@@ -1,5 +1,3 @@
-"""Top-level package for schema-fm."""
-
 from importlib.metadata import PackageNotFoundError, version
 
 try:
