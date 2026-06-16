@@ -42,7 +42,7 @@ repos:
         name: Check PEP8
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.0
+    rev: v0.15.17
     hooks:
       - id: ruff-format
         name: Format Python code
