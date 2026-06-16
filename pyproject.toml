@@ -35,6 +35,11 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
 [project.urls]
 Download = "https://github.com/NVIDIA/schema-fm/releases"
 Homepage = "https://github.com/NVIDIA/schema-fm"
@@ -51,3 +56,13 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
+
+[tool.pytest.ini_options]
+addopts = [
+    "--capture=no",
+    "--color=yes",
+    "-vv",
+    "--import-mode=importlib",
+]
+testpaths = ["test"]
+xfail_strict = true
