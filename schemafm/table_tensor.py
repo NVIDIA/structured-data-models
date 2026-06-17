@@ -5,7 +5,7 @@ import torch
 import torch.utils._pytree as pytree
 from torch import Tensor
 
-from schemafm import Stype, StypeLike
+from schemafm.column import Stype, StypeLike
 
 aten = torch.ops.aten
 
@@ -22,9 +22,10 @@ def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 class TableTensor(Tensor):
-    _data: torch.Tensor
+    _data: Tensor
     _names: tuple[str, ...]
     _stypes: tuple[Stype, ...]
+    _colptr: Tensor
 
     # Prevent auto-wrapping outputs back into the proper subclass type:
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
@@ -34,6 +35,7 @@ class TableTensor(Tensor):
         data: Tensor,
         names: Sequence[str],
         stypes: Sequence[StypeLike],
+        colptr: Tensor | Sequence[int] | None = None,
     ) -> None:
         pass
 
@@ -43,26 +45,29 @@ class TableTensor(Tensor):
         data: Tensor,
         names: Sequence[str],
         stypes: Sequence[StypeLike],
+        colptr: Tensor | Sequence[int] | None = None,
     ) -> "TableTensor":
-        if isinstance(data, cls):  # If passed `TableTensor`, inherit metadata:
+        if isinstance(data, cls):
             data = data._data
 
-        names = tuple(names)
-        stypes = tuple(Stype(stype) for stype in stypes)
+        names, stypes = _normalize_metadata(names=names, stypes=stypes)
+        colptr = _normalize_colptr(
+            colptr=colptr,
+            num_logical_columns=len(names),
+        )
 
         if data.dim() != 2:
             raise ValueError(
-                f"'{cls.__name__}' must be two-dimensional "
-                f"(got {{data.dim()}})"
+                f"'{cls.__name__}' must be two-dimensional (got {data.dim()})"
             )
 
-        if len(names) != len(stypes):
+        if data.size(1) != int(colptr[-1]):
             raise ValueError(
-                f"The number of column names (got {len(names)}) must match "
-                f"the number of semantic types (got {len(stypes)})"
+                f"The number of physical columns (got {data.size(1)}) must "
+                f"match 'colptr[-1]' (got {int(colptr[-1])})"
             )
 
-        out = torch.Tensor._make_wrapper_subclass(
+        out = Tensor._make_wrapper_subclass(
             cls,
             size=data.size(),
             strides=data.stride(),
@@ -75,10 +80,11 @@ class TableTensor(Tensor):
         out._data = data
         out._names = names
         out._stypes = stypes
+        out._colptr = colptr
 
         return out
 
-    def as_tensor(self) -> torch.Tensor:
+    def as_tensor(self) -> Tensor:
         return self._data
 
     @property
@@ -89,10 +95,14 @@ class TableTensor(Tensor):
     def stypes(self) -> tuple[Stype, ...]:
         return self._stypes
 
+    @property
+    def colptr(self) -> Tensor:
+        return self._colptr
+
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["_data"]
+        attrs = ["_data", "_colptr"]
         ctx = (self._names, self._stypes)
         return attrs, ctx
 
@@ -108,6 +118,7 @@ class TableTensor(Tensor):
             data=inner_tensors["_data"],
             names=names,
             stypes=stypes,
+            colptr=inner_tensors["_colptr"],
         )
 
     @classmethod
@@ -120,6 +131,63 @@ class TableTensor(Tensor):
     ) -> Any:
         if func in HANDLED_FUNCTIONS:
             return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+
         args = pytree.tree_map_only(TableTensor, lambda x: x._data, args)
-        kwargs = pytree.tree_map_only(TableTensor, lambda x: x._data, kwargs)
+        if kwargs is not None:
+            kwargs = pytree.tree_map_only(
+                TableTensor,
+                lambda x: x._data,
+                kwargs,
+            )
         return func(*args, **(kwargs or {}))
+
+
+def _normalize_metadata(
+    *,
+    names: Sequence[str],
+    stypes: Sequence[StypeLike],
+) -> tuple[tuple[str, ...], tuple[Stype, ...]]:
+    if len(names) != len(stypes):
+        raise ValueError(
+            f"The number of column names (got {len(names)}) must match "
+            f"the number of semantic types (got {len(stypes)})"
+        )
+
+    names = tuple(names)
+    stypes = tuple(Stype(stype) for stype in stypes)
+
+    if len(set(names)) != len(names):
+        raise ValueError("Column names must be unique")
+
+    return names, stypes
+
+
+def _normalize_colptr(
+    *,
+    colptr: Tensor | Sequence[int] | None,
+    num_logical_columns: int,
+) -> Tensor:
+    if colptr is None:
+        return torch.arange(num_logical_columns + 1, dtype=torch.long)
+
+    if isinstance(colptr, Tensor):
+        colptr = colptr.detach().to(dtype=torch.long, device="cpu")
+    else:
+        colptr = torch.tensor(colptr, dtype=torch.long)
+
+    if colptr.dim() != 1:
+        raise ValueError("'colptr' must be one-dimensional")
+
+    if colptr.numel() != num_logical_columns + 1:
+        raise ValueError(
+            f"'colptr' must have length {num_logical_columns + 1} "
+            f"(got {colptr.numel()})"
+        )
+
+    if colptr.numel() == 0 or int(colptr[0]) != 0:
+        raise ValueError("'colptr' must start with 0")
+
+    if (colptr[:-1] >= colptr[1:]).any():
+        raise ValueError("'colptr' must be strictly increasing")
+
+    return colptr
