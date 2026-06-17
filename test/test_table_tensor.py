@@ -17,18 +17,18 @@ def test_init() -> None:
 
 
 def test_shape_preserving_ops() -> None:
+    def assert_metadata(out: TableTensor) -> None:
+        assert isinstance(out, TableTensor)
+        assert out.col_names == table.col_names
+        assert out.stypes == table.stypes
+        assert out.colptr.equal(table.colptr)
+
     table = TableTensor(
         data=torch.randn(2, 2),
         col_names=("age", "fraud"),
         stypes=("numerical", "categorical"),
         colptr=range(3),
     )
-
-    def assert_metadata(out: TableTensor) -> None:
-        assert isinstance(out, TableTensor)
-        assert out.col_names == table.col_names
-        assert out.stypes == table.stypes
-        assert out.colptr.equal(table.colptr)
 
     for out in (
         table.clone(),
@@ -47,6 +47,7 @@ def test_shape_preserving_ops() -> None:
         out = table.pin_memory()
         assert_metadata(out)
         assert out.is_pinned()
+        assert out.as_tensor().is_pinned()
 
     table = TableTensor(
         data=torch.randn(2, 2, requires_grad=True),
