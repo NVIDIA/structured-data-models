@@ -59,6 +59,19 @@ def test_shape_preserving_ops() -> None:
     )
     assert table.requires_grad
     assert table.as_tensor().requires_grad
+    for out in (table.clone(), table.to(torch.float64)):
+        assert out.requires_grad
+        assert out.as_tensor().requires_grad
+        table.as_tensor().grad = None
+        out.as_tensor().sum().backward()
+        assert table.as_tensor().grad is not None
+
     assert table.detach_() is table
+    assert not table.requires_grad
+    assert not table.as_tensor().requires_grad
+    table.requires_grad = True
+    assert table.requires_grad
+    assert table.as_tensor().requires_grad
+    assert table.requires_grad_(False) is table
     assert not table.requires_grad
     assert not table.as_tensor().requires_grad

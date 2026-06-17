@@ -12,6 +12,43 @@ aten = torch.ops.aten
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
 
 
+class _ToCopy(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx: Any,
+        data: Tensor,
+        dtype: torch.dtype | None,
+        device: torch.device | None,
+        pin_memory: bool | None,
+        non_blocking: bool,
+        memory_format: torch.memory_format | None,
+    ) -> Tensor:
+        ctx.dtype = data.dtype
+        ctx.device = data.device
+
+        kwargs: dict[str, Any] = {
+            "copy": True,
+            "non_blocking": non_blocking,
+        }
+        if dtype is not None:
+            kwargs["dtype"] = dtype
+        if device is not None:
+            kwargs["device"] = device
+        if memory_format is not None:
+            kwargs["memory_format"] = memory_format
+
+        out = data.to(**kwargs)
+        return out.pin_memory() if pin_memory else out
+
+    @staticmethod
+    def backward(
+        ctx: Any,
+        grad: Tensor,
+    ) -> tuple[Tensor, None, None, None, None, None]:
+        grad = grad.to(device=ctx.device, dtype=ctx.dtype)
+        return grad, None, None, None, None, None
+
+
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -102,6 +139,14 @@ class TableTensor(Tensor):
         return self._data
 
     @property
+    def requires_grad(self) -> bool:
+        return self._data.requires_grad
+
+    @requires_grad.setter
+    def requires_grad(self, requires_grad: bool) -> None:
+        self.requires_grad_(requires_grad)
+
+    @property
     def col_names(self) -> tuple[str, ...]:
         return self._col_names
 
@@ -163,6 +208,11 @@ class TableTensor(Tensor):
         Tensor.detach_(self)
         return self
 
+    def requires_grad_(self, requires_grad: bool = True) -> "TableTensor":
+        self._data.requires_grad_(requires_grad)
+        Tensor.requires_grad_(self, requires_grad)
+        return self
+
 
 @implements(aten.clone.default)
 def _clone(
@@ -171,7 +221,14 @@ def _clone(
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
     return TableTensor(
-        data=aten.clone.default(input._data, memory_format=memory_format),
+        data=_ToCopy.apply(
+            input._data,
+            None,
+            None,
+            None,
+            False,
+            memory_format,
+        ),
         col_names=input._col_names,
         stypes=input._stypes,
         colptr=input._colptr.clone(),
@@ -181,7 +238,7 @@ def _clone(
 @implements(aten.detach.default)
 def _detach(input: TableTensor) -> TableTensor:
     return TableTensor(
-        data=aten.detach.default(input._data),
+        data=input._data.detach(),
         col_names=input._col_names,
         stypes=input._stypes,
         colptr=input._colptr,
@@ -199,14 +256,16 @@ def _to_copy(
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    data = aten._to_copy.default(
+    if layout is not None and layout != input._data.layout:
+        raise ValueError("Changing 'layout' is not supported in 'TableTensor'")
+
+    data = _ToCopy.apply(
         input._data,
-        dtype=dtype,
-        layout=layout,
-        device=device,
-        pin_memory=pin_memory,
-        non_blocking=non_blocking,
-        memory_format=memory_format,
+        dtype,
+        device,
+        pin_memory,
+        non_blocking,
+        memory_format,
     )
     colptr = aten._to_copy.default(
         input._colptr,
