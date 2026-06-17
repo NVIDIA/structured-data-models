@@ -13,8 +13,7 @@ Do not add platform or serving abstractions unless explicitly requested.
 
 # Project Structure
 
-- `schemafm/column.py`: Column metadata via `Column`, `Stype`, and
-  `StypeLike`.
+- `schemafm/column.py`: Column metadata via `Column` and `Stype`.
 - `schemafm/table_tensor.py`: PyTorch-native `TableTensor` subclass for tensorized tables with column names and semantic types.
 
 # Core Design Principles
