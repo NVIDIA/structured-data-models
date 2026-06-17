@@ -13,59 +13,32 @@ It should stay generic, modular, and lightweight.
 # Core Design Principles
 
 - Keep the project PyTorch/tensor-centric.
-- Preserve dataframe ergonomics at the boundary, but move model execution onto
-  structured tensor containers.
-- Keep model-family wrappers thin. Shared abstractions should live outside
-  TabICL, KumoRFM, or any one model implementation.
-- Make context/query boundaries explicit in public structured objects, even
-  when model internals require contiguous packed rows.
+- Preserve dataframe ergonomics at the boundary, but move model execution onto structured tensor containers.
+- Keep model-family wrappers thin. Shared abstractions should live outside model implementations if possible.
 - Avoid mandatory config-first APIs. Direct Python composition should be the
   primary interface.
-- Add composable transforms instead of hard-coding one-off preprocessing into
-  model wrappers.
+- Add composable transformations instead of hard-coding one-off preprocessing into model wrappers.
 - Keep recipes inspectable and deterministic where possible. Any stochastic
-  transform should expose seed/generator control.
-- Treat preprocessing as leakage-sensitive. Transforms that learn state must be
-  scoped to the context/training portion unless explicitly designed otherwise.
-- Keep dependencies minimal in the core package. Heavy stacks such as cuDF,
-  PyG, `pyg-lib`, explainability libraries, or benchmark tooling should be
-  optional extras unless they become essential.
-- Prefer GPU acceleration where it matters, but keep CPU/pandas interop usable.
-- Do not introduce serving/product abstractions unless specifically requested.
+  transformations should expose seed/generator control.
+- Treat preprocessing as leakage-sensitive.
+  Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
+- Keep dependencies minimal in the core package.
+  Heavy stacks such should be optional extras unless they become essential.
+- Aim for GPU acceleration in all core components. Prefer PyTorch and cuDF
+  execution paths over CPU-bound pandas, NumPy, or sklearn implementations.
 
-# Model Integration Notes
+# Coding Style
 
-TabICLv2:
-
-- Public reference implementations use sklearn-style `fit(X_train, y_train)`
-  and `predict(X_test)`.
-- Raw model execution expects packed rows: context/training rows first, followed
-  by query/test rows.
-- `y_train` determines the context length internally.
-- KV-cache support separates cached context computation from repeated query
-  inference.
-
-TabPFN:
-
-- Public reference implementations also expose sklearn-style `fit`/`predict`.
-- Inference code stores train inputs/targets, preprocesses test inputs, then
-  concatenates train and test rows before model execution.
-- Cache paths may execute with test-only inputs plus cached context state.
-
-For `schema-fm`, preserve the useful parts of these designs while exposing a
-lower-level model-zoo interface:
-
-- public structured objects should know target, context rows, and query rows;
-- model adapters may pack or concatenate internally;
-- caching should be a shared concept where possible, not duplicated per model
-  family.
-
-# References
-
-- [TabICLv2](https://arxiv.org/abs/2602.11139)
-- [TabICL repository](https://github.com/soda-inria/tabicl)
-- [TabPFNv2](https://www.nature.com/articles/s41586-024-08328-6)
-- [TabPFN repository](https://github.com/PriorLabs/TabPFN)
-- [pytorch-image-models](https://github.com/huggingface/pytorch-image-models)
-- [transformers](https://github.com/huggingface/transformers)
-- [sentence-transformers](https://github.com/huggingface/sentence-transformers)
+- Keep Python code typed at function and method boundaries.
+- Keep lines within 80 columns.
+- Prefer single quotes for symbolic strings, keys, and enum-like values.
+  Use double quotes for human-readable messages and prose.
+- Use keyword arguments in multi-line calls.
+- Avoid `else` after `return`, `raise`, `break`, or `continue`.
+- Prefer PyTorch-native, vectorized tensor operations over NumPy or Python
+  loops. Call out cases where vectorization is not practical.
+- Preserve tensor device and data type.
+  Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, Python scalars, or newly-created CPU tensors.
+- Add short tensor shape comments for complex tensor operations.
+- Avoid accidental graph breaks where a `torch.compile`-friendly formulation is
+  straightforward.
