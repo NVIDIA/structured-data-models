@@ -26,7 +26,15 @@ class TableTensor(Tensor):
     _stypes: tuple[Stype, ...]
 
     # Prevent auto-wrapping outputs back into the proper subclass type:
-    __torch_function__ = torch._C._disabled_torch_function_impl
+    __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
+
+    def __init__(
+        self,
+        data: Tensor,
+        names: Sequence[str],
+        stypes: Sequence[Stype | str],
+    ) -> None:
+        pass
 
     @staticmethod
     def __new__(
@@ -104,7 +112,7 @@ class TableTensor(Tensor):
         )
 
     @classmethod
-    def __torch_dispatch__(
+    def __torch_dispatch__(  # type: ignore
         cls,
         func: Callable[..., Any],
         types: tuple[type[Any], ...],
