@@ -4,49 +4,13 @@ from typing import Any
 import torch
 import torch.utils._pytree as pytree
 from torch import Tensor
+from torch.overrides import enable_reentrant_dispatch
 
 from schemafm import Stype, StypeLike
 
 aten = torch.ops.aten
 
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
-
-
-class _ToCopy(torch.autograd.Function):
-    @staticmethod
-    def forward(
-        ctx: Any,
-        data: Tensor,
-        dtype: torch.dtype | None,
-        device: torch.device | None,
-        pin_memory: bool | None,
-        non_blocking: bool,
-        memory_format: torch.memory_format | None,
-    ) -> Tensor:
-        ctx.dtype = data.dtype
-        ctx.device = data.device
-
-        kwargs: dict[str, Any] = {
-            "copy": True,
-            "non_blocking": non_blocking,
-        }
-        if dtype is not None:
-            kwargs["dtype"] = dtype
-        if device is not None:
-            kwargs["device"] = device
-        if memory_format is not None:
-            kwargs["memory_format"] = memory_format
-
-        out = data.to(**kwargs)
-        return out.pin_memory() if pin_memory else out
-
-    @staticmethod
-    def backward(
-        ctx: Any,
-        grad: Tensor,
-    ) -> tuple[Tensor, None, None, None, None, None]:
-        grad = grad.to(device=ctx.device, dtype=ctx.dtype)
-        return grad, None, None, None, None, None
 
 
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -125,7 +89,9 @@ class TableTensor(Tensor):
             dtype=data.dtype,
             device=data.device,
             layout=data.layout,
-            requires_grad=data.requires_grad,
+            # Autograd lives on `_data`; the outer wrapper only carries
+            # table metadata and redispatches to the inner tensor.
+            requires_grad=False,
         )
 
         out._data = data
@@ -144,7 +110,7 @@ class TableTensor(Tensor):
 
     @requires_grad.setter
     def requires_grad(self, requires_grad: bool) -> None:
-        self.requires_grad_(requires_grad)
+        self._data.requires_grad_(requires_grad)
 
     @property
     def col_names(self) -> tuple[str, ...]:
@@ -189,11 +155,15 @@ class TableTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if func in HANDLED_FUNCTIONS:
-            return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+            # Reentrant dispatch lets inner `_data` ops record autograd.
+            with enable_reentrant_dispatch():
+                return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
         args = pytree.tree_map_only(TableTensor, lambda x: x._data, args)
         kwargs = pytree.tree_map_only(TableTensor, lambda x: x._data, kwargs)
-        return func(*args, **(kwargs or {}))
+        # Reentrant dispatch lets inner `_data` ops record autograd.
+        with enable_reentrant_dispatch():
+            return func(*args, **(kwargs or {}))
 
     def share_memory_(self) -> "TableTensor":
         self._data.share_memory_()
@@ -205,12 +175,10 @@ class TableTensor(Tensor):
 
     def detach_(self) -> "TableTensor":
         self._data.detach_()
-        Tensor.detach_(self)
         return self
 
     def requires_grad_(self, requires_grad: bool = True) -> "TableTensor":
         self._data.requires_grad_(requires_grad)
-        Tensor.requires_grad_(self, requires_grad)
         return self
 
 
@@ -221,14 +189,7 @@ def _clone(
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
     return TableTensor(
-        data=_ToCopy.apply(
-            input._data,
-            None,
-            None,
-            None,
-            False,
-            memory_format,
-        ),
+        data=input._data.clone(memory_format=memory_format),
         col_names=input._col_names,
         stypes=input._stypes,
         colptr=input._colptr.clone(),
@@ -259,14 +220,21 @@ def _to_copy(
     if layout is not None and layout != input._data.layout:
         raise ValueError("Changing 'layout' is not supported in 'TableTensor'")
 
-    data = _ToCopy.apply(
-        input._data,
-        dtype,
-        device,
-        pin_memory,
-        non_blocking,
-        memory_format,
-    )
+    kwargs: dict[str, Any] = {
+        "copy": True,
+        "non_blocking": non_blocking,
+    }
+    if dtype is not None:
+        kwargs["dtype"] = dtype
+    if device is not None:
+        kwargs["device"] = device
+    if memory_format is not None:
+        kwargs["memory_format"] = memory_format
+
+    data = input._data.to(**kwargs)
+    if pin_memory:
+        data = data.pin_memory()
+
     colptr = aten._to_copy.default(
         input._colptr,
         device=data.device,

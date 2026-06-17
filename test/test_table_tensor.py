@@ -51,21 +51,6 @@ def test_shape_preserving_ops() -> None:
         assert out.is_pinned()
         assert out.as_tensor().is_pinned()
 
-    table = TableTensor(
-        data=torch.randn(2, 2, requires_grad=True),
-        col_names=("age", "fraud"),
-        stypes=("numerical", "categorical"),
-        colptr=range(3),
-    )
-    assert table.requires_grad
-    assert table.as_tensor().requires_grad
-    for out in (table.clone(), table.to(torch.float64)):
-        assert out.requires_grad
-        assert out.as_tensor().requires_grad
-        table.as_tensor().grad = None
-        out.as_tensor().sum().backward()
-        assert table.as_tensor().grad is not None
-
     assert table.detach_() is table
     assert not table.requires_grad
     assert not table.as_tensor().requires_grad
@@ -75,3 +60,13 @@ def test_shape_preserving_ops() -> None:
     assert table.requires_grad_(False) is table
     assert not table.requires_grad
     assert not table.as_tensor().requires_grad
+
+    assert table.requires_grad_(True) is table
+    assert table.requires_grad
+    assert table.as_tensor().requires_grad
+    for out in (table.clone(), table.to(torch.float64)):
+        assert out.requires_grad
+        assert out.as_tensor().requires_grad
+        table.as_tensor().grad = None
+        out.as_tensor().sum().backward()
+        assert table.as_tensor().grad is not None
