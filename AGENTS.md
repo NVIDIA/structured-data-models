@@ -50,8 +50,6 @@ Do not add platform or serving abstractions unless explicitly requested.
 
 - Keep Python code typed at function and method boundaries.
 - Keep lines within 80 columns.
-- Prefer single quotes for symbolic strings, keys, and enum-like values.
-  Use double quotes for human-readable messages and prose.
 - Use keyword arguments in multi-line calls.
 - Avoid `else` after `return`, `raise`, `break`, or `continue`.
 - Prefer PyTorch-native, vectorized tensor operations over NumPy or Python
