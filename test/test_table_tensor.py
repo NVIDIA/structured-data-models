@@ -3,7 +3,7 @@ import torch
 from schemafm import Stype, TableTensor
 
 
-def test_table_tensor_validates_names_and_stypes():
+def test_init():
     table = TableTensor(
         data=torch.randn(2, 2),
         names=('age', 'fraud'),
