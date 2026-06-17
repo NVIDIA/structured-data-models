@@ -3,7 +3,7 @@ import torch
 from schemafm import Stype, TableTensor
 
 
-def test_init():
+def test_init() -> None:
     table = TableTensor(
         data=torch.randn(2, 2),
         names=("age", "fraud"),
