@@ -25,7 +25,6 @@ def test_shape_preserving_ops() -> None:
     )
 
     def assert_metadata(out: TableTensor) -> None:
-        return
         assert isinstance(out, TableTensor)
         assert out.col_names == table.col_names
         assert out.stypes == table.stypes
@@ -35,14 +34,28 @@ def test_shape_preserving_ops() -> None:
         table.clone(),
         table.detach(),
         table.to(torch.float64),
-        table.view(table.size()),
     ):
         assert_metadata(out)
 
-    # assert table.share_memory_() is table
-    # assert table.is_shared()
+    assert not table.is_shared()
+    assert not table.as_tensor().is_shared()
+    assert table.share_memory_() is table
+    assert table.is_shared()
+    assert table.as_tensor().is_shared()
 
     if torch.cuda.is_available():
         out = table.pin_memory()
         assert_metadata(out)
-        # assert out.is_pinned()
+        assert out.is_pinned()
+
+    table = TableTensor(
+        data=torch.randn(2, 2, requires_grad=True),
+        col_names=("age", "fraud"),
+        stypes=("numerical", "categorical"),
+        colptr=range(3),
+    )
+    assert table.requires_grad
+    assert table.as_tensor().requires_grad
+    assert table.detach_() is table
+    assert not table.requires_grad
+    assert not table.as_tensor().requires_grad
