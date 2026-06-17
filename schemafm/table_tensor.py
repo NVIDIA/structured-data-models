@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+from typing import Iterable, Sequence
 
 import torch
 import torch.utils._pytree as pytree
 
-from schemafm.schema import ColumnSelector, Schema
+from schemafm.stype import Stype
 
 aten = torch.ops.aten
 
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
+
+ColumnSelector = str | int | slice | Sequence[str] | Sequence[int]
 
 
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -22,7 +25,8 @@ def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
 class TableTensor(torch.Tensor):
     _data: torch.Tensor
-    _schema: Schema
+    _names: tuple[str, ...]
+    _stypes: tuple[Stype, ...]
     _mask: torch.Tensor | None
 
     __torch_function__ = torch._C._disabled_torch_function_impl
@@ -31,13 +35,21 @@ class TableTensor(torch.Tensor):
     def __new__(
         cls,
         data: torch.Tensor,
-        schema: Schema,
+        names: Iterable[str] | None = None,
+        stypes: Iterable[Stype | str] | None = None,
         mask: torch.Tensor | None = None,
     ) -> 'TableTensor':
         if isinstance(data, TableTensor):
             mask = data._mask if mask is None else mask
-            schema = data._schema if schema is None else schema
+            names = data._names if names is None else names
+            stypes = data._stypes if stypes is None else stypes
             data = data._data
+
+        if names is None or stypes is None:
+            raise TypeError("'names' and 'stypes' must be specified")
+
+        names = tuple(names)
+        stypes = tuple(Stype(stype) for stype in stypes)
 
         if not isinstance(data, torch.Tensor):
             raise TypeError("'data' must be a torch.Tensor")
@@ -50,15 +62,24 @@ class TableTensor(torch.Tensor):
                 "'TableTensor' must be one- or two-dimensional",
             )
 
-        if data.dim() == 1 and len(schema) != 1:
+        if len(names) != len(stypes):
             raise ValueError(
-                "A one-dimensional 'TableTensor' must have exactly one "
-                "schema column",
+                "The number of column names must match the number of "
+                "semantic types",
             )
 
-        if data.dim() == 2 and data.size(1) != len(schema):
+        if len(set(names)) != len(names):
+            raise ValueError("Column names must be unique")
+
+        if data.dim() == 1 and len(names) != 1:
             raise ValueError(
-                "The last tensor dimension must match the number of schema "
+                "A one-dimensional 'TableTensor' must have exactly one "
+                "column name and semantic type",
+            )
+
+        if data.dim() == 2 and data.size(1) != len(names):
+            raise ValueError(
+                "The last tensor dimension must match the number of named "
                 "columns",
             )
 
@@ -81,7 +102,8 @@ class TableTensor(torch.Tensor):
         )
 
         out._data = data
-        out._schema = schema
+        out._names = names
+        out._stypes = stypes
         out._mask = mask
         return out
 
@@ -93,26 +115,30 @@ class TableTensor(torch.Tensor):
         return self._data
 
     @property
-    def schema(self) -> Schema:
-        return self._schema
+    def column_names(self) -> tuple[str, ...]:
+        return self._names
+
+    @property
+    def stypes(self) -> tuple[Stype, ...]:
+        return self._stypes
 
     @property
     def mask(self) -> torch.Tensor | None:
         return self._mask
 
-    @property
-    def names(self) -> tuple[str, ...]:
-        return self._schema.names
-
-    @property
-    def stypes(self) -> tuple[Any, ...]:
-        return self._schema.stypes
-
     def column_index(self, name: str) -> int:
-        return self._schema.index(name)
+        try:
+            return self._names.index(name)
+        except ValueError as exc:
+            raise KeyError(name) from exc
 
-    def indices_for(self, *stypes: Any) -> tuple[int, ...]:
-        return self._schema.indices_for(*stypes)
+    def indices_for(self, *stypes: Stype | str) -> tuple[int, ...]:
+        stypes = tuple(Stype(stype) for stype in stypes)
+        return tuple(
+            index
+            for index, stype in enumerate(self._stypes)
+            if stype in stypes
+        )
 
     def select(self, columns: ColumnSelector | torch.Tensor) -> 'TableTensor':
         if self.dim() != 2:
@@ -120,26 +146,26 @@ class TableTensor(torch.Tensor):
                 "Column selection requires a two-dimensional table",
             )
 
-        indices = self._schema._indices(columns)
+        indices = self._column_indices(columns)
         data = self._data[:, indices]
         mask = None if self._mask is None else self._mask[:, indices]
-        schema = self._schema.select(indices)
-        return TableTensor(data, schema, mask)
+        names, stypes = self._select_metadata(indices)
+        return TableTensor(data, names, stypes, mask)
 
     def drop(self, columns: ColumnSelector | torch.Tensor) -> 'TableTensor':
         if self.dim() != 2:
             raise ValueError("Column dropping requires a two-dimensional table")
 
-        drop_indices = set(self._schema._indices(columns))
+        drop_indices = set(self._column_indices(columns))
         indices = tuple(
             index
-            for index in range(len(self._schema))
+            for index in range(len(self._names))
             if index not in drop_indices
         )
         data = self._data[:, indices]
         mask = None if self._mask is None else self._mask[:, indices]
-        schema = self._schema.select(indices)
-        return TableTensor(data, schema, mask)
+        names, stypes = self._select_metadata(indices)
+        return TableTensor(data, names, stypes, mask)
 
     def __getitem__(self, index: Any) -> torch.Tensor | 'TableTensor':
         if isinstance(index, str):
@@ -152,7 +178,7 @@ class TableTensor(torch.Tensor):
         mask = None if self._mask is None else self._mask[index]
 
         if data.dim() == self.dim():
-            return TableTensor(data, self._schema, mask)
+            return TableTensor(data, self._names, self._stypes, mask)
 
         return data
 
@@ -177,10 +203,10 @@ class TableTensor(torch.Tensor):
             data = self._data[index]
             mask = None if self._mask is None else self._mask[index]
             if data.dim() == self.dim():
-                return TableTensor(data, self._schema, mask)
+                return TableTensor(data, self._names, self._stypes, mask)
             return data
 
-        data_column_index = _data_column_index(self._schema, column_index)
+        data_column_index = self._data_column_index(column_index)
         data = self._data[row_index, data_column_index]
         mask = (
             None
@@ -191,14 +217,97 @@ class TableTensor(torch.Tensor):
         if _is_row_scalar(row_index):
             return data
 
-        schema = self._schema.select(column_index)
-        return TableTensor(data, schema, mask)
+        indices = self._column_indices(column_index)
+        names, stypes = self._select_metadata(indices)
+        return TableTensor(data, names, stypes, mask)
+
+    def _column_indices(
+        self,
+        columns: ColumnSelector | torch.Tensor,
+    ) -> tuple[int, ...]:
+        if isinstance(columns, str):
+            return (self.column_index(columns),)
+
+        if isinstance(columns, int):
+            return (self._normalize_column_index(columns),)
+
+        if isinstance(columns, slice):
+            return tuple(range(len(self._names))[columns])
+
+        if isinstance(columns, torch.Tensor):
+            if columns.dtype == torch.bool:
+                if columns.numel() != len(self._names):
+                    raise IndexError("Boolean column mask has invalid length")
+                return tuple(
+                    index
+                    for index, keep in enumerate(columns.tolist())
+                    if keep
+                )
+
+            return tuple(
+                self._normalize_column_index(int(index))
+                for index in columns.tolist()
+            )
+
+        values = tuple(columns)
+        if len(values) == 0:
+            return ()
+
+        if all(isinstance(value, str) for value in values):
+            return tuple(self.column_index(value) for value in values)
+
+        if all(isinstance(value, bool) for value in values):
+            if len(values) != len(self._names):
+                raise IndexError("Boolean column mask has invalid length")
+            return tuple(
+                index
+                for index, keep in enumerate(values)
+                if keep
+            )
+
+        if all(isinstance(value, int) for value in values):
+            return tuple(
+                self._normalize_column_index(value)  # type: ignore[arg-type]
+                for value in values
+            )
+
+        raise TypeError(f"Unsupported column selector: {columns!r}")
+
+    def _normalize_column_index(self, index: int) -> int:
+        if index < 0:
+            index += len(self._names)
+
+        if index < 0 or index >= len(self._names):
+            raise IndexError("Column index out of range")
+
+        return index
+
+    def _select_metadata(
+        self,
+        indices: Sequence[int],
+    ) -> tuple[tuple[str, ...], tuple[Stype, ...]]:
+        return (
+            tuple(self._names[index] for index in indices),
+            tuple(self._stypes[index] for index in indices),
+        )
+
+    def _data_column_index(self, index: Any) -> Any:
+        if isinstance(index, str):
+            return self.column_index(index)
+
+        if isinstance(index, (list, tuple)) and all(
+            isinstance(value, str)
+            for value in index
+        ):
+            return list(self._column_indices(index))
+
+        return index
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ['_data']
         if self._mask is not None:
             attrs.append('_mask')
-        return attrs, (self._schema,)
+        return attrs, (self._names, self._stypes)
 
     @staticmethod
     def __tensor_unflatten__(
@@ -211,6 +320,7 @@ class TableTensor(torch.Tensor):
         return TableTensor(
             inner_tensors['_data'],
             ctx[0],
+            ctx[1],
             inner_tensors.get('_mask', None),
         )
 
@@ -237,7 +347,8 @@ class TableTensor(torch.Tensor):
     def __repr__(self) -> str:
         return (
             f'{self.__class__.__name__}('
-            f'{self._data!r}, names={self.names!r}, stypes={self.stypes!r})'
+            f'{self._data!r}, names={self._names!r}, '
+            f'stypes={self._stypes!r})'
         )
 
 
@@ -264,32 +375,21 @@ def _is_row_scalar(index: Any) -> bool:
     return False
 
 
-def _data_column_index(schema: Schema, index: Any) -> Any:
-    if isinstance(index, str):
-        return schema.index(index)
-
-    if isinstance(index, (list, tuple)) and all(
-        isinstance(value, str)
-        for value in index
-    ):
-        return list(schema._indices(index))
-
-    return index
-
-
 def _wrap_like(
     input: TableTensor,
     data: torch.Tensor,
     mask: torch.Tensor | None,
-    schema: Schema | None = None,
+    names: tuple[str, ...] | None = None,
+    stypes: tuple[Stype, ...] | None = None,
 ) -> TableTensor | torch.Tensor:
-    schema = input.schema if schema is None else schema
+    names = input.column_names if names is None else names
+    stypes = input.stypes if stypes is None else stypes
 
-    if data.dim() == 1 and len(schema) == 1:
-        return TableTensor(data, schema, mask)
+    if data.dim() == 1 and len(names) == 1:
+        return TableTensor(data, names, stypes, mask)
 
-    if data.dim() == 2 and data.size(1) == len(schema):
-        return TableTensor(data, schema, mask)
+    if data.dim() == 2 and data.size(1) == len(names):
+        return TableTensor(data, names, stypes, mask)
 
     return data
 
@@ -313,7 +413,8 @@ def _clone(
 ) -> TableTensor:
     return TableTensor(
         input._data.clone(memory_format=memory_format),
-        input.schema,
+        input.column_names,
+        input.stypes,
         _map_mask(input._mask, torch.Tensor.clone),
     )
 
@@ -322,14 +423,20 @@ def _clone(
 def _detach(input: TableTensor) -> TableTensor:
     return TableTensor(
         input._data.detach(),
-        input.schema,
+        input.column_names,
+        input.stypes,
         _map_mask(input._mask, torch.Tensor.detach),
     )
 
 
 @implements(aten.alias.default)
 def _alias(input: TableTensor) -> TableTensor:
-    return TableTensor(input._data, input.schema, input._mask)
+    return TableTensor(
+        input._data,
+        input.column_names,
+        input.stypes,
+        input._mask,
+    )
 
 
 @implements(aten._to_copy.default)
@@ -360,7 +467,7 @@ def _to_copy(
             non_blocking=non_blocking,
         )
 
-    return TableTensor(data, input.schema, mask)
+    return TableTensor(data, input.column_names, input.stypes, mask)
 
 
 @implements(aten.cat.default)
@@ -384,8 +491,11 @@ def _cat(
     table_tensors = [
         tensor for tensor in tensors if isinstance(tensor, TableTensor)
     ]
-    schema = table_tensors[0].schema
-    if any(tensor.schema != schema for tensor in table_tensors):
+    names = table_tensors[0].column_names
+    stypes = table_tensors[0].stypes
+    if any(tensor.column_names != names for tensor in table_tensors):
+        return data
+    if any(tensor.stypes != stypes for tensor in table_tensors):
         return data
 
     if any(tensor.mask is None for tensor in table_tensors):
@@ -395,4 +505,4 @@ def _cat(
         assert all(mask is not None for mask in masks)
         mask = aten.cat.default(masks, dim=dim)
 
-    return _wrap_like(table_tensors[0], data, mask, schema)
+    return _wrap_like(table_tensors[0], data, mask, names, stypes)

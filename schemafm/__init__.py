@@ -1,6 +1,6 @@
 from importlib.metadata import PackageNotFoundError, version
 
-from schemafm.schema import Schema, Stype
+from schemafm.stype import Stype
 from schemafm.table_tensor import TableTensor
 
 try:
@@ -9,7 +9,6 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 __all__ = [
-    "Schema",
     "Stype",
     "TableTensor",
     "__version__",

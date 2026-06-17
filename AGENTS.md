@@ -17,10 +17,9 @@ Do not add platform or serving abstractions unless explicitly requested.
 
 # Project Structure
 
-- `schemafm/schema.py`: Column names and semantic types via `Schema` and
-  `Stype`.
+- `schemafm/stype.py`: Semantic column types via `Stype`.
 - `schemafm/table_tensor.py`: PyTorch-native `TableTensor` subclass for
-  tensorized scalar tables.
+  tensorized scalar tables with column names and semantic types.
 - `docs/table_tensor_proposal.md`: Design notes for the `TableTensor`
   abstraction and encoding/preprocessing boundary.
 - `test`: Test suite.
