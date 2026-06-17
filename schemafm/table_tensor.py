@@ -53,16 +53,15 @@ class TableTensor(Tensor):
         colptr = torch.as_tensor(colptr, dtype=torch.long, device=data.device)
 
         if data.dim() != 2:
-            noun = "dimension" if data.dim() == 1 else "dimensions"
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to be two-dimensional "
-                f"(got {data.dim()} {noun})"
+                f"(got {data.dim()}D tensor)"
             )
 
         if colptr.dim() != 1:
             raise ValueError(
                 f"Expected 'colptr' in '{cls.__name__}' to be one-dimensional "
-                f"(got {colptr.dim()} dimensions)"
+                f"(got {colptr.dim()}D tensor)"
             )
 
         if len(names) != colptr.numel() - 1:
@@ -148,10 +147,5 @@ class TableTensor(Tensor):
             return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
         args = pytree.tree_map_only(TableTensor, lambda x: x._data, args)
-        if kwargs is not None:
-            kwargs = pytree.tree_map_only(
-                TableTensor,
-                lambda x: x._data,
-                kwargs,
-            )
+        kwargs = pytree.tree_map_only(TableTensor, lambda x: x._data, kwargs)
         return func(*args, **(kwargs or {}))
