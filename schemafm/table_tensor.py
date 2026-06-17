@@ -53,9 +53,10 @@ class TableTensor(Tensor):
         colptr = torch.as_tensor(colptr, dtype=torch.long, device=data.device)
 
         if data.dim() != 2:
+            noun = "dimension" if data.dim() == 1 else "dimensions"
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to be two-dimensional "
-                f"(got {data.dim()} dimensions)"
+                f"(got {data.dim()} {noun})"
             )
 
         if colptr.dim() != 1:
@@ -66,14 +67,14 @@ class TableTensor(Tensor):
 
         if len(names) != colptr.numel() - 1:
             raise ValueError(
-                f"The number of column names needs to match the number of "
+                f"The number of column names must match the number of "
                 f"logical columns (got {len(names)}, but expected "
                 f"{colptr.numel() - 1})"
             )
 
         if len(stypes) != colptr.numel() - 1:
             raise ValueError(
-                f"The number of semantic types needs to match the number of "
+                f"The number of semantic types must match the number of "
                 f"logical columns (got {len(stypes)}, but expected "
                 f"{colptr.numel() - 1})"
             )
