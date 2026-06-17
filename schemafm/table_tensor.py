@@ -5,7 +5,7 @@ import torch
 import torch.utils._pytree as pytree
 from torch import Tensor
 
-from schemafm.column import Stype, StypeLike
+from schemafm import Stype, StypeLike
 
 aten = torch.ops.aten
 
