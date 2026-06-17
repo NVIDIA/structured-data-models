@@ -33,7 +33,9 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
-dependencies = []
+dependencies = [
+    "torch",
+]
 
 [project.optional-dependencies]
 test = [
@@ -66,3 +68,22 @@ addopts = [
 ]
 testpaths = ["test"]
 xfail_strict = true
+
+[tool.ruff]  # https://docs.astral.sh/ruff/rules
+src=["schema-fm", "test"]
+line-length=79
+indent-width=4
+target-version="py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # import sorting
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "C4",   # comprehensions
+    "SIM",  # simplification
+    "RUF",  # ruff-specific rules
+]
