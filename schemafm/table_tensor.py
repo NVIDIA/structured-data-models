@@ -34,7 +34,7 @@ class TableTensor(Tensor):
         data: Tensor,
         names: Sequence[str],
         stypes: Sequence[Stype | str],
-    ) -> 'TableTensor':
+    ) -> "TableTensor":
         if isinstance(data, cls):  # If passed `TableTensor`, inherit metadata:
             names = data._names if names is None else names
             stypes = data._stypes if stypes is None else stypes
@@ -44,18 +44,21 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         if data.dim() != 2:
-            raise ValueError(f"'{cls.__name__}' must be two-dimensional "
-                             f"(got {data.dim()})")
+            raise ValueError(
+                f"'{cls.__name__}' must be two-dimensional (got {data.dim()})"
+            )
 
         if len(names) != len(stypes):
-            raise ValueError(f"The number of column names (got {len(names)}) "
-                             f"must match the number of semantic types "
-                             f"(got {len(stypes)})")
+            raise ValueError(
+                f"The number of column names (got {len(names)}) "
+                f"must match the number of semantic types "
+                f"(got {len(stypes)})"
+            )
 
         if data.dim() == 2 and data.size(1) != len(names):
             raise ValueError(
-                "The last tensor dimension must match the number of named "
-                "columns", )
+                "The last tensor dimension must match the number of named columns",
+            )
 
         out = torch.Tensor._make_wrapper_subclass(
             cls,
@@ -87,7 +90,7 @@ class TableTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ['_data']
+        attrs = ["_data"]
         ctx = (self._names, self._stypes)
         return attrs, ctx
 
@@ -97,10 +100,10 @@ class TableTensor(Tensor):
         ctx: tuple[Any, ...],
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
-    ) -> 'TableTensor':
+    ) -> "TableTensor":
         names, stypes = ctx
         return TableTensor(
-            data=inner_tensors['_data'],
+            data=inner_tensors["_data"],
             names=names,
             stypes=stypes,
         )
