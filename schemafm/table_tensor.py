@@ -22,9 +22,10 @@ def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
 
 class TableTensor(Tensor):
-    _data: torch.Tensor
+    _data: Tensor
     _names: tuple[str, ...]
     _stypes: tuple[Stype, ...]
+    _colptr: Tensor
 
     # Prevent auto-wrapping outputs back into the proper subclass type:
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
@@ -34,6 +35,7 @@ class TableTensor(Tensor):
         data: Tensor,
         names: Sequence[str],
         stypes: Sequence[StypeLike],
+        colptr: Tensor | Sequence[int],
     ) -> None:
         pass
 
@@ -43,26 +45,43 @@ class TableTensor(Tensor):
         data: Tensor,
         names: Sequence[str],
         stypes: Sequence[StypeLike],
+        colptr: Tensor | Sequence[int],
     ) -> "TableTensor":
-        if isinstance(data, cls):  # If passed `TableTensor`, inherit metadata:
-            data = data._data
 
         names = tuple(names)
         stypes = tuple(Stype(stype) for stype in stypes)
+        colptr = torch.as_tensor(colptr, dtype=torch.long, device=data.device)
 
         if data.dim() != 2:
             raise ValueError(
-                f"'{cls.__name__}' must be two-dimensional "
-                f"(got {{data.dim()}})"
+                f"Expected 'data' in '{cls.__name__}' to be two-dimensional "
+                f"(got {data.dim()}D tensor)"
             )
 
-        if len(names) != len(stypes):
+        if colptr.dim() != 1:
             raise ValueError(
-                f"The number of column names (got {len(names)}) must match "
-                f"the number of semantic types (got {len(stypes)})"
+                f"Expected 'colptr' in '{cls.__name__}' to be one-dimensional "
+                f"(got {colptr.dim()}D tensor)"
             )
 
-        out = torch.Tensor._make_wrapper_subclass(
+        if len(names) != colptr.numel() - 1:
+            raise ValueError(
+                f"The number of column names must match the number of "
+                f"logical columns (got {len(names)}, but expected "
+                f"{colptr.numel() - 1})"
+            )
+
+        if len(stypes) != colptr.numel() - 1:
+            raise ValueError(
+                f"The number of semantic types must match the number of "
+                f"logical columns (got {len(stypes)}, but expected "
+                f"{colptr.numel() - 1})"
+            )
+
+        if len(set(names)) != len(names):
+            raise ValueError("Column names must be unique")
+
+        out = Tensor._make_wrapper_subclass(
             cls,
             size=data.size(),
             strides=data.stride(),
@@ -75,10 +94,11 @@ class TableTensor(Tensor):
         out._data = data
         out._names = names
         out._stypes = stypes
+        out._colptr = colptr
 
         return out
 
-    def as_tensor(self) -> torch.Tensor:
+    def as_tensor(self) -> Tensor:
         return self._data
 
     @property
@@ -89,10 +109,14 @@ class TableTensor(Tensor):
     def stypes(self) -> tuple[Stype, ...]:
         return self._stypes
 
+    @property
+    def colptr(self) -> Tensor:
+        return self._colptr
+
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
-        attrs = ["_data"]
+        attrs = ["_data", "_colptr"]
         ctx = (self._names, self._stypes)
         return attrs, ctx
 
@@ -108,6 +132,7 @@ class TableTensor(Tensor):
             data=inner_tensors["_data"],
             names=names,
             stypes=stypes,
+            colptr=inner_tensors["_colptr"],
         )
 
     @classmethod
@@ -120,6 +145,7 @@ class TableTensor(Tensor):
     ) -> Any:
         if func in HANDLED_FUNCTIONS:
             return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+
         args = pytree.tree_map_only(TableTensor, lambda x: x._data, args)
         kwargs = pytree.tree_map_only(TableTensor, lambda x: x._data, kwargs)
         return func(*args, **(kwargs or {}))
