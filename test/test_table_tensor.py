@@ -13,4 +13,4 @@ def test_init() -> None:
     assert table.size() == (2, 2)
     assert table.column_names == ("age", "fraud")
     assert table.stypes == (Stype.numerical, Stype.categorical)
-    assert torch.equal(table.colptr, torch.tensor([0, 1, 2]))
+    assert table.colptr.equal(torch.tensor([0, 1, 2]))
