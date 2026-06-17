@@ -44,6 +44,8 @@ def test_shape_preserving_ops() -> None:
     assert table.as_tensor().is_shared()
 
     if torch.cuda.is_available():
+        assert not out.is_pinned()
+        assert not out.as_tensor().is_pinned()
         out = table.pin_memory()
         assert_metadata(out)
         assert out.is_pinned()
