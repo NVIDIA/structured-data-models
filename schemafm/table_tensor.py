@@ -23,7 +23,7 @@ def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
 class TableTensor(Tensor):
     _data: Tensor
-    _names: tuple[str, ...]
+    _col_names: tuple[str, ...]
     _stypes: tuple[Stype, ...]
     _colptr: Tensor
 
@@ -33,7 +33,7 @@ class TableTensor(Tensor):
     def __init__(
         self,
         data: Tensor,
-        names: Sequence[str],
+        col_names: Sequence[str],
         stypes: Sequence[StypeLike],
         colptr: Tensor | Sequence[int],
     ) -> None:
@@ -43,12 +43,12 @@ class TableTensor(Tensor):
     def __new__(
         cls,
         data: Tensor,
-        names: Sequence[str],
+        col_names: Sequence[str],
         stypes: Sequence[StypeLike],
         colptr: Tensor | Sequence[int],
     ) -> "TableTensor":
 
-        names = tuple(names)
+        col_names = tuple(col_names)
         stypes = tuple(Stype(stype) for stype in stypes)
         colptr = torch.as_tensor(colptr, dtype=torch.long, device=data.device)
 
@@ -64,10 +64,10 @@ class TableTensor(Tensor):
                 f"(got {colptr.dim()}D tensor)"
             )
 
-        if len(names) != colptr.numel() - 1:
+        if len(col_names) != colptr.numel() - 1:
             raise ValueError(
                 f"The number of column names must match the number of "
-                f"logical columns (got {len(names)}, but expected "
+                f"logical columns (got {len(col_names)}, but expected "
                 f"{colptr.numel() - 1})"
             )
 
@@ -78,7 +78,7 @@ class TableTensor(Tensor):
                 f"{colptr.numel() - 1})"
             )
 
-        if len(set(names)) != len(names):
+        if len(set(col_names)) != len(col_names):
             raise ValueError("Column names must be unique")
 
         out = Tensor._make_wrapper_subclass(
@@ -92,7 +92,7 @@ class TableTensor(Tensor):
         )
 
         out._data = data
-        out._names = names
+        out._col_names = col_names
         out._stypes = stypes
         out._colptr = colptr
 
@@ -102,8 +102,8 @@ class TableTensor(Tensor):
         return self._data
 
     @property
-    def column_names(self) -> tuple[str, ...]:
-        return self._names
+    def col_names(self) -> tuple[str, ...]:
+        return self._col_names
 
     @property
     def stypes(self) -> tuple[Stype, ...]:
@@ -117,7 +117,7 @@ class TableTensor(Tensor):
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["_data", "_colptr"]
-        ctx = (self._names, self._stypes)
+        ctx = (self._col_names, self._stypes)
         return attrs, ctx
 
     @staticmethod
@@ -127,10 +127,10 @@ class TableTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> "TableTensor":
-        names, stypes = ctx
+        col_names, stypes = ctx
         return TableTensor(
             data=inner_tensors["_data"],
-            names=names,
+            col_names=col_names,
             stypes=stypes,
             colptr=inner_tensors["_colptr"],
         )
@@ -143,6 +143,7 @@ class TableTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        print(func.__name__)
         if func in HANDLED_FUNCTIONS:
             return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
