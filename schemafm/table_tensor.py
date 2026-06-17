@@ -5,7 +5,7 @@ import torch
 import torch.utils._pytree as pytree
 from torch import Tensor
 
-from schemafm.stype import Stype
+from schemafm import Stype, StypeLike
 
 aten = torch.ops.aten
 
@@ -33,7 +33,7 @@ class TableTensor(Tensor):
         self,
         data: Tensor,
         names: Sequence[str],
-        stypes: Sequence[Stype | str],
+        stypes: Sequence[StypeLike],
     ) -> None:
         pass
 
@@ -42,11 +42,9 @@ class TableTensor(Tensor):
         cls,
         data: Tensor,
         names: Sequence[str],
-        stypes: Sequence[Stype | str],
+        stypes: Sequence[StypeLike],
     ) -> "TableTensor":
         if isinstance(data, cls):  # If passed `TableTensor`, inherit metadata:
-            names = data._names if names is None else names
-            stypes = data._stypes if stypes is None else stypes
             data = data._data
 
         names = tuple(names)
