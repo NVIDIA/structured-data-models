@@ -74,3 +74,16 @@ src=["schema-fm", "test"]
 line-length=79
 indent-width=4
 target-version="py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # import sorting
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "C4",   # comprehensions
+    "SIM",  # simplification
+    "RUF",  # ruff-specific rules
+]

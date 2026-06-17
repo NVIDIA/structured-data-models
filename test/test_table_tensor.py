@@ -1,5 +1,4 @@
 import torch
-
 from schemafm import Stype, TableTensor
 
 
