@@ -21,31 +21,23 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Keep the project PyTorch/tensor-centric.
 - Preserve dataframe ergonomics at the boundary, but move model execution onto structured tensor containers.
 - Keep model-family wrappers thin. Shared abstractions should live outside model implementations if possible.
-- Avoid mandatory config-first APIs. Direct Python composition should be the
-  primary interface.
+- Avoid mandatory config-first APIs. Direct Python composition should be the primary interface.
 - Add composable transformations instead of hard-coding one-off preprocessing into model wrappers.
-- Keep recipes inspectable and deterministic where possible. Any stochastic
-  transformations should expose seed/generator control.
+- Keep recipes inspectable and deterministic where possible. Any stochastic transformations should expose seed/generator control.
 - Treat preprocessing as leakage-sensitive.
   Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
 - Keep dependencies minimal in the core package.
   Heavy dependencies should be optional unless they become essential.
-- Aim for GPU acceleration in all core components. Prefer PyTorch and cuDF
-  execution paths over CPU-bound pandas, NumPy, or sklearn implementations.
+- Aim for GPU acceleration in all core components. Prefer PyTorch and cuDF execution paths over CPU-bound pandas, NumPy, or sklearn implementations.
 
 # Python/PyTorch Coding Style
 
 - Keep Python code typed at function and method boundaries.
-- Keep lines within 80 columns.
-- Prefer single quotes for symbolic strings, keys, and enum-like values.
-  Use double quotes for human-readable messages and prose.
 - Use keyword arguments in multi-line calls.
 - Avoid `else` after `return`, `raise`, `break`, or `continue`.
-- Prefer PyTorch-native, vectorized tensor operations over NumPy or Python
-  loops.
+- Prefer PyTorch-native, vectorized tensor operations over NumPy or Python loops.
   Call out cases where vectorization is not practical.
 - Preserve tensor device and dtype.
   Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, Python scalars, or newly-created CPU tensors.
 - Add short tensor shape comments for complex tensor operations.
-- Avoid accidental graph breaks where a `torch.compile`-friendly formulation is
-  straightforward.
+- Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.

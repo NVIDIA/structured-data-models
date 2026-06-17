@@ -45,19 +45,14 @@ class TableTensor(Tensor):
 
         if data.dim() != 2:
             raise ValueError(
-                f"'{cls.__name__}' must be two-dimensional (got {data.dim()})"
+                f"'{cls.__name__}' must be two-dimensional "
+                f"(got {{data.dim()}})"
             )
 
         if len(names) != len(stypes):
             raise ValueError(
-                f"The number of column names (got {len(names)}) "
-                f"must match the number of semantic types "
-                f"(got {len(stypes)})"
-            )
-
-        if data.dim() == 2 and data.size(1) != len(names):
-            raise ValueError(
-                "The last tensor dimension must match the number of named columns",
+                f"The number of column names (got {len(names)}) must match "
+                f"the number of semantic types (got {len(stypes)})"
             )
 
         out = torch.Tensor._make_wrapper_subclass(

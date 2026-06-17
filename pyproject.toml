@@ -68,3 +68,9 @@ addopts = [
 ]
 testpaths = ["test"]
 xfail_strict = true
+
+[tool.ruff]  # https://docs.astral.sh/ruff/rules
+src=["schema-fm", "test"]
+line-length=79
+indent-width=4
+target-version="py310"
