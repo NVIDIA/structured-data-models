@@ -45,7 +45,7 @@ class TableTensor(Tensor):
         data: Tensor,
         names: Sequence[str],
         stypes: Sequence[StypeLike],
-        colptr: Tensor | Sequence[int] | None = None,
+        colptr: Tensor | Sequence[int],
     ) -> "TableTensor":
 
         names = tuple(names)
@@ -55,25 +55,27 @@ class TableTensor(Tensor):
         if data.dim() != 2:
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to be two-dimensional "
-                f"(got {data.dim()})"
+                f"(got {data.dim()} dimensions)"
             )
 
         if colptr.dim() != 1:
             raise ValueError(
                 f"Expected 'colptr' in '{cls.__name__}' to be one-dimensional "
-                f"(got {colptr.dim()})"
+                f"(got {colptr.dim()} dimensions)"
             )
 
         if len(names) != colptr.numel() - 1:
             raise ValueError(
                 f"The number of column names needs to match the number of "
-                f"logical columns (got {len(stypes)}, expected {len(names)})"
+                f"logical columns (got {len(names)}, but expected "
+                f"{colptr.numel() - 1})"
             )
 
         if len(stypes) != colptr.numel() - 1:
             raise ValueError(
                 f"The number of semantic types needs to match the number of "
-                f"logical columns (got {len(stypes)}, expected {len(names)})"
+                f"logical columns (got {len(stypes)}, but expected "
+                f"{colptr.numel() - 1})"
             )
 
         if len(set(names)) != len(names):
