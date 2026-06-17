@@ -50,49 +50,34 @@ class TableTensor(Tensor):
 
         names = tuple(names)
         stypes = tuple(Stype(stype) for stype in stypes)
-
-        if colptr is None:
-            return torch.arange(num_logical_columns + 1, dtype=torch.long)
-
-        if isinstance(colptr, Tensor):
-            colptr = colptr.detach().to(dtype=torch.long, device="cpu")
-        else:
-            colptr = torch.tensor(colptr, dtype=torch.long)
-
-        if colptr.dim() != 1:
-            raise ValueError("'colptr' must be one-dimensional")
-
-        if colptr.numel() != num_logical_columns + 1:
-            raise ValueError(
-                f"'colptr' must have length {num_logical_columns + 1} "
-                f"(got {colptr.numel()})"
-            )
-
-        if colptr.numel() == 0 or int(colptr[0]) != 0:
-            raise ValueError("'colptr' must start with 0")
-
-        if (colptr[:-1] >= colptr[1:]).any():
-            raise ValueError("'colptr' must be strictly increasing")
+        colptr = torch.as_tensor(colptr, dtype=torch.long, device=data.device)
 
         if data.dim() != 2:
             raise ValueError(
-                f"'{cls.__name__}' must be two-dimensional (got {data.dim()})"
+                f"Expected 'data' in '{cls.__name__}' to be two-dimensional "
+                f"(got {data.dim()})"
             )
 
-        if len(names) != len(stypes):
+        if colptr.dim() != 1:
             raise ValueError(
-                f"The number of column names (got {len(names)}) must match "
-                f"the number of semantic types (got {len(stypes)})"
+                f"Expected 'colptr' in '{cls.__name__}' to be one-dimensional "
+                f"(got {colptr.dim()})"
+            )
+
+        if len(names) != colptr.numel() - 1:
+            raise ValueError(
+                f"The number of column names needs to match the number of "
+                f"logical columns (got {len(stypes)}, expected {len(names)})"
+            )
+
+        if len(stypes) != colptr.numel() - 1:
+            raise ValueError(
+                f"The number of semantic types needs to match the number of "
+                f"logical columns (got {len(stypes)}, expected {len(names)})"
             )
 
         if len(set(names)) != len(names):
             raise ValueError("Column names must be unique")
-
-        if data.size(1) != int(colptr[-1]):
-            raise ValueError(
-                f"The number of physical columns (got {data.size(1)}) must "
-                f"match 'colptr[-1]' (got {int(colptr[-1])})"
-            )
 
         out = Tensor._make_wrapper_subclass(
             cls,
