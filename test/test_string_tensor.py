@@ -98,7 +98,12 @@ def test_to_copy() -> None:
     with pytest.raises(TypeError, match="Cannot convert"):
         tensor.to(torch.float32)
 
+    out = torch.ops.aten._to_copy.default(tensor, pin_memory=True)
+    assert isinstance(out, StringTensor)
+    assert not out.is_pinned()
+
     assert not tensor.is_pinned()
+    assert not torch.ops.aten.is_pinned.default(tensor, None)
     if torch.cuda.is_available():
         assert tensor.pin_memory().is_pinned()
 
