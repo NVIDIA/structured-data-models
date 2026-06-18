@@ -11,6 +11,28 @@ aten = torch.ops.aten
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
 
 
+def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
+    value = 1
+    stride = []
+    for dim_size in reversed(size):
+        stride.append(value)
+        value *= dim_size
+    return tuple(stride[::-1])
+
+
+def _max_index(
+    size: Sequence[int],
+    stride: Sequence[int],
+    storage_offset: int,
+) -> int:
+    if math.prod(size) == 0:
+        return storage_offset
+    return storage_offset + sum(
+        (dim_size - 1) * dim_stride
+        for dim_size, dim_stride in zip(size, stride, strict=True)
+    )
+
+
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -49,12 +71,7 @@ class StringTensor(Tensor):
         storage_offset: int = 0,
     ) -> "StringTensor":
 
-        if stride is None:
-            stride, value = [], 1
-            for dim_size in reversed(size):
-                stride.append(value)
-                value *= dim_size
-            stride = stride[::-1]
+        stride = stride or _contiguous_stride(size)
 
         if data.dtype != torch.uint8:
             raise ValueError(
@@ -86,16 +103,13 @@ class StringTensor(Tensor):
                 f"Expected 'size' and 'stride' in '{cls.__name__}' to have "
                 f"the same length (got {len(size)} and {len(stride)})"
             )
-        if storage_offset < 0:
+        if storage_offset < 0 or storage_offset >= offset.numel():
             raise ValueError(
-                f"Expected 'storage_offset' in '{cls.__name__}' to be "
-                f"non-negative"
+                f"'storage_offset' in '{cls.__name__}' is out of bounds (got "
+                f"{storage_offset}, but expected [0, {offset.numel() - 1}])"
             )
         if math.prod(size) > 0:
-            max_index = storage_offset + sum(
-                (dim_size - 1) * dim_stride
-                for dim_size, dim_stride in zip(size, stride, strict=True)
-            )
+            max_index = _max_index(size, stride, storage_offset)
             if max_index >= offset.numel() - 1:
                 raise ValueError(
                     f"'offset' in '{cls.__name__}' is out of bounds (got "
@@ -272,3 +286,133 @@ class StringTensor(Tensor):
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"
         )
+
+    def is_shared(self) -> bool:
+        return self._data.is_shared() and self._offset.is_shared()
+
+    def share_memory_(self) -> "StringTensor":
+        self._data.share_memory_()
+        self._offset.share_memory_()
+        return self
+
+
+@implements(aten.clone.default)
+def _clone(
+    input: StringTensor,
+    *,
+    memory_format: torch.memory_format | None = None,
+) -> StringTensor:
+
+    if memory_format is None:
+        memory_format = torch.preserve_format
+
+    if memory_format not in (torch.preserve_format, torch.contiguous_format):
+        raise ValueError(
+            f"Unsupported memory format '{memory_format}' for "
+            f"'{input.__class__.__name__}.clone'"
+        )
+
+    stride = _contiguous_stride(input.size())
+    if input.stride() != stride:
+        raise NotImplementedError(
+            f"Cannot clone non-contiguous '{input.__class__.__name__}'"
+        )
+
+    storage_offset = int(input.storage_offset())
+
+    if input.numel() == 0:
+        offset = input._offset[storage_offset : storage_offset + 1].clone()
+        data = input._data.new_empty(0)
+    else:
+        max_index = _max_index(input.size(), input.stride(), storage_offset)
+        offset = input._offset[storage_offset : max_index + 2].clone()
+        data = input._data[offset[0] : offset[-1]].clone(
+            memory_format=memory_format,
+        )
+        offset -= offset[0]
+
+    return StringTensor(
+        data=data,
+        offset=offset,
+        size=input.size(),
+        stride=stride,
+        storage_offset=0,
+    )
+
+
+@implements(aten._to_copy.default)
+def _to_copy(
+    input: StringTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool = False,
+    non_blocking: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> StringTensor:
+    if dtype is not None and dtype != torch.uint8:
+        raise TypeError(
+            f"Cannot convert '{input.__class__.__name__}' to dtype '{dtype}'"
+        )
+    if layout is not None and layout != torch.strided:
+        raise TypeError(
+            f"Cannot convert '{input.__class__.__name__}' to layout '{layout}'"
+        )
+
+    return StringTensor(
+        data=aten._to_copy.default(
+            input._data,
+            dtype=torch.uint8,
+            layout=torch.strided,
+            device=device,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            memory_format=memory_format,
+        ),
+        offset=aten._to_copy.default(
+            input._offset,
+            dtype=torch.long,
+            layout=torch.strided,
+            device=device,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            memory_format=memory_format,
+        ),
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+@implements(aten.is_pinned.default)
+def _is_pinned(
+    input: StringTensor,
+    *,
+    device: torch.device | str | None = None,
+) -> bool:
+    if device is None:
+        return input._data.is_pinned() and input._offset.is_pinned()
+    return input._data.is_pinned(device) and input._offset.is_pinned(device)
+
+
+@implements(aten._pin_memory.default)
+def _pin_memory(
+    input: StringTensor,
+    *,
+    device: torch.device | str | None = None,
+) -> StringTensor:
+    if device is None:
+        data = input._data.pin_memory()
+        offset = input._offset.pin_memory()
+    else:
+        data = input._data.pin_memory(device)
+        offset = input._offset.pin_memory(device)
+
+    return StringTensor(
+        data=data,
+        offset=offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
