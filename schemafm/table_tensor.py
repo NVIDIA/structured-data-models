@@ -27,7 +27,7 @@ class TableTensor(Tensor):
     _stypes: tuple[Stype, ...]
     _colptr: Tensor
 
-    # Prevent auto-wrapping outputs back into the proper subclass type:
+    # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
 
     def __init__(
