@@ -33,31 +33,6 @@ def _max_index(
     )
 
 
-def _compact_storage(
-    input: "StringTensor",
-) -> tuple[Tensor, Tensor, tuple[int, ...]]:
-    stride = _contiguous_stride(input.size())
-    if input.stride() != stride:
-        raise NotImplementedError(
-            f"Cannot copy non-contiguous '{input.__class__.__name__}'"
-        )
-
-    storage_offset = int(input.storage_offset())
-
-    if input.numel() == 0:
-        data = input._data.new_empty(0)
-        offset = input._offset.new_zeros(1)
-    else:
-        max_index = _max_index(input.size(), input.stride(), storage_offset)
-        offset = input._offset[storage_offset : max_index + 2]
-        byte_start = int(offset[0])
-        byte_end = int(offset[-1])
-        data = input._data[byte_start:byte_end]
-        offset = offset - offset[0]
-
-    return data, offset, stride
-
-
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -359,7 +334,22 @@ def _to_copy(
             f"Cannot convert '{input.__class__.__name__}' to layout '{layout}'"
         )
 
-    data, offset, stride = _compact_storage(input)
+    if input.stride() != _contiguous_stride(input.size()):
+        raise NotImplementedError(  # TODO
+            f"Cannot copy non-contiguous '{input.__class__.__name__}'"
+        )
+
+    storage_offset = int(input.storage_offset())
+    if input.numel() == 0:
+        data = input._data.new_empty(0)
+        offset = input._offset.new_zeros(1)
+    else:
+        max_index = _max_index(input.size(), input.stride(), storage_offset)
+        offset = input._offset[storage_offset : max_index + 2]
+        byte_start = int(offset[0])
+        byte_end = int(offset[-1])
+        data = input._data[byte_start:byte_end]
+        offset = offset - offset[0]
 
     return StringTensor(
         data=aten._to_copy.default(
@@ -378,29 +368,19 @@ def _to_copy(
             device=device,
             pin_memory=pin_memory,
             non_blocking=non_blocking,
-            memory_format=memory_format,
+            memory_format=None,
         ),
         size=input.size(),
-        stride=stride,
+        stride=input.stride(),
         storage_offset=0,
     )
 
 
 @implements(aten.is_pinned.default)
-def _is_pinned(
-    input: StringTensor,
-    *,
-    device: torch.device | str | None = None,
-) -> bool:
-    if device is None:
-        return input._data.is_pinned() and input._offset.is_pinned()
-    return input._data.is_pinned(device) and input._offset.is_pinned(device)
+def _is_pinned(input: StringTensor) -> bool:
+    return input._data.is_pinned() and input._offset.is_pinned()
 
 
 @implements(aten._pin_memory.default)
-def _pin_memory(
-    input: StringTensor,
-    *,
-    device: torch.device | str | None = None,
-) -> StringTensor:
-    return _to_copy(input, device=device, pin_memory=True)
+def _pin_memory(input: StringTensor) -> StringTensor:
+    return _to_copy(input, pin_memory=True)
