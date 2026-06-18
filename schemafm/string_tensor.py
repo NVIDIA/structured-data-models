@@ -367,30 +367,15 @@ def _to_copy(
 
 
 @implements(aten.is_pinned.default)
-def _is_pinned(
-    input: StringTensor,
-    device: torch.device | str | None = None,
-) -> bool:
-    return input._data.is_pinned(device=device) and input._offset.is_pinned(
-        device=device
-    )
+def _is_pinned(input: StringTensor) -> bool:
+    return input._data.is_pinned() and input._offset.is_pinned()
 
 
 @implements(aten._pin_memory.default)
-def _pin_memory(
-    input: StringTensor,
-    device: torch.device | str | None = None,
-) -> StringTensor:
-    if device is None:
-        data = input._data.pin_memory()
-        offset = input._offset.pin_memory()
-    else:
-        data = input._data.pin_memory(device=device)
-        offset = input._offset.pin_memory(device=device)
-
+def _pin_memory(input: StringTensor) -> StringTensor:
     return StringTensor(
-        data=data,
-        offset=offset,
+        data=input._data.pin_memory(),
+        offset=input._offset.pin_memory(),
         size=input.size(),
         stride=input.stride(),
         storage_offset=int(input.storage_offset()),
