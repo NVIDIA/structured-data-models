@@ -351,10 +351,7 @@ def _to_copy(
         data = input._data[byte_start:byte_end]
         offset = offset - offset[0]
 
-    if pin_memory:
-        data = data.pin_memory()
-        offset = offset.pin_memory()
-    elif device is not None and device != data.device:
+    if device is not None and device != data.device:
         data = data.to(device, non_blocking=non_blocking)
         offset = offset.to(device, non_blocking=non_blocking)
     elif input.numel() > 0:
@@ -376,4 +373,10 @@ def _is_pinned(input: StringTensor) -> bool:
 
 @implements(aten._pin_memory.default)
 def _pin_memory(input: StringTensor) -> StringTensor:
-    return _to_copy(input, pin_memory=True)
+    return StringTensor(
+        data=input._data.pin_memory(),
+        offset=input._offset.pin_memory(),
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
