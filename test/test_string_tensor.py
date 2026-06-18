@@ -54,7 +54,7 @@ def test_from_pandas() -> None:
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
 
 
-def test_copy_and_memory_ops() -> None:
+def test_to_copy() -> None:
     tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
 
     out = tensor.clone()
