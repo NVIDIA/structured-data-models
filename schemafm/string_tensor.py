@@ -302,15 +302,6 @@ def _clone(
     *,
     memory_format: torch.memory_format | None = None,
 ) -> StringTensor:
-
-    if memory_format is None:
-        memory_format = torch.preserve_format
-
-    if memory_format not in (torch.preserve_format, torch.contiguous_format):
-        raise ValueError(
-            f"Unsupported memory format '{memory_format}' for "
-            f"'{input.__class__.__name__}.clone'"
-        )
     return _to_copy(input, memory_format=memory_format)
 
 
@@ -326,6 +317,9 @@ def _to_copy(
     memory_format: torch.memory_format | None = None,
 ) -> StringTensor:
 
+    if memory_format is None:
+        memory_format = torch.preserve_format
+
     if dtype is not None and dtype != torch.uint8:
         raise TypeError(
             f"Cannot convert '{input.__class__.__name__}' to dtype '{dtype}'"
@@ -333,6 +327,11 @@ def _to_copy(
     if layout is not None and layout != torch.strided:
         raise TypeError(
             f"Cannot convert '{input.__class__.__name__}' to layout '{layout}'"
+        )
+    if memory_format not in (torch.preserve_format, torch.contiguous_format):
+        raise ValueError(
+            f"Unsupported memory format '{memory_format}' for "
+            f"'{input.__class__.__name__}.clone'"
         )
 
     if input.stride() != _contiguous_stride(input.size()):
