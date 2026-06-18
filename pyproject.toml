@@ -35,12 +35,13 @@ classifiers = [
 ]
 dependencies = [
     "torch",
-    "pyarrow",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pyarrow",
+    "pandas",
 ]
 
 [project.urls]

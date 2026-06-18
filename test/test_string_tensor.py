@@ -1,4 +1,5 @@
 import pyarrow as pa
+import pytest
 import torch
 from schemafm import StringTensor
 
@@ -40,3 +41,14 @@ def test_from_arrow() -> None:
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([]))
     assert tensor._offset.equal(torch.tensor([0]))
+
+
+def test_from_pandas() -> None:
+    pd = pytest.importorskip("pandas")
+
+    tensor = StringTensor.from_pandas(pd.Series(["hi", "é", "", None]))
+    assert tensor.size() == (4,)
+    assert tensor.stride() == (1,)
+    assert tensor.dtype == torch.uint8
+    assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
