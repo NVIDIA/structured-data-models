@@ -119,7 +119,7 @@ class StringTensor(Tensor):
         return out
 
     @classmethod
-    def from_list(
+    def from_strings(
         cls,
         data: str | Sequence[Any],
         *,
@@ -159,13 +159,49 @@ class StringTensor(Tensor):
             size=size,
         )
 
-    @property
-    def bytes(self) -> Tensor:
-        return self._data
+    @classmethod
+    def from_arrow(
+        cls,
+        data: Any,
+        *,
+        device: torch.device | str | None = None,
+    ) -> "StringTensor":
+        import pyarrow as pa
 
-    @property
-    def offset(self) -> Tensor:
-        return self._offset
+        if isinstance(data, pa.ChunkedArray):
+            if data.num_chunks == 1:
+                data = data.chunk(0)
+            else:
+                data = data.combine_chunks()
+
+        if not isinstance(data, pa.Array):
+            raise TypeError(
+                f"Expected 'data' in '{cls.__name__}.from_arrow' to be a "
+                f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
+                f"(got '{type(data).__name__}')"
+            )
+
+        is_string = pa.types.is_string(data.type)
+        is_large_string = pa.types.is_large_string(data.type)
+        if not is_string and not is_large_string:
+            raise TypeError(
+                f"Expected 'data' in '{cls.__name__}.from_arrow' to have "
+                f"'string' or 'large_string' type (got '{data.type}')"
+            )
+
+        buffers = data.buffers()
+
+        return cls(
+            data=torch.frombuffer(buffers[2], dtype=torch.uint8).to(device)
+            if buffers[2].size > 0
+            else torch.empty(0, dtype=torch.uint8, device=device),
+            offset=torch.frombuffer(
+                buffer=buffers[1],
+                dtype=torch.int if is_string else torch.long,
+            ).to(device, torch.long),
+            size=(len(data),),
+            storage_offset=data.offset,
+        )
 
     # PyTorch/Python builtins #################################################
 

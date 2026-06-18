@@ -1,11 +1,42 @@
+import pyarrow as pa
 import torch
 from schemafm import StringTensor
 
 
-def test_init() -> None:
-    tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
+def test_from_strings() -> None:
+    tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
     assert tensor.size() == (2, 2)
     assert tensor.stride() == (2, 1)
     assert tensor.dtype == torch.uint8
-    assert tensor.bytes.equal(torch.tensor([104, 105, 195, 169, 97, 98, 99]))
-    assert tensor.offset.equal(torch.tensor([0, 2, 4, 4, 7]))
+    assert tensor._data.equal(torch.tensor([104, 105, 195, 169, 97, 98, 99]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 7]))
+
+    tensor = StringTensor.from_strings([])
+    assert tensor.size() == (0,)
+    assert tensor.stride() == (1,)
+    assert tensor.dtype == torch.uint8
+    assert tensor._data.equal(torch.tensor([]))
+    assert tensor._offset.equal(torch.tensor([0]))
+
+    tensor = StringTensor.from_strings("hi")
+    assert tensor.size() == ()
+    assert tensor.stride() == ()
+    assert tensor.dtype == torch.uint8
+    assert tensor._data.equal(torch.tensor([104, 105]))
+    assert tensor._offset.equal(torch.tensor([0, 2]))
+
+
+def test_from_arrow() -> None:
+    tensor = StringTensor.from_arrow(pa.array(["hi", "é", "", None]))
+    assert tensor.size() == (4,)
+    assert tensor.stride() == (1,)
+    assert tensor.dtype == torch.uint8
+    assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
+
+    tensor = StringTensor.from_arrow(pa.array([], type=pa.string()))
+    assert tensor.size() == (0,)
+    assert tensor.stride() == (1,)
+    assert tensor.dtype == torch.uint8
+    assert tensor._data.equal(torch.tensor([]))
+    assert tensor._offset.equal(torch.tensor([0]))
