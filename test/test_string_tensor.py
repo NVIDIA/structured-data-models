@@ -3,8 +3,7 @@ from schemafm import StringTensor
 
 
 def test_init() -> None:
-    tensor = StringTensor([["hi", "é"], ["", "abc"]])
-
+    tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
     assert tensor.size() == (2, 2)
     assert tensor.stride() == (2, 1)
     assert tensor.dtype == torch.uint8

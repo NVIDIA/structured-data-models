@@ -26,8 +26,19 @@ class StringTensor(Tensor):
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
 
-    @classmethod
-    def _from_bytes(
+    def __init__(
+        cls,
+        data: Tensor,
+        offset: Tensor,
+        size: Sequence[int],
+        *,
+        stride: Sequence[int] | None = None,
+        storage_offset: int = 0,
+    ) -> None:
+        pass
+
+    @staticmethod
+    def __new__(
         cls,
         data: Tensor,
         offset: Tensor,
@@ -107,16 +118,8 @@ class StringTensor(Tensor):
 
         return out
 
-    def __init__(
-        self,
-        data: str | Sequence[Any],
-        *,
-        device: torch.device | str | None = None,
-    ) -> None:
-        pass
-
-    @staticmethod
-    def __new__(
+    @classmethod
+    def from_list(
         cls,
         data: str | Sequence[Any],
         *,
@@ -150,7 +153,7 @@ class StringTensor(Tensor):
 
         size = flatten(data)
 
-        return cls._from_bytes(
+        return cls(
             data=torch.tensor(values, dtype=torch.uint8, device=device),
             offset=torch.tensor(offsets, dtype=torch.long, device=device),
             size=size,
@@ -179,7 +182,7 @@ class StringTensor(Tensor):
         outer_stride: tuple[int, ...],
     ) -> "StringTensor":
         (storage_offset,) = ctx
-        return StringTensor._from_bytes(
+        return StringTensor(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             size=outer_size,
