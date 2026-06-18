@@ -33,6 +33,47 @@ def _max_index(
     )
 
 
+def _resolve_view_size(size: Sequence[int], numel: int) -> tuple[int, ...]:
+    size = tuple(size)
+    unknown_dims = [i for i, dim_size in enumerate(size) if dim_size == -1]
+    if len(unknown_dims) > 1:
+        raise ValueError("Only one dimension can be inferred")
+    if any(dim_size < -1 for dim_size in size):
+        raise ValueError(f"Invalid shape dimension {size}")
+
+    if not unknown_dims:
+        if math.prod(size) != numel:
+            raise ValueError(
+                f"Cannot view tensor with {numel} elements as shape {size}"
+            )
+        return size
+
+    known_numel = math.prod(dim_size for dim_size in size if dim_size != -1)
+    if known_numel == 0:
+        raise ValueError(f"Cannot infer shape dimension for shape {size}")
+    if numel % known_numel != 0:
+        raise ValueError(
+            f"Cannot view tensor with {numel} elements as shape {size}"
+        )
+
+    out = list(size)
+    out[unknown_dims[0]] = numel // known_numel
+    return tuple(out)
+
+
+def _normalize_dim(dim: int, ndim: int, *, allow_end: bool = False) -> int:
+    min_dim = -ndim - int(allow_end)
+    max_dim = ndim + int(allow_end) - 1
+    if dim < min_dim or dim > max_dim:
+        raise IndexError(
+            f"Dimension out of range (expected to be in range of "
+            f"[{min_dim}, {max_dim}], but got {dim})"
+        )
+    if dim < 0:
+        dim += ndim + int(allow_end)
+    return dim
+
+
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -377,3 +418,92 @@ def _is_pinned(input: StringTensor) -> bool:
 @implements(aten._pin_memory.default)
 def _pin_memory(input: StringTensor) -> StringTensor:
     return _to_copy(input, pin_memory=True)
+
+
+@implements(aten.view.default)
+def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
+    if input.stride() != _contiguous_stride(input.size()):
+        raise RuntimeError(
+            "view size is not compatible with input tensor's size and stride "
+            "(at least one dimension spans across two contiguous subspaces). "
+            "Use .reshape(...) instead."
+        )
+
+    size = _resolve_view_size(size, int(input.numel()))
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=size,
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+@implements(aten.squeeze.default)
+def _squeeze(input: StringTensor) -> StringTensor:
+    size, stride = [], []
+    for dim_size, dim_stride in zip(input.size(), input.stride(), strict=True):
+        if dim_size != 1:
+            size.append(dim_size)
+            stride.append(dim_stride)
+
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=size,
+        stride=stride,
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+@implements(aten.squeeze.dim)
+def _squeeze_dim(input: StringTensor, dim: int) -> StringTensor:
+    dim = _normalize_dim(dim, input.dim())
+    size = list(input.size())
+    stride = list(input.stride())
+    if size[dim] == 1:
+        del size[dim]
+        del stride[dim]
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=size,
+        stride=stride,
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+@implements(aten.squeeze.dims)
+def _squeeze_dims(input: StringTensor, dim: Sequence[int]) -> StringTensor:
+    dims = {_normalize_dim(d, input.dim()) for d in dim}
+    size, stride = [], []
+    for i, (dim_size, dim_stride) in enumerate(
+        zip(input.size(), input.stride(), strict=True)
+    ):
+        if i not in dims or dim_size != 1:
+            size.append(dim_size)
+            stride.append(dim_stride)
+
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=size,
+        stride=stride,
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+@implements(aten.unsqueeze.default)
+def _unsqueeze(input: StringTensor, dim: int) -> StringTensor:
+    dim = _normalize_dim(dim, input.dim(), allow_end=True)
+    size = list(input.size())
+    stride = list(input.stride())
+    dim_stride = 1 if dim == input.dim() else size[dim] * stride[dim]
+    size.insert(dim, 1)
+    stride.insert(dim, dim_stride)
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=size,
+        stride=stride,
+        storage_offset=int(input.storage_offset()),
+    )

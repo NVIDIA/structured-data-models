@@ -108,3 +108,50 @@ def test_to_copy() -> None:
         assert out.is_shared()
     except RuntimeError:
         pass
+
+
+def test_shape_views() -> None:
+    tensor = StringTensor.from_strings([["a", "bb"], ["ccc", "d"]])
+
+    out = tensor.view(4)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (4,)
+    assert out.stride() == (1,)
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor.reshape(1, -1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (1, 4)
+    assert out.stride() == (4, 1)
+
+    out = tensor.flatten()
+    assert isinstance(out, StringTensor)
+    assert out.size() == (4,)
+    assert out.stride() == (1,)
+
+    out = tensor.unsqueeze(1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 1, 2)
+    assert out.stride() == (2, 2, 1)
+
+    out = tensor.view(1, 2, 2, 1).squeeze()
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 2)
+    assert out.stride() == (2, 1)
+
+    non_contiguous = StringTensor(
+        data=tensor._data,
+        offset=tensor._offset,
+        size=tensor.size(),
+        stride=(1, 2),
+    )
+    out = non_contiguous.unsqueeze(0)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (1, 2, 2)
+    assert out.stride() == (2, 1, 2)
+
+    with pytest.raises(RuntimeError, match="view size is not compatible"):
+        non_contiguous.view(4)
+    with pytest.raises(NotImplementedError, match="non-contiguous"):
+        out.to("cpu", copy=True)
