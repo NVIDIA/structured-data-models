@@ -203,6 +203,26 @@ class StringTensor(Tensor):
             storage_offset=data.offset,
         )
 
+    @classmethod
+    def from_pandas(
+        cls,
+        data: Any,
+        *,
+        device: torch.device | str | None = None,
+    ) -> "StringTensor":
+        import pandas as pd
+
+        if not isinstance(data, pd.Series):
+            raise TypeError(
+                f"Expected 'data' in '{cls.__name__}.from_pandas' to be a "
+                f"'pandas.Series' (got '{type(data).__name__}')"
+            )
+
+        return cls.from_arrow(
+            data=data.astype("string[pyarrow]").array.__arrow_array__(),
+            device=device,
+        )
+
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:

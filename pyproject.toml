@@ -41,6 +41,8 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pyarrow",
+    "pandas",
 ]
 
 [project.urls]
