@@ -2,6 +2,7 @@ import math
 from collections.abc import Callable, Sequence
 from typing import Any
 
+import pyarrow as pa
 import torch
 from torch import Tensor
 
@@ -119,55 +120,13 @@ class StringTensor(Tensor):
         return out
 
     @classmethod
-    def from_strings(
-        cls,
-        data: str | Sequence[Any],
-        *,
-        device: torch.device | str | None = None,
-    ) -> "StringTensor":
-        values = bytearray()
-        offsets = [0]
-
-        def flatten(data: Any) -> tuple[int, ...]:
-            if isinstance(data, str):
-                values.extend(data.encode("utf-8"))
-                offsets.append(len(values))
-                return ()
-            if not isinstance(data, Sequence):
-                raise TypeError(f"'{cls.__name__}' data must contain strings")
-            if len(data) == 0:
-                return (0,)
-
-            child_size: tuple[int, ...] | None = None
-            for item in data:
-                item_size = flatten(item)
-                if child_size is None:
-                    child_size = item_size
-                elif item_size != child_size:
-                    raise ValueError(
-                        f"'{cls.__name__}' data must be rectangular"
-                    )
-
-            assert child_size is not None
-            return (len(data), *child_size)
-
-        size = flatten(data)
-
-        return cls(
-            data=torch.tensor(values, dtype=torch.uint8, device=device),
-            offset=torch.tensor(offsets, dtype=torch.long, device=device),
-            size=size,
-        )
-
-    @classmethod
     def from_arrow(
         cls,
-        data: Any,
+        data: pa.Array | pa.ChunkedArray,
         *,
+        size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
-        import pyarrow as pa
-
         if isinstance(data, pa.ChunkedArray):
             if data.num_chunks == 1:
                 data = data.chunk(0)
@@ -189,6 +148,14 @@ class StringTensor(Tensor):
                 f"'string' or 'large_string' type (got '{data.type}')"
             )
 
+        if size is None:
+            size = (len(data),)
+        elif math.prod(size) != len(data):
+            raise ValueError(
+                f"Expected 'size' in '{cls.__name__}.from_arrow' to contain "
+                f"{len(data)} elements (got {math.prod(size)})"
+            )
+
         buffers = data.buffers()
 
         return cls(
@@ -199,8 +166,53 @@ class StringTensor(Tensor):
                 buffer=buffers[1],
                 dtype=torch.int if is_string else torch.long,
             ).to(device, torch.long),
-            size=(len(data),),
+            size=size,
             storage_offset=data.offset,
+        )
+
+    @classmethod
+    def from_strings(
+        cls,
+        data: str | Sequence[Any],
+        *,
+        device: torch.device | str | None = None,
+    ) -> "StringTensor":
+        def flatten(data: Any) -> tuple[int, ...]:
+            if isinstance(data, str):
+                return ()
+            if not isinstance(data, Sequence):
+                raise TypeError(f"'{cls.__name__}' data must contain strings")
+            if len(data) == 0:
+                return (0,)
+
+            if not isinstance(data[0], Sequence) or isinstance(data[0], str):
+                values.extend(data)
+                return (len(data),)
+
+            child_size: tuple[int, ...] | None = None
+            for item in data:
+                item_size = flatten(item)
+                if child_size is None:
+                    child_size = item_size
+                elif item_size != child_size:
+                    raise ValueError(
+                        f"'{cls.__name__}' data must be rectangular"
+                    )
+
+            assert child_size is not None
+            return (len(data), *child_size)
+
+        if isinstance(data, str):
+            values: list[str] = [data]
+            size: tuple[int, ...] = ()
+        else:
+            values = []
+            size = flatten(data)
+
+        return cls.from_arrow(
+            data=pa.array(values, type=pa.large_string()),
+            device=device,
+            size=size,
         )
 
     @classmethod
