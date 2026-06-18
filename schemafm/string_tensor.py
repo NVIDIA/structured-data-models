@@ -325,6 +325,7 @@ def _to_copy(
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> StringTensor:
+
     if dtype is not None and dtype != torch.uint8:
         raise TypeError(
             f"Cannot convert '{input.__class__.__name__}' to dtype '{dtype}'"
@@ -351,25 +352,18 @@ def _to_copy(
         data = input._data[byte_start:byte_end]
         offset = offset - offset[0]
 
+    if pin_memory:
+        data = data.pin_memory()
+        offset = offset.pin_memory()
+    elif device is not None and device != data.device:
+        data = data.to(device, non_blocking=non_blocking)
+        offset = offset.to(device, non_blocking=non_blocking)
+    elif input.numel() > 0:
+        data = data.clone()
+
     return StringTensor(
-        data=aten._to_copy.default(
-            data,
-            dtype=torch.uint8,
-            layout=torch.strided,
-            device=device,
-            pin_memory=pin_memory,
-            non_blocking=non_blocking,
-            memory_format=memory_format,
-        ),
-        offset=aten._to_copy.default(
-            offset,
-            dtype=torch.long,
-            layout=torch.strided,
-            device=device,
-            pin_memory=pin_memory,
-            non_blocking=non_blocking,
-            memory_format=None,
-        ),
+        data=data,
+        offset=offset,
         size=input.size(),
         stride=input.stride(),
         storage_offset=0,
