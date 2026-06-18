@@ -1,4 +1,3 @@
-import pyarrow as pa
 import pytest
 import torch
 from schemafm import StringTensor
@@ -28,6 +27,8 @@ def test_from_strings() -> None:
 
 
 def test_from_arrow() -> None:
+    pa = pytest.importorskip("pyarrow")
+
     tensor = StringTensor.from_arrow(pa.array(["hi", "é", "", None]))
     assert tensor.size() == (4,)
     assert tensor.stride() == (1,)
