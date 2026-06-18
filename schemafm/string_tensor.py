@@ -10,42 +10,6 @@ aten = torch.ops.aten
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
 
 
-def _flatten_strings(data: Any) -> tuple[tuple[int, ...], list[str]]:
-    if isinstance(data, str):
-        return (), [data]
-
-    if not isinstance(data, Sequence):
-        raise TypeError("'StringTensor' data must contain strings")
-
-    if len(data) == 0:
-        return (0,), []
-
-    child_size: tuple[int, ...] | None = None
-    flat: list[str] = []
-    for item in data:
-        item_size, item_flat = _flatten_strings(item)
-        if child_size is None:
-            child_size = item_size
-        elif item_size != child_size:
-            raise ValueError("'StringTensor' data must be rectangular")
-        flat.extend(item_flat)
-
-    assert child_size is not None
-    return (len(data), *child_size), flat
-
-
-def _encode_strings(strings: Sequence[str]) -> tuple[Tensor, Tensor]:
-    data = bytearray()
-    offset = [0]
-    for string in strings:
-        data.extend(string.encode("utf-8"))
-        offset.append(len(data))
-
-    data_tensor = torch.tensor(list(data), dtype=torch.uint8)
-    offset_tensor = torch.tensor(offset, dtype=torch.long)
-    return data_tensor, offset_tensor
-
-
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -118,7 +82,7 @@ class StringTensor(Tensor):
         if math.prod(size) > 0:
             max_index = storage_offset + sum(
                 (dim_size - 1) * dim_stride
-                for dim_size, dim_stride in zip(size, stride)
+                for dim_size, dim_stride in zip(size, stride, strict=True)
             )
             if max_index >= offset.numel() - 1:
                 raise ValueError(
@@ -158,13 +122,43 @@ class StringTensor(Tensor):
         *,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
-        size, strings = _flatten_strings(data)
-        data_tensor, offset = _encode_strings(strings)
-        if device is not None:
-            data_tensor = data_tensor.to(device=device)
-            offset = offset.to(device=device)
+        values = bytearray()
+        offsets = [0]
 
-        return cls._from_bytes(data=data_tensor, offset=offset, size=size)
+        def flatten(data: Any) -> tuple[int, ...]:
+            if isinstance(data, str):
+                values.extend(data.encode("utf-8"))
+                offsets.append(len(values))
+                return ()
+            if not isinstance(data, Sequence):
+                raise TypeError(f"'{cls.__name__}' data must contain strings")
+            if len(data) == 0:
+                return (0,)
+
+            child_size: tuple[int, ...] | None = None
+            for item in data:
+                item_size = flatten(item)
+                if child_size is None:
+                    child_size = item_size
+                elif item_size != child_size:
+                    raise ValueError(
+                        f"'{cls.__name__}' data must be rectangular"
+                    )
+
+            assert child_size is not None
+            return (len(data), *child_size)
+
+        size = flatten(data)
+
+        return cls._from_bytes(
+            data=torch.tensor(values, dtype=torch.uint8, device=device),
+            offset=torch.tensor(offsets, dtype=torch.long, device=device),
+            size=size,
+        )
+
+    @property
+    def bytes(self) -> Tensor:
+        return self._data
 
     @property
     def offset(self) -> Tensor:
