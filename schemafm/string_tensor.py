@@ -33,6 +33,31 @@ def _max_index(
     )
 
 
+def _compact_storage(
+    input: "StringTensor",
+) -> tuple[Tensor, Tensor, tuple[int, ...]]:
+    stride = _contiguous_stride(input.size())
+    if input.stride() != stride:
+        raise NotImplementedError(
+            f"Cannot copy non-contiguous '{input.__class__.__name__}'"
+        )
+
+    storage_offset = int(input.storage_offset())
+
+    if input.numel() == 0:
+        data = input._data.new_empty(0)
+        offset = input._offset.new_zeros(1)
+    else:
+        max_index = _max_index(input.size(), input.stride(), storage_offset)
+        offset = input._offset[storage_offset : max_index + 2]
+        byte_start = int(offset[0])
+        byte_end = int(offset[-1])
+        data = input._data[byte_start:byte_end]
+        offset = offset - offset[0]
+
+    return data, offset, stride
+
+
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -311,33 +336,7 @@ def _clone(
             f"Unsupported memory format '{memory_format}' for "
             f"'{input.__class__.__name__}.clone'"
         )
-
-    stride = _contiguous_stride(input.size())
-    if input.stride() != stride:
-        raise NotImplementedError(
-            f"Cannot clone non-contiguous '{input.__class__.__name__}'"
-        )
-
-    storage_offset = int(input.storage_offset())
-
-    if input.numel() == 0:
-        offset = input._offset[storage_offset : storage_offset + 1].clone()
-        data = input._data.new_empty(0)
-    else:
-        max_index = _max_index(input.size(), input.stride(), storage_offset)
-        offset = input._offset[storage_offset : max_index + 2].clone()
-        data = input._data[offset[0] : offset[-1]].clone(
-            memory_format=memory_format,
-        )
-        offset -= offset[0]
-
-    return StringTensor(
-        data=data,
-        offset=offset,
-        size=input.size(),
-        stride=stride,
-        storage_offset=0,
-    )
+    return _to_copy(input, memory_format=memory_format)
 
 
 @implements(aten._to_copy.default)
@@ -360,9 +359,11 @@ def _to_copy(
             f"Cannot convert '{input.__class__.__name__}' to layout '{layout}'"
         )
 
+    data, offset, stride = _compact_storage(input)
+
     return StringTensor(
         data=aten._to_copy.default(
-            input._data,
+            data,
             dtype=torch.uint8,
             layout=torch.strided,
             device=device,
@@ -371,7 +372,7 @@ def _to_copy(
             memory_format=memory_format,
         ),
         offset=aten._to_copy.default(
-            input._offset,
+            offset,
             dtype=torch.long,
             layout=torch.strided,
             device=device,
@@ -380,8 +381,8 @@ def _to_copy(
             memory_format=memory_format,
         ),
         size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
+        stride=stride,
+        storage_offset=0,
     )
 
 
@@ -402,17 +403,4 @@ def _pin_memory(
     *,
     device: torch.device | str | None = None,
 ) -> StringTensor:
-    if device is None:
-        data = input._data.pin_memory()
-        offset = input._offset.pin_memory()
-    else:
-        data = input._data.pin_memory(device)
-        offset = input._offset.pin_memory(device)
-
-    return StringTensor(
-        data=data,
-        offset=offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
-    )
+    return _to_copy(input, device=device, pin_memory=True)

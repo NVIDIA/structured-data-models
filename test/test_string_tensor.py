@@ -66,15 +66,6 @@ def test_copy_and_memory_ops() -> None:
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
-    sliced = StringTensor.from_arrow(
-        pa.array(["x", "hi", "abc"], type=pa.large_string()).slice(1)
-    )
-    out = sliced.clone()
-    assert isinstance(out, StringTensor)
-    assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([104, 105, 97, 98, 99]))
-    assert out._offset.equal(torch.tensor([0, 2, 5]))
-
     non_contiguous = StringTensor(
         data=tensor._data,
         offset=tensor._offset,
@@ -83,11 +74,24 @@ def test_copy_and_memory_ops() -> None:
     )
     with pytest.raises(NotImplementedError, match="non-contiguous"):
         non_contiguous.clone()
+    with pytest.raises(NotImplementedError, match="non-contiguous"):
+        non_contiguous.to("cpu", copy=True)
+
+    tensor = StringTensor.from_arrow(
+        pa.array(["x", "hi", "abc"], type=pa.large_string()).slice(1)
+    )
+    assert tensor.storage_offset() == 1
+    out = tensor.clone()
+    assert isinstance(out, StringTensor)
+    assert out.storage_offset() == 0
+    assert out._data.equal(torch.tensor([104, 105, 97, 98, 99]))
+    assert out._offset.equal(torch.tensor([0, 2, 5]))
 
     out = tensor.to("cpu", copy=True)
     assert isinstance(out, StringTensor)
-    assert out._data.equal(tensor._data)
-    assert out._offset.equal(tensor._offset)
+    assert out.storage_offset() == 0
+    assert out._data.equal(torch.tensor([104, 105, 97, 98, 99]))
+    assert out._offset.equal(torch.tensor([0, 2, 5]))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
@@ -99,10 +103,4 @@ def test_copy_and_memory_ops() -> None:
         assert tensor.pin_memory().is_pinned()
 
     assert not tensor.is_shared()
-    out = tensor.clone()
-    try:
-        out.share_memory_()
-    except RuntimeError:
-        pass
-    else:
-        assert out.is_shared()
+    assert out.share_memory_().is_shared()
