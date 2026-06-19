@@ -698,6 +698,12 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
     return StringTensor(data=data[index], offset=offset, size=size)
 
 
+@implements(aten.stack.default)
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
+    out = torch.cat([tensor.unsqueeze(dim) for tensor in tensors], dim=dim)
+    return cast(StringTensor, out)
+
+
 # Helpers #####################################################################
 
 
