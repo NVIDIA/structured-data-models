@@ -65,10 +65,10 @@ class StringTensor(Tensor):
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to be contiguous"
             )
-        if offset.dtype != torch.long:  # TODO Relax 8-byte offset restriction.
+        if offset.dtype not in (torch.int32, torch.int64):
             raise ValueError(
                 f"Expected 'offset' in '{cls.__name__}' to have dtype "
-                f"'torch.int64' (got '{offset.dtype}')"
+                f"'torch.int32' or 'torch.int64' (got '{offset.dtype}')"
             )
         if offset.dim() != 1:
             raise ValueError(
@@ -99,6 +99,12 @@ class StringTensor(Tensor):
                 f"'offset' in '{cls.__name__}' is out of bounds (got "
                 f"{offset.numel()} entries, but expected at least "
                 f"{storage_offset + _span_len(size, stride) + 1} entries)"
+            )
+        if data.numel() > torch.iinfo(offset.dtype).max:
+            raise ValueError(
+                f"Expected 'offset' in '{cls.__name__}' to represent "
+                f"{data.numel()} bytes, but '{offset.dtype}' can only "
+                f"represent {torch.iinfo(offset.dtype).max} bytes"
             )
 
         out = Tensor._make_wrapper_subclass(
@@ -175,8 +181,8 @@ class StringTensor(Tensor):
             else torch.empty(0, dtype=torch.uint8, device=device),
             offset=torch.frombuffer(
                 buffer=buffers[1],
-                dtype=torch.int if is_string else torch.long,
-            ).to(device, torch.long),
+                dtype=torch.int32 if is_string else torch.int64,
+            ).to(device),
             size=size,
             storage_offset=data.offset,
         )
@@ -255,8 +261,11 @@ class StringTensor(Tensor):
 
         data, offset = cast(StringTensor, self.contiguous()).data_offset
 
+        array_type = (
+            pa.string() if offset.dtype == torch.int32 else pa.large_string()
+        )
         return pa.Array.from_buffers(
-            pa.large_string(),
+            array_type,
             length=self.numel(),
             buffers=[
                 None,
@@ -667,12 +676,13 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
         cast(StringTensor, tensor.contiguous()) for tensor in tensors
     )
     data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
+    offset_dtype = _cat_offset_dtype(offsets, data_list)
 
     dim_size = 0
     storage_offset = 0
     start_views, end_views = [], []
-    for tensor, data, offset in zip(tensors, data_list, offsets):
-        offset = offset + storage_offset
+    for tensor, data, offset in zip(tensors, data_list, offsets, strict=True):
+        offset = offset.to(offset_dtype) + storage_offset
         dim_size += tensor.size(dim)
         storage_offset += data.numel()
         start_views.append(offset[:-1].view(tensor.size()))
@@ -681,7 +691,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
     size = tensors[0].size()
     dim = dim % len(size)
     size = (*size[:dim], dim_size, *size[dim + 1 :])
-    offset = offsets[0].new_empty(math.prod(size) + 1)
+    offset = offsets[0].new_empty(math.prod(size) + 1, dtype=offset_dtype)
     start = torch.cat(start_views, dim=dim, out=offset[:-1].view(size))
     data = torch.cat(data_list, dim=0)
 
@@ -725,6 +735,20 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
+def _cat_offset_dtype(
+    offsets: Sequence[Tensor],
+    data_list: Sequence[Tensor],
+) -> torch.dtype:
+    if any(offset.dtype == torch.int64 for offset in offsets):
+        return torch.int64
+
+    num_bytes = sum(data.numel() for data in data_list)
+    if num_bytes > torch.iinfo(torch.int32).max:
+        return torch.int64
+
+    return torch.int32
+
+
 def _layout_view(input: "StringTensor") -> Tensor:
     return torch.as_strided(
         input._offset,
@@ -749,9 +773,13 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
 
     offset = count.new_empty(count.numel() + 1)
     offset[0] = 0
-    offset[1:] = count.cumsum(dim=0)
+    offset[1:] = count.cumsum(dim=0, dtype=count.dtype)
 
-    local = torch.arange(offset[-1], device=count.device)  # type: ignore
+    local = torch.arange(  # type: ignore
+        offset[-1],
+        dtype=count.dtype,
+        device=count.device,
+    )
     local -= offset[:-1].repeat_interleave(
         count,
         output_size=local.numel(),
