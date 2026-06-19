@@ -1,7 +1,10 @@
+from typing import cast
+
 import pyarrow as pa
 import pytest
 import torch
 from schemafm import StringTensor
+from torch import Tensor
 
 
 def test_from_strings() -> None:
@@ -177,6 +180,26 @@ def test_to_copy() -> None:
         tensor.to(torch.float32)
 
 
+def test_data_offset() -> None:
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(2,),
+        storage_offset=2,
+    )
+    data, offset = tensor.data_offset
+    assert data.equal(torch.tensor([2, 3], dtype=torch.uint8))
+    assert offset.equal(torch.tensor([0, 1, 2]))
+
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(2, 4),
+    )
+    with pytest.raises(RuntimeError, match="non-contiguous"):
+        _ = cast(StringTensor, tensor[:, ::2]).data_offset
+
+
 def test_equal_allclose() -> None:
     tensor = StringTensor.from_strings([["a", "bb"], ["c", "d"]])
     other = StringTensor.from_strings([["a", "z", "bb"], ["c", "z", "d"]])
@@ -258,6 +281,31 @@ def test_indexing() -> None:
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
     assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
+
+
+def test_cat() -> None:
+    tensors: list[Tensor] = [
+        StringTensor.from_strings([["a", "bb"], ["c", "d"]]),
+        StringTensor.from_strings([["e", "ff"]]),
+    ]
+
+    out = torch.cat(tensors)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3, 2)
+    assert out.stride() == (2, 1)
+    assert out.storage_offset() == 0
+    assert out.to_arrow().to_pylist() == ["a", "bb", "c", "d", "e", "ff"]
+
+    tensors = [
+        StringTensor.from_strings([["a", "bb"], ["c", "d"]]),
+        StringTensor.from_strings([["x"], ["yy"]]),
+    ]
+    out = torch.cat(tensors, dim=-1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 3)
+    assert out.stride() == (3, 1)
+    assert out.storage_offset() == 0
+    assert out.to_arrow().to_pylist() == ["a", "bb", "x", "c", "d", "yy"]
 
 
 def test_pin_memory() -> None:

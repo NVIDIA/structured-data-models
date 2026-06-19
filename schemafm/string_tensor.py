@@ -117,6 +117,19 @@ class StringTensor(Tensor):
 
         return out
 
+    @property
+    def data_offset(self) -> tuple[Tensor, Tensor]:
+        if not self.is_contiguous():
+            raise RuntimeError(
+                f"Cannot access 'data_offset' for non-contiguous "
+                f"'{self.__class__.__name__}'"
+            )
+
+        start = int(self.storage_offset())
+        offset = self._offset[start : start + self.numel() + 1]
+        data = self._data[offset[0] : offset[-1]]
+        return data, offset - offset[0]
+
     @classmethod
     def from_arrow(
         cls,
@@ -240,15 +253,11 @@ class StringTensor(Tensor):
                 f"Use Tensor.cpu() to copy the tensor to host memory first."
             )
 
-        tensor = cast(StringTensor, self.contiguous())
-        start = int(tensor.storage_offset())
-        offset = tensor._offset[start : start + tensor.numel() + 1]
-        data = tensor._data[offset[0] : offset[-1]]
-        offset = offset - offset[0]
+        data, offset = cast(StringTensor, self.contiguous()).data_offset
 
         return pa.Array.from_buffers(
             pa.large_string(),
-            length=tensor.numel(),
+            length=self.numel(),
             buffers=[
                 None,
                 pa.py_buffer(offset.numpy()),
@@ -460,21 +469,10 @@ def _equal(input: StringTensor, other: Tensor) -> bool:
     if input.size() != other.size():
         return False
 
-    input = cast(StringTensor, input.contiguous())
-    other = cast(StringTensor, other.contiguous())
+    data1, offset1 = cast(StringTensor, input.contiguous()).data_offset
+    data2, offset2 = cast(StringTensor, other.contiguous()).data_offset
 
-    start1 = int(input.storage_offset())
-    offset1 = input._offset[start1 : start1 + input.numel() + 1]
-    data1 = input._data[offset1[0] : offset1[-1]]
-
-    start2 = int(other.storage_offset())
-    offset2 = other._offset[start2 : start2 + other.numel() + 1]
-    data2 = other._data[offset2[0] : offset2[-1]]
-
-    if not data1.equal(data2):
-        return False
-
-    return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
+    return offset1.equal(offset2) and data1.equal(data2)
 
 
 @implements(aten.allclose.default)
@@ -490,21 +488,12 @@ def _allclose(
     if input.size() != other.size():
         return False
 
-    input = cast(StringTensor, input.contiguous())
-    other = cast(StringTensor, other.contiguous())
+    data1, offset1 = cast(StringTensor, input.contiguous()).data_offset
+    data2, offset2 = cast(StringTensor, other.contiguous()).data_offset
 
-    start1 = int(input.storage_offset())
-    offset1 = input._offset[start1 : start1 + input.numel() + 1]
-    data1 = input._data[offset1[0] : offset1[-1]]
-
-    start2 = int(other.storage_offset())
-    offset2 = other._offset[start2 : start2 + other.numel() + 1]
-    data2 = other._data[offset2[0] : offset2[-1]]
-
-    if not data1.allclose(data2, rtol=rtol, atol=atol, equal_nan=equal_nan):
-        return False
-
-    return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
+    return offset1.equal(offset2) and data1.allclose(
+        data2, rtol=rtol, atol=atol, equal_nan=equal_nan
+    )
 
 
 @implements(aten.view.default)
@@ -662,6 +651,53 @@ def _index(
     return _materialize(input, lambda x: aten.index.Tensor(x, indices))
 
 
+@implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
+    if len(tensors) == 0:
+        raise ValueError("Expected a non-empty list of Tensors")
+
+    for i, tensor in enumerate(tensors):
+        if not isinstance(tensor, StringTensor):
+            raise TypeError(
+                f"Expected '{StringTensor.__name__}' as element {i}, but got "
+                f"'{type(tensor).__name__}'"
+            )
+
+    tensors = tuple(
+        cast(StringTensor, tensor.contiguous()) for tensor in tensors
+    )
+    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
+
+    dim_size = 0
+    storage_offset = 0
+    start_views, end_views = [], []
+    for tensor, data, offset in zip(tensors, data_list, offsets):
+        offset = offset + storage_offset
+        dim_size += tensor.size(dim)
+        storage_offset += data.numel()
+        start_views.append(offset[:-1].view(tensor.size()))
+        end_views.append(offset[1:].view(tensor.size()))
+
+    size = tensors[0].size()
+    dim = dim % len(size)
+    size = (*size[:dim], dim_size, *size[dim + 1 :])
+    offset = offsets[0].new_empty(math.prod(size) + 1)
+    start = torch.cat(start_views, dim=dim, out=offset[:-1].view(size))
+    data = torch.cat(data_list, dim=0)
+
+    if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
+        offset[-1] = storage_offset
+        return StringTensor(data=data, offset=offset, size=size)
+
+    end = torch.cat(end_views, dim=dim)
+    start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
+    end = torch.as_strided(end, size=(end.numel(),), stride=(1,))
+
+    offset, index = _compact(start, end)
+
+    return StringTensor(data=data[index], offset=offset, size=size)
+
+
 # Helpers #####################################################################
 
 
@@ -700,6 +736,24 @@ def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
         stride=view.stride(),
         storage_offset=int(view.storage_offset()),
     )
+
+
+def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
+    count = end - start
+
+    offset = count.new_empty(count.numel() + 1)
+    offset[0] = 0
+    offset[1:] = count.cumsum(dim=0)
+
+    local = torch.arange(offset[-1], device=count.device)  # type: ignore
+    local -= offset[:-1].repeat_interleave(
+        count,
+        output_size=local.numel(),
+    )
+    index = start.repeat_interleave(count, output_size=local.numel())
+    index += local
+
+    return offset, index
 
 
 def _materialize(
@@ -745,16 +799,8 @@ def _materialize(
         stride=(1,),
         storage_offset=end.storage_offset(),
     )
-    count = end - start
 
-    offset = count.new_empty(count.numel() + 1)
-    offset[0] = 0
-    offset[1:] = count.cumsum(dim=0)
-
-    local = torch.arange(offset[-1], device=count.device)  # type: ignore
-    local -= offset[:-1].repeat_interleave(count, output_size=local.numel())
-    index = start.repeat_interleave(count, output_size=local.numel())
-    index += local
+    offset, index = _compact(start, end)
 
     return StringTensor(
         data=input._data[index].to(device, non_blocking=non_blocking),
