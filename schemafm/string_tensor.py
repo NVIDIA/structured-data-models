@@ -668,29 +668,28 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
     )
     data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
 
-    numel = 0
+    dim_size = 0
     storage_offset = 0
     start_views, end_views = [], []
     for tensor, data, offset in zip(tensors, data_list, offsets):
         offset = offset + storage_offset
-        numel += offset.numel() - 1
+        dim_size += tensor.size(dim)
         storage_offset += data.numel()
         start_views.append(offset[:-1].view(tensor.size()))
         end_views.append(offset[1:].view(tensor.size()))
 
-    offset = offsets[0].new_empty(numel + 1)
-    print(offset.shape)
-    start = torch.cat(start_views, dim=dim, out=offset[:-1])
-    print(offset.shape)
-    size = start.size()
+    size = tensors[0].size()
+    dim = dim % len(size)
+    size = (*size[:dim], dim_size, *size[dim + 1 :])
+    offset = offsets[0].new_empty(math.prod(size) + 1)
+    start = torch.cat(start_views, dim=dim, out=offset[:-1].view(size))
     data = torch.cat(data_list, dim=0)
 
-    dim = dim % tensors[0].dim()
     if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
         offset[-1] = storage_offset
         return StringTensor(data=data, offset=offset, size=size)
 
-    end = torch.cat(end_views, dim=dim, out=offset)
+    end = torch.cat(end_views, dim=dim)
     start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
     end = torch.as_strided(end, size=(end.numel(),), stride=(1,))
     count = end - start
