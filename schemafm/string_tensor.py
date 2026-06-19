@@ -654,61 +654,43 @@ def _index(
 @implements(aten.cat.default)
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
     if len(tensors) == 0:
-        raise RuntimeError("torch.cat(): expected a non-empty list of Tensors")
+        raise ValueError("Expected a non-empty list of Tensors")
 
-    if not all(isinstance(tensor, StringTensor) for tensor in tensors):
-        raise TypeError(
-            f"Expected all tensors in '{StringTensor.__name__}.cat' to be of "
-            f"type '{StringTensor.__name__}'"
-        )
+    for i, tensor in enumerate(tensors):
+        if not isinstance(tensor, StringTensor):
+            raise TypeError(
+                f"Expected '{StringTensor.__name__}' as element {i}, but got "
+                f"'{type(tensor).__name__}'"
+            )
+
     tensors = tuple(
-        cast(StringTensor, tensor.contiguous())
-        for tensor in cast(Sequence[StringTensor], tensors)
+        cast(StringTensor, tensor.contiguous()) for tensor in tensors
     )
-    data_offsets = [tensor.data_offset for tensor in tensors]
-    data = torch.cat([data for data, _ in data_offsets])
+    data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
 
-    shifted_offsets = []
-    start_views = []
-    end_views = []
-    byte_offset = 0
-    for tensor, (data_i, offset_i) in zip(
-        tensors,
-        data_offsets,
-        strict=True,
-    ):
-        offset = offset_i + byte_offset
-        shifted_offsets.append(offset)
+    numel = 0
+    storage_offset = 0
+    start_views, end_views = [], []
+    for tensor, data, offset in zip(tensors, data_list, offsets):
+        offset = offset + storage_offset
+        numel += offset.numel() - 1
+        storage_offset += data.numel()
         start_views.append(offset[:-1].view(tensor.size()))
         end_views.append(offset[1:].view(tensor.size()))
-        byte_offset += data_i.numel()
 
-    start = aten.cat.default(start_views, dim)
-    end = aten.cat.default(end_views, dim)
+    offset = offsets[0].new_empty(numel + 1)
+    print(offset.shape)
+    start = torch.cat(start_views, dim=dim, out=offset[:-1])
+    print(offset.shape)
+    size = start.size()
+    data = torch.cat(data_list, dim=0)
 
     dim = dim % tensors[0].dim()
-    if math.prod(tensors[0].size()[:dim]) == 1:
-        offset = aten.cat.default(
-            [
-                shifted_offsets[0],
-                *(offset[1:] for offset in shifted_offsets[1:]),
-            ],
-        )
-        return StringTensor(
-            data=data,
-            offset=offset,
-            size=start.size(),
-            stride=start.stride(),
-            storage_offset=0,
-        )
+    if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
+        offset[-1] = storage_offset
+        return StringTensor(data=data, offset=offset, size=size)
 
-    assert start.storage_offset() == 0
-    assert end.storage_offset() == 0
-    assert _span_len(start.size(), start.stride()) == start.numel()
-    assert _span_len(end.size(), end.stride()) == end.numel()
-
-    size = start.size()
-    stride = start.stride()
+    end = torch.cat(end_views, dim=dim, out=offset)
     start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
     end = torch.as_strided(end, size=(end.numel(),), stride=(1,))
     count = end - start
@@ -725,13 +707,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
     index = start.repeat_interleave(count, output_size=local.numel())
     index += local
 
-    return StringTensor(
-        data=data[index],
-        offset=offset,
-        size=size,
-        stride=stride,
-        storage_offset=0,
-    )
+    return StringTensor(data=data[index], offset=offset, size=size)
 
 
 # Helpers #####################################################################
