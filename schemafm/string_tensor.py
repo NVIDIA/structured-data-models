@@ -552,11 +552,6 @@ def _select(input: StringTensor, dim: int, index: int) -> StringTensor:
     return _from_layout_view(input, view)
 
 
-@implements(aten.masked_select.default)
-def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
-    return _materialize(input, lambda x: x.masked_select(mask))
-
-
 @implements(aten.slice.Tensor)
 def _slice(
     input: StringTensor,
