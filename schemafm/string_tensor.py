@@ -225,6 +225,39 @@ class StringTensor(Tensor):
             device=device,
         )
 
+    def to_arrow(self) -> pa.Array:
+        tensor = self.contiguous()
+        assert isinstance(tensor, StringTensor)
+        if tensor.device.type != "cpu":
+            tensor = tensor.cpu()
+            assert isinstance(tensor, StringTensor)
+
+        storage_offset = int(tensor.storage_offset())
+        offset = tensor._offset[
+            storage_offset : storage_offset + tensor.numel() + 1
+        ]
+        data = tensor._data[int(offset[0]) : int(offset[-1])]
+        offset = (offset - offset[0]).contiguous()
+
+        return pa.Array.from_buffers(
+            pa.large_string(),
+            length=tensor.numel(),
+            buffers=[
+                None,
+                pa.py_buffer(offset.numpy()),
+                pa.py_buffer(data.contiguous().numpy()),
+            ],
+        )
+
+    def to_pandas(self) -> Any:
+        if self.dim() != 1:
+            raise ValueError(
+                f"Expected '{self.__class__.__name__}.to_pandas' to be "
+                f"one-dimensional (got {self.dim()}D tensor)"
+            )
+
+        return self.to_arrow().to_pandas()
+
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:

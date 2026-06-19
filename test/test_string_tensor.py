@@ -54,6 +54,33 @@ def test_from_pandas() -> None:
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
 
 
+def test_to_arrow() -> None:
+    tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
+    array = tensor.to_arrow()
+    assert array.type == pa.large_string()
+    assert array.to_pylist() == ["hi", "é", "", "abc"]
+
+    tensor = StringTensor.from_strings([["a", "bb", "c"], ["dd", "e", "ff"]])
+    out = tensor[:, ::2]
+    assert isinstance(out, StringTensor)
+    assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
+
+    tensor = StringTensor.from_strings([["a", "bb"]]).expand(3, 2)
+    assert isinstance(tensor, StringTensor)
+    assert tensor.to_arrow().to_pylist() == ["a", "bb"] * 3
+
+
+def test_to_pandas() -> None:
+    pd = pytest.importorskip("pandas")
+
+    series = StringTensor.from_strings(["hi", "é", ""]).to_pandas()
+    assert isinstance(series, pd.Series)
+    assert series.tolist() == ["hi", "é", ""]
+
+    with pytest.raises(ValueError, match="one-dimensional"):
+        StringTensor.from_strings([["hi"]]).to_pandas()
+
+
 def test_item() -> None:
     assert StringTensor.from_strings("é").item() == "é"
     assert StringTensor.from_strings(["hi", "é"])[1].item() == "é"
