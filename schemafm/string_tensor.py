@@ -112,7 +112,7 @@ class StringTensor(Tensor):
             size=tuple(size),
             strides=tuple(stride),
             storage_offset=storage_offset,
-            dtype=torch.uint8,
+            dtype=data.dtype,
             device=data.device,
             layout=torch.strided,
             requires_grad=False,
