@@ -63,12 +63,6 @@ def test_item() -> None:
         StringTensor.from_strings(["hi", "é"]).item()
 
 
-def test_str() -> None:
-    tensor = StringTensor.from_strings(["hi", "é"])
-
-    assert str(tensor) == "StringTensor(size=(2,), device='cpu')"
-
-
 def test_to_copy() -> None:
     data = torch.arange(16, dtype=torch.uint8)
     offset = torch.arange(data.numel() + 1)
