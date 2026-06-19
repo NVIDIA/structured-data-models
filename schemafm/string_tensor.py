@@ -235,13 +235,12 @@ class StringTensor(Tensor):
             values = []
             size = flatten(data)
 
+        pa_type = pa.large_string()
+        if offset_dtype == torch.int32:
+            pa_type = pa.string()
+
         return cls.from_arrow(
-            data=pa.array(
-                values,
-                type=pa.string()
-                if offset_dtype == torch.int32
-                else pa.large_string(),
-            ),
+            data=pa.array(values, type=pa_type),
             device=device,
             size=size,
         )
@@ -252,6 +251,7 @@ class StringTensor(Tensor):
         data: Any,
         *,
         device: torch.device | str | None = None,
+        offset_dtype: torch.dtype = torch.int64,
     ) -> "StringTensor":
         import pandas as pd
 
@@ -260,9 +260,19 @@ class StringTensor(Tensor):
                 f"Expected 'data' in '{cls.__name__}.from_pandas' to be a "
                 f"'pandas.Series' (got '{type(data).__name__}')"
             )
+        if offset_dtype not in (torch.int32, torch.int64):
+            raise ValueError(
+                f"Expected 'offset_dtype' in '{cls.__name__}.from_pandas' "
+                f"to be 'torch.int32' or 'torch.int64' "
+                f"(got '{offset_dtype}')"
+            )
+
+        pa_type = pa.large_string()
+        if offset_dtype == torch.int32:
+            pa_type = pa.string()
 
         return cls.from_arrow(
-            data=data.astype("string[pyarrow]").array.__arrow_array__(),
+            data=data.astype(pd.ArrowDtype(pa_type)).array.__arrow_array__(),
             device=device,
         )
 
