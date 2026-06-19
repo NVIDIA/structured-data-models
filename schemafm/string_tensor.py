@@ -261,11 +261,8 @@ class StringTensor(Tensor):
 
         data, offset = cast(StringTensor, self.contiguous()).data_offset
 
-        array_type = (
-            pa.string() if offset.dtype == torch.int32 else pa.large_string()
-        )
         return pa.Array.from_buffers(
-            array_type,
+            pa.string() if offset.dtype == torch.int32 else pa.large_string(),
             length=self.numel(),
             buffers=[
                 None,
