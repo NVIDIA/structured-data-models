@@ -160,6 +160,21 @@ def test_to_copy() -> None:
         tensor.to(torch.float32)
 
 
+def test_equal_allclose() -> None:
+    tensor = StringTensor.from_strings([["a", "bb"], ["c", "d"]])
+    other = StringTensor.from_strings([["a", "z", "bb"], ["c", "z", "d"]])
+
+    assert not tensor.equal(other)
+    assert not torch.equal(tensor, other)
+    assert not tensor.allclose(other)
+    assert not torch.allclose(tensor, other)
+
+    assert tensor.equal(other[:, ::2])
+    assert torch.equal(tensor, other[:, ::2])
+    assert tensor.allclose(other[:, ::2])
+    assert torch.allclose(tensor, other[:, ::2])
+
+
 def test_pin_memory() -> None:
     tensor = StringTensor.from_strings(["hi", "abc"])
 
