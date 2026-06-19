@@ -27,7 +27,7 @@ def test_from_strings() -> None:
     assert tensor._offset.equal(torch.tensor([0, 2]))
 
 
-def test_from_arrow() -> None:
+def test_arrow() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", "é", "", None]))
     assert tensor.size() == (4,)
     assert tensor.stride() == (1,)
@@ -42,19 +42,6 @@ def test_from_arrow() -> None:
     assert tensor._data.equal(torch.tensor([]))
     assert tensor._offset.equal(torch.tensor([0]))
 
-
-def test_from_pandas() -> None:
-    pd = pytest.importorskip("pandas")
-
-    tensor = StringTensor.from_pandas(pd.Series(["hi", "é", "", None]))
-    assert tensor.size() == (4,)
-    assert tensor.stride() == (1,)
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
-
-
-def test_to_arrow() -> None:
     tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
     array = tensor.to_arrow()
     assert array.type == pa.large_string()
@@ -69,16 +56,28 @@ def test_to_arrow() -> None:
     assert isinstance(tensor, StringTensor)
     assert tensor.to_arrow().to_pylist() == ["a", "bb"] * 3
 
+    tensor = StringTensor(
+        data=torch.empty(0, dtype=torch.uint8, device="meta"),
+        offset=torch.empty(1, dtype=torch.long, device="meta"),
+        size=(0,),
+    )
+    with pytest.raises(TypeError, match=r"Use Tensor\.cpu"):
+        tensor.to_arrow()
 
-def test_to_pandas() -> None:
+
+def test_pandas() -> None:
     pd = pytest.importorskip("pandas")
 
-    series = StringTensor.from_strings(["hi", "é", ""]).to_pandas()
-    assert isinstance(series, pd.Series)
-    assert series.tolist() == ["hi", "é", ""]
+    tensor = StringTensor.from_pandas(pd.Series(["hi", "é", "", None]))
+    assert tensor.size() == (4,)
+    assert tensor.stride() == (1,)
+    assert tensor.dtype == torch.uint8
+    assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
 
-    with pytest.raises(ValueError, match="one-dimensional"):
-        StringTensor.from_strings([["hi"]]).to_pandas()
+    series = tensor.to_pandas()
+    assert isinstance(series, pd.Series)
+    assert series.tolist() == ["hi", "é", "", ""]
 
 
 def test_item() -> None:

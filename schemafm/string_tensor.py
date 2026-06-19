@@ -226,18 +226,19 @@ class StringTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
+        if self.device.type != "cpu":
+            raise TypeError(
+                f"can't convert {self.device} device type tensor to arrow. "
+                f"Use Tensor.cpu() to copy the tensor to host memory first."
+            )
+
         tensor = self.contiguous()
         assert isinstance(tensor, StringTensor)
-        if tensor.device.type != "cpu":
-            tensor = tensor.cpu()
-            assert isinstance(tensor, StringTensor)
 
-        storage_offset = int(tensor.storage_offset())
-        offset = tensor._offset[
-            storage_offset : storage_offset + tensor.numel() + 1
-        ]
-        data = tensor._data[int(offset[0]) : int(offset[-1])]
-        offset = (offset - offset[0]).contiguous()
+        start = int(tensor.storage_offset())
+        offset = tensor._offset[start : start + tensor.numel() + 1]
+        data = tensor._data[offset[0] : offset[-1]]
+        offset = offset - offset[0] if start != 0 else offset
 
         return pa.Array.from_buffers(
             pa.large_string(),
@@ -252,8 +253,8 @@ class StringTensor(Tensor):
     def to_pandas(self) -> Any:
         if self.dim() != 1:
             raise ValueError(
-                f"Expected '{self.__class__.__name__}.to_pandas' to be "
-                f"one-dimensional (got {self.dim()}D tensor)"
+                f"Expected '{self.__class__.__name__}' to be "
+                f"one-dimensional for 'to_pandas' (got {self.dim()}D tensor)"
             )
 
         return self.to_arrow().to_pandas()
