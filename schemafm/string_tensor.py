@@ -535,6 +535,39 @@ def _allclose(
     return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
 
 
+@implements(aten.masked_select.default)
+def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
+    storage_offset = int(input.storage_offset())
+    start = _layout_view(input).masked_select(mask)
+    end = torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=storage_offset + 1,
+    ).masked_select(mask)
+    count = end - start
+
+    offset = count.new_empty(count.numel() + 1)
+    offset[0] = 0
+    offset[1:] = count.cumsum(dim=0)
+
+    local = torch.arange(offset[-1], device=count.device)  # type: ignore
+    local -= offset[:-1].repeat_interleave(
+        count,
+        output_size=local.numel(),
+    )
+    index = start.repeat_interleave(count, output_size=local.numel())
+    index += local
+
+    return StringTensor(
+        data=input._data[index],
+        offset=offset,
+        size=start.size(),
+        stride=_contiguous_stride(start.size()),
+        storage_offset=0,
+    )
+
+
 @implements(aten.view.default)
 def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
     view = _layout_view(input).view(tuple(size))
