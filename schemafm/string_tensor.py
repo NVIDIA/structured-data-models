@@ -662,6 +662,87 @@ def _index(
     return _materialize(input, lambda x: aten.index.Tensor(x, indices))
 
 
+@implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
+    if len(tensors) == 0:
+        raise RuntimeError("torch.cat(): expected a non-empty list of Tensors")
+
+    if not all(isinstance(tensor, StringTensor) for tensor in tensors):
+        raise TypeError(
+            f"Expected all tensors in '{StringTensor.__name__}.cat' to be "
+            f"'{StringTensor.__name__}'"
+        )
+
+    tensors = cast(Sequence[StringTensor], tensors)
+    start = aten.cat.default([_layout_view(tensor) for tensor in tensors], dim)
+    end = aten.cat.default(
+        [_layout_end_view(tensor) for tensor in tensors], dim
+    )
+    source = aten.cat.default(
+        [
+            torch.full_like(
+                _layout_view(tensor),
+                fill_value=i,
+                dtype=torch.long,
+            )
+            for i, tensor in enumerate(tensors)
+        ],
+        dim,
+    )
+
+    assert start.storage_offset() == 0
+    assert end.storage_offset() == 0
+    assert source.storage_offset() == 0
+    assert _span_len(start.size(), start.stride()) == start.numel()
+    assert _span_len(end.size(), end.stride()) == end.numel()
+    assert _span_len(source.size(), source.stride()) == source.numel()
+
+    size = start.size()
+    stride = start.stride()
+    start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
+    end = torch.as_strided(end, size=(end.numel(),), stride=(1,))
+    source = torch.as_strided(source, size=(source.numel(),), stride=(1,))
+    count = end - start
+
+    offset = count.new_empty(count.numel() + 1)
+    offset[0] = 0
+    offset[1:] = count.cumsum(dim=0)
+    data = tensors[0]._data.new_empty(offset[-1])  # type: ignore
+
+    for i, tensor in enumerate(tensors):
+        mask = source == i
+        start_i = start[mask]
+        count_i = count[mask]
+        offset_i = count_i.new_empty(count_i.numel() + 1)
+        offset_i[0] = 0
+        offset_i[1:] = count_i.cumsum(dim=0)
+
+        local = torch.arange(offset_i[-1], device=count_i.device)  # type: ignore
+        local -= offset_i[:-1].repeat_interleave(
+            count_i,
+            output_size=local.numel(),
+        )
+        src_index = start_i.repeat_interleave(
+            count_i,
+            output_size=local.numel(),
+        )
+        src_index += local
+        dst_index = offset[:-1][mask].repeat_interleave(
+            count_i,
+            output_size=local.numel(),
+        )
+        dst_index += local
+        data[dst_index] = tensor._data[src_index]
+
+    return StringTensor(
+        data=data,
+        offset=offset,
+        size=size,
+        stride=stride,
+        storage_offset=0,
+    )
+
+
 # Helpers #####################################################################
 
 
@@ -689,6 +770,15 @@ def _layout_view(input: "StringTensor") -> Tensor:
         size=input.size(),
         stride=input.stride(),
         storage_offset=int(input.storage_offset()),
+    )
+
+
+def _layout_end_view(input: "StringTensor") -> Tensor:
+    return torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()) + 1,
     )
 
 

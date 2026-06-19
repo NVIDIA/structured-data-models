@@ -260,6 +260,32 @@ def test_indexing() -> None:
     assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
 
 
+def test_cat() -> None:
+    tensor = StringTensor.from_strings([["a", "bb"], ["c", "d"]])
+
+    out = torch.cat([tensor, StringTensor.from_strings([["e", "ff"]])])
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3, 2)
+    assert out.stride() == (2, 1)
+    assert out.storage_offset() == 0
+    assert out.to_arrow().to_pylist() == ["a", "bb", "c", "d", "e", "ff"]
+
+    out = torch.cat(
+        [tensor, StringTensor.from_strings([["x"], ["yy"]])], dim=1
+    )
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 3)
+    assert out.stride() == (3, 1)
+    assert out.to_arrow().to_pylist() == ["a", "bb", "x", "c", "d", "yy"]
+
+    other = StringTensor.from_strings([["z", "e", "ff"], ["z", "g", "h"]])
+    out = torch.cat([tensor[:, :1], other[:, 1:]], dim=-1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 3)
+    assert out.stride() == (3, 1)
+    assert out.to_arrow().to_pylist() == ["a", "e", "ff", "c", "g", "h"]
+
+
 def test_pin_memory() -> None:
     tensor = StringTensor.from_strings(["hi", "abc"])
 
