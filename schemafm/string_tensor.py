@@ -99,10 +99,10 @@ class StringTensor(Tensor):
                 f"Expected 'size' and 'stride' in '{cls.__name__}' to have "
                 f"the same length (got {len(size)} and {len(stride)})"
             )
-        if storage_offset < 0 or storage_offset >= offset.numel():
+        if storage_offset < 0:
             raise ValueError(
-                f"'storage_offset' in '{cls.__name__}' is out of bounds (got "
-                f"{storage_offset}, but expected [0, {offset.numel() - 1}])"
+                f"Expected 'storage_offset' in '{cls.__name__}' to be "
+                f"non-negative"
             )
         if storage_offset + _span_len(size, stride) >= offset.numel():
             raise ValueError(
@@ -428,6 +428,7 @@ def _pin_memory(input: StringTensor) -> StringTensor:
         stride=input.stride(),
         storage_offset=int(input.storage_offset()),
     )
+
 
 @implements(aten.view.default)
 def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
