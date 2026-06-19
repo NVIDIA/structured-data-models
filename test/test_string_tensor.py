@@ -159,3 +159,111 @@ def test_share_memory() -> None:
         assert tensor.is_shared()
     except RuntimeError:
         pass
+
+
+def test_view() -> None:
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(2, 4),
+    )
+
+    out = tensor.view(4, 2)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (4, 2)
+    assert out.stride() == (2, 1)
+    assert out.storage_offset() == 0
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor.view(1, -1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (1, 8)
+    assert out.stride() == (8, 1)
+    assert out.storage_offset() == 0
+
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(2, 2),
+        stride=(1, 4),
+    )
+    with pytest.raises(RuntimeError, match="view size is not compatible"):
+        tensor.view(4)
+
+
+def test_squeeze() -> None:
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(1, 2, 1, 4),
+        storage_offset=0,
+    )
+
+    out = tensor.squeeze()
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 4)
+    assert out.stride() == (4, 1)
+    assert out.storage_offset() == 0
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor.squeeze(0)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 1, 4)
+    assert out.stride() == (4, 4, 1)
+    assert out.storage_offset() == 0
+
+    out = tensor.squeeze((0, 2))
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 4)
+    assert out.stride() == (4, 1)
+    assert out.storage_offset() == 0
+
+    out = tensor.squeeze(1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (1, 2, 1, 4)
+    assert out.stride() == (8, 4, 4, 1)
+    assert out.storage_offset() == 0
+
+
+def test_unsqueeze() -> None:
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(2, 2),
+        stride=(1, 4),
+        storage_offset=1,
+    )
+
+    for dim in range(-tensor.dim() - 1, tensor.dim() + 1):
+        out = tensor.unsqueeze(dim)
+        assert isinstance(out, StringTensor)
+        assert out.storage_offset() == 1
+        assert out._data.data_ptr() == tensor._data.data_ptr()
+        assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor.unsqueeze(0)
+    assert out.size() == (1, 2, 2)
+    assert out.stride() == (2, 1, 4)
+
+    out = tensor.unsqueeze(1)
+    assert out.size() == (2, 1, 2)
+    assert out.stride() == (1, 8, 4)
+
+    out = tensor.unsqueeze(2)
+    assert out.size() == (2, 2, 1)
+    assert out.stride() == (1, 4, 1)
+
+    scalar = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(),
+    )
+    out = scalar.unsqueeze(0)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (1,)
+    assert out.stride() == (1,)
+
+    with pytest.raises(IndexError, match="Dimension out of range"):
+        tensor.unsqueeze(tensor.dim() + 1)
