@@ -20,6 +20,24 @@ def test_dtype_conversion() -> None:
     assert out._offset.dtype == torch.int64
 
 
+def test_autograd() -> None:
+    data = torch.arange(4, dtype=torch.float32, requires_grad=True)
+    tensor = VarLenTensor(
+        data=data,
+        offset=torch.arange(5),
+        size=(2, 2),
+    )
+
+    assert tensor.requires_grad
+
+    out = tensor.clone()
+    assert isinstance(out, VarLenTensor)
+
+    out._data.sum().backward()
+    assert data.grad is not None
+    assert data.grad.equal(torch.ones_like(data))
+
+
 def test_offset_dtype() -> None:
     tensor = VarLenTensor(
         data=torch.arange(4),
