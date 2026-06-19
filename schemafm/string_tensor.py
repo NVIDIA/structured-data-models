@@ -306,7 +306,7 @@ def _to_copy(
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,  # Ignored by PyTorch
+    pin_memory: bool = False,  # Ignored by PyTorch.
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> StringTensor:
@@ -343,9 +343,6 @@ def _to_copy(
         stride=input.stride(),
         storage_offset=storage_offset,
     )
-
-    # Match PyTorch's preserve-format fast path: exact stride preservation is
-    # only valid for non-overlapping dense layouts.
     use_slice = (
         input.numel() == 0
         or (
