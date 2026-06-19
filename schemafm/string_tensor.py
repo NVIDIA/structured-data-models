@@ -61,6 +61,10 @@ class StringTensor(Tensor):
                 f"Expected 'data' in '{cls.__name__}' to be one-dimensional "
                 f"(got {data.dim()}D tensor)"
             )
+        if not data.is_contiguous():
+            raise ValueError(
+                f"Expected 'data' in '{cls.__name__}' to be contiguous"
+            )
         if offset.dtype != torch.long:  # TODO Relax 8-byte offset restriction.
             raise ValueError(
                 f"Expected 'offset' in '{cls.__name__}' to have dtype "
@@ -70,6 +74,10 @@ class StringTensor(Tensor):
             raise ValueError(
                 f"Expected 'offset' in '{cls.__name__}' to be one-dimensional "
                 f"(got {offset.dim()}D tensor)"
+            )
+        if not offset.is_contiguous():
+            raise ValueError(
+                f"Expected 'offset' in '{cls.__name__}' to be contiguous"
             )
         if data.device != offset.device:
             raise ValueError(
@@ -238,7 +246,7 @@ class StringTensor(Tensor):
         start = int(tensor.storage_offset())
         offset = tensor._offset[start : start + tensor.numel() + 1]
         data = tensor._data[offset[0] : offset[-1]]
-        offset = offset - offset[0] if start != 0 else offset
+        offset = offset - offset[0]
 
         return pa.Array.from_buffers(
             pa.large_string(),
@@ -246,7 +254,7 @@ class StringTensor(Tensor):
             buffers=[
                 None,
                 pa.py_buffer(offset.numpy()),
-                pa.py_buffer(data.contiguous().numpy()),
+                pa.py_buffer(data.numpy()),
             ],
         )
 

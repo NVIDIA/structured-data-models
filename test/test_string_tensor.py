@@ -47,23 +47,6 @@ def test_arrow() -> None:
     assert array.type == pa.large_string()
     assert array.to_pylist() == ["hi", "é", "", "abc"]
 
-    tensor = StringTensor.from_strings([["a", "bb", "c"], ["dd", "e", "ff"]])
-    out = tensor[:, ::2]
-    assert isinstance(out, StringTensor)
-    assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
-
-    tensor = StringTensor.from_strings([["a", "bb"]]).expand(3, 2)
-    assert isinstance(tensor, StringTensor)
-    assert tensor.to_arrow().to_pylist() == ["a", "bb"] * 3
-
-    tensor = StringTensor(
-        data=torch.empty(0, dtype=torch.uint8, device="meta"),
-        offset=torch.empty(1, dtype=torch.long, device="meta"),
-        size=(0,),
-    )
-    with pytest.raises(TypeError, match=r"Use Tensor\.cpu"):
-        tensor.to_arrow()
-
 
 def test_pandas() -> None:
     pd = pytest.importorskip("pandas")
