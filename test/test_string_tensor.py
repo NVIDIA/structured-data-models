@@ -148,6 +148,13 @@ def test_to_copy() -> None:
         size=(2,),
         storage_offset=2,
     )
+    out = tensor.contiguous()
+    assert isinstance(out, StringTensor)
+    assert out is tensor
+    assert out.storage_offset() == 2
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
     out = tensor.clone()
     assert isinstance(out, StringTensor)
     assert out.storage_offset() == 0
@@ -173,6 +180,28 @@ def test_equal_allclose() -> None:
     assert torch.equal(tensor, other[:, ::2])
     assert tensor.allclose(other[:, ::2])
     assert torch.allclose(tensor, other[:, ::2])
+
+
+def test_masked_select() -> None:
+    tensor = StringTensor.from_strings([["a", "bb", "c"], ["dd", "e", "ff"]])
+    mask = torch.tensor([[True, False, True], [False, True, True]])
+
+    out = tensor.masked_select(mask)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (4,)
+    assert out.stride() == (1,)
+    assert out.storage_offset() == 0
+    assert out.to_arrow().to_pylist() == ["a", "c", "e", "ff"]
+
+    out = torch.masked_select(tensor, torch.tensor([[True, False, True]]))
+    assert isinstance(out, StringTensor)
+    assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
+
+    out = tensor.masked_select(torch.zeros(2, 3, dtype=torch.bool))
+    assert isinstance(out, StringTensor)
+    assert out.size() == (0,)
+    assert out.stride() == (1,)
+    assert out.to_arrow().to_pylist() == []
 
 
 def test_pin_memory() -> None:
