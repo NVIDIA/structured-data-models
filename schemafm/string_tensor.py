@@ -11,43 +11,6 @@ aten = torch.ops.aten
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
 
 
-def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
-    value = 1
-    stride = []
-    for dim_size in reversed(size):
-        stride.append(value)
-        value *= dim_size
-    return tuple(stride[::-1])
-
-
-def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
-    if math.prod(size) == 0:
-        return 0
-    return 1 + sum(
-        (dim_size - 1) * dim_stride
-        for dim_size, dim_stride in zip(size, stride)
-    )
-
-
-def _layout_view(input: "StringTensor") -> Tensor:
-    return torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
-    )
-
-
-def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
-    return StringTensor(
-        data=input._data,
-        offset=input._offset,
-        size=view.size(),
-        stride=view.stride(),
-        storage_offset=int(view.storage_offset()),
-    )
-
-
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -477,3 +440,43 @@ def _squeeze_dims(input: StringTensor, dim: Sequence[int]) -> StringTensor:
 def _unsqueeze(input: StringTensor, dim: int) -> StringTensor:
     view = _layout_view(input).unsqueeze(dim)
     return _from_layout_view(input, view)
+
+
+# Helpers #####################################################################
+
+
+def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
+    value = 1
+    stride = []
+    for dim_size in reversed(size):
+        stride.append(value)
+        value *= dim_size
+    return tuple(stride[::-1])
+
+
+def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
+    if math.prod(size) == 0:
+        return 0
+    return 1 + sum(
+        (dim_size - 1) * dim_stride
+        for dim_size, dim_stride in zip(size, stride)
+    )
+
+
+def _layout_view(input: "StringTensor") -> Tensor:
+    return torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=view.size(),
+        stride=view.stride(),
+        storage_offset=int(view.storage_offset()),
+    )
