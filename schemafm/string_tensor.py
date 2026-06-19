@@ -283,9 +283,7 @@ class StringTensor(Tensor):
         return bytes(self._data[start:end].tolist()).decode("utf-8")
 
     def __str__(self) -> str:
-        if self.numel() == 1:
-            return self.item()
-        return self.__repr__()
+        return self.item() if self.numel() == 1 else self.__repr__()
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         return (
