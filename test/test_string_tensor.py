@@ -365,3 +365,9 @@ def test_select_slice_narrow_expand() -> None:
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
     out = out.clone()
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3, 4)
+    assert out.stride() == (4, 1)
+    assert out.storage_offset() == 0
+    assert out._data.equal(torch.tensor([0, 1, 2, 3] * 3))
+    assert out._offset.equal(torch.arange(13))
