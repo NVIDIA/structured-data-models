@@ -700,19 +700,8 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
 
 @implements(aten.stack.default)
 def _stack(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
-    if len(tensors) == 0:
-        raise RuntimeError("stack expects a non-empty TensorList")
-
-    for i, tensor in enumerate(tensors):
-        if not isinstance(tensor, StringTensor):
-            raise TypeError(
-                f"Expected '{StringTensor.__name__}' as element {i}, but got "
-                f"'{type(tensor).__name__}'"
-            )
-
-    tensors = cast(Sequence[StringTensor], tensors)
-    tensors = [tensor.unsqueeze(dim) for tensor in tensors]
-    return cast(StringTensor, torch.cat(tensors, dim=dim))
+    out = torch.cat([tensor.unsqueeze(dim) for tensor in tensors], dim=dim)
+    return cast(StringTensor, out)
 
 
 # Helpers #####################################################################
