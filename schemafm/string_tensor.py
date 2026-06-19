@@ -253,12 +253,11 @@ class StringTensor(Tensor):
                 f"Use Tensor.cpu() to copy the tensor to host memory first."
             )
 
-        tensor = cast(StringTensor, self.contiguous())
-        data, offset = tensor.data_offset
+        data, offset = cast(StringTensor, self.contiguous()).data_offset
 
         return pa.Array.from_buffers(
             pa.large_string(),
-            length=tensor.numel(),
+            length=self.numel(),
             buffers=[
                 None,
                 pa.py_buffer(offset.numpy()),
@@ -470,11 +469,8 @@ def _equal(input: StringTensor, other: Tensor) -> bool:
     if input.size() != other.size():
         return False
 
-    input = cast(StringTensor, input.contiguous())
-    other = cast(StringTensor, other.contiguous())
-
-    data1, offset1 = input.data_offset
-    data2, offset2 = other.data_offset
+    data1, offset1 = cast(StringTensor, input.contiguous()).data_offset
+    data2, offset2 = cast(StringTensor, other.contiguous()).data_offset
 
     return offset1.equal(offset2) and data1.equal(data2)
 
@@ -492,11 +488,8 @@ def _allclose(
     if input.size() != other.size():
         return False
 
-    input = cast(StringTensor, input.contiguous())
-    other = cast(StringTensor, other.contiguous())
-
-    data1, offset1 = input.data_offset
-    data2, offset2 = other.data_offset
+    data1, offset1 = cast(StringTensor, input.contiguous()).data_offset
+    data2, offset2 = cast(StringTensor, other.contiguous()).data_offset
 
     return offset1.equal(offset2) and data1.allclose(
         data2, rtol=rtol, atol=atol, equal_nan=equal_nan
