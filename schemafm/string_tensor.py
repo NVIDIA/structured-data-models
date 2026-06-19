@@ -341,6 +341,15 @@ def _clone(
     return _to_copy(input, memory_format=memory_format)
 
 
+@implements(aten.contiguous.default)
+def _contiguous(
+    input: StringTensor,
+    *,
+    memory_format: torch.memory_format = torch.contiguous_format,
+) -> StringTensor:
+    return _to_copy(input, memory_format=memory_format)
+
+
 @implements(aten._to_copy.default)
 def _to_copy(
     input: StringTensor,
@@ -454,17 +463,6 @@ def _to_copy(
         stride=stride,
         storage_offset=0,
     )
-
-
-@implements(aten.contiguous.default)
-def _contiguous(
-    input: StringTensor,
-    *,
-    memory_format: torch.memory_format = torch.contiguous_format,
-) -> StringTensor:
-    if input.is_contiguous(memory_format=memory_format):
-        return input
-    return _to_copy(input, memory_format=memory_format)
 
 
 @implements(aten.is_pinned.default)
