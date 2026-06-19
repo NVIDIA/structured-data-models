@@ -57,10 +57,16 @@ def test_from_pandas() -> None:
 def test_item() -> None:
     assert StringTensor.from_strings("é").item() == "é"
     assert StringTensor.from_strings(["hi", "é"])[1].item() == "é"
-    assert StringTensor.from_strings([""]).item() == ""
+    assert str(StringTensor.from_strings([""])) == ""
 
     with pytest.raises(RuntimeError, match="cannot be converted"):
         StringTensor.from_strings(["hi", "é"]).item()
+
+
+def test_str() -> None:
+    tensor = StringTensor.from_strings(["hi", "é"])
+
+    assert str(tensor) == "StringTensor(size=(2,), device='cpu')"
 
 
 def test_to_copy() -> None:

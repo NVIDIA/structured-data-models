@@ -282,6 +282,15 @@ class StringTensor(Tensor):
         end = self._offset[int(self.storage_offset()) + 1]
         return bytes(self._data[start:end].tolist()).decode("utf-8")
 
+    def __str__(self) -> str:
+        if self.numel() == 1:
+            return self.item()
+
+        return (
+            f"{self.__class__.__name__}(size={tuple(self.size())}, "
+            f"device='{self.device}')"
+        )
+
 
 @implements(aten.clone.default)
 def _clone(
