@@ -66,6 +66,57 @@ def test_pandas() -> None:
     assert series.tolist() == ["hi", "é", "", ""]
 
 
+def test_offset_dtype() -> None:
+    tensor = StringTensor.from_arrow(pa.array(["hi", "é"], type=pa.string()))
+    assert tensor._offset.dtype == torch.int32
+    assert tensor.to_arrow().type == pa.string()
+
+    tensor = StringTensor.from_arrow(
+        pa.array(["hi", "é"], type=pa.large_string())
+    )
+    assert tensor._offset.dtype == torch.int64
+    assert tensor.to_arrow().type == pa.large_string()
+
+    tensor = StringTensor(
+        data=torch.arange(4, dtype=torch.uint8),
+        offset=torch.arange(5, dtype=torch.int32),
+        size=(2, 2),
+    )
+    out = tensor.masked_select(torch.tensor([[True, False], [False, True]]))
+    assert isinstance(out, StringTensor)
+    assert out._offset.dtype == torch.int32
+
+    out = torch.cat(
+        [
+            StringTensor.from_arrow(
+                data=pa.array(["a", "bb"], type=pa.string()),
+                size=(1, 2),
+            ),
+            StringTensor.from_arrow(
+                data=pa.array(["c", "d"], type=pa.string()),
+                size=(1, 2),
+            ),
+        ]
+    )
+    assert isinstance(out, StringTensor)
+    assert out._offset.dtype == torch.int32
+
+    out = torch.cat(
+        [
+            StringTensor.from_arrow(
+                pa.array(["a", "bb"], type=pa.string()),
+                size=(1, 2),
+            ),
+            StringTensor.from_arrow(
+                data=pa.array(["c", "d"], type=pa.large_string()),
+                size=(1, 2),
+            ),
+        ]
+    )
+    assert isinstance(out, StringTensor)
+    assert out._offset.dtype == torch.int64
+
+
 def test_item() -> None:
     assert StringTensor.from_strings("é").item() == "é"
     assert StringTensor.from_strings(["hi", "é"])[1].item() == "é"
