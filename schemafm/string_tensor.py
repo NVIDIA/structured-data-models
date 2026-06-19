@@ -29,6 +29,25 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
+def _start_view(input: "StringTensor") -> Tensor:
+    return torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+def _from_start_view(input: "StringTensor", start: Tensor) -> "StringTensor":
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=start.size(),
+        stride=start.stride(),
+        storage_offset=int(start.storage_offset()),
+    )
+
+
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
 
     def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -432,88 +451,24 @@ def _pin_memory(input: StringTensor) -> StringTensor:
 
 @implements(aten.view.default)
 def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
-    if input.stride() != _contiguous_stride(input.size()):
-        raise RuntimeError(
-            "view size is not compatible with input tensor's size and stride "
-            "(at least one dimension spans across two contiguous subspaces). "
-            "Use .reshape(...) instead."
-        )
-
-    size = _resolve_view_size(size, int(input.numel()))
-    return StringTensor(
-        data=input._data,
-        offset=input._offset,
-        size=size,
-        storage_offset=int(input.storage_offset()),
-    )
+    return _from_start_view(input, _start_view(input).view(tuple(size)))
 
 
 @implements(aten.squeeze.default)
 def _squeeze(input: StringTensor) -> StringTensor:
-    size, stride = [], []
-    for dim_size, dim_stride in zip(input.size(), input.stride(), strict=True):
-        if dim_size != 1:
-            size.append(dim_size)
-            stride.append(dim_stride)
-
-    return StringTensor(
-        data=input._data,
-        offset=input._offset,
-        size=size,
-        stride=stride,
-        storage_offset=int(input.storage_offset()),
-    )
+    return _from_start_view(input, _start_view(input).squeeze())
 
 
 @implements(aten.squeeze.dim)
 def _squeeze_dim(input: StringTensor, dim: int) -> StringTensor:
-    dim = _normalize_dim(dim, input.dim())
-    size = list(input.size())
-    stride = list(input.stride())
-    if size[dim] == 1:
-        del size[dim]
-        del stride[dim]
-    return StringTensor(
-        data=input._data,
-        offset=input._offset,
-        size=size,
-        stride=stride,
-        storage_offset=int(input.storage_offset()),
-    )
+    return _from_start_view(input, _start_view(input).squeeze(dim))
 
 
 @implements(aten.squeeze.dims)
 def _squeeze_dims(input: StringTensor, dim: Sequence[int]) -> StringTensor:
-    dims = {_normalize_dim(d, input.dim()) for d in dim}
-    size, stride = [], []
-    for i, (dim_size, dim_stride) in enumerate(
-        zip(input.size(), input.stride(), strict=True)
-    ):
-        if i not in dims or dim_size != 1:
-            size.append(dim_size)
-            stride.append(dim_stride)
-
-    return StringTensor(
-        data=input._data,
-        offset=input._offset,
-        size=size,
-        stride=stride,
-        storage_offset=int(input.storage_offset()),
-    )
+    return _from_start_view(input, _start_view(input).squeeze(tuple(dim)))
 
 
 @implements(aten.unsqueeze.default)
 def _unsqueeze(input: StringTensor, dim: int) -> StringTensor:
-    dim = _normalize_dim(dim, input.dim(), allow_end=True)
-    size = list(input.size())
-    stride = list(input.stride())
-    dim_stride = 1 if dim == input.dim() else size[dim] * stride[dim]
-    size.insert(dim, 1)
-    stride.insert(dim, dim_stride)
-    return StringTensor(
-        data=input._data,
-        offset=input._offset,
-        size=size,
-        stride=stride,
-        storage_offset=int(input.storage_offset()),
-    )
+    return _from_start_view(input, _start_view(input).unsqueeze(dim))

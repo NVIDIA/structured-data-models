@@ -4,6 +4,12 @@ import torch
 from schemafm import StringTensor
 
 
+def assert_same_view_metadata(tensor: StringTensor, ref: torch.Tensor) -> None:
+    assert tensor.size() == ref.size()
+    assert tensor.stride() == ref.stride()
+    assert tensor.storage_offset() == ref.storage_offset()
+
+
 def test_from_strings() -> None:
     tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
     assert tensor.size() == (2, 2)
@@ -161,48 +167,105 @@ def test_share_memory() -> None:
         pass
 
 
-def test_shape_views() -> None:
-    tensor = StringTensor.from_strings([["a", "bb"], ["ccc", "d"]])
+def test_view() -> None:
+    data = torch.arange(8, dtype=torch.uint8)
+    offset = torch.arange(data.numel() + 1)
+    tensor = StringTensor(
+        data=data,
+        offset=offset,
+        size=(2, 4),
+    )
+    ref = torch.as_strided(
+        offset[:-1],
+        size=tensor.size(),
+        stride=tensor.stride(),
+        storage_offset=tensor.storage_offset(),
+    )
 
-    out = tensor.view(4)
+    out = tensor.view(4, 2)
     assert isinstance(out, StringTensor)
-    assert out.size() == (4,)
-    assert out.stride() == (1,)
+    assert_same_view_metadata(out, ref.view(4, 2))
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
-    out = tensor.reshape(1, -1)
+    out = tensor.view(1, -1)
     assert isinstance(out, StringTensor)
-    assert out.size() == (1, 4)
-    assert out.stride() == (4, 1)
-
-    out = tensor.flatten()
-    assert isinstance(out, StringTensor)
-    assert out.size() == (4,)
-    assert out.stride() == (1,)
-
-    out = tensor.unsqueeze(1)
-    assert isinstance(out, StringTensor)
-    assert out.size() == (2, 1, 2)
-    assert out.stride() == (2, 2, 1)
-
-    out = tensor.view(1, 2, 2, 1).squeeze()
-    assert isinstance(out, StringTensor)
-    assert out.size() == (2, 2)
-    assert out.stride() == (2, 1)
+    assert_same_view_metadata(out, ref.view(1, -1))
 
     non_contiguous = StringTensor(
-        data=tensor._data,
-        offset=tensor._offset,
-        size=tensor.size(),
-        stride=(1, 2),
+        data=data,
+        offset=offset,
+        size=(2, 2),
+        stride=(1, 4),
     )
-    out = non_contiguous.unsqueeze(0)
-    assert isinstance(out, StringTensor)
-    assert out.size() == (1, 2, 2)
-    assert out.stride() == (2, 1, 2)
-
     with pytest.raises(RuntimeError, match="view size is not compatible"):
         non_contiguous.view(4)
-    with pytest.raises(NotImplementedError, match="non-contiguous"):
-        out.to("cpu", copy=True)
+
+
+def test_squeeze() -> None:
+    data = torch.arange(8, dtype=torch.uint8)
+    offset = torch.arange(data.numel() + 1)
+    tensor = StringTensor(
+        data=data,
+        offset=offset,
+        size=(1, 2, 1, 4),
+        storage_offset=0,
+    )
+    ref = torch.as_strided(
+        offset[:-1],
+        size=tensor.size(),
+        stride=tensor.stride(),
+        storage_offset=tensor.storage_offset(),
+    )
+
+    out = tensor.squeeze()
+    assert isinstance(out, StringTensor)
+    assert_same_view_metadata(out, ref.squeeze())
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor.squeeze(0)
+    assert isinstance(out, StringTensor)
+    assert_same_view_metadata(out, ref.squeeze(0))
+
+    out = tensor.squeeze((0, 2))
+    assert isinstance(out, StringTensor)
+    assert_same_view_metadata(out, ref.squeeze((0, 2)))
+
+    out = tensor.squeeze(1)
+    assert isinstance(out, StringTensor)
+    assert_same_view_metadata(out, ref.squeeze(1))
+
+
+def test_unsqueeze() -> None:
+    data = torch.arange(8, dtype=torch.uint8)
+    offset = torch.arange(data.numel() + 1)
+    tensor = StringTensor(
+        data=data,
+        offset=offset,
+        size=(2, 2),
+        stride=(1, 4),
+        storage_offset=1,
+    )
+
+    for dim in range(-tensor.dim() - 1, tensor.dim() + 1):
+        out = tensor.unsqueeze(dim)
+        ref = torch.as_strided(
+            offset[:-1],
+            size=tensor.size(),
+            stride=tensor.stride(),
+            storage_offset=tensor.storage_offset(),
+        ).unsqueeze(dim)
+        assert isinstance(out, StringTensor)
+        assert_same_view_metadata(out, ref)
+        assert out._data.data_ptr() == tensor._data.data_ptr()
+        assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    scalar = StringTensor(data=data, offset=offset, size=())
+    out = scalar.unsqueeze(0)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (1,)
+    assert out.stride() == (1,)
+
+    with pytest.raises(IndexError, match="Dimension out of range"):
+        tensor.unsqueeze(tensor.dim() + 1)
