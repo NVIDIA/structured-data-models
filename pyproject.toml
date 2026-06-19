@@ -89,6 +89,9 @@ select = [
     "SIM",  # simplification
     "RUF",  # ruff-specific rules
 ]
+ignore = [
+      "B905",  # zip() without explicit `strict`
+  ]
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]

@@ -66,16 +66,60 @@ def test_to_copy() -> None:
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
-    non_contiguous = StringTensor(
-        data=tensor._data,
-        offset=tensor._offset,
-        size=tensor.size(),
-        stride=(1, 2),
+    base = StringTensor.from_strings(
+        [
+            ["a", "b", "c", "d"],
+            ["e", "f", "g", "h"],
+            ["i", "j", "k", "l"],
+            ["m", "n", "o", "p"],
+        ]
     )
-    with pytest.raises(NotImplementedError, match="non-contiguous"):
-        non_contiguous.clone()
-    with pytest.raises(NotImplementedError, match="non-contiguous"):
-        non_contiguous.to("cpu", copy=True)
+
+    dense = StringTensor(
+        data=base._data,
+        offset=base._offset,
+        size=(4, 2),
+        stride=(1, 4),
+        storage_offset=2,
+    )
+    out = dense.clone()
+    assert isinstance(out, StringTensor)
+    assert out.stride() == dense.stride()
+    assert out._data.equal(torch.tensor(list(b"cdefghij"), dtype=torch.uint8))
+    assert out._offset.equal(torch.arange(9))
+
+    out = dense.clone(memory_format=torch.contiguous_format)
+    assert isinstance(out, StringTensor)
+    assert out.stride() == (2, 1)
+    assert out._data.equal(torch.tensor(list(b"cgdheifj"), dtype=torch.uint8))
+    assert out._offset.equal(torch.arange(9))
+
+    gapped = StringTensor(
+        data=base._data,
+        offset=base._offset,
+        size=(4, 2),
+        stride=(4, 1),
+        storage_offset=2,
+    )
+    out = gapped.clone()
+    assert isinstance(out, StringTensor)
+    assert out.stride() == (2, 1)
+    assert out._data.equal(torch.tensor(list(b"cdghklop"), dtype=torch.uint8))
+    assert out._offset.equal(torch.arange(9))
+
+    overlapping = StringTensor(
+        data=base._data,
+        offset=base._offset,
+        size=(4, 4),
+        stride=(0, 1),
+    )
+    out = overlapping.clone()
+    assert isinstance(out, StringTensor)
+    assert out.stride() == (4, 1)
+    assert out._data.equal(
+        torch.tensor(list(b"abcdabcdabcdabcd"), dtype=torch.uint8)
+    )
+    assert out._offset.equal(torch.arange(17))
 
     tensor = StringTensor.from_arrow(
         pa.array(["x", "hi", "abc"], type=pa.large_string()).slice(1)
