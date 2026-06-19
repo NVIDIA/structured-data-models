@@ -552,6 +552,11 @@ def _select(input: StringTensor, dim: int, index: int) -> StringTensor:
     return _from_layout_view(input, view)
 
 
+@implements(aten.masked_select.default)
+def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
+    return _materialize(input, lambda x: x.masked_select(mask))
+
+
 @implements(aten.slice.Tensor)
 def _slice(
     input: StringTensor,
@@ -665,6 +670,69 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     return 1 + sum(
         (dim_size - 1) * dim_stride
         for dim_size, dim_stride in zip(size, stride)
+    )
+
+
+def _materialize(
+    input: StringTensor,
+    function: Callable[[Tensor], Tensor],
+    *,
+    device: torch.device | str | None = None,
+    non_blocking: bool = False,
+) -> StringTensor:
+    # Use PyTorch's own memory-format semantics to materialize data:
+    start = torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+    start = function(start)
+    assert start.storage_offset() == 0
+    assert _span_len(start.size(), start.stride()) == start.numel()
+
+    end = torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()) + 1,
+    )
+    end = function(end)
+    assert end.storage_offset() == 0
+    assert _span_len(end.size(), end.stride()) == end.numel()
+
+    size = start.size()
+    stride = start.stride()
+
+    start = torch.as_strided(
+        start,
+        size=(start.numel(),),
+        stride=(1,),
+        storage_offset=start.storage_offset(),
+    )
+    end = torch.as_strided(
+        end,
+        size=(end.numel(),),
+        stride=(1,),
+        storage_offset=end.storage_offset(),
+    )
+    count = end - start
+
+    offset = count.new_empty(count.numel() + 1)
+    offset[0] = 0
+    offset[1:] = count.cumsum(dim=0)
+
+    local = torch.arange(offset[-1], device=count.device)  # type: ignore
+    local -= offset[:-1].repeat_interleave(count, output_size=local.numel())
+    index = start.repeat_interleave(count, output_size=local.numel())
+    index += local
+
+    return StringTensor(
+        data=input._data[index].to(device, non_blocking=non_blocking),
+        offset=offset.to(device, non_blocking=non_blocking),
+        size=size,
+        stride=stride,
+        storage_offset=0,
     )
 
 
