@@ -74,10 +74,12 @@ def test_offset_dtype() -> None:
     out = torch.cat(
         [
             StringTensor.from_arrow(
-                pa.array(["a", "bb"], type=pa.string()), size=(1, 2)
+                data=pa.array(["a", "bb"], type=pa.string()),
+                size=(1, 2),
             ),
             StringTensor.from_arrow(
-                pa.array(["c", "d"], type=pa.string()), size=(1, 2)
+                data=pa.array(["c", "d"], type=pa.string()),
+                size=(1, 2),
             ),
         ]
     )
@@ -87,9 +89,13 @@ def test_offset_dtype() -> None:
     out = torch.cat(
         [
             StringTensor.from_arrow(
-                pa.array(["a", "bb"], type=pa.string()), size=(1, 2)
+                pa.array(["a", "bb"], type=pa.string()),
+                size=(1, 2),
             ),
-            StringTensor.from_strings([["c", "d"]]),
+            StringTensor.from_arrow(
+                data=pa.array(["c", "d"], type=pa.large_string()),
+                size=(1, 2),
+            ),
         ]
     )
     assert isinstance(out, StringTensor)

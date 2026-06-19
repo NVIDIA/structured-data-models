@@ -193,7 +193,16 @@ class StringTensor(Tensor):
         data: str | Sequence[Any],
         *,
         device: torch.device | str | None = None,
+        offset_dtype: torch.dtype = torch.int64,
     ) -> "StringTensor":
+
+        if offset_dtype not in (torch.int32, torch.int64):
+            raise ValueError(
+                f"Expected 'offset_dtype' in '{cls.__name__}.from_strings' "
+                f"to be 'torch.int32' or 'torch.int64' "
+                f"(got '{offset_dtype}')"
+            )
+
         def flatten(data: Any) -> tuple[int, ...]:
             if isinstance(data, str):
                 return ()
@@ -227,7 +236,12 @@ class StringTensor(Tensor):
             size = flatten(data)
 
         return cls.from_arrow(
-            data=pa.array(values, type=pa.large_string()),
+            data=pa.array(
+                values,
+                type=pa.string()
+                if offset_dtype == torch.int32
+                else pa.large_string(),
+            ),
             device=device,
             size=size,
         )
@@ -684,7 +698,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
     dim_size = 0
     storage_offset = 0
     start_views, end_views = [], []
-    for tensor, data, offset in zip(tensors, data_list, offsets, strict=True):
+    for tensor, data, offset in zip(tensors, data_list, offsets):
         offset = offset.to(offset_dtype) + storage_offset
         dim_size += tensor.size(dim)
         storage_offset += data.numel()
