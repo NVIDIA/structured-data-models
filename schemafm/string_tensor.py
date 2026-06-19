@@ -474,6 +474,35 @@ def _pin_memory(input: StringTensor) -> StringTensor:
     )
 
 
+@implements(aten.equal.default)
+def _equal(input: StringTensor, other: Tensor) -> bool:
+    if not isinstance(other, StringTensor):
+        return False
+    if input.size() != other.size():
+        return False
+
+    input_contiguous = input.clone(memory_format=torch.contiguous_format)
+    other_contiguous = other.clone(memory_format=torch.contiguous_format)
+    assert isinstance(input_contiguous, StringTensor)
+    assert isinstance(other_contiguous, StringTensor)
+
+    return input_contiguous._offset.equal(
+        other_contiguous._offset
+    ) and input_contiguous._data.equal(other_contiguous._data)
+
+
+@implements(aten.allclose.default)
+def _allclose(
+    input: StringTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    del rtol, atol, equal_nan
+    return _equal(input, other)
+
+
 @implements(aten.view.default)
 def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
     view = _layout_view(input).view(tuple(size))
