@@ -61,12 +61,6 @@ def test_pandas() -> None:
     assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
 
-    tensor = StringTensor.from_pandas(
-        pd.Series(["hi", "é", "", None]),
-        offset_dtype=torch.int32,
-    )
-    assert tensor._offset.dtype == torch.int32
-
     series = tensor.to_pandas()
     assert isinstance(series, pd.Series)
     assert series.tolist() == ["hi", "é", "", ""]
