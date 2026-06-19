@@ -20,16 +20,12 @@ def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
     return tuple(stride[::-1])
 
 
-def _max_index(
-    size: Sequence[int],
-    stride: Sequence[int],
-    storage_offset: int,
-) -> int:
+def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     if math.prod(size) == 0:
-        return storage_offset
-    return storage_offset + sum(
+        return 0
+    return 1 + sum(
         (dim_size - 1) * dim_stride
-        for dim_size, dim_stride in zip(size, stride, strict=True)
+        for dim_size, dim_stride in zip(size, stride)
     )
 
 
@@ -103,19 +99,17 @@ class StringTensor(Tensor):
                 f"Expected 'size' and 'stride' in '{cls.__name__}' to have "
                 f"the same length (got {len(size)} and {len(stride)})"
             )
-        if storage_offset < 0 or storage_offset >= offset.numel():
+        if storage_offset < 0:
             raise ValueError(
-                f"'storage_offset' in '{cls.__name__}' is out of bounds (got "
-                f"{storage_offset}, but expected [0, {offset.numel() - 1}])"
+                f"Expected 'storage_offset' in '{cls.__name__}' to be "
+                f"non-negative"
             )
-        if math.prod(size) > 0:
-            max_index = _max_index(size, stride, storage_offset)
-            if max_index >= offset.numel() - 1:
-                raise ValueError(
-                    f"'offset' in '{cls.__name__}' is out of bounds (got "
-                    f"{offset.numel() - 1} elements, but expected at least "
-                    f"{max_index + 1} elements)"
-                )
+        if storage_offset + _span_len(size, stride) >= offset.numel():
+            raise ValueError(
+                f"'offset' in '{cls.__name__}' is out of bounds (got "
+                f"{offset.numel()} entries, but expected at least "
+                f"{storage_offset + _span_len(size, stride) + 1} entries)"
+            )
 
         out = Tensor._make_wrapper_subclass(
             cls,
@@ -312,7 +306,7 @@ def _to_copy(
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,
+    pin_memory: bool = False,  # Ignored by PyTorch.
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> StringTensor:
@@ -334,34 +328,88 @@ def _to_copy(
             f"'{input.__class__.__name__}.clone'"
         )
 
-    if input.stride() != _contiguous_stride(input.size()):
-        raise NotImplementedError(  # TODO
-            f"Cannot copy non-contiguous '{input.__class__.__name__}'"
-        )
-
+    # `StringTensor` stores one physical 1D blob in `_offset`/`_data`.
+    # Logical tensor positions are mapped into that blob via
+    # `size`/`stride`/`storage_offset`, just like regular strided tensors.
+    # Copying therefore has two cases:
+    # 1. Slice one physical span when the requested output layout can reuse the
+    #    input storage order.
+    # 2. Gather logical elements in physical order when holes, overlaps, or
+    #    `contiguous_format` require materialization.
     storage_offset = int(input.storage_offset())
-    if input.numel() == 0:
-        data = input._data.new_empty(0)
-        offset = input._offset.new_zeros(1)
+    start = torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=storage_offset,
+    )
+    use_slice = (
+        input.numel() == 0
+        or (
+            memory_format == torch.preserve_format
+            and torch._debug_has_internal_overlap(start) == 0
+        )
+        or (
+            memory_format == torch.contiguous_format
+            and input.stride() == _contiguous_stride(input.size())
+        )
+    )
+    if use_slice:
+        span_len = _span_len(input.size(), input.stride())
+        offset = input._offset[storage_offset : storage_offset + span_len + 1]
+        data = input._data[offset[0] : offset[-1]].to(
+            device,
+            non_blocking=non_blocking,
+            copy=True,
+        )
+        offset = (offset - offset[0]).to(device, non_blocking=non_blocking)
+        if memory_format == torch.preserve_format:
+            stride = input.stride()
+        else:
+            stride = _contiguous_stride(input.size())
     else:
-        max_index = _max_index(input.size(), input.stride(), storage_offset)
-        offset = input._offset[storage_offset : max_index + 2]
-        byte_start = int(offset[0])
-        byte_end = int(offset[-1])
-        data = input._data[byte_start:byte_end]
-        offset = offset - offset[0]
+        # Use PyTorch's own memory-format semantics to materialize data:
+        start = start.clone(memory_format=memory_format)
+        stride = start.stride()
+        start = torch.as_strided(  # Physical 1D representation.
+            start,
+            size=(start.numel(),),
+            stride=(1,),
+            storage_offset=start.storage_offset(),
+        )
+        end = torch.as_strided(
+            input._offset,
+            size=input.size(),
+            stride=input.stride(),
+            storage_offset=storage_offset + 1,
+        ).clone(memory_format=memory_format)
+        end = torch.as_strided(  # Physical 1D representation.
+            end,
+            size=(end.numel(),),
+            stride=(1,),
+            storage_offset=end.storage_offset(),
+        )
+        count = end - start
 
-    if device is not None and device != data.device:
-        data = data.to(device, non_blocking=non_blocking)
+        offset = count.new_empty(count.numel() + 1)
+        offset[0] = 0
+        offset[1:] = count.cumsum(dim=0)
+
+        local = torch.arange(offset[-1], device=count.device)  # type: ignore
+        local -= offset[:-1].repeat_interleave(
+            count, output_size=local.numel()
+        )
+        index = start.repeat_interleave(count, output_size=local.numel())
+        index += local
+
+        data = input._data[index].to(device, non_blocking=non_blocking)
         offset = offset.to(device, non_blocking=non_blocking)
-    elif input.numel() > 0:
-        data = data.clone()
 
     return StringTensor(
         data=data,
         offset=offset,
         size=input.size(),
-        stride=input.stride(),
+        stride=stride,
         storage_offset=0,
     )
 
