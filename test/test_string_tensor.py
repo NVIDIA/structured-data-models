@@ -407,6 +407,52 @@ def test_select_slice_narrow_expand() -> None:
     assert out._offset.equal(torch.arange(13))
 
 
+def test_unbind_split() -> None:
+    tensor = StringTensor(
+        data=torch.arange(25, dtype=torch.uint8),
+        offset=torch.arange(26),
+        size=(2, 3, 4),
+        storage_offset=1,
+    )
+
+    out = tensor.unbind(dim=1)
+    assert isinstance(out, tuple)
+    assert len(out) == 3
+    assert out[1].size() == (2, 4)
+    assert out[1].stride() == (12, 1)
+    assert out[1].storage_offset() == 5
+    chunk = out[1]
+    assert isinstance(chunk, StringTensor)
+    assert chunk._data.data_ptr() == tensor._data.data_ptr()
+    assert chunk._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tuple(tensor)
+    assert len(out) == 2
+    assert out[1].size() == (3, 4)
+    assert out[1].stride() == (4, 1)
+    assert out[1].storage_offset() == 13
+
+    out = tensor.split(2, dim=2)
+    assert len(out) == 2
+    assert out[0].size() == (2, 3, 2)
+    assert out[0].stride() == (12, 4, 1)
+    assert out[0].storage_offset() == 1
+    assert out[1].size() == (2, 3, 2)
+    assert out[1].stride() == (12, 4, 1)
+    assert out[1].storage_offset() == 3
+    chunk = out[1]
+    assert isinstance(chunk, StringTensor)
+    assert chunk._data.data_ptr() == tensor._data.data_ptr()
+    assert chunk._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor.split([1, 2], dim=-2)
+    assert len(out) == 2
+    assert out[0].size() == (2, 1, 4)
+    assert out[0].storage_offset() == 1
+    assert out[1].size() == (2, 2, 4)
+    assert out[1].storage_offset() == 5
+
+
 def test_unsafe_view() -> None:
     tensor = StringTensor(
         data=torch.arange(12, dtype=torch.uint8),

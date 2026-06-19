@@ -618,6 +618,40 @@ def _narrow(
     return _from_layout_view(input, view)
 
 
+@implements(aten.unbind.int)
+def _unbind(input: StringTensor, dim: int = 0) -> tuple[StringTensor, ...]:
+    return tuple(
+        _from_layout_view(input, view)
+        for view in _layout_view(input).unbind(dim)
+    )
+
+
+@implements(aten.split.Tensor)
+def _split(
+    input: StringTensor,
+    split_size: int,
+    dim: int = 0,
+) -> tuple[StringTensor, ...]:
+    return tuple(
+        _from_layout_view(input, view)
+        for view in _layout_view(input).split(split_size, dim)
+    )
+
+
+@implements(aten.split.sizes)
+@implements(aten.split.default)
+@implements(aten.split_with_sizes.default)
+def _split_with_sizes(
+    input: StringTensor,
+    split_sizes: Sequence[int],
+    dim: int = 0,
+) -> tuple[StringTensor, ...]:
+    return tuple(
+        _from_layout_view(input, view)
+        for view in _layout_view(input).split(tuple(split_sizes), dim)
+    )
+
+
 @implements(aten.expand.default)
 def _expand(
     input: StringTensor,
