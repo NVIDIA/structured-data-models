@@ -1,6 +1,6 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, cast
 
 import pyarrow as pa
 import torch
@@ -240,9 +240,7 @@ class StringTensor(Tensor):
                 f"Use Tensor.cpu() to copy the tensor to host memory first."
             )
 
-        tensor = self.contiguous()
-        assert isinstance(tensor, StringTensor)
-
+        tensor = cast(StringTensor, self.contiguous())
         start = int(tensor.storage_offset())
         offset = tensor._offset[start : start + tensor.numel() + 1]
         data = tensor._data[offset[0] : offset[-1]]
@@ -458,6 +456,17 @@ def _to_copy(
     )
 
 
+@implements(aten.contiguous.default)
+def _contiguous(
+    input: StringTensor,
+    *,
+    memory_format: torch.memory_format = torch.contiguous_format,
+) -> StringTensor:
+    if input.is_contiguous(memory_format=memory_format):
+        return input
+    return _to_copy(input, memory_format=memory_format)
+
+
 @implements(aten.is_pinned.default)
 def _is_pinned(input: StringTensor) -> bool:
     return input._data.is_pinned() and input._offset.is_pinned()
@@ -481,14 +490,21 @@ def _equal(input: StringTensor, other: Tensor) -> bool:
     if input.size() != other.size():
         return False
 
-    input_contiguous = input.clone(memory_format=torch.contiguous_format)
-    other_contiguous = other.clone(memory_format=torch.contiguous_format)
-    assert isinstance(input_contiguous, StringTensor)
-    assert isinstance(other_contiguous, StringTensor)
+    input = cast(StringTensor, input.contiguous())
+    other = cast(StringTensor, other.contiguous())
 
-    return input_contiguous._offset.equal(
-        other_contiguous._offset
-    ) and input_contiguous._data.equal(other_contiguous._data)
+    start1 = int(input.storage_offset())
+    offset1 = input._offset[start1 : start1 + input.numel() + 1]
+    data1 = input._data[offset1[0] : offset1[-1]]
+
+    start2 = int(other.storage_offset())
+    offset2 = other._offset[start2 : start2 + other.numel() + 1]
+    data2 = other._data[offset2[0] : offset2[-1]]
+
+    if not data1.equal(data2):
+        return False
+
+    return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
 
 
 @implements(aten.allclose.default)
@@ -499,8 +515,26 @@ def _allclose(
     atol: float = 1e-08,
     equal_nan: bool = False,
 ) -> bool:
-    del rtol, atol, equal_nan
-    return _equal(input, other)
+    if not isinstance(other, StringTensor):
+        return False
+    if input.size() != other.size():
+        return False
+
+    input = cast(StringTensor, input.contiguous())
+    other = cast(StringTensor, other.contiguous())
+
+    start1 = int(input.storage_offset())
+    offset1 = input._offset[start1 : start1 + input.numel() + 1]
+    data1 = input._data[offset1[0] : offset1[-1]]
+
+    start2 = int(other.storage_offset())
+    offset2 = other._offset[start2 : start2 + other.numel() + 1]
+    data2 = other._data[offset2[0] : offset2[-1]]
+
+    if not data1.allclose(data2, rtol=rtol, atol=atol, equal_nan=equal_nan):
+        return False
+
+    return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
 
 
 @implements(aten.view.default)

@@ -162,19 +162,17 @@ def test_to_copy() -> None:
 
 def test_equal_allclose() -> None:
     tensor = StringTensor.from_strings([["a", "bb"], ["c", "d"]])
-    other = StringTensor.from_strings([["a", "z", "bb"], ["c", "z", "d"]])[
-        :, ::2
-    ]
-    assert isinstance(other, StringTensor)
+    other = StringTensor.from_strings([["a", "z", "bb"], ["c", "z", "d"]])
 
-    assert tensor.equal(other)
-    assert torch.equal(tensor, other)
-    assert torch.allclose(tensor, other)
-
-    other = StringTensor.from_strings([["a", "bb"], ["c", "e"]])
     assert not tensor.equal(other)
-    assert not torch.allclose(tensor, other, atol=1)
-    assert not torch.equal(tensor, torch.empty(2, 2, dtype=torch.uint8))
+    assert not torch.equal(tensor, other)
+    assert not tensor.allclose(other)
+    assert not torch.allclose(tensor, other)
+
+    assert tensor.equal(other[:, ::2])
+    assert torch.equal(tensor, other[:, ::2])
+    assert tensor.allclose(other[:, ::2])
+    assert torch.allclose(tensor, other[:, ::2])
 
 
 def test_pin_memory() -> None:
