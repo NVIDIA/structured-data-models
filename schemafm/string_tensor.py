@@ -653,6 +653,7 @@ def _materialize(
     device: torch.device | str | None = None,
     non_blocking: bool = False,
 ) -> StringTensor:
+    # Use PyTorch's own memory-format semantics to materialize data:
     start = torch.as_strided(
         input._offset,
         size=input.size(),
