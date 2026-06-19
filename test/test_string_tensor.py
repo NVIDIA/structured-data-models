@@ -364,10 +364,36 @@ def test_select_slice_narrow_expand() -> None:
     assert out.storage_offset() == 0
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
-    out = out.clone()
+    out = out.contiguous()
+    assert out.is_contiguous()
     assert isinstance(out, StringTensor)
     assert out.size() == (3, 4)
     assert out.stride() == (4, 1)
     assert out.storage_offset() == 0
     assert out._data.equal(torch.tensor([0, 1, 2, 3] * 3))
     assert out._offset.equal(torch.arange(13))
+
+
+def test_unsafe_view() -> None:
+    tensor = StringTensor(
+        data=torch.arange(12, dtype=torch.uint8),
+        offset=torch.arange(13),
+        size=(3, 2),
+        stride=(4, 1),
+    )
+
+    out = tensor.reshape(2, 3)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 3)
+    assert out.stride() == (3, 1)
+    assert out.storage_offset() == 0
+    assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
+    assert out._offset.equal(torch.arange(7))
+
+    out = tensor.flatten()
+    assert isinstance(out, StringTensor)
+    assert out.size() == (6,)
+    assert out.stride() == (1,)
+    assert out.storage_offset() == 0
+    assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
+    assert out._offset.equal(torch.arange(7))

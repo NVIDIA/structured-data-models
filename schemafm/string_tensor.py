@@ -418,6 +418,12 @@ def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
     return _from_layout_view(input, view)
 
 
+@implements(aten._unsafe_view.default)
+def _unsafe_view(input: StringTensor, size: Sequence[int]) -> StringTensor:
+    view = aten._unsafe_view.default(_layout_view(input), size)
+    return _from_layout_view(input, view)
+
+
 @implements(aten.squeeze.default)
 def _squeeze(input: StringTensor) -> StringTensor:
     view = _layout_view(input).squeeze()
