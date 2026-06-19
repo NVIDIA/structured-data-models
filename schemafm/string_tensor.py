@@ -271,6 +271,26 @@ class StringTensor(Tensor):
         self._offset.share_memory_()
         return self
 
+    def item(self) -> str:  # type: ignore
+        if self.numel() != 1:
+            raise RuntimeError(
+                f"a Tensor with {self.numel()} elements cannot be converted "
+                f"to a string"
+            )
+
+        start = self._offset[int(self.storage_offset())]
+        end = self._offset[int(self.storage_offset()) + 1]
+        return bytes(self._data[start:end].tolist()).decode("utf-8")
+
+    def __str__(self) -> str:
+        return self.item() if self.numel() == 1 else self.__repr__()
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        return (
+            f"{self.__class__.__name__}(size={tuple(self.size())}, "
+            f"device='{self.device}')"
+        )
+
 
 @implements(aten.clone.default)
 def _clone(

@@ -54,6 +54,15 @@ def test_from_pandas() -> None:
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
 
 
+def test_item() -> None:
+    assert StringTensor.from_strings("é").item() == "é"
+    assert StringTensor.from_strings(["hi", "é"])[1].item() == "é"
+    assert str(StringTensor.from_strings([""])) == ""
+
+    with pytest.raises(RuntimeError, match="cannot be converted"):
+        StringTensor.from_strings(["hi", "é"]).item()
+
+
 def test_to_copy() -> None:
     data = torch.arange(16, dtype=torch.uint8)
     offset = torch.arange(data.numel() + 1)
