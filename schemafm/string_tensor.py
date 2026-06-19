@@ -476,10 +476,7 @@ def _equal(input: StringTensor, other: Tensor) -> bool:
     data1, offset1 = input.data_offset
     data2, offset2 = other.data_offset
 
-    if not data1.equal(data2):
-        return False
-
-    return torch.equal(offset1, offset2)
+    return offset1.equal(offset2) and data1.equal(data2)
 
 
 @implements(aten.allclose.default)
@@ -501,10 +498,9 @@ def _allclose(
     data1, offset1 = input.data_offset
     data2, offset2 = other.data_offset
 
-    if not data1.allclose(data2, rtol=rtol, atol=atol, equal_nan=equal_nan):
-        return False
-
-    return torch.equal(offset1, offset2)
+    return offset1.equal(offset2) and data1.allclose(
+        data2, rtol=rtol, atol=atol, equal_nan=equal_nan
+    )
 
 
 @implements(aten.view.default)
