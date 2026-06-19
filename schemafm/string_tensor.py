@@ -285,7 +285,9 @@ class StringTensor(Tensor):
     def __str__(self) -> str:
         if self.numel() == 1:
             return self.item()
+        return self.__repr__()
 
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
         return (
             f"{self.__class__.__name__}(size={tuple(self.size())}, "
             f"device='{self.device}')"
