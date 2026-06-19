@@ -322,6 +322,21 @@ class StringTensor(Tensor):
         end = self._offset[int(self.storage_offset()) + 1]
         return bytes(self._data[start:end].tolist()).decode("utf-8")
 
+    def tolist(self) -> str | list[Any]:  # ty: ignore[invalid-method-override]
+        def reshape(values: list[str], size: tuple[int, ...]) -> Any:
+            if len(size) == 0:
+                return values[0]
+            if len(size) == 1:
+                return values
+
+            step = math.prod(size[1:])
+            return [
+                reshape(values[i : i + step], size[1:])
+                for i in range(0, len(values), step)
+            ]
+
+        return reshape(self.to_arrow().to_pylist(), tuple(self.size()))
+
     def __str__(self) -> str:
         return self.item() if self.numel() == 1 else self.__repr__()
 
