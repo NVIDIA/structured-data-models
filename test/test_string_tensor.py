@@ -72,6 +72,16 @@ def test_item() -> None:
         StringTensor.from_strings(["hi", "é"]).item()
 
 
+def test_tolist() -> None:
+    for strings in [
+        "é",
+        ["hi", "é"],
+        [],
+        [["a", "bb", "c"], ["dd", "e", "ff"]],
+    ]:
+        assert StringTensor.from_strings(strings).tolist() == strings
+
+
 def test_to_copy() -> None:
     data = torch.arange(16, dtype=torch.uint8)
     offset = torch.arange(data.numel() + 1)
