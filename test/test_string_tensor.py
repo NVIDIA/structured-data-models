@@ -365,6 +365,7 @@ def test_select_slice_narrow_expand() -> None:
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
     out = out.contiguous()
+    assert out.is_contiguous()
     assert isinstance(out, StringTensor)
     assert out.size() == (3, 4)
     assert out.stride() == (4, 1)
