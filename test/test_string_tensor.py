@@ -267,3 +267,90 @@ def test_unsqueeze() -> None:
 
     with pytest.raises(IndexError, match="Dimension out of range"):
         tensor.unsqueeze(tensor.dim() + 1)
+
+
+def test_transpose_permute() -> None:
+    tensor = StringTensor(
+        data=torch.arange(12, dtype=torch.uint8),
+        offset=torch.arange(13),
+        size=(2, 3),
+        stride=(1, 4),
+        storage_offset=2,
+    )
+
+    out = tensor.t()
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3, 2)
+    assert out.stride() == (4, 1)
+    assert out.storage_offset() == 2
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor.transpose(0, 1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3, 2)
+    assert out.stride() == (4, 1)
+    assert out.storage_offset() == 2
+
+    tensor_3d = StringTensor(
+        data=torch.arange(24, dtype=torch.uint8),
+        offset=torch.arange(25),
+        size=(2, 3, 4),
+        stride=(12, 4, 1),
+    )
+
+    out = tensor_3d.transpose(0, -1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (4, 3, 2)
+    assert out.stride() == (1, 4, 12)
+    assert out.storage_offset() == 0
+
+    out = tensor_3d.permute(2, 0, 1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (4, 2, 3)
+    assert out.stride() == (1, 12, 4)
+    assert out.storage_offset() == 0
+
+    with pytest.raises(RuntimeError, match="t\\(\\) expects"):
+        tensor_3d.t()
+
+
+def test_select_slice_narrow_expand() -> None:
+    tensor = StringTensor(
+        data=torch.arange(24, dtype=torch.uint8),
+        offset=torch.arange(25),
+        size=(2, 3, 4),
+    )
+
+    out = tensor.select(1, 1)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 4)
+    assert out.stride() == (12, 1)
+    assert out.storage_offset() == 4
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
+    out = tensor[:, 1:3, ::2]
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 2, 2)
+    assert out.stride() == (12, 4, 2)
+    assert out.storage_offset() == 4
+
+    out = tensor.narrow(1, 1, 2)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 2, 4)
+    assert out.stride() == (12, 4, 1)
+    assert out.storage_offset() == 4
+
+    tensor = StringTensor(
+        data=torch.arange(4, dtype=torch.uint8),
+        offset=torch.arange(5),
+        size=(1, 4),
+    )
+    out = tensor.expand(3, 4)
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3, 4)
+    assert out.stride() == (0, 1)
+    assert out.storage_offset() == 0
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()

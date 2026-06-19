@@ -442,6 +442,64 @@ def _unsqueeze(input: StringTensor, dim: int) -> StringTensor:
     return _from_layout_view(input, view)
 
 
+@implements(aten.t.default)
+def _t(input: StringTensor) -> StringTensor:
+    view = _layout_view(input).t()
+    return _from_layout_view(input, view)
+
+
+@implements(aten.transpose.int)
+def _transpose(input: StringTensor, dim0: int, dim1: int) -> StringTensor:
+    view = _layout_view(input).transpose(dim0, dim1)
+    return _from_layout_view(input, view)
+
+
+@implements(aten.permute.default)
+def _permute(input: StringTensor, dims: Sequence[int]) -> StringTensor:
+    view = _layout_view(input).permute(tuple(dims))
+    return _from_layout_view(input, view)
+
+
+@implements(aten.select.int)
+def _select(input: StringTensor, dim: int, index: int) -> StringTensor:
+    view = _layout_view(input).select(dim, index)
+    return _from_layout_view(input, view)
+
+
+@implements(aten.slice.Tensor)
+def _slice(
+    input: StringTensor,
+    dim: int = 0,
+    start: int | None = None,
+    end: int | None = None,
+    step: int = 1,
+) -> StringTensor:
+    view = aten.slice.Tensor(_layout_view(input), dim, start, end, step)
+    return _from_layout_view(input, view)
+
+
+@implements(aten.narrow.default)
+def _narrow(
+    input: StringTensor,
+    dim: int,
+    start: int,
+    length: int,
+) -> StringTensor:
+    view = _layout_view(input).narrow(dim, start, length)
+    return _from_layout_view(input, view)
+
+
+@implements(aten.expand.default)
+def _expand(
+    input: StringTensor,
+    size: Sequence[int],
+    *,
+    implicit: bool = False,
+) -> StringTensor:
+    view = aten.expand.default(_layout_view(input), size, implicit=implicit)
+    return _from_layout_view(input, view)
+
+
 # Helpers #####################################################################
 
 
