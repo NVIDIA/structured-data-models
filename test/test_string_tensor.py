@@ -1,3 +1,5 @@
+from typing import cast
+
 import pyarrow as pa
 import pytest
 import torch
@@ -175,6 +177,26 @@ def test_to_copy() -> None:
 
     with pytest.raises(TypeError, match="Cannot convert"):
         tensor.to(torch.float32)
+
+
+def test_data_offset() -> None:
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(2,),
+        storage_offset=2,
+    )
+    data, offset = tensor.data_offset
+    assert data.equal(torch.tensor([2, 3], dtype=torch.uint8))
+    assert offset.equal(torch.tensor([0, 1, 2]))
+
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(2, 4),
+    )
+    with pytest.raises(RuntimeError, match=r"data_offset.*contiguous"):
+        _ = cast(StringTensor, tensor[:, ::2]).data_offset
 
 
 def test_equal_allclose() -> None:

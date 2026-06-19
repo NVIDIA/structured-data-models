@@ -117,6 +117,19 @@ class StringTensor(Tensor):
 
         return out
 
+    @property
+    def data_offset(self) -> tuple[Tensor, Tensor]:
+        if not self.is_contiguous():
+            raise RuntimeError(
+                f"Cannot access 'data_offset' for non-contiguous "
+                f"'{self.__class__.__name__}'"
+            )
+
+        start = int(self.storage_offset())
+        offset = self._offset[start : start + self.numel() + 1]
+        data = self._data[offset[0] : offset[-1]]
+        return data, offset - offset[0]
+
     @classmethod
     def from_arrow(
         cls,
@@ -241,10 +254,7 @@ class StringTensor(Tensor):
             )
 
         tensor = cast(StringTensor, self.contiguous())
-        start = int(tensor.storage_offset())
-        offset = tensor._offset[start : start + tensor.numel() + 1]
-        data = tensor._data[offset[0] : offset[-1]]
-        offset = offset - offset[0]
+        data, offset = tensor.data_offset
 
         return pa.Array.from_buffers(
             pa.large_string(),
@@ -463,18 +473,13 @@ def _equal(input: StringTensor, other: Tensor) -> bool:
     input = cast(StringTensor, input.contiguous())
     other = cast(StringTensor, other.contiguous())
 
-    start1 = int(input.storage_offset())
-    offset1 = input._offset[start1 : start1 + input.numel() + 1]
-    data1 = input._data[offset1[0] : offset1[-1]]
-
-    start2 = int(other.storage_offset())
-    offset2 = other._offset[start2 : start2 + other.numel() + 1]
-    data2 = other._data[offset2[0] : offset2[-1]]
+    data1, offset1 = input.data_offset
+    data2, offset2 = other.data_offset
 
     if not data1.equal(data2):
         return False
 
-    return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
+    return torch.equal(offset1, offset2)
 
 
 @implements(aten.allclose.default)
@@ -493,18 +498,13 @@ def _allclose(
     input = cast(StringTensor, input.contiguous())
     other = cast(StringTensor, other.contiguous())
 
-    start1 = int(input.storage_offset())
-    offset1 = input._offset[start1 : start1 + input.numel() + 1]
-    data1 = input._data[offset1[0] : offset1[-1]]
-
-    start2 = int(other.storage_offset())
-    offset2 = other._offset[start2 : start2 + other.numel() + 1]
-    data2 = other._data[offset2[0] : offset2[-1]]
+    data1, offset1 = input.data_offset
+    data2, offset2 = other.data_offset
 
     if not data1.allclose(data2, rtol=rtol, atol=atol, equal_nan=equal_nan):
         return False
 
-    return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
+    return torch.equal(offset1, offset2)
 
 
 @implements(aten.view.default)
@@ -669,73 +669,75 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
 
     if not all(isinstance(tensor, StringTensor) for tensor in tensors):
         raise TypeError(
-            f"Expected all tensors in '{StringTensor.__name__}.cat' to be "
-            f"'{StringTensor.__name__}'"
+            f"Expected all tensors in '{StringTensor.__name__}.cat' to be of "
+            f"type '{StringTensor.__name__}'"
         )
+    tensors = tuple(
+        cast(StringTensor, tensor.contiguous())
+        for tensor in cast(Sequence[StringTensor], tensors)
+    )
+    data_offsets = [tensor.data_offset for tensor in tensors]
+    data = torch.cat([data for data, _ in data_offsets])
 
-    tensors = cast(Sequence[StringTensor], tensors)
-    start = aten.cat.default([_layout_view(tensor) for tensor in tensors], dim)
-    end = aten.cat.default(
-        [_layout_end_view(tensor) for tensor in tensors], dim
-    )
-    source = aten.cat.default(
-        [
-            torch.full_like(
-                _layout_view(tensor),
-                fill_value=i,
-                dtype=torch.long,
-            )
-            for i, tensor in enumerate(tensors)
-        ],
-        dim,
-    )
+    shifted_offsets = []
+    start_views = []
+    end_views = []
+    byte_offset = 0
+    for tensor, (data_i, offset_i) in zip(
+        tensors,
+        data_offsets,
+        strict=True,
+    ):
+        offset = offset_i + byte_offset
+        shifted_offsets.append(offset)
+        start_views.append(offset[:-1].view(tensor.size()))
+        end_views.append(offset[1:].view(tensor.size()))
+        byte_offset += data_i.numel()
+
+    start = aten.cat.default(start_views, dim)
+    end = aten.cat.default(end_views, dim)
+
+    dim = dim % tensors[0].dim()
+    if math.prod(tensors[0].size()[:dim]) == 1:
+        offset = aten.cat.default(
+            [
+                shifted_offsets[0],
+                *(offset[1:] for offset in shifted_offsets[1:]),
+            ],
+        )
+        return StringTensor(
+            data=data,
+            offset=offset,
+            size=start.size(),
+            stride=start.stride(),
+            storage_offset=0,
+        )
 
     assert start.storage_offset() == 0
     assert end.storage_offset() == 0
-    assert source.storage_offset() == 0
     assert _span_len(start.size(), start.stride()) == start.numel()
     assert _span_len(end.size(), end.stride()) == end.numel()
-    assert _span_len(source.size(), source.stride()) == source.numel()
 
     size = start.size()
     stride = start.stride()
     start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
     end = torch.as_strided(end, size=(end.numel(),), stride=(1,))
-    source = torch.as_strided(source, size=(source.numel(),), stride=(1,))
     count = end - start
 
     offset = count.new_empty(count.numel() + 1)
     offset[0] = 0
     offset[1:] = count.cumsum(dim=0)
-    data = tensors[0]._data.new_empty(offset[-1])  # type: ignore
 
-    for i, tensor in enumerate(tensors):
-        mask = source == i
-        start_i = start[mask]
-        count_i = count[mask]
-        offset_i = count_i.new_empty(count_i.numel() + 1)
-        offset_i[0] = 0
-        offset_i[1:] = count_i.cumsum(dim=0)
-
-        local = torch.arange(offset_i[-1], device=count_i.device)  # type: ignore
-        local -= offset_i[:-1].repeat_interleave(
-            count_i,
-            output_size=local.numel(),
-        )
-        src_index = start_i.repeat_interleave(
-            count_i,
-            output_size=local.numel(),
-        )
-        src_index += local
-        dst_index = offset[:-1][mask].repeat_interleave(
-            count_i,
-            output_size=local.numel(),
-        )
-        dst_index += local
-        data[dst_index] = tensor._data[src_index]
+    local = torch.arange(offset[-1], device=count.device)  # type: ignore
+    local -= offset[:-1].repeat_interleave(
+        count,
+        output_size=local.numel(),
+    )
+    index = start.repeat_interleave(count, output_size=local.numel())
+    index += local
 
     return StringTensor(
-        data=data,
+        data=data[index],
         offset=offset,
         size=size,
         stride=stride,
@@ -770,15 +772,6 @@ def _layout_view(input: "StringTensor") -> Tensor:
         size=input.size(),
         stride=input.stride(),
         storage_offset=int(input.storage_offset()),
-    )
-
-
-def _layout_end_view(input: "StringTensor") -> Tensor:
-    return torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()) + 1,
     )
 
 
