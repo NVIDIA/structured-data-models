@@ -383,84 +383,44 @@ def _to_copy(
     # Logical tensor positions are mapped into that blob via
     # `size`/`stride`/`storage_offset`, just like regular strided tensors.
     # Copying therefore has two cases:
-    # 1. Slice one physical span when the requested output layout can reuse the
-    #    input storage order.
-    # 2. Gather logical elements in physical order when holes, overlaps, or
-    #    `contiguous_format` require materialization.
-    storage_offset = int(input.storage_offset())
-    start = torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=storage_offset,
-    )
+    # 1. Slice when the output layout can reuse the input storage order.
+    # 2. Materialize in case of holes, overlaps, or change in memory format.
     use_slice = (
         input.numel() == 0
         or (
             memory_format == torch.preserve_format
-            and torch._debug_has_internal_overlap(start) == 0
+            and torch._debug_has_internal_overlap(_layout_view(input)) == 0
         )
         or (
             memory_format == torch.contiguous_format
             and input.stride() == _contiguous_stride(input.size())
         )
     )
-    if use_slice:
-        span_len = _span_len(input.size(), input.stride())
-        offset = input._offset[storage_offset : storage_offset + span_len + 1]
-        data = input._data[offset[0] : offset[-1]].to(
-            device,
+    if not use_slice:
+        return _materialize(
+            input,
+            lambda x: x.clone(memory_format=memory_format),
+            device=device,
             non_blocking=non_blocking,
-            copy=True,
         )
-        offset = (offset - offset[0]).to(device, non_blocking=non_blocking)
-        if memory_format == torch.preserve_format:
-            stride = input.stride()
-        else:
-            stride = _contiguous_stride(input.size())
-    else:
-        # Use PyTorch's own memory-format semantics to materialize data:
-        start = start.clone(memory_format=memory_format)
-        stride = start.stride()
-        start = torch.as_strided(  # Physical 1D representation.
-            start,
-            size=(start.numel(),),
-            stride=(1,),
-            storage_offset=start.storage_offset(),
-        )
-        end = torch.as_strided(
-            input._offset,
-            size=input.size(),
-            stride=input.stride(),
-            storage_offset=storage_offset + 1,
-        ).clone(memory_format=memory_format)
-        end = torch.as_strided(  # Physical 1D representation.
-            end,
-            size=(end.numel(),),
-            stride=(1,),
-            storage_offset=end.storage_offset(),
-        )
-        count = end - start
 
-        offset = count.new_empty(count.numel() + 1)
-        offset[0] = 0
-        offset[1:] = count.cumsum(dim=0)
-
-        local = torch.arange(offset[-1], device=count.device)  # type: ignore
-        local -= offset[:-1].repeat_interleave(
-            count, output_size=local.numel()
-        )
-        index = start.repeat_interleave(count, output_size=local.numel())
-        index += local
-
-        data = input._data[index].to(device, non_blocking=non_blocking)
-        offset = offset.to(device, non_blocking=non_blocking)
+    storage_offset = int(input.storage_offset())
+    span_len = _span_len(input.size(), input.stride())
+    offset = input._offset[storage_offset : storage_offset + span_len + 1]
+    data = input._data[offset[0] : offset[-1]].to(
+        device,
+        non_blocking=non_blocking,
+        copy=True,
+    )
+    offset = (offset - offset[0]).to(device, non_blocking=non_blocking)
 
     return StringTensor(
         data=data,
         offset=offset,
         size=input.size(),
-        stride=stride,
+        stride=input.stride()
+        if memory_format == torch.preserve_format
+        else _contiguous_stride(input.size()),
         storage_offset=0,
     )
 
@@ -535,39 +495,6 @@ def _allclose(
     return torch.equal(offset1 - offset1[0], offset2 - offset2[0])
 
 
-@implements(aten.masked_select.default)
-def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
-    storage_offset = int(input.storage_offset())
-    start = _layout_view(input).masked_select(mask)
-    end = torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=storage_offset + 1,
-    ).masked_select(mask)
-    count = end - start
-
-    offset = count.new_empty(count.numel() + 1)
-    offset[0] = 0
-    offset[1:] = count.cumsum(dim=0)
-
-    local = torch.arange(offset[-1], device=count.device)  # type: ignore
-    local -= offset[:-1].repeat_interleave(
-        count,
-        output_size=local.numel(),
-    )
-    index = start.repeat_interleave(count, output_size=local.numel())
-    index += local
-
-    return StringTensor(
-        data=input._data[index],
-        offset=offset,
-        size=start.size(),
-        stride=_contiguous_stride(start.size()),
-        storage_offset=0,
-    )
-
-
 @implements(aten.view.default)
 def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
     view = _layout_view(input).view(tuple(size))
@@ -626,6 +553,11 @@ def _permute(input: StringTensor, dims: Sequence[int]) -> StringTensor:
 def _select(input: StringTensor, dim: int, index: int) -> StringTensor:
     view = _layout_view(input).select(dim, index)
     return _from_layout_view(input, view)
+
+
+@implements(aten.masked_select.default)
+def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
+    return _materialize(input, lambda x: x.masked_select(mask))
 
 
 @implements(aten.slice.Tensor)
@@ -714,6 +646,68 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     return 1 + sum(
         (dim_size - 1) * dim_stride
         for dim_size, dim_stride in zip(size, stride)
+    )
+
+
+def _materialize(
+    input: StringTensor,
+    function: Callable[[Tensor], Tensor],
+    *,
+    device: torch.device | str | None = None,
+    non_blocking: bool = False,
+) -> StringTensor:
+    start = torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+    start = function(start)
+    assert start.storage_offset() == 0
+    assert _span_len(start.size(), start.stride()) == start.numel()
+
+    end = torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()) + 1,
+    )
+    end = function(end)
+    assert end.storage_offset() == 0
+    assert _span_len(end.size(), end.stride()) == end.numel()
+
+    size = start.size()
+    stride = start.stride()
+
+    start = torch.as_strided(
+        start,
+        size=(start.numel(),),
+        stride=(1,),
+        storage_offset=start.storage_offset(),
+    )
+    end = torch.as_strided(
+        end,
+        size=(end.numel(),),
+        stride=(1,),
+        storage_offset=end.storage_offset(),
+    )
+    count = end - start
+
+    offset = count.new_empty(count.numel() + 1)
+    offset[0] = 0
+    offset[1:] = count.cumsum(dim=0)
+
+    local = torch.arange(offset[-1], device=count.device)  # type: ignore
+    local -= offset[:-1].repeat_interleave(count, output_size=local.numel())
+    index = start.repeat_interleave(count, output_size=local.numel())
+    index += local
+
+    return StringTensor(
+        data=input._data[index].to(device, non_blocking=non_blocking),
+        offset=offset.to(device, non_blocking=non_blocking),
+        size=size,
+        stride=stride,
+        storage_offset=0,
     )
 
 
