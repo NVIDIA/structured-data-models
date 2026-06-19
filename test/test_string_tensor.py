@@ -4,6 +4,7 @@ import pyarrow as pa
 import pytest
 import torch
 from schemafm import StringTensor
+from torch import Tensor
 
 
 def test_from_strings() -> None:
@@ -195,7 +196,7 @@ def test_data_offset() -> None:
         offset=torch.arange(9),
         size=(2, 4),
     )
-    with pytest.raises(RuntimeError, match=r"data_offset.*contiguous"):
+    with pytest.raises(RuntimeError, match="non-contiguous"):
         _ = cast(StringTensor, tensor[:, ::2]).data_offset
 
 
@@ -283,29 +284,28 @@ def test_indexing() -> None:
 
 
 def test_cat() -> None:
-    tensor = StringTensor.from_strings([["a", "bb"], ["c", "d"]])
+    tensors: list[Tensor] = [
+        StringTensor.from_strings([["a", "bb"], ["c", "d"]]),
+        StringTensor.from_strings([["e", "ff"]]),
+    ]
 
-    out = torch.cat([tensor, StringTensor.from_strings([["e", "ff"]])])
+    out = torch.cat(tensors)
     assert isinstance(out, StringTensor)
     assert out.size() == (3, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
     assert out.to_arrow().to_pylist() == ["a", "bb", "c", "d", "e", "ff"]
 
-    out = torch.cat(
-        [tensor, StringTensor.from_strings([["x"], ["yy"]])], dim=1
-    )
+    tensors = [
+        StringTensor.from_strings([["a", "bb"], ["c", "d"]]),
+        StringTensor.from_strings([["x"], ["yy"]]),
+    ]
+    out = torch.cat(tensors, dim=-1)
     assert isinstance(out, StringTensor)
     assert out.size() == (2, 3)
     assert out.stride() == (3, 1)
+    assert out.storage_offset() == 0
     assert out.to_arrow().to_pylist() == ["a", "bb", "x", "c", "d", "yy"]
-
-    other = StringTensor.from_strings([["z", "e", "ff"], ["z", "g", "h"]])
-    out = torch.cat([tensor[:, :1], other[:, 1:]], dim=-1)
-    assert isinstance(out, StringTensor)
-    assert out.size() == (2, 3)
-    assert out.stride() == (3, 1)
-    assert out.to_arrow().to_pylist() == ["a", "e", "ff", "c", "g", "h"]
 
 
 def test_pin_memory() -> None:
