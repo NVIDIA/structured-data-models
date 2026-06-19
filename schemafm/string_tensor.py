@@ -332,24 +332,6 @@ class StringTensor(Tensor):
         )
 
 
-@implements(aten.clone.default)
-def _clone(
-    input: StringTensor,
-    *,
-    memory_format: torch.memory_format | None = None,
-) -> StringTensor:
-    return _to_copy(input, memory_format=memory_format)
-
-
-@implements(aten.contiguous.default)
-def _contiguous(
-    input: StringTensor,
-    *,
-    memory_format: torch.memory_format = torch.contiguous_format,
-) -> StringTensor:
-    return _to_copy(input, memory_format=memory_format)
-
-
 @implements(aten._to_copy.default)
 def _to_copy(
     input: StringTensor,
@@ -420,6 +402,24 @@ def _to_copy(
         else _contiguous_stride(input.size()),
         storage_offset=0,
     )
+
+
+@implements(aten.clone.default)
+def _clone(
+    input: StringTensor,
+    *,
+    memory_format: torch.memory_format | None = None,
+) -> StringTensor:
+    return _to_copy(input, memory_format=memory_format)
+
+
+@implements(aten.contiguous.default)
+def _contiguous(
+    input: StringTensor,
+    *,
+    memory_format: torch.memory_format = torch.contiguous_format,
+) -> StringTensor:
+    return _to_copy(input, memory_format=memory_format)
 
 
 @implements(aten.is_pinned.default)
@@ -552,11 +552,6 @@ def _select(input: StringTensor, dim: int, index: int) -> StringTensor:
     return _from_layout_view(input, view)
 
 
-@implements(aten.masked_select.default)
-def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
-    return _materialize(input, lambda x: x.masked_select(mask))
-
-
 @implements(aten.slice.Tensor)
 def _slice(
     input: StringTensor,
@@ -625,6 +620,33 @@ def _expand(
     return _from_layout_view(input, view)
 
 
+@implements(aten.masked_select.default)
+def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
+    return _materialize(input, lambda x: x.masked_select(mask))
+
+
+@implements(aten.index_select.default)
+def _index_select(
+    input: StringTensor,
+    dim: int,
+    index: Tensor,
+) -> StringTensor:
+    return _materialize(input, lambda x: x.index_select(dim, index))
+
+
+@implements(aten.take.default)
+def _take(input: StringTensor, index: Tensor) -> StringTensor:
+    return _materialize(input, lambda x: x.take(index))
+
+
+@implements(aten.index.Tensor)
+def _index(
+    input: StringTensor,
+    indices: Sequence[Tensor | None],
+) -> StringTensor:
+    return _materialize(input, lambda x: aten.index.Tensor(x, indices))
+
+
 # Helpers #####################################################################
 
 
@@ -643,6 +665,25 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     return 1 + sum(
         (dim_size - 1) * dim_stride
         for dim_size, dim_stride in zip(size, stride)
+    )
+
+
+def _layout_view(input: "StringTensor") -> Tensor:
+    return torch.as_strided(
+        input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+
+
+def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
+    return StringTensor(
+        data=input._data,
+        offset=input._offset,
+        size=view.size(),
+        stride=view.stride(),
+        storage_offset=int(view.storage_offset()),
     )
 
 
@@ -706,23 +747,4 @@ def _materialize(
         size=size,
         stride=stride,
         storage_offset=0,
-    )
-
-
-def _layout_view(input: "StringTensor") -> Tensor:
-    return torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
-    )
-
-
-def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
-    return StringTensor(
-        data=input._data,
-        offset=input._offset,
-        size=view.size(),
-        stride=view.stride(),
-        storage_offset=int(view.storage_offset()),
     )
