@@ -673,7 +673,13 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
         cast(StringTensor, tensor.contiguous()) for tensor in tensors
     )
     data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
-    offset_dtype = _cat_offset_dtype(offsets, data_list)
+
+    offset_dtype: torch.dtype = torch.int32
+    if (
+        any(offset.dtype == torch.int64 for offset in offsets)
+        or sum(d.numel() for d in data_list) > torch.iinfo(torch.int32).max
+    ):
+        offset_dtype = torch.int64
 
     dim_size = 0
     storage_offset = 0
@@ -732,20 +738,6 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
-def _cat_offset_dtype(
-    offsets: Sequence[Tensor],
-    data_list: Sequence[Tensor],
-) -> torch.dtype:
-    if any(offset.dtype == torch.int64 for offset in offsets):
-        return torch.int64
-
-    num_bytes = sum(data.numel() for data in data_list)
-    if num_bytes > torch.iinfo(torch.int32).max:
-        return torch.int64
-
-    return torch.int32
-
-
 def _layout_view(input: "StringTensor") -> Tensor:
     return torch.as_strided(
         input._offset,
@@ -773,7 +765,7 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
     offset[1:] = count.cumsum(dim=0, dtype=count.dtype)
 
     local = torch.arange(  # type: ignore
-        offset[-1],
+        end=offset[-1],
         dtype=count.dtype,
         device=count.device,
     )
