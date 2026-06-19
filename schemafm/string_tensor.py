@@ -692,19 +692,8 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
     end = torch.cat(end_views, dim=dim)
     start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
     end = torch.as_strided(end, size=(end.numel(),), stride=(1,))
-    count = end - start
 
-    offset = count.new_empty(count.numel() + 1)
-    offset[0] = 0
-    offset[1:] = count.cumsum(dim=0)
-
-    local = torch.arange(offset[-1], device=count.device)  # type: ignore
-    local -= offset[:-1].repeat_interleave(
-        count,
-        output_size=local.numel(),
-    )
-    index = start.repeat_interleave(count, output_size=local.numel())
-    index += local
+    offset, index = _compact(start, end)
 
     return StringTensor(data=data[index], offset=offset, size=size)
 
@@ -747,6 +736,24 @@ def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
         stride=view.stride(),
         storage_offset=int(view.storage_offset()),
     )
+
+
+def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
+    count = end - start
+
+    offset = count.new_empty(count.numel() + 1)
+    offset[0] = 0
+    offset[1:] = count.cumsum(dim=0)
+
+    local = torch.arange(offset[-1], device=count.device)  # type: ignore
+    local -= offset[:-1].repeat_interleave(
+        count,
+        output_size=local.numel(),
+    )
+    index = start.repeat_interleave(count, output_size=local.numel())
+    index += local
+
+    return offset, index
 
 
 def _materialize(
@@ -792,16 +799,8 @@ def _materialize(
         stride=(1,),
         storage_offset=end.storage_offset(),
     )
-    count = end - start
 
-    offset = count.new_empty(count.numel() + 1)
-    offset[0] = 0
-    offset[1:] = count.cumsum(dim=0)
-
-    local = torch.arange(offset[-1], device=count.device)  # type: ignore
-    local -= offset[:-1].repeat_interleave(count, output_size=local.numel())
-    index = start.repeat_interleave(count, output_size=local.numel())
-    index += local
+    offset, index = _compact(start, end)
 
     return StringTensor(
         data=input._data[index].to(device, non_blocking=non_blocking),
