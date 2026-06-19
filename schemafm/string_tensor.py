@@ -61,6 +61,10 @@ class StringTensor(Tensor):
                 f"Expected 'data' in '{cls.__name__}' to be one-dimensional "
                 f"(got {data.dim()}D tensor)"
             )
+        if not data.is_contiguous():
+            raise ValueError(
+                f"Expected 'data' in '{cls.__name__}' to be contiguous"
+            )
         if offset.dtype != torch.long:  # TODO Relax 8-byte offset restriction.
             raise ValueError(
                 f"Expected 'offset' in '{cls.__name__}' to have dtype "
@@ -70,6 +74,10 @@ class StringTensor(Tensor):
             raise ValueError(
                 f"Expected 'offset' in '{cls.__name__}' to be one-dimensional "
                 f"(got {offset.dim()}D tensor)"
+            )
+        if not offset.is_contiguous():
+            raise ValueError(
+                f"Expected 'offset' in '{cls.__name__}' to be contiguous"
             )
         if data.device != offset.device:
             raise ValueError(
@@ -224,6 +232,40 @@ class StringTensor(Tensor):
             data=data.astype("string[pyarrow]").array.__arrow_array__(),
             device=device,
         )
+
+    def to_arrow(self) -> pa.Array:
+        if self.device.type != "cpu":
+            raise TypeError(
+                f"can't convert {self.device} device type tensor to arrow. "
+                f"Use Tensor.cpu() to copy the tensor to host memory first."
+            )
+
+        tensor = self.contiguous()
+        assert isinstance(tensor, StringTensor)
+
+        start = int(tensor.storage_offset())
+        offset = tensor._offset[start : start + tensor.numel() + 1]
+        data = tensor._data[offset[0] : offset[-1]]
+        offset = offset - offset[0]
+
+        return pa.Array.from_buffers(
+            pa.large_string(),
+            length=tensor.numel(),
+            buffers=[
+                None,
+                pa.py_buffer(offset.numpy()),
+                pa.py_buffer(data.numpy()),
+            ],
+        )
+
+    def to_pandas(self) -> Any:
+        if self.dim() != 1:
+            raise ValueError(
+                f"Expected '{self.__class__.__name__}' to be "
+                f"one-dimensional for 'to_pandas' (got {self.dim()}D tensor)"
+            )
+
+        return self.to_arrow().to_pandas()
 
     # PyTorch/Python builtins #################################################
 

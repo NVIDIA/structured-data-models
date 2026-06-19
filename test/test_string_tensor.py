@@ -27,7 +27,7 @@ def test_from_strings() -> None:
     assert tensor._offset.equal(torch.tensor([0, 2]))
 
 
-def test_from_arrow() -> None:
+def test_arrow() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", "é", "", None]))
     assert tensor.size() == (4,)
     assert tensor.stride() == (1,)
@@ -42,8 +42,13 @@ def test_from_arrow() -> None:
     assert tensor._data.equal(torch.tensor([]))
     assert tensor._offset.equal(torch.tensor([0]))
 
+    tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
+    array = tensor.to_arrow()
+    assert array.type == pa.large_string()
+    assert array.to_pylist() == ["hi", "é", "", "abc"]
 
-def test_from_pandas() -> None:
+
+def test_pandas() -> None:
     pd = pytest.importorskip("pandas")
 
     tensor = StringTensor.from_pandas(pd.Series(["hi", "é", "", None]))
@@ -52,6 +57,10 @@ def test_from_pandas() -> None:
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
+
+    series = tensor.to_pandas()
+    assert isinstance(series, pd.Series)
+    assert series.tolist() == ["hi", "é", "", ""]
 
 
 def test_item() -> None:
