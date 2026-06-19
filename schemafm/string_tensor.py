@@ -335,7 +335,7 @@ def _to_copy(
     # 1. Slice one physical span when the requested output layout can reuse the
     #    input storage order.
     # 2. Gather logical elements in physical order when holes, overlaps, or
-    #   `contiguous_format` require materialization.
+    #    `contiguous_format` require materialization.
     storage_offset = int(input.storage_offset())
     start = torch.as_strided(
         input._offset,
