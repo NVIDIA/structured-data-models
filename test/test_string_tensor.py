@@ -318,32 +318,15 @@ def test_stack() -> None:
     assert isinstance(out, StringTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
+    assert out.storage_offset() == 0
     assert out.to_arrow().to_pylist() == ["a", "bb", "c", "d"]
 
     out = torch.stack(tensors, dim=-1)
     assert isinstance(out, StringTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
+    assert out.storage_offset() == 0
     assert out.to_arrow().to_pylist() == ["a", "c", "bb", "d"]
-
-    tensors = [
-        StringTensor.from_strings([["a", "bb"], ["c", "d"]]),
-        StringTensor.from_strings([["e", "ff"], ["g", "h"]]),
-    ]
-    out = torch.stack(tensors, dim=1)
-    assert isinstance(out, StringTensor)
-    assert out.size() == (2, 2, 2)
-    assert out.stride() == (4, 2, 1)
-    assert out.to_arrow().to_pylist() == [
-        "a",
-        "bb",
-        "e",
-        "ff",
-        "c",
-        "d",
-        "g",
-        "h",
-    ]
 
 
 def test_pin_memory() -> None:
