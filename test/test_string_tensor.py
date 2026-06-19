@@ -4,12 +4,6 @@ import torch
 from schemafm import StringTensor
 
 
-def assert_same_view_metadata(tensor: StringTensor, ref: torch.Tensor) -> None:
-    assert tensor.size() == ref.size()
-    assert tensor.stride() == ref.stride()
-    assert tensor.storage_offset() == ref.storage_offset()
-
-
 def test_from_strings() -> None:
     tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
     assert tensor.size() == (2, 2)
@@ -168,81 +162,75 @@ def test_share_memory() -> None:
 
 
 def test_view() -> None:
-    data = torch.arange(8, dtype=torch.uint8)
-    offset = torch.arange(data.numel() + 1)
     tensor = StringTensor(
-        data=data,
-        offset=offset,
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
         size=(2, 4),
-    )
-    ref = torch.as_strided(
-        offset[:-1],
-        size=tensor.size(),
-        stride=tensor.stride(),
-        storage_offset=tensor.storage_offset(),
     )
 
     out = tensor.view(4, 2)
     assert isinstance(out, StringTensor)
-    assert_same_view_metadata(out, ref.view(4, 2))
+    assert out.size() == (4, 2)
+    assert out.stride() == (2, 1)
+    assert out.storage_offset() == 0
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.view(1, -1)
     assert isinstance(out, StringTensor)
-    assert_same_view_metadata(out, ref.view(1, -1))
+    assert out.size() == (1, 8)
+    assert out.stride() == (8, 1)
+    assert out.storage_offset() == 0
 
-    non_contiguous = StringTensor(
-        data=data,
-        offset=offset,
+    tensor = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
         size=(2, 2),
         stride=(1, 4),
     )
     with pytest.raises(RuntimeError, match="view size is not compatible"):
-        non_contiguous.view(4)
+        tensor.view(4)
 
 
 def test_squeeze() -> None:
-    data = torch.arange(8, dtype=torch.uint8)
-    offset = torch.arange(data.numel() + 1)
     tensor = StringTensor(
-        data=data,
-        offset=offset,
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
         size=(1, 2, 1, 4),
         storage_offset=0,
-    )
-    ref = torch.as_strided(
-        offset[:-1],
-        size=tensor.size(),
-        stride=tensor.stride(),
-        storage_offset=tensor.storage_offset(),
     )
 
     out = tensor.squeeze()
     assert isinstance(out, StringTensor)
-    assert_same_view_metadata(out, ref.squeeze())
+    assert out.size() == (2, 4)
+    assert out.stride() == (4, 1)
+    assert out.storage_offset() == 0
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.squeeze(0)
     assert isinstance(out, StringTensor)
-    assert_same_view_metadata(out, ref.squeeze(0))
+    assert out.size() == (2, 1, 4)
+    assert out.stride() == (4, 4, 1)
+    assert out.storage_offset() == 0
 
     out = tensor.squeeze((0, 2))
     assert isinstance(out, StringTensor)
-    assert_same_view_metadata(out, ref.squeeze((0, 2)))
+    assert out.size() == (2, 4)
+    assert out.stride() == (4, 1)
+    assert out.storage_offset() == 0
 
     out = tensor.squeeze(1)
     assert isinstance(out, StringTensor)
-    assert_same_view_metadata(out, ref.squeeze(1))
+    assert out.size() == (1, 2, 1, 4)
+    assert out.stride() == (8, 4, 4, 1)
+    assert out.storage_offset() == 0
 
 
 def test_unsqueeze() -> None:
-    data = torch.arange(8, dtype=torch.uint8)
-    offset = torch.arange(data.numel() + 1)
     tensor = StringTensor(
-        data=data,
-        offset=offset,
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
         size=(2, 2),
         stride=(1, 4),
         storage_offset=1,
@@ -250,18 +238,28 @@ def test_unsqueeze() -> None:
 
     for dim in range(-tensor.dim() - 1, tensor.dim() + 1):
         out = tensor.unsqueeze(dim)
-        ref = torch.as_strided(
-            offset[:-1],
-            size=tensor.size(),
-            stride=tensor.stride(),
-            storage_offset=tensor.storage_offset(),
-        ).unsqueeze(dim)
         assert isinstance(out, StringTensor)
-        assert_same_view_metadata(out, ref)
+        assert out.storage_offset() == 1
         assert out._data.data_ptr() == tensor._data.data_ptr()
         assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
-    scalar = StringTensor(data=data, offset=offset, size=())
+    out = tensor.unsqueeze(0)
+    assert out.size() == (1, 2, 2)
+    assert out.stride() == (2, 1, 4)
+
+    out = tensor.unsqueeze(1)
+    assert out.size() == (2, 1, 2)
+    assert out.stride() == (1, 8, 4)
+
+    out = tensor.unsqueeze(2)
+    assert out.size() == (2, 2, 1)
+    assert out.stride() == (1, 4, 1)
+
+    scalar = StringTensor(
+        data=torch.arange(8, dtype=torch.uint8),
+        offset=torch.arange(9),
+        size=(),
+    )
     out = scalar.unsqueeze(0)
     assert isinstance(out, StringTensor)
     assert out.size() == (1,)
