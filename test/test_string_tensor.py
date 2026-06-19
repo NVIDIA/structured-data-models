@@ -148,8 +148,8 @@ def test_pin_memory() -> None:
     assert not tensor.is_pinned()
     if torch.cuda.is_available():
         assert tensor.pin_memory().is_pinned()
-        
- 
+
+
 def test_share_memory() -> None:
     tensor = StringTensor.from_strings(["hi", "abc"])
 
