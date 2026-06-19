@@ -204,6 +204,52 @@ def test_masked_select() -> None:
     assert out.to_arrow().to_pylist() == []
 
 
+def test_indexing() -> None:
+    tensor = StringTensor.from_strings([["a", "bb", "c"], ["dd", "e", "ff"]])
+
+    out = tensor.index_select(dim=1, index=torch.tensor([2, 0]))
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 2)
+    assert out.stride() == (2, 1)
+    assert out.storage_offset() == 0
+    assert out.to_arrow().to_pylist() == ["c", "a", "ff", "dd"]
+
+    out = torch.index_select(tensor, dim=0, index=torch.tensor([1, 1, 0]))
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3, 3)
+    assert out.stride() == (3, 1)
+    assert out.to_arrow().to_pylist() == [
+        "dd",
+        "e",
+        "ff",
+        "dd",
+        "e",
+        "ff",
+        "a",
+        "bb",
+        "c",
+    ]
+
+    out = tensor.take(torch.tensor([[0, 3], [5, 1]]))
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 2)
+    assert out.stride() == (2, 1)
+    assert out.to_arrow().to_pylist() == ["a", "dd", "ff", "bb"]
+
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+    out = tensor[mask]
+    assert isinstance(out, StringTensor)
+    assert out.size() == (3,)
+    assert out.stride() == (1,)
+    assert out.to_arrow().to_pylist() == ["a", "c", "e"]
+
+    out = tensor[:, torch.tensor([True, False, True])]
+    assert isinstance(out, StringTensor)
+    assert out.size() == (2, 2)
+    assert out.stride() == (2, 1)
+    assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
+
+
 def test_pin_memory() -> None:
     tensor = StringTensor.from_strings(["hi", "abc"])
 
