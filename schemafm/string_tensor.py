@@ -29,7 +29,7 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
-def _start_view(input: "StringTensor") -> Tensor:
+def _layout_view(input: "StringTensor") -> Tensor:
     return torch.as_strided(
         input._offset,
         size=input.size(),
@@ -38,13 +38,13 @@ def _start_view(input: "StringTensor") -> Tensor:
     )
 
 
-def _from_start_view(input: "StringTensor", start: Tensor) -> "StringTensor":
+def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
     return StringTensor(
         data=input._data,
         offset=input._offset,
-        size=start.size(),
-        stride=start.stride(),
-        storage_offset=int(start.storage_offset()),
+        size=view.size(),
+        stride=view.stride(),
+        storage_offset=int(view.storage_offset()),
     )
 
 
@@ -451,24 +451,29 @@ def _pin_memory(input: StringTensor) -> StringTensor:
 
 @implements(aten.view.default)
 def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
-    return _from_start_view(input, _start_view(input).view(tuple(size)))
+    view = _layout_view(input).view(tuple(size))
+    return _from_layout_view(input, view)
 
 
 @implements(aten.squeeze.default)
 def _squeeze(input: StringTensor) -> StringTensor:
-    return _from_start_view(input, _start_view(input).squeeze())
+    view = _layout_view(input).squeeze()
+    return _from_layout_view(input, view)
 
 
 @implements(aten.squeeze.dim)
 def _squeeze_dim(input: StringTensor, dim: int) -> StringTensor:
-    return _from_start_view(input, _start_view(input).squeeze(dim))
+    view = _layout_view(input).squeeze(dim)
+    return _from_layout_view(input, view)
 
 
 @implements(aten.squeeze.dims)
 def _squeeze_dims(input: StringTensor, dim: Sequence[int]) -> StringTensor:
-    return _from_start_view(input, _start_view(input).squeeze(tuple(dim)))
+    view = _layout_view(input).squeeze(tuple(dim))
+    return _from_layout_view(input, view)
 
 
 @implements(aten.unsqueeze.default)
 def _unsqueeze(input: StringTensor, dim: int) -> StringTensor:
-    return _from_start_view(input, _start_view(input).unsqueeze(dim))
+    view = _layout_view(input).unsqueeze(dim)
+    return _from_layout_view(input, view)
