@@ -148,6 +148,13 @@ def test_to_copy() -> None:
         size=(2,),
         storage_offset=2,
     )
+    out = tensor.contiguous()
+    assert isinstance(out, StringTensor)
+    assert out is tensor
+    assert out.storage_offset() == 2
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert out._offset.data_ptr() == tensor._offset.data_ptr()
+
     out = tensor.clone()
     assert isinstance(out, StringTensor)
     assert out.storage_offset() == 0

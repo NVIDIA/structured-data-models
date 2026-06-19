@@ -379,10 +379,7 @@ def _to_copy(
             f"'{input.__class__.__name__}.clone'"
         )
 
-    # `StringTensor` stores one physical 1D blob in `_offset`/`_data`.
-    # Logical tensor positions are mapped into that blob via
-    # `size`/`stride`/`storage_offset`, just like regular strided tensors.
-    # Copying therefore has two cases:
+    # Copying has two cases:
     # 1. Slice when the output layout can reuse the input storage order.
     # 2. Materialize in case of holes, overlaps, or change in memory format.
     use_slice = (
