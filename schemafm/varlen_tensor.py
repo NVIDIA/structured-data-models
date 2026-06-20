@@ -137,9 +137,11 @@ class VarLenTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
-    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+    def __tensor_flatten__(
+        self,
+    ) -> tuple[list[str], tuple[type["VarLenTensor"], Any]]:
         attrs = ["_data", "_offset"]
-        ctx = (self.storage_offset(),)
+        ctx = (self.__class__, self.storage_offset())
         return attrs, ctx
 
     @staticmethod
@@ -149,8 +151,8 @@ class VarLenTensor(Tensor):
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
     ) -> "VarLenTensor":
-        (storage_offset,) = ctx
-        return VarLenTensor(
+        cls, storage_offset = ctx
+        return cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             size=outer_size,

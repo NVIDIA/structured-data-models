@@ -1,3 +1,5 @@
+from typing import cast
+
 import pyarrow as pa
 import pytest
 import torch
@@ -93,6 +95,19 @@ def test_allowed_dtype() -> None:
 
     with pytest.raises(TypeError, match="Cannot convert"):
         tensor.to(torch.float32)
+
+
+def test_tensor_unflatten() -> None:
+    tensor = cast(StringTensor, StringTensor.from_strings(["hi", "é"])[1:])
+    attrs, ctx = tensor.__tensor_flatten__()
+    out = StringTensor.__tensor_unflatten__(
+        inner_tensors={name: getattr(tensor, name) for name in attrs},
+        ctx=ctx,
+        outer_size=tuple(tensor.size()),
+        outer_stride=tuple(tensor.stride()),
+    )
+    assert isinstance(out, StringTensor)
+    assert out.tolist() == ["é"]
 
 
 def test_item() -> None:

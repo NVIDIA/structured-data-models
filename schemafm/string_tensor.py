@@ -9,22 +9,6 @@ from schemafm.varlen_tensor import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
-    @staticmethod
-    def __tensor_unflatten__(
-        inner_tensors: dict[str, Any],
-        ctx: tuple[Any, ...],
-        outer_size: tuple[int, ...],
-        outer_stride: tuple[int, ...],
-    ) -> "StringTensor":
-        (storage_offset,) = ctx
-        return StringTensor(
-            data=inner_tensors["_data"],
-            offset=inner_tensors["_offset"],
-            size=outer_size,
-            stride=outer_stride,
-            storage_offset=storage_offset,
-        )
-
     @classmethod
     def from_arrow(
         cls,
