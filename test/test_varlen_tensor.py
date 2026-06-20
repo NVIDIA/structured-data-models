@@ -79,7 +79,7 @@ def test_to_copy() -> None:
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
     assert out.stride() == tensor.stride()
-    assert out._data.equal(torch.arange(2, 10, dtype=torch.uint8))
+    assert out._data.equal(torch.arange(2, 10))
     assert out._offset.equal(torch.arange(9))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
@@ -87,9 +87,7 @@ def test_to_copy() -> None:
     out = tensor.clone(memory_format=torch.contiguous_format)
     assert isinstance(out, VarLenTensor)
     assert out.stride() == (2, 1)
-    assert out._data.equal(
-        torch.tensor([2, 6, 3, 7, 4, 8, 5, 9], dtype=torch.uint8)
-    )
+    assert out._data.equal(torch.tensor([2, 6, 3, 7, 4, 8, 5, 9]))
     assert out._offset.equal(torch.arange(9))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
@@ -104,9 +102,7 @@ def test_to_copy() -> None:
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
     assert out.stride() == (2, 1)
-    assert out._data.equal(
-        torch.tensor([2, 3, 6, 7, 10, 11, 14, 15], dtype=torch.uint8)
-    )
+    assert out._data.equal(torch.tensor([2, 3, 6, 7, 10, 11, 14, 15]))
     assert out._offset.equal(torch.arange(9))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
@@ -120,7 +116,7 @@ def test_to_copy() -> None:
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
     assert out.stride() == (4, 1)
-    assert out._data.equal(torch.tensor([0, 1, 2, 3] * 4, dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 1, 2, 3] * 4))
     assert out._offset.equal(torch.arange(17))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
@@ -141,7 +137,7 @@ def test_to_copy() -> None:
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([2, 3], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([2, 3]))
     assert out._offset.equal(torch.tensor([0, 1, 2]))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
@@ -155,7 +151,7 @@ def test_data_offset() -> None:
         storage_offset=2,
     )
     data, offset = tensor.data_offset
-    assert data.equal(torch.tensor([2, 3], dtype=torch.uint8))
+    assert data.equal(torch.tensor([2, 3]))
     assert offset.equal(torch.tensor([0, 1, 2]))
 
     tensor = VarLenTensor(
@@ -203,12 +199,12 @@ def test_masked_select() -> None:
     assert out.size() == (4,)
     assert out.stride() == (1,)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([0, 3, 6, 7, 8], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 3, 6, 7, 8]))
     assert out._offset.equal(torch.tensor([0, 1, 2, 3, 5]))
 
     out = torch.masked_select(tensor, torch.tensor([[True, False, True]]))
     assert isinstance(out, VarLenTensor)
-    assert out._data.equal(torch.tensor([0, 3, 4, 5, 7, 8], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 3, 4, 5, 7, 8]))
 
     out = tensor.masked_select(torch.zeros(2, 3, dtype=torch.bool))
     assert isinstance(out, VarLenTensor)
@@ -230,7 +226,7 @@ def test_indexing() -> None:
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([3, 0, 7, 8, 4, 5], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([3, 0, 7, 8, 4, 5]))
     assert out._offset.equal(torch.tensor([0, 1, 2, 4, 6]))
 
     out = torch.index_select(tensor, dim=0, index=torch.tensor([1, 1, 0]))
@@ -238,31 +234,27 @@ def test_indexing() -> None:
     assert out.size() == (3, 3)
     assert out.stride() == (3, 1)
     assert out._data.equal(
-        torch.tensor(
-            [4, 5, 6, 7, 8, 4, 5, 6, 7, 8, 0, 1, 2, 3], dtype=torch.uint8
-        )
+        torch.tensor([4, 5, 6, 7, 8, 4, 5, 6, 7, 8, 0, 1, 2, 3])
     )
 
     out = tensor.take(torch.tensor([[0, 3], [5, 1]]))
     assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
-    assert out._data.equal(
-        torch.tensor([0, 4, 5, 7, 8, 1, 2], dtype=torch.uint8)
-    )
+    assert out._data.equal(torch.tensor([0, 4, 5, 7, 8, 1, 2]))
 
     mask = torch.tensor([[True, False, True], [False, True, False]])
     out = tensor[mask]
     assert isinstance(out, VarLenTensor)
     assert out.size() == (3,)
     assert out.stride() == (1,)
-    assert out._data.equal(torch.tensor([0, 3, 6], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 3, 6]))
 
     out = tensor[:, torch.tensor([True, False, True])]
     assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
-    assert out._data.equal(torch.tensor([0, 3, 4, 5, 7, 8], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 3, 4, 5, 7, 8]))
 
 
 def test_cat() -> None:
@@ -284,7 +276,7 @@ def test_cat() -> None:
     assert out.size() == (3, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.arange(7, dtype=torch.uint8))
+    assert out._data.equal(torch.arange(7))
     assert out._offset.equal(torch.tensor([0, 1, 2, 3, 4, 5, 7]))
 
     tensors = [
@@ -304,9 +296,7 @@ def test_cat() -> None:
     assert out.size() == (2, 3)
     assert out.stride() == (3, 1)
     assert out.storage_offset() == 0
-    assert out._data.equal(
-        torch.tensor([0, 1, 4, 2, 3, 5, 6], dtype=torch.uint8)
-    )
+    assert out._data.equal(torch.tensor([0, 1, 4, 2, 3, 5, 6]))
     assert out._offset.equal(torch.tensor([0, 1, 2, 3, 4, 5, 7]))
 
 
@@ -329,7 +319,7 @@ def test_stack() -> None:
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.arange(5, dtype=torch.uint8))
+    assert out._data.equal(torch.arange(5))
     assert out._offset.equal(torch.tensor([0, 1, 3, 4, 5]))
 
     out = torch.stack(tensors, dim=-1)
@@ -337,7 +327,7 @@ def test_stack() -> None:
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([0, 3, 1, 2, 4], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 3, 1, 2, 4]))
     assert out._offset.equal(torch.tensor([0, 1, 2, 4, 5]))
 
 
@@ -577,7 +567,7 @@ def test_select_slice_narrow_expand() -> None:
     assert out.size() == (3, 4)
     assert out.stride() == (4, 1)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([0, 1, 2, 3] * 3, dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 1, 2, 3] * 3))
     assert out._offset.equal(torch.arange(13))
 
 
@@ -647,7 +637,7 @@ def test_unsafe_view() -> None:
     assert out.size() == (2, 3)
     assert out.stride() == (3, 1)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
     assert out._offset.equal(torch.arange(7))
 
     out = tensor.flatten()
@@ -655,5 +645,5 @@ def test_unsafe_view() -> None:
     assert out.size() == (6,)
     assert out.stride() == (1,)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
     assert out._offset.equal(torch.arange(7))
