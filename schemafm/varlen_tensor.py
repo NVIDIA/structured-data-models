@@ -7,24 +7,14 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 
 aten = torch.ops.aten
-
-HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
-
-
-def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
-
-    def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
-        HANDLED_FUNCTIONS[torch_function] = my_function
-        return my_function
-
-    return decorator
-
-
 SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
+    HANDLED_FUNCTIONS: ClassVar[
+        dict[Callable[..., Any], Callable[..., Any]]
+    ] = {}
 
     _data: Tensor
     _offset: Tensor
@@ -147,6 +137,20 @@ class VarLenTensor(Tensor):
         data = self._data[offset[0] : offset[-1]]
         return data, offset - offset[0]
 
+    @classmethod
+    def implements(
+        cls,
+        torch_function: Callable[..., Any],
+    ) -> Callable[..., Any]:
+        if "HANDLED_FUNCTIONS" not in cls.__dict__:
+            cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
+
+        def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
+            cls.HANDLED_FUNCTIONS[torch_function] = my_function
+            return my_function
+
+        return decorator
+
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
@@ -178,9 +182,9 @@ class VarLenTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        if func in HANDLED_FUNCTIONS:
+        if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             with enable_reentrant_dispatch():  # Record autograd in `_data`.
-                return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+                return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"
@@ -217,7 +221,7 @@ class VarLenTensor(Tensor):
         )
 
 
-@implements(aten._to_copy.default)
+@VarLenTensor.implements(aten._to_copy.default)
 def _to_copy(
     input: VarLenTensor,
     *,
@@ -295,7 +299,7 @@ def _to_copy(
     )
 
 
-@implements(aten.clone.default)
+@VarLenTensor.implements(aten.clone.default)
 def _clone(
     input: VarLenTensor,
     *,
@@ -304,7 +308,7 @@ def _clone(
     return _to_copy(input, memory_format=memory_format)
 
 
-@implements(aten.detach.default)
+@VarLenTensor.implements(aten.detach.default)
 def _detach(input: VarLenTensor) -> VarLenTensor:
     return input.__class__(
         data=input._data.detach(),
@@ -315,7 +319,7 @@ def _detach(input: VarLenTensor) -> VarLenTensor:
     )
 
 
-@implements(aten.contiguous.default)
+@VarLenTensor.implements(aten.contiguous.default)
 def _contiguous(
     input: VarLenTensor,
     *,
@@ -324,12 +328,12 @@ def _contiguous(
     return _to_copy(input, memory_format=memory_format)
 
 
-@implements(aten.is_pinned.default)
+@VarLenTensor.implements(aten.is_pinned.default)
 def _is_pinned(input: VarLenTensor) -> bool:
     return input._data.is_pinned() and input._offset.is_pinned()
 
 
-@implements(aten._pin_memory.default)
+@VarLenTensor.implements(aten._pin_memory.default)
 def _pin_memory(input: VarLenTensor) -> VarLenTensor:
     return input.__class__(
         data=input._data.pin_memory(),
@@ -340,7 +344,7 @@ def _pin_memory(input: VarLenTensor) -> VarLenTensor:
     )
 
 
-@implements(aten.equal.default)
+@VarLenTensor.implements(aten.equal.default)
 def _equal(input: VarLenTensor, other: Tensor) -> bool:
     if input.__class__ is not other.__class__:
         return False
@@ -353,7 +357,7 @@ def _equal(input: VarLenTensor, other: Tensor) -> bool:
     return offset1.equal(offset2) and data1.equal(data2)
 
 
-@implements(aten.allclose.default)
+@VarLenTensor.implements(aten.allclose.default)
 def _allclose(
     input: VarLenTensor,
     other: Tensor,
@@ -374,67 +378,67 @@ def _allclose(
     )
 
 
-@implements(aten.view.default)
+@VarLenTensor.implements(aten.view.default)
 def _view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).view(tuple(size))
     return _from_layout_view(input, view)
 
 
-@implements(aten._unsafe_view.default)
+@VarLenTensor.implements(aten._unsafe_view.default)
 def _unsafe_view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     view = aten._unsafe_view.default(_layout_view(input), size)
     return _from_layout_view(input, view)
 
 
-@implements(aten.squeeze.default)
+@VarLenTensor.implements(aten.squeeze.default)
 def _squeeze(input: VarLenTensor) -> VarLenTensor:
     view = _layout_view(input).squeeze()
     return _from_layout_view(input, view)
 
 
-@implements(aten.squeeze.dim)
+@VarLenTensor.implements(aten.squeeze.dim)
 def _squeeze_dim(input: VarLenTensor, dim: int) -> VarLenTensor:
     view = _layout_view(input).squeeze(dim)
     return _from_layout_view(input, view)
 
 
-@implements(aten.squeeze.dims)
+@VarLenTensor.implements(aten.squeeze.dims)
 def _squeeze_dims(input: VarLenTensor, dim: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).squeeze(tuple(dim))
     return _from_layout_view(input, view)
 
 
-@implements(aten.unsqueeze.default)
+@VarLenTensor.implements(aten.unsqueeze.default)
 def _unsqueeze(input: VarLenTensor, dim: int) -> VarLenTensor:
     view = _layout_view(input).unsqueeze(dim)
     return _from_layout_view(input, view)
 
 
-@implements(aten.t.default)
+@VarLenTensor.implements(aten.t.default)
 def _t(input: VarLenTensor) -> VarLenTensor:
     view = _layout_view(input).t()
     return _from_layout_view(input, view)
 
 
-@implements(aten.transpose.int)
+@VarLenTensor.implements(aten.transpose.int)
 def _transpose(input: VarLenTensor, dim0: int, dim1: int) -> VarLenTensor:
     view = _layout_view(input).transpose(dim0, dim1)
     return _from_layout_view(input, view)
 
 
-@implements(aten.permute.default)
+@VarLenTensor.implements(aten.permute.default)
 def _permute(input: VarLenTensor, dims: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).permute(tuple(dims))
     return _from_layout_view(input, view)
 
 
-@implements(aten.select.int)
+@VarLenTensor.implements(aten.select.int)
 def _select(input: VarLenTensor, dim: int, index: int) -> VarLenTensor:
     view = _layout_view(input).select(dim, index)
     return _from_layout_view(input, view)
 
 
-@implements(aten.slice.Tensor)
+@VarLenTensor.implements(aten.slice.Tensor)
 def _slice(
     input: VarLenTensor,
     dim: int = 0,
@@ -446,7 +450,7 @@ def _slice(
     return _from_layout_view(input, view)
 
 
-@implements(aten.narrow.default)
+@VarLenTensor.implements(aten.narrow.default)
 def _narrow(
     input: VarLenTensor,
     dim: int,
@@ -457,7 +461,7 @@ def _narrow(
     return _from_layout_view(input, view)
 
 
-@implements(aten.unbind.int)
+@VarLenTensor.implements(aten.unbind.int)
 def _unbind(input: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
     return tuple(
         _from_layout_view(input, view)
@@ -465,7 +469,7 @@ def _unbind(input: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
     )
 
 
-@implements(aten.split.Tensor)
+@VarLenTensor.implements(aten.split.Tensor)
 def _split(
     input: VarLenTensor,
     split_size: int,
@@ -477,9 +481,9 @@ def _split(
     )
 
 
-@implements(aten.split.sizes)
-@implements(aten.split.default)
-@implements(aten.split_with_sizes.default)
+@VarLenTensor.implements(aten.split.sizes)
+@VarLenTensor.implements(aten.split.default)
+@VarLenTensor.implements(aten.split_with_sizes.default)
 def _split_with_sizes(
     input: VarLenTensor,
     split_sizes: Sequence[int],
@@ -491,7 +495,7 @@ def _split_with_sizes(
     )
 
 
-@implements(aten.expand.default)
+@VarLenTensor.implements(aten.expand.default)
 def _expand(
     input: VarLenTensor,
     size: Sequence[int],
@@ -502,12 +506,12 @@ def _expand(
     return _from_layout_view(input, view)
 
 
-@implements(aten.masked_select.default)
+@VarLenTensor.implements(aten.masked_select.default)
 def _masked_select(input: VarLenTensor, mask: Tensor) -> VarLenTensor:
     return _materialize(input, lambda x: x.masked_select(mask))
 
 
-@implements(aten.index_select.default)
+@VarLenTensor.implements(aten.index_select.default)
 def _index_select(
     input: VarLenTensor,
     dim: int,
@@ -516,12 +520,12 @@ def _index_select(
     return _materialize(input, lambda x: x.index_select(dim, index))
 
 
-@implements(aten.take.default)
+@VarLenTensor.implements(aten.take.default)
 def _take(input: VarLenTensor, index: Tensor) -> VarLenTensor:
     return _materialize(input, lambda x: x.take(index))
 
 
-@implements(aten.index.Tensor)
+@VarLenTensor.implements(aten.index.Tensor)
 def _index(
     input: VarLenTensor,
     indices: Sequence[Tensor | None],
@@ -529,7 +533,7 @@ def _index(
     return _materialize(input, lambda x: aten.index.Tensor(x, indices))
 
 
-@implements(aten.cat.default)
+@VarLenTensor.implements(aten.cat.default)
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     if len(tensors) == 0:
         raise ValueError("Expected a non-empty list of Tensors")
@@ -590,7 +594,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     return tensor_cls(data=data[index], offset=offset, size=size)
 
 
-@implements(aten.stack.default)
+@VarLenTensor.implements(aten.stack.default)
 def _stack(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     out = torch.cat([tensor.unsqueeze(dim) for tensor in tensors], dim=dim)
     return cast(VarLenTensor, out)
