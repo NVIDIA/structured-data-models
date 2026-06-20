@@ -10,28 +10,6 @@ from schemafm.varlen_tensor import VarLenTensor
 
 class StringTensor(VarLenTensor):
     @staticmethod
-    def __new__(
-        cls,
-        data: torch.Tensor,
-        offset: torch.Tensor,
-        size: Sequence[int],
-        *,
-        stride: Sequence[int] | None = None,
-        storage_offset: int = 0,
-    ) -> "StringTensor":
-        return cast(
-            StringTensor,
-            VarLenTensor.__new__(
-                cls,
-                data=data,
-                offset=offset,
-                size=size,
-                stride=stride,
-                storage_offset=storage_offset,
-            ),
-        )
-
-    @staticmethod
     def __tensor_unflatten__(
         inner_tensors: dict[str, Any],
         ctx: tuple[Any, ...],

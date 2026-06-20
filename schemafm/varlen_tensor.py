@@ -1,6 +1,6 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -8,6 +8,7 @@ from torch import Tensor
 aten = torch.ops.aten
 
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
+SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -37,16 +38,15 @@ class VarLenTensor(Tensor):
     ) -> None:
         pass
 
-    @staticmethod
     def __new__(
-        cls,
+        cls: type[SelfVarLenTensor],
         data: Tensor,
         offset: Tensor,
         size: Sequence[int],
         *,
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
-    ) -> "VarLenTensor":
+    ) -> SelfVarLenTensor:
 
         stride = stride or _contiguous_stride(size)
 
@@ -120,7 +120,7 @@ class VarLenTensor(Tensor):
         out._data = data
         out._offset = offset
 
-        return out
+        return cast(SelfVarLenTensor, out)
 
     @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
