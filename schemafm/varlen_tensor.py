@@ -4,6 +4,7 @@ from typing import Any, ClassVar, TypeVar, cast
 
 import torch
 from torch import Tensor
+from torch.overrides import enable_reentrant_dispatch
 
 aten = torch.ops.aten
 
@@ -123,7 +124,7 @@ class VarLenTensor(Tensor):
             dtype=data.dtype,
             device=data.device,
             layout=torch.strided,
-            requires_grad=False,
+            requires_grad=False,  # Autograd lives on `_data` only.
         )
 
         out._data = data
@@ -178,7 +179,8 @@ class VarLenTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if func in HANDLED_FUNCTIONS:
-            return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
+            with enable_reentrant_dispatch():  # Record autograd in `_data`.
+                return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"
@@ -190,6 +192,22 @@ class VarLenTensor(Tensor):
     def share_memory_(self) -> "VarLenTensor":
         self._data.share_memory_()
         self._offset.share_memory_()
+        return self
+
+    @property
+    def requires_grad(self) -> bool:
+        return self._data.requires_grad
+
+    @requires_grad.setter
+    def requires_grad(self, requires_grad: bool) -> None:
+        self._data.requires_grad_(requires_grad)
+
+    def requires_grad_(self, mode: bool = True) -> "VarLenTensor":
+        self._data.requires_grad_(mode)
+        return self
+
+    def detach_(self) -> "VarLenTensor":
+        self._data.detach_()
         return self
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
@@ -284,6 +302,17 @@ def _clone(
     memory_format: torch.memory_format | None = None,
 ) -> VarLenTensor:
     return _to_copy(input, memory_format=memory_format)
+
+
+@implements(aten.detach.default)
+def _detach(input: VarLenTensor) -> VarLenTensor:
+    return input.__class__(
+        data=input._data.detach(),
+        offset=input._offset,
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
 
 
 @implements(aten.contiguous.default)
