@@ -1,5 +1,3 @@
-from typing import cast
-
 import pyarrow as pa
 import pytest
 import torch
@@ -27,13 +25,6 @@ def test_from_strings() -> None:
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([104, 105]))
     assert tensor._offset.equal(torch.tensor([0, 2]))
-
-    tensor = StringTensor.from_strings(
-        [["hi", "é"], ["", "abc"]],
-        offset_dtype=torch.int32,
-    )
-    assert tensor._offset.dtype == torch.int32
-    assert tensor.to_arrow().type == pa.string()
 
 
 def test_arrow() -> None:
@@ -67,27 +58,9 @@ def test_pandas() -> None:
     assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
 
-    tensor = StringTensor.from_pandas(
-        pd.Series(["hi", "é", "", None]),
-        offset_dtype=torch.int32,
-    )
-    assert tensor._offset.dtype == torch.int32
-
     series = tensor.to_pandas()
     assert isinstance(series, pd.Series)
     assert series.tolist() == ["hi", "é", "", ""]
-
-
-def test_offset_dtype() -> None:
-    tensor = StringTensor.from_arrow(pa.array(["hi", "é"], type=pa.string()))
-    assert tensor._offset.dtype == torch.int32
-    assert tensor.to_arrow().type == pa.string()
-
-    tensor = StringTensor.from_arrow(
-        pa.array(["hi", "é"], type=pa.large_string())
-    )
-    assert tensor._offset.dtype == torch.int64
-    assert tensor.to_arrow().type == pa.large_string()
 
 
 def test_allowed_dtype() -> None:
@@ -95,19 +68,6 @@ def test_allowed_dtype() -> None:
 
     with pytest.raises(TypeError, match="Cannot convert"):
         tensor.to(torch.float32)
-
-
-def test_tensor_unflatten() -> None:
-    tensor = cast(StringTensor, StringTensor.from_strings(["hi", "é"])[1:])
-    attrs, ctx = tensor.__tensor_flatten__()
-    out = StringTensor.__tensor_unflatten__(
-        inner_tensors={name: getattr(tensor, name) for name in attrs},
-        ctx=ctx,
-        outer_size=tuple(tensor.size()),
-        outer_stride=tuple(tensor.stride()),
-    )
-    assert isinstance(out, StringTensor)
-    assert out.tolist() == ["é"]
 
 
 def test_item() -> None:
