@@ -8,7 +8,6 @@ from torch import Tensor
 aten = torch.ops.aten
 
 HANDLED_FUNCTIONS: dict[Callable[..., Any], Callable[..., Any]] = {}
-SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
@@ -20,12 +19,17 @@ def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
     return decorator
 
 
+SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
+
+
 class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
 
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
+
+    # Constructors ############################################################
 
     def __init__(
         cls,
@@ -120,7 +124,9 @@ class VarLenTensor(Tensor):
         out._data = data
         out._offset = offset
 
-        return cast(SelfVarLenTensor, out)
+        return out
+
+    # Properties ##############################################################
 
     @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
@@ -137,9 +143,7 @@ class VarLenTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
-    def __tensor_flatten__(
-        self,
-    ) -> tuple[list[str], tuple[type["VarLenTensor"], Any]]:
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["_data", "_offset"]
         ctx = (self.__class__, self.storage_offset())
         return attrs, ctx
@@ -298,7 +302,7 @@ def _pin_memory(input: VarLenTensor) -> VarLenTensor:
 
 @implements(aten.equal.default)
 def _equal(input: VarLenTensor, other: Tensor) -> bool:
-    if not isinstance(other, VarLenTensor):
+    if input.__class__ is not other.__class__:
         return False
     if input.size() != other.size():
         return False
@@ -317,7 +321,7 @@ def _allclose(
     atol: float = 1e-08,
     equal_nan: bool = False,
 ) -> bool:
-    if not isinstance(other, VarLenTensor):
+    if input.__class__ is not other.__class__:
         return False
     if input.size() != other.size():
         return False
@@ -498,10 +502,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
     tensor_cls = tensors[0].__class__
     for i, tensor in enumerate(tensors):
-        if (
-            not isinstance(tensor, VarLenTensor)
-            or tensor.__class__ is not tensor_cls
-        ):
+        if tensor.__class__ is not tensor_cls:
             raise TypeError(
                 f"Expected '{tensor_cls.__name__}' as element {i}, but got "
                 f"'{tensor.__class__.__name__}'"
