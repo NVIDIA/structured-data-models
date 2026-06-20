@@ -124,9 +124,7 @@ class VarLenTensor(Tensor):
             dtype=data.dtype,
             device=data.device,
             layout=torch.strided,
-            # Autograd lives on `_data`; the outer wrapper only carries
-            # var-length metadata and redispatches to the inner tensor.
-            requires_grad=False,
+            requires_grad=False,  # Autograd lives on `_data` only.
         )
 
         out._data = data
@@ -135,14 +133,6 @@ class VarLenTensor(Tensor):
         return out
 
     # Properties ##############################################################
-
-    @property
-    def requires_grad(self) -> bool:
-        return self._data.requires_grad
-
-    @requires_grad.setter
-    def requires_grad(self, requires_grad: bool) -> None:
-        self._data.requires_grad_(requires_grad)
 
     @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
@@ -189,8 +179,7 @@ class VarLenTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if func in HANDLED_FUNCTIONS:
-            # Reentrant dispatch lets inner `_data` ops record autograd.
-            with enable_reentrant_dispatch():
+            with enable_reentrant_dispatch():  # Record autograd in `_data`.
                 return HANDLED_FUNCTIONS[func](*args, **(kwargs or {}))
 
         raise NotImplementedError(
@@ -205,12 +194,20 @@ class VarLenTensor(Tensor):
         self._offset.share_memory_()
         return self
 
-    def detach_(self) -> "VarLenTensor":
-        self._data.detach_()
-        return self
+    @property
+    def requires_grad(self) -> bool:
+        return self._data.requires_grad
+
+    @requires_grad.setter
+    def requires_grad(self, requires_grad: bool) -> None:
+        self._data.requires_grad_(requires_grad)
 
     def requires_grad_(self, mode: bool = True) -> "VarLenTensor":
         self._data.requires_grad_(mode)
+        return self
+
+    def detach_(self) -> "VarLenTensor":
+        self._data.detach_()
         return self
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:

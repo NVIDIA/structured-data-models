@@ -27,7 +27,6 @@ def test_autograd() -> None:
         offset=torch.arange(5),
         size=(2, 2),
     )
-
     assert tensor.requires_grad
 
     out = tensor.clone()
@@ -36,6 +35,13 @@ def test_autograd() -> None:
     out._data.sum().backward()
     assert data.grad is not None
     assert data.grad.equal(torch.ones_like(data))
+
+    tensor.detach_()
+    assert not tensor.requires_grad
+    tensor.requires_grad_(True)
+    assert tensor.requires_grad
+    tensor = tensor.detach()
+    assert not tensor.requires_grad
 
 
 def test_offset_dtype() -> None:
