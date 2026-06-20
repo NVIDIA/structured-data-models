@@ -1,152 +1,67 @@
 from typing import cast
 
-import pyarrow as pa
 import pytest
 import torch
-from schemafm import StringTensor
+from schemafm import VarLenTensor
 from torch import Tensor
 
 
-def test_from_strings() -> None:
-    tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
-    assert tensor.size() == (2, 2)
-    assert tensor.stride() == (2, 1)
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([104, 105, 195, 169, 97, 98, 99]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 7]))
-
-    tensor = StringTensor.from_strings([])
-    assert tensor.size() == (0,)
-    assert tensor.stride() == (1,)
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([]))
-    assert tensor._offset.equal(torch.tensor([0]))
-
-    tensor = StringTensor.from_strings("hi")
-    assert tensor.size() == ()
-    assert tensor.stride() == ()
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([104, 105]))
-    assert tensor._offset.equal(torch.tensor([0, 2]))
-
-
-def test_arrow() -> None:
-    tensor = StringTensor.from_arrow(pa.array(["hi", "é", "", None]))
-    assert tensor.size() == (4,)
-    assert tensor.stride() == (1,)
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
-
-    tensor = StringTensor.from_arrow(pa.array([], type=pa.string()))
-    assert tensor.size() == (0,)
-    assert tensor.stride() == (1,)
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([]))
-    assert tensor._offset.equal(torch.tensor([0]))
-
-    tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
-    array = tensor.to_arrow()
-    assert array.type == pa.large_string()
-    assert array.to_pylist() == ["hi", "é", "", "abc"]
-
-
-def test_pandas() -> None:
-    pd = pytest.importorskip("pandas")
-
-    tensor = StringTensor.from_pandas(pd.Series(["hi", "é", "", None]))
-    assert tensor.size() == (4,)
-    assert tensor.stride() == (1,)
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
-
-    series = tensor.to_pandas()
-    assert isinstance(series, pd.Series)
-    assert series.tolist() == ["hi", "é", "", ""]
-
-
 def test_offset_dtype() -> None:
-    tensor = StringTensor.from_arrow(pa.array(["hi", "é"], type=pa.string()))
-    assert tensor._offset.dtype == torch.int32
-    assert tensor.to_arrow().type == pa.string()
-
-    tensor = StringTensor.from_arrow(
-        pa.array(["hi", "é"], type=pa.large_string())
-    )
-    assert tensor._offset.dtype == torch.int64
-    assert tensor.to_arrow().type == pa.large_string()
-
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(4, dtype=torch.uint8),
         offset=torch.arange(5, dtype=torch.int32),
         size=(2, 2),
     )
     out = tensor.masked_select(torch.tensor([[True, False], [False, True]]))
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out._offset.dtype == torch.int32
 
     out = torch.cat(
         [
-            StringTensor.from_arrow(
-                data=pa.array(["a", "bb"], type=pa.string()),
+            VarLenTensor(
+                data=torch.tensor([0, 1, 2], dtype=torch.uint8),
+                offset=torch.tensor([0, 1, 3], dtype=torch.int32),
                 size=(1, 2),
             ),
-            StringTensor.from_arrow(
-                data=pa.array(["c", "d"], type=pa.string()),
+            VarLenTensor(
+                data=torch.tensor([3, 4], dtype=torch.uint8),
+                offset=torch.tensor([0, 1, 2], dtype=torch.int32),
                 size=(1, 2),
             ),
         ]
     )
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out._offset.dtype == torch.int32
 
     out = torch.cat(
         [
-            StringTensor.from_arrow(
-                pa.array(["a", "bb"], type=pa.string()),
+            VarLenTensor(
+                data=torch.tensor([0, 1, 2], dtype=torch.uint8),
+                offset=torch.tensor([0, 1, 3], dtype=torch.int32),
                 size=(1, 2),
             ),
-            StringTensor.from_arrow(
-                data=pa.array(["c", "d"], type=pa.large_string()),
+            VarLenTensor(
+                data=torch.tensor([3, 4], dtype=torch.uint8),
+                offset=torch.tensor([0, 1, 2], dtype=torch.int64),
                 size=(1, 2),
             ),
         ]
     )
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out._offset.dtype == torch.int64
-
-
-def test_item() -> None:
-    assert StringTensor.from_strings("é").item() == "é"
-    assert StringTensor.from_strings(["hi", "é"])[1].item() == "é"
-    assert str(StringTensor.from_strings([""])) == ""
-
-    with pytest.raises(RuntimeError, match="cannot be converted"):
-        StringTensor.from_strings(["hi", "é"]).item()
-
-
-def test_tolist() -> None:
-    for strings in [
-        "é",
-        ["hi", "é"],
-        [],
-        [["a", "bb", "c"], ["dd", "e", "ff"]],
-    ]:
-        assert StringTensor.from_strings(strings).tolist() == strings
 
 
 def test_to_copy() -> None:
     data = torch.arange(16, dtype=torch.uint8)
     offset = torch.arange(data.numel() + 1)
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=data,
         offset=offset,
         size=(4, 4),
     )
     out = tensor.clone()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == tensor.size()
     assert out.stride() == tensor.stride()
     assert out._data.equal(tensor._data)
@@ -154,7 +69,7 @@ def test_to_copy() -> None:
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=data,
         offset=offset,
         size=(4, 2),
@@ -162,22 +77,22 @@ def test_to_copy() -> None:
         storage_offset=2,
     )
     out = tensor.clone()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.stride() == tensor.stride()
-    assert out._data.equal(torch.arange(2, 10, dtype=torch.uint8))
+    assert out._data.equal(torch.arange(2, 10))
     assert out._offset.equal(torch.arange(9))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
     out = tensor.clone(memory_format=torch.contiguous_format)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.stride() == (2, 1)
     assert out._data.equal(torch.tensor([2, 6, 3, 7, 4, 8, 5, 9]))
     assert out._offset.equal(torch.arange(9))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=data,
         offset=offset,
         size=(4, 2),
@@ -185,75 +100,80 @@ def test_to_copy() -> None:
         storage_offset=2,
     )
     out = tensor.clone()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.stride() == (2, 1)
     assert out._data.equal(torch.tensor([2, 3, 6, 7, 10, 11, 14, 15]))
     assert out._offset.equal(torch.arange(9))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=data,
         offset=offset,
         size=(4, 4),
         stride=(0, 1),
     )
     out = tensor.clone()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.stride() == (4, 1)
-    assert out._data.equal(torch.tensor([0, 1, 2, 3] * 4, dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([0, 1, 2, 3] * 4))
     assert out._offset.equal(torch.arange(17))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=data,
         offset=offset,
         size=(2,),
         storage_offset=2,
     )
     out = tensor.contiguous()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out is tensor
     assert out.storage_offset() == 2
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.clone()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.storage_offset() == 0
-    assert out._data.equal(torch.tensor([2, 3], dtype=torch.uint8))
+    assert out._data.equal(torch.tensor([2, 3]))
     assert out._offset.equal(torch.tensor([0, 1, 2]))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
-    with pytest.raises(TypeError, match="Cannot convert"):
-        tensor.to(torch.float32)
-
 
 def test_data_offset() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(8, dtype=torch.uint8),
         offset=torch.arange(9),
         size=(2,),
         storage_offset=2,
     )
     data, offset = tensor.data_offset
-    assert data.equal(torch.tensor([2, 3], dtype=torch.uint8))
+    assert data.equal(torch.tensor([2, 3]))
     assert offset.equal(torch.tensor([0, 1, 2]))
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(8, dtype=torch.uint8),
         offset=torch.arange(9),
         size=(2, 4),
     )
     with pytest.raises(RuntimeError, match="non-contiguous"):
-        _ = cast(StringTensor, tensor[:, ::2]).data_offset
+        _ = cast(VarLenTensor, tensor[:, ::2]).data_offset
 
 
 def test_equal_allclose() -> None:
-    tensor = StringTensor.from_strings([["a", "bb"], ["c", "d"]])
-    other = StringTensor.from_strings([["a", "z", "bb"], ["c", "z", "d"]])
+    tensor = VarLenTensor(
+        data=torch.tensor([0, 2, 3, 5], dtype=torch.uint8),
+        offset=torch.arange(5),
+        size=(2, 2),
+    )
+    other = VarLenTensor(
+        data=torch.arange(6, dtype=torch.uint8),
+        offset=torch.arange(7),
+        size=(2, 3),
+    )
 
     assert not tensor.equal(other)
     assert not torch.equal(tensor, other)
@@ -267,121 +187,156 @@ def test_equal_allclose() -> None:
 
 
 def test_masked_select() -> None:
-    tensor = StringTensor.from_strings([["a", "bb", "c"], ["dd", "e", "ff"]])
+    tensor = VarLenTensor(
+        data=torch.arange(9, dtype=torch.uint8),
+        offset=torch.tensor([0, 1, 3, 4, 6, 7, 9]),
+        size=(2, 3),
+    )
     mask = torch.tensor([[True, False, True], [False, True, True]])
 
     out = tensor.masked_select(mask)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (4,)
     assert out.stride() == (1,)
     assert out.storage_offset() == 0
-    assert out.to_arrow().to_pylist() == ["a", "c", "e", "ff"]
+    assert out._data.equal(torch.tensor([0, 3, 6, 7, 8]))
+    assert out._offset.equal(torch.tensor([0, 1, 2, 3, 5]))
 
     out = torch.masked_select(tensor, torch.tensor([[True, False, True]]))
-    assert isinstance(out, StringTensor)
-    assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
+    assert isinstance(out, VarLenTensor)
+    assert out._data.equal(torch.tensor([0, 3, 4, 5, 7, 8]))
 
     out = tensor.masked_select(torch.zeros(2, 3, dtype=torch.bool))
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (0,)
     assert out.stride() == (1,)
-    assert out.to_arrow().to_pylist() == []
+    assert out._data.equal(torch.empty(0))
+    assert out._offset.equal(torch.tensor([0]))
 
 
 def test_indexing() -> None:
-    tensor = StringTensor.from_strings([["a", "bb", "c"], ["dd", "e", "ff"]])
+    tensor = VarLenTensor(
+        data=torch.arange(9, dtype=torch.uint8),
+        offset=torch.tensor([0, 1, 3, 4, 6, 7, 9]),
+        size=(2, 3),
+    )
 
     out = tensor.index_select(dim=1, index=torch.tensor([2, 0]))
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out.to_arrow().to_pylist() == ["c", "a", "ff", "dd"]
+    assert out._data.equal(torch.tensor([3, 0, 7, 8, 4, 5]))
+    assert out._offset.equal(torch.tensor([0, 1, 2, 4, 6]))
 
     out = torch.index_select(tensor, dim=0, index=torch.tensor([1, 1, 0]))
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (3, 3)
     assert out.stride() == (3, 1)
-    assert out.to_arrow().to_pylist() == [
-        "dd",
-        "e",
-        "ff",
-        "dd",
-        "e",
-        "ff",
-        "a",
-        "bb",
-        "c",
-    ]
+    assert out._data.equal(
+        torch.tensor([4, 5, 6, 7, 8, 4, 5, 6, 7, 8, 0, 1, 2, 3])
+    )
 
     out = tensor.take(torch.tensor([[0, 3], [5, 1]]))
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
-    assert out.to_arrow().to_pylist() == ["a", "dd", "ff", "bb"]
+    assert out._data.equal(torch.tensor([0, 4, 5, 7, 8, 1, 2]))
 
     mask = torch.tensor([[True, False, True], [False, True, False]])
     out = tensor[mask]
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (3,)
     assert out.stride() == (1,)
-    assert out.to_arrow().to_pylist() == ["a", "c", "e"]
+    assert out._data.equal(torch.tensor([0, 3, 6]))
 
     out = tensor[:, torch.tensor([True, False, True])]
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
-    assert out.to_arrow().to_pylist() == ["a", "c", "dd", "ff"]
+    assert out._data.equal(torch.tensor([0, 3, 4, 5, 7, 8]))
 
 
 def test_cat() -> None:
     tensors: list[Tensor] = [
-        StringTensor.from_strings([["a", "bb"], ["c", "d"]]),
-        StringTensor.from_strings([["e", "ff"]]),
+        VarLenTensor(
+            data=torch.arange(4, dtype=torch.uint8),
+            offset=torch.arange(5),
+            size=(2, 2),
+        ),
+        VarLenTensor(
+            data=torch.tensor([4, 5, 6], dtype=torch.uint8),
+            offset=torch.tensor([0, 1, 3]),
+            size=(1, 2),
+        ),
     ]
 
     out = torch.cat(tensors)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (3, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out.to_arrow().to_pylist() == ["a", "bb", "c", "d", "e", "ff"]
+    assert out._data.equal(torch.arange(7))
+    assert out._offset.equal(torch.tensor([0, 1, 2, 3, 4, 5, 7]))
 
     tensors = [
-        StringTensor.from_strings([["a", "bb"], ["c", "d"]]),
-        StringTensor.from_strings([["x"], ["yy"]]),
+        VarLenTensor(
+            data=torch.arange(4, dtype=torch.uint8),
+            offset=torch.arange(5),
+            size=(2, 2),
+        ),
+        VarLenTensor(
+            data=torch.tensor([4, 5, 6], dtype=torch.uint8),
+            offset=torch.tensor([0, 1, 3]),
+            size=(2, 1),
+        ),
     ]
     out = torch.cat(tensors, dim=-1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 3)
     assert out.stride() == (3, 1)
     assert out.storage_offset() == 0
-    assert out.to_arrow().to_pylist() == ["a", "bb", "x", "c", "d", "yy"]
+    assert out._data.equal(torch.tensor([0, 1, 4, 2, 3, 5, 6]))
+    assert out._offset.equal(torch.tensor([0, 1, 2, 3, 4, 5, 7]))
 
 
 def test_stack() -> None:
     tensors: list[Tensor] = [
-        StringTensor.from_strings(["a", "bb"]),
-        StringTensor.from_strings(["c", "d"]),
+        VarLenTensor(
+            data=torch.arange(3, dtype=torch.uint8),
+            offset=torch.tensor([0, 1, 3]),
+            size=(2,),
+        ),
+        VarLenTensor(
+            data=torch.arange(3, 5, dtype=torch.uint8),
+            offset=torch.tensor([0, 1, 2]),
+            size=(2,),
+        ),
     ]
 
     out = torch.stack(tensors)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out.to_arrow().to_pylist() == ["a", "bb", "c", "d"]
+    assert out._data.equal(torch.arange(5))
+    assert out._offset.equal(torch.tensor([0, 1, 3, 4, 5]))
 
     out = torch.stack(tensors, dim=-1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
-    assert out.to_arrow().to_pylist() == ["a", "c", "bb", "d"]
+    assert out._data.equal(torch.tensor([0, 3, 1, 2, 4]))
+    assert out._offset.equal(torch.tensor([0, 1, 2, 4, 5]))
 
 
 def test_pin_memory() -> None:
-    tensor = StringTensor.from_strings(["hi", "abc"])
+    tensor = VarLenTensor(
+        data=torch.arange(4, dtype=torch.uint8),
+        offset=torch.arange(5),
+        size=(4,),
+    )
 
     assert not tensor.is_pinned()
     if torch.cuda.is_available():
@@ -389,7 +344,11 @@ def test_pin_memory() -> None:
 
 
 def test_share_memory() -> None:
-    tensor = StringTensor.from_strings(["hi", "abc"])
+    tensor = VarLenTensor(
+        data=torch.arange(4, dtype=torch.uint8),
+        offset=torch.arange(5),
+        size=(4,),
+    )
 
     assert not tensor.is_shared()
     try:
@@ -400,14 +359,14 @@ def test_share_memory() -> None:
 
 
 def test_view() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(8, dtype=torch.uint8),
         offset=torch.arange(9),
         size=(2, 4),
     )
 
     out = tensor.view(4, 2)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (4, 2)
     assert out.stride() == (2, 1)
     assert out.storage_offset() == 0
@@ -415,12 +374,12 @@ def test_view() -> None:
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.view(1, -1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (1, 8)
     assert out.stride() == (8, 1)
     assert out.storage_offset() == 0
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(8, dtype=torch.uint8),
         offset=torch.arange(9),
         size=(2, 2),
@@ -431,7 +390,7 @@ def test_view() -> None:
 
 
 def test_squeeze() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(8, dtype=torch.uint8),
         offset=torch.arange(9),
         size=(1, 2, 1, 4),
@@ -439,7 +398,7 @@ def test_squeeze() -> None:
     )
 
     out = tensor.squeeze()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 4)
     assert out.stride() == (4, 1)
     assert out.storage_offset() == 0
@@ -447,26 +406,26 @@ def test_squeeze() -> None:
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.squeeze(0)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 1, 4)
     assert out.stride() == (4, 4, 1)
     assert out.storage_offset() == 0
 
     out = tensor.squeeze((0, 2))
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 4)
     assert out.stride() == (4, 1)
     assert out.storage_offset() == 0
 
     out = tensor.squeeze(1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (1, 2, 1, 4)
     assert out.stride() == (8, 4, 4, 1)
     assert out.storage_offset() == 0
 
 
 def test_unsqueeze() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(8, dtype=torch.uint8),
         offset=torch.arange(9),
         size=(2, 2),
@@ -476,7 +435,7 @@ def test_unsqueeze() -> None:
 
     for dim in range(-tensor.dim() - 1, tensor.dim() + 1):
         out = tensor.unsqueeze(dim)
-        assert isinstance(out, StringTensor)
+        assert isinstance(out, VarLenTensor)
         assert out.storage_offset() == 1
         assert out._data.data_ptr() == tensor._data.data_ptr()
         assert out._offset.data_ptr() == tensor._offset.data_ptr()
@@ -493,13 +452,13 @@ def test_unsqueeze() -> None:
     assert out.size() == (2, 2, 1)
     assert out.stride() == (1, 4, 1)
 
-    scalar = StringTensor(
+    scalar = VarLenTensor(
         data=torch.arange(8, dtype=torch.uint8),
         offset=torch.arange(9),
         size=(),
     )
     out = scalar.unsqueeze(0)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (1,)
     assert out.stride() == (1,)
 
@@ -508,7 +467,7 @@ def test_unsqueeze() -> None:
 
 
 def test_transpose_permute() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(12, dtype=torch.uint8),
         offset=torch.arange(13),
         size=(2, 3),
@@ -517,7 +476,7 @@ def test_transpose_permute() -> None:
     )
 
     out = tensor.t()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (3, 2)
     assert out.stride() == (4, 1)
     assert out.storage_offset() == 2
@@ -525,14 +484,14 @@ def test_transpose_permute() -> None:
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.transpose(0, 1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (3, 2)
     assert out.stride() == (4, 1)
     assert out.storage_offset() == 2
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(24, dtype=torch.uint8),
         offset=torch.arange(25),
         size=(2, 3, 4),
@@ -540,7 +499,7 @@ def test_transpose_permute() -> None:
     )
 
     out = tensor.transpose(0, -1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (4, 3, 2)
     assert out.stride() == (1, 4, 12)
     assert out.storage_offset() == 0
@@ -548,7 +507,7 @@ def test_transpose_permute() -> None:
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.permute(2, 0, 1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (4, 2, 3)
     assert out.stride() == (1, 12, 4)
     assert out.storage_offset() == 0
@@ -560,14 +519,14 @@ def test_transpose_permute() -> None:
 
 
 def test_select_slice_narrow_expand() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(24, dtype=torch.uint8),
         offset=torch.arange(25),
         size=(2, 3, 4),
     )
 
     out = tensor.select(dim=1, index=1)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 4)
     assert out.stride() == (12, 1)
     assert out.storage_offset() == 4
@@ -575,7 +534,7 @@ def test_select_slice_narrow_expand() -> None:
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor[:, 1:3, ::2]
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2, 2)
     assert out.stride() == (12, 4, 2)
     assert out.storage_offset() == 4
@@ -583,20 +542,20 @@ def test_select_slice_narrow_expand() -> None:
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
     out = tensor.narrow(dim=1, start=1, length=2)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 2, 4)
     assert out.stride() == (12, 4, 1)
     assert out.storage_offset() == 4
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
 
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(4, dtype=torch.uint8),
         offset=torch.arange(5),
         size=(1, 4),
     )
     out = tensor.expand(3, 4)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (3, 4)
     assert out.stride() == (0, 1)
     assert out.storage_offset() == 0
@@ -604,7 +563,7 @@ def test_select_slice_narrow_expand() -> None:
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
     out = out.contiguous()
     assert out.is_contiguous()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (3, 4)
     assert out.stride() == (4, 1)
     assert out.storage_offset() == 0
@@ -613,7 +572,7 @@ def test_select_slice_narrow_expand() -> None:
 
 
 def test_unbind() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(25, dtype=torch.uint8),
         offset=torch.arange(26),
         size=(2, 3, 4),
@@ -626,7 +585,7 @@ def test_unbind() -> None:
     assert out[1].size() == (2, 4)
     assert out[1].stride() == (12, 1)
     assert out[1].storage_offset() == 5
-    assert isinstance(out[1], StringTensor)
+    assert isinstance(out[1], VarLenTensor)
     assert out[1]._data.data_ptr() == tensor._data.data_ptr()
     assert out[1]._offset.data_ptr() == tensor._offset.data_ptr()
 
@@ -638,7 +597,7 @@ def test_unbind() -> None:
 
 
 def test_split() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(25, dtype=torch.uint8),
         offset=torch.arange(26),
         size=(2, 3, 4),
@@ -653,7 +612,7 @@ def test_split() -> None:
     assert out[1].size() == (2, 3, 2)
     assert out[1].stride() == (12, 4, 1)
     assert out[1].storage_offset() == 3
-    assert isinstance(out[1], StringTensor)
+    assert isinstance(out[1], VarLenTensor)
     assert out[1]._data.data_ptr() == tensor._data.data_ptr()
     assert out[1]._offset.data_ptr() == tensor._offset.data_ptr()
 
@@ -666,7 +625,7 @@ def test_split() -> None:
 
 
 def test_unsafe_view() -> None:
-    tensor = StringTensor(
+    tensor = VarLenTensor(
         data=torch.arange(12, dtype=torch.uint8),
         offset=torch.arange(13),
         size=(3, 2),
@@ -674,7 +633,7 @@ def test_unsafe_view() -> None:
     )
 
     out = tensor.reshape(2, 3)
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (2, 3)
     assert out.stride() == (3, 1)
     assert out.storage_offset() == 0
@@ -682,7 +641,7 @@ def test_unsafe_view() -> None:
     assert out._offset.equal(torch.arange(7))
 
     out = tensor.flatten()
-    assert isinstance(out, StringTensor)
+    assert isinstance(out, VarLenTensor)
     assert out.size() == (6,)
     assert out.stride() == (1,)
     assert out.storage_offset() == 0

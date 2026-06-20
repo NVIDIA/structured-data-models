@@ -1,8 +1,7 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
-import pyarrow as pa
 import torch
 from torch import Tensor
 
@@ -20,12 +19,17 @@ def implements(torch_function: Callable[..., Any]) -> Callable[..., Any]:
     return decorator
 
 
-class StringTensor(Tensor):
+SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
+
+
+class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
 
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
+
+    # Constructors ############################################################
 
     def __init__(
         cls,
@@ -38,16 +42,15 @@ class StringTensor(Tensor):
     ) -> None:
         pass
 
-    @staticmethod
     def __new__(
-        cls,
+        cls: type[SelfVarLenTensor],
         data: Tensor,
         offset: Tensor,
         size: Sequence[int],
         *,
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
-    ) -> "StringTensor":
+    ) -> SelfVarLenTensor:
 
         stride = stride or _contiguous_stride(size)
 
@@ -123,6 +126,8 @@ class StringTensor(Tensor):
 
         return out
 
+    # Properties ##############################################################
+
     @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
         if not self.is_contiguous():
@@ -136,179 +141,11 @@ class StringTensor(Tensor):
         data = self._data[offset[0] : offset[-1]]
         return data, offset - offset[0]
 
-    @classmethod
-    def from_arrow(
-        cls,
-        data: pa.Array | pa.ChunkedArray,
-        *,
-        size: Sequence[int] | None = None,
-        device: torch.device | str | None = None,
-    ) -> "StringTensor":
-        if isinstance(data, pa.ChunkedArray):
-            if data.num_chunks == 1:
-                data = data.chunk(0)
-            else:
-                data = data.combine_chunks()
-
-        if not isinstance(data, pa.Array):
-            raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_arrow' to be a "
-                f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
-                f"(got '{type(data).__name__}')"
-            )
-
-        is_string = pa.types.is_string(data.type)
-        is_large_string = pa.types.is_large_string(data.type)
-        if not is_string and not is_large_string:
-            raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_arrow' to have "
-                f"'string' or 'large_string' type (got '{data.type}')"
-            )
-
-        if size is None:
-            size = (len(data),)
-        elif math.prod(size) != len(data):
-            raise ValueError(
-                f"Expected 'size' in '{cls.__name__}.from_arrow' to contain "
-                f"{len(data)} elements (got {math.prod(size)})"
-            )
-
-        buffers = data.buffers()
-
-        return cls(
-            data=torch.frombuffer(buffers[2], dtype=torch.uint8).to(device)
-            if buffers[2].size > 0
-            else torch.empty(0, dtype=torch.uint8, device=device),
-            offset=torch.frombuffer(
-                buffer=buffers[1],
-                dtype=torch.int32 if is_string else torch.int64,
-            ).to(device),
-            size=size,
-            storage_offset=data.offset,
-        )
-
-    @classmethod
-    def from_strings(
-        cls,
-        data: str | Sequence[Any],
-        *,
-        device: torch.device | str | None = None,
-        offset_dtype: torch.dtype = torch.int64,
-    ) -> "StringTensor":
-
-        if offset_dtype not in (torch.int32, torch.int64):
-            raise ValueError(
-                f"Expected 'offset_dtype' in '{cls.__name__}.from_strings' "
-                f"to be 'torch.int32' or 'torch.int64' "
-                f"(got '{offset_dtype}')"
-            )
-
-        def flatten(data: Any) -> tuple[int, ...]:
-            if isinstance(data, str):
-                return ()
-            if not isinstance(data, Sequence):
-                raise TypeError(f"'{cls.__name__}' data must contain strings")
-            if len(data) == 0:
-                return (0,)
-
-            if not isinstance(data[0], Sequence) or isinstance(data[0], str):
-                values.extend(data)
-                return (len(data),)
-
-            child_size: tuple[int, ...] | None = None
-            for item in data:
-                item_size = flatten(item)
-                if child_size is None:
-                    child_size = item_size
-                elif item_size != child_size:
-                    raise ValueError(
-                        f"'{cls.__name__}' data must be rectangular"
-                    )
-
-            assert child_size is not None
-            return (len(data), *child_size)
-
-        if isinstance(data, str):
-            values: list[str] = [data]
-            size: tuple[int, ...] = ()
-        else:
-            values = []
-            size = flatten(data)
-
-        pa_type = pa.large_string()
-        if offset_dtype == torch.int32:
-            pa_type = pa.string()
-
-        return cls.from_arrow(
-            data=pa.array(values, type=pa_type),
-            device=device,
-            size=size,
-        )
-
-    @classmethod
-    def from_pandas(
-        cls,
-        data: Any,
-        *,
-        device: torch.device | str | None = None,
-        offset_dtype: torch.dtype = torch.int64,
-    ) -> "StringTensor":
-        import pandas as pd
-
-        if not isinstance(data, pd.Series):
-            raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_pandas' to be a "
-                f"'pandas.Series' (got '{type(data).__name__}')"
-            )
-        if offset_dtype not in (torch.int32, torch.int64):
-            raise ValueError(
-                f"Expected 'offset_dtype' in '{cls.__name__}.from_pandas' "
-                f"to be 'torch.int32' or 'torch.int64' "
-                f"(got '{offset_dtype}')"
-            )
-
-        pa_type = pa.large_string()
-        if offset_dtype == torch.int32:
-            pa_type = pa.string()
-
-        return cls.from_arrow(
-            data=data.astype(pd.ArrowDtype(pa_type)).array.__arrow_array__(),
-            device=device,
-        )
-
-    def to_arrow(self) -> pa.Array:
-        if self.device.type != "cpu":
-            raise TypeError(
-                f"can't convert {self.device} device type tensor to arrow. "
-                f"Use Tensor.cpu() to copy the tensor to host memory first."
-            )
-
-        data, offset = cast(StringTensor, self.contiguous()).data_offset
-
-        return pa.Array.from_buffers(
-            pa.string() if offset.dtype == torch.int32 else pa.large_string(),
-            length=self.numel(),
-            buffers=[
-                None,
-                pa.py_buffer(offset.numpy()),
-                pa.py_buffer(data.numpy()),
-            ],
-        )
-
-    def to_pandas(self) -> Any:
-        if self.dim() != 1:
-            raise ValueError(
-                f"Expected '{self.__class__.__name__}' to be "
-                f"one-dimensional for 'to_pandas' (got {self.dim()}D tensor)"
-            )
-
-        return self.to_arrow().to_pandas()
-
     # PyTorch/Python builtins #################################################
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["_data", "_offset"]
-        ctx = (self.storage_offset(),)
+        ctx = (self.__class__, self.storage_offset())
         return attrs, ctx
 
     @staticmethod
@@ -317,9 +154,9 @@ class StringTensor(Tensor):
         ctx: tuple[Any, ...],
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
-    ) -> "StringTensor":
-        (storage_offset,) = ctx
-        return StringTensor(
+    ) -> "VarLenTensor":
+        cls, storage_offset = ctx
+        return cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
             size=outer_size,
@@ -345,39 +182,10 @@ class StringTensor(Tensor):
     def is_shared(self) -> bool:
         return self._data.is_shared() and self._offset.is_shared()
 
-    def share_memory_(self) -> "StringTensor":
+    def share_memory_(self) -> "VarLenTensor":
         self._data.share_memory_()
         self._offset.share_memory_()
         return self
-
-    def item(self) -> str:  # type: ignore
-        if self.numel() != 1:
-            raise RuntimeError(
-                f"a Tensor with {self.numel()} elements cannot be converted "
-                f"to a string"
-            )
-
-        start = self._offset[int(self.storage_offset())]
-        end = self._offset[int(self.storage_offset()) + 1]
-        return bytes(self._data[start:end].tolist()).decode("utf-8")
-
-    def tolist(self) -> str | list[Any]:  # type: ignore
-        def reshape(seq: list[str], size: tuple[int, ...]) -> str | list[Any]:
-            if len(size) == 0:
-                return seq[0]
-            if len(size) == 1:
-                return seq
-
-            step = math.prod(size[1:])
-            return [
-                reshape(seq[i : i + step], size[1:])
-                for i in range(0, len(seq), step)
-            ]
-
-        return reshape(self.to_arrow().to_pylist(), tuple(self.size()))
-
-    def __str__(self) -> str:
-        return self.item() if self.numel() == 1 else self.__repr__()
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         return (
@@ -388,7 +196,7 @@ class StringTensor(Tensor):
 
 @implements(aten._to_copy.default)
 def _to_copy(
-    input: StringTensor,
+    input: VarLenTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
@@ -396,7 +204,7 @@ def _to_copy(
     pin_memory: bool = False,  # Ignored by PyTorch.
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> StringTensor:
+) -> VarLenTensor:
 
     if memory_format is None:
         memory_format = torch.preserve_format
@@ -447,7 +255,7 @@ def _to_copy(
     )
     offset = (offset - offset[0]).to(device, non_blocking=non_blocking)
 
-    return StringTensor(
+    return input.__class__(
         data=data,
         offset=offset,
         size=input.size(),
@@ -460,30 +268,30 @@ def _to_copy(
 
 @implements(aten.clone.default)
 def _clone(
-    input: StringTensor,
+    input: VarLenTensor,
     *,
     memory_format: torch.memory_format | None = None,
-) -> StringTensor:
+) -> VarLenTensor:
     return _to_copy(input, memory_format=memory_format)
 
 
 @implements(aten.contiguous.default)
 def _contiguous(
-    input: StringTensor,
+    input: VarLenTensor,
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
-) -> StringTensor:
+) -> VarLenTensor:
     return _to_copy(input, memory_format=memory_format)
 
 
 @implements(aten.is_pinned.default)
-def _is_pinned(input: StringTensor) -> bool:
+def _is_pinned(input: VarLenTensor) -> bool:
     return input._data.is_pinned() and input._offset.is_pinned()
 
 
 @implements(aten._pin_memory.default)
-def _pin_memory(input: StringTensor) -> StringTensor:
-    return StringTensor(
+def _pin_memory(input: VarLenTensor) -> VarLenTensor:
+    return input.__class__(
         data=input._data.pin_memory(),
         offset=input._offset.pin_memory(),
         size=input.size(),
@@ -493,33 +301,33 @@ def _pin_memory(input: StringTensor) -> StringTensor:
 
 
 @implements(aten.equal.default)
-def _equal(input: StringTensor, other: Tensor) -> bool:
-    if not isinstance(other, StringTensor):
+def _equal(input: VarLenTensor, other: Tensor) -> bool:
+    if input.__class__ is not other.__class__:
         return False
     if input.size() != other.size():
         return False
 
-    data1, offset1 = cast(StringTensor, input.contiguous()).data_offset
-    data2, offset2 = cast(StringTensor, other.contiguous()).data_offset
+    data1, offset1 = cast(VarLenTensor, input.contiguous()).data_offset
+    data2, offset2 = cast(VarLenTensor, other.contiguous()).data_offset
 
     return offset1.equal(offset2) and data1.equal(data2)
 
 
 @implements(aten.allclose.default)
 def _allclose(
-    input: StringTensor,
+    input: VarLenTensor,
     other: Tensor,
     rtol: float = 1e-05,
     atol: float = 1e-08,
     equal_nan: bool = False,
 ) -> bool:
-    if not isinstance(other, StringTensor):
+    if input.__class__ is not other.__class__:
         return False
     if input.size() != other.size():
         return False
 
-    data1, offset1 = cast(StringTensor, input.contiguous()).data_offset
-    data2, offset2 = cast(StringTensor, other.contiguous()).data_offset
+    data1, offset1 = cast(VarLenTensor, input.contiguous()).data_offset
+    data2, offset2 = cast(VarLenTensor, other.contiguous()).data_offset
 
     return offset1.equal(offset2) and data1.allclose(
         data2, rtol=rtol, atol=atol, equal_nan=equal_nan
@@ -527,90 +335,90 @@ def _allclose(
 
 
 @implements(aten.view.default)
-def _view(input: StringTensor, size: Sequence[int]) -> StringTensor:
+def _view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).view(tuple(size))
     return _from_layout_view(input, view)
 
 
 @implements(aten._unsafe_view.default)
-def _unsafe_view(input: StringTensor, size: Sequence[int]) -> StringTensor:
+def _unsafe_view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     view = aten._unsafe_view.default(_layout_view(input), size)
     return _from_layout_view(input, view)
 
 
 @implements(aten.squeeze.default)
-def _squeeze(input: StringTensor) -> StringTensor:
+def _squeeze(input: VarLenTensor) -> VarLenTensor:
     view = _layout_view(input).squeeze()
     return _from_layout_view(input, view)
 
 
 @implements(aten.squeeze.dim)
-def _squeeze_dim(input: StringTensor, dim: int) -> StringTensor:
+def _squeeze_dim(input: VarLenTensor, dim: int) -> VarLenTensor:
     view = _layout_view(input).squeeze(dim)
     return _from_layout_view(input, view)
 
 
 @implements(aten.squeeze.dims)
-def _squeeze_dims(input: StringTensor, dim: Sequence[int]) -> StringTensor:
+def _squeeze_dims(input: VarLenTensor, dim: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).squeeze(tuple(dim))
     return _from_layout_view(input, view)
 
 
 @implements(aten.unsqueeze.default)
-def _unsqueeze(input: StringTensor, dim: int) -> StringTensor:
+def _unsqueeze(input: VarLenTensor, dim: int) -> VarLenTensor:
     view = _layout_view(input).unsqueeze(dim)
     return _from_layout_view(input, view)
 
 
 @implements(aten.t.default)
-def _t(input: StringTensor) -> StringTensor:
+def _t(input: VarLenTensor) -> VarLenTensor:
     view = _layout_view(input).t()
     return _from_layout_view(input, view)
 
 
 @implements(aten.transpose.int)
-def _transpose(input: StringTensor, dim0: int, dim1: int) -> StringTensor:
+def _transpose(input: VarLenTensor, dim0: int, dim1: int) -> VarLenTensor:
     view = _layout_view(input).transpose(dim0, dim1)
     return _from_layout_view(input, view)
 
 
 @implements(aten.permute.default)
-def _permute(input: StringTensor, dims: Sequence[int]) -> StringTensor:
+def _permute(input: VarLenTensor, dims: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).permute(tuple(dims))
     return _from_layout_view(input, view)
 
 
 @implements(aten.select.int)
-def _select(input: StringTensor, dim: int, index: int) -> StringTensor:
+def _select(input: VarLenTensor, dim: int, index: int) -> VarLenTensor:
     view = _layout_view(input).select(dim, index)
     return _from_layout_view(input, view)
 
 
 @implements(aten.slice.Tensor)
 def _slice(
-    input: StringTensor,
+    input: VarLenTensor,
     dim: int = 0,
     start: int | None = None,
     end: int | None = None,
     step: int = 1,
-) -> StringTensor:
+) -> VarLenTensor:
     view = aten.slice.Tensor(_layout_view(input), dim, start, end, step)
     return _from_layout_view(input, view)
 
 
 @implements(aten.narrow.default)
 def _narrow(
-    input: StringTensor,
+    input: VarLenTensor,
     dim: int,
     start: int,
     length: int,
-) -> StringTensor:
+) -> VarLenTensor:
     view = _layout_view(input).narrow(dim, start, length)
     return _from_layout_view(input, view)
 
 
 @implements(aten.unbind.int)
-def _unbind(input: StringTensor, dim: int = 0) -> tuple[StringTensor, ...]:
+def _unbind(input: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
     return tuple(
         _from_layout_view(input, view)
         for view in _layout_view(input).unbind(dim)
@@ -619,10 +427,10 @@ def _unbind(input: StringTensor, dim: int = 0) -> tuple[StringTensor, ...]:
 
 @implements(aten.split.Tensor)
 def _split(
-    input: StringTensor,
+    input: VarLenTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[StringTensor, ...]:
+) -> tuple[VarLenTensor, ...]:
     return tuple(
         _from_layout_view(input, view)
         for view in _layout_view(input).split(split_size, dim)
@@ -633,10 +441,10 @@ def _split(
 @implements(aten.split.default)
 @implements(aten.split_with_sizes.default)
 def _split_with_sizes(
-    input: StringTensor,
+    input: VarLenTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[StringTensor, ...]:
+) -> tuple[VarLenTensor, ...]:
     return tuple(
         _from_layout_view(input, view)
         for view in _layout_view(input).split(tuple(split_sizes), dim)
@@ -645,56 +453,63 @@ def _split_with_sizes(
 
 @implements(aten.expand.default)
 def _expand(
-    input: StringTensor,
+    input: VarLenTensor,
     size: Sequence[int],
     *,
     implicit: bool = False,
-) -> StringTensor:
+) -> VarLenTensor:
     view = aten.expand.default(_layout_view(input), size, implicit=implicit)
     return _from_layout_view(input, view)
 
 
 @implements(aten.masked_select.default)
-def _masked_select(input: StringTensor, mask: Tensor) -> StringTensor:
+def _masked_select(input: VarLenTensor, mask: Tensor) -> VarLenTensor:
     return _materialize(input, lambda x: x.masked_select(mask))
 
 
 @implements(aten.index_select.default)
 def _index_select(
-    input: StringTensor,
+    input: VarLenTensor,
     dim: int,
     index: Tensor,
-) -> StringTensor:
+) -> VarLenTensor:
     return _materialize(input, lambda x: x.index_select(dim, index))
 
 
 @implements(aten.take.default)
-def _take(input: StringTensor, index: Tensor) -> StringTensor:
+def _take(input: VarLenTensor, index: Tensor) -> VarLenTensor:
     return _materialize(input, lambda x: x.take(index))
 
 
 @implements(aten.index.Tensor)
 def _index(
-    input: StringTensor,
+    input: VarLenTensor,
     indices: Sequence[Tensor | None],
-) -> StringTensor:
+) -> VarLenTensor:
     return _materialize(input, lambda x: aten.index.Tensor(x, indices))
 
 
 @implements(aten.cat.default)
-def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     if len(tensors) == 0:
         raise ValueError("Expected a non-empty list of Tensors")
 
+    if not isinstance(tensors[0], VarLenTensor):
+        raise TypeError(
+            f"Expected '{VarLenTensor.__name__}' as element 0, but got "
+            f"'{tensors[0].__class__.__name__}'"
+        )
+
+    tensor_cls = tensors[0].__class__
     for i, tensor in enumerate(tensors):
-        if not isinstance(tensor, StringTensor):
+        if tensor.__class__ is not tensor_cls:
             raise TypeError(
-                f"Expected '{StringTensor.__name__}' as element {i}, but got "
-                f"'{type(tensor).__name__}'"
+                f"Expected '{tensor_cls.__name__}' as element {i}, but got "
+                f"'{tensor.__class__.__name__}'"
             )
 
     tensors = tuple(
-        cast(StringTensor, tensor.contiguous()) for tensor in tensors
+        cast(VarLenTensor, tensor.contiguous()) for tensor in tensors
     )
     data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
 
@@ -724,7 +539,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
 
     if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
         offset[-1] = storage_offset
-        return StringTensor(data=data, offset=offset, size=size)
+        return tensor_cls(data=data, offset=offset, size=size)
 
     end = torch.cat(end_views, dim=dim)
     start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
@@ -732,13 +547,13 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
 
     offset, index = _compact(start, end)
 
-    return StringTensor(data=data[index], offset=offset, size=size)
+    return tensor_cls(data=data[index], offset=offset, size=size)
 
 
 @implements(aten.stack.default)
-def _stack(tensors: Sequence[Tensor], dim: int = 0) -> StringTensor:
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
     out = torch.cat([tensor.unsqueeze(dim) for tensor in tensors], dim=dim)
-    return cast(StringTensor, out)
+    return cast(VarLenTensor, out)
 
 
 # Helpers #####################################################################
@@ -762,7 +577,7 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
-def _layout_view(input: "StringTensor") -> Tensor:
+def _layout_view(input: "VarLenTensor") -> Tensor:
     return torch.as_strided(
         input._offset,
         size=input.size(),
@@ -771,8 +586,8 @@ def _layout_view(input: "StringTensor") -> Tensor:
     )
 
 
-def _from_layout_view(input: "StringTensor", view: Tensor) -> "StringTensor":
-    return StringTensor(
+def _from_layout_view(input: "VarLenTensor", view: Tensor) -> "VarLenTensor":
+    return input.__class__(
         data=input._data,
         offset=input._offset,
         size=view.size(),
@@ -804,12 +619,12 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
 
 
 def _materialize(
-    input: StringTensor,
+    input: VarLenTensor,
     function: Callable[[Tensor], Tensor],
     *,
     device: torch.device | str | None = None,
     non_blocking: bool = False,
-) -> StringTensor:
+) -> VarLenTensor:
     # Use PyTorch's own memory-format semantics to materialize data:
     start = torch.as_strided(
         input._offset,
@@ -849,7 +664,7 @@ def _materialize(
 
     offset, index = _compact(start, end)
 
-    return StringTensor(
+    return input.__class__(
         data=input._data[index].to(device, non_blocking=non_blocking),
         offset=offset.to(device, non_blocking=non_blocking),
         size=size,
