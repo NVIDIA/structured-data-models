@@ -5,7 +5,7 @@ from typing import Any, cast
 import pyarrow as pa
 import torch
 
-from schemafm.varlen_tensor import VarLenTensor
+from schemafm import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
