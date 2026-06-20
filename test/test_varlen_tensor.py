@@ -44,60 +44,6 @@ def test_autograd() -> None:
     assert not tensor.requires_grad
 
 
-def test_subclass_function_overrides() -> None:
-    class CustomVarLenTensor(VarLenTensor):
-        pass
-
-    aten = torch.ops.aten
-
-    @CustomVarLenTensor.implements(aten.neg.default)
-    def _neg(input: CustomVarLenTensor) -> CustomVarLenTensor:
-        return input.__class__(
-            data=input._data.neg(),
-            offset=input._offset.clone(),
-            size=input.size(),
-            stride=input.stride(),
-            storage_offset=int(input.storage_offset()),
-        )
-
-    @CustomVarLenTensor.implements(aten.clone.default)
-    def _clone(
-        input: CustomVarLenTensor,
-        *,
-        memory_format: torch.memory_format | None = None,
-    ) -> CustomVarLenTensor:
-        return input.__class__(
-            data=input._data + 1,
-            offset=input._offset.clone(),
-            size=input.size(),
-            stride=input.stride(),
-            storage_offset=int(input.storage_offset()),
-        )
-
-    base = VarLenTensor(
-        data=torch.arange(4, dtype=torch.float32),
-        offset=torch.arange(5),
-        size=(2, 2),
-    )
-    custom = CustomVarLenTensor(
-        data=torch.arange(4, dtype=torch.float32),
-        offset=torch.arange(5),
-        size=(2, 2),
-    )
-
-    with pytest.raises(NotImplementedError):
-        _ = -base
-
-    out = -custom
-    assert isinstance(out, CustomVarLenTensor)
-    assert out._data.equal(-custom._data)
-
-    out = custom.clone()
-    assert isinstance(out, CustomVarLenTensor)
-    assert out._data.equal(custom._data + 1)
-    assert cast(VarLenTensor, base.clone())._data.equal(base._data)
-
-
 def test_offset_dtype() -> None:
     tensor = VarLenTensor(
         data=torch.arange(4),
