@@ -1,6 +1,6 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, TypeVar, cast
+from typing import Any, ClassVar, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -23,6 +23,8 @@ SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
+    ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
+
     _data: Tensor
     _offset: Tensor
 
@@ -54,10 +56,13 @@ class VarLenTensor(Tensor):
 
         stride = stride or _contiguous_stride(size)
 
-        if data.dtype != torch.uint8:
+        if (
+            cls.ALLOWED_DTYPES is not None
+            and data.dtype not in cls.ALLOWED_DTYPES
+        ):
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to have dtype "
-                f"'torch.uint8' (got '{data.dtype}')"
+                f"in '{cls.ALLOWED_DTYPES}' (got '{data.dtype}')"
             )
         if data.dim() != 1:
             raise ValueError(
@@ -106,8 +111,8 @@ class VarLenTensor(Tensor):
         if data.numel() > torch.iinfo(offset.dtype).max:
             raise ValueError(
                 f"Expected 'offset' in '{cls.__name__}' to represent "
-                f"{data.numel()} bytes, but '{offset.dtype}' can only "
-                f"represent {torch.iinfo(offset.dtype).max} bytes"
+                f"{data.numel()} elements, but '{offset.dtype}' can only "
+                f"represent {torch.iinfo(offset.dtype).max} elements"
             )
 
         out = Tensor._make_wrapper_subclass(
@@ -209,7 +214,11 @@ def _to_copy(
     if memory_format is None:
         memory_format = torch.preserve_format
 
-    if dtype is not None and dtype != torch.uint8:
+    if (
+        dtype is not None
+        and input.ALLOWED_DTYPES is not None
+        and dtype not in input.ALLOWED_DTYPES
+    ):
         raise TypeError(
             f"Cannot convert '{input.__class__.__name__}' to dtype '{dtype}'"
         )
@@ -242,6 +251,7 @@ def _to_copy(
             input,
             lambda x: x.clone(memory_format=memory_format),
             device=device,
+            dtype=dtype,
             non_blocking=non_blocking,
         )
 
@@ -249,7 +259,8 @@ def _to_copy(
     span_len = _span_len(input.size(), input.stride())
     offset = input._offset[storage_offset : storage_offset + span_len + 1]
     data = input._data[offset[0] : offset[-1]].to(
-        device,
+        device=device,
+        dtype=dtype,
         non_blocking=non_blocking,
         copy=True,
     )
@@ -623,6 +634,7 @@ def _materialize(
     function: Callable[[Tensor], Tensor],
     *,
     device: torch.device | str | None = None,
+    dtype: torch.dtype | None = None,
     non_blocking: bool = False,
 ) -> VarLenTensor:
     # Use PyTorch's own memory-format semantics to materialize data:
@@ -665,7 +677,11 @@ def _materialize(
     offset, index = _compact(start, end)
 
     return input.__class__(
-        data=input._data[index].to(device, non_blocking=non_blocking),
+        data=input._data[index].to(
+            device=device,
+            dtype=dtype,
+            non_blocking=non_blocking,
+        ),
         offset=offset.to(device, non_blocking=non_blocking),
         size=size,
         stride=stride,

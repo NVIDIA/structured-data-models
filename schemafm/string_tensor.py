@@ -1,6 +1,6 @@
 import math
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pyarrow as pa
 import torch
@@ -9,6 +9,8 @@ from schemafm import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
+    ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
+
     @classmethod
     def from_arrow(
         cls,
