@@ -21,6 +21,8 @@ def test_autograd() -> None:
     data = torch.randn(4, requires_grad=True)
     tensor = VarLenTensor.from_tensor(data)
     assert tensor.requires_grad
+    with pytest.raises(RuntimeError, match="requires grad"):
+        tensor.to_arrow()
 
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)

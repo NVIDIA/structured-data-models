@@ -238,6 +238,11 @@ class VarLenTensor(Tensor):
                 f"can't convert {self.device} device type tensor to arrow. "
                 f"Use Tensor.cpu() to copy the tensor to host memory first."
             )
+        if self.requires_grad:
+            raise RuntimeError(
+                "Can't call to_arrow() on Tensor that requires grad. "
+                "Use Tensor.detach().to_arrow() instead."
+            )
 
         data, offset = cast(VarLenTensor, self.contiguous()).data_offset
 
