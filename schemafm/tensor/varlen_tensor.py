@@ -129,20 +129,22 @@ class VarLenTensor(Tensor):
         *,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
-        span_len = _span_len(data.size(), data.stride())
-        view = torch.as_strided(
-            data,
-            size=(int(data.storage_offset() + span_len),),
-            stride=(1,),
-            storage_offset=0,
-        )
+        flat_data = data
+        if data.stride() != (1,) or int(data.storage_offset()) != 0:
+            span_len = _span_len(data.size(), data.stride())
+            flat_data = torch.as_strided(
+                data,
+                size=(int(data.storage_offset()) + span_len,),
+                stride=(1,),
+                storage_offset=0,
+            )
         offset = torch.arange(
-            view.numel() + 1,
+            flat_data.numel() + 1,
             dtype=offset_dtype,
             device=data.device,
         )
         return cls(
-            data=view,
+            data=flat_data,
             offset=offset,
             size=data.size(),
             stride=data.stride(),
