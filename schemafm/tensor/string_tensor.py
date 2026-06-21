@@ -140,57 +140,6 @@ class StringTensor(VarLenTensor):
             size=size,
         )
 
-    @classmethod
-    def from_pandas(
-        cls,
-        data: Any,
-        *,
-        device: torch.device | str | None = None,
-        offset_dtype: torch.dtype = torch.int64,
-    ) -> "StringTensor":
-        import pandas as pd
-
-        if not isinstance(data, pd.Series):
-            raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_pandas' to be a "
-                f"'pandas.Series' (got '{type(data).__name__}')"
-            )
-        if offset_dtype not in (torch.int32, torch.int64):
-            raise ValueError(
-                f"Expected 'offset_dtype' in '{cls.__name__}.from_pandas' "
-                f"to be 'torch.int32' or 'torch.int64' "
-                f"(got '{offset_dtype}')"
-            )
-
-        pa_type = pa.large_string()
-        if offset_dtype == torch.int32:
-            pa_type = pa.string()
-
-        return cls.from_arrow(
-            array=data.astype(pd.ArrowDtype(pa_type)).array.__arrow_array__(),
-            device=device,
-        )
-
-    def to_pandas(self) -> Any:
-        if self.dim() != 1:
-            raise ValueError(
-                f"Expected '{self.__class__.__name__}' to be "
-                f"one-dimensional for 'to_pandas' (got {self.dim()}D tensor)"
-            )
-
-        return self.to_arrow().to_pandas()
-
-    def item(self) -> str:  # type: ignore
-        if self.numel() != 1:
-            raise RuntimeError(
-                f"a Tensor with {self.numel()} elements cannot be converted "
-                f"to a string"
-            )
-
-        start = self._offset[int(self.storage_offset())]
-        end = self._offset[int(self.storage_offset()) + 1]
-        return bytes(self._data[start:end].tolist()).decode("utf-8")
-
     def tolist(self) -> str | list[Any]:  # type: ignore
         def reshape(seq: list[str], size: tuple[int, ...]) -> str | list[Any]:
             if len(size) == 0:
@@ -205,6 +154,17 @@ class StringTensor(VarLenTensor):
             ]
 
         return reshape(self.to_arrow().to_pylist(), tuple(self.size()))
+
+    def item(self) -> str:  # type: ignore
+        if self.numel() != 1:
+            raise RuntimeError(
+                f"a Tensor with {self.numel()} elements cannot be converted "
+                f"to a string"
+            )
+
+        start = self._offset[int(self.storage_offset())]
+        end = self._offset[int(self.storage_offset()) + 1]
+        return bytes(self._data[start:end].tolist()).decode("utf-8")
 
     def __str__(self) -> str:
         return self.item() if self.numel() == 1 else self.__repr__()

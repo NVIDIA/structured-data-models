@@ -48,21 +48,6 @@ def test_arrow() -> None:
     assert array.to_pylist() == ["hi", "é", "", "abc"]
 
 
-def test_pandas() -> None:
-    pd = pytest.importorskip("pandas")
-
-    tensor = StringTensor.from_pandas(pd.Series(["hi", "é", "", None]))
-    assert tensor.size() == (4,)
-    assert tensor.stride() == (1,)
-    assert tensor.dtype == torch.uint8
-    assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
-
-    series = tensor.to_pandas()
-    assert isinstance(series, pd.Series)
-    assert series.tolist() == ["hi", "é", "", ""]
-
-
 def test_allowed_dtype() -> None:
     tensor = StringTensor.from_strings("hi")
 
