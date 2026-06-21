@@ -4,22 +4,22 @@ import torch
 from schemafm import StringTensor
 
 
-def test_from_strings() -> None:
-    tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
+def test_from_list() -> None:
+    tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
     assert tensor.size() == (2, 2)
     assert tensor.stride() == (2, 1)
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([104, 105, 195, 169, 97, 98, 99]))
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 7]))
 
-    tensor = StringTensor.from_strings([])
+    tensor = StringTensor.from_list([])
     assert tensor.size() == (0,)
     assert tensor.stride() == (1,)
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([]))
     assert tensor._offset.equal(torch.tensor([0]))
 
-    tensor = StringTensor.from_strings("hi")
+    tensor = StringTensor.from_list("hi")
     assert tensor.size() == ()
     assert tensor.stride() == ()
     assert tensor.dtype == torch.uint8
@@ -42,26 +42,26 @@ def test_arrow() -> None:
     assert tensor._data.equal(torch.tensor([]))
     assert tensor._offset.equal(torch.tensor([0]))
 
-    tensor = StringTensor.from_strings([["hi", "é"], ["", "abc"]])
+    tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
     array = tensor.to_arrow()
     assert array.type == pa.large_string()
     assert array.to_pylist() == ["hi", "é", "", "abc"]
 
 
 def test_allowed_dtype() -> None:
-    tensor = StringTensor.from_strings("hi")
+    tensor = StringTensor.from_list("hi")
 
     with pytest.raises(TypeError, match="Cannot convert"):
         tensor.to(torch.float32)
 
 
 def test_item() -> None:
-    assert StringTensor.from_strings("é").item() == "é"
-    assert StringTensor.from_strings(["hi", "é"])[1].item() == "é"
-    assert str(StringTensor.from_strings([""])) == ""
+    assert StringTensor.from_list("é").item() == "é"
+    assert StringTensor.from_list(["hi", "é"])[1].item() == "é"
+    assert str(StringTensor.from_list([""])) == ""
 
     with pytest.raises(RuntimeError, match="cannot be converted"):
-        StringTensor.from_strings(["hi", "é"]).item()
+        StringTensor.from_list(["hi", "é"]).item()
 
 
 def test_tolist() -> None:
@@ -71,4 +71,4 @@ def test_tolist() -> None:
         [],
         [["a", "bb", "c"], ["dd", "e", "ff"]],
     ]:
-        assert StringTensor.from_strings(strings).tolist() == strings
+        assert StringTensor.from_list(strings).tolist() == strings

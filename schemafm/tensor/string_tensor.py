@@ -88,35 +88,43 @@ class StringTensor(VarLenTensor):
         )
 
     @classmethod
-    def from_strings(
+    def from_list(
         cls,
-        data: str | Sequence[Any],
+        values: str | Sequence[Any],
         *,
+        dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> "StringTensor":
 
+        if dtype is not None and dtype != torch.uint8:
+            raise ValueError(
+                f"Expected 'dtype' in '{cls.__name__}.from_list' to be "
+                f"'torch.uint8' (got '{dtype}')"
+            )
         if offset_dtype not in (torch.int32, torch.int64):
             raise ValueError(
-                f"Expected 'offset_dtype' in '{cls.__name__}.from_strings' "
+                f"Expected 'offset_dtype' in '{cls.__name__}.from_list' "
                 f"to be 'torch.int32' or 'torch.int64' "
                 f"(got '{offset_dtype}')"
             )
 
-        def flatten(data: Any) -> tuple[int, ...]:
-            if isinstance(data, str):
+        def flatten(values: Any) -> tuple[int, ...]:
+            if isinstance(values, str):
                 return ()
-            if not isinstance(data, Sequence):
+            if not isinstance(values, Sequence):
                 raise TypeError(f"'{cls.__name__}' data must contain strings")
-            if len(data) == 0:
+            if len(values) == 0:
                 return (0,)
 
-            if not isinstance(data[0], Sequence) or isinstance(data[0], str):
-                values.extend(data)
-                return (len(data),)
+            if not isinstance(values[0], Sequence) or isinstance(
+                values[0], str
+            ):
+                strings.extend(values)
+                return (len(values),)
 
             child_size: tuple[int, ...] | None = None
-            for item in data:
+            for item in values:
                 item_size = flatten(item)
                 if child_size is None:
                     child_size = item_size
@@ -126,21 +134,21 @@ class StringTensor(VarLenTensor):
                     )
 
             assert child_size is not None
-            return (len(data), *child_size)
+            return (len(values), *child_size)
 
-        if isinstance(data, str):
-            values: list[str] = [data]
+        if isinstance(values, str):
+            strings: list[str] = [values]
             size: tuple[int, ...] = ()
         else:
-            values = []
-            size = flatten(data)
+            strings = []
+            size = flatten(values)
 
         pa_type = pa.large_string()
         if offset_dtype == torch.int32:
             pa_type = pa.string()
 
         return cls.from_arrow(
-            array=pa.array(values, type=pa_type),
+            array=pa.array(strings, type=pa_type),
             device=device,
             size=size,
         )
