@@ -66,8 +66,13 @@ class StringTensor(VarLenTensor):
     def to_arrow(self) -> pa.Array:
         if self.device.type != "cpu":
             raise TypeError(
-                f"can't convert {self.device} device type tensor to arrow. "
-                f"Use Tensor.cpu() to copy the tensor to host memory first."
+                f"Can't convert {self.device} device type tensor to arrow. "
+                f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
+            )
+        if self.requires_grad:
+            raise RuntimeError(
+                "Can't call 'to_arrow()' on Tensor that requires grad. "
+                "Use 'Tensor.detach().to_arrow()' instead."
             )
 
         data, offset = cast(StringTensor, self.contiguous()).data_offset
@@ -83,35 +88,41 @@ class StringTensor(VarLenTensor):
         )
 
     @classmethod
-    def from_strings(
+    def from_list(
         cls,
-        data: str | Sequence[Any],
+        values: str | Sequence[Any],
         *,
+        dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> "StringTensor":
 
+        if dtype is not None and dtype != torch.uint8:
+            raise ValueError(
+                f"Expected 'dtype' in '{cls.__name__}.from_list' to be "
+                f"'torch.uint8' (got '{dtype}')"
+            )
         if offset_dtype not in (torch.int32, torch.int64):
             raise ValueError(
-                f"Expected 'offset_dtype' in '{cls.__name__}.from_strings' "
+                f"Expected 'offset_dtype' in '{cls.__name__}.from_list' "
                 f"to be 'torch.int32' or 'torch.int64' "
                 f"(got '{offset_dtype}')"
             )
 
-        def flatten(data: Any) -> tuple[int, ...]:
-            if isinstance(data, str):
+        def flatten(seq: Any) -> tuple[int, ...]:
+            if isinstance(seq, str):
                 return ()
-            if not isinstance(data, Sequence):
+            if not isinstance(seq, Sequence):
                 raise TypeError(f"'{cls.__name__}' data must contain strings")
-            if len(data) == 0:
-                return (0,)
+            if len(seq) == 0:
+                return ()
 
-            if not isinstance(data[0], Sequence) or isinstance(data[0], str):
-                values.extend(data)
-                return (len(data),)
+            if not isinstance(seq[0], Sequence) or isinstance(seq[0], str):
+                array.extend(seq)
+                return (len(seq),)
 
             child_size: tuple[int, ...] | None = None
-            for item in data:
+            for item in seq:
                 item_size = flatten(item)
                 if child_size is None:
                     child_size = item_size
@@ -121,50 +132,27 @@ class StringTensor(VarLenTensor):
                     )
 
             assert child_size is not None
-            return (len(data), *child_size)
+            return (len(seq), *child_size)
 
-        if isinstance(data, str):
-            values: list[str] = [data]
+        if isinstance(values, str):
+            array: list[str] = [values]
             size: tuple[int, ...] = ()
         else:
-            values = []
-            size = flatten(data)
+            array = []
+            size = (0,) if len(values) == 0 else flatten(values)
 
         pa_type = pa.large_string()
         if offset_dtype == torch.int32:
             pa_type = pa.string()
 
         return cls.from_arrow(
-            array=pa.array(values, type=pa_type),
+            array=pa.array(array, type=pa_type),
             device=device,
             size=size,
         )
 
-    def tolist(self) -> str | list[Any]:  # type: ignore
-        def reshape(seq: list[str], size: tuple[int, ...]) -> str | list[Any]:
-            if len(size) == 0:
-                return seq[0]
-            if len(size) == 1:
-                return seq
-
-            step = math.prod(size[1:])
-            return [
-                reshape(seq[i : i + step], size[1:])
-                for i in range(0, len(seq), step)
-            ]
-
-        return reshape(self.to_arrow().to_pylist(), tuple(self.size()))
-
     def item(self) -> str:  # type: ignore
-        if self.numel() != 1:
-            raise RuntimeError(
-                f"a Tensor with {self.numel()} elements cannot be converted "
-                f"to a string"
-            )
-
-        start = self._offset[int(self.storage_offset())]
-        end = self._offset[int(self.storage_offset()) + 1]
-        return bytes(self._data[start:end].tolist()).decode("utf-8")
+        return cast(str, super().item())
 
     def __str__(self) -> str:
         return self.item() if self.numel() == 1 else self.__repr__()

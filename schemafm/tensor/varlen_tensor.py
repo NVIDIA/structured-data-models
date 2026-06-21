@@ -235,8 +235,13 @@ class VarLenTensor(Tensor):
     def to_arrow(self) -> pa.Array:
         if self.device.type != "cpu":
             raise TypeError(
-                f"can't convert {self.device} device type tensor to arrow. "
-                f"Use Tensor.cpu() to copy the tensor to host memory first."
+                f"Can't convert {self.device} device type tensor to arrow. "
+                f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
+            )
+        if self.requires_grad:
+            raise RuntimeError(
+                "Can't call 'to_arrow()' on Tensor that requires grad. "
+                "Use 'Tensor.detach().to_arrow()' instead."
             )
 
         data, offset = cast(VarLenTensor, self.contiguous()).data_offset
@@ -258,6 +263,57 @@ class VarLenTensor(Tensor):
             length=self.numel(),
             buffers=[None, pa.py_buffer(offset.numpy())],
             children=[values],
+        )
+
+    @classmethod
+    def from_list(
+        cls: type[SelfVarLenTensor],
+        values: Sequence[Any],
+        *,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+        offset_dtype: torch.dtype = torch.int64,
+    ) -> SelfVarLenTensor:
+        def is_sequence(value: Any) -> bool:
+            return isinstance(value, Sequence) and not isinstance(
+                value, str | bytes | bytearray
+            )
+
+        def flatten(seq: Sequence[Any]) -> tuple[int, ...]:
+            if len(seq) == 0:
+                offset.append(len(data))
+                return ()
+
+            if not is_sequence(seq[0]):
+                data.extend(seq)
+                offset.append(len(data))
+                return ()
+
+            child_size: tuple[int, ...] | None = None
+            for item in seq:
+                if not is_sequence(item):
+                    raise ValueError(
+                        f"'{cls.__name__}' data must be rectangular"
+                    )
+                item_size = flatten(cast(Sequence[Any], item))
+                if child_size is None:
+                    child_size = item_size
+                elif item_size != child_size:
+                    raise ValueError(
+                        f"'{cls.__name__}' data must be rectangular"
+                    )
+
+            assert child_size is not None
+            return (len(seq), *child_size)
+
+        data: list[Any] = []
+        offset = [0]
+        size = (0,) if len(values) == 0 else flatten(values)
+
+        return cls(
+            data=torch.tensor(data, dtype=dtype, device=device),
+            offset=torch.tensor(offset, dtype=offset_dtype, device=device),
+            size=size,
         )
 
     # Properties ##############################################################
@@ -351,6 +407,31 @@ class VarLenTensor(Tensor):
     def detach_(self) -> "VarLenTensor":
         self._data.detach_()
         return self
+
+    def tolist(self) -> Any:
+        def reshape(values: list[Any], size: tuple[int, ...]) -> Any:
+            if len(size) == 0:
+                return values[0]
+            if len(size) == 1:
+                return values
+
+            step = math.prod(size[1:])
+            return [
+                reshape(values[i * step : (i + 1) * step], size[1:])
+                for i in range(size[0])
+            ]
+
+        tensor = cast(VarLenTensor, self.detach().cpu())
+        values = tensor.to_arrow().to_pylist()
+        return reshape(values, tuple(self.size()))
+
+    def item(self) -> list[Any]:  # type: ignore
+        if self.numel() != 1:
+            raise RuntimeError(
+                f"'{self.__class__.__name__}' with {self.numel()} "
+                f"elements cannot be converted to a single item"
+            )
+        return self.view(-1).tolist()[0]
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         return (
