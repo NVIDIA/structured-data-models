@@ -238,7 +238,7 @@ class VarLenTensor(Tensor):
         return self
 
     def detach_(self) -> "VarLenTensor":
-        self._data = self._data.detach()
+        self._data.detach_()
         return self
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:

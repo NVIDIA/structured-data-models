@@ -18,7 +18,11 @@ def test_dtype_conversion() -> None:
 
 def test_autograd() -> None:
     data = torch.arange(4, dtype=torch.float32, requires_grad=True)
-    tensor = VarLenTensor.from_tensor(data.view(2, 2).t())
+    tensor = VarLenTensor(
+        data=data,
+        offset=torch.arange(5),
+        size=(2, 2),
+    )
     assert tensor.requires_grad
 
     out = tensor.clone()
