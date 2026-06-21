@@ -1,5 +1,6 @@
 from typing import cast
 
+import pyarrow as pa
 import pytest
 import torch
 from schemafm import VarLenTensor
@@ -78,6 +79,28 @@ def test_offset_dtype() -> None:
     )
     assert isinstance(out, VarLenTensor)
     assert out._offset.dtype == torch.int64
+
+
+def test_arrow() -> None:
+    tensor = VarLenTensor.from_arrow(
+        pa.array([[1, 2], [], [3]], type=pa.list_(pa.int64())),
+    )
+    assert tensor.size() == (3,)
+    assert tensor.dtype == torch.int64
+    assert tensor._data.equal(torch.tensor([1, 2, 3]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 2, 3], dtype=torch.int32))
+    array = tensor.to_arrow()
+    assert array.type == pa.list_(pa.int64())
+    assert array.to_pylist() == [[1, 2], [], [3]]
+
+    tensor = VarLenTensor.from_arrow(
+        pa.array([[1.0, 2.0], [3.0]], type=pa.large_list(pa.float32()))[1:],
+    )
+    assert tensor.storage_offset() == 1
+    assert tensor.dtype == torch.float32
+    array = tensor.to_arrow()
+    assert array.type == pa.large_list(pa.float32())
+    assert array.to_pylist() == [[3.0]]
 
 
 def test_to_copy() -> None:

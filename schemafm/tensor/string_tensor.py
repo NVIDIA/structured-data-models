@@ -5,7 +5,7 @@ from typing import Any, ClassVar, cast
 import pyarrow as pa
 import torch
 
-from schemafm.tensor import VarLenTensor
+from schemafm.tensor.varlen_tensor import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
@@ -19,18 +19,7 @@ class StringTensor(VarLenTensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
-        if isinstance(data, pa.ChunkedArray):
-            if data.num_chunks == 1:
-                data = data.chunk(0)
-            else:
-                data = data.combine_chunks()
-
-        if not isinstance(data, pa.Array):
-            raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_arrow' to be a "
-                f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
-                f"(got '{type(data).__name__}')"
-            )
+        data, size = cls._prepare_arrow_array(data, size=size)
 
         is_string = pa.types.is_string(data.type)
         is_large_string = pa.types.is_large_string(data.type)
@@ -40,25 +29,15 @@ class StringTensor(VarLenTensor):
                 f"'string' or 'large_string' type (got '{data.type}')"
             )
 
-        if size is None:
-            size = (len(data),)
-        elif math.prod(size) != len(data):
-            raise ValueError(
-                f"Expected 'size' in '{cls.__name__}.from_arrow' to contain "
-                f"{len(data)} elements (got {math.prod(size)})"
-            )
-
         buffers = data.buffers()
 
-        return cls(
-            data=torch.frombuffer(buffers[2], dtype=torch.uint8).to(device)
-            if buffers[2].size > 0
-            else torch.empty(0, dtype=torch.uint8, device=device),
-            offset=torch.frombuffer(
-                buffer=buffers[1],
-                dtype=torch.int32 if is_string else torch.int64,
-            ).to(device),
+        return cls._from_arrow_buffers(
+            data_buffer=buffers[2],
+            data_dtype=torch.uint8,
+            offset_buffer=buffers[1],
+            offset_dtype=torch.int32 if is_string else torch.int64,
             size=size,
+            device=device,
             storage_offset=data.offset,
         )
 
