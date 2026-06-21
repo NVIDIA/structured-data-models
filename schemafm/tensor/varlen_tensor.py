@@ -274,52 +274,32 @@ class VarLenTensor(Tensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
-        def is_sequence(value: Any) -> bool:
-            return isinstance(value, Sequence) and not isinstance(
-                value, str | bytes | bytearray
-            )
-
-        def flatten(
-            values: Sequence[Any], root: bool = False
-        ) -> tuple[int, ...]:
-            if len(values) == 0:
-                if root:
-                    return (0,)
+        def flatten(seq: Sequence[Any]) -> tuple[int, ...]:
+            if len(seq) == 0:
                 offset.append(len(data))
                 return ()
 
-            is_nested = [is_sequence(value) for value in values]
-            if any(is_nested) and not all(is_nested):
-                raise ValueError(
-                    "Expected 'values' to have rectangular dimensions"
-                )
-
-            if not is_nested[0]:
-                data.extend(values)
+            if not isinstance(seq[0], Sequence):
+                data.extend(seq)
                 offset.append(len(data))
                 return ()
 
-            size: tuple[int, ...] | None = None
-            for value in values:
-                value_size = flatten(cast(Sequence[Any], value))
-                if size is None:
-                    size = value_size
-                elif value_size != size:
+            child_size: tuple[int, ...] | None = None
+            for item in seq:
+                item_size = flatten(cast(Sequence[Any], item))
+                if child_size is None:
+                    child_size = item_size
+                elif item_size != child_size:
                     raise ValueError(
-                        "Expected 'values' to have rectangular dimensions"
+                        f"'{cls.__name__}' data must be rectangular"
                     )
 
-            return (len(values), *(size or ()))
-
-        if not is_sequence(values):
-            raise TypeError(
-                f"Expected 'values' in '{cls.__name__}.from_list' to be a "
-                f"sequence (got '{type(values).__name__}')"
-            )
+            assert child_size is not None
+            return (len(seq), *child_size)
 
         data: list[Any] = []
         offset = [0]
-        size = flatten(values, root=True)
+        size = (0,) if len(values) == 0 else flatten(values)
 
         return cls(
             data=torch.tensor(data, dtype=dtype, device=device),

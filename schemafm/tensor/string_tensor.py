@@ -109,22 +109,20 @@ class StringTensor(VarLenTensor):
                 f"(got '{offset_dtype}')"
             )
 
-        def flatten(values: Any) -> tuple[int, ...]:
-            if isinstance(values, str):
+        def flatten(seq: Any) -> tuple[int, ...]:
+            if isinstance(seq, str):
                 return ()
-            if not isinstance(values, Sequence):
+            if not isinstance(seq, Sequence):
                 raise TypeError(f"'{cls.__name__}' data must contain strings")
-            if len(values) == 0:
-                return (0,)
+            if len(seq) == 0:
+                return ()
 
-            if not isinstance(values[0], Sequence) or isinstance(
-                values[0], str
-            ):
-                strings.extend(values)
-                return (len(values),)
+            if not isinstance(seq[0], Sequence) or isinstance(seq[0], str):
+                array.extend(seq)
+                return (len(seq),)
 
             child_size: tuple[int, ...] | None = None
-            for item in values:
+            for item in seq:
                 item_size = flatten(item)
                 if child_size is None:
                     child_size = item_size
@@ -134,21 +132,21 @@ class StringTensor(VarLenTensor):
                     )
 
             assert child_size is not None
-            return (len(values), *child_size)
+            return (len(seq), *child_size)
 
         if isinstance(values, str):
-            strings: list[str] = [values]
+            array: list[str] = [values]
             size: tuple[int, ...] = ()
         else:
-            strings = []
-            size = flatten(values)
+            array = []
+            size = (0,) if len(values) == 0 else flatten(values)
 
         pa_type = pa.large_string()
         if offset_dtype == torch.int32:
             pa_type = pa.string()
 
         return cls.from_arrow(
-            array=pa.array(strings, type=pa_type),
+            array=pa.array(array, type=pa_type),
             device=device,
             size=size,
         )
