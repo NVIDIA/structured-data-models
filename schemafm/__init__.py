@@ -1,7 +1,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from schemafm.stype import Stype, StypeLike
-from schemafm.tensor import StringTensor, VarLenTensor
+from schemafm.tensor import VarLenTensor, StringTensor
 
 try:
     __version__ = version("schema-fm")
