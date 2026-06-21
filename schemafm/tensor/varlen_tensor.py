@@ -274,18 +274,27 @@ class VarLenTensor(Tensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
+        def is_sequence(value: Any) -> bool:
+            return isinstance(value, Sequence) and not isinstance(
+                value, str | bytes | bytearray
+            )
+
         def flatten(seq: Sequence[Any]) -> tuple[int, ...]:
             if len(seq) == 0:
                 offset.append(len(data))
                 return ()
 
-            if not isinstance(seq[0], Sequence):
+            if not is_sequence(seq[0]):
                 data.extend(seq)
                 offset.append(len(data))
                 return ()
 
             child_size: tuple[int, ...] | None = None
             for item in seq:
+                if not is_sequence(item):
+                    raise ValueError(
+                        f"'{cls.__name__}' data must be rectangular"
+                    )
                 item_size = flatten(cast(Sequence[Any], item))
                 if child_size is None:
                     child_size = item_size
