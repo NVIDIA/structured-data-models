@@ -202,7 +202,7 @@ class VarLenTensor(Tensor):
         is_large_list = pa.types.is_large_list(array.type)
         if not is_list and not is_large_list:
             raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_arrow' to have "
+                f"Expected 'array' in '{cls.__name__}.from_arrow' to have "
                 f"'list' or 'large_list' type (got '{array.type}')"
             )
 
@@ -256,10 +256,7 @@ class VarLenTensor(Tensor):
             if offset.dtype == torch.int32
             else pa.large_list(value_type),
             length=self.numel(),
-            buffers=[
-                None,
-                pa.py_buffer(offset.numpy()),
-            ],
+            buffers=[None, pa.py_buffer(offset.numpy())],
             children=[values],
         )
 
