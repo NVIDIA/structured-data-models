@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 import pyarrow as pa
 import torch
 
-from schemafm.tensor.varlen_tensor import VarLenTensor
+from schemafm.tensor import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
@@ -64,7 +64,7 @@ class StringTensor(VarLenTensor):
             pa_type = pa.string()
 
         return cls.from_arrow(
-            data=pa.array(values, type=pa_type),
+            array=pa.array(values, type=pa_type),
             device=device,
             size=size,
         )
@@ -96,7 +96,7 @@ class StringTensor(VarLenTensor):
             pa_type = pa.string()
 
         return cls.from_arrow(
-            data=data.astype(pd.ArrowDtype(pa_type)).array.__arrow_array__(),
+            array=data.astype(pd.ArrowDtype(pa_type)).array.__arrow_array__(),
             device=device,
         )
 
