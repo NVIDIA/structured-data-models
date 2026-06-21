@@ -236,7 +236,7 @@ class VarLenTensor(Tensor):
         if self.device.type != "cpu":
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
-                f"Use Tensor.cpu() to copy the tensor to host memory first."
+                f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
             )
         if self.requires_grad:
             raise RuntimeError(
