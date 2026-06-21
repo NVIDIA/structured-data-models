@@ -439,7 +439,7 @@ class VarLenTensor(Tensor):
     def item(self) -> list[Any]:  # type: ignore
         if self.numel() != 1:
             raise RuntimeError(
-                f"a '{self.__class__.__name__}' with {self.numel()} "
+                f"'{self.__class__.__name__}' with {self.numel()} "
                 f"elements cannot be converted to a single item"
             )
         return self.view(-1).tolist()[0]
