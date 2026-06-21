@@ -260,6 +260,68 @@ class VarLenTensor(Tensor):
             children=[values],
         )
 
+    @classmethod
+    def from_list(
+        cls: type[SelfVarLenTensor],
+        values: Sequence[Any],
+        *,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+        offset_dtype: torch.dtype = torch.int64,
+    ) -> SelfVarLenTensor:
+        def is_sequence(value: Any) -> bool:
+            return isinstance(value, Sequence) and not isinstance(
+                value, str | bytes | bytearray
+            )
+
+        def flatten(
+            values: Sequence[Any], root: bool = False
+        ) -> tuple[int, ...]:
+            if len(values) == 0:
+                if root:
+                    return (0,)
+                offset.append(len(data))
+                return ()
+
+            is_nested = [is_sequence(value) for value in values]
+            if any(is_nested) and not all(is_nested):
+                raise ValueError(
+                    "Expected 'values' to have rectangular dimensions"
+                )
+
+            if not is_nested[0]:
+                data.extend(values)
+                offset.append(len(data))
+                return ()
+
+            size: tuple[int, ...] | None = None
+            for value in values:
+                value_size = flatten(cast(Sequence[Any], value))
+                if size is None:
+                    size = value_size
+                elif value_size != size:
+                    raise ValueError(
+                        "Expected 'values' to have rectangular dimensions"
+                    )
+
+            return (len(values), *(size or ()))
+
+        if not is_sequence(values):
+            raise TypeError(
+                f"Expected 'values' in '{cls.__name__}.from_list' to be a "
+                f"sequence (got '{type(values).__name__}')"
+            )
+
+        data: list[Any] = []
+        offset = [0]
+        size = flatten(values, root=True)
+
+        return cls(
+            data=torch.tensor(data, dtype=dtype, device=device),
+            offset=torch.tensor(offset, dtype=offset_dtype, device=device),
+            size=size,
+        )
+
     # Properties ##############################################################
 
     @property
@@ -351,6 +413,31 @@ class VarLenTensor(Tensor):
     def detach_(self) -> "VarLenTensor":
         self._data.detach_()
         return self
+
+    def tolist(self) -> Any:
+        def reshape(values: list[Any], size: tuple[int, ...]) -> Any:
+            if len(size) == 0:
+                return values[0]
+            if len(size) == 1:
+                return values
+
+            step = math.prod(size[1:])
+            return [
+                reshape(values[i * step : (i + 1) * step], size[1:])
+                for i in range(size[0])
+            ]
+
+        tensor = cast(VarLenTensor, self.detach().cpu())
+        values = tensor.to_arrow().to_pylist()
+        return reshape(values, tuple(self.size()))
+
+    def item(self) -> list[Any]:  # type: ignore
+        if self.numel() != 1:
+            raise RuntimeError(
+                f"a '{self.__class__.__name__}' with {self.numel()} "
+                f"elements cannot be converted to a single item"
+            )
+        return self.view(-1).tolist()[0]
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         return (

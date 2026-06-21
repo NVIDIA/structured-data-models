@@ -105,6 +105,38 @@ def test_arrow() -> None:
     assert array.to_pylist() == [[3.0]]
 
 
+def test_from_list_tolist_item() -> None:
+    tensor = VarLenTensor.from_list(
+        [[1, 2], [], [3]],
+        dtype=torch.int64,
+        offset_dtype=torch.int32,
+    )
+    assert tensor.size() == (3,)
+    assert tensor.dtype == torch.int64
+    assert tensor._data.equal(torch.tensor([1, 2, 3]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 2, 3], dtype=torch.int32))
+    assert tensor.tolist() == [[1, 2], [], [3]]
+    assert tensor[0].item() == [1, 2]
+
+    with pytest.raises(RuntimeError, match="cannot be converted"):
+        tensor.item()
+
+    tensor = VarLenTensor.from_list([[[1], [2, 3]], [[], [4]]])
+    assert tensor.size() == (2, 2)
+    assert tensor.tolist() == [[[1], [2, 3]], [[], [4]]]
+
+    tensor = VarLenTensor.from_list([1, 2, 3])
+    assert tensor.size() == ()
+    assert tensor.item() == [1, 2, 3]
+
+    tensor = VarLenTensor.from_list([[[[1, 2]]]])
+    assert tensor.size() == (1, 1, 1)
+    assert tensor.item() == [1, 2]
+
+    with pytest.raises(ValueError, match="rectangular"):
+        VarLenTensor.from_list([[[1]], [[2], [3]]])
+
+
 def test_to_copy() -> None:
     data = torch.arange(16)
     offset = torch.arange(data.numel() + 1)

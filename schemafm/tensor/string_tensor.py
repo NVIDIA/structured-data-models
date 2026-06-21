@@ -140,31 +140,8 @@ class StringTensor(VarLenTensor):
             size=size,
         )
 
-    def tolist(self) -> str | list[Any]:  # type: ignore
-        def reshape(seq: list[str], size: tuple[int, ...]) -> str | list[Any]:
-            if len(size) == 0:
-                return seq[0]
-            if len(size) == 1:
-                return seq
-
-            step = math.prod(size[1:])
-            return [
-                reshape(seq[i : i + step], size[1:])
-                for i in range(0, len(seq), step)
-            ]
-
-        return reshape(self.to_arrow().to_pylist(), tuple(self.size()))
-
     def item(self) -> str:  # type: ignore
-        if self.numel() != 1:
-            raise RuntimeError(
-                f"a Tensor with {self.numel()} elements cannot be converted "
-                f"to a string"
-            )
-
-        start = self._offset[int(self.storage_offset())]
-        end = self._offset[int(self.storage_offset()) + 1]
-        return bytes(self._data[start:end].tolist()).decode("utf-8")
+        return cast(str, super().item())
 
     def __str__(self) -> str:
         return self.item() if self.numel() == 1 else self.__repr__()
