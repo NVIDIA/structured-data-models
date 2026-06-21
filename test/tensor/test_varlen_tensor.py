@@ -83,21 +83,23 @@ def test_offset_dtype() -> None:
 
 def test_arrow() -> None:
     tensor = VarLenTensor.from_arrow(
-        pa.array([[1, 2], [], [3]], type=pa.list_(pa.int64())),
+        pa.array([[1, 2], [], None, [3]], type=pa.list_(pa.int64())),
     )
-    assert tensor.size() == (3,)
+    assert tensor.size() == (4,)
     assert tensor.dtype == torch.int64
     assert tensor._data.equal(torch.tensor([1, 2, 3]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 2, 3], dtype=torch.int32))
+    assert tensor._offset.equal(torch.tensor([0, 2, 2, 2, 3]))
     array = tensor.to_arrow()
     assert array.type == pa.list_(pa.int64())
-    assert array.to_pylist() == [[1, 2], [], [3]]
+    assert array.to_pylist() == [[1, 2], [], [], [3]]
 
     tensor = VarLenTensor.from_arrow(
         pa.array([[1.0, 2.0], [3.0]], type=pa.large_list(pa.float32()))[1:],
     )
     assert tensor.storage_offset() == 1
     assert tensor.dtype == torch.float32
+    assert tensor._data.equal(torch.tensor([1.0, 2.0, 3.0]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 3]))
     array = tensor.to_arrow()
     assert array.type == pa.large_list(pa.float32())
     assert array.to_pylist() == [[3.0]]

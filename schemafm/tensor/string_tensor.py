@@ -1,6 +1,6 @@
 import math
 from collections.abc import Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 import pyarrow as pa
 import torch
@@ -10,36 +10,6 @@ from schemafm.tensor.varlen_tensor import VarLenTensor
 
 class StringTensor(VarLenTensor):
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
-
-    @classmethod
-    def from_arrow(
-        cls,
-        data: pa.Array | pa.ChunkedArray,
-        *,
-        size: Sequence[int] | None = None,
-        device: torch.device | str | None = None,
-    ) -> "StringTensor":
-        data, size = cls._prepare_arrow_array(data, size=size)
-
-        is_string = pa.types.is_string(data.type)
-        is_large_string = pa.types.is_large_string(data.type)
-        if not is_string and not is_large_string:
-            raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_arrow' to have "
-                f"'string' or 'large_string' type (got '{data.type}')"
-            )
-
-        buffers = data.buffers()
-
-        return cls._from_arrow_buffers(
-            data_buffer=buffers[2],
-            data_dtype=torch.uint8,
-            offset_buffer=buffers[1],
-            offset_dtype=torch.int32 if is_string else torch.int64,
-            size=size,
-            device=device,
-            storage_offset=data.offset,
-        )
 
     @classmethod
     def from_strings(
@@ -128,25 +98,6 @@ class StringTensor(VarLenTensor):
         return cls.from_arrow(
             data=data.astype(pd.ArrowDtype(pa_type)).array.__arrow_array__(),
             device=device,
-        )
-
-    def to_arrow(self) -> pa.Array:
-        if self.device.type != "cpu":
-            raise TypeError(
-                f"can't convert {self.device} device type tensor to arrow. "
-                f"Use Tensor.cpu() to copy the tensor to host memory first."
-            )
-
-        data, offset = cast(StringTensor, self.contiguous()).data_offset
-
-        return pa.Array.from_buffers(
-            pa.string() if offset.dtype == torch.int32 else pa.large_string(),
-            length=self.numel(),
-            buffers=[
-                None,
-                pa.py_buffer(offset.numpy()),
-                pa.py_buffer(data.numpy()),
-            ],
         )
 
     def to_pandas(self) -> Any:

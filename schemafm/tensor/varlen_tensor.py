@@ -8,17 +8,23 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 
 aten = torch.ops.aten
-SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
-TORCH_ARROW_DTYPES = {
-    torch.uint8: pa.uint8(),
-    torch.int8: pa.int8(),
-    torch.int16: pa.int16(),
-    torch.int32: pa.int32(),
-    torch.int64: pa.int64(),
-    torch.float16: pa.float16(),
-    torch.float32: pa.float32(),
-    torch.float64: pa.float64(),
+
+ARROW_TORCH_DTYPES = {
+    pa.uint8(): torch.uint8,
+    pa.uint16(): torch.uint16,
+    pa.uint32(): torch.uint32,
+    pa.uint64(): torch.uint64,
+    pa.int8(): torch.int8,
+    pa.int16(): torch.int16,
+    pa.int32(): torch.int32,
+    pa.int64(): torch.int64,
+    pa.float16(): torch.float16,
+    pa.float32(): torch.float32,
+    pa.float64(): torch.float64,
 }
+TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
+
+SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
@@ -136,127 +142,125 @@ class VarLenTensor(Tensor):
     @classmethod
     def from_tensor(
         cls: type[SelfVarLenTensor],
-        data: Tensor,
+        tensor: Tensor,
         *,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
-        flat_data = data
-        if data.stride() != (1,) or int(data.storage_offset()) != 0:
-            span_len = _span_len(data.size(), data.stride())
-            flat_data = torch.as_strided(
-                data,
+        data = tensor
+        if tensor.stride() != (1,) or int(tensor.storage_offset()) != 0:
+            span_len = _span_len(tensor.size(), tensor.stride())
+            data = torch.as_strided(
+                tensor,
                 size=(int(data.storage_offset()) + span_len,),
                 stride=(1,),
                 storage_offset=0,
             )
         offset = torch.arange(
-            flat_data.numel() + 1,
+            data.numel() + 1,
             dtype=offset_dtype,
             device=data.device,
         )
         return cls(
-            data=flat_data,
+            data=data,
             offset=offset,
-            size=data.size(),
-            stride=data.stride(),
-            storage_offset=int(data.storage_offset()),
+            size=tensor.size(),
+            stride=tensor.stride(),
+            storage_offset=int(tensor.storage_offset()),
         )
 
     @classmethod
     def from_arrow(
         cls: type[SelfVarLenTensor],
-        data: pa.Array | pa.ChunkedArray,
+        array: pa.Array | pa.ChunkedArray,
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfVarLenTensor:
-        data, size = cls._prepare_arrow_array(data, size=size)
 
-        is_list = pa.types.is_list(data.type)
-        is_large_list = pa.types.is_large_list(data.type)
-        if not is_list and not is_large_list:
-            raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_arrow' to have "
-                f"'list' or 'large_list' type (got '{data.type}')"
-            )
-
-        values = data.values
-        if values.null_count > 0:
-            raise ValueError(f"'{cls.__name__}' cannot represent null values")
-
-        value_dtype = _torch_dtype_from_arrow_type(values.type)
-        offset_dtype = torch.int32 if is_list else torch.int64
-        return cls._from_arrow_buffers(
-            data_buffer=values.buffers()[1],
-            data_dtype=value_dtype,
-            offset_buffer=data.buffers()[1],
-            offset_dtype=offset_dtype,
-            size=size,
-            storage_offset=data.offset,
-            device=device,
-            offset_shift=values.offset,
-        )
-
-    @classmethod
-    def _prepare_arrow_array(
-        cls,
-        data: pa.Array | pa.ChunkedArray,
-        *,
-        size: Sequence[int] | None = None,
-    ) -> tuple[pa.Array, tuple[int, ...]]:
-        if isinstance(data, pa.ChunkedArray):
-            if data.num_chunks == 1:
-                data = data.chunk(0)
+        if isinstance(array, pa.ChunkedArray):
+            if array.num_chunks == 1:
+                array = array.chunk(0)
             else:
-                data = data.combine_chunks()
+                array = array.combine_chunks()
 
-        if not isinstance(data, pa.Array):
+        if not isinstance(array, pa.Array):
             raise TypeError(
-                f"Expected 'data' in '{cls.__name__}.from_arrow' to be a "
+                f"Expected 'array' in '{cls.__name__}.from_arrow' to be a "
                 f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
-                f"(got '{type(data).__name__}')"
+                f"(got '{type(array).__name__}')"
             )
 
         if size is None:
-            size = (len(data),)
-        elif math.prod(size) != len(data):
+            size = (len(array),)
+        elif math.prod(size) != len(array):
             raise ValueError(
                 f"Expected 'size' in '{cls.__name__}.from_arrow' to contain "
-                f"{len(data)} elements (got {math.prod(size)})"
+                f"{len(array)} elements (got {math.prod(size)})"
             )
 
-        return data, tuple(size)
+        is_list = pa.types.is_list(array.type)
+        is_large_list = pa.types.is_large_list(array.type)
+        if not is_list and not is_large_list:
+            raise TypeError(
+                f"Expected 'data' in '{cls.__name__}.from_arrow' to have "
+                f"'list' or 'large_list' type (got '{array.type}')"
+            )
 
-    @classmethod
-    def _from_arrow_buffers(
-        cls: type[SelfVarLenTensor],
-        *,
-        data_buffer: pa.Buffer | None,
-        data_dtype: torch.dtype,
-        offset_buffer: pa.Buffer,
-        offset_dtype: torch.dtype,
-        size: Sequence[int],
-        storage_offset: int,
-        device: torch.device | str | None = None,
-        offset_shift: int = 0,
-    ) -> SelfVarLenTensor:
-        data = (
-            torch.frombuffer(data_buffer, dtype=data_dtype).to(device)
-            if data_buffer is not None and data_buffer.size > 0
-            else torch.empty(0, dtype=data_dtype, device=device)
-        )
-        offset = torch.frombuffer(
-            buffer=offset_buffer,
-            dtype=offset_dtype,
-        ).to(device)
-        if offset_shift != 0:
-            offset = offset + offset_shift
+        if array.values.null_count > 0:
+            raise ValueError(f"'{cls.__name__}' cannot represent null values")
+
+        dtype = ARROW_TORCH_DTYPES.get(array.values.type)
+        if dtype is None:
+            raise TypeError(f"Unsupported value type '{array.values.type}'")
+        offset_dtype = torch.int32 if is_list else torch.int64
+
+        buffer = array.values.buffers()[1]
+        if buffer is not None and buffer.size > 0:
+            data = torch.frombuffer(buffer, dtype=dtype).to(device)
+        else:
+            data = torch.empty(0, dtype=dtype, device=device)
+
+        offset = torch.frombuffer(array.buffers()[1], dtype=offset_dtype)
+        if array.values.offset != 0:
+            offset = offset + array.values.offset
+        offset = offset.to(device)
 
         return cls(
             data=data,
             offset=offset,
             size=size,
-            storage_offset=storage_offset,
+            storage_offset=array.offset,
+        )
+
+    def to_arrow(self) -> pa.Array:
+        if self.device.type != "cpu":
+            raise TypeError(
+                f"can't convert {self.device} device type tensor to arrow. "
+                f"Use Tensor.cpu() to copy the tensor to host memory first."
+            )
+
+        data, offset = cast(VarLenTensor, self.contiguous()).data_offset
+
+        value_type = TORCH_ARROW_DTYPES.get(data.dtype)
+        if value_type is None:
+            raise TypeError(f"Unsupported data type '{data.dtype}'")
+
+        values = pa.Array.from_buffers(
+            value_type,
+            length=data.numel(),
+            buffers=[None, pa.py_buffer(data.numpy())],
+        )
+
+        return pa.Array.from_buffers(
+            pa.list_(value_type)
+            if offset.dtype == torch.int32
+            else pa.large_list(value_type),
+            length=self.numel(),
+            buffers=[
+                None,
+                pa.py_buffer(offset.numpy()),
+            ],
+            children=[values],
         )
 
     # Properties ##############################################################
@@ -355,36 +359,6 @@ class VarLenTensor(Tensor):
         return (
             f"{self.__class__.__name__}(size={tuple(self.size())}, "
             f"device='{self.device}')"
-        )
-
-    def to_arrow(self) -> pa.Array:
-        if self.device.type != "cpu":
-            raise TypeError(
-                f"can't convert {self.device} device type tensor to arrow. "
-                f"Use Tensor.cpu() to copy the tensor to host memory first."
-            )
-
-        data, offset = cast(VarLenTensor, self.contiguous()).data_offset
-        value_type = _arrow_type_from_torch_dtype(data.dtype)
-        values = pa.Array.from_buffers(
-            value_type,
-            length=data.numel(),
-            buffers=[
-                None,
-                pa.py_buffer(data.numpy()),
-            ],
-        )
-
-        return pa.Array.from_buffers(
-            pa.list_(value_type)
-            if offset.dtype == torch.int32
-            else pa.large_list(value_type),
-            length=self.numel(),
-            buffers=[
-                None,
-                pa.py_buffer(offset.numpy()),
-            ],
-            children=[values],
         )
 
 
@@ -777,19 +751,6 @@ def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
         stride.append(value)
         value *= dim_size
     return tuple(stride[::-1])
-
-
-def _arrow_type_from_torch_dtype(dtype: torch.dtype) -> pa.DataType:
-    if dtype not in TORCH_ARROW_DTYPES:
-        raise TypeError(f"Unsupported dtype '{dtype}' for Arrow conversion")
-    return TORCH_ARROW_DTYPES[dtype]
-
-
-def _torch_dtype_from_arrow_type(dtype: pa.DataType) -> torch.dtype:
-    for torch_dtype, arrow_type in TORCH_ARROW_DTYPES.items():
-        if dtype == arrow_type:
-            return torch_dtype
-    raise TypeError(f"Unsupported Arrow value type '{dtype}'")
 
 
 def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
