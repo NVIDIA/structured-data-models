@@ -122,6 +122,33 @@ class VarLenTensor(Tensor):
 
         return out
 
+    @classmethod
+    def from_tensor(
+        cls: type[SelfVarLenTensor],
+        data: Tensor,
+        *,
+        offset_dtype: torch.dtype = torch.int64,
+    ) -> SelfVarLenTensor:
+        span_len = _span_len(data.size(), data.stride())
+        view = torch.as_strided(
+            data,
+            size=(int(data.storage_offset() + span_len),),
+            stride=(1,),
+            storage_offset=0,
+        )
+        offset = torch.arange(
+            view.numel() + 1,
+            dtype=offset_dtype,
+            device=data.device,
+        )
+        return cls(
+            data=view,
+            offset=offset,
+            size=data.size(),
+            stride=data.stride(),
+            storage_offset=int(data.storage_offset()),
+        )
+
     # Properties ##############################################################
 
     @property
@@ -211,7 +238,7 @@ class VarLenTensor(Tensor):
         return self
 
     def detach_(self) -> "VarLenTensor":
-        self._data.detach_()
+        self._data = self._data.detach()
         return self
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:

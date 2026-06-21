@@ -7,11 +7,7 @@ from torch import Tensor
 
 
 def test_dtype_conversion() -> None:
-    tensor = VarLenTensor(
-        data=torch.arange(4),
-        offset=torch.arange(5),
-        size=(2, 2),
-    )
+    tensor = VarLenTensor.from_tensor(torch.arange(4).view(2, 2))
 
     out = tensor.to(torch.float64)
     assert isinstance(out, VarLenTensor)
@@ -22,11 +18,7 @@ def test_dtype_conversion() -> None:
 
 def test_autograd() -> None:
     data = torch.arange(4, dtype=torch.float32, requires_grad=True)
-    tensor = VarLenTensor(
-        data=data,
-        offset=torch.arange(5),
-        size=(2, 2),
-    )
+    tensor = VarLenTensor.from_tensor(data.view(2, 2).t())
     assert tensor.requires_grad
 
     out = tensor.clone()
@@ -45,10 +37,9 @@ def test_autograd() -> None:
 
 
 def test_offset_dtype() -> None:
-    tensor = VarLenTensor(
-        data=torch.arange(4),
-        offset=torch.arange(5, dtype=torch.int32),
-        size=(2, 2),
+    tensor = VarLenTensor.from_tensor(
+        torch.arange(4).view(2, 2),
+        offset_dtype=torch.int32,
     )
     out = tensor.masked_select(torch.tensor([[True, False], [False, True]]))
     assert isinstance(out, VarLenTensor)
