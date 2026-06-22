@@ -121,12 +121,3 @@ class TableTensor(Tensor):
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"
         )
-
-
-def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
-    strides: list[int] = []
-    stride = 1
-    for dim_size in reversed(size):
-        strides.append(stride)
-        stride *= dim_size
-    return tuple(reversed(strides))
