@@ -1,6 +1,6 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import pyarrow as pa
 import torch
@@ -10,6 +10,8 @@ from torch.overrides import enable_reentrant_dispatch
 aten = torch.ops.aten
 
 ARROW_TORCH_DTYPES = {
+    # TODO Support boolean dtype.
+    # TODO Support bfloat16 dtype.
     pa.uint8(): torch.uint8,
     pa.uint16(): torch.uint16,
     pa.uint32(): torch.uint32,
@@ -62,7 +64,31 @@ class VarLenTensor(Tensor):
         storage_offset: int = 0,
     ) -> SelfVarLenTensor:
 
-        stride = stride or _contiguous_stride(size)
+        size = tuple(size)
+        if any(dim_size < -1 for dim_size in size):
+            raise ValueError(f"Invalid shape dimensions (got '{size}')")
+        if size.count(-1) > 1:
+            raise ValueError("Only one dimension can be inferred")
+
+        if -1 in size:
+            if stride is not None:
+                raise ValueError("Can't infer size when stride is given")
+
+            numel = offset.numel() - 1 - storage_offset
+            known = math.prod(dim_size for dim_size in size if dim_size != -1)
+            if numel < 0 or known == 0 or numel % known != 0:
+                raise ValueError(
+                    f"Shape '{size}' is invalid for input of size {numel}"
+                )
+
+            dim = size.index(-1)
+            size = (*size[:dim], numel // known, *size[dim + 1 :])
+
+        stride = _contiguous_stride(size) if stride is None else tuple(stride)
+        if any(dim_stride < 0 for dim_stride in stride):
+            raise ValueError(
+                f"Negative strides are not supported (got '{stride}')"
+            )
 
         if (
             cls.ALLOWED_DTYPES is not None
@@ -123,10 +149,13 @@ class VarLenTensor(Tensor):
                 f"represent {torch.iinfo(offset.dtype).max} elements"
             )
 
+        # NOTE We do not validate offset values here (e.g., monotonicity) due
+        # to device synchronization.
+
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=tuple(size),
-            strides=tuple(stride),
+            size=size,
+            strides=stride,
             storage_offset=storage_offset,
             dtype=data.dtype,
             device=data.device,
@@ -206,7 +235,7 @@ class VarLenTensor(Tensor):
                 f"'list' or 'large_list' type (got '{array.type}')"
             )
 
-        if array.values.null_count > 0:
+        if array.null_count > 0 or array.values.null_count > 0:
             raise ValueError(f"'{cls.__name__}' cannot represent null values")
 
         dtype = ARROW_TORCH_DTYPES.get(array.values.type)
@@ -322,7 +351,7 @@ class VarLenTensor(Tensor):
     def data_offset(self) -> tuple[Tensor, Tensor]:
         if not self.is_contiguous():
             raise RuntimeError(
-                f"Cannot access 'data_offset' for non-contiguous "
+                f"Can't access 'data_offset' for non-contiguous "
                 f"'{self.__class__.__name__}'"
             )
 
@@ -368,6 +397,17 @@ class VarLenTensor(Tensor):
             storage_offset=storage_offset,
         )
 
+    def __reduce_ex__(self, proto: SupportsIndex) -> Any:
+        args = (
+            self.__class__,
+            self._data,
+            self._offset,
+            tuple(self.size()),
+            tuple(self.stride()),
+            int(self.storage_offset()),
+        )
+        return (_deserialize, args)
+
     @classmethod
     def __torch_dispatch__(  # type: ignore
         cls,
@@ -393,6 +433,10 @@ class VarLenTensor(Tensor):
         return self
 
     @property
+    def grad(self) -> Tensor | None:
+        return self._data.grad
+
+    @property
     def requires_grad(self) -> bool:
         return self._data.requires_grad
 
@@ -405,8 +449,10 @@ class VarLenTensor(Tensor):
         return self
 
     def detach_(self) -> "VarLenTensor":
-        self._data.detach_()
-        return self
+        raise RuntimeError(
+            f"Can't detach a '{self.__class__.__name__} in-place. Use "
+            f"'detach() instead."
+        )
 
     def tolist(self) -> Any:
         def reshape(values: list[Any], size: tuple[int, ...]) -> Any:
@@ -434,33 +480,17 @@ class VarLenTensor(Tensor):
         return self.view(-1).tolist()[0]
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
-        if tensor_contents is None:
-            tensor_contents = "..."
-            if self.numel() != 0:
-                tensor_contents += f", size={tuple(self.size())}"
-
-        out = torch._tensor_str._str(  # type: ignore[attr-defined]
-            self,
-            tensor_contents=tensor_contents,
-        )
-        if self.__class__ is VarLenTensor and f"dtype={self.dtype}" not in out:
-            out = _add_repr_suffix(out, suffix=f"dtype={self.dtype}")
-        elif self.__class__.__name__ == "StringTensor":
-            out = out.replace(f", dtype={self.dtype}", "", 1)
-
-        grad_fn = self._data.grad_fn
-        if grad_fn is None:
-            return out
-
-        grad_fn_name = type(grad_fn).__name__
-        if grad_fn_name == "CppFunction":
-            grad_fn_name = grad_fn.name().rsplit("::", 1)[-1]
-
-        return out.replace(
-            "requires_grad=True",
-            f"grad_fn=<{grad_fn_name}>",
-            1,
-        )
+        out = f"{self.__class__.__name__}(..."
+        out += f", size={tuple(self.size())}"
+        out += f", dtype={self.dtype}"
+        if self.device.type != "cpu":
+            out += f", device={self.device}"
+        if self._data.grad_fn is not None:
+            out += f", grad_fn=<{type(self._data.grad_fn).__name__}>"
+        elif self.requires_grad:
+            out += ", requires_grad=True"
+        out += ")"
+        return out
 
 
 @VarLenTensor.implements(aten._to_copy.default)
@@ -484,11 +514,11 @@ def _to_copy(
         and dtype not in input.ALLOWED_DTYPES
     ):
         raise TypeError(
-            f"Cannot convert '{input.__class__.__name__}' to dtype '{dtype}'"
+            f"Can't convert '{input.__class__.__name__}' to dtype '{dtype}'"
         )
     if layout is not None and layout != torch.strided:
         raise TypeError(
-            f"Cannot convert '{input.__class__.__name__}' to layout '{layout}'"
+            f"Can't convert '{input.__class__.__name__}' to layout '{layout}'"
         )
     if memory_format not in (torch.preserve_format, torch.contiguous_format):
         raise ValueError(
@@ -863,13 +893,21 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
-def _add_repr_suffix(out: str, suffix: str) -> str:
-    for marker in (", grad_fn=<", ", requires_grad=True"):
-        index = out.find(marker)
-        if index != -1:
-            return f"{out[:index]}, {suffix}{out[index:]}"
-
-    return f"{out[:-1]}, {suffix})"
+def _deserialize(
+    cls: type[SelfVarLenTensor],
+    data: Tensor,
+    offset: Tensor,
+    size: tuple[int, ...],
+    stride: tuple[int, ...],
+    storage_offset: int,
+) -> SelfVarLenTensor:
+    return cls(
+        data=data,
+        offset=offset,
+        size=size,
+        stride=stride,
+        storage_offset=storage_offset,
+    )
 
 
 def _layout_view(input: "VarLenTensor") -> Tensor:

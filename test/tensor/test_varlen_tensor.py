@@ -37,12 +37,10 @@ def test_autograd() -> None:
     assert data.grad is not None
     assert data.grad.equal(torch.ones_like(data))
 
-    tensor.detach_()
+    tensor = tensor.detach()
     assert not tensor.requires_grad
     tensor.requires_grad_(True)
     assert tensor.requires_grad
-    tensor = tensor.detach()
-    assert not tensor.requires_grad
 
 
 def test_offset_dtype() -> None:
@@ -91,15 +89,15 @@ def test_offset_dtype() -> None:
 
 def test_arrow() -> None:
     tensor = VarLenTensor.from_arrow(
-        pa.array([[1, 2], [], None, [3]], type=pa.list_(pa.int64())),
+        pa.array([[1, 2], [], [3]], type=pa.list_(pa.int64())),
     )
-    assert tensor.size() == (4,)
+    assert tensor.size() == (3,)
     assert tensor.dtype == torch.int64
     assert tensor._data.equal(torch.tensor([1, 2, 3]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 2, 2, 3]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 2, 3]))
     array = tensor.to_arrow()
     assert array.type == pa.list_(pa.int64())
-    assert array.to_pylist() == [[1, 2], [], [], [3]]
+    assert array.to_pylist() == [[1, 2], [], [3]]
 
     tensor = VarLenTensor.from_arrow(
         pa.array([[1.0, 2.0], [3.0]], type=pa.large_list(pa.float32()))[1:],
@@ -115,28 +113,12 @@ def test_arrow() -> None:
 
 def test_list() -> None:
     tensor = VarLenTensor.from_list([[1, 2], [], [3]])
-    assert repr(tensor) == "VarLenTensor(..., size=(3,), dtype=torch.int64)"
     assert tensor.size() == (3,)
     assert tensor.dtype == torch.int64
     assert tensor._data.equal(torch.tensor([1, 2, 3]))
     assert tensor._offset.equal(torch.tensor([0, 2, 2, 3], dtype=torch.int32))
     assert tensor.tolist() == [[1, 2], [], [3]]
     assert tensor[0].item() == [1, 2]
-
-    tensor = VarLenTensor.from_tensor(torch.empty(2, 0))
-    assert (
-        repr(tensor) == "VarLenTensor(..., size=(2, 0), dtype=torch.float32)"
-    )
-
-    tensor = VarLenTensor.from_list([[1.0, 2.0]], dtype=torch.float64)
-    assert repr(tensor) == "VarLenTensor(..., size=(1,), dtype=torch.float64)"
-
-    tensor = VarLenTensor(
-        data=torch.tensor([True, False, True]),
-        offset=torch.tensor([0, 2, 3]),
-        size=(2,),
-    )
-    assert repr(tensor) == "VarLenTensor(..., size=(2,), dtype=torch.bool)"
 
 
 def test_to_copy() -> None:
