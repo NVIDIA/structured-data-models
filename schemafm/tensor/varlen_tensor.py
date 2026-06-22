@@ -480,6 +480,7 @@ class VarLenTensor(Tensor):
         return self.view(-1).tolist()[0]
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
+        # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
