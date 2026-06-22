@@ -28,6 +28,19 @@ def test_pin_memory() -> None:
         assert tensor.pin_memory().is_pinned()
 
 
+def test_share_memory() -> None:
+    data = torch.tensor([[0, -1, 2], [2, 1, 0]])
+    categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
+    tensor = CategoricalTensor(data, categories)
+
+    assert not tensor.is_shared()
+    try:
+        tensor.share_memory_()
+        assert tensor.is_shared()
+    except RuntimeError:
+        pass
+
+
 def test_isnan() -> None:
     data = torch.tensor([[0, -1, 2], [-2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
