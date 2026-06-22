@@ -268,6 +268,6 @@ def _deserialize(
 
 
 def _maybe_wrap(input: CategoricalTensor, data: Tensor) -> Tensor:
-    if data.size(-1) == input.size(-1):
+    if data.dim() > 0 and data.size(-1) == input.size(-1):
         return input.__class__(data, input.categories)
     return data
