@@ -66,7 +66,6 @@ class CategoricalTensor(Tensor):
             storage_offset=data.storage_offset(),
             dtype=data.dtype,
             device=data.device,
-            layout=torch.strided,
             requires_grad=False,
         )
 

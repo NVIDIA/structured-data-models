@@ -77,11 +77,8 @@ class TableTensor(Tensor):
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, num_columns),
-            strides=_contiguous_stride((*size, num_columns)),
-            storage_offset=0,
             dtype=torch.uint8,
             device=numerical.device,
-            layout=torch.strided,
             requires_grad=False,
         )
 
