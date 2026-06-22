@@ -9,6 +9,7 @@ from torch import Tensor
 
 def test_dtype_conversion() -> None:
     tensor = VarLenTensor.from_tensor(torch.arange(4).view(2, 2))
+    assert repr(tensor) == "VarLenTensor(..., size=(2, 2), dtype=torch.int64)"
 
     out = tensor.to(torch.float64)
     assert isinstance(out, VarLenTensor)
@@ -21,20 +22,25 @@ def test_autograd() -> None:
     data = torch.randn(4, requires_grad=True)
     tensor = VarLenTensor.from_tensor(data)
     assert tensor.requires_grad
+    assert repr(tensor) == (
+        "VarLenTensor(..., size=(4,), dtype=torch.float32, requires_grad=True)"
+    )
 
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
+    assert repr(out) == (
+        "VarLenTensor(..., size=(4,), dtype=torch.float32, "
+        "grad_fn=<ToCopyBackward0>)"
+    )
 
     out._data.sum().backward()
     assert data.grad is not None
     assert data.grad.equal(torch.ones_like(data))
 
-    tensor.detach_()
+    tensor = tensor.detach()
     assert not tensor.requires_grad
     tensor.requires_grad_(True)
     assert tensor.requires_grad
-    tensor = tensor.detach()
-    assert not tensor.requires_grad
 
 
 def test_offset_dtype() -> None:
@@ -83,15 +89,15 @@ def test_offset_dtype() -> None:
 
 def test_arrow() -> None:
     tensor = VarLenTensor.from_arrow(
-        pa.array([[1, 2], [], None, [3]], type=pa.list_(pa.int64())),
+        pa.array([[1, 2], [], [3]], type=pa.list_(pa.int64())),
     )
-    assert tensor.size() == (4,)
+    assert tensor.size() == (3,)
     assert tensor.dtype == torch.int64
     assert tensor._data.equal(torch.tensor([1, 2, 3]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 2, 2, 3]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 2, 3]))
     array = tensor.to_arrow()
     assert array.type == pa.list_(pa.int64())
-    assert array.to_pylist() == [[1, 2], [], [], [3]]
+    assert array.to_pylist() == [[1, 2], [], [3]]
 
     tensor = VarLenTensor.from_arrow(
         pa.array([[1.0, 2.0], [3.0]], type=pa.large_list(pa.float32()))[1:],

@@ -9,6 +9,7 @@ from schemafm.tensor import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
+    # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
 
     @classmethod
@@ -48,6 +49,9 @@ class StringTensor(VarLenTensor):
                 f"Expected 'array' in '{cls.__name__}.from_arrow' to have "
                 f"'string' or 'large_string' type (got '{array.type}')"
             )
+
+        if array.null_count > 0:
+            raise ValueError(f"'{cls.__name__}' cannot represent null values")
 
         buffers = array.buffers()
 
@@ -111,11 +115,12 @@ class StringTensor(VarLenTensor):
 
         def flatten(seq: Any) -> tuple[int, ...]:
             if isinstance(seq, str):
+                array.append(seq)
                 return ()
             if not isinstance(seq, Sequence):
                 raise TypeError(f"'{cls.__name__}' data must contain strings")
             if len(seq) == 0:
-                return ()
+                return (0,)
 
             if not isinstance(seq[0], Sequence) or isinstance(seq[0], str):
                 array.extend(seq)
@@ -139,7 +144,7 @@ class StringTensor(VarLenTensor):
             size: tuple[int, ...] = ()
         else:
             array = []
-            size = (0,) if len(values) == 0 else flatten(values)
+            size = flatten(values)
 
         pa_type = pa.large_string()
         if offset_dtype == torch.int32:
@@ -156,3 +161,16 @@ class StringTensor(VarLenTensor):
 
     def __str__(self) -> str:
         return self.item() if self.numel() == 1 else self.__repr__()
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        # TODO Support tensor content printing.
+        out = f"{self.__class__.__name__}(..."
+        out += f", size={tuple(self.size())}"
+        if self.device.type != "cpu":
+            out += f", device={self.device}"
+        if self._data.grad_fn is not None:
+            out += f", grad_fn=<{type(self._data.grad_fn).__name__}>"
+        elif self.requires_grad:
+            out += ", requires_grad=True>"
+        out += ")"
+        return out

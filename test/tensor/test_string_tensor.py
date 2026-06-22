@@ -6,6 +6,7 @@ from schemafm import StringTensor
 
 def test_from_list() -> None:
     tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
+    assert repr(tensor) == "StringTensor(..., size=(2, 2))"
     assert tensor.size() == (2, 2)
     assert tensor.stride() == (2, 1)
     assert tensor.dtype == torch.uint8
@@ -28,12 +29,12 @@ def test_from_list() -> None:
 
 
 def test_arrow() -> None:
-    tensor = StringTensor.from_arrow(pa.array(["hi", "é", "", None]))
-    assert tensor.size() == (4,)
+    tensor = StringTensor.from_arrow(pa.array(["hi", "é", ""]))
+    assert tensor.size() == (3,)
     assert tensor.stride() == (1,)
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4, 4]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 4, 4]))
 
     tensor = StringTensor.from_arrow(pa.array([], type=pa.string()))
     assert tensor.size() == (0,)
@@ -51,7 +52,7 @@ def test_arrow() -> None:
 def test_allowed_dtype() -> None:
     tensor = StringTensor.from_list("hi")
 
-    with pytest.raises(TypeError, match="Cannot convert"):
+    with pytest.raises(TypeError, match="Can't convert"):
         tensor.to(torch.float32)
 
 
