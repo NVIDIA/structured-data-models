@@ -29,7 +29,7 @@ class TableTensor(Tensor):
 
     def __init__(
         self,
-        columns: Mapping[StypeLike, Sequence[str]] | None,
+        columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
         size: Sequence[int] | None = None,
@@ -46,20 +46,34 @@ class TableTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
 
-        size = size(tuple) if size is not None else size
+        size = tuple(size) if size is not None else size
+        device = torch.device(device) if device is not None else device
 
         for block in (numerical, categorical):
+            if block is None:
+                continue
+
             size = tuple(block.size()[:-1]) if size is None else size
             device = block.device if device is None else device
 
-            # TODO Check size
-            # TODO Check device
+            if size != block.size()[:-1]:
+                raise ValueError(
+                    f"Expected block size of '{size}' "
+                    f"(got '{tuple(block.size()[:-1])}')"
+                )
+            if device != block.device:
+                raise ValueError(
+                    f"Expected block to be on device '{device}' "
+                    f"(got '{block.device}')"
+                )
 
         if size is None:
             raise ValueError(
                 f"Expected 'size' in '{cls.__name__}' to be given when "
                 f"all blocks are 'None'"
             )
+        elif len(size) < 1:
+            raise ValueError("Expected table to hold at least two dimensions")
 
         if numerical is None:
             numerical = torch.empty((*size, 0), device=device)
@@ -69,10 +83,37 @@ class TableTensor(Tensor):
                 categories=(),
             )
 
-        # TODO Build columns
-        # TODO Build column loc
-        # TODO Check unique column names
-        # TODO compute global number of columns
+        columns = {
+            Stype(stype): tuple(names)
+            for stype, names in (columns or {}).items()
+        }
+        columns = {
+            Stype.numerical: tuple(columns.get(Stype.numerical, ())),
+            Stype.categorical: tuple(columns.get(Stype.categorical, ())),
+        }
+
+        if numerical.size(-1) != len(columns[Stype.numerical]):
+            raise ValueError(
+                f"Expected 'numerical' block in '{cls.__name__}' to hold "
+                f"{len(columns[Stype.numerical])} columns "
+                f"(got {numerical.size(-1)})"
+            )
+        if categorical.size(-1) != len(columns[Stype.categorical]):
+            raise ValueError(
+                f"Expected 'categorical' block in '{cls.__name__}' to hold "
+                f"{len(columns[Stype.categorical])} columns "
+                f"(got {categorical.size(-1)})"
+            )
+
+        num_columns = sum(len(names) for names in columns.values())
+        column_to_loc: dict[str, tuple[Stype, int]] = {}
+        for stype, names in columns.items():
+            for i, name in enumerate(names):
+                column_to_loc[name] = (Stype(stype), i)
+        if len(column_to_loc) != num_columns:
+            raise ValueError(
+                f"Expected column names in '{cls.__name__}' to be unique"
+            )
 
         out = Tensor._make_wrapper_subclass(
             cls,
