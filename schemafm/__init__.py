@@ -2,10 +2,10 @@ from importlib.metadata import PackageNotFoundError, version
 
 from schemafm.stype import Stype, StypeLike
 from schemafm.tensor import (
-    CategoricalTensor,
-    StringTensor,
-    TableTensor,
     VarLenTensor,
+    StringTensor,
+    CategoricalTensor,
+    TableTensor,
 )
 
 try:
