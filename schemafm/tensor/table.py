@@ -4,8 +4,8 @@ from typing import Any, ClassVar, TypeVar
 import torch
 from torch import Tensor
 
-from schemafm.stype import Stype, StypeLike
-from schemafm.tensor.categorical import CategoricalTensor
+from schemafm import Stype, StypeLike
+from schemafm.tensor import CategoricalTensor
 
 aten = torch.ops.aten
 
