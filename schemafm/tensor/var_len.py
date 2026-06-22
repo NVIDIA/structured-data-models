@@ -360,6 +360,8 @@ class VarLenTensor(Tensor):
         data = self._data[offset[0] : offset[-1]]
         return data, offset - offset[0]
 
+    # Decorators ##############################################################
+
     @classmethod
     def implements(
         cls,
