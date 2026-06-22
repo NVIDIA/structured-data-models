@@ -407,7 +407,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
     tensors = cast(Sequence[CategoricalTensor], tensors)
     dim %= tensors[0].dim()
     if dim != tensors[0].dim() - 1:
-        # NOTE We trust the user for category compatibility.
+        # NOTE We trust the user to ensure category compatibility.
         return tensors[0].__class__(data, tensors[0].categories)
 
     categories = tuple(
@@ -427,6 +427,7 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
     if dim >= tensors[0].dim():
         return data
 
+    # NOTE We trust the user to ensure category compatibility.
     return tensors[0].__class__(data, tensors[0].categories)
 
 
