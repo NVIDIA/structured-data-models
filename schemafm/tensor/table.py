@@ -1,5 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, ClassVar, NamedTuple, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 import torch
 from torch import Tensor
@@ -12,11 +12,6 @@ aten = torch.ops.aten
 SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
 
 
-class _ColumnIndex(NamedTuple):
-    stype: Stype
-    index: int
-
-
 class TableTensor(Tensor):
     HANDLED_FUNCTIONS: ClassVar[
         dict[Callable[..., Any], Callable[..., Any]]
@@ -25,7 +20,7 @@ class TableTensor(Tensor):
     _numerical: Tensor
     _categorical: CategoricalTensor
     _columns: dict[Stype, tuple[str, ...]]
-    _column_to_loc: dict[str, _ColumnIndex]
+    _column_to_loc: dict[str, tuple[Stype, int]]
 
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
