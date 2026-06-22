@@ -9,6 +9,7 @@ from schemafm.tensor import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
+    # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
 
     @classmethod
@@ -48,6 +49,9 @@ class StringTensor(VarLenTensor):
                 f"Expected 'array' in '{cls.__name__}.from_arrow' to have "
                 f"'string' or 'large_string' type (got '{array.type}')"
             )
+
+        if array.null_count > 0:
+            raise ValueError(f"'{cls.__name__}' cannot represent null values")
 
         buffers = array.buffers()
 
@@ -111,11 +115,12 @@ class StringTensor(VarLenTensor):
 
         def flatten(seq: Any) -> tuple[int, ...]:
             if isinstance(seq, str):
+                array.append(seq)
                 return ()
             if not isinstance(seq, Sequence):
                 raise TypeError(f"'{cls.__name__}' data must contain strings")
             if len(seq) == 0:
-                return ()
+                return (0,)
 
             if not isinstance(seq[0], Sequence) or isinstance(seq[0], str):
                 array.extend(seq)
@@ -139,7 +144,7 @@ class StringTensor(VarLenTensor):
             size: tuple[int, ...] = ()
         else:
             array = []
-            size = (0,) if len(values) == 0 else flatten(values)
+            size = flatten(values)
 
         pa_type = pa.large_string()
         if offset_dtype == torch.int32:
