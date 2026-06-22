@@ -146,7 +146,7 @@ def _to_copy(
     pin_memory: bool = False,
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> CategoricalTensor | Tensor:
+) -> Tensor:
 
     data = aten._to_copy.default(
         input._data,
@@ -160,12 +160,10 @@ def _to_copy(
     if data.dtype not in input.ALLOWED_DTYPES or data.layout != torch.strided:
         return data
 
-    categories = input._categories
-    if device is not None:
-        categories = tuple(
-            category.to(device=device, non_blocking=non_blocking)
-            for category in input._categories
-        )
+    categories = tuple(
+        category.to(device=device, non_blocking=non_blocking, copy=True)
+        for category in input._categories
+    )
     return input.__class__(data, categories)
 
 
