@@ -1,3 +1,5 @@
+from typing import cast
+
 import torch
 from schemafm import CategoricalTensor
 
@@ -56,7 +58,7 @@ def test_view_ops() -> None:
 
 def test_slicing_ops() -> None:
     data = torch.randint(0, 4, (2, 3, 4))
-    categories = tuple(torch.full((2,), i) for i in range(data.size(-1)))
+    categories = tuple(torch.arange(4) for _ in range(data.size(-1)))
     tensor = CategoricalTensor(data, categories)
 
     out = tensor[:, 1:]
@@ -82,6 +84,35 @@ def test_slicing_ops() -> None:
     out = tensor[..., 0]
     assert not isinstance(out, CategoricalTensor)
     assert out.size() == (2, 3)
+
+
+def test_split_ops() -> None:
+    data = torch.randint(0, 4, (2, 3, 4))
+    categories = tuple(torch.arange(4) for _ in range(data.size(-1)))
+    tensor = CategoricalTensor(data, categories)
+
+    out = cast(tuple[CategoricalTensor], tensor.unbind(0))
+    assert all(isinstance(item, CategoricalTensor) for item in out)
+    assert [item.size() for item in out] == 2 * [(3, 4)]
+    assert all(item.categories == tensor.categories for item in out)
+
+    out = tensor.unbind(-1)
+    assert all(not isinstance(item, CategoricalTensor) for item in out)
+    assert [item.size() for item in out] == 4 * [(2, 3)]
+
+    out = tensor.split(2, dim=-1)
+    assert all(isinstance(item, CategoricalTensor) for item in out)
+    assert [item.categories for item in out] == [
+        categories[:2],
+        categories[2:],
+    ]
+
+    out = tensor.split([1, 3], dim=-1)
+    assert all(isinstance(item, CategoricalTensor) for item in out)
+    assert [item.categories for item in out] == [
+        categories[:1],
+        categories[1:],
+    ]
 
 
 def test_pin_memory() -> None:

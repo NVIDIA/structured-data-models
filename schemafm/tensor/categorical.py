@@ -1,4 +1,5 @@
 from collections.abc import Callable, Sequence
+from itertools import accumulate
 from typing import Any, ClassVar, SupportsIndex, TypeVar
 
 import torch
@@ -294,6 +295,55 @@ def _narrow(
     if start < 0:
         start += input.size(dim)
     return input.__class__(data, input.categories[start : start + length])
+
+
+@CategoricalTensor.implements(aten.unbind.int)
+def _unbind(input: CategoricalTensor, dim: int = 0) -> tuple[Tensor, ...]:
+    data_list = input._data.unbind(dim)
+    dim %= input.dim()
+    if dim == input.dim() - 1:
+        return data_list
+    return tuple(input.__class__(data, input.categories) for data in data_list)
+
+
+@CategoricalTensor.implements(aten.split.Tensor)
+def _split(
+    input: CategoricalTensor,
+    split_size: int,
+    dim: int = 0,
+) -> tuple[CategoricalTensor, ...]:
+    data_list = input._data.split(split_size, dim)
+    dim %= input.dim()
+    if dim != input.dim() - 1:
+        return tuple(
+            input.__class__(data, input.categories) for data in data_list
+        )
+    return tuple(
+        input.__class__(data, input.categories[i : i + split_size])
+        for data, i in zip(data_list, range(0, input.size(dim), split_size))
+    )
+
+
+@CategoricalTensor.implements(aten.split.sizes)
+@CategoricalTensor.implements(aten.split.default)
+@CategoricalTensor.implements(aten.split_with_sizes.default)
+def _split_with_sizes(
+    input: CategoricalTensor,
+    split_sizes: Sequence[int],
+    dim: int = 0,
+) -> tuple[CategoricalTensor, ...]:
+    data_list = input._data.split(tuple(split_sizes), dim)
+    dim %= input.dim()
+    if dim != input.dim() - 1:
+        return tuple(
+            input.__class__(data, input.categories) for data in data_list
+        )
+
+    offset = (0, *accumulate(split_sizes))
+    return tuple(
+        input.__class__(data, input.categories[start:end])
+        for data, start, end in zip(data_list, offset[:-1], offset[1:])
+    )
 
 
 # Helpers #####################################################################
