@@ -196,6 +196,66 @@ def _pin_memory(input: CategoricalTensor) -> CategoricalTensor:
     )
 
 
+@CategoricalTensor.implements(aten.view.default)
+def _view(input: CategoricalTensor, size: Sequence[int]) -> Tensor:
+    return _maybe_wrap(input, input._data.view(size))
+
+
+@CategoricalTensor.implements(aten._unsafe_view.default)
+def _unsafe_view(input: CategoricalTensor, size: Sequence[int]) -> Tensor:
+    return _maybe_wrap(input, aten._unsafe_view(input._data, size))
+
+
+@CategoricalTensor.implements(aten.squeeze.default)
+def _squeeze(input: CategoricalTensor) -> Tensor:
+    return _maybe_wrap(input, input._data.squeeze())
+
+
+@CategoricalTensor.implements(aten.squeeze.dim)
+def _squeeze_dim(input: CategoricalTensor, dim: int) -> Tensor:
+    return _maybe_wrap(input, input._data.squeeze(dim))
+
+
+@CategoricalTensor.implements(aten.squeeze.dims)
+def _squeeze_dims(input: CategoricalTensor, dim: Sequence[int]) -> Tensor:
+    return _maybe_wrap(input, input._data.squeeze(tuple(dim)))
+
+
+@CategoricalTensor.implements(aten.unsqueeze.default)
+def _unsqueeze(input: CategoricalTensor, dim: int) -> Tensor:
+    return _maybe_wrap(input, input._data.unsqueeze(dim))
+
+
+@CategoricalTensor.implements(aten.expand.default)
+def _expand(
+    input: CategoricalTensor,
+    size: Sequence[int],
+    *,
+    implicit: bool = False,
+) -> Tensor:
+    data = aten.expand.default(input._data, size, implicit=implicit)
+    return _maybe_wrap(input, data)
+
+
+@CategoricalTensor.implements(aten.transpose.int)
+def _transpose(input: CategoricalTensor, dim0: int, dim1: int) -> Tensor:
+    data = input._data.transpose(dim0, dim1)
+    dim0 %= input.dim()
+    dim1 %= input.dim()
+    if dim0 != dim1 and input.dim() - 1 in (dim0, dim1):
+        return data
+    return input.__class__(data, input.categories)
+
+
+@CategoricalTensor.implements(aten.permute.default)
+def _permute(input: CategoricalTensor, dims: Sequence[int]) -> Tensor:
+    data = input._data.permute(tuple(dims))
+    dims = tuple(dim % input.dim() for dim in dims)
+    if dims[-1] != input.dim() - 1:
+        return data
+    return input.__class__(data, input.categories)
+
+
 # Helpers #####################################################################
 
 
@@ -205,3 +265,9 @@ def _deserialize(
     categories: tuple[Tensor, ...],
 ) -> SelfCategoricalTensor:
     return cls(data, categories)
+
+
+def _maybe_wrap(input: CategoricalTensor, data: Tensor) -> Tensor:
+    if data.dim() > 0 and data.size(-1) == input.size(-1):
+        return input.__class__(data, input.categories)
+    return data
