@@ -251,9 +251,9 @@ def _transpose(input: CategoricalTensor, dim0: int, dim1: int) -> Tensor:
 def _permute(input: CategoricalTensor, dims: Sequence[int]) -> Tensor:
     data = input._data.permute(tuple(dims))
     dims = tuple(dim % input.dim() for dim in dims)
-    if dims[-1] == input.dim() - 1:
-        return input.__class__(data, input.categories)
-    return data
+    if dims[-1] != input.dim() - 1:
+        return data
+    return input.__class__(data, input.categories)
 
 
 # Helpers #####################################################################
