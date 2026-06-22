@@ -163,6 +163,7 @@ class StringTensor(VarLenTensor):
         return self.item() if self.numel() == 1 else self.__repr__()
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
+        # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
         if self.device.type != "cpu":
