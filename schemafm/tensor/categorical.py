@@ -451,16 +451,3 @@ def _as_tensor(input: Tensor) -> Tensor:
     if isinstance(input, CategoricalTensor):
         return input._data
     return input
-
-
-def _categories_equal(
-    left: tuple[Tensor, ...],
-    right: tuple[Tensor, ...],
-) -> bool:
-    if len(left) != len(right):
-        return False
-
-    try:
-        return all(a.equal(b) for a, b in zip(left, right))
-    except RuntimeError:
-        return False
