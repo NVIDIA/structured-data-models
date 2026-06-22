@@ -434,9 +434,32 @@ class VarLenTensor(Tensor):
         return self.view(-1).tolist()[0]
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
-        return (
-            f"{self.__class__.__name__}(size={tuple(self.size())}, "
-            f"device='{self.device}')"
+        if tensor_contents is None:
+            tensor_contents = "..."
+            if self.numel() != 0:
+                tensor_contents += f", size={tuple(self.size())}"
+
+        out = torch._tensor_str._str(  # type: ignore[attr-defined]
+            self,
+            tensor_contents=tensor_contents,
+        )
+        if self.__class__ is VarLenTensor and f"dtype={self.dtype}" not in out:
+            out = _add_repr_suffix(out, suffix=f"dtype={self.dtype}")
+        elif self.__class__.__name__ == "StringTensor":
+            out = out.replace(f", dtype={self.dtype}", "", 1)
+
+        grad_fn = self._data.grad_fn
+        if grad_fn is None:
+            return out
+
+        grad_fn_name = type(grad_fn).__name__
+        if grad_fn_name == "CppFunction":
+            grad_fn_name = grad_fn.name().rsplit("::", 1)[-1]
+
+        return out.replace(
+            "requires_grad=True",
+            f"grad_fn=<{grad_fn_name}>",
+            1,
         )
 
 
@@ -838,6 +861,15 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
         (dim_size - 1) * dim_stride
         for dim_size, dim_stride in zip(size, stride)
     )
+
+
+def _add_repr_suffix(out: str, suffix: str) -> str:
+    for marker in (", grad_fn=<", ", requires_grad=True"):
+        index = out.find(marker)
+        if index != -1:
+            return f"{out[:index]}, {suffix}{out[index:]}"
+
+    return f"{out[:-1]}, {suffix})"
 
 
 def _layout_view(input: "VarLenTensor") -> Tensor:

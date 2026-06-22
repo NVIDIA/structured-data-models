@@ -6,6 +6,7 @@ from schemafm import StringTensor
 
 def test_from_list() -> None:
     tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
+    assert repr(tensor) == "StringTensor(..., size=(2, 2))"
     assert tensor.size() == (2, 2)
     assert tensor.stride() == (2, 1)
     assert tensor.dtype == torch.uint8

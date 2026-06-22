@@ -9,6 +9,7 @@ from torch import Tensor
 
 def test_dtype_conversion() -> None:
     tensor = VarLenTensor.from_tensor(torch.arange(4).view(2, 2))
+    assert repr(tensor) == "VarLenTensor(..., size=(2, 2), dtype=torch.int64)"
 
     out = tensor.to(torch.float64)
     assert isinstance(out, VarLenTensor)
@@ -21,9 +22,16 @@ def test_autograd() -> None:
     data = torch.randn(4, requires_grad=True)
     tensor = VarLenTensor.from_tensor(data)
     assert tensor.requires_grad
+    assert repr(tensor) == (
+        "VarLenTensor(..., size=(4,), dtype=torch.float32, requires_grad=True)"
+    )
 
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
+    assert repr(out) == (
+        "VarLenTensor(..., size=(4,), dtype=torch.float32, "
+        "grad_fn=<ToCopyBackward0>)"
+    )
 
     out._data.sum().backward()
     assert data.grad is not None
@@ -107,12 +115,28 @@ def test_arrow() -> None:
 
 def test_list() -> None:
     tensor = VarLenTensor.from_list([[1, 2], [], [3]])
+    assert repr(tensor) == "VarLenTensor(..., size=(3,), dtype=torch.int64)"
     assert tensor.size() == (3,)
     assert tensor.dtype == torch.int64
     assert tensor._data.equal(torch.tensor([1, 2, 3]))
     assert tensor._offset.equal(torch.tensor([0, 2, 2, 3], dtype=torch.int32))
     assert tensor.tolist() == [[1, 2], [], [3]]
     assert tensor[0].item() == [1, 2]
+
+    tensor = VarLenTensor.from_tensor(torch.empty(2, 0))
+    assert (
+        repr(tensor) == "VarLenTensor(..., size=(2, 0), dtype=torch.float32)"
+    )
+
+    tensor = VarLenTensor.from_list([[1.0, 2.0]], dtype=torch.float64)
+    assert repr(tensor) == "VarLenTensor(..., size=(1,), dtype=torch.float64)"
+
+    tensor = VarLenTensor(
+        data=torch.tensor([True, False, True]),
+        offset=torch.tensor([0, 2, 3]),
+        size=(2,),
+    )
+    assert repr(tensor) == "VarLenTensor(..., size=(2,), dtype=torch.bool)"
 
 
 def test_to_copy() -> None:
