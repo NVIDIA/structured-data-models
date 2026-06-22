@@ -20,6 +20,40 @@ def test_to_copy() -> None:
     assert out.dtype == torch.float32
 
 
+def test_view_ops() -> None:
+    data = torch.randint(0, 4, (2, 3, 4))
+    categories = tuple(torch.arange(4) for _ in range(data.size(-1)))
+    tensor = CategoricalTensor(data, categories)
+
+    out = tensor.view(6, 4)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (6, 4)
+
+    out = tensor.view(-1)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (24,)
+
+    out = tensor.unsqueeze(1)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 1, 3, 4)
+
+    out = tensor.unsqueeze(1).squeeze(1)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 4)
+
+    out = tensor.unsqueeze(-1)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 4, 1)
+
+    out = tensor.transpose(0, 1)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (3, 2, 4)
+
+    out = tensor.permute(2, 0, 1)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (4, 2, 3)
+
+
 def test_pin_memory() -> None:
     data = torch.tensor([[0, -1, 2], [2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
