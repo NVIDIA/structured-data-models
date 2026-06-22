@@ -1,5 +1,5 @@
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, SupportsIndex, TypeVar
 
 import torch
 from torch import Tensor
@@ -47,7 +47,6 @@ class CategoricalTensor(Tensor):
                 f"Expected 'data' in '{cls.__name__}' to have dtype "
                 f"in '{cls.ALLOWED_DTYPES}' (got '{data.dtype}')"
             )
-
         if data.dim() == 0:
             raise ValueError(
                 f"Expected '{cls.__name__}' to have at least one dimension"
@@ -80,6 +79,10 @@ class CategoricalTensor(Tensor):
     def as_tensor(self) -> Tensor:
         return self._data
 
+    @property
+    def categories(self) -> tuple[Tensor, ...]:
+        return self._categories
+
     # Decorators ##############################################################
 
     @classmethod
@@ -97,6 +100,10 @@ class CategoricalTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __reduce_ex__(self, proto: SupportsIndex) -> Any:
+        args = (self.__class__, self._data, self._categories)
+        return (_deserialize, args)
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -116,7 +123,87 @@ class CategoricalTensor(Tensor):
         )
         return func(*args, **(kwargs or {}))
 
+    def is_shared(self) -> bool:
+        return self._data.is_shared()
+
+    def share_memory_(self) -> "CategoricalTensor":
+        self._data.share_memory_()
+        return self
+
 
 @CategoricalTensor.implements(aten.isnan.default)
 def _isnan(input: CategoricalTensor) -> Tensor:
     return input._data < 0
+
+
+@CategoricalTensor.implements(aten._to_copy.default)
+def _to_copy(
+    input: CategoricalTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool = False,
+    non_blocking: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> CategoricalTensor | Tensor:
+
+    data = aten._to_copy.default(
+        input._data,
+        device=device,
+        dtype=dtype,
+        layout=layout,
+        pin_memory=pin_memory,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+    if data.dtype not in input.ALLOWED_DTYPES or data.layout != torch.strided:
+        return data
+
+    categories = input._categories
+    if device is not None:
+        categories = tuple(
+            category.to(device=device, non_blocking=non_blocking)
+            for category in input._categories
+        )
+    return input.__class__(data, categories)
+
+
+@CategoricalTensor.implements(aten.clone.default)
+def _clone(
+    input: CategoricalTensor,
+    *,
+    memory_format: torch.memory_format | None = None,
+) -> CategoricalTensor:
+    out = _to_copy(input, memory_format=memory_format)
+    assert isinstance(out, CategoricalTensor)
+    return out
+
+
+@CategoricalTensor.implements(aten.contiguous.default)
+def _contiguous(
+    input: CategoricalTensor,
+    *,
+    memory_format: torch.memory_format = torch.contiguous_format,
+) -> CategoricalTensor:
+    data = input._data.contiguous(memory_format=memory_format)
+    return input.__class__(data, input._categories)
+
+
+@CategoricalTensor.implements(aten._pin_memory.default)
+def _pin_memory(input: CategoricalTensor) -> CategoricalTensor:
+    return input.__class__(
+        input._data.pin_memory(),
+        input._categories,
+    )
+
+
+# Helpers #####################################################################
+
+
+def _deserialize(
+    cls: type[SelfCategoricalTensor],
+    data: Tensor,
+    categories: tuple[Tensor, ...],
+) -> SelfCategoricalTensor:
+    return cls(data, categories)
