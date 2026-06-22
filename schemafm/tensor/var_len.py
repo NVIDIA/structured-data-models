@@ -689,6 +689,17 @@ def _unsqueeze(input: VarLenTensor, dim: int) -> VarLenTensor:
     return _from_layout_view(input, view)
 
 
+@VarLenTensor.implements(aten.expand.default)
+def _expand(
+    input: VarLenTensor,
+    size: Sequence[int],
+    *,
+    implicit: bool = False,
+) -> VarLenTensor:
+    view = aten.expand.default(_layout_view(input), size, implicit=implicit)
+    return _from_layout_view(input, view)
+
+
 @VarLenTensor.implements(aten.t.default)
 def _t(input: VarLenTensor) -> VarLenTensor:
     view = _layout_view(input).t()
@@ -768,17 +779,6 @@ def _split_with_sizes(
         _from_layout_view(input, view)
         for view in _layout_view(input).split(tuple(split_sizes), dim)
     )
-
-
-@VarLenTensor.implements(aten.expand.default)
-def _expand(
-    input: VarLenTensor,
-    size: Sequence[int],
-    *,
-    implicit: bool = False,
-) -> VarLenTensor:
-    view = aten.expand.default(_layout_view(input), size, implicit=implicit)
-    return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.masked_select.default)

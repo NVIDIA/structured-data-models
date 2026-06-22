@@ -54,6 +54,36 @@ def test_view_ops() -> None:
     assert out.size() == (4, 2, 3)
 
 
+def test_slicing_ops() -> None:
+    data = torch.randint(0, 4, (2, 3, 4))
+    categories = tuple(torch.full((2,), i) for i in range(data.size(-1)))
+    tensor = CategoricalTensor(data, categories)
+
+    out = tensor[:, 1:]
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 2, 4)
+    assert out.categories == tensor.categories
+
+    out = tensor[..., 1::2]
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 2)
+    assert out.categories == categories[1::2]
+
+    out = tensor.narrow(-1, 1, 2)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 2)
+    assert out.categories == categories[1:3]
+
+    out = tensor[0]
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (3, 4)
+    assert out.categories == tensor.categories
+
+    out = tensor[..., 0]
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3)
+
+
 def test_pin_memory() -> None:
     data = torch.tensor([[0, -1, 2], [2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
