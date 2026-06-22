@@ -346,6 +346,58 @@ def _split_with_sizes(
     )
 
 
+@CategoricalTensor.implements(aten.index_select.default)
+def _index_select(
+    input: CategoricalTensor,
+    dim: int,
+    index: Tensor,
+) -> CategoricalTensor:
+    data = input._data.index_select(dim, index)
+    dim %= input.dim()
+    if dim != input.dim() - 1:
+        return input.__class__(data, input.categories)
+    categories = tuple(input.categories[i] for i in index.tolist())
+    return input.__class__(data, categories)
+
+
+@CategoricalTensor.implements(aten.index.Tensor)
+def _index(
+    input: CategoricalTensor,
+    indices: Sequence[Tensor | None],
+) -> Tensor:
+    data = aten.index.Tensor(input._data, indices)
+
+    current_dim = 0
+    has_other_index = False
+    category_index: Tensor | None = None
+    for index in indices:
+        if index is None:
+            current_dim += 1
+            continue
+
+        # Check whether we index the category dimension:
+        num_indexed_dims = index.dim() if index.dtype == torch.bool else 1
+        if current_dim <= input.dim() - 1 < current_dim + num_indexed_dims:
+            if num_indexed_dims != 1:
+                return data
+            category_index = index
+        else:
+            has_other_index = True
+        current_dim += num_indexed_dims
+
+    if category_index is None:
+        return _maybe_wrap(input, data)
+
+    if has_other_index or category_index.dim() != 1:
+        return data
+
+    if category_index.dtype == torch.bool:
+        category_index = category_index.nonzero().view(-1)
+
+    categories = tuple(input.categories[i] for i in category_index.tolist())
+    return input.__class__(data, categories)
+
+
 # Helpers #####################################################################
 
 

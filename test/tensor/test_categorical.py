@@ -115,6 +115,47 @@ def test_split_ops() -> None:
     ]
 
 
+def test_index_ops() -> None:
+    data = torch.randint(0, 4, (2, 3, 4))
+    categories = tuple(torch.arange(4) for _ in range(data.size(-1)))
+    tensor = CategoricalTensor(data, categories)
+
+    out = tensor.index_select(1, torch.tensor([2, 0]))
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 2, 4)
+    assert out.categories == tensor.categories
+
+    out = tensor.index_select(-1, torch.tensor([2, 0]))
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 2)
+    assert out.categories == (categories[2], categories[0])
+
+    out = tensor[[1, 0]]
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 4)
+    assert out.categories == tensor.categories
+
+    out = tensor[..., [2, 0]]
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 2)
+    assert out.categories == (categories[2], categories[0])
+
+    out = tensor[..., [True, False, True, False]]
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 2)
+    assert out.categories == (categories[0], categories[2])
+
+    out = tensor[[1, 0], :, [2, 1]]
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3)
+
+    mask = torch.zeros_like(data, dtype=torch.bool)
+    mask[0, :2] = True
+    out = tensor[mask]
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (8,)
+
+
 def test_pin_memory() -> None:
     data = torch.tensor([[0, -1, 2], [2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
