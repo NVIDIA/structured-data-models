@@ -1,5 +1,5 @@
-from schemafm.tensor.varlen_tensor import VarLenTensor
-from schemafm.tensor.string_tensor import StringTensor
+from schemafm.tensor.var_len import VarLenTensor
+from schemafm.tensor.string import StringTensor
 
 __all__ = [
     "StringTensor",
