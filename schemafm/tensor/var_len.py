@@ -44,7 +44,7 @@ class VarLenTensor(Tensor):
     # Constructors ############################################################
 
     def __init__(
-        cls,
+        self,
         data: Tensor,
         offset: Tensor,
         size: Sequence[int],
@@ -159,7 +159,6 @@ class VarLenTensor(Tensor):
             storage_offset=storage_offset,
             dtype=data.dtype,
             device=data.device,
-            layout=torch.strided,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
 

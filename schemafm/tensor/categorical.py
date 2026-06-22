@@ -31,7 +31,7 @@ class CategoricalTensor(Tensor):
     # Constructors ############################################################
 
     def __init__(
-        cls,
+        self,
         data: Tensor,
         categories: Sequence[Tensor],
     ) -> None:
@@ -66,7 +66,6 @@ class CategoricalTensor(Tensor):
             storage_offset=data.storage_offset(),
             dtype=data.dtype,
             device=data.device,
-            layout=torch.strided,
             requires_grad=False,
         )
 
