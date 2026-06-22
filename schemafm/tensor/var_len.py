@@ -911,15 +911,6 @@ def _deserialize(
     )
 
 
-def _add_repr_suffix(out: str, suffix: str) -> str:
-    for marker in (", grad_fn=<", ", requires_grad=True"):
-        index = out.find(marker)
-        if index != -1:
-            return f"{out[:index]}, {suffix}{out[index:]}"
-
-    return f"{out[:-1]}, {suffix})"
-
-
 def _layout_view(input: "VarLenTensor") -> Tensor:
     return torch.as_strided(
         input._offset,
