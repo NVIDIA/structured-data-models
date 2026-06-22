@@ -77,7 +77,7 @@ class TableTensor(Tensor):
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, num_columns),
-            dtype=torch.uint8,
+            dtype=torch.uint8,  # NOTE Dummy. DO NOT USE.
             device=numerical.device,
             requires_grad=False,
         )
