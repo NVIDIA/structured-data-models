@@ -44,7 +44,7 @@ class VarLenTensor(Tensor):
     # Constructors ############################################################
 
     def __init__(
-        cls,
+        self,
         data: Tensor,
         offset: Tensor,
         size: Sequence[int],

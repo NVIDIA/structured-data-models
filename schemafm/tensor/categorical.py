@@ -31,7 +31,7 @@ class CategoricalTensor(Tensor):
     # Constructors ############################################################
 
     def __init__(
-        cls,
+        self,
         data: Tensor,
         categories: Sequence[Tensor],
     ) -> None:

@@ -28,7 +28,7 @@ class TableTensor(Tensor):
     # Constructors ############################################################
 
     def __init__(
-        cls,
+        self,
         columns: Mapping[StypeLike, Sequence[str]] | None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
