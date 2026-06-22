@@ -156,6 +156,41 @@ def test_index_ops() -> None:
     assert out.size() == (8,)
 
 
+def test_cat_stack() -> None:
+    data1 = torch.randint(0, 4, (2, 3, 4))
+    data2 = torch.randint(0, 4, (2, 3, 4))
+    categories = tuple(torch.arange(4) for _ in range(data1.size(-1)))
+    tensor1 = CategoricalTensor(data1, categories)
+    tensor2 = CategoricalTensor(data2, categories)
+
+    out = torch.cat([tensor1, tensor2], dim=0)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (4, 3, 4)
+    assert out.categories == categories
+
+    out = torch.cat([tensor1, data2], dim=0)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (4, 3, 4)
+
+    out = torch.cat([tensor1, tensor2], dim=-1)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 8)
+    assert out.categories == categories + categories
+
+    out = torch.stack([tensor1, tensor2], dim=1)
+    assert isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 2, 3, 4)
+    assert out.categories == categories
+
+    out = torch.stack([tensor1, data2], dim=1)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 2, 3, 4)
+
+    out = torch.stack([tensor1, tensor2], dim=-1)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.size() == (2, 3, 4, 2)
+
+
 def test_pin_memory() -> None:
     data = torch.tensor([[0, -1, 2], [2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))

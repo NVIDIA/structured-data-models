@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
-from itertools import accumulate
-from typing import Any, ClassVar, SupportsIndex, TypeVar
+from itertools import accumulate, chain
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -398,6 +398,39 @@ def _index(
     return input.__class__(data, categories)
 
 
+@CategoricalTensor.implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
+    data = torch.cat([_as_tensor(tensor) for tensor in tensors], dim=dim)
+    if not all(isinstance(tensor, CategoricalTensor) for tensor in tensors):
+        return data
+
+    tensors = cast(Sequence[CategoricalTensor], tensors)
+    dim %= tensors[0].dim()
+    if dim != tensors[0].dim() - 1:
+        # NOTE We trust the user to ensure category compatibility.
+        return tensors[0].__class__(data, tensors[0].categories)
+
+    categories = tuple(
+        chain.from_iterable(tensor.categories for tensor in tensors)
+    )
+    return tensors[0].__class__(data, categories)
+
+
+@CategoricalTensor.implements(aten.stack.default)
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
+    data = torch.stack([_as_tensor(tensor) for tensor in tensors], dim=dim)
+    if not all(isinstance(tensor, CategoricalTensor) for tensor in tensors):
+        return data
+
+    tensors = cast(Sequence[CategoricalTensor], tensors)
+    dim %= tensors[0].dim() + 1
+    if dim >= tensors[0].dim():
+        return data
+
+    # NOTE We trust the user to ensure category compatibility.
+    return tensors[0].__class__(data, tensors[0].categories)
+
+
 # Helpers #####################################################################
 
 
@@ -413,3 +446,9 @@ def _maybe_wrap(input: CategoricalTensor, data: Tensor) -> Tensor:
     if data.dim() > 0 and data.size(-1) == input.size(-1):
         return input.__class__(data, input.categories)
     return data
+
+
+def _as_tensor(input: Tensor) -> Tensor:
+    if isinstance(input, CategoricalTensor):
+        return input._data
+    return input
