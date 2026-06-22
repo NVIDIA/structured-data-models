@@ -1,6 +1,6 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import pyarrow as pa
 import torch
@@ -397,7 +397,7 @@ class VarLenTensor(Tensor):
             storage_offset=storage_offset,
         )
 
-    def __reduce_ex__(self, proto: int) -> Any:
+    def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
             self.__class__,
             self._data,
