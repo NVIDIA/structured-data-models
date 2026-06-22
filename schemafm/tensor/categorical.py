@@ -256,6 +256,46 @@ def _permute(input: CategoricalTensor, dims: Sequence[int]) -> Tensor:
     return input.__class__(data, input.categories)
 
 
+@CategoricalTensor.implements(aten.select.int)
+def _select(input: CategoricalTensor, dim: int, index: int) -> Tensor:
+    data = input._data.select(dim, index)
+    dim %= input.dim()
+    if dim == input.dim() - 1:
+        return data
+    return input.__class__(data, input.categories)
+
+
+@CategoricalTensor.implements(aten.slice.Tensor)
+def _slice(
+    input: CategoricalTensor,
+    dim: int = 0,
+    start: int | None = None,
+    end: int | None = None,
+    step: int = 1,
+) -> CategoricalTensor:
+    data = aten.slice.Tensor(input._data, dim, start, end, step)
+    dim %= input.dim()
+    if dim != input.dim() - 1:
+        return input.__class__(data, input.categories)
+    return input.__class__(data, input.categories[slice(start, end, step)])
+
+
+@CategoricalTensor.implements(aten.narrow.default)
+def _narrow(
+    input: CategoricalTensor,
+    dim: int,
+    start: int,
+    length: int,
+) -> CategoricalTensor:
+    data = input._data.narrow(dim, start, length)
+    dim %= input.dim()
+    if dim != input.dim() - 1:
+        return input.__class__(data, input.categories)
+    if start < 0:
+        start += input.size(dim)
+    return input.__class__(data, input.categories[start : start + length])
+
+
 # Helpers #####################################################################
 
 
