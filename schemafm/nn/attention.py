@@ -1,11 +1,16 @@
 """Attention modules for structured tensor models."""
 
-from typing import Any, cast
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
+
+if TYPE_CHECKING:
+    from schemafm.nn.rope import RotaryEmbedding
 
 
 class QASSMax(torch.nn.Module):
@@ -213,3 +218,109 @@ class SDPA(torch.nn.Module):
         ).transpose(-3, -2)  # [B, Q, H, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, H, C]
+
+
+class Attention(torch.nn.Module):
+    r"""Multi-head attention layer.
+
+    This module owns the query, key, value, and output projections. When
+    ``key_value`` is omitted, queries, keys, and values are projected from the
+    same input tensor. When ``key_value`` is passed, it is interpreted as
+    unprojected context states from which keys and values are produced.
+
+    Args:
+        channels: The number of input and output channels.
+        num_heads: The number of attention heads.
+        qassmax: Whether to scale queries with :class:`QASSMax`.
+        device: The device to use for module parameters.
+        dtype: The dtype to use for module parameters.
+
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        num_heads: int,
+        qassmax: bool = False,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        if channels % num_heads != 0:
+            raise ValueError(
+                f"`channels` ({channels}) must be divisible by `num_heads` "
+                f"({num_heads})"
+            )
+
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.num_heads = num_heads
+        self.qkv_lin = Linear(channels, 3 * channels, **factory_kwargs)
+        self.sdpa = SDPA(
+            channels=channels // num_heads,
+            num_heads=num_heads,
+            qassmax=qassmax,
+            **factory_kwargs,
+        )
+        self.out_lin = Linear(channels, channels, **factory_kwargs)
+
+        torch.nn.init.zeros_(self.out_lin.weight)
+        torch.nn.init.zeros_(self.out_lin.bias)
+
+    def forward(
+        self,
+        query: Tensor,  # [..., Q, C]
+        key_value: Tensor | None = None,  # [..., KV, C]
+        seqused_key_value: Tensor | None = None,  # [...]
+        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        rope: RotaryEmbedding | None = None,
+    ) -> Tensor:  # [..., Q, C]
+        r"""Forward pass of multi-head attention layer.
+
+        Args:
+            query: Unprojected query-side hidden states with shape
+                ``[..., Q, C]``.
+            key_value: Optional unprojected key/value-side hidden states with
+                shape ``[..., KV, C]``. If omitted, ``query`` is used for
+                self-attention.
+            seqused_key_value: Optional valid key/value lengths with shape
+                ``[...]`` and dtype ``torch.int32``.
+            attn_mask: Optional boolean attention mask with shape
+                ``[..., Q, KV]``. Entries set to ``True`` participate in
+                attention.
+            rope: Optional rotary positional embedding applied after
+                projection.
+
+        Returns:
+            Tensor with shape ``[..., Q, C]``.
+
+        """
+        if key_value is None:
+            query, key, value = self.qkv_lin(query).chunk(chunks=3, dim=-1)
+        else:
+            sections = [query.size(-1), 2 * query.size(-1)]
+            q_weight, kv_weight = self.qkv_lin.weight.split(sections, dim=0)
+            q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
+            query = F.linear(query, q_weight, q_bias)
+            key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
+
+        # [..., S, C] -> [..., S, H, C // H]
+        query = query.unflatten(-1, [self.num_heads, -1])
+        key = key.unflatten(-1, [self.num_heads, -1])
+        value = value.unflatten(-1, [self.num_heads, -1])
+
+        if rope is not None:
+            query = rope(query)
+            key = rope(key)
+            assert query.dtype == key.dtype == value.dtype
+
+        out = self.sdpa(
+            query=query,  # [..., Q, H, C // H]
+            key=key,  # [..., KV, H, C // H]
+            value=value,  # [..., KV, H, C // H]
+            seqused_key_value=seqused_key_value,  # [...]
+            attn_mask=attn_mask,  # [..., Q, KV]
+        )  # [..., Q, H, C // H]
+
+        out = out.flatten(-2, -1)  # [..., Q, C]
+        return self.out_lin(out)  # [..., Q, C]
