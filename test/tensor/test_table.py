@@ -30,9 +30,9 @@ def test_init() -> None:
     assert tensor.size() == (2, 4)
     assert tensor.dtype == torch.float32
     assert tensor.device == torch.device("cpu")
-    assert tensor._numerical.size() == (2, 2)
-    assert tensor._categorical.size() == (2, 2)
-    assert tensor._columns == {
+    assert tensor.numerical.size() == (2, 2)
+    assert tensor.categorical.size() == (2, 2)
+    assert tensor.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
     }
@@ -52,9 +52,9 @@ def test_empty() -> None:
 
     tensor = TableTensor(size=(1, 4))
     assert tensor.size() == (1, 4, 0)
-    assert tensor._numerical.size() == (1, 4, 0)
-    assert tensor._categorical.size() == (1, 4, 0)
-    assert tensor._columns == {
+    assert tensor.numerical.size() == (1, 4, 0)
+    assert tensor.categorical.size() == (1, 4, 0)
+    assert tensor.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
     }
@@ -95,13 +95,13 @@ def test_save_load() -> None:
 
     assert isinstance(out, TableTensor)
     assert out.size() == tensor.size()
-    assert out._columns == tensor._columns
+    assert out.numerical.equal(tensor.numerical)
+    assert out.categorical.as_tensor().equal(tensor.categorical.as_tensor())
+    assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
-    assert out._numerical.equal(tensor._numerical)
-    assert out._categorical.as_tensor().equal(tensor._categorical.as_tensor())
     for category1, category2 in zip(
-        out._categorical.categories,
-        tensor._categorical.categories,
+        out.categorical.categories,
+        tensor.categorical.categories,
     ):
         assert category1.equal(category2)
 
@@ -122,44 +122,31 @@ def test_to_copy() -> None:
     out = tensor.to(torch.float64)
 
     assert isinstance(out, TableTensor)
-    assert out._numerical.dtype == torch.float64
-    assert out._categorical.dtype == torch.int32
-    assert out._columns == tensor._columns
+    assert out.dtype == torch.float64
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.dtype == torch.int32
+    assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
 
 
 def test_clone_contiguous() -> None:
-    numerical = torch.randn(2, 4)[:, ::2]
-    categorical = CategoricalTensor(
-        data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32).t(),
-        categories=(torch.arange(2), torch.arange(2)),
-    )
     tensor = TableTensor(
-        columns={
-            "numerical": ["age", "income"],
-            "categorical": ["country", "segment"],
-        },
-        numerical=numerical,
-        categorical=categorical,
+        columns={"numerical": ["age", "income"]},
+        numerical=torch.randn(2, 4)[:, ::2],
     )
-
-    assert not tensor.is_contiguous()
 
     out = tensor.clone()
     assert isinstance(out, TableTensor)
-    assert out._numerical.equal(tensor._numerical)
-    assert out._numerical.data_ptr() != tensor._numerical.data_ptr()
-    assert out._categorical.as_tensor().equal(tensor._categorical.as_tensor())
-    assert out._categorical.as_tensor().data_ptr() != (
-        tensor._categorical.as_tensor().data_ptr()
-    )
+    assert out.numerical.equal(tensor.numerical)
+    assert out.numerical.data_ptr() != tensor.numerical.data_ptr()
 
+    assert not tensor.is_contiguous()
+    assert not tensor.numerical.is_contiguous()
     out = tensor.contiguous()
     assert isinstance(out, TableTensor)
+    assert out.numerical.equal(tensor.numerical)
     assert out.is_contiguous()
-    assert out._numerical.is_contiguous()
-    assert out._categorical.as_tensor().is_contiguous()
-    assert out._columns == tensor._columns
+    assert out.numerical.is_contiguous()
 
 
 def test_pin_memory() -> None:
