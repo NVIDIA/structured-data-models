@@ -222,6 +222,8 @@ class TableTensor(Tensor):
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
     ) -> "TableTensor":
+        if self.is_contiguous(memory_format=memory_format):
+            return self
         return _contiguous(self, memory_format=memory_format)
 
     def tolist() -> Any:
