@@ -105,26 +105,26 @@ def test_sdpa() -> None:
     )
     torch.testing.assert_close(out, expected)
 
-    # Decode-style broadcast: four candidate continuations share one KV cache.
-    prompt_count = 2
-    candidate_count = 4
-    decode_query_len = 1
-    cache_len = 5
+    # Test rows share the same in-context training examples.
+    batch_size = 2
+    num_test = 4
+    num_queries = 1
+    num_train = 5
     query = torch.randn(
-        prompt_count,
-        candidate_count,
-        decode_query_len,
+        batch_size,
+        num_test,
+        num_queries,
         num_heads,
         channels,
     )
-    key = torch.randn(prompt_count, 1, cache_len, num_heads, channels)
-    value = torch.randn(prompt_count, 1, cache_len, num_heads, channels)
+    key = torch.randn(batch_size, 1, num_train, num_heads, channels)
+    value = torch.randn(batch_size, 1, num_train, num_heads, channels)
 
     out = module(query=query, key=key, value=value)
     expected = reference_sdpa(
         query=query,
-        key=key.expand(-1, candidate_count, -1, -1, -1),
-        value=value.expand(-1, candidate_count, -1, -1, -1),
+        key=key.expand(-1, num_test, -1, -1, -1),
+        value=value.expand(-1, num_test, -1, -1, -1),
     )
     torch.testing.assert_close(out, expected)
 
