@@ -1,3 +1,4 @@
+import math
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
@@ -329,6 +330,139 @@ def _is_pinned(input: TableTensor) -> bool:
 @TableTensor.implements(aten._pin_memory.default)
 def _pin_memory(input: TableTensor) -> TableTensor:
     blocks = {stype: tensor.pin_memory() for stype, tensor in input.items()}
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.view.default)
+def _view(input: TableTensor, size: Sequence[int]) -> TableTensor:
+    size = tuple(size)
+    for i, dim_size in enumerate(size):
+        if dim_size < -1:
+            raise RuntimeError(
+                f"Invalid shape dimension {dim_size} at index {i} of shape "
+                f"{size}"
+            )
+
+    if size.count(-1) > 1:
+        raise RuntimeError("Only one dimension can be inferred")
+
+    if -1 in size:
+        known = math.prod(dim_size for dim_size in size if dim_size != -1)
+        if known == 0:
+            raise RuntimeError(
+                f"Cannot reshape tensor of {input.numel()} elements into "
+                f"shape {size} because the unspecified dimension size -1 can "
+                f"be any value and is ambiguous"
+            )
+        if input.numel() % known != 0:
+            raise RuntimeError(
+                f"Shape {size} is invalid for input of size {input.numel()}"
+            )
+        dim = size.index(-1)
+        size = (*size[:dim], input.numel() // known, *size[dim + 1 :])
+
+    if len(size) == 0 or size[-1] != input.size(-1):
+        _columns = "column" if input.size(-1) == 1 else "columns"
+        raise RuntimeError(
+            f"Can't reshape '{input.__class__.__name__}' with "
+            f"{input.size(-1)} {_columns} into shape {size}"
+        )
+
+    blocks = {
+        stype: tensor.view((*size[:-1], tensor.size(-1)))
+        for stype, tensor in input.items()
+    }
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten._unsafe_view.default)
+def _unsafe_view(input: TableTensor, size: Sequence[int]) -> TableTensor:
+    return _view(input, size)
+
+
+@TableTensor.implements(aten.squeeze.default)
+def _squeeze(input: TableTensor) -> TableTensor:
+    return _squeeze_dims(input, range(input.dim() - 1))
+
+
+@TableTensor.implements(aten.squeeze.dim)
+def _squeeze_dim(input: TableTensor, dim: int) -> TableTensor:
+    blocks = {stype: tensor.squeeze(dim) for stype, tensor in input.items()}
+
+    if dim % input.dim() == input.dim() - 1:
+        raise RuntimeError(
+            f"Can't squeeze the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.squeeze.dims)
+def _squeeze_dims(input: TableTensor, dim: Sequence[int]) -> TableTensor:
+    dims = tuple(dim)
+    blocks = {stype: tensor.squeeze(dims) for stype, tensor in input.items()}
+
+    if input.dim() - 1 in tuple(dim % input.dim() for dim in dims):
+        raise RuntimeError(
+            f"Can't squeeze the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.unsqueeze.default)
+def _unsqueeze(input: TableTensor, dim: int) -> TableTensor:
+    blocks = {stype: tensor.unsqueeze(dim) for stype, tensor in input.items()}
+
+    if dim % (input.dim() + 1) == input.dim():
+        raise RuntimeError(
+            f"Can't unsqueeze after the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.expand.default)
+def _expand(
+    input: TableTensor,
+    size: Sequence[int],
+    *,
+    implicit: bool = False,
+) -> TableTensor:
+    size = tuple(size)
+    if len(size) == 0 or size[-1] not in (-1, input.size(-1)):
+        _columns = "column" if input.size(-1) == 1 else "columns"
+        raise RuntimeError(
+            f"Can't expand '{input.__class__.__name__}' with "
+            f"{input.size(-1)} {_columns} to shape {size}"
+        )
+
+    blocks = {
+        stype: aten.expand.default(
+            tensor,
+            (*size[:-1], tensor.size(-1)),
+            implicit=implicit,
+        )
+        for stype, tensor in input.items()
+    }
     return input.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
         **blocks,

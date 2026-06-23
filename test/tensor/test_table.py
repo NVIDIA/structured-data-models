@@ -149,6 +149,43 @@ def test_clone_contiguous() -> None:
     assert out.numerical.is_contiguous()
 
 
+def test_view_ops() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 3, 2),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 3, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = tensor.view(-1, 3)
+
+    assert isinstance(out, TableTensor)
+    assert out.size() == (6, 3)
+    assert out.numerical.size() == (6, 2)
+    assert out.categorical.size() == (6, 1)
+    assert out.columns == tensor.columns
+
+    with pytest.raises(RuntimeError, match="Can't reshape"):
+        _ = tensor.view(-1)
+
+    out = tensor.unsqueeze(0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (1, 2, 3, 3)
+
+    out = tensor.squeeze()
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 3)
+
+    out = tensor.unsqueeze(1).expand(-1, 4, 3, -1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 4, 3, 3)
+
+
 def test_pin_memory() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
