@@ -10,12 +10,7 @@ from torch import Tensor
     "key_len_fn",
     [
         lambda: 4,
-        lambda: torch.tensor(
-            [
-                [1, 2, 0],
-                [3, 4, 1]
-            ]
-        ),
+        lambda: torch.tensor([[1, 2, 0], [3, 4, 1]]),
         lambda: torch.tensor([[4], [1]], dtype=torch.int32),
     ],
 )
