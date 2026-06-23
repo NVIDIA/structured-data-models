@@ -24,7 +24,7 @@ def test_qassmax(key_len_fn: Callable[[], Tensor | int]) -> None:
     num_heads = 3
     module = QASSMax(channels=channels, num_heads=num_heads, hidden_channels=4)
 
-    query = torch.arange(
+    query = torch.randn(
         2 * 3 * num_heads * channels,
         dtype=torch.float32,
     ).reshape(2, 3, num_heads, channels)
