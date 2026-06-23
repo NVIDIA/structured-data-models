@@ -28,7 +28,7 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install '.[test]'
+          uv pip install --torch-backend=cpu '.[test]'
 
       - name: Run tests
         run: |

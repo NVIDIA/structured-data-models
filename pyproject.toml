@@ -73,24 +73,32 @@ testpaths = ["test"]
 xfail_strict = true
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
-src=["schema-fm", "test"]
-line-length=79
-indent-width=4
-target-version="py310"
+src = ["pyproject.toml", "schemafm", "test"]
+line-length = 79
+indent-width = 4
+target-version = "py310"
 
 [tool.ruff.lint]
 # https://docs.astral.sh/ruff/rules/
 select = [
+    "B",    # bugbear
+    "BLE",  # blind-except
+    "C4",   # comprehensions
+    "D",    # pydocstyle
     "E",    # pycodestyle errors
     "F",    # pyflakes
-    "W",    # pycodestyle warnings
-    "D",    # pydocstyle
     "I",    # import sorting
-    "B",    # bugbear
-    "UP",   # pyupgrade
-    "C4",   # comprehensions
-    "SIM",  # simplification
+    "NPY",  # numpy-specific rules
+    "PIE",  # flake8-pie
+    "PT",   # pytest style
+    "RET",  # return statement style
     "RUF",  # ruff-specific rules
+    "SIM",  # simplification
+    "T10",  # flake8-debugger
+    "T20",  # flake8-print
+    "UP",   # pyupgrade
+    "W",    # pycodestyle warnings
+    "YTT",  # flake8-2020
 ]
 ignore = [
     "B905",  # Ignore "zip() without explicit `strict`"

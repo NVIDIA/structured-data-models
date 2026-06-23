@@ -34,7 +34,7 @@ jobs:
 
       - name: Install package and pre-commit
         run: |
-          uv pip install . pre-commit
+          uv pip install --torch-backend=cpu . pre-commit
 
       - name: Run pre-commit
         run: |
