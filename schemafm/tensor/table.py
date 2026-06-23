@@ -1,6 +1,6 @@
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -288,7 +288,10 @@ def _to_copy(
         )
         for stype, tensor in input.items()
     }
-    return input.__class__(columns=input._columns, **blocks)
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
 
 
 @TableTensor.implements(aten.clone.default)
@@ -310,7 +313,10 @@ def _contiguous(
         stype: tensor.contiguous(memory_format=memory_format)
         for stype, tensor in input.items()
     }
-    return input.__class__(columns=input._columns, **blocks)
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
 
 
 @TableTensor.implements(aten.is_pinned.default)
@@ -324,7 +330,10 @@ def _pin_memory(
     device: torch.device | None = None,
 ) -> TableTensor:
     blocks = {stype: tensor.pin_memory() for stype, tensor in input.items()}
-    return input.__class__(columns=input._columns, **blocks)
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
 
 
 # Helpers #####################################################################
