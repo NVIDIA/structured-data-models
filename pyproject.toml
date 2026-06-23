@@ -94,6 +94,7 @@ select = [
 ]
 ignore = [
     "B905",  # Ignore "zip() without explicit `strict`"
+    "D100",  # Ignore "Missing docstring in public module"
     "D105",  # Ignore "missing docstring in magic method"
     "D107",  # Ignore "missing docstring in __init__"
 ]
@@ -104,7 +105,6 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]
 "test/**/*.py" = [
-    "D100",  # Ignore "Missing docstring in public module"
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
     "D103",  # Ignore "Missing docstring in public function"
@@ -113,7 +113,6 @@ convention = "google"
 ]
 # TODO: Address these ignores
 "schemafm/tensor/*.py" = [
-    "D100",  # Ignore "Missing docstring in public module"
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
 ]

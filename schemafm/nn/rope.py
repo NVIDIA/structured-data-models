@@ -5,6 +5,17 @@ from torch import Tensor
 
 
 class RotaryEmbedding(torch.nn.Module):
+    """Rotary positional embedding for ``[..., S, H, C]`` tensors.
+
+    Args:
+        channels: The number of channels per attention head. Must be even.
+        theta: The base frequency used to initialize inverse frequencies.
+        requires_grad: Whether inverse frequencies are learnable.
+        device: The device to use for module parameters.
+        dtype: The dtype to use for module parameters.
+
+    """
+
     def __init__(
         self,
         channels: int,
@@ -30,6 +41,15 @@ class RotaryEmbedding(torch.nn.Module):
         self,
         x: Tensor,  # [..., S, H, C]
     ) -> Tensor:  # [..., S, H, C]
+        """Apply rotary positional embedding.
+
+        Args:
+            x: Input tensor with shape ``[..., S, H, C]``.
+
+        Returns:
+            The rotated tensor with shape ``[..., S, H, C]``.
+
+        """
         if x.size(-1) != 2 * self.inv_freq.size(-1):
             raise ValueError(
                 f"Expected {2 * self.inv_freq.size(-1)} channels, "
