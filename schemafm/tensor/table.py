@@ -67,25 +67,24 @@ class TableTensor(Tensor):
 
             if block.dim() < 2:
                 raise ValueError(
-                    f"Expected '{stype}' block to be at least 2D "
+                    f"Expected '{stype.value}' block to be at least 2D "
                     f"(got {block.dim()}D)"
                 )
             if size != block.size()[:-1]:
                 raise ValueError(
-                    f"Expected '{stype}' block size of "
+                    f"Expected '{stype.value}' block size of "
                     f"{_block_size_repr(size)} "
                     f"(got {_block_size_repr(block.size()[:-1])})"
                 )
             if device != block.device:
                 raise ValueError(
-                    f"Expected '{stype}' block to be on device '{device}' "
-                    f"(got '{block.device}')"
+                    f"Expected '{stype.value}' block to be on device "
+                    f"'{device}' (got '{block.device}')"
                 )
 
         if size is None:
             raise ValueError(
-                f"Expected 'size' in '{cls.__name__}' to be given when "
-                f"all blocks are 'None'"
+                "Expected 'size' to be given when all blocks are 'None'"
             )
 
         if numerical is None:
@@ -112,7 +111,7 @@ class TableTensor(Tensor):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
                 raise ValueError(
-                    f"Expected '{stype}' block to hold "
+                    f"Expected '{stype.value}' block to hold "
                     f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 
