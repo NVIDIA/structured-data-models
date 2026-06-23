@@ -1,6 +1,8 @@
+import io
+
 import pytest
 import torch
-from schemafm import CategoricalTensor, Stype, TableTensor
+from schemafm import CategoricalTensor, StringTensor, Stype, TableTensor
 
 
 def test_init() -> None:
@@ -63,3 +65,34 @@ def test_column_names() -> None:
             columns={"numerical": ["age", "age"]},
             numerical=torch.randn(2, 2),
         )
+
+
+def test_save_load() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(3, 2),
+        categorical=CategoricalTensor(
+            data=torch.arange(3).view(3, 1),
+            categories=(StringTensor.from_list(["USA, GER, FRA"]),),
+        ),
+    )
+
+    buffer = io.BytesIO()
+    torch.save(tensor, buffer)
+    buffer.seek(0)
+    out = torch.load(buffer, weights_only=False)
+
+    assert isinstance(out, TableTensor)
+    assert out.size() == tensor.size()
+    assert out._columns == tensor._columns
+    assert out._column_to_loc == tensor._column_to_loc
+    assert out._numerical.equal(tensor._numerical)
+    assert out._categorical.as_tensor().equal(tensor._categorical.as_tensor())
+    for category1, category2 in zip(
+        out._categorical.categories,
+        tensor._categorical.categories,
+    ):
+        assert category1.equal(category2)

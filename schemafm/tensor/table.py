@@ -1,6 +1,6 @@
 from collections.abc import Callable, Mapping, Sequence
 from itertools import chain
-from typing import Any, ClassVar, TypeVar
+from typing import Any, ClassVar, SupportsIndex, TypeVar
 
 import torch
 from torch import Tensor
@@ -154,6 +154,15 @@ class TableTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __reduce_ex__(self, proto: SupportsIndex) -> Any:
+        args = (
+            tuple(self.size()[:-1]),
+            self._columns,
+            self._numerical,
+            self._categorical,
+        )
+        return (self.__class__, args)
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
