@@ -1,3 +1,5 @@
+import pickle
+
 import pytest
 import torch
 from schemafm import CategoricalTensor, Stype, TableTensor
@@ -63,3 +65,31 @@ def test_column_names() -> None:
             columns={"numerical": ["age", "age"]},
             numerical=torch.randn(2, 2),
         )
+
+
+def test_pickle() -> None:
+    numerical = torch.randn(2, 2)
+    categories = (torch.arange(2), torch.arange(3))
+    categorical = CategoricalTensor(
+        data=torch.tensor([[0, 1], [1, 2]], dtype=torch.int32),
+        categories=categories,
+    )
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+        },
+        numerical=numerical,
+        categorical=categorical,
+    )
+
+    out = pickle.loads(pickle.dumps(tensor))
+
+    assert isinstance(out, TableTensor)
+    assert out.size() == tensor.size()
+    assert out._columns == tensor._columns
+    assert out._column_to_loc == tensor._column_to_loc
+    assert out._numerical.equal(numerical)
+    assert out._categorical.as_tensor().equal(categorical.as_tensor())
+    for out_category, category in zip(out._categorical.categories, categories):
+        assert out_category.equal(category)

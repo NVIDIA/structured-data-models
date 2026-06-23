@@ -1,3 +1,4 @@
+import pickle
 from typing import cast
 
 import pyarrow as pa
@@ -717,3 +718,22 @@ def test_unsafe_view() -> None:
     assert out.storage_offset() == 0
     assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
     assert out._offset.equal(torch.arange(7))
+
+
+def test_pickle() -> None:
+    tensor = VarLenTensor(
+        data=torch.arange(10),
+        offset=torch.arange(8),
+        size=(2, 2),
+        stride=(3, 1),
+        storage_offset=1,
+    )
+
+    out = pickle.loads(pickle.dumps(tensor))
+
+    assert isinstance(out, VarLenTensor)
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out.storage_offset() == tensor.storage_offset()
+    assert out._data.equal(tensor._data)
+    assert out._offset.equal(tensor._offset)
