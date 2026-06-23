@@ -196,4 +196,4 @@ class SDPA(torch.nn.Module):
             else None,
         ).transpose(-3, -2)  # [B, Q, H, C]
 
-        return out.reshape(batch_shape + out.size()[-3:])  # [..., Q, H, C]
+        return out.view(batch_shape + out.size()[-3:])  # [..., Q, H, C]
