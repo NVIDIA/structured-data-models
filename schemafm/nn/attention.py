@@ -110,16 +110,16 @@ class SDPA(torch.nn.Module):
         self,
         channels: int,
         num_heads: int,
-        ssmax: bool = False,
+        qassmax: bool = False,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.ssmax: QASSMax | None = None
-        if ssmax:
-            self.ssmax = QASSMax(
+        self.qassmax: QASSMax | None = None
+        if qassmax:
+            self.qassmax = QASSMax(
                 channels=channels,
                 num_heads=num_heads,
                 **factory_kwargs,
@@ -149,14 +149,14 @@ class SDPA(torch.nn.Module):
         if attn_mask is not None and attn_mask.dtype != torch.bool:
             raise ValueError("`attn_mask` must have dtype torch.bool")
 
-        if self.ssmax is not None:
+        if self.qassmax is not None:
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
                 key_len = attn_mask.sum(dim=-1)
             else:
                 key_len = key.size(-3)
-            query = self.ssmax(query, key_len=key_len)
+            query = self.qassmax(query, key_len=key_len)
 
         batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
         if seqused_query is not None:
