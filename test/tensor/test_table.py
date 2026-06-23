@@ -38,7 +38,7 @@ def test_empty() -> None:
     with pytest.raises(ValueError, match="to be given"):
         _ = TableTensor()
     with pytest.raises(ValueError, match="to be non-empty"):
-        _ = TableTensor(size=())
+        _ = TableTensor(())
 
     tensor = TableTensor(size=(1, 4))
     assert tensor.size() == (1, 4, 0)

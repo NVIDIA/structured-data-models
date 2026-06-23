@@ -30,20 +30,20 @@ class TableTensor(Tensor):
 
     def __init__(
         self,
+        size: Sequence[int] | None = None,
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
-        size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> None:
         pass
 
     def __new__(
         cls: type[SelfTableTensor],
+        size: Sequence[int] | None = None,
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
-        size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
 
@@ -110,10 +110,10 @@ class TableTensor(Tensor):
             (Stype.categorical, categorical),
         ):
             if block.size(-1) != len(columns[stype]):
+                _columns = "column" if len(columns[stype]) == 1 else "columns"
                 raise ValueError(
                     f"Expected '{stype}' block to hold "
-                    f"{len(columns[Stype.numerical])} columns "
-                    f"(got {numerical.size(-1)})"
+                    f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 
         column_names = list(chain.from_iterable(columns.values()))
