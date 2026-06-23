@@ -198,6 +198,38 @@ def test_view_ops() -> None:
     assert out.categorical.size() == (3, 2, 1)
 
 
+def test_slicing_ops() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 3, 4, 2),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = tensor.select(1, 0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 4, 3)
+    assert out.numerical.size() == (2, 4, 2)
+    assert out.categorical.size() == (2, 4, 1)
+
+    out = tensor[:, :, 1:3]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 2, 3)
+    assert out.numerical.size() == (2, 3, 2, 2)
+    assert out.categorical.size() == (2, 3, 2, 1)
+
+    out = tensor.narrow(-2, 1, 2)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 2, 3)
+    assert out.numerical.size() == (2, 3, 2, 2)
+    assert out.categorical.size() == (2, 3, 2, 1)
+
+
 def test_pin_memory() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
