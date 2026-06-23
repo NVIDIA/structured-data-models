@@ -190,10 +190,7 @@ def _contiguous(
 
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(input: CategoricalTensor) -> CategoricalTensor:
-    return input.__class__(
-        input._data.pin_memory(),
-        input._categories,
-    )
+    return input.__class__(input._data.pin_memory(), input._categories)
 
 
 @CategoricalTensor.implements(aten.view.default)
