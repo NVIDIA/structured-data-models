@@ -60,13 +60,7 @@ def test_sdpa() -> None:
     query = torch.randn(2, 3, num_heads, channels)
     key = torch.randn(5, num_heads, channels)
     value = torch.randn(1, 5, num_heads, channels)
-    attn_mask = torch.tensor(
-        [
-            [True, True, False, False, False],
-            [True, False, True, False, False],
-            [False, True, True, True, False],
-        ],
-    )
+    attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool)
 
     out = module(
         query=query,
@@ -100,12 +94,8 @@ def test_sdpa() -> None:
         seqused_key_value=seqused_key_value,
     )
 
-    key_index = torch.arange(key_value_len)
-    attn_mask = key_index.view(1, 1, key_value_len) < seqused_key_value.view(
-        batch_size,
-        1,
-        1,
-    )
+    key_index = torch.arange(key_value_len).view(1, 1, key_value_len)
+    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
     attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
     expected = reference_sdpa(
         query=query,
