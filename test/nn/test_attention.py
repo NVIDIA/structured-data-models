@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pytest
 import torch
 import torch.nn.functional as F
-from schemafm.nn import SDPA, Attention, QASSMax
+from schemafm.nn import SDPA, Attention, QASSMax, RotaryEmbedding
 from torch import Tensor
 
 
@@ -167,7 +167,8 @@ def test_sdpa() -> None:
 
 
 @pytest.mark.parametrize("qassmax", [False, True])
-def test_attention(qassmax: bool) -> None:
+@pytest.mark.parametrize("rope", [False, True])
+def test_attention(qassmax: bool, rope: bool) -> None:
     channels = 6
     num_heads = 3
     dtype = torch.float32
@@ -182,18 +183,29 @@ def test_attention(qassmax: bool) -> None:
     key_value = torch.randn(2, 5, channels, dtype=dtype)
     attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool)
 
-    out = module(query=query, key_value=None)
+    rotary_embedding = (
+        RotaryEmbedding(channels=channels // num_heads, dtype=dtype)
+        if rope
+        else None
+    )
+
+    out = module(query=query, key_value=None, rope=rotary_embedding)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
 
-    out = module(query=query, key_value=key_value, attn_mask=attn_mask)
+    out = module(
+        query=query,
+        key_value=key_value,
+        attn_mask=attn_mask,
+        rope=rotary_embedding,
+    )
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
 
     query = torch.randn(2, 4, channels, dtype=dtype)
-    out = module(query=query, key_value=query)
+    out = module(query=query, key_value=query, rope=rotary_embedding)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
