@@ -332,48 +332,6 @@ def _pin_memory(input: TableTensor) -> TableTensor:
         **blocks,
     )
 
-    def is_shared(self) -> bool:
-        return all(tensor.is_shared() for _, tensor in self.items())
-
-    def share_memory_(self) -> "TableTensor":
-        for _, tensor in self.items():
-            tensor.share_memory_()
-        return self
-
-    def __repr__(self, *, tensor_contents: Any = None) -> str:
-        def _columns_repr(
-            columns: Sequence[str],
-            max_cols: int = 3,
-            max_item_len: int = 24,
-        ) -> str:
-            columns = [
-                f"'{column}'"
-                if len(column) <= max_item_len
-                else column[: max_item_len - 1] + "…"
-                for column in columns
-            ]
-            if len(columns) > max_cols:
-                [*columns[: max_cols - 1], "...", columns[-1]]
-            return "[" + ", ".join(column for column in columns) + "]"
-
-        stype_repr = [
-            (
-                f"    {stype.value} ({tensor.size(-1):,}): "
-                f"{_columns_repr(self._columns[stype])},"
-            )
-            for stype, tensor in self.items()
-        ]
-
-        out = f"{self.__class__.__name__}(\n"
-        out += f"  size={tuple(self.size())},\n"
-        out += "  blocks={\n"
-        out += "\n".join(stype_repr) + "\n"
-        out += "  },\n"
-        if self.device.type != "cpu":
-            out += f"  device={self.device},\n"
-        out += ")"
-        return out
-
 
 # Helpers #####################################################################
 
