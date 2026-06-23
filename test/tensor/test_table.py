@@ -28,8 +28,7 @@ def test_init() -> None:
     )
 
     assert tensor.size() == (2, 4)
-    with pytest.raises(RuntimeError, match="single dtype"):
-        _ = tensor.dtype
+    assert tensor.dtype == torch.float32
     assert tensor.device == torch.device("cpu")
     assert tensor._numerical.size() == (2, 2)
     assert tensor._categorical.size() == (2, 2)
@@ -105,6 +104,73 @@ def test_save_load() -> None:
         tensor._categorical.categories,
     ):
         assert category1.equal(category2)
+
+
+def test_to_copy() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+        },
+        numerical=torch.randn(2, 2),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+            categories=(torch.arange(2), torch.arange(2)),
+        ),
+    )
+
+    out = tensor.to(torch.float64)
+
+    assert isinstance(out, TableTensor)
+    assert out._numerical.dtype == torch.float64
+    assert out._categorical.dtype == torch.int32
+    assert out._columns == tensor._columns
+    assert out._column_to_loc == tensor._column_to_loc
+
+
+def test_clone_contiguous() -> None:
+    numerical = torch.randn(2, 4)[:, ::2]
+    categorical = CategoricalTensor(
+        data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32).t(),
+        categories=(torch.arange(2), torch.arange(2)),
+    )
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+        },
+        numerical=numerical,
+        categorical=categorical,
+    )
+
+    assert not tensor.is_contiguous()
+
+    out = tensor.clone()
+    assert isinstance(out, TableTensor)
+    assert out._numerical.equal(tensor._numerical)
+    assert out._numerical.data_ptr() != tensor._numerical.data_ptr()
+    assert out._categorical.as_tensor().equal(tensor._categorical.as_tensor())
+    assert out._categorical.as_tensor().data_ptr() != (
+        tensor._categorical.as_tensor().data_ptr()
+    )
+
+    out = tensor.contiguous()
+    assert isinstance(out, TableTensor)
+    assert out.is_contiguous()
+    assert out._numerical.is_contiguous()
+    assert out._categorical.as_tensor().is_contiguous()
+    assert out._columns == tensor._columns
+
+
+def test_pin_memory() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age", "income"]},
+        numerical=torch.randn(2, 2),
+    )
+
+    assert not tensor.is_pinned()
+    if torch.cuda.is_available():
+        assert tensor.pin_memory().is_pinned()
 
 
 def test_share_memory() -> None:

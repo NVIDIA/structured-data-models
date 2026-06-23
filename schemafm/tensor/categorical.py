@@ -189,9 +189,12 @@ def _contiguous(
 
 
 @CategoricalTensor.implements(aten._pin_memory.default)
-def _pin_memory(input: CategoricalTensor) -> CategoricalTensor:
+def _pin_memory(
+    input: CategoricalTensor,
+    device: torch.device | None = None,
+) -> CategoricalTensor:
     return input.__class__(
-        input._data.pin_memory(),
+        input._data.pin_memory(device),
         input._categories,
     )
 

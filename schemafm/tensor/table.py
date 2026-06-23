@@ -125,7 +125,7 @@ class TableTensor(Tensor):
         out = Tensor._make_wrapper_subclass(
             cls,
             size=(*size, len(column_names)),
-            dtype=torch.uint8,  # NOTE Dummy. DO NOT USE.
+            dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
         )
@@ -201,12 +201,6 @@ class TableTensor(Tensor):
             f"'{func}' is not supported for '{cls.__name__}'"
         )
 
-    @property
-    def dtype(self) -> torch.dtype:
-        raise RuntimeError(
-            f"'{self.__class__.__name__}' does not have a single dtype"
-        )
-
     def is_shared(self) -> bool:
         return all(tensor.is_shared() for _, tensor in self.items())
 
@@ -214,6 +208,21 @@ class TableTensor(Tensor):
         for _, tensor in self.items():
             tensor.share_memory_()
         return self
+
+    def is_contiguous(
+        self,
+        memory_format: torch.memory_format = torch.contiguous_format,
+    ) -> bool:
+        return all(
+            tensor.is_contiguous(memory_format=memory_format)
+            for _, tensor in self.items()
+        )
+
+    def contiguous(
+        self,
+        memory_format: torch.memory_format = torch.contiguous_format,
+    ) -> "TableTensor":
+        return _contiguous(self, memory_format=memory_format)
 
     def tolist() -> Any:
         raise NotImplementedError("'tolist() is not yet implemented")  # TODO
@@ -251,6 +260,71 @@ class TableTensor(Tensor):
             out += f"  device={self.device},\n"
         out += ")"
         return out
+
+
+@TableTensor.implements(aten._to_copy.default)
+def _to_copy(
+    input: TableTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool = False,
+    non_blocking: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    blocks = {
+        stype: aten._to_copy.default(
+            tensor,
+            device=device,
+            dtype=dtype
+            if not isinstance(tensor, CategoricalTensor)
+            or dtype in (torch.int32, torch.int64)
+            else None,
+            layout=layout,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            memory_format=memory_format,
+        )
+        for stype, tensor in input.items()
+    }
+    return input.__class__(columns=input._columns, **blocks)
+
+
+@TableTensor.implements(aten.clone.default)
+def _clone(
+    input: TableTensor,
+    *,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    return _to_copy(input, memory_format=memory_format)
+
+
+@TableTensor.implements(aten.contiguous.default)
+def _contiguous(
+    input: TableTensor,
+    *,
+    memory_format: torch.memory_format = torch.contiguous_format,
+) -> TableTensor:
+    blocks = {
+        stype: tensor.contiguous(memory_format=memory_format)
+        for stype, tensor in input.items()
+    }
+    return input.__class__(columns=input._columns, **blocks)
+
+
+@TableTensor.implements(aten.is_pinned.default)
+def _is_pinned(input: TableTensor, device: torch.device | None = None) -> bool:
+    return all(tensor.is_pinned(device) for _, tensor in input.items())
+
+
+@TableTensor.implements(aten._pin_memory.default)
+def _pin_memory(
+    input: TableTensor,
+    device: torch.device | None = None,
+) -> TableTensor:
+    blocks = {stype: tensor.pin_memory() for stype, tensor in input.items()}
+    return input.__class__(columns=input._columns, **blocks)
 
 
 # Helpers #####################################################################
