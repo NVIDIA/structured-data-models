@@ -1,0 +1,255 @@
+import io
+
+import pytest
+import torch
+from schemafm import CategoricalTensor, StringTensor, Stype, TableTensor
+
+
+def test_init() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+        },
+        numerical=torch.randn(2, 2),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+            categories=(torch.arange(2), torch.arange(2)),
+        ),
+    )
+    assert repr(tensor) == (
+        "TableTensor(\n"
+        "  size=(2, 4),\n"
+        "  blocks={\n"
+        "    numerical (2): ['age', 'income'],\n"
+        "    categorical (2): ['country', 'segment'],\n"
+        "  },\n"
+        ")"
+    )
+
+    assert tensor.size() == (2, 4)
+    assert tensor.dtype == torch.float32
+    assert tensor.device == torch.device("cpu")
+    assert tensor.numerical.size() == (2, 2)
+    assert tensor.categorical.size() == (2, 2)
+    assert tensor.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: ("country", "segment"),
+    }
+    assert tensor._column_to_loc == {
+        "age": (Stype.numerical, 0),
+        "income": (Stype.numerical, 1),
+        "country": (Stype.categorical, 0),
+        "segment": (Stype.categorical, 1),
+    }
+
+
+def test_empty() -> None:
+    with pytest.raises(ValueError, match="to be given"):
+        _ = TableTensor()
+    with pytest.raises(ValueError, match="to be non-empty"):
+        _ = TableTensor(())
+
+    tensor = TableTensor(size=(1, 4))
+    assert tensor.size() == (1, 4, 0)
+    assert tensor.numerical.size() == (1, 4, 0)
+    assert tensor.categorical.size() == (1, 4, 0)
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+    }
+    assert tensor._column_to_loc == {}
+
+
+def test_column_names() -> None:
+    with pytest.raises(ValueError, match="hold 2 columns"):
+        _ = TableTensor(
+            columns={"numerical": ["age", "income"]},
+            numerical=torch.randn(2, 3),
+        )
+
+    with pytest.raises(ValueError, match="to be unique"):
+        _ = TableTensor(
+            columns={"numerical": ["age", "age"]},
+            numerical=torch.randn(2, 2),
+        )
+
+
+def test_save_load() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(3, 2),
+        categorical=CategoricalTensor(
+            data=torch.arange(3).view(3, 1),
+            categories=(StringTensor.from_list(["USA, GER, FRA"]),),
+        ),
+    )
+
+    buffer = io.BytesIO()
+    torch.save(tensor, buffer)
+    buffer.seek(0)
+    out = torch.load(buffer, weights_only=False)
+
+    assert isinstance(out, TableTensor)
+    assert out.size() == tensor.size()
+    assert out.numerical.equal(tensor.numerical)
+    assert out.categorical.as_tensor().equal(tensor.categorical.as_tensor())
+    assert out.columns == tensor.columns
+    assert out._column_to_loc == tensor._column_to_loc
+    for category1, category2 in zip(
+        out.categorical.categories,
+        tensor.categorical.categories,
+    ):
+        assert category1.equal(category2)
+
+
+def test_to_copy() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+        },
+        numerical=torch.randn(2, 2),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+            categories=(torch.arange(2), torch.arange(2)),
+        ),
+    )
+
+    out = tensor.to(torch.float64)
+
+    assert isinstance(out, TableTensor)
+    assert out.dtype == torch.float64
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.dtype == torch.int32
+    assert out.columns == tensor.columns
+    assert out._column_to_loc == tensor._column_to_loc
+
+
+def test_clone_contiguous() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age", "income"]},
+        numerical=torch.randn(2, 4)[:, ::2],
+    )
+
+    out = tensor.clone()
+    assert isinstance(out, TableTensor)
+    assert out.numerical.equal(tensor.numerical)
+    assert out.numerical.data_ptr() != tensor.numerical.data_ptr()
+
+    assert not tensor.is_contiguous()
+    assert not tensor.numerical.is_contiguous()
+    out = tensor.contiguous()
+    assert isinstance(out, TableTensor)
+    assert out.numerical.equal(tensor.numerical)
+    assert out.is_contiguous()
+    assert out.numerical.is_contiguous()
+
+
+def test_view_ops() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 3, 2),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 3, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = tensor.view(-1, 3)
+
+    assert isinstance(out, TableTensor)
+    assert out.size() == (6, 3)
+    assert out.numerical.size() == (6, 2)
+    assert out.categorical.size() == (6, 1)
+    assert out.columns == tensor.columns
+
+    with pytest.raises(RuntimeError, match="Can't reshape"):
+        _ = tensor.view(-1)
+
+    out = tensor.unsqueeze(0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (1, 2, 3, 3)
+
+    out = tensor.squeeze()
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 3)
+
+    out = tensor.unsqueeze(1).expand(-1, 4, 3, -1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 4, 3, 3)
+
+    out = tensor.transpose(0, 1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (3, 2, 3)
+    assert out.numerical.size() == (3, 2, 2)
+    assert out.categorical.size() == (3, 2, 1)
+
+    out = tensor.permute(1, 0, 2)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (3, 2, 3)
+    assert out.numerical.size() == (3, 2, 2)
+    assert out.categorical.size() == (3, 2, 1)
+
+
+def test_slicing_ops() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 3, 4, 2),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = tensor.select(1, 0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 4, 3)
+    assert out.numerical.size() == (2, 4, 2)
+    assert out.categorical.size() == (2, 4, 1)
+
+    out = tensor[:, :, 1:3]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 2, 3)
+    assert out.numerical.size() == (2, 3, 2, 2)
+    assert out.categorical.size() == (2, 3, 2, 1)
+
+    out = tensor.narrow(-2, 1, 2)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 2, 3)
+    assert out.numerical.size() == (2, 3, 2, 2)
+    assert out.categorical.size() == (2, 3, 2, 1)
+
+
+def test_pin_memory() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age", "income"]},
+        numerical=torch.randn(2, 2),
+    )
+
+    assert not tensor.is_pinned()
+    if torch.cuda.is_available():
+        assert tensor.pin_memory().is_pinned()
+
+
+def test_share_memory() -> None:
+    tensor = TableTensor(
+        numerical=torch.randn(3, 2),
+        columns={"numerical": ["age", "income"]},
+    )
+
+    assert not tensor.is_shared()
+    try:
+        tensor.share_memory_()
+        assert tensor.is_shared()
+    except RuntimeError:
+        pass

@@ -44,11 +44,10 @@ class VarLenTensor(Tensor):
     # Constructors ############################################################
 
     def __init__(
-        cls,
+        self,
         data: Tensor,
         offset: Tensor,
         size: Sequence[int],
-        *,
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
     ) -> None:
@@ -59,7 +58,6 @@ class VarLenTensor(Tensor):
         data: Tensor,
         offset: Tensor,
         size: Sequence[int],
-        *,
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
     ) -> SelfVarLenTensor:
@@ -159,7 +157,6 @@ class VarLenTensor(Tensor):
             storage_offset=storage_offset,
             dtype=data.dtype,
             device=data.device,
-            layout=torch.strided,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
 
@@ -401,14 +398,13 @@ class VarLenTensor(Tensor):
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
-            self.__class__,
             self._data,
             self._offset,
             tuple(self.size()),
             tuple(self.stride()),
             int(self.storage_offset()),
         )
-        return (_deserialize, args)
+        return (self.__class__, args)
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -893,23 +889,6 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     return 1 + sum(
         (dim_size - 1) * dim_stride
         for dim_size, dim_stride in zip(size, stride)
-    )
-
-
-def _deserialize(
-    cls: type[SelfVarLenTensor],
-    data: Tensor,
-    offset: Tensor,
-    size: tuple[int, ...],
-    stride: tuple[int, ...],
-    storage_offset: int,
-) -> SelfVarLenTensor:
-    return cls(
-        data=data,
-        offset=offset,
-        size=size,
-        stride=stride,
-        storage_offset=storage_offset,
     )
 
 

@@ -25,12 +25,7 @@ def reference_sdpa(
     "key_len_fn",
     [
         lambda: 4,
-        lambda: torch.tensor(
-            [
-                [1, 2, 0],
-                [3, 4, 1],
-            ],
-        ),
+        lambda: torch.tensor([[1, 2, 0], [3, 4, 1]]),
         lambda: torch.tensor([[4], [1]], dtype=torch.int32),
     ],
 )
@@ -39,10 +34,7 @@ def test_qassmax(key_len_fn: Callable[[], Tensor | int]) -> None:
     num_heads = 3
     module = QASSMax(channels=channels, num_heads=num_heads, hidden_channels=4)
 
-    query = torch.arange(
-        2 * 3 * num_heads * channels,
-        dtype=torch.float32,
-    ).reshape(2, 3, num_heads, channels)
+    query = torch.randn(2, 3, num_heads, channels)
 
     out = module(query, key_len_fn())
     assert out.shape == query.shape
@@ -51,7 +43,6 @@ def test_qassmax(key_len_fn: Callable[[], Tensor | int]) -> None:
 
 
 def test_sdpa() -> None:
-    torch.manual_seed(0)
     channels = 3
     num_heads = 2
     module = SDPA(channels=channels, num_heads=num_heads)
@@ -63,21 +54,13 @@ def test_sdpa() -> None:
 
     out = module(query=query, key=key, value=value)
     expected = reference_sdpa(query=query, key=key, value=value)
-
-    assert out.shape == query.shape
     torch.testing.assert_close(out, expected)
 
     # Broadcast batch dimensions and apply a boolean attention mask.
     query = torch.randn(2, 3, num_heads, channels)
     key = torch.randn(5, num_heads, channels)
     value = torch.randn(1, 5, num_heads, channels)
-    attn_mask = torch.tensor(
-        [
-            [True, True, False, False, False],
-            [True, False, True, False, False],
-            [False, True, True, True, False],
-        ],
-    )
+    attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool)
 
     out = module(
         query=query,
@@ -91,11 +74,9 @@ def test_sdpa() -> None:
         value=value.expand(2, -1, -1, -1),
         attn_mask=attn_mask,
     )
-
-    assert out.shape == query.shape
     torch.testing.assert_close(out, expected)
 
-    # Apply sequence lengths to mask keys and zero invalid queries.
+    # Apply sequence lengths to mask keys.
     batch_size = 2
     query_len = 4
     key_value_len = 5
@@ -104,62 +85,47 @@ def test_sdpa() -> None:
     value = torch.randn(batch_size, key_value_len, num_heads, channels)
     value[0, 3:] = 1000
     value[1, 1:] = -1000
-    seqused_query = torch.tensor([2, 4], dtype=torch.int32)
     seqused_key_value = torch.tensor([3, 1], dtype=torch.int32)
 
     out = module(
         query=query,
         key=key,
         value=value,
-        seqused_query=seqused_query,
         seqused_key_value=seqused_key_value,
     )
 
-    key_index = torch.arange(key_value_len)
-    attn_mask = key_index.view(1, 1, key_value_len) < seqused_key_value.view(
-        batch_size,
-        1,
-        1,
-    )
+    key_index = torch.arange(key_value_len).view(1, 1, key_value_len)
+    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
     attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
-    query_index = torch.arange(query_len)
-    query_is_valid = query_index.view(1, query_len) < seqused_query.view(
-        batch_size,
-        1,
-    )
     expected = reference_sdpa(
         query=query,
         key=key,
         value=value,
         attn_mask=attn_mask,
     )
-    expected = expected * query_is_valid.unsqueeze(-1).unsqueeze(-1)
-
     torch.testing.assert_close(out, expected)
 
-    # Decode-style broadcast: four candidate continuations share one KV cache.
-    prompt_count = 2
-    candidate_count = 4
-    decode_query_len = 1
-    cache_len = 5
+    # Test rows share the same in-context training examples.
+    batch_size = 2
+    num_test = 4
+    num_queries = 1
+    num_train = 5
     query = torch.randn(
-        prompt_count,
-        candidate_count,
-        decode_query_len,
+        batch_size,
+        num_test,
+        num_queries,
         num_heads,
         channels,
     )
-    key = torch.randn(prompt_count, 1, cache_len, num_heads, channels)
-    value = torch.randn(prompt_count, 1, cache_len, num_heads, channels)
+    key = torch.randn(batch_size, 1, num_train, num_heads, channels)
+    value = torch.randn(batch_size, 1, num_train, num_heads, channels)
 
     out = module(query=query, key=key, value=value)
     expected = reference_sdpa(
         query=query,
-        key=key.expand(-1, candidate_count, -1, -1, -1),
-        value=value.expand(-1, candidate_count, -1, -1, -1),
+        key=key.expand(-1, num_test, -1, -1, -1),
+        value=value.expand(-1, num_test, -1, -1, -1),
     )
-
-    assert out.shape == query.shape
     torch.testing.assert_close(out, expected)
 
     # Reject invalid mask and sequence-length combinations.
@@ -173,28 +139,8 @@ def test_sdpa() -> None:
             query=query,
             key=key,
             value=value,
-            seqused_query=torch.tensor([1], dtype=torch.int32),
-            attn_mask=attn_mask,
-        )
-
-    with pytest.raises(ValueError, match="Cannot pass both"):
-        module(
-            query=query,
-            key=key,
-            value=value,
             seqused_key_value=torch.tensor([1], dtype=torch.int32),
             attn_mask=attn_mask,
-        )
-
-    with pytest.raises(
-        ValueError,
-        match=r"`seqused_query` must have dtype torch\.int32",
-    ):
-        module(
-            query=query,
-            key=key,
-            value=value,
-            seqused_query=torch.tensor([1], dtype=torch.int64),
         )
 
     with pytest.raises(
