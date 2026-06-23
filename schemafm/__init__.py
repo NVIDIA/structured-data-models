@@ -1,3 +1,5 @@
+"""Foundation models and tensor containers for structured data."""
+
 from importlib.metadata import PackageNotFoundError, version
 
 from schemafm.stype import Stype, StypeLike
