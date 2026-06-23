@@ -176,16 +176,10 @@ class SDPA(torch.nn.Module):
 
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
-            seqused_key_value = seqused_key_value.reshape(-1)
+            seqused_key_value = seqused_key_value.reshape(-1).unsqueeze(-1)
             key_index = torch.arange(key.size(-3), device=key.device)
-            attn_mask = key_index.unsqueeze(0) < seqused_key_value.unsqueeze(
-                -1
-            )
-            attn_mask = attn_mask.unsqueeze(-2).expand(
-                -1,
-                query.size(-3),
-                -1,
-            )
+            attn_mask = key_index.unsqueeze(0) < seqused_key_value
+            attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
         out = F.scaled_dot_product_attention(
             query=query.transpose(-3, -2),  # [B, H, Q, C],
