@@ -31,7 +31,7 @@ class CategoricalTensor(Tensor):
     # Constructors ############################################################
 
     def __init__(
-        cls,
+        self,
         data: Tensor,
         categories: Sequence[Tensor],
     ) -> None:
@@ -66,7 +66,6 @@ class CategoricalTensor(Tensor):
             storage_offset=data.storage_offset(),
             dtype=data.dtype,
             device=data.device,
-            layout=torch.strided,
             requires_grad=False,
         )
 
@@ -103,8 +102,8 @@ class CategoricalTensor(Tensor):
     # PyTorch/Python builtins #################################################
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
-        args = (self.__class__, self._data, self._categories)
-        return (_deserialize, args)
+        args = (self._data, self._categories)
+        return (self.__class__, args)
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -191,10 +190,7 @@ def _contiguous(
 
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(input: CategoricalTensor) -> CategoricalTensor:
-    return input.__class__(
-        input._data.pin_memory(),
-        input._categories,
-    )
+    return input.__class__(input._data.pin_memory(), input._categories)
 
 
 @CategoricalTensor.implements(aten.view.default)
@@ -432,14 +428,6 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
 
 
 # Helpers #####################################################################
-
-
-def _deserialize(
-    cls: type[SelfCategoricalTensor],
-    data: Tensor,
-    categories: tuple[Tensor, ...],
-) -> SelfCategoricalTensor:
-    return cls(data, categories)
 
 
 def _maybe_wrap(input: CategoricalTensor, data: Tensor) -> Tensor:
