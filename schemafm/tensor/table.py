@@ -215,6 +215,9 @@ class TableTensor(Tensor):
             tensor.share_memory_()
         return self
 
+    def tolist() -> Any:
+        raise NotImplementedError("'tolist() is not yet implemented")  # TODO
+
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         def _columns_repr(
             columns: Sequence[str],
