@@ -130,17 +130,14 @@ class SDPA(torch.nn.Module):
         query: Tensor,  # [..., Q, H, C]
         key: Tensor,  # [..., KV, H, C]
         value: Tensor,  # [..., KV, H, C]
-        seqused_query: Tensor | None = None,  # [...]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
     ) -> Tensor:  # [..., Q, H, C]
-        if attn_mask is not None and (
-            seqused_query is not None or seqused_key_value is not None
-        ):
-            raise ValueError("Cannot pass both `attn_mask` and `seqused_*`")
+        if attn_mask is not None and seqused_key_value is not None:
+            raise ValueError(
+                "Cannot pass both `attn_mask` and `seqused_key_value`"
+            )
 
-        if seqused_query is not None and seqused_query.dtype != torch.int32:
-            raise ValueError("`seqused_query` must have dtype torch.int32")
         if (
             seqused_key_value is not None
             and seqused_key_value.dtype != torch.int32
@@ -159,8 +156,6 @@ class SDPA(torch.nn.Module):
             query = self.qassmax(query, key_len=key_len)
 
         batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
-        if seqused_query is not None:
-            batch_shapes.append(seqused_query.size())
         if seqused_key_value is not None:
             batch_shapes.append(seqused_key_value.size())
         if attn_mask is not None:
@@ -175,17 +170,10 @@ class SDPA(torch.nn.Module):
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
 
-        query_is_valid: Tensor | None = None
         if attn_mask is not None:
             attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-2:])
             attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-2:])
 
-        if seqused_query is not None:
-            seqused_query = seqused_query.expand(batch_shape).reshape(-1)
-            query_index = torch.arange(query.size(-3), device=query.device)
-            query_is_valid = query_index.unsqueeze(
-                0
-            ) < seqused_query.unsqueeze(-1)
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
             seqused_key_value = seqused_key_value.reshape(-1)
@@ -207,8 +195,5 @@ class SDPA(torch.nn.Module):
             if attn_mask is not None
             else None,
         ).transpose(-3, -2)  # [B, Q, H, C]
-
-        if query_is_valid is not None:
-            out = out * query_is_valid.unsqueeze(-1).unsqueeze(-1)
 
         return out.reshape(batch_shape + out.size()[-3:])  # [..., Q, H, C]
