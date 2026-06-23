@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
+from itertools import chain
 from typing import Any, ClassVar, TypeVar
 
 import torch
@@ -46,24 +47,38 @@ class TableTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
 
+        if size is not None:
+            size = tuple(size)
+            if len(size) == 0:
+                raise ValueError("Expected 'size' to be non-empty")
+
         size = tuple(size) if size is not None else size
         device = torch.device(device) if device is not None else device
 
-        for block in (numerical, categorical):
+        for stype, block in (
+            (Stype.numerical, numerical),
+            (Stype.categorical, categorical),
+        ):
             if block is None:
                 continue
 
             size = tuple(block.size()[:-1]) if size is None else size
             device = block.device if device is None else device
 
+            if block.dim() < 2:
+                raise ValueError(
+                    f"Expected '{stype}' block to be at least 2D "
+                    f"(got {block.dim()}D)"
+                )
             if size != block.size()[:-1]:
                 raise ValueError(
-                    f"Expected block size of '{size}' "
-                    f"(got '{tuple(block.size()[:-1])}')"
+                    f"Expected '{stype}' block size of "
+                    f"{_block_size_repr(size)} "
+                    f"(got {_block_size_repr(block.size()[:-1])})"
                 )
             if device != block.device:
                 raise ValueError(
-                    f"Expected block to be on device '{device}' "
+                    f"Expected '{stype}' block to be on device '{device}' "
                     f"(got '{block.device}')"
                 )
 
@@ -72,8 +87,6 @@ class TableTensor(Tensor):
                 f"Expected 'size' in '{cls.__name__}' to be given when "
                 f"all blocks are 'None'"
             )
-        elif len(size) < 1:
-            raise ValueError("Expected table to hold at least two dimensions")
 
         if numerical is None:
             numerical = torch.empty((*size, 0), device=device)
@@ -92,32 +105,28 @@ class TableTensor(Tensor):
             Stype.categorical: tuple(columns.get(Stype.categorical, ())),
         }
 
-        if numerical.size(-1) != len(columns[Stype.numerical]):
-            raise ValueError(
-                f"Expected 'numerical' block in '{cls.__name__}' to hold "
-                f"{len(columns[Stype.numerical])} columns "
-                f"(got {numerical.size(-1)})"
-            )
-        if categorical.size(-1) != len(columns[Stype.categorical]):
-            raise ValueError(
-                f"Expected 'categorical' block in '{cls.__name__}' to hold "
-                f"{len(columns[Stype.categorical])} columns "
-                f"(got {categorical.size(-1)})"
-            )
+        for stype, block in (
+            (Stype.numerical, numerical),
+            (Stype.categorical, categorical),
+        ):
+            if block.size(-1) != len(columns[stype]):
+                raise ValueError(
+                    f"Expected '{stype}' block to hold "
+                    f"{len(columns[Stype.numerical])} columns "
+                    f"(got {numerical.size(-1)})"
+                )
 
-        num_columns = sum(len(names) for names in columns.values())
+        column_names = list(chain.from_iterable(columns.values()))
         column_to_loc: dict[str, tuple[Stype, int]] = {}
         for stype, names in columns.items():
             for i, name in enumerate(names):
                 column_to_loc[name] = (Stype(stype), i)
-        if len(column_to_loc) != num_columns:
-            raise ValueError(
-                f"Expected column names in '{cls.__name__}' to be unique"
-            )
+        if len(column_names) != len(column_to_loc):
+            raise ValueError("Expected column names to be unique")
 
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=(*size, num_columns),
+            size=(*size, len(column_names)),
             dtype=torch.uint8,  # NOTE Dummy. DO NOT USE.
             device=numerical.device,
             requires_grad=False,
@@ -162,3 +171,20 @@ class TableTensor(Tensor):
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"
         )
+
+    @property
+    def dtype(self) -> torch.dtype:
+        raise RuntimeError(
+            f"'{self.__class__.__name__}' does not have a single dtype"
+        )
+
+
+# Helpers #####################################################################
+
+
+def _block_size_repr(size: Sequence[int]) -> str:
+    if len(size) == 0:
+        return "(*,)"
+    if len(size) == 1:
+        return f"({size[0]}, *)"
+    return f"{str(tuple(size))[:-1]}, *)"
