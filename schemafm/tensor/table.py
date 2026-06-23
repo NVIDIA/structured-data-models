@@ -338,7 +338,32 @@ def _pin_memory(input: TableTensor) -> TableTensor:
 
 @TableTensor.implements(aten.view.default)
 def _view(input: TableTensor, size: Sequence[int]) -> TableTensor:
-    size = _infer_view_size(size, math.prod(input.size()))
+    size = tuple(size)
+    for i, dim_size in enumerate(size):
+        if dim_size < -1:
+            raise RuntimeError(
+                f"Invalid shape dimension {dim_size} at index {i} of shape "
+                f"{size}"
+            )
+
+    if size.count(-1) > 1:
+        raise RuntimeError("Only one dimension can be inferred")
+
+    if -1 in size:
+        known = math.prod(dim_size for dim_size in size if dim_size != -1)
+        if known == 0:
+            raise RuntimeError(
+                f"Cannot reshape tensor of {input.numel()} elements into "
+                f"shape {size} because the unspecified dimension size -1 can "
+                f"be any value and is ambiguous"
+            )
+        if input.numel() % known != 0:
+            raise RuntimeError(
+                f"Shape {size} is invalid for input of size {input.numel()}"
+            )
+        dim = size.index(-1)
+        size = (*size[:dim], input.numel() // known, *size[dim + 1 :])
+
     if len(size) == 0 or size[-1] != input.size(-1):
         _columns = "column" if input.size(-1) == 1 else "columns"
         raise RuntimeError(
@@ -453,35 +478,6 @@ def _block_size_repr(size: Sequence[int]) -> str:
     if len(size) == 1:
         return f"({size[0]}, *)"
     return f"{str(tuple(size))[:-1]}, *)"
-
-
-def _infer_view_size(size: Sequence[int], numel: int) -> tuple[int, ...]:
-    size = tuple(size)
-    for i, dim_size in enumerate(size):
-        if dim_size < -1:
-            raise RuntimeError(
-                f"Invalid shape dimension {dim_size} at index {i} of shape "
-                f"{size}"
-            )
-    if size.count(-1) > 1:
-        raise RuntimeError("Only one dimension can be inferred")
-    if -1 not in size:
-        return size
-
-    known = math.prod(dim_size for dim_size in size if dim_size != -1)
-    if known == 0:
-        raise RuntimeError(
-            f"Cannot reshape tensor of {numel} elements into shape {size} "
-            f"because the unspecified dimension size -1 can be any value and "
-            f"is ambiguous"
-        )
-    if numel % known != 0:
-        raise RuntimeError(
-            f"Shape {size} is invalid for input of size {numel}"
-        )
-
-    dim = size.index(-1)
-    return (*size[:dim], numel // known, *size[dim + 1 :])
 
 
 def _normalize_dim(dim: int, ndim: int) -> int:
