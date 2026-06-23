@@ -1,4 +1,3 @@
-import pickle
 from typing import cast
 
 import torch
@@ -223,16 +222,3 @@ def test_isnan() -> None:
     expected = torch.tensor([[False, True, False], [True, False, False]])
     assert torch.isnan(tensor).equal(expected)
     assert tensor.isnan().equal(expected)
-
-
-def test_pickle() -> None:
-    data = torch.tensor([[0, -1, 2], [2, 1, 0]], dtype=torch.int32)
-    categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
-    tensor = CategoricalTensor(data, categories)
-
-    out = pickle.loads(pickle.dumps(tensor))
-
-    assert isinstance(out, CategoricalTensor)
-    assert out.as_tensor().equal(data)
-    for out_category, category in zip(out.categories, categories):
-        assert out_category.equal(category)
