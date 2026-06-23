@@ -1,3 +1,5 @@
+"""Attention modules for structured tensor models."""
+
 from typing import Any, cast
 
 import torch
@@ -7,10 +9,12 @@ from torch.nn import GELU, Linear, Sequential
 
 
 class QASSMax(torch.nn.Module):
-    r"""Learnable query scaler used by query-aware scalable softmax (QASSMax)
-    introduced in the `"TabICLv2: A better, faster, scalable, and
-    open tabular foundation model" <https://arxiv.org/abs/2602.11139>`_ paper
-    as a temperature-scaling method for attention.
+    r"""Learnable query scaler for query-aware scalable softmax (QASSMax).
+
+    This scaling method was introduced in the `"TabICLv2: A better, faster,
+    scalable, and open tabular foundation model"
+    <https://arxiv.org/abs/2602.11139>`_ paper as a temperature-scaling method
+    for attention.
 
     For a query tensor ``q`` and key length ``n``, this module returns a scaled
     query
@@ -39,6 +43,7 @@ class QASSMax(torch.nn.Module):
         hidden_channels: The hidden width of the scale and gate MLPs.
         device: The device to use for module parameters.
         dtype: The dtype to use for module parameters.
+
     """
 
     def __init__(
@@ -90,6 +95,7 @@ class QASSMax(torch.nn.Module):
 
         Returns:
             The scaled query tensor.
+
         """
         if isinstance(key_len, Tensor):
             log_key_len = key_len.float().clamp(min=1.0).log().to(query.dtype)
@@ -133,6 +139,22 @@ class SDPA(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
     ) -> Tensor:  # [..., Q, H, C]
+        r"""Apply scaled dot-product attention.
+
+        Args:
+            query: Query tensor with shape ``[..., Q, H, C]``.
+            key: Key tensor with shape ``[..., KV, H, C]``.
+            value: Value tensor with shape ``[..., KV, H, C]``.
+            seqused_key_value: Optional valid key/value lengths with shape
+                ``[...]`` and dtype ``torch.int32``.
+            attn_mask: Optional boolean attention mask with shape
+                ``[..., Q, KV]``. Entries set to ``True`` participate in
+                attention.
+
+        Returns:
+            The attention output with shape ``[..., Q, H, C]``.
+
+        """
         if attn_mask is not None and seqused_key_value is not None:
             raise ValueError(
                 "Cannot pass both `attn_mask` and `seqused_key_value`"
