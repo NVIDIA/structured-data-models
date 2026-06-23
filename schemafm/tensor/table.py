@@ -469,6 +469,44 @@ def _expand(
     )
 
 
+@TableTensor.implements(aten.transpose.int)
+def _transpose(input: TableTensor, dim0: int, dim1: int) -> TableTensor:
+    blocks = {
+        stype: tensor.transpose(dim0, dim1) for stype, tensor in input.items()
+    }
+
+    dim0 %= input.dim()
+    dim1 %= input.dim()
+    if dim0 != dim1 and input.dim() - 1 in (dim0, dim1):
+        raise RuntimeError(
+            f"Can't transpose the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.permute.default)
+def _permute(input: TableTensor, dims: Sequence[int]) -> TableTensor:
+    dims = tuple(dims)
+    blocks = {stype: tensor.permute(dims) for stype, tensor in input.items()}
+
+    dims = tuple(dim % input.dim() for dim in dims)
+    if dims[-1] != input.dim() - 1:
+        raise RuntimeError(
+            f"Can't permute the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
 # Helpers #####################################################################
 
 

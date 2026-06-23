@@ -185,6 +185,18 @@ def test_view_ops() -> None:
     assert isinstance(out, TableTensor)
     assert out.size() == (2, 4, 3, 3)
 
+    out = tensor.transpose(0, 1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (3, 2, 3)
+    assert out.numerical.size() == (3, 2, 2)
+    assert out.categorical.size() == (3, 2, 1)
+
+    out = tensor.permute(1, 0, 2)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (3, 2, 3)
+    assert out.numerical.size() == (3, 2, 2)
+    assert out.categorical.size() == (3, 2, 1)
+
 
 def test_pin_memory() -> None:
     tensor = TableTensor(
