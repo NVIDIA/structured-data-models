@@ -149,7 +149,7 @@ def test_clone_contiguous() -> None:
     assert out.numerical.is_contiguous()
 
 
-def test_view() -> None:
+def test_view_ops() -> None:
     tensor = TableTensor(
         columns={
             "numerical": ["age", "income"],
@@ -170,8 +170,20 @@ def test_view() -> None:
     assert out.categorical.size() == (6, 1)
     assert out.columns == tensor.columns
 
-    with pytest.raises(RuntimeError, match="Cannot view"):
+    with pytest.raises(RuntimeError, match="Can't reshape"):
         _ = tensor.view(-1)
+
+    out = tensor.unsqueeze(0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (1, 2, 3, 3)
+
+    out = tensor.squeeze()
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 3)
+
+    out = tensor.unsqueeze(1).expand(-1, 4, 3, -1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 4, 3, 3)
 
 
 def test_pin_memory() -> None:
