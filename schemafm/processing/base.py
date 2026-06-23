@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
-
-SelfProcessor = TypeVar("SelfProcessor", bound="Processor")
+from typing_extensions import Self
 
 
 class Processor(torch.nn.Module, abc.ABC):
     """Fittable, tensor-in/tensor-out transform.
 
-    Subclass and implement ``_transform``. Override ``_fit`` to learn state
-    from data (the default is a no-op). For an inverse, also mix in
-    ``InvertibleMixin`` and implement ``_inverse_transform``.
+    Subclass and implement ``forward`` (the transform). Override ``_fit`` to
+    learn state from data (the default is a no-op). For an inverse, also mix
+    in ``InvertibleMixin`` and implement ``_inverse_transform``.
     """
 
     def __init__(self) -> None:
@@ -25,23 +24,28 @@ class Processor(torch.nn.Module, abc.ABC):
         if not self._fitted:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' is not fitted; "
-                "call 'fit' before 'transform' or 'inverse_transform'."
+                "call 'fit()' before."
             )
 
     def _fit(self, input: Tensor) -> None:
         pass
 
     @abc.abstractmethod
-    def _transform(self, input: Tensor) -> Tensor: ...
+    def forward(self, input: Tensor) -> Tensor:
+        """Transform ``input`` and return the result.
 
-    def fit(self: SelfProcessor, input: Tensor) -> SelfProcessor:
+        Called via ``processor(input)`` (``torch.nn.Module.__call__``) or,
+        with a fitted-state check, via :meth:`transform`.
+        """
+
+    def fit(self, input: Tensor) -> Self:
         self._fit(input)
         self._fitted = True
         return self
 
     def transform(self, input: Tensor) -> Tensor:
         self._check_is_fitted()
-        return self._transform(input)
+        return self(input)
 
     def fit_transform(self, input: Tensor) -> Tensor:
         return self.fit(input).transform(input)
