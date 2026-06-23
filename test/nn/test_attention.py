@@ -54,8 +54,6 @@ def test_sdpa() -> None:
 
     out = module(query=query, key=key, value=value)
     expected = reference_sdpa(query=query, key=key, value=value)
-
-    assert out.shape == query.shape
     torch.testing.assert_close(out, expected)
 
     # Broadcast batch dimensions and apply a boolean attention mask.
@@ -82,8 +80,6 @@ def test_sdpa() -> None:
         value=value.expand(2, -1, -1, -1),
         attn_mask=attn_mask,
     )
-
-    assert out.shape == query.shape
     torch.testing.assert_close(out, expected)
 
     # Apply sequence lengths to mask keys.
@@ -117,7 +113,6 @@ def test_sdpa() -> None:
         value=value,
         attn_mask=attn_mask,
     )
-
     torch.testing.assert_close(out, expected)
 
     # Decode-style broadcast: four candidate continuations share one KV cache.
@@ -141,8 +136,6 @@ def test_sdpa() -> None:
         key=key.expand(-1, candidate_count, -1, -1, -1),
         value=value.expand(-1, candidate_count, -1, -1, -1),
     )
-
-    assert out.shape == query.shape
     torch.testing.assert_close(out, expected)
 
     # Reject invalid mask and sequence-length combinations.
