@@ -17,6 +17,15 @@ def test_init() -> None:
             categories=(torch.arange(2), torch.arange(2)),
         ),
     )
+    assert repr(tensor) == (
+        "TableTensor(\n"
+        "  size=(2, 4),\n"
+        "  blocks={\n"
+        "    numerical (2): ['age', 'income'],\n"
+        "    categorical (2): ['country', 'segment'],\n"
+        "  },\n"
+        ")"
+    )
 
     assert tensor.size() == (2, 4)
     with pytest.raises(RuntimeError, match="single dtype"):
@@ -96,3 +105,17 @@ def test_save_load() -> None:
         tensor._categorical.categories,
     ):
         assert category1.equal(category2)
+
+
+def test_share_memory() -> None:
+    tensor = TableTensor(
+        numerical=torch.randn(3, 2),
+        columns={"numerical": ["age", "income"]},
+    )
+
+    assert not tensor.is_shared()
+    try:
+        tensor.share_memory_()
+        assert tensor.is_shared()
+    except RuntimeError:
+        pass

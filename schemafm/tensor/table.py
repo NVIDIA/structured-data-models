@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Any, ClassVar, SupportsIndex, TypeVar
 
@@ -137,6 +137,28 @@ class TableTensor(Tensor):
 
         return out
 
+    # Properties ##############################################################
+
+    @property
+    def columns(self) -> Mapping[Stype, tuple[str, ...]]:
+        return self._columns.copy()
+
+    @property
+    def numerical(self) -> Tensor:
+        return self._numerical
+
+    @property
+    def categorical(self) -> CategoricalTensor:
+        return self._categorical
+
+    def items(self) -> Iterator[tuple[Stype, Tensor]]:
+        yield Stype.numerical, self._numerical
+        yield Stype.categorical, self._categorical
+
+    @property
+    def blocks(self) -> Mapping[Stype, Tensor]:
+        return dict(self.items())
+
     # Decorators ##############################################################
 
     @classmethod
@@ -184,6 +206,48 @@ class TableTensor(Tensor):
         raise RuntimeError(
             f"'{self.__class__.__name__}' does not have a single dtype"
         )
+
+    def is_shared(self) -> bool:
+        return all(tensor.is_shared() for _, tensor in self.items())
+
+    def share_memory_(self) -> "TableTensor":
+        for _, tensor in self.items():
+            tensor.share_memory_()
+        return self
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        def _columns_repr(
+            columns: Sequence[str],
+            max_cols: int = 3,
+            max_item_len: int = 24,
+        ) -> str:
+            columns = [
+                f"'{column}'"
+                if len(column) <= max_item_len
+                else column[: max_item_len - 1] + "…"
+                for column in columns
+            ]
+            if len(columns) > max_cols:
+                [*columns[: max_cols - 1], "...", columns[-1]]
+            return "[" + ", ".join(column for column in columns) + "]"
+
+        stype_repr = [
+            (
+                f"    {stype.value} ({tensor.size(-1):,}): "
+                f"{_columns_repr(self._columns[stype])},"
+            )
+            for stype, tensor in self.items()
+        ]
+
+        out = f"{self.__class__.__name__}(\n"
+        out += f"  size={tuple(self.size())},\n"
+        out += "  blocks={\n"
+        out += "\n".join(stype_repr) + "\n"
+        out += "  },\n"
+        if self.device.type != "cpu":
+            out += f"  device={self.device},\n"
+        out += ")"
+        return out
 
 
 # Helpers #####################################################################
