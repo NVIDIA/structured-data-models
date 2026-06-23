@@ -13,8 +13,8 @@ from torch import Tensor
         lambda: torch.tensor(
             [
                 [1, 2, 0],
-                [3, 4, 1],
-            ],
+                [3, 4, 1]
+            ]
         ),
         lambda: torch.tensor([[4], [1]], dtype=torch.int32),
     ],
