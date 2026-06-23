@@ -73,8 +73,7 @@ class TableTensor(Tensor):
             if size != block.size()[:-1]:
                 raise ValueError(
                     f"Expected '{stype.value}' block size of "
-                    f"{_block_size_repr(size)} "
-                    f"(got {_block_size_repr(block.size()[:-1])})"
+                    f"{_block_size_repr(size)} (got {tuple(block.size())})"
                 )
             if device != block.device:
                 raise ValueError(
