@@ -39,15 +39,18 @@ class Processor(torch.nn.Module, abc.ABC):
         """
 
     def fit(self, input: Tensor) -> Self:
+        """Fit the processor on ``input`` and return it."""
         self._fit(input)
         self._fitted = True
         return self
 
     def transform(self, input: Tensor) -> Tensor:
+        """Transform ``input`` using the fitted processor."""
         self._check_is_fitted()
         return self(input)
 
     def fit_transform(self, input: Tensor) -> Tensor:
+        """Fit on ``input`` and return the transformed result."""
         return self.fit(input).transform(input)
 
 
@@ -62,6 +65,7 @@ class InvertibleMixin(abc.ABC):
     def _inverse_transform(self, input: Tensor) -> Tensor: ...
 
     def inverse_transform(self, input: Tensor) -> Tensor:
+        """Invert the transform of ``input`` using the fitted processor."""
         self._check_is_fitted()
         return self._inverse_transform(input)
 
