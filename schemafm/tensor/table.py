@@ -478,14 +478,3 @@ def _block_size_repr(size: Sequence[int]) -> str:
     if len(size) == 1:
         return f"({size[0]}, *)"
     return f"{str(tuple(size))[:-1]}, *)"
-
-
-def _normalize_dim(dim: int, ndim: int) -> int:
-    if dim < 0:
-        dim += ndim
-    if dim < 0 or dim >= ndim:
-        raise IndexError(
-            f"Dimension out of range (expected to be in range of "
-            f"[-{ndim}, {ndim - 1}], but got {dim})"
-        )
-    return dim
