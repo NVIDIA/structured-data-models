@@ -320,15 +320,12 @@ def _contiguous(
 
 
 @TableTensor.implements(aten.is_pinned.default)
-def _is_pinned(input: TableTensor, device: torch.device | None = None) -> bool:
-    return all(tensor.is_pinned(device) for _, tensor in input.items())
+def _is_pinned(input: TableTensor) -> bool:
+    return all(tensor.is_pinned() for _, tensor in input.items())
 
 
 @TableTensor.implements(aten._pin_memory.default)
-def _pin_memory(
-    input: TableTensor,
-    device: torch.device | None = None,
-) -> TableTensor:
+def _pin_memory(input: TableTensor) -> TableTensor:
     blocks = {stype: tensor.pin_memory() for stype, tensor in input.items()}
     return input.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
