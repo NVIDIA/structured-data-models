@@ -507,6 +507,72 @@ def _permute(input: TableTensor, dims: Sequence[int]) -> TableTensor:
     )
 
 
+@TableTensor.implements(aten.select.int)
+def _select(input: TableTensor, dim: int, index: int) -> TableTensor:
+    blocks = {
+        stype: tensor.select(dim, index) for stype, tensor in input.items()
+    }
+
+    if dim % input.dim() == input.dim() - 1:
+        raise RuntimeError(
+            f"Can't select the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.slice.Tensor)
+def _slice(
+    input: TableTensor,
+    dim: int = 0,
+    start: int | None = None,
+    end: int | None = None,
+    step: int = 1,
+) -> TableTensor:
+    blocks = {
+        stype: aten.slice.Tensor(tensor, dim, start, end, step)
+        for stype, tensor in input.items()
+    }
+
+    if dim % input.dim() == input.dim() - 1:
+        raise RuntimeError(
+            f"Can't slice the column dimension of '{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.narrow.default)
+def _narrow(
+    input: TableTensor,
+    dim: int,
+    start: int,
+    length: int,
+) -> TableTensor:
+    blocks = {
+        stype: tensor.narrow(dim, start, length)
+        for stype, tensor in input.items()
+    }
+
+    if dim % input.dim() == input.dim() - 1:
+        raise RuntimeError(
+            f"Can't narrow the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
 # Helpers #####################################################################
 
 
