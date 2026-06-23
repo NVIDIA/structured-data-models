@@ -2,6 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from schemafm.cache import CacheGroup, KVCacheEntry, ModelCache
 from schemafm.stype import Stype, StypeLike
 from schemafm.tensor import (
     VarLenTensor,
@@ -16,7 +17,10 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 __all__ = [
+    "CacheGroup",
     "CategoricalTensor",
+    "KVCacheEntry",
+    "ModelCache",
     "StringTensor",
     "Stype",
     "StypeLike",
