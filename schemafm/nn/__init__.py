@@ -1,5 +1,6 @@
-from schemafm.nn.attention import QASSMax
+from schemafm.nn.attention import QASSMax, SDPA
 
 __all__ = [
+    "SDPA",
     "QASSMax",
 ]

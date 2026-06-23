@@ -1,6 +1,7 @@
 from typing import Any, cast
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
@@ -100,3 +101,114 @@ class QASSMax(torch.nn.Module):
         scale = scale.unflatten(-1, (query.size(-2), query.size(-1)))
         gate = 1 + self.gate(query).tanh()
         return query * scale * gate
+
+
+class SDPA(torch.nn.Module):
+    r"""Scaled dot-product attention wrapper for ``[..., S, H, C]`` tensors."""
+
+    def __init__(
+        self,
+        channels: int,
+        num_heads: int,
+        ssmax: bool = False,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.ssmax: QASSMax | None = None
+        if ssmax:
+            self.ssmax = QASSMax(
+                channels=channels,
+                num_heads=num_heads,
+                **factory_kwargs,
+            )
+
+    def forward(
+        self,
+        query: Tensor,  # [..., Q, H, C]
+        key: Tensor,  # [..., KV, H, C]
+        value: Tensor,  # [..., KV, H, C]
+        seqused_query: Tensor | None = None,  # [...]
+        seqused_key_value: Tensor | None = None,  # [...]
+        attn_mask: Tensor | None = None,  # [..., Q, KV]
+    ) -> Tensor:  # [..., Q, H, C]
+        if attn_mask is not None and (
+            seqused_query is not None or seqused_key_value is not None
+        ):
+            raise ValueError("Cannot pass both `attn_mask` and `seqused_*`")
+
+        if seqused_query is not None and seqused_query.dtype != torch.int32:
+            raise ValueError("`seqused_query` must have dtype torch.int32")
+        if (
+            seqused_key_value is not None
+            and seqused_key_value.dtype != torch.int32
+        ):
+            raise ValueError("`seqused_key_value` must have dtype torch.int32")
+        if attn_mask is not None and attn_mask.dtype != torch.bool:
+            raise ValueError("`attn_mask` must have dtype torch.bool")
+
+        if self.ssmax is not None:
+            if seqused_key_value is not None:
+                key_len = seqused_key_value.unsqueeze(-1)
+            elif attn_mask is not None and attn_mask.size(-1) > 1:
+                key_len = attn_mask.sum(dim=-1)
+            else:
+                key_len = key.size(-3)
+            query = self.ssmax(query, key_len=key_len)
+
+        batch_shapes = [query.size()[:-3], key.size()[:-3], value.size()[:-3]]
+        if seqused_query is not None:
+            batch_shapes.append(seqused_query.size())
+        if seqused_key_value is not None:
+            batch_shapes.append(seqused_key_value.size())
+        if attn_mask is not None:
+            batch_shapes.append(attn_mask.size()[:-2])
+        batch_shape = torch.broadcast_shapes(*batch_shapes)
+
+        # Broadcast and flatten batch dimensions => [B, S, H, C].
+        query_size = query.size()[-3:]
+        key_size = key.size()[-3:]
+        value_size = value.size()[-3:]
+        query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
+        key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
+        value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
+
+        query_is_valid: Tensor | None = None
+        if attn_mask is not None:
+            attn_mask = attn_mask.expand(batch_shape + attn_mask.size()[-2:])
+            attn_mask = attn_mask.reshape(-1, *attn_mask.size()[-2:])
+
+        if seqused_query is not None:
+            seqused_query = seqused_query.expand(batch_shape).reshape(-1)
+            query_index = torch.arange(query.size(-3), device=query.device)
+            query_is_valid = query_index.unsqueeze(
+                0
+            ) < seqused_query.unsqueeze(-1)
+        if seqused_key_value is not None:
+            seqused_key_value = seqused_key_value.expand(batch_shape)
+            seqused_key_value = seqused_key_value.reshape(-1)
+            key_index = torch.arange(key.size(-3), device=key.device)
+            attn_mask = key_index.unsqueeze(0) < seqused_key_value.unsqueeze(
+                -1
+            )
+            attn_mask = attn_mask.unsqueeze(-2).expand(
+                -1,
+                query.size(-3),
+                -1,
+            )
+
+        out = F.scaled_dot_product_attention(
+            query=query.transpose(-3, -2),  # [B, H, Q, C],
+            key=key.transpose(-3, -2),  # [B, H, KV, C],
+            value=value.transpose(-3, -2),  # [B, H, KV, C],
+            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
+            if attn_mask is not None
+            else None,
+        ).transpose(-3, -2)  # [B, Q, H, C]
+
+        if query_is_valid is not None:
+            out = out * query_is_valid.unsqueeze(-1).unsqueeze(-1)
+
+        return out.reshape(batch_shape + out.size()[-3:])  # [..., Q, H, C]
