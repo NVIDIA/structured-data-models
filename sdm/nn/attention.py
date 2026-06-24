@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
+from torch.nn import GELU, LayerNorm, Linear, Sequential
 
 if TYPE_CHECKING:
     from sdm.nn import RotaryEmbedding
@@ -324,3 +324,85 @@ class MultiHeadAttention(torch.nn.Module):
 
         out = out.flatten(-2, -1)  # [..., Q, C]
         return self.out_lin(out)  # [..., Q, C]
+
+
+class TransformerBlock(torch.nn.Module):
+    r"""Transformer block with optional QASSMax and RoPE support.
+
+    Args:
+        channels: Input and output channel count.
+        num_heads: Number of attention heads.
+        feedforward_channels: Hidden width of the MLP.
+        qassmax: Whether to use QASSMax query scaling.
+        norm_bias: Whether LayerNorm uses learnable bias.
+        device: Parameter device.
+        dtype: Parameter dtype.
+
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        num_heads: int,
+        feedforward_channels: int,
+        qassmax: bool = False,
+        norm_bias: bool = True,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.q_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
+        self.kv_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
+        self.attn = MultiHeadAttention(
+            channels=channels,
+            num_heads=num_heads,
+            qassmax=qassmax,
+            **factory_kwargs,
+        )
+        self.mlp = Sequential(
+            LayerNorm(channels, bias=norm_bias, **factory_kwargs),
+            Linear(channels, feedforward_channels, **factory_kwargs),
+            GELU(),
+            Linear(feedforward_channels, channels, **factory_kwargs),
+        )
+
+        torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).weight)
+        torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).bias)
+
+    def forward(
+        self,
+        query: Tensor,  # [..., Q, C]
+        key_value: Tensor | None = None,  # [..., KV, C]
+        seqused_key_value: Tensor | None = None,  # [...]
+        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        rope: RotaryEmbedding | None = None,
+    ) -> Tensor:  # [..., Q, C]
+        r"""Forward pass of transformer block.
+
+        Args:
+            query: Query-side hidden states with shape ``[..., Q, C]``.
+            key_value: Optional key/value-side context states with shape
+                ``[..., KV, C]``. If omitted, ``query`` is used for
+                self-attention.
+            seqused_key_value: Optional valid key/value lengths with shape
+                ``[...]`` and dtype ``torch.int32``.
+            attn_mask: Optional boolean attention mask with shape
+                ``[..., Q, KV]``. Entries set to ``True`` participate in
+                attention.
+            rope: Optional rotary positional embedding applied inside the
+                attention branch after query/key projection.
+
+        Returns:
+            Tensor with shape ``[..., Q, C]``.
+
+        """
+        out = query + self.attn(
+            query=self.q_norm(query),
+            key_value=None if key_value is None else self.kv_norm(key_value),
+            seqused_key_value=seqused_key_value,
+            attn_mask=attn_mask,
+            rope=rope,
+        )
+        return out + self.mlp(out)
