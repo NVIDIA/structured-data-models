@@ -10,7 +10,7 @@ from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
 if TYPE_CHECKING:
-    from schemafm.nn.rope import RotaryEmbedding
+    from schemafm.nn import RotaryEmbedding
 
 
 class QASSMax(torch.nn.Module):
