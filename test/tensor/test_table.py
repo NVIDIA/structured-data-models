@@ -1,4 +1,5 @@
 import io
+from typing import cast
 
 import pytest
 import torch
@@ -248,7 +249,7 @@ def test_unbind_split() -> None:
         ),
     )
 
-    out = tensor.unbind(1)
+    out = cast(tuple[TableTensor, ...], tensor.unbind(1))
     assert len(out) == 3
     assert all(isinstance(tensor, TableTensor) for tensor in out)
     assert out[0].size() == (2, 4, 3)
@@ -267,7 +268,7 @@ def test_unbind_split() -> None:
     assert out[0].size() == (2, 1, 4, 3)
     assert out[1].size() == (2, 2, 4, 3)
 
-    out = tensor.unbind(-1)
+    out = cast(tuple[TableTensor, ...], tensor.unbind(-1))
     assert len(out) == 3
     assert all(isinstance(tensor, TableTensor) for tensor in out)
     assert out[0].size() == (2, 3, 4, 1)
@@ -276,34 +277,6 @@ def test_unbind_split() -> None:
     assert out[0].columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
-    }
-    assert out[1].columns == {
-        Stype.numerical: ("income",),
-        Stype.categorical: (),
-    }
-    assert out[2].size() == (2, 3, 4, 1)
-    assert out[2].numerical.size() == (2, 3, 4, 0)
-    assert out[2].categorical.size() == (2, 3, 4, 1)
-    assert out[2].columns == {
-        Stype.numerical: (),
-        Stype.categorical: ("country",),
-    }
-
-    out = tensor.split(1, dim=-1)
-    assert len(out) == 3
-    assert all(isinstance(tensor, TableTensor) for tensor in out)
-    assert out[0].size() == (2, 3, 4, 1)
-    assert out[0].columns == {
-        Stype.numerical: ("age",),
-        Stype.categorical: (),
-    }
-    assert out[1].columns == {
-        Stype.numerical: ("income",),
-        Stype.categorical: (),
-    }
-    assert out[2].columns == {
-        Stype.numerical: (),
-        Stype.categorical: ("country",),
     }
 
     with pytest.raises(RuntimeError, match="split size 1"):

@@ -576,7 +576,7 @@ def _narrow(
 @TableTensor.implements(aten.unbind.int)
 def _unbind(input: TableTensor, dim: int = 0) -> tuple[TableTensor, ...]:
     if _is_column_dim(input, dim):
-        return _split(input, 1, dim)
+        return _split(input, split_size=1, dim=dim)
 
     tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
         stype: tensor.unbind(dim) for stype, tensor in input.items()
@@ -672,43 +672,3 @@ def _is_column_dim(input: TableTensor, dim: int) -> bool:
     if dim < -input.dim() or dim >= input.dim():
         return False
     return dim % input.dim() == input.dim() - 1
-
-
-def _wrap_block_list(
-    input: TableTensor,
-    block_list_dict: Mapping[Stype, Sequence[Tensor]],
-) -> tuple[TableTensor, ...]:
-    columns = cast(dict[StypeLike, tuple[str, ...]], input._columns)
-    return tuple(
-        input.__class__(
-            columns=columns,
-            **{
-                stype: block_list[i]
-                for stype, block_list in block_list_dict.items()
-            },
-        )
-        for i in range(len(next(iter(block_list_dict.values()))))
-    )
-
-
-def _wrap_column_block_list(
-    input: TableTensor,
-    block_list_dict: Mapping[Stype, Sequence[Tensor]],
-) -> tuple[TableTensor, ...]:
-    output: list[TableTensor] = []
-    for stype, block_list in block_list_dict.items():
-        offset = 0
-        for block in block_list:
-            size = block.size(-1)
-            kwargs: dict[str, Any] = {
-                "columns": {
-                    stype: input._columns[stype][offset : offset + size]
-                },
-            }
-            if stype == Stype.numerical:
-                kwargs["numerical"] = block
-            else:
-                kwargs["categorical"] = block
-            output.append(input.__class__(**kwargs))
-            offset += size
-    return tuple(output)
