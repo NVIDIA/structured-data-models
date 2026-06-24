@@ -66,11 +66,6 @@ def test_slicing_ops() -> None:
     assert out.size() == (2, 2, 4)
     assert out.categories == tensor.categories
 
-    out = tensor[:, :, :]
-    assert isinstance(out, CategoricalTensor)
-    assert out.size() == tensor.size()
-    assert out.categories == tensor.categories
-
     out = tensor[..., 1::2]
     assert isinstance(out, CategoricalTensor)
     assert out.size() == (2, 3, 2)

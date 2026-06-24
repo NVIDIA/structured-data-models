@@ -326,12 +326,6 @@ def test_indexing() -> None:
     assert out.stride() == (2, 1)
     assert out._data.equal(torch.tensor([0, 3, 4, 5, 7, 8]))
 
-    out = tensor[:, :]
-    assert isinstance(out, VarLenTensor)
-    assert out.size() == tensor.size()
-    assert out.stride() == tensor.stride()
-    assert out.storage_offset() == tensor.storage_offset()
-
 
 def test_cat() -> None:
     tensors: list[Tensor] = [

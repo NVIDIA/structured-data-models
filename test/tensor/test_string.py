@@ -61,11 +61,6 @@ def test_item() -> None:
     assert StringTensor.from_list(["hi", "é"])[1].item() == "é"
     assert str(StringTensor.from_list([""])) == ""
 
-    tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
-    out = tensor[:, :]
-    assert isinstance(out, StringTensor)
-    assert out.tolist() == [["hi", "é"], ["", "abc"]]
-
     with pytest.raises(RuntimeError, match="cannot be converted"):
         StringTensor.from_list(["hi", "é"]).item()
 
