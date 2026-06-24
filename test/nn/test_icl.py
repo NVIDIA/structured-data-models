@@ -1,8 +1,7 @@
 import pytest
 import torch
-from torch import Tensor
-
 from sdm.nn import ICLBlock
+from torch import Tensor
 
 
 class RecordingLayer(torch.nn.Module):

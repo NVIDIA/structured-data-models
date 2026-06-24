@@ -97,8 +97,7 @@ class ICLBlock(torch.nn.Module):
             raise ValueError("`x` must be a floating-point tensor")
         if x.size(-1) != self.channels:
             raise ValueError(
-                f"`x` must have {self.channels} channels, "
-                f"got {x.size(-1)}"
+                f"`x` must have {self.channels} channels, got {x.size(-1)}"
             )
         if y_train.dim() != 1:
             raise ValueError(
@@ -110,8 +109,7 @@ class ICLBlock(torch.nn.Module):
             raise ValueError("`y_train` must contain at least one train row")
         if y_train.size(0) > x.size(0):
             raise ValueError(
-                "`y_train` length must be less than or equal to "
-                "`x.size(0)`"
+                "`y_train` length must be less than or equal to `x.size(0)`"
             )
         if y_train.is_floating_point():
             return

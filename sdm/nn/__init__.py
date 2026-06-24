@@ -12,9 +12,9 @@ from sdm.nn.rope import RotaryEmbedding
 
 __all__ = [
     "SDPA",
+    "ICLBlock",
     "MultiHeadAttention",
     "QASSMax",
-    "ICLBlock",
     "RotaryEmbedding",
     "TransformerBlock",
 ]
