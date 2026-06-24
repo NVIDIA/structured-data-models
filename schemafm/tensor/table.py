@@ -1,6 +1,6 @@
 import math
 from collections import defaultdict
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
@@ -161,32 +161,43 @@ class TableTensor(Tensor):
     def blocks(self) -> Mapping[Stype, Tensor]:
         return dict(self.items())
 
-    def select_columns(self, columns: str | Sequence[str]) -> "TableTensor":
-        if isinstance(columns, str):
-            columns = (columns,)
-        if len(set(columns)) != len(columns):
-            raise ValueError("Expected column names to be unique")
+    def select_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+        columns = {columns} if isinstance(columns, str) else set(columns)
+
+        for column in columns:
+            if column not in self._column_to_loc:
+                raise KeyError(column)
 
         index_dict: dict[Stype, list[int]] = defaultdict(list)
         columns_dict: dict[StypeLike, list[str]] = defaultdict(list)
-        for column in columns:
-            try:
-                stype, index = self._column_to_loc[column]
-            except KeyError:
-                raise KeyError(column) from None
-            index_dict[stype].append(index)
-            columns_dict[stype].append(column)
+        for stype, stype_columns in self._columns.items():
+            for i, column in enumerate(stype_columns):
+                if column in columns:
+                    index_dict[stype].append(i)
+                    columns_dict[stype].append(column)
 
         blocks: dict[Stype, Tensor] = {}
         for stype, tensor in self.items():
             indices = index_dict[stype]
             if len(indices) == 0:
                 blocks[stype] = tensor.narrow(-1, 0, 0)
-                continue
-            index = torch.tensor(indices, device=tensor.device)
-            blocks[stype] = tensor.index_select(-1, index)
+            elif len(indices) == len(self._columns[stype]):
+                blocks[stype] = tensor
+            else:
+                index = torch.tensor(indices, device=tensor.device)
+                blocks[stype] = tensor.index_select(-1, index)
 
         return self.__class__(columns=columns_dict, **blocks)
+
+    def drop_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+        columns = {columns} if isinstance(columns, str) else set(columns)
+
+        for column in columns:
+            if column not in self._column_to_loc:
+                raise KeyError(column)
+
+        columns = set(chain.from_iterable(self._columns.values())) - columns
+        return self.select_columns(columns)
 
     # Decorators ##############################################################
 
