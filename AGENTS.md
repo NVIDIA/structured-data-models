@@ -1,6 +1,6 @@
 # Overview
 
-This repository is an open-source model zoo for foundation models on structured data (e.g., TabICLv2, KumoRFM-2, etc).
+This repository is an open-source model zoo for structured data models (e.g., TabICLv2, KumoRFM-2, etc).
 
 The repository provides reusable model architectures, tensor containers, preprocessing and postprocessing blocks, attention modules, key/value cache building blocks, ensembling utilities, benchmark examples, and NIM-compatible runtime foundations.
 It should stay generic, modular, and lightweight.
@@ -11,10 +11,18 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Test execution via `pytest`
 - Pre-commit checks via `pre-commit run --all-files`
 
+# PR / GitHub Metadata
+
+- Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions, commit messages, or review replies unless explicitly requested.
+- PR metadata should describe the code change only.
+
 # Project Structure
 
 - `schemafm/stype.py`: Semantic column types via `Stype`.
+- `schemafm/cache.py`: Model cache, e.g., for key/value caching.
 - `schemafm/tensor`: Custom PyTorch-native `Tensor` subclasses for tensorized raw table data.
+- `schemafm/processing`: Common tensorized preprocessing and postprocessing routines for structured data models.
+- `schemafm/nn`: Common neural network building blocks for structured data models.
 
 # Core Design Principles
 
