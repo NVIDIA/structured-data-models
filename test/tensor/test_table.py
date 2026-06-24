@@ -323,6 +323,69 @@ def test_index_ops() -> None:
         _ = tensor[..., torch.tensor([0])]
 
 
+def test_cat_stack() -> None:
+    tensor1 = TableTensor(
+        columns={
+            "numerical": ["age"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 1),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+    tensor2 = TableTensor(
+        columns={
+            "numerical": ["age"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(3, 1),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (3, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+    tensor3 = TableTensor(
+        columns={
+            "numerical": ["income"],
+            "categorical": ["segment"],
+        },
+        numerical=torch.randn(2, 1),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = torch.cat([tensor1, tensor2], dim=0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (5, 2)
+    assert out.numerical.size() == (5, 1)
+    assert out.categorical.size() == (5, 1)
+    assert out.columns == tensor1.columns
+
+    out = torch.cat([tensor1, tensor3], dim=-1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 4)
+    assert out.numerical.size() == (2, 2)
+    assert out.categorical.size() == (2, 2)
+    assert out.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: ("country", "segment"),
+    }
+
+    out = torch.stack([tensor1, tensor1], dim=0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 2, 2)
+    assert out.numerical.size() == (2, 2, 1)
+    assert out.categorical.size() == (2, 2, 1)
+    assert out.columns == tensor1.columns
+
+    with pytest.raises(RuntimeError, match="Can't stack"):
+        _ = torch.stack([tensor1, tensor1], dim=-1)
+
+
 def test_pin_memory() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
