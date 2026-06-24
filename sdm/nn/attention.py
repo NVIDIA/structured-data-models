@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, LayerNorm, Linear, Sequential
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 if TYPE_CHECKING:
     from sdm.nn import RotaryEmbedding
@@ -205,14 +206,23 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
-        out = F.scaled_dot_product_attention(
-            query=query.transpose(-3, -2),  # [B, H, Q, C],
-            key=key.transpose(-3, -2),  # [B, H, KV, C],
-            value=value.transpose(-3, -2),  # [B, H, KV, C],
-            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-            if attn_mask is not None
-            else None,
-        ).transpose(-3, -2)  # [B, Q, H, C]
+        if query.device.type == "cuda":
+            if attn_mask is not None:
+                backend = SDPBackend.EFFICIENT_ATTENTION
+            else:
+                backend = SDPBackend.FLASH_ATTENTION
+        else:
+            backend = SDPBackend.MATH
+
+        with sdpa_kernel(backend):
+            out = F.scaled_dot_product_attention(
+                query=query.transpose(-3, -2),  # [B, H, Q, C]
+                key=key.transpose(-3, -2),  # [B, H, KV, C]
+                value=value.transpose(-3, -2),  # [B, H, KV, C]
+                attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
+                if attn_mask is not None
+                else None,
+            ).transpose(-3, -2)  # [B, Q, H, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, H, C]
 
