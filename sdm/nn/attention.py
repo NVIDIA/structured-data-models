@@ -48,7 +48,6 @@ class QASSMax(torch.nn.Module):
         hidden_channels: The hidden width of the scale and gate MLPs.
         device: The device to use for module parameters.
         dtype: The dtype to use for module parameters.
-
     """
 
     def __init__(
@@ -100,7 +99,6 @@ class QASSMax(torch.nn.Module):
 
         Returns:
             The scaled query tensor.
-
         """
         if isinstance(key_len, Tensor):
             log_key_len = key_len.float().clamp(min=1.0).log().to(query.dtype)
@@ -158,7 +156,6 @@ class SDPA(torch.nn.Module):
 
         Returns:
             The attention output with shape ``[..., Q, H, C]``.
-
         """
         if attn_mask is not None and seqused_key_value is not None:
             raise ValueError(
@@ -234,7 +231,6 @@ class MultiHeadAttention(torch.nn.Module):
         qassmax: Whether to scale queries with :class:`QASSMax`.
         device: The device to use for module parameters.
         dtype: The dtype to use for module parameters.
-
     """
 
     def __init__(
@@ -293,7 +289,6 @@ class MultiHeadAttention(torch.nn.Module):
 
         Returns:
             Tensor with shape ``[..., Q, C]``.
-
         """
         if key_value is None:
             query, key, value = self.qkv_lin(query).chunk(chunks=3, dim=-1)
@@ -337,7 +332,6 @@ class TransformerBlock(torch.nn.Module):
         norm_bias: Whether LayerNorm uses learnable bias.
         device: Parameter device.
         dtype: Parameter dtype.
-
     """
 
     def __init__(
@@ -396,7 +390,6 @@ class TransformerBlock(torch.nn.Module):
 
         Returns:
             Tensor with shape ``[..., Q, C]``.
-
         """
         out = query + self.attn(
             query=self.q_norm(query),

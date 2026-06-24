@@ -17,7 +17,6 @@ class KVCacheEntry:
     Args:
         key: Cached key projection tensor.
         value: Cached value projection tensor.
-
     """
 
     key: Tensor
@@ -31,16 +30,10 @@ class ModelCache:
     modules should not receive this object; they should only return or consume
     values such as :class:`KVCacheEntry`. Repeated values, such as per-layer KV
     entries, can be stored as plain dictionaries.
-
     """
 
     def __init__(self) -> None:
-        r"""Initialize an empty model cache.
-
-        Args:
-            None.
-
-        """
+        r"""Initialize an empty model cache."""
         self._items: dict[str, object] = {}
 
     def __setitem__(self, name: str, value: object) -> None:

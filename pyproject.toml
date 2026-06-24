@@ -105,6 +105,7 @@ ignore = [
     "D100",  # Ignore "Missing docstring in public module"
     "D105",  # Ignore "missing docstring in magic method"
     "D107",  # Ignore "missing docstring in __init__"
+    "D413",  # Ignore "Missing blank line after last section ("{name}")"
 ]
 
 [tool.ruff.lint.pydocstyle]
