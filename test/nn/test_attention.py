@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pytest
 import torch
 import torch.nn.functional as F
-from schemafm.nn import SDPA, Attention, QASSMax, RotaryEmbedding
+from schemafm.nn import SDPA, MultiHeadAttention, QASSMax, RotaryEmbedding
 from torch import Tensor
 
 
@@ -172,7 +172,7 @@ def test_attention(qassmax: bool, rope: bool) -> None:
     channels = 6
     num_heads = 3
     dtype = torch.float32
-    module = Attention(
+    module = MultiHeadAttention(
         channels=channels,
         num_heads=num_heads,
         qassmax=qassmax,
@@ -214,7 +214,7 @@ def test_attention(qassmax: bool, rope: bool) -> None:
 def test_attention_errors() -> None:
     channels = 6
     num_heads = 3
-    module = Attention(channels=channels, num_heads=num_heads)
+    module = MultiHeadAttention(channels=channels, num_heads=num_heads)
     query = torch.randn(2, 4, channels)
 
     with pytest.raises(ValueError, match="Cannot pass both"):
@@ -243,4 +243,4 @@ def test_attention_errors() -> None:
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
-        Attention(channels=5, num_heads=2)
+        MultiHeadAttention(channels=5, num_heads=2)

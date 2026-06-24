@@ -220,7 +220,7 @@ class SDPA(torch.nn.Module):
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, H, C]
 
 
-class Attention(torch.nn.Module):
+class MultiHeadAttention(torch.nn.Module):
     r"""Multi-head attention layer.
 
     This module owns the query, key, value, and output projections. When
