@@ -1,4 +1,4 @@
-# structured-data-models
+# Structured Data Models
 
 Python package for structured data models.
 
