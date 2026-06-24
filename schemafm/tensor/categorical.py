@@ -193,6 +193,11 @@ def _pin_memory(input: CategoricalTensor) -> CategoricalTensor:
     return input.__class__(input._data.pin_memory(), input._categories)
 
 
+@CategoricalTensor.implements(aten.alias.default)
+def _alias(input: CategoricalTensor) -> CategoricalTensor:
+    return input.__class__(aten.alias.default(input._data), input._categories)
+
+
 @CategoricalTensor.implements(aten.view.default)
 def _view(input: CategoricalTensor, size: Sequence[int]) -> Tensor:
     return _maybe_wrap(input, input._data.view(size))

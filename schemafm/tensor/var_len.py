@@ -615,6 +615,17 @@ def _pin_memory(input: VarLenTensor) -> VarLenTensor:
     )
 
 
+@VarLenTensor.implements(aten.alias.default)
+def _alias(input: VarLenTensor) -> VarLenTensor:
+    return input.__class__(
+        data=aten.alias.default(input._data),
+        offset=aten.alias.default(input._offset),
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+
+
 @VarLenTensor.implements(aten.equal.default)
 def _equal(input: VarLenTensor, other: Tensor) -> bool:
     if input.__class__ is not other.__class__:

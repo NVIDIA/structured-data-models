@@ -241,6 +241,27 @@ class TableTensor(Tensor):
             f"'{func}' is not supported for '{cls.__name__}'"
         )
 
+    def __getitem__(self, indices: Any) -> "TableTensor":
+        def is_column_index(index: Any) -> bool:
+            return isinstance(index, str) or (
+                isinstance(index, list)
+                and all(isinstance(value, str) for value in index)
+            )
+
+        if is_column_index(indices):
+            return self.select_columns(indices)
+        if not isinstance(indices, tuple):
+            return cast(TableTensor, Tensor.__getitem__(self, indices))
+        if not any(is_column_index(index) for index in indices):
+            return cast(TableTensor, Tensor.__getitem__(self, indices))
+        if any(is_column_index(index) for index in indices[:-1]):
+            raise IndexError(
+                "Column names can only index the column dimension"
+            )
+
+        out = Tensor.__getitem__(self, (*indices[:-1], slice(None)))
+        return cast(TableTensor, out).select_columns(indices[-1])
+
     def is_shared(self) -> bool:
         return all(tensor.is_shared() for _, tensor in self.items())
 
@@ -302,6 +323,17 @@ class TableTensor(Tensor):
             out += f"  device={self.device},\n"
         out += ")"
         return out
+
+
+@TableTensor.implements(aten.alias.default)
+def _alias(input: TableTensor) -> TableTensor:
+    blocks = {
+        stype: aten.alias.default(tensor) for stype, tensor in input.items()
+    }
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
 
 
 @TableTensor.implements(aten._to_copy.default)
