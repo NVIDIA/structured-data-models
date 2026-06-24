@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pytest
 import torch
 import torch.nn.functional as F
-from schemafm.nn import SDPA, MultiHeadAttention, QASSMax, RotaryEmbedding
+from sdm.nn import SDPA, MultiHeadAttention, QASSMax, RotaryEmbedding
 from torch import Tensor
 
 

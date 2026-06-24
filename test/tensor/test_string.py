@@ -1,7 +1,7 @@
 import pyarrow as pa
 import pytest
 import torch
-from schemafm import StringTensor
+from sdm import StringTensor
 
 
 def test_from_list() -> None:

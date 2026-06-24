@@ -1,6 +1,6 @@
 import pytest
 import torch
-from schemafm.cache import KVCacheEntry, ModelCache
+from sdm.cache import KVCacheEntry, ModelCache
 
 
 def _entry() -> KVCacheEntry:

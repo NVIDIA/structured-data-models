@@ -53,7 +53,7 @@ Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["schemafm*"]
+include = ["sdm*"]
 
 [tool.setuptools_scm]
 fallback_version = "0.1.0.dev0"
@@ -73,7 +73,7 @@ testpaths = ["test"]
 xfail_strict = true
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
-src = ["pyproject.toml", "schemafm", "test"]
+src = ["pyproject.toml", "sdm", "test"]
 line-length = 79
 indent-width = 4
 target-version = "py310"
@@ -120,7 +120,7 @@ convention = "google"
     "D106",  # Ignore "Missing docstring in public nested class"
 ]
 # TODO: Address these ignores
-"schemafm/tensor/*.py" = [
+"sdm/tensor/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
 ]

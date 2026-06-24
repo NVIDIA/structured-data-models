@@ -1,7 +1,7 @@
 """Neural network modules for structured data foundation models."""
 
-from schemafm.nn.attention import MultiHeadAttention, QASSMax, SDPA
-from schemafm.nn.rope import RotaryEmbedding
+from sdm.nn.attention import MultiHeadAttention, QASSMax, SDPA
+from sdm.nn.rope import RotaryEmbedding
 
 
 __all__ = [

@@ -3,7 +3,7 @@ from typing import cast
 
 import pytest
 import torch
-from schemafm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 
 
 def test_init() -> None:
