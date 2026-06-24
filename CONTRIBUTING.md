@@ -1,12 +1,12 @@
-# Contributing to schema-fm
+# Contributing to structured-data-models
 
-If you are interested in contributing to schema-fm, your contributions will fall
+If you are interested in contributing to structured-data-models, your contributions will fall
 into three categories:
 
 1. You want to report a bug, feature request, or documentation issue
-   - File an [issue](https://github.com/NVIDIA/schema-fm/issues/new/choose)
+   - File an [issue](https://github.com/NVIDIA/structured-data-models/issues/new/choose)
      describing what you encountered or what you want to see changed.
-   - Please run and paste the output of the `schema-fm/print_env.sh` script while
+   - Please run and paste the output of the `structured-data-models/print_env.sh` script while
      reporting a bug to gather and report relevant environment details.
    - The RAPIDS team will evaluate the issues and triage them, scheduling
      them for a release. If you believe the issue needs priority attention
@@ -25,16 +25,16 @@ into three categories:
 
 ### Your first issue
 
-1. Read the project's [README.md](https://github.com/NVIDIA/schema-fm/blob/main/README.md)
+1. Read the project's [README.md](https://github.com/NVIDIA/structured-data-models/blob/main/README.md)
    to learn how to setup the development environment.
-2. Find an issue to work on. The best way is to look for the [good first issue](https://github.com/NVIDIA/schema-fm/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
-   or [help wanted](https://github.com/NVIDIA/schema-fm/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) labels
+2. Find an issue to work on. The best way is to look for the [good first issue](https://github.com/NVIDIA/structured-data-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+   or [help wanted](https://github.com/NVIDIA/structured-data-models/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) labels
 3. Comment on the issue saying you are going to work on it.
 4. Get familar with the developer guide relevant for you:
    - For C++ developers it is available here [DEVELOPER_GUIDE.md](https://github.com/jarmak-nv/rapids-repo-template/blob/main/Maintainers/DEVELOPER_GUIDE.md)
    - For Python developers, a [cuDF SAMPLE Python DEVELOPER_GUIDE.md](https://docs.rapids.ai/api/cudf/stable/developer_guide/index.html) is availabe as well.
 5. Code! Make sure to update unit tests!
-6. When done, [create your pull request](https://github.com/NVIDIA/schema-fm/compare).
+6. When done, [create your pull request](https://github.com/NVIDIA/structured-data-models/compare).
 7. Verify that CI passes all [status checks](https://help.github.com/articles/about-status-checks/), or fix if needed.
 8. Wait for other developers to review your code and update code as needed.
 9. Once reviewed and approved, a RAPIDS developer will merge your pull request.
@@ -45,7 +45,7 @@ Remember, if you are unsure about anything, don't hesitate to comment on issues 
 
 Each PR must be labeled according to whether it is a "breaking" or "non-breaking" change (using Github labels). This is used to highlight changes that users should know about when upgrading.
 
-For schema-fm, a "breaking" change is one that modifies the public, non-experimental, Python API in a
+For structured-data-models, a "breaking" change is one that modifies the public, non-experimental, Python API in a
 non-backward-compatible way. The C++ API does not have an expectation of backward compatibility at this
 time, so changes to it are not typically considered breaking. Backward-compatible API changes to the Python
 API (such as adding a new keyword argument to a function) do not need to be labeled.
@@ -67,16 +67,16 @@ implementation of the issue, ask them in the issue instead of the PR.
 
 ### Branches and Versions
 
-The schema-fm repository has two main branches:
+The structured-data-models repository has two main branches:
 
 1. `main` branch: it contains the last released version. Only hotfixes are targeted and merged into it.
 2. `branch-x.y`: it is the development branch which contains the upcoming release. All the new features should be based on this branch and Merge/Pull request should target this branch (with the exception of hotfixes).
 
 ### Additional details
 
-For every new version `x.y` of schema-fm there is a corresponding branch called `branch-x.y`, from where new feature development starts and PRs will be targeted and merged before its release. The exceptions to this are the 'hotfixes' that target the `main` branch, which target critical issues raised by Github users and are directly merged to `main` branch, and create a new subversion of the project. While trying to patch an issue which requires a 'hotfix', please state the intent in the PR.
+For every new version `x.y` of structured-data-models there is a corresponding branch called `branch-x.y`, from where new feature development starts and PRs will be targeted and merged before its release. The exceptions to this are the 'hotfixes' that target the `main` branch, which target critical issues raised by Github users and are directly merged to `main` branch, and create a new subversion of the project. While trying to patch an issue which requires a 'hotfix', please state the intent in the PR.
 
-For all development, your changes should be pushed into a branch (created using the naming instructions below) in your own fork of schema-fm and then create a pull request when the code is ready.
+For all development, your changes should be pushed into a branch (created using the naming instructions below) in your own fork of structured-data-models and then create a pull request when the code is ready.
 
 A few days before releasing version `x.y` the code of the current development branch (`branch-x.y`) will be frozen and a new branch, 'branch-x+1.y' will be created to continue development.
 

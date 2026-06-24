@@ -11,7 +11,7 @@ from schemafm.tensor import (
 )
 
 try:
-    __version__ = version("schema-fm")
+    __version__ = version("structured-data-models")
 except PackageNotFoundError:
     __version__ = "0+unknown"
 
