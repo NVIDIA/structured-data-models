@@ -767,8 +767,8 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         columns = tensors[0]._columns
     else:
         columns = {
-            stype: chain.from_iterable(
-                tensor._columns[stype] for tensor in tensors
+            stype: tuple(
+                chain.from_iterable(t._columns[stype] for t in tensors)
             )
             for stype, _ in tensors[0].items()
         }
