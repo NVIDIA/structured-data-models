@@ -13,7 +13,6 @@ class RotaryEmbedding(torch.nn.Module):
         requires_grad: Whether inverse frequencies are learnable.
         device: The device to use for module parameters.
         dtype: The dtype to use for module parameters.
-
     """
 
     def __init__(
@@ -48,7 +47,6 @@ class RotaryEmbedding(torch.nn.Module):
 
         Returns:
             The rotated tensor with shape ``[..., S, H, C]``.
-
         """
         if x.size(-1) != 2 * self.inv_freq.size(-1):
             raise ValueError(

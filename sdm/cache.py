@@ -17,7 +17,6 @@ class KVCacheEntry:
     Args:
         key: Cached key projection tensor.
         value: Cached value projection tensor.
-
     """
 
     key: Tensor
@@ -35,12 +34,7 @@ class ModelCache:
     """
 
     def __init__(self) -> None:
-        r"""Initialize an empty model cache.
-
-        Args:
-            None.
-
-        """
+        r"""Initialize an empty model cache."""
         self._items: dict[str, object] = {}
 
     def __setitem__(self, name: str, value: object) -> None:
