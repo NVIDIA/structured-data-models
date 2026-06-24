@@ -4,7 +4,16 @@ from collections.abc import Callable
 
 import pytest
 import torch
-from schemafm.processing import Clip, Power, Processor, Quantile, StandardScale
+from schemafm.processing import (
+    Clip,
+    LabelEncode,
+    MeanImpute,
+    Power,
+    Processor,
+    Quantile,
+    SigmaClip,
+    StandardScale,
+)
 from schemafm.processing.base import InvertibleMixin
 
 ProcessorFactory = Callable[[], Processor]
@@ -12,7 +21,15 @@ ProcessorFactory = Callable[[], Processor]
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [Clip, Power, Quantile, StandardScale],
+    [
+        Clip,
+        LabelEncode,
+        MeanImpute,
+        Power,
+        Quantile,
+        SigmaClip,
+        StandardScale,
+    ],
 )
 def test_processor_requires_fit_for_transform(
     processor_factory: ProcessorFactory,
@@ -26,7 +43,7 @@ def test_processor_requires_fit_for_transform(
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [Clip, Power, Quantile, StandardScale],
+    [Clip, LabelEncode, Power, Quantile, StandardScale],
 )
 def test_invertible_processor_requires_fit_for_inverse_transform(
     processor_factory: ProcessorFactory,
