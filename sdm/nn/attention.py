@@ -332,7 +332,6 @@ class TransformerBlock(torch.nn.Module):
         norm_bias: Whether LayerNorm uses learnable bias.
         device: Parameter device.
         dtype: Parameter dtype.
-
     """
 
     def __init__(
@@ -391,7 +390,6 @@ class TransformerBlock(torch.nn.Module):
 
         Returns:
             Tensor with shape ``[..., Q, C]``.
-
         """
         out = query + self.attn(
             query=self.q_norm(query),
