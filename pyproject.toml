@@ -3,7 +3,7 @@ requires = ["setuptools>=80", "setuptools-scm>=10"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "schema-fm"
+name = "structured-data-models"
 dynamic = ["version"]
 description = "Foundation Models for Structured Data"
 readme = "README.md"
@@ -46,10 +46,10 @@ test = [
 ]
 
 [project.urls]
-Download = "https://github.com/NVIDIA/schema-fm/releases"
-Homepage = "https://github.com/NVIDIA/schema-fm"
-Repository = "https://github.com/NVIDIA/schema-fm"
-Issues = "https://github.com/NVIDIA/schema-fm/issues"
+Download = "https://github.com/NVIDIA/structured-data-models/releases"
+Homepage = "https://github.com/NVIDIA/structured-data-models"
+Repository = "https://github.com/NVIDIA/structured-data-models"
+Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

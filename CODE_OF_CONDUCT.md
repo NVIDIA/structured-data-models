@@ -2,7 +2,7 @@
 
 ## Overview
 
-Define the code of conduct followed and enforced for schema-fm.
+Define the code of conduct followed and enforced for structured-data-models.
 
 ### Intended audience
 

@@ -1,6 +1,6 @@
-# schema-fm
+# structured-data-models
 
-Python package for schema-fm.
+Python package for structured data foundation models.
 
 ## Development
 
