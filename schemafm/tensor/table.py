@@ -657,6 +657,60 @@ def _split_with_sizes(
     )
 
 
+@TableTensor.implements(aten.index_select.default)
+def _index_select(
+    input: TableTensor,
+    dim: int,
+    index: Tensor,
+) -> TableTensor:
+    blocks = {
+        stype: tensor.index_select(dim, index)
+        for stype, tensor in input.items()
+    }
+
+    if dim % input.dim() == input.dim() - 1:
+        raise RuntimeError(
+            f"Can't index the column dimension of '{input.__class__.__name__}'"
+        )
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.index.Tensor)
+def _index(
+    input: TableTensor,
+    indices: Sequence[Tensor | None],
+) -> TableTensor:
+
+    current_dim = 0
+    for index in indices:
+        if index is None:
+            current_dim += 1
+            continue
+
+        # Check whether we index the column dimension:
+        num_indexed_dims = index.dim() if index.dtype == torch.bool else 1
+        if current_dim <= input.dim() - 1 < current_dim + num_indexed_dims:
+            raise RuntimeError(
+                f"Can't index the column dimension of "
+                f"'{input.__class__.__name__}'"
+            )
+        current_dim += num_indexed_dims
+
+    blocks = {
+        stype: aten.index.Tensor(tensor, indices)
+        for stype, tensor in input.items()
+    }
+
+    return input.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+        **blocks,
+    )
+
+
 # Helpers #####################################################################
 
 

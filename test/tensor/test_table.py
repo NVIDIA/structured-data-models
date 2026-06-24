@@ -285,6 +285,44 @@ def test_unbind_split() -> None:
         _ = tensor.split([1, 2], dim=-1)
 
 
+def test_index_ops() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 3, 4, 2),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = tensor.index_select(1, torch.tensor([2, 0]))
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 2, 4, 3)
+    assert out.numerical.size() == (2, 2, 4, 2)
+    assert out.categorical.size() == (2, 2, 4, 1)
+
+    out = tensor[:, [2, 0]]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 2, 4, 3)
+    assert out.numerical.size() == (2, 2, 4, 2)
+    assert out.categorical.size() == (2, 2, 4, 1)
+
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+    out = tensor[mask]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (3, 4, 3)
+    assert out.numerical.size() == (3, 4, 2)
+    assert out.categorical.size() == (3, 4, 1)
+
+    with pytest.raises(RuntimeError, match="Can't index"):
+        _ = tensor.index_select(-1, torch.tensor([0]))
+    with pytest.raises(RuntimeError, match="Can't index"):
+        _ = tensor[..., torch.tensor([0])]
+
+
 def test_pin_memory() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
