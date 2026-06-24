@@ -3,7 +3,13 @@ from collections.abc import Callable
 import pytest
 import torch
 import torch.nn.functional as F
-from sdm.nn import SDPA, MultiHeadAttention, QASSMax, RotaryEmbedding
+from schemafm.nn import (
+    SDPA,
+    MultiHeadAttention,
+    QASSMax,
+    RotaryEmbedding,
+    TransformerBlock,
+)
 from torch import Tensor
 
 
@@ -244,3 +250,74 @@ def test_attention_errors() -> None:
 
     with pytest.raises(ValueError, match="must be divisible"):
         MultiHeadAttention(channels=5, num_heads=2)
+
+
+@pytest.mark.parametrize("qassmax", [False, True])
+@pytest.mark.parametrize("rope", [False, True])
+def test_transformer_block(qassmax: bool, rope: bool) -> None:
+    batch_size = 2
+    query_len = 3
+    key_value_len = 5
+    channels = 8
+    num_heads = 2
+    feedforward_channels = 16
+    module = TransformerBlock(
+        channels=channels,
+        num_heads=num_heads,
+        feedforward_channels=feedforward_channels,
+        qassmax=qassmax,
+    )
+    query = torch.randn(batch_size, query_len, channels)
+    key_value = torch.randn(batch_size, key_value_len, channels)
+    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32)
+    key_index = torch.arange(key_value_len).view(1, 1, key_value_len)
+    attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
+    attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
+    rotary_embedding: RotaryEmbedding | None = None
+    if rope:
+        rotary_embedding = RotaryEmbedding(channels=channels // num_heads)
+
+    out = module(query=query, rope=rotary_embedding)
+    assert out.size() == query.size()
+    assert out.dtype == query.dtype
+    assert out.device == query.device
+
+    out = module(
+        query=query,
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+        rope=rotary_embedding,
+    )
+    assert out.size() == query.size()
+    assert out.dtype == query.dtype
+    assert out.device == query.device
+
+    with torch.no_grad():
+        module.attn.out_lin.weight.copy_(torch.eye(channels))
+        module.attn.out_lin.bias.zero_()
+
+    out1 = module(
+        query=query,
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+        rope=rotary_embedding,
+    )
+    out2 = module(
+        query=query,
+        key_value=key_value,
+        attn_mask=attn_mask,
+        rope=rotary_embedding,
+    )
+    torch.testing.assert_close(out1, out2)
+
+    # Test no padding leakage
+    new_key_value = key_value.clone()
+    new_key_value[0, 3:] = torch.randn_like(new_key_value[0, 3:]) * 1000
+    new_key_value[1, 1:] = torch.randn_like(new_key_value[1, 1:]) * -1000
+    out3 = module(
+        query=query,
+        key_value=new_key_value,
+        seqused_key_value=seqused_key_value,
+        rope=rotary_embedding,
+    )
+    torch.testing.assert_close(out1, out3)

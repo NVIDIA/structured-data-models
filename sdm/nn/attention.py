@@ -355,7 +355,7 @@ class TransformerBlock(torch.nn.Module):
 
         self.q_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
         self.kv_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
-        self.attn = Attention(
+        self.attn = MultiHeadAttention(
             channels=channels,
             num_heads=num_heads,
             qassmax=qassmax,
