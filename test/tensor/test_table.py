@@ -229,6 +229,86 @@ def test_slicing_ops() -> None:
     assert out.numerical.size() == (2, 3, 2, 2)
     assert out.categorical.size() == (2, 3, 2, 1)
 
+    with pytest.raises(RuntimeError, match="Can't select"):
+        _ = tensor.select(-1, 0)
+    with pytest.raises(RuntimeError, match="Can't select"):
+        _ = tensor[..., 0]
+
+
+def test_unbind_split() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 3, 4, 2),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = tensor.unbind(1)
+    assert len(out) == 3
+    assert all(isinstance(tensor, TableTensor) for tensor in out)
+    assert out[0].size() == (2, 4, 3)
+    assert out[0].numerical.size() == (2, 4, 2)
+    assert out[0].categorical.size() == (2, 4, 1)
+
+    out = tensor.split(2, dim=1)
+    assert len(out) == 2
+    assert all(isinstance(tensor, TableTensor) for tensor in out)
+    assert out[0].size() == (2, 2, 4, 3)
+    assert out[1].size() == (2, 1, 4, 3)
+
+    out = tensor.split([1, 2], dim=1)
+    assert len(out) == 2
+    assert all(isinstance(tensor, TableTensor) for tensor in out)
+    assert out[0].size() == (2, 1, 4, 3)
+    assert out[1].size() == (2, 2, 4, 3)
+
+    out = tensor.unbind(-1)
+    assert len(out) == 3
+    assert all(isinstance(tensor, TableTensor) for tensor in out)
+    assert out[0].size() == (2, 3, 4, 1)
+    assert out[0].numerical.size() == (2, 3, 4, 1)
+    assert out[0].categorical.size() == (2, 3, 4, 0)
+    assert out[0].columns == {
+        Stype.numerical: ("age",),
+        Stype.categorical: (),
+    }
+    assert out[1].columns == {
+        Stype.numerical: ("income",),
+        Stype.categorical: (),
+    }
+    assert out[2].size() == (2, 3, 4, 1)
+    assert out[2].numerical.size() == (2, 3, 4, 0)
+    assert out[2].categorical.size() == (2, 3, 4, 1)
+    assert out[2].columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("country",),
+    }
+
+    out = tensor.split(1, dim=-1)
+    assert len(out) == 3
+    assert all(isinstance(tensor, TableTensor) for tensor in out)
+    assert out[0].size() == (2, 3, 4, 1)
+    assert out[0].columns == {
+        Stype.numerical: ("age",),
+        Stype.categorical: (),
+    }
+    assert out[1].columns == {
+        Stype.numerical: ("income",),
+        Stype.categorical: (),
+    }
+    assert out[2].columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("country",),
+    }
+
+    with pytest.raises(RuntimeError, match="split size 1"):
+        _ = tensor.split(2, dim=-1)
+
 
 def test_pin_memory() -> None:
     tensor = TableTensor(
