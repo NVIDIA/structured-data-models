@@ -18,11 +18,11 @@ Do not add platform or serving abstractions unless explicitly requested.
 
 # Project Structure
 
-- `schemafm/stype.py`: Semantic column types via `Stype`.
-- `schemafm/cache.py`: Model cache, e.g., for key/value caching.
-- `schemafm/tensor`: Custom PyTorch-native `Tensor` subclasses for tensorized raw table data.
-- `schemafm/processing`: Common tensorized preprocessing and postprocessing routines for structured data models.
-- `schemafm/nn`: Common neural network building blocks for structured data models.
+- `sdm/stype.py`: Semantic column types via `Stype`.
+- `sdm/cache.py`: Model cache, e.g., for key/value caching.
+- `sdm/tensor`: Custom PyTorch-native `Tensor` subclasses for tensorized raw table data.
+- `sdm/processing`: Common tensorized preprocessing and postprocessing routines for structured data models.
+- `sdm/nn`: Common neural network building blocks for structured data models.
 
 # Core Design Principles
 

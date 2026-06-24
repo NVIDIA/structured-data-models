@@ -1,7 +1,7 @@
 from typing import cast
 
 import torch
-from schemafm import CategoricalTensor
+from sdm import CategoricalTensor
 
 
 def test_to_copy() -> None:

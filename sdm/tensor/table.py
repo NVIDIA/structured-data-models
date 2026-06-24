@@ -7,8 +7,8 @@ from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 import torch
 from torch import Tensor
 
-from schemafm import Stype, StypeLike
-from schemafm.tensor import CategoricalTensor
+from sdm import Stype, StypeLike
+from sdm.tensor import CategoricalTensor
 
 aten = torch.ops.aten
 

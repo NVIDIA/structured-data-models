@@ -13,7 +13,7 @@ uv sync
 Run commands inside the project environment:
 
 ```bash
-uv run python -c "import schemafm; print(schemafm.__version__)"
+uv run python -c "import sdm; print(sdm.__version__)"
 ```
 
 Build source and wheel distributions:

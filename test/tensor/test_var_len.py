@@ -3,7 +3,7 @@ from typing import cast
 import pyarrow as pa
 import pytest
 import torch
-from schemafm import VarLenTensor
+from sdm import VarLenTensor
 from torch import Tensor
 
 

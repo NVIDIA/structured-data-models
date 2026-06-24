@@ -2,7 +2,7 @@ import math
 
 import pytest
 import torch
-from schemafm.nn.rope import RotaryEmbedding
+from sdm.nn.rope import RotaryEmbedding
 
 
 def test_rope() -> None:

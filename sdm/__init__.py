@@ -2,12 +2,12 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from schemafm.stype import Stype, StypeLike
-from schemafm.tensor import (
-    VarLenTensor,
-    StringTensor,
+from sdm.stype import Stype, StypeLike
+from sdm.tensor import (
     CategoricalTensor,
+    StringTensor,
     TableTensor,
+    VarLenTensor,
 )
 
 try:
