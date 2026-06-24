@@ -11,6 +11,12 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Test execution via `pytest`
 - Pre-commit checks via `pre-commit run --all-files`
 
+# PR / GitHub Metadata
+
+- Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions,
+  commit messages, or review replies unless explicitly requested.
+- PR metadata should describe the code change only.
+
 # Project Structure
 
 - `schemafm/stype.py`: Semantic column types via `Stype`.
