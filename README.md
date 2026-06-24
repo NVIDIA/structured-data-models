@@ -1,6 +1,6 @@
 # structured-data-models
 
-Python package for structured data foundation models.
+Python package for structured data models.
 
 ## Development
 
