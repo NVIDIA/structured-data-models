@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import torch
 from torch import Tensor
@@ -14,14 +14,23 @@ class Processor(torch.nn.Module, abc.ABC):
     Subclass and implement ``forward`` (the transform). Override ``_fit`` to
     learn state from data (the default is a no-op). For an inverse, also mix
     in ``InvertibleMixin`` and implement ``_inverse_transform``.
+
+    Set ``requires_fit = False`` for stateless processors that can safely run
+    without a prior ``fit`` call.
+
+    Processors assume the caller has selected compatible tensor blocks and
+    normalized dtypes before calling ``fit`` or ``transform``. Table-level
+    dispatch and casting will be formalized separately from this base class.
     """
+
+    requires_fit: ClassVar[bool] = True
 
     def __init__(self) -> None:
         super().__init__()
-        self._fitted = False
+        self._fitted = not self.requires_fit
 
     def _check_is_fitted(self) -> None:
-        if not self._fitted:
+        if self.requires_fit and not self._fitted:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' is not fitted; "
                 "call 'fit()' before."
