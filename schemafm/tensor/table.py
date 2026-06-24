@@ -750,6 +750,58 @@ def _index(
     )
 
 
+@TableTensor.implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
+    if not all(isinstance(tensor, TableTensor) for tensor in tensors):
+        raise TypeError(
+            f"Expected all tensors to be '{TableTensor.__name__}' instances"
+        )
+
+    tensors = cast(Sequence[TableTensor], tensors)
+    blocks = {
+        stype: torch.cat([tensor.blocks[stype] for tensor in tensors], dim=dim)
+        for stype, _ in tensors[0].items()
+    }
+
+    if dim % tensors[0].dim() != tensors[0].dim() - 1:
+        columns = tensors[0]._columns
+    else:
+        columns = {
+            stype: chain.from_iterable(
+                tensor._columns[stype] for tensor in tensors
+            )
+            for stype, _ in tensors[0].items()
+        }
+    return tensors[0].__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], columns),
+        **blocks,
+    )
+
+
+@TableTensor.implements(aten.stack.default)
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
+    if not all(isinstance(tensor, TableTensor) for tensor in tensors):
+        raise TypeError("Expected all tensors to be 'TableTensor' instances")
+
+    tensors = cast(Sequence[TableTensor], tensors)
+    blocks = {
+        stype: torch.stack([tensor.blocks[stype] for tensor in tensors], dim)
+        for stype in tensors[0]._columns
+    }
+
+    dim %= tensors[0].dim() + 1
+    if dim >= tensors[0].dim():
+        raise RuntimeError(
+            f"Can't stack after the column dimension of "
+            f"'{tensors[0].__class__.__name__}'"
+        )
+
+    return tensors[0].__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], tensors[0]._columns),
+        **blocks,
+    )
+
+
 # Helpers #####################################################################
 
 
