@@ -6,7 +6,6 @@ import pytest
 import torch
 from schemafm.processing import (
     Clip,
-    LabelEncode,
     MeanImpute,
     Power,
     Processor,
@@ -23,7 +22,6 @@ ProcessorFactory = Callable[[], Processor]
     "processor_factory",
     [
         Clip,
-        LabelEncode,
         MeanImpute,
         Power,
         Quantile,
@@ -43,7 +41,7 @@ def test_processor_requires_fit_for_transform(
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [Clip, LabelEncode, Power, Quantile, StandardScale],
+    [Clip, Power, Quantile, StandardScale],
 )
 def test_invertible_processor_requires_fit_for_inverse_transform(
     processor_factory: ProcessorFactory,

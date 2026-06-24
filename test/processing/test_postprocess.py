@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 import torch
-from schemafm.processing import SoftmaxTemperature
+from schemafm import CategoricalTensor, StringTensor
+from schemafm.processing import DecodeLabels, SoftmaxTemperature
 
 
 def test_softmax_temperature_runs_without_fit() -> None:
@@ -59,3 +60,76 @@ def test_softmax_temperature_matches_tabicl_numpy_formula() -> None:
 def test_softmax_temperature_rejects_nonpositive_temperature() -> None:
     with pytest.raises(ValueError, match="positive"):
         SoftmaxTemperature(temperature=0.0)
+
+
+def test_decode_labels_runs_without_fit_and_has_no_vocab_state() -> None:
+    categories = StringTensor.from_list(["red", "green", "blue"])
+    indices = torch.tensor([2, 0, 1])
+    processor = DecodeLabels()
+
+    output = processor.transform(indices, categories)
+
+    assert output.tolist() == ["blue", "red", "green"]
+    assert processor.state_dict() == {}
+    assert list(processor.named_buffers()) == []
+
+
+def test_decode_labels_uses_categorical_tensor_categories() -> None:
+    target = CategoricalTensor(
+        data=torch.tensor([[0], [1], [0]], dtype=torch.int64),
+        categories=(torch.tensor([10, 20]),),
+    )
+
+    output = DecodeLabels().transform(torch.tensor([1, 0]), target)
+
+    assert torch.equal(output, torch.tensor([20, 10]))
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        torch.tensor([-1]),
+        torch.tensor([2]),
+    ],
+)
+def test_decode_labels_rejects_out_of_range_indices(
+    indices: torch.Tensor,
+) -> None:
+    categories = torch.tensor([10, 20])
+
+    with pytest.raises(ValueError, match="outside categories"):
+        DecodeLabels().transform(indices, categories)
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        torch.tensor([0.0]),
+        torch.tensor([True]),
+    ],
+)
+def test_decode_labels_rejects_non_integer_indices(
+    indices: torch.Tensor,
+) -> None:
+    categories = torch.tensor([10, 20])
+
+    with pytest.raises(ValueError, match="integer class indices"):
+        DecodeLabels().transform(indices, categories)
+
+
+def test_decode_labels_rejects_multi_column_categorical_context() -> None:
+    target = CategoricalTensor(
+        data=torch.tensor([[0, 1]], dtype=torch.int64),
+        categories=(torch.tensor([10]), torch.tensor([20, 30])),
+    )
+
+    with pytest.raises(ValueError, match="single target"):
+        DecodeLabels().transform(torch.tensor([0]), target)
+
+
+def test_processing_api_does_not_export_encoding_vocab_processors() -> None:
+    import schemafm.processing as processing
+
+    assert hasattr(processing, "DecodeLabels")
+    assert not hasattr(processing, "LabelEncode")
+    assert not hasattr(processing, "OrdinalEncode")
