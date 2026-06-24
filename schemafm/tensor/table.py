@@ -509,15 +509,15 @@ def _permute(input: TableTensor, dims: Sequence[int]) -> TableTensor:
 
 @TableTensor.implements(aten.select.int)
 def _select(input: TableTensor, dim: int, index: int) -> TableTensor:
-    blocks = {
-        stype: tensor.select(dim, index) for stype, tensor in input.items()
-    }
-
-    if dim % input.dim() == input.dim() - 1:
+    if _is_column_dim(input, dim):
         raise RuntimeError(
             f"Can't select the column dimension of "
             f"'{input.__class__.__name__}'"
         )
+
+    blocks = {
+        stype: tensor.select(dim, index) for stype, tensor in input.items()
+    }
 
     return input.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
@@ -573,6 +573,90 @@ def _narrow(
     )
 
 
+@TableTensor.implements(aten.unbind.int)
+def _unbind(input: TableTensor, dim: int = 0) -> tuple[TableTensor, ...]:
+    if _is_column_dim(input, dim):
+        return _split(input, split_size=1, dim=dim)
+
+    tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
+        stype: tensor.unbind(dim) for stype, tensor in input.items()
+    }
+
+    stypes = tuple(tensors_dict.keys())
+    return tuple(
+        input.__class__(
+            columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+            **dict(zip(stypes, blocks)),
+        )
+        for blocks in zip(*tensors_dict.values())
+    )
+
+
+@TableTensor.implements(aten.split.Tensor)
+def _split(
+    input: TableTensor,
+    split_size: int,
+    dim: int = 0,
+) -> tuple[TableTensor, ...]:
+    tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
+        stype: tensor.split(split_size, dim) for stype, tensor in input.items()
+    }
+
+    if dim % input.dim() == input.dim() - 1:
+        if split_size != 1:
+            raise RuntimeError(
+                f"Can only split the column dimension of "
+                f"'{input.__class__.__name__}' with split size 1"
+            )
+
+        return tuple(
+            input.__class__(
+                columns={stype: (input._columns[stype][i],)},
+                **{stype: tensor},
+            )
+            for stype, tensors in tensors_dict.items()
+            for i, tensor in enumerate(tensors)
+        )
+
+    stypes = tuple(tensors_dict.keys())
+    return tuple(
+        input.__class__(
+            columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+            **dict(zip(stypes, blocks)),
+        )
+        for blocks in zip(*tensors_dict.values())
+    )
+
+
+@TableTensor.implements(aten.split.sizes)
+@TableTensor.implements(aten.split.default)
+@TableTensor.implements(aten.split_with_sizes.default)
+def _split_with_sizes(
+    input: TableTensor,
+    split_sizes: Sequence[int],
+    dim: int = 0,
+) -> tuple[TableTensor, ...]:
+    if _is_column_dim(input, dim):
+        raise RuntimeError(
+            f"Can't split the column dimension of '{input.__class__.__name__}'"
+        )
+
+    split_sizes = tuple(split_sizes)
+    blocks_dict: dict[Stype, tuple[Tensor, ...]] = {
+        stype: tensor.split(split_sizes, dim)
+        for stype, tensor in input.items()
+    }
+
+    stypes = tuple(blocks_dict.keys())
+    return tuple(
+        input.__class__(
+            columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
+            **dict(zip(stypes, blocks)),
+        )
+        for blocks in zip(*blocks_dict.values())
+    )
+
+
 # Helpers #####################################################################
 
 
@@ -582,3 +666,9 @@ def _block_size_repr(size: Sequence[int]) -> str:
     if len(size) == 1:
         return f"({size[0]}, *)"
     return f"{str(tuple(size))[:-1]}, *)"
+
+
+def _is_column_dim(input: TableTensor, dim: int) -> bool:
+    if dim < -input.dim() or dim >= input.dim():
+        return False
+    return dim % input.dim() == input.dim() - 1
