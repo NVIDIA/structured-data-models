@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 from torch import Tensor
@@ -40,11 +40,13 @@ class Processor(torch.nn.Module, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input: Tensor, *args: Any, **kwargs: Any) -> Tensor:
         """Transform ``input`` and return the result.
 
-        Called via ``processor(input)`` (``torch.nn.Module.__call__``) or,
-        with a fitted-state check, via :meth:`transform`.
+        Called via ``processor(input, *args, **kwargs)``
+        (``torch.nn.Module.__call__``) or, with a fitted-state check, via
+        :meth:`transform`. Extra arguments carry explicit context for
+        stateless processors without storing it on the processor.
         """
 
     def fit(self, input: Tensor) -> Self:
@@ -53,10 +55,10 @@ class Processor(torch.nn.Module, abc.ABC):
         self._fitted = True
         return self
 
-    def transform(self, input: Tensor) -> Tensor:
+    def transform(self, input: Tensor, *args: Any, **kwargs: Any) -> Tensor:
         """Transform ``input`` using the fitted processor."""
         self._check_is_fitted()
-        return self(input)
+        return self(input, *args, **kwargs)
 
     def fit_transform(self, input: Tensor) -> Tensor:
         """Fit on ``input`` and return the transformed result."""
