@@ -181,7 +181,12 @@ class ModelCache:
     """
 
     def __init__(self) -> None:
-        r"""Initialize an empty model cache."""
+        r"""Initialize an empty model cache.
+
+        Args:
+            None.
+
+        """
         self._items: dict[str, object] = {}
 
     def create_group(
