@@ -323,6 +323,78 @@ def test_index_ops() -> None:
         _ = tensor[..., torch.tensor([0])]
 
 
+def test_column_indexing() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.randn(2, 3, 4, 2),
+        categorical=CategoricalTensor(
+            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+    out = tensor["age"]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 4, 1)
+    assert out.numerical.size() == (2, 3, 4, 1)
+    assert out.categorical.size() == (2, 3, 4, 0)
+    assert out.columns == {
+        Stype.numerical: ("age",),
+        Stype.categorical: (),
+    }
+
+    out = tensor.view(-1, 3)[:, "age"]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (24, 1)
+    assert out.numerical.size() == (24, 1)
+    assert out.categorical.size() == (24, 0)
+
+    out = tensor[["country", "age"]]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 4, 2)
+    assert out.numerical.size() == (2, 3, 4, 1)
+    assert out.categorical.size() == (2, 3, 4, 1)
+    assert out.columns == {
+        Stype.numerical: ("age",),
+        Stype.categorical: ("country",),
+    }
+
+    out = tensor[..., "country"]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 3, 4, 1)
+    assert out.numerical.size() == (2, 3, 4, 0)
+    assert out.categorical.size() == (2, 3, 4, 1)
+    assert out.columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("country",),
+    }
+
+    out = tensor[:, [2, 0], :, ["age", "country"]]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 2, 4, 2)
+    assert out.numerical.size() == (2, 2, 4, 1)
+    assert out.categorical.size() == (2, 2, 4, 1)
+
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+    out = tensor[mask, :, "age"]
+    assert isinstance(out, TableTensor)
+    assert out.size() == (3, 4, 1)
+    assert out.numerical.size() == (3, 4, 1)
+    assert out.categorical.size() == (3, 4, 0)
+
+    with pytest.raises(IndexError, match="column dimension"):
+        _ = tensor[:, "age"]
+    with pytest.raises(IndexError, match="column dimension"):
+        _ = tensor["age", :]
+    with pytest.raises(KeyError):
+        _ = tensor["missing"]
+    with pytest.raises(ValueError, match="unique"):
+        _ = tensor[["age", "age"]]
+
+
 def test_pin_memory() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
