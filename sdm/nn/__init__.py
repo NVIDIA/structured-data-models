@@ -6,6 +6,7 @@ from sdm.nn.attention import (
     SDPA,
     TransformerBlock,
 )
+from sdm.nn.icl import ICLBlock
 from sdm.nn.rope import RotaryEmbedding
 
 
@@ -13,6 +14,7 @@ __all__ = [
     "SDPA",
     "MultiHeadAttention",
     "QASSMax",
+    "ICLBlock",
     "RotaryEmbedding",
     "TransformerBlock",
 ]
