@@ -281,6 +281,8 @@ def test_unbind_split() -> None:
 
     with pytest.raises(RuntimeError, match="split size 1"):
         _ = tensor.split(2, dim=-1)
+    with pytest.raises(RuntimeError, match="Can't split"):
+        _ = tensor.split([1, 2], dim=-1)
 
 
 def test_pin_memory() -> None:
