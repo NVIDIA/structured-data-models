@@ -492,6 +492,17 @@ class VarLenTensor(Tensor):
         return out
 
 
+@VarLenTensor.implements(aten.alias.default)
+def _alias(input: VarLenTensor) -> VarLenTensor:
+    return input.__class__(
+        data=aten.alias.default(input._data),
+        offset=aten.alias.default(input._offset),
+        size=input.size(),
+        stride=input.stride(),
+        storage_offset=int(input.storage_offset()),
+    )
+
+
 @VarLenTensor.implements(aten._to_copy.default)
 def _to_copy(
     input: VarLenTensor,

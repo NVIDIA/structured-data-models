@@ -136,6 +136,11 @@ def _isnan(input: CategoricalTensor) -> Tensor:
     return input._data < 0
 
 
+@CategoricalTensor.implements(aten.alias.default)
+def _alias(input: CategoricalTensor) -> CategoricalTensor:
+    return input.__class__(aten.alias.default(input._data), input._categories)
+
+
 @CategoricalTensor.implements(aten._to_copy.default)
 def _to_copy(
     input: CategoricalTensor,
