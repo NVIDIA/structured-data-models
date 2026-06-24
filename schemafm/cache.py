@@ -9,6 +9,8 @@ from typing import Generic, TypeVar, cast
 import torch
 from torch import Tensor
 
+# Groups use regular Python dict keys. Expected key shapes include layer
+# indices, block names, or tuples combining request/context/layer identifiers.
 CacheKey = Hashable
 T = TypeVar("T")
 
@@ -36,7 +38,13 @@ class KVCacheEntry:
 
     The entry intentionally does not know where it is stored or whether it is
     valid for a particular request. The owning model or caller manages cache
-    keys and invalidation.
+    keys and invalidation. The key and value tensors stay separate to avoid
+    baking a packed cache layout into this generic primitive.
+
+    Args:
+        key: Cached key projection tensor.
+        value: Cached value projection tensor.
+
     """
 
     key: Tensor
@@ -54,20 +62,39 @@ class KVCacheEntry:
         *,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        non_blocking: bool = False,
     ) -> KVCacheEntry:
-        r"""Move/cast cached tensors and return a new entry."""
+        r"""Move/cast cached tensors and return a new entry.
+
+        Args:
+            device: Optional target device.
+            dtype: Optional target dtype.
+            non_blocking: Whether tensor copies may run asynchronously.
+
+        Returns:
+            A cache entry containing the moved/cast tensors.
+
+        """
         if device is None and dtype is None:
             return self
         if device is None:
             assert dtype is not None
-            key = self.key.to(dtype=dtype)
-            value = self.value.to(dtype=dtype)
+            key = self.key.to(dtype=dtype, non_blocking=non_blocking)
+            value = self.value.to(dtype=dtype, non_blocking=non_blocking)
         elif dtype is None:
-            key = self.key.to(device=device)
-            value = self.value.to(device=device)
+            key = self.key.to(device=device, non_blocking=non_blocking)
+            value = self.value.to(device=device, non_blocking=non_blocking)
         else:
-            key = self.key.to(device=device, dtype=dtype)
-            value = self.value.to(device=device, dtype=dtype)
+            key = self.key.to(
+                device=device,
+                dtype=dtype,
+                non_blocking=non_blocking,
+            )
+            value = self.value.to(
+                device=device,
+                dtype=dtype,
+                non_blocking=non_blocking,
+            )
         return KVCacheEntry(
             key=key,
             value=value,
@@ -86,7 +113,13 @@ class CacheGroup(Generic[T]):
         name: str,
         value_type: type[T] | None = None,
     ) -> None:
-        r"""Initialize an empty cache group."""
+        r"""Initialize an empty cache group.
+
+        Args:
+            name: Unique cache group name inside a :class:`ModelCache`.
+            value_type: Optional runtime type required for stored values.
+
+        """
         _validate_name(name)
         self.name = name
         self._value_type = value_type
@@ -142,7 +175,9 @@ class ModelCache:
 
     ``ModelCache`` owns model-level cache lifecycle and invalidation. Attention
     modules should not receive this object; they should only return or consume
-    values such as :class:`KVCacheEntry`.
+    values such as :class:`KVCacheEntry`. The cache starts empty and takes no
+    constructor arguments.
+
     """
 
     def __init__(self) -> None:

@@ -18,7 +18,7 @@ def _entry() -> KVCacheEntry:
 def test_kv_cache_entry_to() -> None:
     entry = _entry()
 
-    out = entry.to(dtype=torch.float64)
+    out = entry.to(dtype=torch.float64, non_blocking=True)
 
     assert out is not entry
     assert out.key.dtype == torch.float64
