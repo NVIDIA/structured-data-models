@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pytest
 import torch
 import torch.nn.functional as F
-from schemafm.nn.attention import SDPA, QASSMax
+from schemafm.nn import SDPA, MultiHeadAttention, QASSMax, RotaryEmbedding
 from torch import Tensor
 
 
@@ -164,3 +164,83 @@ def test_sdpa() -> None:
             value=value,
             attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
         )
+
+
+@pytest.mark.parametrize("qassmax", [False, True])
+@pytest.mark.parametrize("rope", [False, True])
+def test_attention(qassmax: bool, rope: bool) -> None:
+    channels = 6
+    num_heads = 3
+    dtype = torch.float32
+    module = MultiHeadAttention(
+        channels=channels,
+        num_heads=num_heads,
+        qassmax=qassmax,
+        dtype=dtype,
+    )
+
+    query = torch.randn(2, 4, channels, dtype=dtype)
+    key_value = torch.randn(2, 5, channels, dtype=dtype)
+    attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool)
+
+    rotary_embedding = (
+        RotaryEmbedding(channels=channels // num_heads, dtype=dtype)
+        if rope
+        else None
+    )
+
+    out = module(query=query, key_value=None, rope=rotary_embedding)
+    assert out.shape == query.shape
+    assert out.dtype == query.dtype
+    assert out.device == query.device
+
+    out = module(
+        query=query,
+        key_value=key_value,
+        attn_mask=attn_mask,
+        rope=rotary_embedding,
+    )
+    assert out.shape == query.shape
+    assert out.dtype == query.dtype
+    assert out.device == query.device
+
+    query = torch.randn(2, 4, channels, dtype=dtype)
+    out = module(query=query, key_value=query, rope=rotary_embedding)
+    assert out.shape == query.shape
+    assert out.dtype == query.dtype
+    assert out.device == query.device
+
+
+def test_attention_errors() -> None:
+    channels = 6
+    num_heads = 3
+    module = MultiHeadAttention(channels=channels, num_heads=num_heads)
+    query = torch.randn(2, 4, channels)
+
+    with pytest.raises(ValueError, match="Cannot pass both"):
+        module(
+            query=query,
+            seqused_key_value=torch.tensor([4, 4], dtype=torch.int32),
+            attn_mask=torch.randint(0, 2, (2, 4, 5), dtype=torch.bool),
+        )
+
+    with pytest.raises(
+        ValueError,
+        match=r"`seqused_key_value` must have dtype torch\.int32",
+    ):
+        module(
+            query=query,
+            seqused_key_value=torch.tensor([4, 4], dtype=torch.int64),
+        )
+
+    with pytest.raises(
+        ValueError,
+        match=r"`attn_mask` must have dtype torch\.bool",
+    ):
+        module(
+            query=query,
+            attn_mask=torch.ones(2, 4, 4, dtype=torch.float32),
+        )
+
+    with pytest.raises(ValueError, match="must be divisible"):
+        MultiHeadAttention(channels=5, num_heads=2)
