@@ -1,7 +1,5 @@
 """Generic runtime cache primitives."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from torch import Tensor
