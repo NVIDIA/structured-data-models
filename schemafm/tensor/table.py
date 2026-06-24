@@ -230,19 +230,6 @@ class TableTensor(Tensor):
             f"'{func}' is not supported for '{cls.__name__}'"
         )
 
-    def __getitem__(self, key: Any) -> Any:
-        if not _has_column_index(key):
-            return Tensor.__getitem__(self, key)
-
-        index_key, columns = _split_column_index(self, key)
-        if len(index_key) == 0 or all(
-            _is_full_slice(key) for key in index_key
-        ):
-            out = self
-        else:
-            out = Tensor.__getitem__(self, index_key)
-        return cast(TableTensor, out).select_columns(columns)
-
     def is_shared(self) -> bool:
         return all(tensor.is_shared() for _, tensor in self.items())
 
@@ -767,89 +754,3 @@ def _is_column_dim(input: TableTensor, dim: int) -> bool:
     if dim < -input.dim() or dim >= input.dim():
         return False
     return dim % input.dim() == input.dim() - 1
-
-
-def _has_column_index(key: Any) -> bool:
-    if _is_column_index(key):
-        return True
-    if not isinstance(key, tuple):
-        return False
-    return any(_is_column_index(index) for index in key)
-
-
-def _split_column_index(
-    input: TableTensor,
-    key: Any,
-) -> tuple[tuple[Any, ...], str | Sequence[str]]:
-    if _is_column_index(key):
-        return (), key
-    if not isinstance(key, tuple):
-        raise TypeError("Expected column index to be a string or list[str]")
-
-    key = _expand_ellipsis(input, key)
-    column_index_count = sum(_is_column_index(index) for index in key)
-    if column_index_count != 1:
-        raise IndexError("Expected exactly one column index")
-
-    current_dim = 0
-    for i, index in enumerate(key):
-        if _is_column_index(index):
-            if current_dim != input.dim() - 1 or i != len(key) - 1:
-                raise IndexError(
-                    "Column names can only index the column dimension"
-                )
-            return tuple(key[:i]), index
-
-        current_dim += _num_indexed_dims(index)
-
-    raise RuntimeError("Failed to resolve column index")  # pragma: no cover
-
-
-def _expand_ellipsis(
-    input: TableTensor, key: tuple[Any, ...]
-) -> tuple[Any, ...]:
-    if key.count(Ellipsis) > 1:
-        raise IndexError("An index can only have a single ellipsis")
-    if Ellipsis not in key:
-        return key
-
-    consumed_dims = sum(
-        _num_indexed_dims(index) for index in key if index is not Ellipsis
-    )
-    num_slices = input.dim() - consumed_dims
-    if num_slices < 0:
-        raise IndexError(
-            f"Too many indices for tensor of dimension {input.dim()}"
-        )
-
-    output: list[Any] = []
-    for index in key:
-        if index is Ellipsis:
-            output.extend([slice(None)] * num_slices)
-        else:
-            output.append(index)
-    return tuple(output)
-
-
-def _is_column_index(index: Any) -> bool:
-    return isinstance(index, str) or (
-        isinstance(index, list)
-        and all(isinstance(column, str) for column in index)
-    )
-
-
-def _is_full_slice(index: Any) -> bool:
-    return (
-        isinstance(index, slice)
-        and index.start is None
-        and index.stop is None
-        and index.step is None
-    )
-
-
-def _num_indexed_dims(index: Any) -> int:
-    if index is None:
-        return 0
-    if isinstance(index, Tensor):
-        return index.dim() if index.dtype == torch.bool else 1
-    return 1
