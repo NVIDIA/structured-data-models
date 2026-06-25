@@ -6,8 +6,8 @@ from sdm.tensor.categorical import CategoricalTensor
 from sdm.tensor.table import TableTensor
 
 __all__ = [
-    "CategoricalTensor",
-    "StringTensor",
-    "TableTensor",
     "VarLenTensor",
+    "StringTensor",
+    "CategoricalTensor",
+    "TableTensor",
 ]

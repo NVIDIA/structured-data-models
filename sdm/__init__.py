@@ -16,11 +16,11 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 __all__ = [
-    "CategoricalTensor",
-    "StringTensor",
     "Stype",
     "StypeLike",
-    "TableTensor",
     "VarLenTensor",
+    "StringTensor",
+    "CategoricalTensor",
+    "TableTensor",
     "__version__",
 ]
