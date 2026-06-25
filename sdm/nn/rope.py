@@ -5,14 +5,17 @@ from torch import Tensor
 
 
 class RotaryEmbedding(torch.nn.Module):
-    """Rotary positional embedding for ``[..., S, H, C]`` tensors.
+    """Rotary Positional Embeddings (RoPE).
+
+    Uses a split-half channel layout, pairing the first half channels with the
+    last half, rather than interleaved even/odd pairs.
 
     Args:
-        channels: The number of channels per attention head. Must be even.
+        channels: The number of channels per attention head.
         theta: The base frequency used to initialize inverse frequencies.
         requires_grad: Whether inverse frequencies are learnable.
-        device: The device to use for module parameters.
-        dtype: The dtype to use for module parameters.
+        device: The device.
+        dtype: The dtype.
     """
 
     def __init__(
@@ -40,13 +43,15 @@ class RotaryEmbedding(torch.nn.Module):
         self,
         x: Tensor,  # [..., S, H, C]
     ) -> Tensor:  # [..., S, H, C]
-        """Apply rotary positional embedding.
+        """The forward pass.
 
         Args:
-            x: Input tensor with shape ``[..., S, H, C]``.
+            x: Tensor with shape ``[..., S, H, C]``.
+                ``S`` is the query sequence length, ``H`` is the number of
+                attention heads, and ``C`` is the channels per head.
 
         Returns:
-            The rotated tensor with shape ``[..., S, H, C]``.
+            Tensor with shape ``[..., S, H, C]``.
         """
         if x.size(-1) != 2 * self.inv_freq.size(-1):
             raise ValueError(
