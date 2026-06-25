@@ -206,7 +206,7 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
-        if query.device.type == "cuda":
+        if query.is_cuda:
             if attn_mask is not None:
                 backend = SDPBackend.EFFICIENT_ATTENTION
             else:
