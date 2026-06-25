@@ -145,45 +145,47 @@ data-aria-dark="Switch to auto color mode">
 <dt class="sig sig-object py" id="sdm.nn.MultiHeadAttention">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.nn.</span></span><span class="sig-name descname"><span class="pre">MultiHeadAttention</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">qassmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.12)"><span class="pre">dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.nn.MultiHeadAttention" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a></p>
-<p>Multi-head attention layer.</p>
-<p>This module owns the query, key, value, and output projections. When
-<code class="docutils literal notranslate"><span class="pre">key_value</span></code> is omitted, queries, keys, and values are projected from the
-same input tensor. When <code class="docutils literal notranslate"><span class="pre">key_value</span></code> is passed, it is interpreted as
-unprojected context states from which keys and values are produced.</p>
+<p>Multi-Head Attention layer.</p>
+<p>This module owns the query, key, value, and output projections.
+It performs self-attention when <code class="docutils literal notranslate"><span class="pre">key_value</span></code> is omitted and
+cross-attention when <code class="docutils literal notranslate"><span class="pre">key_value</span></code> is given.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>channels</strong> – The number of input and output channels.</p></li>
-<li><p><strong>num_heads</strong> – The number of attention heads.</p></li>
-<li><p><strong>qassmax</strong> – Whether to scale queries with <a class="reference internal" href="sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-class docutils literal notranslate"><span class="pre">QASSMax</span></code></a>.</p></li>
-<li><p><strong>device</strong> – The device to use for module parameters.</p></li>
-<li><p><strong>dtype</strong> – The dtype to use for module parameters.</p></li>
+<li><p><strong>channels</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of input and output channels.</p></li>
+<li><p><strong>num_heads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of attention heads.</p></li>
+<li><p><strong>qassmax</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to scale queries with <a class="reference internal" href="sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-class docutils literal notranslate"><span class="pre">QASSMax</span></code></a>.</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><em>device</em></a><em> | </em><em>None</em>) – The device.</p></li>
+<li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.12)"><em>dtype</em></a><em> | </em><em>None</em>) – The dtype.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.nn.MultiHeadAttention.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seqused_key_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attn_mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rope</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.rope.RotaryEmbedding"><span class="pre">RotaryEmbedding</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.nn.MultiHeadAttention.forward" title="Link to this definition">¶</a></dt>
-<dd><p>Forward pass of multi-head attention layer.</p>
+<dd><p>The forward pass.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>query</strong> – Unprojected query-side hidden states with shape
-<code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">Q,</span> <span class="pre">C]</span></code>.</p></li>
-<li><p><strong>key_value</strong> – Optional unprojected key/value-side hidden states with
-shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">C]</span></code>. If omitted, <code class="docutils literal notranslate"><span class="pre">query</span></code> is used for
-self-attention.</p></li>
-<li><p><strong>seqused_key_value</strong> – Optional valid key/value lengths with shape
-<code class="docutils literal notranslate"><span class="pre">[...]</span></code> and dtype <code class="docutils literal notranslate"><span class="pre">torch.int32</span></code>.</p></li>
-<li><p><strong>attn_mask</strong> – Optional boolean attention mask with shape
-<code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">Q,</span> <span class="pre">KV]</span></code>. Entries set to <code class="docutils literal notranslate"><span class="pre">True</span></code> participate in
-attention.</p></li>
-<li><p><strong>rope</strong> – Optional rotary positional embedding applied after
+<li><p><strong>query</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Query tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">Q,</span> <span class="pre">C]</span></code>.
+<code class="docutils literal notranslate"><span class="pre">Q</span></code> is the query sequence length, <code class="docutils literal notranslate"><span class="pre">C</span></code> is the number of
+channels.</p></li>
+<li><p><strong>key_value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a><em> | </em><em>None</em>) – key/value tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">C]</span></code>.
+<code class="docutils literal notranslate"><span class="pre">KV</span></code> is the key/value sequence length.
+If omitted, <code class="docutils literal notranslate"><span class="pre">query</span></code> is used for self-attention.</p></li>
+<li><p><strong>seqused_key_value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a><em> | </em><em>None</em>) – Valid key/value lengths with shape <code class="docutils literal notranslate"><span class="pre">[...]</span></code> and
+dtype <code class="docutils literal notranslate"><span class="pre">torch.int32</span></code>.</p></li>
+<li><p><strong>attn_mask</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a><em> | </em><em>None</em>) – Boolean attention mask with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">Q,</span> <span class="pre">KV]</span></code>.
+Entries set to <code class="docutils literal notranslate"><span class="pre">True</span></code> participate in attention.</p></li>
+<li><p><strong>rope</strong> (<a class="reference internal" href="sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.rope.RotaryEmbedding"><em>RotaryEmbedding</em></a><em> | </em><em>None</em>) – Rotary positional embedding applied after query/key
 projection.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">Q,</span> <span class="pre">C]</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -216,7 +218,7 @@ projection.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=536b3ed4"></script>
+      <script src="../../_static/documentation_options.js?v=ec655b1b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
