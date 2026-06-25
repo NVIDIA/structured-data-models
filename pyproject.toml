@@ -35,6 +35,7 @@ classifiers = [
 ]
 dependencies = [
     "torch",
+    "torch-geometric",
     "numpy",
     "pyarrow",
 ]
