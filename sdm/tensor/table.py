@@ -295,7 +295,7 @@ class TableTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        """Register an ``__torch_dispatch__`` implementation."""
+        r"""Register a ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
