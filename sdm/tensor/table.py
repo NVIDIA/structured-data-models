@@ -395,7 +395,9 @@ def _contiguous(
 
 @TableTensor.implements(aten.is_pinned.default)
 def _is_pinned(input: TableTensor) -> bool:
-    return all(tensor.is_pinned() for _, tensor in input.items())
+    return all(
+        tensor.is_pinned() for _, tensor in input.items() if tensor.numel() > 0
+    )
 
 
 @TableTensor.implements(aten._pin_memory.default)

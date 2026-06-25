@@ -10,6 +10,7 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
+from sdm.testing import withCUDA
 from torch import Tensor
 
 
@@ -27,6 +28,7 @@ def reference_sdpa(
     ).transpose(-3, -2)
 
 
+@withCUDA
 @pytest.mark.parametrize(
     "key_len_fn",
     [
@@ -35,14 +37,26 @@ def reference_sdpa(
         lambda: torch.tensor([[4], [1]], dtype=torch.int32),
     ],
 )
-def test_qassmax(key_len_fn: Callable[[], Tensor | int]) -> None:
+def test_qassmax(
+    device: torch.device,
+    key_len_fn: Callable[[], Tensor | int],
+) -> None:
     channels = 2
     num_heads = 3
-    module = QASSMax(channels=channels, num_heads=num_heads, hidden_channels=4)
+    module = QASSMax(
+        channels=channels,
+        num_heads=num_heads,
+        hidden_channels=4,
+        device=device,
+    )
 
-    query = torch.randn(2, 3, num_heads, channels)
+    query = torch.randn(2, 3, num_heads, channels, device=device)
 
-    out = module(query, key_len_fn())
+    key_len = key_len_fn()
+    if isinstance(key_len, Tensor):
+        key_len = key_len.to(device)
+
+    out = module(query, key_len)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
@@ -172,9 +186,10 @@ def test_sdpa() -> None:
         )
 
 
+@withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
-def test_attention(qassmax: bool, rope: bool) -> None:
+def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
     channels = 6
     num_heads = 3
     dtype = torch.float32
@@ -182,15 +197,20 @@ def test_attention(qassmax: bool, rope: bool) -> None:
         channels=channels,
         num_heads=num_heads,
         qassmax=qassmax,
+        device=device,
         dtype=dtype,
     )
 
-    query = torch.randn(2, 4, channels, dtype=dtype)
-    key_value = torch.randn(2, 5, channels, dtype=dtype)
-    attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool)
+    query = torch.randn(2, 4, channels, dtype=dtype, device=device)
+    key_value = torch.randn(2, 5, channels, dtype=dtype, device=device)
+    attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool, device=device)
 
     rotary_embedding = (
-        RotaryEmbedding(channels=channels // num_heads, dtype=dtype)
+        RotaryEmbedding(
+            channels=channels // num_heads,
+            device=device,
+            dtype=dtype,
+        )
         if rope
         else None
     )
@@ -210,7 +230,7 @@ def test_attention(qassmax: bool, rope: bool) -> None:
     assert out.dtype == query.dtype
     assert out.device == query.device
 
-    query = torch.randn(2, 4, channels, dtype=dtype)
+    query = torch.randn(2, 4, channels, dtype=dtype, device=device)
     out = module(query=query, key_value=query, rope=rotary_embedding)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
@@ -252,9 +272,14 @@ def test_attention_errors() -> None:
         MultiHeadAttention(channels=5, num_heads=2)
 
 
+@withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
-def test_transformer_block(qassmax: bool, rope: bool) -> None:
+def test_transformer_block(
+    device: torch.device,
+    qassmax: bool,
+    rope: bool,
+) -> None:
     batch_size = 2
     query_len = 3
     key_value_len = 5
@@ -266,16 +291,22 @@ def test_transformer_block(qassmax: bool, rope: bool) -> None:
         num_heads=num_heads,
         feedforward_channels=feedforward_channels,
         qassmax=qassmax,
+        device=device,
     )
-    query = torch.randn(batch_size, query_len, channels)
-    key_value = torch.randn(batch_size, key_value_len, channels)
-    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32)
-    key_index = torch.arange(key_value_len).view(1, 1, key_value_len)
+    query = torch.randn(batch_size, query_len, channels, device=device)
+    key_value = torch.randn(batch_size, key_value_len, channels, device=device)
+    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32, device=device)
+    key_index = torch.arange(key_value_len, device=device).view(
+        1, 1, key_value_len
+    )
     attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
     attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
     rotary_embedding: RotaryEmbedding | None = None
     if rope:
-        rotary_embedding = RotaryEmbedding(channels=channels // num_heads)
+        rotary_embedding = RotaryEmbedding(
+            channels=channels // num_heads,
+            device=device,
+        )
 
     out = module(query=query, rope=rotary_embedding)
     assert out.size() == query.size()
