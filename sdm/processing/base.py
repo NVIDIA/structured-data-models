@@ -1,5 +1,5 @@
 import abc
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import torch
 from torch import Tensor
@@ -15,6 +15,9 @@ class Processor(torch.nn.Module, abc.ABC):
 
     Set ``requires_fit = False`` for stateless processors that can safely run
     without a prior ``fit`` call.
+
+    Processors map a single tensor to a single tensor. Transforms that need
+    extra runtime context are not modeled here.
 
     Processors assume the caller has selected compatible tensor blocks and
     normalized dtypes before calling ``fit`` or ``transform``. Table-level
@@ -38,12 +41,11 @@ class Processor(torch.nn.Module, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def forward(self, input: Tensor, *args: Any, **kwargs: Any) -> Tensor:
+    def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` and return the result.
 
-        Use :meth:`transform` to run with a fitted-state check. Extra
-        arguments carry explicit context for stateless processors without
-        storing it on the processor.
+        Called via ``processor(input)`` (``torch.nn.Module.__call__``) or,
+        with a fitted-state check, via :meth:`transform`.
         """
 
     def fit(self, input: Tensor) -> Self:
@@ -52,16 +54,14 @@ class Processor(torch.nn.Module, abc.ABC):
         self._fitted = True
         return self
 
-    def transform(self, input: Tensor, *args: Any, **kwargs: Any) -> Tensor:
+    def transform(self, input: Tensor) -> Tensor:
         """Transform ``input`` using the fitted processor."""
         self._check_is_fitted()
-        return self(input, *args, **kwargs)
+        return self(input)
 
-    def fit_transform(
-        self, input: Tensor, *args: Any, **kwargs: Any
-    ) -> Tensor:
+    def fit_transform(self, input: Tensor) -> Tensor:
         """Fit on ``input`` and return the transformed result."""
-        return self.fit(input).transform(input, *args, **kwargs)
+        return self.fit(input).transform(input)
 
 
 class InvertibleMixin(abc.ABC):
