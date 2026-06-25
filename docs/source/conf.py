@@ -25,27 +25,10 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
 ]
-
-source_suffix = {
-    ".md": "markdown",
-    ".rst": "restructuredtext",
-}
-master_doc = "index"
-
 templates_path = ["_templates"]
-exclude_patterns = [
-    "_build",
-    "Thumbs.db",
-    ".DS_Store",
-]
-suppress_warnings = [
-    "autoapi.python_import_resolution",
-]
-
+suppress_warnings = ["autoapi.python_import_resolution"]
 html_theme = "shibuya"
 html_title = project
-html_show_copyright = False
-html_show_sphinx = False
 html_theme_options = {
     "accent_color": "green",
     "github_url": "https://github.com/NVIDIA/structured-data-models",
@@ -59,14 +42,7 @@ autoapi_ignore = [
 autoapi_template_dir = "_templates/autoapi"
 autoapi_root = "api/reference"
 autoapi_add_toctree_entry = False
-autoapi_keep_files = False
 autoapi_own_page_level = "class"
-autoapi_python_class_content = "both"
-
-napoleon_google_docstring = True
-napoleon_numpy_docstring = True
-napoleon_use_param = True
-napoleon_use_rtype = True
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
