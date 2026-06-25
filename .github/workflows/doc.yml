@@ -30,20 +30,14 @@ jobs:
         run: |
           uv pip install --torch-backend=cpu '.[doc]'
 
-      - name: Get branch name or PR number
-        id: branch_or_pr
-        run: |
-          echo "ref=${{ github.event_name == 'push' && github.ref_name || github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-
       - name: Build documentation
         working-directory: ./docs
         run: |
           uv run --no-project sphinx-build -M html "source" "build" -W --keep-going
 
       - name: Push documentation to gh-pages
+        if: github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: docs/build/html
-          destination_dir: ${{ steps.branch_or_pr.outputs.ref }}/docs
-        continue-on-error: true
