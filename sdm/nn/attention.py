@@ -1,14 +1,13 @@
 """Attention modules for structured tensor models."""
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, LayerNorm, Linear, Sequential
 
-if TYPE_CHECKING:
-    from sdm.nn import RotaryEmbedding
+from sdm.nn import RotaryEmbedding
 
 
 class QASSMax(torch.nn.Module):

@@ -1,12 +1,8 @@
 """Fittable pre/postprocessing transforms for structured data."""
 
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import Processor, InvertibleMixin
 
 __all__ = [
+    "Processor",
     "InvertibleMixin",
-    "Processor",
-]
-
-__docs__ = [
-    "Processor",
 ]

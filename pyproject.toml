@@ -48,7 +48,6 @@ doc = [
     "myst-parser",
     "shibuya",
     "sphinx",
-    "sphinx-autoapi",
     "sphinx-copybutton",
 ]
 
@@ -113,6 +112,7 @@ ignore = [
     "D105",  # Ignore "missing docstring in magic method"
     "D107",  # Ignore "missing docstring in __init__"
     "D413",  # Ignore "Missing blank line after last section ("{name}")"
+    "RUF022",  # Ignore sorting __all__; order controls public docs.
 ]
 
 [tool.ruff.lint.pydocstyle]

@@ -1,12 +1,8 @@
-import ast
+import importlib
 from datetime import date
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
-
-ROOT = Path(__file__).parents[2]
-PACKAGE = "sdm"
-PACKAGE_ROOT = ROOT / PACKAGE
 
 project = "Structured Data Models"
 author = "NVIDIA"
@@ -19,14 +15,14 @@ except PackageNotFoundError:
 version = release
 
 extensions = [
-    "autoapi.extension",
     "myst_parser",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
 ]
 templates_path = ["_templates"]
-suppress_warnings = ["autoapi.python_import_resolution"]
 html_theme = "shibuya"
 html_title = project
 html_theme_options = {
@@ -34,15 +30,18 @@ html_theme_options = {
     "github_url": "https://github.com/NVIDIA/structured-data-models",
 }
 
-autoapi_type = "python"
-autoapi_dirs = [str(PACKAGE_ROOT)]
-autoapi_ignore = [
-    "*/sdm/testing/*",
-]
-autoapi_template_dir = "_templates/autoapi"
-autoapi_root = "api/reference"
-autoapi_add_toctree_entry = False
-autoapi_own_page_level = "class"
+autosummary_generate = True
+autodoc_typehints = "signature"
+api_exclude = {
+    "sdm": {
+        "CategoricalTensor",
+        "StringTensor",
+        "StypeLike",
+        "TableTensor",
+        "VarLenTensor",
+        "__version__",
+    },
+}
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
@@ -50,71 +49,46 @@ intersphinx_mapping = {
 }
 
 
-def _literal_names(path: Path, name: str) -> set[str] | None:
-    module = ast.parse(path.read_text())
-    for node in module.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(
-            isinstance(target, ast.Name) and target.id == name
-            for target in node.targets
-        ):
-            continue
-        try:
-            values = ast.literal_eval(node.value)
-        except (SyntaxError, ValueError):
-            return None
-        return {value for value in values if isinstance(value, str)}
-    return None
+def api_names(module_name: str) -> list[str]:
+    """Return documented names for an API module."""
+    module = importlib.import_module(module_name)
+    excluded = api_exclude.get(module_name, set())
+    return [name for name in module.__all__ if name not in excluded]
 
 
-def _package_docs(root: Path, package: str) -> dict[str, set[str]]:
-    exports: dict[str, set[str]] = {}
-    for path in root.rglob("__init__.py"):
-        docs_names = _literal_names(path, "__docs__")
-        if docs_names is None:
-            continue
-        relative = path.parent.relative_to(root)
-        module = ".".join((package, *relative.parts))
-        exports[module] = docs_names
-    return exports
+def _render_jinja(app, docname, source):
+    source[0] = app.builder.templates.render_string(
+        source[0],
+        {"api_names": api_names},
+    )
 
 
-PACKAGE_DOCS = _package_docs(PACKAGE_ROOT, PACKAGE)
+def _patch_autosummary_jinja(app):
+    from sphinx.ext.autosummary import generate
 
+    def find_autosummary_in_files(filenames):
+        documented = []
+        for filename in filenames:
+            source = Path(filename).read_text(
+                encoding=app.config.source_encoding,
+                errors="ignore",
+            )
+            source = app.builder.templates.render_string(
+                source,
+                {"api_names": api_names},
+            )
+            documented.extend(
+                generate.find_autosummary_in_lines(
+                    source.splitlines(),
+                    filename=filename,
+                )
+            )
+        return documented
 
-def _parent_package(name: str) -> str | None:
-    parts = name.split(".")
-    for index in range(len(parts) - 1, 0, -1):
-        package = ".".join(parts[:index])
-        if package in PACKAGE_DOCS:
-            return package
-    return None
-
-
-def _skip_undocumented_member(app, what, name, obj, skip, options):
-    if not name.startswith(f"{PACKAGE}."):
-        return skip
-
-    if what in {"attribute", "class", "data", "exception", "function"}:
-        parent = name.rsplit(".", 1)[0]
-        docs = PACKAGE_DOCS.get(parent)
-        if docs is not None and obj.short_name not in docs:
-            return True
-        return skip
-
-    if what != "module":
-        return skip
-
-    parent = _parent_package(name)
-    if parent is None:
-        return skip
-
-    docs = PACKAGE_DOCS[parent]
-    module_name = name.rsplit(".", 1)[-1]
-    return module_name not in docs
+    generate.find_autosummary_in_files = find_autosummary_in_files
 
 
 def setup(app):
-    """Register documentation-only API filtering."""
-    app.connect("autoapi-skip-member", _skip_undocumented_member)
+    """Register Jinja rendering for dynamic autosummary lists."""
+    app.connect("builder-inited", _patch_autosummary_jinja, priority=400)
+    app.connect("source-read", _render_jinja)

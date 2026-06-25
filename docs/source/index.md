@@ -2,7 +2,7 @@
 
 ```{toctree}
 :caption: Getting Started
-:maxdepth: 2
+:maxdepth: 1
 
 install
 ```
@@ -11,8 +11,8 @@ install
 :caption: API
 :maxdepth: 1
 
-api/reference/sdm/index
-api/reference/sdm/tensor/index
-api/reference/sdm/processing/index
-api/reference/sdm/nn/index
+api/sdm
+api/tensor
+api/processing
+api/nn
 ```

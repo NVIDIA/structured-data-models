@@ -1,23 +1,15 @@
 """Neural network modules for structured data models."""
 
+from sdm.nn.rope import RotaryEmbedding
 from sdm.nn.attention import (
-    MultiHeadAttention,
     QASSMax,
     SDPA,
+    MultiHeadAttention,
     TransformerBlock,
 )
-from sdm.nn.rope import RotaryEmbedding
 
 
 __all__ = [
-    "SDPA",
-    "MultiHeadAttention",
-    "QASSMax",
-    "RotaryEmbedding",
-    "TransformerBlock",
-]
-
-__docs__ = [
     "QASSMax",
     "SDPA",
     "RotaryEmbedding",
