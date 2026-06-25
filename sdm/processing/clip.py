@@ -25,7 +25,7 @@ class Clip(Processor, InvertibleMixin):
         super().__init__()
         if not 0 <= q_low <= q_high <= 1:
             raise ValueError(
-                "q_low and q_high must satisfy 0 <= low <= high <= 1."
+                "q_low and q_high must satisfy 0 <= q_low <= q_high <= 1."
             )
         self.q_low = q_low
         self.q_high = q_high
