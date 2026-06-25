@@ -8,7 +8,13 @@ from schemafm.processing.base import InvertibleMixin, Processor
 
 
 class StandardScale(Processor, InvertibleMixin):
-    """Center and scale each feature column."""
+    """Center and scale each feature column.
+
+    Args:
+        with_mean: If ``True``, center each column by its fitted mean.
+        with_std: If ``True``, scale each column by its fitted standard
+            deviation.
+    """
 
     def __init__(
         self,
@@ -39,7 +45,6 @@ class StandardScale(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` using the fitted mean and scale."""
-        self._check_is_fitted()
         return (input - self.mean) / self.scale
 
     def _inverse_transform(self, input: Tensor) -> Tensor:

@@ -27,7 +27,7 @@ class Processor(torch.nn.Module, abc.ABC):
 
     def __init__(self) -> None:
         super().__init__()
-        self._fitted = not self.requires_fit
+        self._fitted = False
 
     def _check_is_fitted(self) -> None:
         if self.requires_fit and not self._fitted:
@@ -43,10 +43,9 @@ class Processor(torch.nn.Module, abc.ABC):
     def forward(self, input: Tensor, *args: Any, **kwargs: Any) -> Tensor:
         """Transform ``input`` and return the result.
 
-        Called via ``processor(input, *args, **kwargs)``
-        (``torch.nn.Module.__call__``) or, with a fitted-state check, via
-        :meth:`transform`. Extra arguments carry explicit context for
-        stateless processors without storing it on the processor.
+        Use :meth:`transform` to run with a fitted-state check. Extra
+        arguments carry explicit context for stateless processors without
+        storing it on the processor.
         """
 
     def fit(self, input: Tensor) -> Self:

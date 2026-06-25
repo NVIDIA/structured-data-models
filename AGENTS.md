@@ -41,3 +41,5 @@ Do not add platform or serving abstractions unless explicitly requested.
   Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, Python scalars, or newly-created CPU tensors.
 - Add short tensor shape comments for complex tensor operations.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
+- Follow established naming conventions over ad-hoc names (e.g. prefer the ecosystem-standard `fill_value` to a coined `empty_value`).
+- Document public constructor parameters with an `Args:` section in the class docstring, not just a one-line summary.

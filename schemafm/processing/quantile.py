@@ -170,7 +170,6 @@ class Quantile(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` into the configured output distribution."""
-        self._check_is_fitted()
         transformed = torch.empty_like(input)
         for i in range(input.shape[1]):
             transformed[:, i] = self._transform_col(

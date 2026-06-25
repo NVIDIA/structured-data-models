@@ -137,7 +137,12 @@ def _nan_mean_var(input: Tensor) -> tuple[Tensor, Tensor]:
 
 
 class Power(Processor, InvertibleMixin):
-    """Apply a feature-wise Yeo-Johnson power transform."""
+    """Apply a feature-wise Yeo-Johnson power transform.
+
+    Args:
+        standardize: If ``True``, zero-mean and unit-variance the transformed
+            features using statistics fitted after the power transform.
+    """
 
     def __init__(self, *, standardize: bool = True) -> None:
         super().__init__()
@@ -213,7 +218,6 @@ class Power(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""
-        self._check_is_fitted()
         transformed = self._yeojohnson_transform(input)
         return (transformed - self.mean) / self.scale
 

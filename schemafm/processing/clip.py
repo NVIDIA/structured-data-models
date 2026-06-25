@@ -11,6 +11,11 @@ class Clip(Processor, InvertibleMixin):
 
     This transform is not reconstructive; ``inverse_transform`` intentionally
     returns its input unchanged.
+
+    Args:
+        q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
+        q_high: Upper quantile in ``[0, 1]`` used as the per-column upper
+            bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
     """
 
     def __init__(
@@ -37,7 +42,6 @@ class Clip(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Clamp ``input`` to the fitted lower and upper bounds."""
-        self._check_is_fitted()
         return input.clamp(min=self.lower_bound, max=self.upper_bound)
 
     def _inverse_transform(self, input: Tensor) -> Tensor:

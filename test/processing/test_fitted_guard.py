@@ -14,7 +14,7 @@ ProcessorFactory = Callable[[], Processor]
     "processor_factory",
     [Clip, Power, Quantile, StandardScale],
 )
-def test_processor_requires_fit_for_transform_and_call(
+def test_processor_requires_fit_for_transform(
     processor_factory: ProcessorFactory,
 ) -> None:
     processor = processor_factory()
@@ -22,8 +22,6 @@ def test_processor_requires_fit_for_transform_and_call(
 
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform(input)
-    with pytest.raises(RuntimeError, match="not fitted"):
-        processor(input)
 
 
 @pytest.mark.parametrize(
