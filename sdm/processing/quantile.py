@@ -10,6 +10,9 @@ BOUNDS_THRESH = 1e-7
 
 def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
     n = xp.numel()
+    if n == 1:
+        return fp[0].expand_as(x)
+
     idx = torch.searchsorted(xp, x, right=True).clamp(1, n - 1)
 
     x0, x1 = xp[idx - 1], xp[idx]
@@ -56,13 +59,6 @@ class Quantile(Processor, InvertibleMixin):
         self.output_distribution = output_distribution
         self.random_state = random_state
         self.n_quantiles = 0
-
-        if self.output_distribution == "normal":
-            self._distribution = torch.distributions.Normal(
-                loc=0.0,
-                scale=1.0,
-                validate_args=False,
-            )
 
         self.register_buffer("quantiles", torch.empty(0))
         self.register_buffer("references", torch.empty(0))
@@ -126,7 +122,7 @@ class Quantile(Processor, InvertibleMixin):
             lower_bound_y = quantiles[0]
             upper_bound_y = quantiles[-1]
             if self.output_distribution == "normal":
-                input_col = self._distribution.cdf(input_col)
+                input_col = torch.special.ndtr(input_col)
 
         if self.output_distribution == "normal":
             bounds_thresh = input_col.new_tensor(BOUNDS_THRESH)
@@ -160,12 +156,12 @@ class Quantile(Processor, InvertibleMixin):
         input_col[upper_bounds_idx] = upper_bound_y
         input_col[lower_bounds_idx] = lower_bound_y
         if not inverse and self.output_distribution == "normal":
-            input_col = self._distribution.icdf(input_col)
             eps = input_col.new_tensor(
                 BOUNDS_THRESH - torch.finfo(torch.float64).eps
             )
-            clip_min = self._distribution.icdf(eps)
-            clip_max = self._distribution.icdf(one - eps)
+            input_col = torch.special.ndtri(input_col)
+            clip_min = torch.special.ndtri(eps)
+            clip_max = torch.special.ndtri(one - eps)
             input_col = input_col.clamp(clip_min, clip_max)
 
         return input_col

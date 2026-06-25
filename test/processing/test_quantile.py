@@ -64,6 +64,25 @@ def test_quantile_constant_columns_round_trip() -> None:
     assert torch.equal(processor.inverse_transform(transformed), input)
 
 
+def test_quantile_single_quantile_maps_to_single_reference() -> None:
+    input = torch.tensor(
+        [
+            [2.0, 1.0],
+            [3.0, 5.0],
+        ],
+        dtype=torch.float64,
+    )
+
+    processor = Quantile(n_quantiles=1, subsample=None).fit(input)
+    transformed = processor.transform(input)
+
+    assert torch.equal(transformed, torch.zeros_like(input))
+    assert torch.equal(
+        processor.inverse_transform(transformed),
+        processor.quantiles[0].expand_as(input),
+    )
+
+
 def test_quantile_preserves_nan_positions() -> None:
     input = torch.tensor(
         [
@@ -93,6 +112,7 @@ def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
     ).fit(input)
     transformed = processor.transform(input)
 
+    assert not hasattr(processor, "_distribution")
     assert transformed.isfinite().all()
     assert torch.allclose(
         processor.inverse_transform(transformed),
