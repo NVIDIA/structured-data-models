@@ -32,20 +32,8 @@ html_theme_options = {
     "accent_color": "green",
     "github_url": "https://github.com/NVIDIA/structured-data-models",
 }
-
 autosummary_generate = True
 autodoc_typehints = "signature"
-api_exclude = {
-    "sdm": {
-        "CategoricalTensor",
-        "StringTensor",
-        "StypeLike",
-        "TableTensor",
-        "VarLenTensor",
-        "__version__",
-    },
-}
-
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
@@ -54,12 +42,7 @@ intersphinx_mapping = {
 
 def api_names(module_name: str) -> list[str]:
     """Return documented names for an API module."""
-    excluded = api_exclude.get(module_name, set())
-    return [
-        name
-        for name in importlib.import_module(module_name).__all__
-        if name not in excluded
-    ]
+    return importlib.import_module(module_name).__all__
 
 
 def _render_jinja(app: Sphinx, docname: str, source: list[str]) -> None:
