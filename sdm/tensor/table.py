@@ -6,6 +6,7 @@ from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import torch
 from torch import Tensor
+from typing_extensions import override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor
@@ -16,6 +17,67 @@ SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
 
 
 class TableTensor(Tensor):
+    r"""A :class:`torch.Tensor` for tensorized, lossless table data.
+
+    A ``TableTensor`` stores column blocks separately per semantic type, while
+    exposing a single tensor-shaped table interface.
+    The last dimension represents named columns.
+
+    .. code-block:: python
+
+        from sdm import TableTensor, CategoricalTensor, StringTensor
+
+        table = TableTensor(
+            columns={
+                "numerical": ["age", "income"],
+                "categorical": ["country", "segment"],
+            },
+            numerical=torch.randn(10, 2),
+            categorical=CategoricalTensor(
+                data=torch.randint(0, 2, size=(10, 2)),
+                categories=(
+                    StringTensor.from_list(["USA", "Germany"]),
+                    StringTensor.from_list(["enterprise", "startup"]),
+                ),
+            ),
+        )
+
+        print(table)
+        # TableTensor (
+        #   size=(2, 4),
+        #   blocks={
+        #     numerical (2): ['age', 'income'],
+        #     categorical (2): ['country', 'segment'],
+        #   },
+        # )
+
+        # DataFrame-like column selection, but still tensor-native:
+        features = table[["age", "country"]]
+        assert features.size() == (10, 2)
+
+        # Normal PyTorch indexing still works on row/batch dimensions:
+        batch = table[[1, O, 2], ["income", "segment"]]
+        assert batch.size() == (3, 2)
+
+        # Semantic blocks stay separate for model input:
+        x_num = table.numerical
+        x_cat = table.categorical
+
+        # Tensor ops preserve the table container:
+        stacked = torch.stack([table, tablel, dim=0)
+        assert stacked.size () == (2, 2, 4)
+
+        # Column-wise cat extends the schema:
+        wide = torch.cat([table, table2], dim=-1)
+
+    Args:
+        size: The shape of the tensor ``[..., C]``.
+        columns: Column names grouped by semantic type.
+        numerical: The numerical column block of shape ``[..., C_num]``.
+        categorical: The categorical column block of shape ``[..., C_cat]``.
+        device: The device.
+    """
+
     HANDLED_FUNCTIONS: ClassVar[
         dict[Callable[..., Any], Callable[..., Any]]
     ] = {}
@@ -48,7 +110,7 @@ class TableTensor(Tensor):
         categorical: CategoricalTensor | None = None,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
-
+        r"""Create a tensor wrapper."""
         if size is not None:
             size = tuple(size)
             if len(size) == 0:
@@ -143,25 +205,41 @@ class TableTensor(Tensor):
 
     @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
+        r"""Return column names grouped by semantic type."""
         return self._columns.copy()
 
     @property
     def numerical(self) -> Tensor:
+        r"""Return the numerical column block."""
         return self._numerical
 
     @property
     def categorical(self) -> CategoricalTensor:
+        r"""Return the categorical column block."""
         return self._categorical
 
     def items(self) -> Iterator[tuple[Stype, Tensor]]:
+        r"""Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
 
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
+        r"""Return typed column blocks per semantic type."""
         return dict(self.items())
 
     def select_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+        r"""Return a table containing only ``columns``.
+
+        .. code-block:: python
+
+            assert table.size() == (2, 4)
+            table = table.select_columns(["age", "country"])
+            assert table.size() == (2, 2)
+
+        Args:
+            columns: The columns to select.
+        """
         columns = {columns} if isinstance(columns, str) else set(columns)
 
         for column in columns:
@@ -190,6 +268,17 @@ class TableTensor(Tensor):
         return self.__class__(columns=columns_dict, **blocks)
 
     def drop_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+        r"""Return a table with ``columns`` removed.
+
+        .. code-block:: python
+
+            assert table.size() == (2, 4)
+            table = table.remove_columns(["age", "country"])
+            assert table.size() == (2, 2)
+
+        Args:
+            columns: The columns to drop.
+        """
         columns = {columns} if isinstance(columns, str) else set(columns)
 
         for column in columns:
@@ -206,6 +295,7 @@ class TableTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
+        r"""Register a ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -262,14 +352,17 @@ class TableTensor(Tensor):
         out = Tensor.__getitem__(self, (*indices[:-1], slice(None)))
         return cast(TableTensor, out).select_columns(indices[-1])
 
+    @override
     def is_shared(self) -> bool:
         return all(tensor.is_shared() for _, tensor in self.items())
 
+    @override
     def share_memory_(self) -> "TableTensor":
         for _, tensor in self.items():
             tensor.share_memory_()
         return self
 
+    @override
     def is_contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
@@ -279,6 +372,7 @@ class TableTensor(Tensor):
             for _, tensor in self.items()
         )
 
+    @override
     def contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
@@ -287,6 +381,7 @@ class TableTensor(Tensor):
             return self
         return _contiguous(self, memory_format=memory_format)
 
+    @override
     def tolist() -> Any:
         raise NotImplementedError("'tolist() is not yet implemented")  # TODO
 

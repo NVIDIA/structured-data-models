@@ -5,6 +5,7 @@ from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
+from typing_extensions import override
 
 aten = torch.ops.aten
 
@@ -15,8 +16,31 @@ SelfCategoricalTensor = TypeVar(
 
 
 class CategoricalTensor(Tensor):
-    # Negative data values represent missing values. Valid data values are
-    # direct indices into the corresponding category vector.
+    r"""A :class:`torch.Tensor` for categorical column data.
+
+    A ``CategoricalTensor`` stores categorical indices in ``data`` and one
+    category vector per column in ``categories``.
+    Data values are direct indices into the corresponding category vector.
+    Negative indices represent missing values.
+
+    .. code-block:: python
+
+        import torch
+        from sdm import CategoricalTensor, StringTensor
+
+        tensor = CategoricalTensor(
+            data=torch.randint(0, 2, size=(10, 2)),
+            categories=(
+                StringTensor.from_list(["USA", "GERMANY"]),
+                StringTensor.from_list(["enterprise", "startup"]),
+            ),
+        )
+
+    Args:
+        data: The categorical indices of shape ``[..., C]``.
+        categories: A tuple of ``C`` category vectors.
+    """
+
     ALLOWED_DTYPES = (torch.int32, torch.int64)
     HANDLED_FUNCTIONS: ClassVar[
         dict[Callable[..., Any], Callable[..., Any]]
@@ -42,7 +66,7 @@ class CategoricalTensor(Tensor):
         data: Tensor,
         categories: Sequence[Tensor],
     ) -> SelfCategoricalTensor:
-
+        r"""Create a tensor wrapper."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to have dtype "
@@ -77,10 +101,12 @@ class CategoricalTensor(Tensor):
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:
+        r"""Return the index tensor."""
         return self._data
 
     @property
     def categories(self) -> tuple[Tensor, ...]:
+        r"""Return category vector for each categorical column."""
         return self._categories
 
     # Decorators ##############################################################
@@ -90,6 +116,7 @@ class CategoricalTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
+        r"""Register a ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -123,9 +150,11 @@ class CategoricalTensor(Tensor):
         )
         return func(*args, **(kwargs or {}))
 
+    @override
     def is_shared(self) -> bool:
         return self._data.is_shared()
 
+    @override
     def share_memory_(self) -> "CategoricalTensor":
         self._data.share_memory_()
         return self
