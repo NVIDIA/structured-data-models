@@ -5,6 +5,7 @@ from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
+from typing_extensions import override
 
 aten = torch.ops.aten
 
@@ -15,6 +16,12 @@ SelfCategoricalTensor = TypeVar(
 
 
 class CategoricalTensor(Tensor):
+    """Tensor subclass for categorical column data.
+
+    ``CategoricalTensor`` stores category ids in ``data`` and one category
+    vector per column in ``categories``. Negative ids represent missing values.
+    """
+
     # Negative data values represent missing values. Valid data values are
     # direct indices into the corresponding category vector.
     ALLOWED_DTYPES = (torch.int32, torch.int64)
@@ -42,7 +49,7 @@ class CategoricalTensor(Tensor):
         data: Tensor,
         categories: Sequence[Tensor],
     ) -> SelfCategoricalTensor:
-
+        """Create a categorical tensor from category ids and vocabularies."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to have dtype "
@@ -77,10 +84,12 @@ class CategoricalTensor(Tensor):
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:
+        """Return the underlying category-id tensor."""
         return self._data
 
     @property
     def categories(self) -> tuple[Tensor, ...]:
+        """Return category vocabularies for each categorical column."""
         return self._categories
 
     # Decorators ##############################################################
@@ -90,6 +99,7 @@ class CategoricalTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
+        """Register an ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -123,9 +133,11 @@ class CategoricalTensor(Tensor):
         )
         return func(*args, **(kwargs or {}))
 
+    @override
     def is_shared(self) -> bool:
         return self._data.is_shared()
 
+    @override
     def share_memory_(self) -> "CategoricalTensor":
         self._data.share_memory_()
         return self

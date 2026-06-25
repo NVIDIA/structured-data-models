@@ -6,6 +6,7 @@ from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import torch
 from torch import Tensor
+from typing_extensions import override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor
@@ -16,6 +17,13 @@ SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
 
 
 class TableTensor(Tensor):
+    """Tensor subclass for column-grouped structured table data.
+
+    ``TableTensor`` stores numerical and categorical column blocks separately
+    while exposing a single tensor-shaped table interface. The last dimension
+    represents named columns.
+    """
+
     HANDLED_FUNCTIONS: ClassVar[
         dict[Callable[..., Any], Callable[..., Any]]
     ] = {}
@@ -48,7 +56,7 @@ class TableTensor(Tensor):
         categorical: CategoricalTensor | None = None,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
-
+        """Create a table tensor from typed column blocks."""
         if size is not None:
             size = tuple(size)
             if len(size) == 0:
@@ -143,25 +151,31 @@ class TableTensor(Tensor):
 
     @property
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
+        """Return column names grouped by semantic type."""
         return self._columns.copy()
 
     @property
     def numerical(self) -> Tensor:
+        """Return the numerical column block."""
         return self._numerical
 
     @property
     def categorical(self) -> CategoricalTensor:
+        """Return the categorical column block."""
         return self._categorical
 
     def items(self) -> Iterator[tuple[Stype, Tensor]]:
+        """Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
 
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
+        """Return typed column blocks as a mapping."""
         return dict(self.items())
 
     def select_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+        """Return a table containing only ``columns``."""
         columns = {columns} if isinstance(columns, str) else set(columns)
 
         for column in columns:
@@ -190,6 +204,7 @@ class TableTensor(Tensor):
         return self.__class__(columns=columns_dict, **blocks)
 
     def drop_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+        """Return a table with ``columns`` removed."""
         columns = {columns} if isinstance(columns, str) else set(columns)
 
         for column in columns:
@@ -206,6 +221,7 @@ class TableTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
+        """Register an ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -262,14 +278,17 @@ class TableTensor(Tensor):
         out = Tensor.__getitem__(self, (*indices[:-1], slice(None)))
         return cast(TableTensor, out).select_columns(indices[-1])
 
+    @override
     def is_shared(self) -> bool:
         return all(tensor.is_shared() for _, tensor in self.items())
 
+    @override
     def share_memory_(self) -> "TableTensor":
         for _, tensor in self.items():
             tensor.share_memory_()
         return self
 
+    @override
     def is_contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
@@ -279,6 +298,7 @@ class TableTensor(Tensor):
             for _, tensor in self.items()
         )
 
+    @override
     def contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
@@ -287,6 +307,7 @@ class TableTensor(Tensor):
             return self
         return _contiguous(self, memory_format=memory_format)
 
+    @override
     def tolist() -> Any:
         raise NotImplementedError("'tolist() is not yet implemented")  # TODO
 

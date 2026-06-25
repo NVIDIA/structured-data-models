@@ -4,15 +4,19 @@ from typing import Any, ClassVar, cast
 
 import pyarrow as pa
 import torch
+from typing_extensions import override
 
 from sdm.tensor import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
+    """Variable-length tensor specialized for UTF-8 strings."""
+
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
 
     @classmethod
+    @override
     def from_arrow(
         cls,
         array: pa.Array | pa.ChunkedArray,
@@ -20,7 +24,6 @@ class StringTensor(VarLenTensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
-
         if isinstance(array, pa.ChunkedArray):
             if array.num_chunks == 1:
                 array = array.chunk(0)
@@ -67,6 +70,7 @@ class StringTensor(VarLenTensor):
             storage_offset=array.offset,
         )
 
+    @override
     def to_arrow(self) -> pa.Array:
         if self.device.type != "cpu":
             raise TypeError(
@@ -92,6 +96,7 @@ class StringTensor(VarLenTensor):
         )
 
     @classmethod
+    @override
     def from_list(
         cls,
         values: str | Sequence[Any],
@@ -100,7 +105,6 @@ class StringTensor(VarLenTensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> "StringTensor":
-
         if dtype is not None and dtype != torch.uint8:
             raise ValueError(
                 f"Expected 'dtype' in '{cls.__name__}.from_list' to be "
@@ -156,6 +160,7 @@ class StringTensor(VarLenTensor):
             size=size,
         )
 
+    @override
     def item(self) -> str:  # type: ignore
         return cast(str, super().item())
 

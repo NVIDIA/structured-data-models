@@ -6,6 +6,7 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
+from typing_extensions import override
 
 aten = torch.ops.aten
 
@@ -30,6 +31,13 @@ SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
+    """Tensor subclass for rectangular variable-length values.
+
+    Values are stored in a flat contiguous ``data`` tensor and indexed by an
+    ``offset`` tensor. The wrapper tensor shape describes the rectangular
+    logical layout of variable-length elements.
+    """
+
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
     HANDLED_FUNCTIONS: ClassVar[
         dict[Callable[..., Any], Callable[..., Any]]
@@ -61,7 +69,7 @@ class VarLenTensor(Tensor):
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
     ) -> SelfVarLenTensor:
-
+        """Create a variable-length tensor from data and offsets."""
         size = tuple(size)
         if any(dim_size < -1 for dim_size in size):
             raise ValueError(f"Invalid shape dimensions (got '{size}')")
@@ -172,6 +180,7 @@ class VarLenTensor(Tensor):
         *,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
+        """Wrap a dense tensor as fixed-size variable-length elements."""
         data = tensor
         if tensor.stride() != (1,) or int(tensor.storage_offset()) != 0:
             span_len = _span_len(tensor.size(), tensor.stride())
@@ -202,7 +211,7 @@ class VarLenTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfVarLenTensor:
-
+        """Create a variable-length tensor from an Arrow list array."""
         if isinstance(array, pa.ChunkedArray):
             if array.num_chunks == 1:
                 array = array.chunk(0)
@@ -259,6 +268,7 @@ class VarLenTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
+        """Convert this tensor to an Arrow list array."""
         if self.device.type != "cpu":
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
@@ -300,6 +310,8 @@ class VarLenTensor(Tensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
+        """Create a variable-length tensor from a rectangular Python list."""
+
         def is_sequence(value: Any) -> bool:
             return isinstance(value, Sequence) and not isinstance(
                 value, str | bytes | bytearray
@@ -346,6 +358,7 @@ class VarLenTensor(Tensor):
 
     @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
+        """Return contiguous data and normalized offsets."""
         if not self.is_contiguous():
             raise RuntimeError(
                 f"Can't access 'data_offset' for non-contiguous "
@@ -364,6 +377,7 @@ class VarLenTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
+        """Register an ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -422,19 +436,23 @@ class VarLenTensor(Tensor):
             f"'{func}' is not supported for '{cls.__name__}'"
         )
 
+    @override
     def is_shared(self) -> bool:
         return self._data.is_shared() and self._offset.is_shared()
 
+    @override
     def share_memory_(self) -> "VarLenTensor":
         self._data.share_memory_()
         self._offset.share_memory_()
         return self
 
     @property
+    @override
     def grad(self) -> Tensor | None:
         return self._data.grad
 
     @property
+    @override
     def requires_grad(self) -> bool:
         return self._data.requires_grad
 
@@ -442,16 +460,19 @@ class VarLenTensor(Tensor):
     def requires_grad(self, requires_grad: bool) -> None:
         self._data.requires_grad_(requires_grad)
 
+    @override
     def requires_grad_(self, mode: bool = True) -> "VarLenTensor":
         self._data.requires_grad_(mode)
         return self
 
+    @override
     def detach_(self) -> "VarLenTensor":
         raise RuntimeError(
             f"Can't detach a '{self.__class__.__name__} in-place. Use "
             f"'detach() instead."
         )
 
+    @override
     def tolist(self) -> Any:
         def reshape(values: list[Any], size: tuple[int, ...]) -> Any:
             if len(size) == 0:
@@ -469,6 +490,7 @@ class VarLenTensor(Tensor):
         values = tensor.to_arrow().to_pylist()
         return reshape(values, tuple(self.size()))
 
+    @override
     def item(self) -> list[Any]:  # type: ignore
         if self.numel() != 1:
             raise RuntimeError(
