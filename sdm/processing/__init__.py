@@ -3,6 +3,7 @@
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.clip import Clip
 from sdm.processing.impute import MeanImpute
+from sdm.processing.postprocess import DecodeLabels, SoftmaxTemperature
 from sdm.processing.power import Power
 from sdm.processing.quantile import Quantile
 from sdm.processing.sigma_clip import SigmaClip
@@ -13,8 +14,10 @@ __all__ = [
     "InvertibleMixin",
     "Clip",
     "MeanImpute",
+    "DecodeLabels",
     "Power",
     "Quantile",
     "SigmaClip",
+    "SoftmaxTemperature",
     "StandardScale",
 ]
