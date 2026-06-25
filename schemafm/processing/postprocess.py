@@ -8,7 +8,13 @@ from schemafm.tensor import CategoricalTensor
 
 
 class SoftmaxTemperature(Processor):
-    """Apply softmax to logits after temperature scaling."""
+    """Apply softmax to logits after temperature scaling.
+
+    Args:
+        temperature: Positive divisor applied to logits before softmax;
+            higher values produce a softer distribution.
+        dim: Dimension along which softmax is computed.
+    """
 
     requires_fit = False
 

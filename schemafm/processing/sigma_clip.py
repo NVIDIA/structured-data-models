@@ -23,7 +23,12 @@ def _nanstd(input: Tensor, *, dim: int, correction: int) -> Tensor:
 
 
 class SigmaClip(Processor):
-    """Two-stage z-score outlier clipping with soft logarithmic bounds."""
+    """Two-stage z-score outlier clipping with soft logarithmic bounds.
+
+    Args:
+        threshold: Positive z-score multiplier setting how many standard
+            deviations from the mean mark the soft clipping bounds.
+    """
 
     def __init__(self, *, threshold: float = 4.0) -> None:
         super().__init__()
@@ -62,7 +67,6 @@ class SigmaClip(Processor):
 
     def forward(self, input: Tensor) -> Tensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""
-        self._check_is_fitted()
         log_abs = torch.log1p(input.abs())
         clipped = torch.maximum(-log_abs + self.lower_bound, input)
         return torch.minimum(log_abs + self.upper_bound, clipped)

@@ -42,7 +42,7 @@ def test_mean_impute_no_nan_keeps_values() -> None:
     assert torch.equal(processor.transform(input), input)
 
 
-def test_mean_impute_all_nan_column_uses_empty_value_and_keeps_shape() -> None:
+def test_mean_impute_all_nan_column_uses_fill_value_and_keeps_shape() -> None:
     input = torch.tensor(
         [
             [torch.nan, 1.0],
@@ -50,7 +50,7 @@ def test_mean_impute_all_nan_column_uses_empty_value_and_keeps_shape() -> None:
         ]
     )
 
-    processor = MeanImpute(empty_value=-5.0).fit(input)
+    processor = MeanImpute(fill_value=-5.0).fit(input)
     transformed = processor.transform(input)
 
     assert transformed.shape == input.shape
