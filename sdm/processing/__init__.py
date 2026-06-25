@@ -2,11 +2,13 @@
 
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.clip import Clip
+from sdm.processing.power import Power
 from sdm.processing.standard_scale import StandardScale
 
 __all__ = [
     "Processor",
     "InvertibleMixin",
     "Clip",
+    "Power",
     "StandardScale",
 ]
