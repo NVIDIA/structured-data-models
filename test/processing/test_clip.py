@@ -1,3 +1,4 @@
+import pytest
 import torch
 from sdm.processing import Clip
 
@@ -58,3 +59,8 @@ def test_clip_nan_columns_follow_torch_quantile() -> None:
     assert torch.isnan(processor.upper_bound[0])
     assert torch.isnan(transformed[:, 0]).all()
     assert torch.equal(transformed[:, 1], input[:, 1])
+
+def test_clip_rejects_invalid_quantiles_with_parameter_names() -> None:
+    with pytest.raises(ValueError, match="q_low <= q_high"):
+        Clip(q_low=0.75, q_high=0.25)
+
