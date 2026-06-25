@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.nn - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="QASSMax" href="generated/sdm.nn.QASSMax.html" /><link rel="prev" title="InvertibleMixin" href="generated/sdm.processing.InvertibleMixin.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.tensor - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="VarLenTensor" href="generated/sdm.tensor.VarLenTensor.html" /><link rel="prev" title="Stype" href="generated/sdm.Stype.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=e1a1ceaf" />
@@ -19,7 +19,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="sdm.nn"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="sdm.tensor"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -69,7 +69,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.Stype.html">Stype</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="tensor.html">sdm.tensor</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.tensor</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.VarLenTensor.html">VarLenTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.StringTensor.html">StringTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
@@ -81,7 +81,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.nn</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="nn.html">sdm.nn</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.QASSMax.html">QASSMax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.SDPA.html">SDPA</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
@@ -116,7 +116,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="1" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">sdm.nn</strong>
+        <strong itemprop="name">sdm.tensor</strong>
         <meta itemprop="position" content="2" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -129,25 +129,22 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="sdm-nn">
-<h1>sdm.nn<a class="headerlink" href="#sdm-nn" title="Link to this heading">¶</a></h1>
+          <section id="sdm-tensor">
+<h1>sdm.tensor<a class="headerlink" href="#sdm-tensor" title="Link to this heading">¶</a></h1>
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.QASSMax</span></code></a></p></td>
-<td><p>Learnable query scaler for query-aware scalable softmax (QASSMax).</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.tensor.VarLenTensor.html#sdm.tensor.VarLenTensor" title="sdm.tensor.VarLenTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.VarLenTensor</span></code></a></p></td>
+<td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.SDPA.html#sdm.nn.SDPA" title="sdm.nn.SDPA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.SDPA</span></code></a></p></td>
-<td><p>Scaled dot-product attention wrapper for <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">S,</span> <span class="pre">H,</span> <span class="pre">C]</span></code> tensors.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.tensor.StringTensor.html#sdm.tensor.StringTensor" title="sdm.tensor.StringTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.StringTensor</span></code></a></p></td>
+<td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.RotaryEmbedding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.RotaryEmbedding</span></code></a></p></td>
-<td><p>Rotary positional embedding for <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">S,</span> <span class="pre">H,</span> <span class="pre">C]</span></code> tensors.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.CategoricalTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.CategoricalTensor</span></code></a></p></td>
+<td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.MultiHeadAttention.html#sdm.nn.MultiHeadAttention" title="sdm.nn.MultiHeadAttention"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.MultiHeadAttention</span></code></a></p></td>
-<td><p>Multi-head attention layer.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html#sdm.nn.TransformerBlock" title="sdm.nn.TransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.TransformerBlock</span></code></a></p></td>
-<td><p>Transformer block with optional QASSMax and RoPE support.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.TableTensor</span></code></a></p></td>
+<td><p></p></td>
 </tr>
 </tbody>
 </table>
@@ -160,16 +157,16 @@ data-aria-dark="Switch to auto color mode">
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="generated/sdm.processing.InvertibleMixin.html">
+    <a href="generated/sdm.Stype.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">InvertibleMixin</div></div>
+        <span>Previous</span><div class="title">Stype</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="generated/sdm.nn.QASSMax.html">
+    <a href="generated/sdm.tensor.VarLenTensor.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">QASSMax</div>
+        <div class="title">VarLenTensor</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -178,11 +175,10 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=6cc828b7"></script>
+      <script src="../_static/documentation_options.js?v=13baad42"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../_static/copybutton.js?v=f281be69"></script>
-      <script src="../_static/shibuya.js?v=50760d75"></script>
-      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script></body>
+      <script src="../_static/shibuya.js?v=50760d75"></script></body>
 </html>
