@@ -1,0 +1,43 @@
+name: Documentation
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: write  # gh-pages push
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ startsWith(github.ref, 'refs/pull/') || github.run_number }}  # yamllint disable-line
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  make_html:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          python-version: '3.10'
+          activate-environment: true
+
+      - name: Install package
+        run: |
+          uv pip install --torch-backend=cpu '.[doc]'
+
+      - name: Build documentation
+        working-directory: ./docs
+        run: |
+          uv run --no-project sphinx-build -M html "source" "build" -W --keep-going
+
+      - name: Push documentation to gh-pages
+        if: github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/build/html
