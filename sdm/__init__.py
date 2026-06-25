@@ -24,3 +24,7 @@ __all__ = [
     "VarLenTensor",
     "__version__",
 ]
+
+__docs__ = [
+    "Stype",
+]

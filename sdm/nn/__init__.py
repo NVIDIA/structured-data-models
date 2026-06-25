@@ -16,3 +16,11 @@ __all__ = [
     "RotaryEmbedding",
     "TransformerBlock",
 ]
+
+__docs__ = [
+    "QASSMax",
+    "SDPA",
+    "RotaryEmbedding",
+    "MultiHeadAttention",
+    "TransformerBlock",
+]

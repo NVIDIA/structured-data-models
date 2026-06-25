@@ -44,6 +44,13 @@ test = [
     "pytest",
     "pandas",
 ]
+doc = [
+    "myst-parser",
+    "shibuya",
+    "sphinx",
+    "sphinx-autoapi",
+    "sphinx-copybutton",
+]
 
 [project.urls]
 Download = "https://github.com/NVIDIA/structured-data-models/releases"

@@ -11,3 +11,10 @@ __all__ = [
     "TableTensor",
     "VarLenTensor",
 ]
+
+__docs__ = [
+    "VarLenTensor",
+    "StringTensor",
+    "CategoricalTensor",
+    "TableTensor",
+]

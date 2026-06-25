@@ -6,3 +6,7 @@ __all__ = [
     "InvertibleMixin",
     "Processor",
 ]
+
+__docs__ = [
+    "Processor",
+]
