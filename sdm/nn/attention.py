@@ -272,10 +272,10 @@ class MultiHeadAttention(torch.nn.Module):
     @overload
     def forward(
         self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
-        seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[False] = False,
@@ -284,10 +284,10 @@ class MultiHeadAttention(torch.nn.Module):
     @overload
     def forward(
         self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
-        seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[True],
@@ -296,10 +296,10 @@ class MultiHeadAttention(torch.nn.Module):
     @overload
     def forward(
         self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
-        seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
         return_kv: bool,
@@ -432,10 +432,10 @@ class TransformerBlock(torch.nn.Module):
     @overload
     def forward(
         self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
-        seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[False] = False,
@@ -444,10 +444,10 @@ class TransformerBlock(torch.nn.Module):
     @overload
     def forward(
         self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
-        seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[True],
@@ -456,10 +456,10 @@ class TransformerBlock(torch.nn.Module):
     @overload
     def forward(
         self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
-        seqused_key_value: Tensor | None = None,  # [...]
-        attn_mask: Tensor | None = None,  # [..., Q, KV]
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
         return_kv: bool,
