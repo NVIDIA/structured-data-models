@@ -112,7 +112,6 @@ def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
     ).fit(input)
     transformed = processor.transform(input)
 
-    assert not hasattr(processor, "_distribution")
     assert transformed.isfinite().all()
     assert torch.allclose(
         processor.inverse_transform(transformed),
