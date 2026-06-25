@@ -10,13 +10,21 @@ from sdm.tensor import VarLenTensor
 
 
 class StringTensor(VarLenTensor):
-    """Variable-length tensor specialized for UTF-8 strings."""
+    r"""A :class:`torch.Tensor` for UTF-8 encoded string values.
+
+    Args:
+        data: Flat contiguous ``uint8`` tensor containing all string values.
+        offset: One-dimensional offsets into ``data``.
+        size: The shape of the tensor.
+        stride: The stride of the tensor.
+        storage_offset: The offset into the logical ``offset`` storage.
+    """
 
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
 
-    @classmethod
     @override
+    @classmethod
     def from_arrow(
         cls,
         array: pa.Array | pa.ChunkedArray,
@@ -24,6 +32,21 @@ class StringTensor(VarLenTensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
+        r"""Create tensor from a ``pyarrow`` string array.
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            from sdm import StringTensor
+
+            array = pa.array("foo", "bar", "hello world", ""])
+            tensor = StringTensor.from_arrow(array, size=(2, 2))
+
+        Args:
+            array: The ``pyarrow`` string array.
+            size: The shape of the tensor.
+            device: The device.
+        """
         if isinstance(array, pa.ChunkedArray):
             if array.num_chunks == 1:
                 array = array.chunk(0)
@@ -72,6 +95,7 @@ class StringTensor(VarLenTensor):
 
     @override
     def to_arrow(self) -> pa.Array:
+        r"""Convert this tensor to flat ``pyarrow`` string array."""
         if self.device.type != "cpu":
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
@@ -105,6 +129,23 @@ class StringTensor(VarLenTensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> "StringTensor":
+        r"""Create tensor from a rectangular Python list of strings.
+
+        .. code-block:: python
+
+            from sdm import StringTensor
+
+            tensor = VarLenTensor.from_list([
+                ["foo", "bar"],
+                ["hello world", ""],
+            ])
+
+        Args:
+            values: The rectangular Python list of strings.
+            dtype: The dtype of the ``value`` tensor.
+            device: The device.
+            offset_dtype: The dtype of the ``offset`` tensor.
+        """
         if dtype is not None and dtype != torch.uint8:
             raise ValueError(
                 f"Expected 'dtype' in '{cls.__name__}.from_list' to be "

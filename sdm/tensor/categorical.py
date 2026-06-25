@@ -16,14 +16,31 @@ SelfCategoricalTensor = TypeVar(
 
 
 class CategoricalTensor(Tensor):
-    """Tensor subclass for categorical column data.
+    r"""A :class:`torch.Tensor` for categorical column data.
 
-    ``CategoricalTensor`` stores category ids in ``data`` and one category
-    vector per column in ``categories``. Negative ids represent missing values.
+    A ``CategoricalTensor`` stores categorical indices in ``data`` and one
+    category vector per column in ``categories``.
+    Data values are direct indices into the corresponding category vector.
+    Negative indices represent missing values.
+
+    .. code-block:: python
+
+        import torch
+        from sdm import CategoricalTensor, StringTensor
+
+        tensor = CategoricalTensor(
+            data=torch.randint(0, 2, size=(10, 2)),
+            categories=(
+                StringTensor.from_list(["USA", "GERMANY"]),
+                StringTensor.from_list(["enterprise", "startup"]),
+            ),
+        )
+
+    Args:
+        data: The categorical indices of shape ``[..., C]``.
+        categories: A tuple of ``C`` category vectors.
     """
 
-    # Negative data values represent missing values. Valid data values are
-    # direct indices into the corresponding category vector.
     ALLOWED_DTYPES = (torch.int32, torch.int64)
     HANDLED_FUNCTIONS: ClassVar[
         dict[Callable[..., Any], Callable[..., Any]]
@@ -49,7 +66,7 @@ class CategoricalTensor(Tensor):
         data: Tensor,
         categories: Sequence[Tensor],
     ) -> SelfCategoricalTensor:
-        """Create a categorical tensor from category ids and vocabularies."""
+        r"""Create a tensor wrapper."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
                 f"Expected 'data' in '{cls.__name__}' to have dtype "
@@ -84,12 +101,12 @@ class CategoricalTensor(Tensor):
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:
-        """Return the underlying category-id tensor."""
+        r"""Return the index tensor."""
         return self._data
 
     @property
     def categories(self) -> tuple[Tensor, ...]:
-        """Return category vocabularies for each categorical column."""
+        r"""Return category vector for each categorical column."""
         return self._categories
 
     # Decorators ##############################################################

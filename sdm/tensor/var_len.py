@@ -31,7 +31,7 @@ SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
-    r"""Tensor subclass for rectangular variable-length values.
+    r"""A :class:`torch.Tensor` for rectangular variable-length values.
 
     Values are stored in a flat contiguous ``data`` tensor and indexed by an
     ``offset`` tensor.
@@ -42,8 +42,8 @@ class VarLenTensor(Tensor):
         from sdm import VarLenTensor
 
         tensor = VarLenTensor(
-            data = torch.tensor([1, 2, 3, 4, 5, 6]),
-            offset = torch.tensor([0, 2, 5, 5, 6]),
+            data=torch.tensor([1, 2, 3, 4, 5, 6]),
+            offset=torch.tensor([0, 2, 5, 5, 6]),
             size=(2, 2),
         )
 
@@ -233,7 +233,7 @@ class VarLenTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfVarLenTensor:
-        r"""Create a variable-length tensor from an ``pyarrow`` list array.
+        r"""Create tensor from a ``pyarrow`` list array.
 
         .. code-block:: python
 
@@ -304,11 +304,7 @@ class VarLenTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
-        r"""Convert this tensor to flat ``pyarrow`` list array.
-
-        Returns:
-            Flat ``pyarrow`` list array.
-        """
+        r"""Convert this tensor to flat ``pyarrow`` list array."""
         if self.device.type != "cpu":
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
@@ -350,7 +346,7 @@ class VarLenTensor(Tensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
-        r"""Create a variable-length tensor from a rectangular Python list.
+        r"""Create tensor from a rectangular Python list.
 
         .. code-block:: python
 
