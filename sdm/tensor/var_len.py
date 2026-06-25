@@ -31,11 +31,28 @@ SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
-    """Tensor subclass for rectangular variable-length values.
+    r"""Tensor subclass for rectangular variable-length values.
 
     Values are stored in a flat contiguous ``data`` tensor and indexed by an
-    ``offset`` tensor. The wrapper tensor shape describes the rectangular
-    logical layout of variable-length elements.
+    ``offset`` tensor.
+
+    .. code-block:: python
+
+        import torch
+        from sdm import VarLenTensor
+
+        tensor = VarLenTensor(
+            data = torch.tensor([1, 2, 3, 4, 5, 6]),
+            offset = torch.tensor([0, 2, 5, 5, 6]),
+            size=(2, 2),
+        )
+
+    Args:
+        data: Flat contiguous tensor containing all element values.
+        offset: One-dimensional offsets into ``data``.
+        size: The shape of the tensor.
+        stride: The stride of the tensor.
+        storage_offset: The offset into the logical ``offset`` storage.
     """
 
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
@@ -69,7 +86,7 @@ class VarLenTensor(Tensor):
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
     ) -> SelfVarLenTensor:
-        """Create a variable-length tensor from data and offsets."""
+        r"""Create a tensor wrapper."""
         size = tuple(size)
         if any(dim_size < -1 for dim_size in size):
             raise ValueError(f"Invalid shape dimensions (got '{size}')")
@@ -180,7 +197,12 @@ class VarLenTensor(Tensor):
         *,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
-        """Wrap a dense tensor as fixed-size variable-length elements."""
+        r"""Wrap a dense tensor as fixed-size variable-length elements.
+
+        Args:
+            tensor: The dense tensor.
+            offset_dtype: The dtype of the ``offset`` tensor.
+        """
         data = tensor
         if tensor.stride() != (1,) or int(tensor.storage_offset()) != 0:
             span_len = _span_len(tensor.size(), tensor.stride())
@@ -211,7 +233,21 @@ class VarLenTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfVarLenTensor:
-        """Create a variable-length tensor from an Arrow list array."""
+        r"""Create a variable-length tensor from an ``pyarrow`` list array.
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            from sdm import VarLenTensor
+
+            array = pa.array([[1, 2], [3, 4, 5], [], [6]])
+            tensor = VarLenTensor.from_arrow(array)
+
+        Args:
+            array: The ``pyarrow`` list array.
+            size: The shape of the tensor.
+            device: The device.
+        """
         if isinstance(array, pa.ChunkedArray):
             if array.num_chunks == 1:
                 array = array.chunk(0)
@@ -268,7 +304,7 @@ class VarLenTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
-        """Convert this tensor to an Arrow list array."""
+        r"""Convert this tensor to flat ``pyarrow`` list array."""
         if self.device.type != "cpu":
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
@@ -310,7 +346,23 @@ class VarLenTensor(Tensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
-        """Create a variable-length tensor from a rectangular Python list."""
+        r"""Create a variable-length tensor from a rectangular Python list.
+
+        .. code-block:: python
+
+            from sdm import VarLenTensor
+
+            tensor = VarLenTensor.from_list([
+                [[1, 2], [3, 4, 5]],
+                [[], [6]],
+            ])
+
+        Args:
+            values: The rectangular Python list.
+            dtype: The dtype of the ``value`` tensor.
+            device: The device.
+            offset_dtype: The dtype of the ``offset`` tensor.
+        """
 
         def is_sequence(value: Any) -> bool:
             return isinstance(value, Sequence) and not isinstance(
@@ -358,7 +410,11 @@ class VarLenTensor(Tensor):
 
     @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
-        """Return contiguous data and normalized offsets."""
+        r"""Return contiguous data and normalized offsets.
+
+        Returns:
+            ``(data, offset)`` tuple.
+        """
         if not self.is_contiguous():
             raise RuntimeError(
                 f"Can't access 'data_offset' for non-contiguous "
@@ -377,7 +433,7 @@ class VarLenTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        """Register an ``__torch_dispatch__`` implementation."""
+        """Register a ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
