@@ -304,7 +304,11 @@ class VarLenTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
-        r"""Convert this tensor to flat ``pyarrow`` list array."""
+        r"""Convert this tensor to flat ``pyarrow`` list array.
+
+        Returns:
+            Flat ``pyarrow`` list array.
+        """
         if self.device.type != "cpu":
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
