@@ -16,12 +16,6 @@ class Processor(torch.nn.Module, abc.ABC):
     Set ``requires_fit = False`` for stateless processors that can safely run
     without a prior ``fit`` call.
 
-    Processors map a single tensor to a single tensor. Transforms that need
-    extra runtime context are not modeled here.
-
-    Processors assume the caller has selected compatible tensor blocks and
-    normalized dtypes before calling ``fit`` or ``transform``. Table-level
-    dispatch and casting will be formalized separately from this base class.
     """
 
     requires_fit: ClassVar[bool] = True
