@@ -4,6 +4,9 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
 
+from sphinx.application import Sphinx
+from sphinx.ext.autosummary.generate import AutosummaryEntry
+
 project = "Structured Data Models"
 author = "NVIDIA"
 copyright = f"{date.today().year}, NVIDIA"
@@ -51,23 +54,28 @@ intersphinx_mapping = {
 
 def api_names(module_name: str) -> list[str]:
     """Return documented names for an API module."""
-    module = importlib.import_module(module_name)
     excluded = api_exclude.get(module_name, set())
-    return [name for name in module.__all__ if name not in excluded]
+    return [
+        name
+        for name in importlib.import_module(module_name).__all__
+        if name not in excluded
+    ]
 
 
-def _render_jinja(app, docname, source):
+def _render_jinja(app: Sphinx, docname: str, source: list[str]) -> None:
     source[0] = app.builder.templates.render_string(
         source[0],
         {"api_names": api_names},
     )
 
 
-def _patch_autosummary_jinja(app):
+def _patch_autosummary_jinja(app: Sphinx) -> None:
     from sphinx.ext.autosummary import generate
 
-    def find_autosummary_in_files(filenames):
-        documented = []
+    def find_autosummary_in_files(
+        filenames: list[str],
+    ) -> list[AutosummaryEntry]:
+        documented: list[AutosummaryEntry] = []
         for filename in filenames:
             source = Path(filename).read_text(
                 encoding=app.config.source_encoding,
@@ -85,10 +93,10 @@ def _patch_autosummary_jinja(app):
             )
         return documented
 
-    generate.find_autosummary_in_files = find_autosummary_in_files
+    generate.find_autosummary_in_files = find_autosummary_in_files  # type: ignore
 
 
-def setup(app):
+def setup(app: Sphinx) -> None:
     """Register Jinja rendering for dynamic autosummary lists."""
     app.connect("builder-inited", _patch_autosummary_jinja, priority=400)
     app.connect("source-read", _render_jinja)
