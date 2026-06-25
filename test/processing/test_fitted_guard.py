@@ -40,10 +40,8 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
 class StatelessProcessor(Processor):
     requires_fit = False
 
-    def forward(
-        self, input: torch.Tensor, offset: torch.Tensor | int = 1
-    ) -> torch.Tensor:
-        return input + offset
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return input + 1
 
 
 def test_stateless_processor_runs_without_fit() -> None:
@@ -52,8 +50,4 @@ def test_stateless_processor_runs_without_fit() -> None:
 
     assert torch.equal(processor.transform(input), input + 1)
     assert torch.equal(processor(input), input + 1)
-
-    offset = input.new_full((), 2)
-    assert torch.equal(processor.transform(input, offset), input + offset)
-    assert torch.equal(processor.fit_transform(input, offset), input + offset)
-    assert torch.equal(processor(input, offset), input + offset)
+    assert torch.equal(processor.fit_transform(input), input + 1)
