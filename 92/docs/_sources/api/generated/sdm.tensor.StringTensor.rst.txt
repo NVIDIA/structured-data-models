@@ -1,0 +1,8 @@
+﻿StringTensor
+============
+
+.. currentmodule:: sdm.tensor
+
+.. autoclass:: StringTensor
+   :members:
+   :show-inheritance:

@@ -1,0 +1,8 @@
+﻿CategoricalTensor
+=================
+
+.. currentmodule:: sdm.tensor
+
+.. autoclass:: CategoricalTensor
+   :members:
+   :show-inheritance:

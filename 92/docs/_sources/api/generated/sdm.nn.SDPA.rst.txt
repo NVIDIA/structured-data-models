@@ -1,0 +1,8 @@
+﻿SDPA
+====
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: SDPA
+   :members:
+   :show-inheritance:

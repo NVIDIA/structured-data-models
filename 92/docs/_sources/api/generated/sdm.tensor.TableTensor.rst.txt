@@ -1,0 +1,8 @@
+﻿TableTensor
+===========
+
+.. currentmodule:: sdm.tensor
+
+.. autoclass:: TableTensor
+   :members:
+   :show-inheritance:

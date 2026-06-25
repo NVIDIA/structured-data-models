@@ -1,0 +1,8 @@
+﻿QASSMax
+=======
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: QASSMax
+   :members:
+   :show-inheritance:

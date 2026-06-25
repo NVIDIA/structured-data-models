@@ -1,0 +1,8 @@
+﻿TransformerBlock
+================
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: TransformerBlock
+   :members:
+   :show-inheritance:

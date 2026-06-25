@@ -1,0 +1,8 @@
+﻿Stype
+=====
+
+.. currentmodule:: sdm
+
+.. autoclass:: Stype
+   :members:
+   :show-inheritance:

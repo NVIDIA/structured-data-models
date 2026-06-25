@@ -1,0 +1,8 @@
+﻿RotaryEmbedding
+===============
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: RotaryEmbedding
+   :members:
+   :show-inheritance:
