@@ -57,5 +57,3 @@ def test_softmax_temperature_matches_tabicl_numpy_formula() -> None:
 def test_softmax_temperature_rejects_nonpositive_temperature() -> None:
     with pytest.raises(ValueError, match="positive"):
         SoftmaxTemperature(temperature=0.0)
-
-
