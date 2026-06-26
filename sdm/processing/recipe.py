@@ -44,7 +44,7 @@ class Pipeline:
         for position, stage in enumerate(self.stages):
             try:
                 stage.fit(numerical)
-                numerical = stage.transform(numerical)
+                numerical = _validate_output(stage.transform(numerical))
             except Exception as exc:
                 raise _stage_error(exc, slot, position, stage) from exc
         return self
@@ -59,10 +59,10 @@ class Pipeline:
         numerical = input.numerical
         for position, stage in enumerate(self.stages):
             try:
-                numerical = stage.transform(numerical)
+                numerical = _validate_output(stage.transform(numerical))
             except Exception as exc:
                 raise _stage_error(exc, slot, position, stage) from exc
-        return _with_numerical(input, numerical)
+        return _with_stage_numerical(input, numerical, slot, position, stage)
 
     def fit_transform(self, input: TableTensor) -> TableTensor:
         """Fit and transform ``input`` by threading stages in order."""
@@ -74,10 +74,10 @@ class Pipeline:
         numerical = input.numerical
         for position, stage in enumerate(self.stages):
             try:
-                numerical = stage.fit_transform(numerical)
+                numerical = _validate_output(stage.fit_transform(numerical))
             except Exception as exc:
                 raise _stage_error(exc, slot, position, stage) from exc
-        return _with_numerical(input, numerical)
+        return _with_stage_numerical(input, numerical, slot, position, stage)
 
     def inverse_transform(self, input: TableTensor) -> TableTensor:
         """Apply invertible stages in reverse order to ``input``."""
@@ -94,16 +94,21 @@ class Pipeline:
         numerical = input.numerical
         for position, stage in reversed(tuple(enumerate(self.stages))):
             if not isinstance(stage, InvertibleMixin):
-                raise TypeError(
-                    "Expected invertible stage for inverse_transform "
-                    f"at position {position} (got "
-                    f"'{stage.__class__.__name__}')"
+                raise _stage_error(
+                    TypeError(
+                        "Expected invertible stage for inverse_transform"
+                    ),
+                    slot,
+                    position,
+                    stage,
                 )
             try:
-                numerical = stage.inverse_transform(numerical)
+                numerical = _validate_output(
+                    stage.inverse_transform(numerical)
+                )
             except Exception as exc:
                 raise _stage_error(exc, slot, position, stage) from exc
-        return _with_numerical(input, numerical)
+        return _with_stage_numerical(input, numerical, slot, position, stage)
 
     def describe(self) -> str:
         """Return a human-readable stage-order summary."""
@@ -209,12 +214,29 @@ def _validate_stage(stage: Processor) -> Processor:
     return stage
 
 
-def _with_numerical(input: TableTensor, numerical: object) -> TableTensor:
-    if not isinstance(numerical, Tensor):
+def _validate_output(output: object) -> Tensor:
+    if not isinstance(output, Tensor):
         raise TypeError(
             "Expected numerical block transform to return a Tensor "
-            f"(got '{type(numerical).__name__}')"
+            f"(got '{type(output).__name__}')"
         )
+    return output
+
+
+def _with_stage_numerical(
+    input: TableTensor,
+    numerical: Tensor,
+    slot: str,
+    position: int,
+    stage: Processor,
+) -> TableTensor:
+    try:
+        return _with_numerical(input, numerical)
+    except Exception as exc:
+        raise _stage_error(exc, slot, position, stage) from exc
+
+
+def _with_numerical(input: TableTensor, numerical: Tensor) -> TableTensor:
     return input.__class__(
         columns={
             Stype.numerical: input.columns[Stype.numerical],

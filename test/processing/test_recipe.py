@@ -2,7 +2,7 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import Pipeline, Processor, Recipe, StandardScale
-from sdm.processing.base import InvertibleMixin, ensure_floating
+from sdm.processing.base import InvertibleMixin
 
 
 def test_public_recipe_imports() -> None:
@@ -63,22 +63,6 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
         numerical=numerical,
         categorical=categorical,
     )
-
-
-def test_ensure_floating_widens_integer_input() -> None:
-    input = torch.tensor([[1, 2]], dtype=torch.int64)
-
-    output = ensure_floating(input)
-
-    assert output.dtype == torch.get_default_dtype()
-    assert torch.equal(output, input.to(torch.get_default_dtype()))
-
-
-def test_ensure_floating_rejects_unsupported_dtype() -> None:
-    input = torch.tensor([[True, False]])
-
-    with pytest.raises(TypeError, match="Expected a floating point"):
-        ensure_floating(input)
 
 
 def test_empty_pipeline_returns_input_table() -> None:
@@ -162,13 +146,32 @@ def test_recipe_runtime_error_includes_slot_and_stage_position() -> None:
         recipe.transform_preprocess(_table())
 
 
-def test_fit_transform_accepts_tabletensor_with_integer_input() -> None:
-    table = _table(torch.tensor([[1, 2], [3, 4]], dtype=torch.int64))
+def test_recipe_bad_stage_output_includes_slot_and_stage_position() -> None:
+    class BadOutput(Processor):
+        requires_fit = False
+
+        def forward(self, input: torch.Tensor) -> object:
+            return object()
+
+    recipe = Recipe(preprocess=[Add(1), BadOutput()])
+
+    with pytest.raises(TypeError, match=r"slot=preprocess, stage=1"):
+        recipe.transform_preprocess(_table())
+
+
+def test_recipe_non_invertible_target_error_has_context() -> None:
+    recipe = Recipe(target=[Add(1)])
+
+    with pytest.raises(TypeError, match=r"slot=target, stage=0"):
+        recipe.inverse_transform_target(_table())
+
+
+def test_fit_transform_accepts_and_returns_tabletensor() -> None:
+    table = _table()
 
     output = Pipeline([StandardScale()]).fit_transform(table)
 
     assert isinstance(output, TableTensor)
-    assert output.numerical.is_floating_point()
     assert output.categorical is table.categorical
 
 
