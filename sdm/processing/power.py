@@ -9,45 +9,85 @@ from sdm.processing.base import InvertibleMixin, Processor
 
 
 def _yeojohnson_transform(input: Tensor, lmbda: float) -> Tensor:
-    output = torch.zeros_like(input)
-    positive = input >= 0
+    return _yeojohnson_transform_batch(
+        input.unsqueeze(1),
+        input.new_tensor([lmbda]),
+    ).squeeze(1)
+
+
+def _yeojohnson_transform_batch(input: Tensor, lambdas: Tensor) -> Tensor:
+    """Apply Yeo-Johnson transform column-wise.
+
+    Args:
+        input: ``(..., n_features)`` values.
+        lambdas: ``(n_features,)`` per-column ``lambda`` parameters.
+    """
     eps = torch.finfo(input.dtype).eps
+    positive = input >= 0
+    lmbda = lambdas.reshape(*([1] * (input.ndim - 1)), -1)
 
-    if abs(lmbda) < eps:
-        output[positive] = input[positive].log1p()
-    else:
-        output[positive] = (lmbda * input[positive].log1p()).expm1() / lmbda
+    lam_zero = lambdas.abs() < eps
+    lam_two = (lambdas - 2).abs() < eps
+    lam_zero_mask = lam_zero.reshape(*([1] * (input.ndim - 1)), -1)
+    lam_two_mask = lam_two.reshape(*([1] * (input.ndim - 1)), -1)
 
-    if abs(lmbda - 2) > eps:
-        output[~positive] = -(
-            (2 - lmbda) * (-input[~positive]).log1p()
-        ).expm1() / (2 - lmbda)
-    else:
-        output[~positive] = -(-input[~positive]).log1p()
+    pos_l0 = positive & lam_zero_mask
+    pos_gen = positive & ~lam_zero_mask
+    neg_l2 = ~positive & lam_two_mask
+    neg_gen = ~positive & ~lam_two_mask
 
-    return output
+    pos_l0_val = input.log1p()
+    pos_gen_val = (lmbda * input.log1p()).expm1() / lmbda
+    neg_l2_val = -(-input).log1p()
+    neg_gen_val = -((2 - lmbda) * (-input).log1p()).expm1() / (2 - lmbda)
+
+    output = torch.zeros_like(input)
+    output = torch.where(pos_l0, pos_l0_val, output)
+    output = torch.where(pos_gen, pos_gen_val, output)
+    output = torch.where(neg_l2, neg_l2_val, output)
+    return torch.where(neg_gen, neg_gen_val, output)
 
 
 def _yeojohnson_inverse_transform(input: Tensor, lmbda: float) -> Tensor:
-    inverse = torch.zeros_like(input)
-    positive = input >= 0
+    return _yeojohnson_inverse_transform_batch(
+        input.unsqueeze(1),
+        input.new_tensor([lmbda]),
+    ).squeeze(1)
+
+
+def _yeojohnson_inverse_transform_batch(input: Tensor, lambdas: Tensor) -> Tensor:
+    """Apply inverse Yeo-Johnson transform column-wise.
+
+    Args:
+        input: ``(..., n_features)`` values.
+        lambdas: ``(n_features,)`` per-column ``lambda`` parameters.
+    """
     eps = torch.finfo(input.dtype).eps
+    positive = input >= 0
+    lmbda = lambdas.reshape(*([1] * (input.ndim - 1)), -1)
 
-    if abs(lmbda) < eps:
-        inverse[positive] = input[positive].expm1()
-    else:
-        inverse[positive] = (
-            (input[positive] * lmbda + 1).log() / lmbda
-        ).expm1()
+    lam_zero = lambdas.abs() < eps
+    lam_two = (lambdas - 2).abs() < eps
+    lam_zero_mask = lam_zero.reshape(*([1] * (input.ndim - 1)), -1)
+    lam_two_mask = lam_two.reshape(*([1] * (input.ndim - 1)), -1)
 
-    if abs(lmbda - 2) > eps:
-        inverse[~positive] = -(
-            (-(2 - lmbda) * input[~positive] + 1).log() / (2 - lmbda)
-        ).expm1()
-    else:
-        inverse[~positive] = -(-input[~positive]).expm1()
+    pos_l0 = positive & lam_zero_mask
+    pos_gen = positive & ~lam_zero_mask
+    neg_l2 = ~positive & lam_two_mask
+    neg_gen = ~positive & ~lam_two_mask
 
-    return inverse
+    pos_l0_val = input.expm1()
+    pos_gen_val = ((input * lmbda + 1).log() / lmbda).expm1()
+    neg_l2_val = -(-input).expm1()
+    neg_gen_val = -(
+        (-(2 - lmbda) * input + 1).log() / (2 - lmbda)
+    ).expm1()
+
+    inverse = torch.zeros_like(input)
+    inverse = torch.where(pos_l0, pos_l0_val, inverse)
+    inverse = torch.where(pos_gen, pos_gen_val, inverse)
+    inverse = torch.where(neg_l2, neg_l2_val, inverse)
+    return torch.where(neg_gen, neg_gen_val, inverse)
 
 
 def _yeojohnson_log_likelihood(input: Tensor, lmbda: float) -> float:
@@ -208,22 +248,10 @@ class Power(Processor, InvertibleMixin):
             self.scale = input.new_ones(n_features)
 
     def _yeojohnson_transform(self, input: Tensor) -> Tensor:
-        transformed = input.clone()
-        for i, lmbda in enumerate(self.lambdas):
-            transformed[:, i] = _yeojohnson_transform(
-                transformed[:, i],
-                float(lmbda),
-            )
-        return transformed
+        return _yeojohnson_transform_batch(input, self.lambdas)
 
     def _yeojohnson_inverse_transform(self, input: Tensor) -> Tensor:
-        inverse = input.clone()
-        for i, lmbda in enumerate(self.lambdas):
-            inverse[:, i] = _yeojohnson_inverse_transform(
-                input[:, i],
-                float(lmbda),
-            )
-        return inverse
+        return _yeojohnson_inverse_transform_batch(input, self.lambdas)
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""

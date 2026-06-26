@@ -8,7 +8,7 @@ from sdm.processing.base import InvertibleMixin, Processor
 BOUNDS_THRESH = 1e-7
 
 
-def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
+def _torch_interp_1d(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
     n = xp.numel()
     if n == 1:
         return fp[0].expand_as(x)
@@ -17,6 +17,46 @@ def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
 
     x0, x1 = xp[idx - 1], xp[idx]
     y0, y1 = fp[idx - 1], fp[idx]
+
+    denom = x1 - x0
+    weight = torch.where(denom != 0, (x - x0) / denom, torch.zeros_like(x))
+    result = torch.lerp(y0, y1, weight)
+
+    result = torch.where(x <= xp[0], fp[0], result)
+    return torch.where(x >= xp[-1], fp[-1], result)
+
+
+def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
+    """Interpolate ``x`` along sorted knot positions ``xp`` into ``fp``.
+
+    Supports a single column (all arguments 1D) and batched columns where
+    ``x`` has shape ``(n_samples, n_features)`` and ``xp`` / ``fp`` provide
+    per-column knots.
+    """
+    if x.ndim == 1:
+        return _torch_interp_1d(x, xp, fp)
+
+    if x.shape[1] == 1 and (xp.ndim == 1 or xp.shape[1] == 1):
+        xp_1d = xp.squeeze(-1) if xp.ndim > 1 else xp
+        fp_1d = fp.squeeze(-1) if fp.ndim > 1 else fp
+        return _torch_interp_1d(x.squeeze(1), xp_1d, fp_1d).unsqueeze(1)
+
+    if xp.ndim == 1:
+        xp = xp.unsqueeze(1).expand(-1, x.shape[1])
+    if fp.ndim == 1:
+        fp = fp.unsqueeze(1).expand(-1, x.shape[1])
+
+    n = xp.shape[0]
+    if n == 1:
+        return fp[0].expand_as(x)
+
+    idx = torch.searchsorted(xp.contiguous(), x, right=True).clamp(1, n - 1)
+    idx_m1 = idx - 1
+
+    x0 = torch.gather(xp, 0, idx_m1)
+    x1 = torch.gather(xp, 0, idx)
+    y0 = torch.gather(fp, 0, idx_m1)
+    y1 = torch.gather(fp, 0, idx)
 
     denom = x1 - x0
     weight = torch.where(denom != 0, (x - x0) / denom, torch.zeros_like(x))
@@ -100,16 +140,11 @@ class Quantile(Processor, InvertibleMixin):
             dim=0,
         )
 
-    def _transform_col(
-        self,
-        input: Tensor,
-        quantiles: Tensor,
-        *,
-        inverse: bool = False,
-    ) -> Tensor:
-        input_col = input.clone()
-        zero = input_col.new_zeros(())
-        one = input_col.new_ones(())
+    def _transform(self, input: Tensor, *, inverse: bool = False) -> Tensor:
+        quantiles = self.quantiles
+        output = input.clone()
+        zero = output.new_zeros(())
+        one = output.new_ones(())
 
         if not inverse:
             lower_bound_x = quantiles[0]
@@ -122,67 +157,49 @@ class Quantile(Processor, InvertibleMixin):
             lower_bound_y = quantiles[0]
             upper_bound_y = quantiles[-1]
             if self.output_distribution == "normal":
-                input_col = torch.special.ndtr(input_col)
+                output = torch.special.ndtr(output)
 
         if self.output_distribution == "normal":
-            bounds_thresh = input_col.new_tensor(BOUNDS_THRESH)
-            lower_bounds_idx = input_col - bounds_thresh < lower_bound_x
-            upper_bounds_idx = input_col + bounds_thresh > upper_bound_x
+            bounds_thresh = output.new_tensor(BOUNDS_THRESH)
+            lower_bounds_idx = output - bounds_thresh < lower_bound_x
+            upper_bounds_idx = output + bounds_thresh > upper_bound_x
         else:
-            lower_bounds_idx = input_col == lower_bound_x
-            upper_bounds_idx = input_col == upper_bound_x
+            lower_bounds_idx = output == lower_bound_x
+            upper_bounds_idx = output == upper_bound_x
 
-        isfinite_mask = input_col.isfinite()
-        input_col_finite = input_col[isfinite_mask]
+        finite = output.isfinite()
+        values = torch.where(finite, output, torch.zeros_like(output))
+
         if not inverse:
-            forward = _torch_interp(
-                input_col_finite,
-                quantiles,
-                self.references,
-            )
+            forward = _torch_interp(values, quantiles, self.references)
             backward = _torch_interp(
-                -input_col_finite,
+                -values,
                 -quantiles.flip(0),
                 -self.references.flip(0),
             )
-            input_col[isfinite_mask] = 0.5 * (forward - backward)
+            interpolated = 0.5 * (forward - backward)
+            output = torch.where(finite, interpolated, output)
         else:
-            input_col[isfinite_mask] = _torch_interp(
-                input_col_finite,
-                self.references,
-                quantiles,
-            )
+            interpolated = _torch_interp(values, self.references, quantiles)
+            output = torch.where(finite, interpolated, output)
 
-        input_col[upper_bounds_idx] = upper_bound_y
-        input_col[lower_bounds_idx] = lower_bound_y
+        output = torch.where(upper_bounds_idx, upper_bound_y, output)
+        output = torch.where(lower_bounds_idx, lower_bound_y, output)
+
         if not inverse and self.output_distribution == "normal":
-            eps = input_col.new_tensor(
+            eps = output.new_tensor(
                 BOUNDS_THRESH - torch.finfo(torch.float64).eps
             )
-            input_col = torch.special.ndtri(input_col)
+            output = torch.special.ndtri(output)
             clip_min = torch.special.ndtri(eps)
             clip_max = torch.special.ndtri(one - eps)
-            input_col = input_col.clamp(clip_min, clip_max)
+            output = output.clamp(clip_min, clip_max)
 
-        return input_col
+        return output
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` into the configured output distribution."""
-        transformed = torch.empty_like(input)
-        for i in range(input.shape[1]):
-            transformed[:, i] = self._transform_col(
-                input[:, i],
-                self.quantiles[:, i],
-                inverse=False,
-            )
-        return transformed
+        return self._transform(input, inverse=False)
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
-        inverse = input.clone()
-        for i in range(input.shape[1]):
-            inverse[:, i] = self._transform_col(
-                input[:, i],
-                self.quantiles[:, i],
-                inverse=True,
-            )
-        return inverse
+        return self._transform(input, inverse=True)
