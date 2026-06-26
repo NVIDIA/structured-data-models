@@ -79,6 +79,26 @@ def test_power_constant_columns_use_identity_lambda() -> None:
     assert torch.equal(processor.inverse_transform(transformed), input)
 
 
+def test_power_inverse_overflow_with_positive_lambda_clamps_to_max() -> None:
+    # This column fits a positive lambda, whose inverse-domain has no finite
+    # upper bound, so ``upper_bound`` must be +inf (matching the lambda == 0
+    # case). A non-finite model output must fall back to the fitted per-column max.
+    input = torch.tensor(
+        [[0.0], [1.0], [4.0], [9.0], [16.0], [25.0], [36.0], [49.0]],
+        dtype=torch.float64,
+    )
+
+    processor = Power().fit(input)
+    assert (processor.lambdas > 0).all()
+    assert torch.isinf(processor.upper_bound).all()
+
+    extreme = torch.tensor([[float("inf")]], dtype=torch.float64)
+    inverse = processor.inverse_transform(extreme)
+
+    assert torch.isfinite(inverse).all()
+    assert torch.equal(inverse, processor.max.reshape_as(inverse))
+
+
 def test_power_is_nan_aware() -> None:
     input = torch.tensor(
         [
