@@ -499,11 +499,8 @@ class TransformerBlock(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        key_value = (
-            key_value
-            if key_value is None or isinstance(key_value, KVCacheEntry)
-            else self.kv_norm(key_value)
-        )
+        if isinstance(key_value, Tensor):
+            key_value = self.kv_norm(key_value)
         attn_result = self.attn(
             query=self.q_norm(query),
             key_value=key_value,
