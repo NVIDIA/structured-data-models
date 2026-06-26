@@ -1,21 +1,32 @@
-# Recipe Design
+# Recipe 
 
-Recipes provide an inspectable processing contract around an external model.
-V0 keeps the surface intentionally small: a `Recipe` owns three ordered
-`Pipeline` slots (`preprocess`, `target`, and `postprocess`) and each slot
-accepts and returns a `TableTensor`.
+Recipes provide an inspectable processing contract around a model.
+A `Recipe` owns three ordered slots (`preprocess`, `target`, and
+`postprocess`). Configure each slot with a list of processing stages. Each
+slot accepts and returns a `TableTensor`.
 
 ```python
-from sdm.processing import Pipeline, Recipe, StandardScale
+from sdm.processing import Clip, Recipe, StandardScale
 
 recipe = Recipe(
-    preprocess=Pipeline([StandardScale()]),
-    target=Pipeline([StandardScale()]),
-    postprocess=Pipeline(),
+    preprocess=[
+        Clip(q_low=0.01, q_high=0.99),
+        StandardScale(),
+    ],
+    target=[StandardScale()],
+    postprocess=[],
 )
 ```
 
-The pipeline applies stages to the numerical block and rebuilds the
-`TableTensor` with categorical blocks unchanged. Model invocation, sampling,
-augmentation, semantic-type conversion, and label decoding are outside the V0
-recipe contract.
+Fit and apply the preprocessing slot before calling the model:
+
+```python
+training_table = recipe.fit_transform_preprocess(train_data)
+model_input = recipe.transform_preprocess(test_data)
+
+prediction = model(model_input)
+prediction = recipe.transform_postprocess(prediction)
+```
+
+Each slot applies stages to the numerical block and rebuilds the
+`TableTensor` with categorical blocks unchanged.
