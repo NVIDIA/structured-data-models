@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 
+from sdm.processing._utils import _ensure_floating
 from sdm.processing.base import Processor
 
 
@@ -24,4 +25,7 @@ class SoftmaxTemperature(Processor):
 
     def forward(self, input: Tensor) -> Tensor:
         """Return ``softmax(input / temperature)`` along ``dim``."""
-        return torch.softmax(input / self.temperature, dim=self.dim)
+        return torch.softmax(
+            _ensure_floating(input) / self.temperature,
+            dim=self.dim,
+        )

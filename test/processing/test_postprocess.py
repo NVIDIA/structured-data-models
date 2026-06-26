@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm.processing import SoftmaxTemperature
 
 

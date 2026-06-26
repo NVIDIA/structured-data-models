@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 
+from sdm.processing._utils import _ensure_floating
 from sdm.processing.base import Processor
 
 
@@ -39,6 +40,7 @@ class SigmaClip(Processor):
         self.register_buffer("upper_bound", torch.empty(0))
 
     def _fit(self, input: Tensor) -> None:
+        input = _ensure_floating(input)
         min_std = input.new_tensor(1e-6)
 
         mean = torch.nanmean(input, dim=0)
@@ -64,6 +66,7 @@ class SigmaClip(Processor):
 
     def forward(self, input: Tensor) -> Tensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""
+        input = _ensure_floating(input)
         log_abs = torch.log1p(input.abs())
         clipped = torch.maximum(-log_abs + self.lower_bound, input)
         return torch.minimum(log_abs + self.upper_bound, clipped)
