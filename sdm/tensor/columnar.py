@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
@@ -14,6 +14,9 @@ from sdm.tensor import StringTensor
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
+
+if TYPE_CHECKING:
+    import cudf  # ty: ignore[unresolved-import]
 
 
 class ColumnarTensor(Tensor):
@@ -142,6 +145,39 @@ class ColumnarTensor(Tensor):
                 writable=device.type == "cpu",
             )
             column = torch.as_tensor(values, device=device)
+
+        return cls(columns=(column,), device=device)
+
+    @classmethod
+    def from_cudf(
+        cls,
+        values: cudf.Series | cudf.Index,
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create tensor from a ``cudf`` series or index.
+
+        Args:
+            values: The ``cudf`` series or index.
+            device: The device. If ``None``, tensors stay on the cuDF values'
+                CUDA device.
+        """
+        from cudf.api.types import (  # ty: ignore[unresolved-import]
+            is_integer_dtype,
+            is_string_dtype,
+        )
+
+        null_count = values._column.null_count
+        if is_string_dtype(values.dtype):
+            column = StringTensor.from_cudf(values, device=device)
+        else:
+            if null_count > 0 and is_integer_dtype(values.dtype):
+                raise ValueError(
+                    f"'{cls.__name__}' cannot represent null integer values"
+                )
+            if null_count > 0 and values.dtype.kind == "f":
+                values = values.fillna(float("nan"))
+            column = torch.from_dlpack(values.to_dlpack()).to(device)
 
         return cls(columns=(column,), device=device)
 
