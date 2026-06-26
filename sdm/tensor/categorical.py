@@ -178,6 +178,44 @@ class CategoricalTensor(Tensor):
         category = _category_tensor(categories, device=device)
         return cls(data=data, categories=(category,))
 
+    @classmethod
+    def from_cudf(
+        cls: type[SelfCategoricalTensor],
+        series: Any,
+        *,
+        dtype: torch.dtype = torch.int32,
+        device: torch.device | str | None = None,
+    ) -> SelfCategoricalTensor:
+        r"""Build a categorical tensor from a cuDF categorical column."""
+        if dtype not in cls.ALLOWED_DTYPES:
+            raise ValueError(
+                f"Expected 'dtype' in '{cls.__name__}.from_cudf' to be "
+                f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
+            )
+
+        codes, categories = series.factorize(
+            sort=False,
+            use_na_sentinel=True,
+        )
+        code_dtype = "int32" if dtype == torch.int32 else "int64"
+        codes = codes.astype(code_dtype, copy=False)
+        data = torch.from_dlpack(codes).unsqueeze(-1)
+        if device is not None:
+            data = data.to(device)
+
+        if len(categories) == 0:
+            category = torch.empty(0, dtype=torch.int64, device=device)
+        elif getattr(categories.dtype, "kind", None) == "O":
+            category = _category_tensor(
+                categories.to_pandas().tolist(), device=device
+            )
+        else:
+            values = categories.to_cupy()
+            category = torch.from_dlpack(values)
+            if device is not None:
+                category = category.to(device)
+        return cls(data=data, categories=(category,))
+
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:
