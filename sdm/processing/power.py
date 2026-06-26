@@ -48,13 +48,6 @@ def _yeojohnson_transform_batch(input: Tensor, lambdas: Tensor) -> Tensor:
     return torch.where(neg_gen, neg_gen_val, output)
 
 
-def _yeojohnson_inverse_transform(input: Tensor, lmbda: float) -> Tensor:
-    return _yeojohnson_inverse_transform_batch(
-        input.unsqueeze(1),
-        input.new_tensor([lmbda]),
-    ).squeeze(1)
-
-
 def _yeojohnson_inverse_transform_batch(input: Tensor, lambdas: Tensor) -> Tensor:
     """Apply inverse Yeo-Johnson transform column-wise.
 
@@ -233,9 +226,9 @@ class Power(Processor, InvertibleMixin):
 
         self.lambdas = lambdas
 
-        self.upper_bound = -(1 / self.lambdas)
         lambda_eps = torch.finfo(input.dtype).eps
-        self.upper_bound[abs(self.lambdas) < lambda_eps] = torch.inf
+        self.upper_bound = -(1 / self.lambdas)
+        self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
             transformed = self._yeojohnson_transform(input)
@@ -262,14 +255,10 @@ class Power(Processor, InvertibleMixin):
         unscaled = input * self.scale + self.mean
         inverse = self._yeojohnson_inverse_transform(unscaled)
 
-        out_of_bounds = inverse.isinf()
-        if out_of_bounds.any():
-            eps = torch.finfo(input.dtype).eps
-            unscaled = torch.minimum(unscaled, self.upper_bound - eps)
-            inverse[out_of_bounds] = self._yeojohnson_inverse_transform(
-                unscaled,
-            )[out_of_bounds]
-            invalid = inverse.isinf()
-            inverse[invalid] = torch.fmin(inverse, self.max)[invalid]
+        invalid = inverse.isinf() | (inverse.isnan() & ~unscaled.isnan())
+        eps = torch.finfo(input.dtype).eps
+        clamped = torch.minimum(unscaled, self.upper_bound - eps)
+        repaired = self._yeojohnson_inverse_transform(clamped)
+        repaired = torch.fmin(repaired, self.max)
 
-        return inverse
+        return torch.where(invalid, repaired, inverse)
