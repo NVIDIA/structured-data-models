@@ -50,20 +50,25 @@ def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
     if n == 1:
         return fp[0].expand_as(x)
 
-    idx = torch.searchsorted(xp.contiguous(), x, right=True).clamp(1, n - 1)
+    x_t = x.transpose(0, 1).contiguous()
+    xp_t = xp.transpose(0, 1).contiguous()
+    fp_t = fp.transpose(0, 1)
+
+    idx = torch.searchsorted(xp_t, x_t, right=True).clamp(1, n - 1)
     idx_m1 = idx - 1
 
-    x0 = torch.gather(xp, 0, idx_m1)
-    x1 = torch.gather(xp, 0, idx)
-    y0 = torch.gather(fp, 0, idx_m1)
-    y1 = torch.gather(fp, 0, idx)
+    x0 = torch.gather(xp_t, 1, idx_m1)
+    x1 = torch.gather(xp_t, 1, idx)
+    y0 = torch.gather(fp_t, 1, idx_m1)
+    y1 = torch.gather(fp_t, 1, idx)
 
     denom = x1 - x0
-    weight = torch.where(denom != 0, (x - x0) / denom, torch.zeros_like(x))
+    weight = torch.where(denom != 0, (x_t - x0) / denom, torch.zeros_like(x_t))
     result = torch.lerp(y0, y1, weight)
 
-    result = torch.where(x <= xp[0], fp[0], result)
-    return torch.where(x >= xp[-1], fp[-1], result)
+    result = torch.where(x_t <= xp_t[:, :1], fp_t[:, :1], result)
+    result = torch.where(x_t >= xp_t[:, -1:], fp_t[:, -1:], result)
+    return result.transpose(0, 1)
 
 
 class Quantile(Processor, InvertibleMixin):

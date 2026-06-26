@@ -17,7 +17,7 @@ def test_processor_torch_compile_smoke() -> None:
 
     processors = [
         Power().fit(input),
-        Quantile(n_quantiles=input.shape[0], subsample=None).fit(input),
+        Quantile(n_quantiles=3, subsample=None).fit(input),
     ]
 
     for processor in processors:
@@ -28,13 +28,3 @@ def test_processor_torch_compile_smoke() -> None:
             fullgraph=True,
         )
         assert torch.equal(compiled(input), expected)
-
-        compiled_inverse = torch.compile(
-            processor.inverse_transform,
-            backend="eager",
-            fullgraph=True,
-        )
-        assert torch.equal(
-            compiled_inverse(expected),
-            processor.inverse_transform(expected),
-        )

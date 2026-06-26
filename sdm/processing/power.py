@@ -255,10 +255,14 @@ class Power(Processor, InvertibleMixin):
         unscaled = input * self.scale + self.mean
         inverse = self._yeojohnson_inverse_transform(unscaled)
 
-        invalid = inverse.isinf() | (inverse.isnan() & ~unscaled.isnan())
-        eps = torch.finfo(input.dtype).eps
-        clamped = torch.minimum(unscaled, self.upper_bound - eps)
-        repaired = self._yeojohnson_inverse_transform(clamped)
-        repaired = torch.fmin(repaired, self.max)
+        out_of_bounds = inverse.isinf()
+        if out_of_bounds.any():
+            eps = torch.finfo(input.dtype).eps
+            unscaled = torch.minimum(unscaled, self.upper_bound - eps)
+            inverse[out_of_bounds] = self._yeojohnson_inverse_transform(
+                unscaled,
+            )[out_of_bounds]
+            invalid = inverse.isinf()
+            inverse[invalid] = torch.fmin(inverse, self.max)[invalid]
 
-        return torch.where(invalid, repaired, inverse)
+        return inverse
