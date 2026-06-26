@@ -3,6 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from sdm.stype import Stype, StypeLike
+from sdm.stype_inference import infer_stypes
 from sdm.tensor import (
     VarLenTensor,
     StringTensor,
@@ -21,6 +22,7 @@ except PackageNotFoundError:
 __all__ = [
     "Stype",
     "StypeLike",
+    "infer_stypes",
     "VarLenTensor",
     "StringTensor",
     "CategoricalTensor",
