@@ -2,10 +2,14 @@ from collections.abc import Callable
 
 import pytest
 import torch
-from sdm.processing import Clip, Processor, StandardScale
+from sdm.processing import Clip, Power, Processor, Quantile, StandardScale
 from sdm.processing.base import InvertibleMixin
 
 ProcessorFactory = Callable[[], Processor]
+
+
+def _quantile_processor() -> Quantile:
+    return Quantile(n_quantiles=5, subsample=None)
 
 
 @pytest.mark.parametrize(
@@ -35,6 +39,45 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
     assert isinstance(processor, InvertibleMixin)
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.inverse_transform(input)
+
+
+@pytest.mark.parametrize(
+    "processor_factory",
+    [
+        Clip,
+        StandardScale,
+        Power,
+        _quantile_processor,
+    ],
+)
+def test_processor_transform_accepts_different_batch_size_after_fit(
+    processor_factory: ProcessorFactory,
+) -> None:
+    fit_input = torch.tensor(
+        [
+            [-2.0, 0.0, 1.0],
+            [-1.0, 10.0, 2.0],
+            [0.0, 20.0, 3.0],
+            [1.0, 30.0, 4.0],
+            [2.0, 40.0, 5.0],
+        ],
+        dtype=torch.float64,
+    )
+    input = torch.tensor(
+        [
+            [-1.5, 5.0, 1.5],
+            [0.5, 25.0, 4.5],
+        ],
+        dtype=torch.float64,
+    )
+
+    processor = processor_factory().fit(fit_input)
+    transformed = processor.transform(input)
+
+    assert transformed.shape == input.shape
+    if isinstance(processor, InvertibleMixin):
+        inverse = processor.inverse_transform(transformed)
+        assert inverse.shape == input.shape
 
 
 class StatelessProcessor(Processor):
