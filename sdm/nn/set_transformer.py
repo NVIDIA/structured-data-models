@@ -12,7 +12,7 @@ from sdm.nn.attention import TransformerBlock
 
 
 class InducedTransformerBlock(torch.nn.Module):
-    r"""Induced transformer block from the Set Transformer.
+    r"""Induced Transformer block from the Set Transformer.
 
     Introduced in the `"Set Transformer: A Framework for Attention-based
     Permutation-Invariant Neural Networks"
