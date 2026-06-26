@@ -37,6 +37,7 @@ dependencies = [
     "torch",
     "numpy",
     "pyarrow",
+    "typing_extensions",
 ]
 
 [project.optional-dependencies]
@@ -126,9 +127,4 @@ convention = "google"
     "D103",  # Ignore "Missing docstring in public function"
     "D104",  # Ignore "Missing docstring in public package"
     "D106",  # Ignore "Missing docstring in public nested class"
-]
-# TODO: Address these ignores
-"sdm/tensor/*.py" = [
-    "D101",  # Ignore "Missing docstring in public class"
-    "D102",  # Ignore "Missing docstring in public method"
 ]
