@@ -134,6 +134,17 @@ def _nan_mean_var(input: Tensor) -> tuple[Tensor, Tensor]:
     return mean, var
 
 
+def _nan_max(input: Tensor) -> Tensor:
+    """Per-column max over finite values; all-NaN columns map to NaN."""
+    finite = ~input.isnan()
+    counts = finite.sum(dim=0)
+    neg_inf = torch.full_like(input, float("-inf"))
+    result = torch.where(finite, input, neg_inf).max(dim=0).values
+
+    nan = torch.full_like(result, torch.nan)
+    return torch.where(counts > 0, result, nan)
+
+
 class Power(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
@@ -171,7 +182,7 @@ class Power(Processor, InvertibleMixin):
 
         var = input.var(dim=0, correction=0)
         mean = input.mean(dim=0)
-        self.max = input.max(dim=0).values
+        self.max = _nan_max(input)
         lambdas = input.new_empty(n_features)
 
         constant_features = _constant_feature_mask(var, mean, n_samples)
@@ -223,14 +234,14 @@ class Power(Processor, InvertibleMixin):
         unscaled = input * self.scale + self.mean
         inverse = self._yeojohnson_inverse_transform(unscaled)
 
-        out_of_bounds = ~inverse.isfinite()
+        out_of_bounds = inverse.isinf()
         if out_of_bounds.any():
             eps = torch.finfo(input.dtype).eps
             unscaled = torch.minimum(unscaled, self.upper_bound - eps)
             inverse[out_of_bounds] = self._yeojohnson_inverse_transform(
                 unscaled,
             )[out_of_bounds]
-            invalid = ~inverse.isfinite()
+            invalid = inverse.isinf()
             inverse[invalid] = torch.fmin(inverse, self.max)[invalid]
 
         return inverse
