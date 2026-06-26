@@ -33,7 +33,7 @@ html_theme_options = {
     "github_url": "https://github.com/NVIDIA/structured-data-models",
 }
 autosummary_generate = True
-autodoc_typehints = "signature"
+autodoc_typehints = "both"
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
