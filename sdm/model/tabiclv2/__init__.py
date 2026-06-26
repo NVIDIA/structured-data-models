@@ -1,1 +1,1 @@
-"""TabICLv2 model components."""
+"""TabICLv2."""
