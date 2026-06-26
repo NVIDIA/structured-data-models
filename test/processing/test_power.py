@@ -34,6 +34,50 @@ def test_power_standardized_fit_transform_and_inverse_round_trip() -> None:
     )
 
 
+def test_power_batched_inference_compile_round_trips_mixed_columns() -> None:
+    fit_input = torch.tensor(
+        [
+            [-5.0, 0.0, 3.0, torch.nan],
+            [-2.0, 1.0, 3.0, -10.0],
+            [-1.0, 2.0, 3.0, -5.0],
+            [0.0, 4.0, 3.0, -2.0],
+            [1.0, 8.0, 3.0, 0.0],
+            [2.0, 16.0, 3.0, 1.0],
+            [5.0, 32.0, 3.0, 2.0],
+            [10.0, 64.0, 3.0, 4.0],
+        ],
+        dtype=torch.float64,
+    )
+    inference = torch.tensor(
+        [
+            [-3.0, 3.0, 3.0, -7.0],
+            [0.0, 10.0, 3.0, torch.nan],
+            [4.0, 40.0, 3.0, 3.0],
+        ],
+        dtype=torch.float64,
+    )
+
+    processor = Power().fit(fit_input)
+    transformed = processor.transform(inference)
+    compiled = torch.compile(
+        processor.transform,
+        backend="eager",
+        fullgraph=True,
+    )
+    compiled_transformed = compiled(inference)
+    inverse = processor.inverse_transform(transformed)
+
+    assert torch.allclose(compiled_transformed, transformed, equal_nan=True)
+    assert torch.equal(torch.isnan(transformed), torch.isnan(inference))
+    finite = inference.isfinite()
+    assert torch.allclose(inverse[finite], inference[finite], atol=1e-8)
+    assert torch.equal(
+        transformed[:, 2],
+        torch.zeros(3, dtype=inference.dtype),
+    )
+    assert torch.equal(inverse[:, 2], inference[:, 2])
+
+
 def test_power_without_standardization_is_near_identity() -> None:
     input = torch.tensor(
         [[-2.0], [-1.0], [0.0], [1.0], [2.0]],
@@ -104,3 +148,5 @@ def test_power_is_nan_aware() -> None:
     assert torch.equal(torch.isnan(transformed), torch.isnan(input))
     assert torch.equal(torch.isnan(inverse), torch.isnan(input))
     assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
+
+

@@ -41,6 +41,54 @@ def test_quantile_uniform_fit_transform_and_inverse_round_trip() -> None:
     assert torch.allclose(processor.inverse_transform(transformed), input)
 
 
+def test_quantile_uniform_batched_inference_batch_size_differs_from_n_quantiles() -> None:
+    fit_input = torch.tensor(
+        [
+            [0.0, 0.0, 100.0],
+            [1.0, 10.0, 100.0],
+            [2.0, 20.0, 105.0],
+            [3.0, 30.0, 110.0],
+            [4.0, 40.0, 120.0],
+            [5.0, 50.0, 130.0],
+        ],
+        dtype=torch.float64,
+    )
+    inference = torch.tensor(
+        [
+            [-1.0, 5.0, 100.0],
+            [0.5, 25.0, 107.5],
+            [2.5, 55.0, torch.nan],
+            [6.0, torch.nan, 140.0],
+        ],
+        dtype=torch.float64,
+    )
+
+    processor = Quantile(n_quantiles=5, subsample=None).fit(fit_input)
+    transformed = processor.transform(inference)
+    compiled = torch.compile(
+        processor.transform,
+        backend="eager",
+        fullgraph=True,
+    )
+    compiled_transformed = compiled(inference)
+
+    assert transformed.shape == inference.shape
+    assert torch.equal(torch.isnan(transformed), torch.isnan(inference))
+    assert torch.allclose(compiled_transformed, transformed, equal_nan=True)
+    assert transformed[0, 0] == 0
+    assert transformed[2, 1] == 1
+    assert transformed[3, 0] == 1
+    assert transformed[3, 2] == 1
+
+    inverse = processor.inverse_transform(transformed)
+    in_range = (
+        inference.isfinite()
+        & (inference >= fit_input.min(dim=0).values)
+        & (inference <= fit_input.max(dim=0).values)
+    )
+    assert torch.allclose(inverse[in_range], inference[in_range], atol=1e-8)
+
+
 def test_quantile_repeated_values_map_to_midpoint() -> None:
     input = torch.tensor([[0.0], [1.0], [1.0], [2.0]])
 
@@ -118,6 +166,51 @@ def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
         input,
         atol=1e-5,
     )
+
+
+def test_quantile_normal_batched_compile_preserves_bounds_and_inverse() -> None:
+    fit_input = torch.tensor(
+        [
+            [-2.0, 0.0],
+            [-1.0, 10.0],
+            [0.0, 20.0],
+            [4.0, 30.0],
+            [8.0, 40.0],
+            [16.0, 50.0],
+        ],
+        dtype=torch.float64,
+    )
+    inference = torch.tensor(
+        [
+            [-2.0, 0.0],
+            [-1.0, 15.0],
+            [4.0, 35.0],
+            [16.0, 50.0],
+            [torch.nan, 25.0],
+        ],
+        dtype=torch.float64,
+    )
+
+    processor = Quantile(
+        n_quantiles=5,
+        subsample=None,
+        output_distribution="normal",
+    ).fit(fit_input)
+    transformed = processor.transform(inference)
+    compiled = torch.compile(
+        processor.transform,
+        backend="eager",
+        fullgraph=True,
+    )
+    compiled_transformed = compiled(inference)
+
+    assert torch.equal(torch.isnan(transformed), torch.isnan(inference))
+    assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
+    assert torch.allclose(compiled_transformed, transformed, equal_nan=True)
+
+    inverse = processor.inverse_transform(transformed)
+    finite = inference.isfinite()
+    assert torch.allclose(inverse[finite], inference[finite], atol=1e-5)
 
 
 def test_quantile_normal_distribution_preserves_nan_positions() -> None:
