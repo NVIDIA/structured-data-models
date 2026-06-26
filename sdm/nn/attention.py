@@ -11,7 +11,7 @@ from sdm.nn import RotaryEmbedding
 
 
 class QASSMax(torch.nn.Module):
-    r"""Learnable query scaler for query-aware scalable softmax (QASSMax).
+    r"""Learnable query scaler for Query-Aware Scalable SoftMax (QASSMax).
 
     This scaling method was introduced in the `"TabICLv2: A better, faster,
     scalable, and open tabular foundation model"
@@ -28,23 +28,22 @@ class QASSMax(torch.nn.Module):
           \left(1 + \tanh(\mathrm{MLP}_{\mathrm{gate}}(q_h)_i)\right),
 
     where ``h`` indexes attention heads, ``i`` indexes head channels,
-    ``MLP_base`` maps the log key length to per-head, per-channel scale
-    factors, and ``MLP_gate`` maps each per-head query vector to a bounded
-    query-dependent gate. In this implementation, ``n`` is clamped to at least
-    1 before taking ``log``. The gate is initialized as identity modulation by
-    zero-initializing the final layer of ``MLP_gate``.
+    :math:`\mathrm{MLP}_{\mathrm{base}}` maps the log key length to per-head,
+    per-channel scale factors, and :math:`\mathrm{MLP}_{\mathrm{gate}}` maps
+    each per-head query vector to a bounded query-dependent gate.
 
     Multiplying the query scales the subsequent attention logits while keeping
-    the attention computation compatible with standard softmax kernels. The
-    length-dependent factor counteracts attention fading as the number of keys
-    grows, while the query-dependent gate lets the scale vary across queries.
+    the attention computation compatible with standard softmax kernels.
+    The length-dependent factor counteracts attention fading as the number of
+    keys grows, while the query-dependent gate lets the scale vary across
+    queries.
 
     Args:
         channels: The number of channels per attention head.
         num_heads: The number of attention heads.
         hidden_channels: The hidden width of the scale and gate MLPs.
-        device: The device to use for module parameters.
-        dtype: The dtype to use for module parameters.
+        device: The device.
+        dtype: The dtype.
     """
 
     def __init__(
@@ -77,25 +76,21 @@ class QASSMax(torch.nn.Module):
         query: Tensor,  # [..., S, H, C]
         key_len: Tensor | int,  # [..., 1] or [..., S] or scalar
     ) -> Tensor:  # [..., S, H, C]
-        r"""Forward pass of :class:`QASSMax`.
+        r"""The forward pass.
 
         Args:
             query: The query tensor to scale, with shape ``[..., S, H, C]``.
                 ``S`` is the query sequence length, ``H`` is the number of
                 attention heads, and ``C`` is the channels per head.
             key_len: The number of valid keys used to scale each query.
-
-                Supported forms are:
-
-                * ``int``: one shared key length for every query.
-                * tensor shaped ``[..., 1]``: one key length per batch/context
-                  item, shared across all query positions in ``S``.
-                * tensor shaped ``[..., S]``: one key length per query
-                  position, such as the result of reducing an attention mask
-                  over its key dimension.
+                An ``int`` denotes one shared key length for every query.
+                A tensor shaped ``[..., 1]`` denotes one key length per batch
+                item, shared across all query positions in ``S``.
+                A tensor shaped ``[..., S]`` denotes one individual key length
+                per query position.
 
         Returns:
-            The scaled query tensor.
+            Tensor with shape ``[..., S, H, C]``.
         """
         if isinstance(key_len, Tensor):
             log_key_len = key_len.float().clamp(min=1.0).log().to(query.dtype)
@@ -110,7 +105,19 @@ class QASSMax(torch.nn.Module):
 
 
 class SDPA(torch.nn.Module):
-    r"""Scaled dot-product attention wrapper for ``[..., S, H, C]`` tensors."""
+    r"""Scaled Dot-Product Attention (SDPA).
+
+    This module wraps :meth:`torch.nn.functional.scaled_dot_product_attention`
+    and extends it by arbitrary batch dimensions, :class:`QASSMax`-based
+    temperature-scaling, and padding support for key/value pairs.
+
+    Args:
+        channels: The number of channels per attention head.
+        num_heads: The number of attention heads.
+        qassmax: Whether to scale queries via :class:`QASSMax`.
+        device: The device.
+        dtype: The dtype.
+    """
 
     def __init__(
         self,
@@ -139,20 +146,22 @@ class SDPA(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
     ) -> Tensor:  # [..., Q, H, C]
-        r"""Apply scaled dot-product attention.
+        r"""The forward pass.
 
         Args:
-            query: Query tensor with shape ``[..., Q, H, C]``.
+            query: The query tensor with shape ``[..., Q, H, C]``.
+                ``Q`` is the query sequence length, ``H`` is the number of
+                attention heads, and ``C`` is the channels per head.
             key: Key tensor with shape ``[..., KV, H, C]``.
+                ``KV`` is the key/value sequence length.
             value: Value tensor with shape ``[..., KV, H, C]``.
-            seqused_key_value: Optional valid key/value lengths with shape
-                ``[...]`` and dtype ``torch.int32``.
-            attn_mask: Optional boolean attention mask with shape
-                ``[..., Q, KV]``. Entries set to ``True`` participate in
-                attention.
+            seqused_key_value: Valid key/value lengths with shape ``[...]`` and
+                dtype ``torch.int32``.
+            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
+                Entries set to ``True`` participate in attention.
 
         Returns:
-            The attention output with shape ``[..., Q, H, C]``.
+            Tensor with shape ``[..., Q, H, C]``.
         """
         if attn_mask is not None and seqused_key_value is not None:
             raise ValueError(
@@ -215,19 +224,18 @@ class SDPA(torch.nn.Module):
 
 
 class MultiHeadAttention(torch.nn.Module):
-    r"""Multi-head attention layer.
+    r"""Multi-Head Attention layer.
 
-    This module owns the query, key, value, and output projections. When
-    ``key_value`` is omitted, queries, keys, and values are projected from the
-    same input tensor. When ``key_value`` is passed, it is interpreted as
-    unprojected context states from which keys and values are produced.
+    This module owns the query, key, value, and output projections.
+    It performs self-attention when ``key_value`` is omitted and
+    cross-attention when ``key_value`` is given.
 
     Args:
         channels: The number of input and output channels.
         num_heads: The number of attention heads.
         qassmax: Whether to scale queries with :class:`QASSMax`.
-        device: The device to use for module parameters.
-        dtype: The dtype to use for module parameters.
+        device: The device.
+        dtype: The dtype.
     """
 
     def __init__(
@@ -268,20 +276,20 @@ class MultiHeadAttention(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         rope: RotaryEmbedding | None = None,
     ) -> Tensor:  # [..., Q, C]
-        r"""Forward pass of multi-head attention layer.
+        r"""The forward pass.
 
         Args:
-            query: Unprojected query-side hidden states with shape
-                ``[..., Q, C]``.
-            key_value: Optional unprojected key/value-side hidden states with
-                shape ``[..., KV, C]``. If omitted, ``query`` is used for
-                self-attention.
-            seqused_key_value: Optional valid key/value lengths with shape
-                ``[...]`` and dtype ``torch.int32``.
-            attn_mask: Optional boolean attention mask with shape
-                ``[..., Q, KV]``. Entries set to ``True`` participate in
-                attention.
-            rope: Optional rotary positional embedding applied after
+            query: Query tensor with shape ``[..., Q, C]``.
+                ``Q`` is the query sequence length, ``C`` is the number of
+                channels.
+            key_value: key/value tensor with shape ``[..., KV, C]``.
+                ``KV`` is the key/value sequence length.
+                If omitted, ``query`` is used for self-attention.
+            seqused_key_value: Valid key/value lengths with shape ``[...]`` and
+                dtype ``torch.int32``.
+            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
+                Entries set to ``True`` participate in attention.
+            rope: Rotary positional embedding applied after query/key
                 projection.
 
         Returns:
@@ -319,16 +327,19 @@ class MultiHeadAttention(torch.nn.Module):
 
 
 class TransformerBlock(torch.nn.Module):
-    r"""Transformer block with optional QASSMax and RoPE support.
+    r"""Transformer block with pre-norm attention and feedforward modules.
+
+    Supports optional :class:`RotaryEmbedding` on projected query/key tensors
+    and optional :class:`QASSMax` query scaling inside attention.
 
     Args:
-        channels: Input and output channel count.
-        num_heads: Number of attention heads.
-        feedforward_channels: Hidden width of the MLP.
-        qassmax: Whether to use QASSMax query scaling.
-        norm_bias: Whether LayerNorm uses learnable bias.
-        device: Parameter device.
-        dtype: Parameter dtype.
+        channels: The number of input and output channels.
+        num_heads: The number of attention heads.
+        feedforward_channels: The hidden width of the MLP.
+        qassmax: Whether to scale queries with :class:`QASSMax`.
+        norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
+        device: The device.
+        dtype: The dtype.
     """
 
     def __init__(
@@ -370,20 +381,21 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         rope: RotaryEmbedding | None = None,
     ) -> Tensor:  # [..., Q, C]
-        r"""Forward pass of transformer block.
+        r"""The forward pass.
 
         Args:
-            query: Query-side hidden states with shape ``[..., Q, C]``.
-            key_value: Optional key/value-side context states with shape
-                ``[..., KV, C]``. If omitted, ``query`` is used for
-                self-attention.
-            seqused_key_value: Optional valid key/value lengths with shape
-                ``[...]`` and dtype ``torch.int32``.
-            attn_mask: Optional boolean attention mask with shape
-                ``[..., Q, KV]``. Entries set to ``True`` participate in
-                attention.
-            rope: Optional rotary positional embedding applied inside the
-                attention branch after query/key projection.
+            query: Query tensor with shape ``[..., Q, C]``.
+                ``Q`` is the query sequence length, ``C`` is the number of
+                channels.
+            key_value: key/value tensor with shape ``[..., KV, C]``.
+                ``KV`` is the key/value sequence length.
+                If omitted, ``query`` is used for self-attention.
+            seqused_key_value: Valid key/value lengths with shape ``[...]`` and
+                dtype ``torch.int32``.
+            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
+                Entries set to ``True`` participate in attention.
+            rope: Rotary positional embedding applied after query/key
+                projection.
 
         Returns:
             Tensor with shape ``[..., Q, C]``.

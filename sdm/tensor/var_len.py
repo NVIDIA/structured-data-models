@@ -6,6 +6,7 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
+from typing_extensions import override
 
 aten = torch.ops.aten
 
@@ -30,6 +31,30 @@ SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
+    r"""A :class:`torch.Tensor` for rectangular variable-length values.
+
+    Values are stored in a flat contiguous ``data`` tensor and indexed by an
+    ``offset`` tensor.
+
+    .. code-block:: python
+
+        import torch
+        from sdm import VarLenTensor
+
+        tensor = VarLenTensor(
+            data=torch.tensor([1, 2, 3, 4, 5, 6]),
+            offset=torch.tensor([0, 2, 5, 5, 6]),
+            size=(2, 2),
+        )
+
+    Args:
+        data: Flat contiguous tensor containing all element values.
+        offset: One-dimensional offsets into ``data``.
+        size: The shape of the tensor.
+        stride: The stride of the tensor.
+        storage_offset: The offset into the logical ``offset`` storage.
+    """
+
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = None
     HANDLED_FUNCTIONS: ClassVar[
         dict[Callable[..., Any], Callable[..., Any]]
@@ -61,7 +86,7 @@ class VarLenTensor(Tensor):
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
     ) -> SelfVarLenTensor:
-
+        r"""Create a tensor wrapper."""
         size = tuple(size)
         if any(dim_size < -1 for dim_size in size):
             raise ValueError(f"Invalid shape dimensions (got '{size}')")
@@ -172,6 +197,12 @@ class VarLenTensor(Tensor):
         *,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
+        r"""Wrap a dense tensor as fixed-size variable-length elements.
+
+        Args:
+            tensor: The dense tensor.
+            offset_dtype: The dtype of the ``offset`` tensor.
+        """
         data = tensor
         if tensor.stride() != (1,) or int(tensor.storage_offset()) != 0:
             span_len = _span_len(tensor.size(), tensor.stride())
@@ -202,7 +233,21 @@ class VarLenTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfVarLenTensor:
+        r"""Create tensor from a ``pyarrow`` list array.
 
+        .. code-block:: python
+
+            import pyarrow as pa
+            from sdm import VarLenTensor
+
+            array = pa.array([[1, 2], [3, 4, 5], [], [6]])
+            tensor = VarLenTensor.from_arrow(array)
+
+        Args:
+            array: The ``pyarrow`` list array.
+            size: The shape of the tensor.
+            device: The device.
+        """
         if isinstance(array, pa.ChunkedArray):
             if array.num_chunks == 1:
                 array = array.chunk(0)
@@ -259,6 +304,7 @@ class VarLenTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
+        r"""Convert this tensor to flat ``pyarrow`` list array."""
         if self.device.type != "cpu":
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
@@ -300,6 +346,24 @@ class VarLenTensor(Tensor):
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
     ) -> SelfVarLenTensor:
+        r"""Create tensor from a rectangular Python list.
+
+        .. code-block:: python
+
+            from sdm import VarLenTensor
+
+            tensor = VarLenTensor.from_list([
+                [[1, 2], [3, 4, 5]],
+                [[], [6]],
+            ])
+
+        Args:
+            values: The rectangular Python list.
+            dtype: The dtype of the ``value`` tensor.
+            device: The device.
+            offset_dtype: The dtype of the ``offset`` tensor.
+        """
+
         def is_sequence(value: Any) -> bool:
             return isinstance(value, Sequence) and not isinstance(
                 value, str | bytes | bytearray
@@ -346,6 +410,11 @@ class VarLenTensor(Tensor):
 
     @property
     def data_offset(self) -> tuple[Tensor, Tensor]:
+        r"""Return contiguous data and normalized offsets.
+
+        Returns:
+            ``(data, offset)`` tuple.
+        """
         if not self.is_contiguous():
             raise RuntimeError(
                 f"Can't access 'data_offset' for non-contiguous "
@@ -364,6 +433,7 @@ class VarLenTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
+        r"""Register a ``__torch_dispatch__`` implementation."""
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -422,19 +492,23 @@ class VarLenTensor(Tensor):
             f"'{func}' is not supported for '{cls.__name__}'"
         )
 
+    @override
     def is_shared(self) -> bool:
         return self._data.is_shared() and self._offset.is_shared()
 
+    @override
     def share_memory_(self) -> "VarLenTensor":
         self._data.share_memory_()
         self._offset.share_memory_()
         return self
 
     @property
+    @override
     def grad(self) -> Tensor | None:
         return self._data.grad
 
     @property
+    @override
     def requires_grad(self) -> bool:
         return self._data.requires_grad
 
@@ -442,16 +516,19 @@ class VarLenTensor(Tensor):
     def requires_grad(self, requires_grad: bool) -> None:
         self._data.requires_grad_(requires_grad)
 
+    @override
     def requires_grad_(self, mode: bool = True) -> "VarLenTensor":
         self._data.requires_grad_(mode)
         return self
 
+    @override
     def detach_(self) -> "VarLenTensor":
         raise RuntimeError(
             f"Can't detach a '{self.__class__.__name__} in-place. Use "
             f"'detach() instead."
         )
 
+    @override
     def tolist(self) -> Any:
         def reshape(values: list[Any], size: tuple[int, ...]) -> Any:
             if len(size) == 0:
@@ -469,6 +546,7 @@ class VarLenTensor(Tensor):
         values = tensor.to_arrow().to_pylist()
         return reshape(values, tuple(self.size()))
 
+    @override
     def item(self) -> list[Any]:  # type: ignore
         if self.numel() != 1:
             raise RuntimeError(
