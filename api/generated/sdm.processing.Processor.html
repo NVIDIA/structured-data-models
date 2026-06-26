@@ -79,6 +79,8 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1 current"><a class="reference internal" href="../processing.html">sdm.processing</a><ul class="current">
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.Clip.html">Clip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.StandardScale.html">StandardScale</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../nn.html">sdm.nn</a><ul>
@@ -152,6 +154,8 @@ data-aria-dark="Switch to auto color mode">
 <p>Subclass and implement <code class="docutils literal notranslate"><span class="pre">forward</span></code> (the transform). Override <code class="docutils literal notranslate"><span class="pre">_fit</span></code> to
 learn state from data (the default is a no-op). For an inverse, also mix
 in <code class="docutils literal notranslate"><span class="pre">InvertibleMixin</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_inverse_transform</span></code>.</p>
+<p>Set <code class="docutils literal notranslate"><span class="pre">requires_fit</span> <span class="pre">=</span> <span class="pre">False</span></code> for stateless processors that can safely run
+without a prior <code class="docutils literal notranslate"><span class="pre">fit</span></code> call.</p>
 <dl class="field-list simple">
 </dl>
 <dl class="py method">
@@ -240,7 +244,7 @@ with a fitted-state check, via <a class="reference internal" href="#sdm.processi
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=f92b20d0"></script>
+      <script src="../../_static/documentation_options.js?v=5383533e"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

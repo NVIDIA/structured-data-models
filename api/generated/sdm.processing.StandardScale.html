@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>InvertibleMixin - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Clip" href="sdm.processing.Clip.html" /><link rel="prev" title="Processor" href="sdm.processing.Processor.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>StandardScale - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="sdm.nn" href="../nn.html" /><link rel="prev" title="Clip" href="sdm.processing.Clip.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -19,7 +19,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="InvertibleMixin"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="StandardScale"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -78,9 +78,9 @@ data-aria-dark="Switch to auto color mode">
 </li>
 <li class="toctree-l1 current"><a class="reference internal" href="../processing.html">sdm.processing</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Processor.html">Processor</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Clip.html">Clip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.StandardScale.html">StandardScale</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">StandardScale</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../nn.html">sdm.nn</a><ul>
@@ -103,8 +103,8 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.InvertibleMixin"><code class="docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.processing.InvertibleMixin.inverse_transform"><code class="docutils literal notranslate">inverse_transform()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.StandardScale"><code class="docutils literal notranslate"><span class="pre">StandardScale</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.processing.StandardScale.forward"><code class="docutils literal notranslate">forward()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -128,7 +128,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">InvertibleMixin</strong>
+        <strong itemprop="name">StandardScale</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -141,19 +141,26 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="invertiblemixin">
-<h1>InvertibleMixin<a class="headerlink" href="#invertiblemixin" title="Link to this heading">¶</a></h1>
+          <section id="standardscale">
+<h1>StandardScale<a class="headerlink" href="#standardscale" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.InvertibleMixin">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">InvertibleMixin</span></span><a class="headerlink" href="#sdm.processing.InvertibleMixin" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
-<p>Adds <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code> to a <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>.</p>
-<p>Combine with <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> and implement <code class="docutils literal notranslate"><span class="pre">_inverse_transform</span></code>,
-e.g. <code class="docutils literal notranslate"><span class="pre">class</span> <span class="pre">StandardScale(Processor,</span> <span class="pre">InvertibleMixin):</span> <span class="pre">...</span></code>.</p>
+<dt class="sig sig-object py" id="sdm.processing.StandardScale">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">StandardScale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_mean</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_std</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.StandardScale" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
+<p>Center and scale each feature column.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>with_mean</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, center each column by its fitted mean.</p></li>
+<li><p><strong>with_std</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, scale each column by its fitted standard
+deviation.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
-<dt class="sig sig-object py" id="sdm.processing.InvertibleMixin.inverse_transform">
-<span class="sig-name descname"><span class="pre">inverse_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.processing.InvertibleMixin.inverse_transform" title="Link to this definition">¶</a></dt>
-<dd><p>Invert the transform of <code class="docutils literal notranslate"><span class="pre">input</span></code> using the fitted processor.</p>
+<dt class="sig sig-object py" id="sdm.processing.StandardScale.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.processing.StandardScale.forward" title="Link to this definition">¶</a></dt>
+<dd><p>Transform <code class="docutils literal notranslate"><span class="pre">input</span></code> using the fitted mean and scale.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>)</p>
@@ -174,16 +181,16 @@ e.g. <code class="docutils literal notranslate"><span class="pre">class</span> <
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.Processor.html">
+    <a href="sdm.processing.Clip.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Processor</div></div>
+        <span>Previous</span><div class="title">Clip</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.Clip.html">
+    <a href="../nn.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Clip</div>
+        <div class="title">sdm.nn</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
