@@ -1,0 +1,8 @@
+﻿TabICLv2
+========
+
+.. currentmodule:: sdm.model
+
+.. autoclass:: TabICLv2
+   :members:
+   :show-inheritance:
