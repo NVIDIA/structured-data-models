@@ -45,3 +45,74 @@ def test_induced_transformer_block(
     )
     out_seqused = module(query, key_value=key_value, seqused_key_value=seqused)
     torch.testing.assert_close(out_seqused, out_cross)
+
+
+@pytest.mark.parametrize("qassmax", [False, True])
+def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
+    batch_size = 2
+    set_size = 6
+    context_size = 5
+    channels = 8
+    num_heads = 2
+    num_inducing_points = 4
+    module = InducedTransformerBlock(
+        channels=channels,
+        num_heads=num_heads,
+        feedforward_channels=16,
+        num_inducing_points=num_inducing_points,
+        qassmax=qassmax,
+    )
+    with torch.no_grad():
+        module.transformer_1.attn.out_lin.weight.copy_(torch.eye(channels))
+        module.transformer_1.attn.out_lin.bias.zero_()
+        module.transformer_2.attn.out_lin.weight.copy_(torch.eye(channels))
+        module.transformer_2.attn.out_lin.bias.zero_()
+
+    query = torch.randn(batch_size, set_size, channels)
+    key_value = torch.randn(batch_size, context_size, channels)
+    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32)
+
+    direct_out = module(
+        query=query,
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+    )
+    hidden = module.induce(
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+    )
+    attend_out = module.attend(query=query, key_value=hidden)
+    attend_cache_out, kv = module.attend(
+        query=query,
+        key_value=hidden,
+        return_kv=True,
+    )
+    attend_cached_out = module.attend(query=query, key_value=kv)
+
+    forward_cache_out, forward_kv = module(
+        query=query,
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+        return_kv=True,
+    )
+    forward_cached_out = module(query=query, key_value=forward_kv)
+
+    self_out = module(query=query)
+    self_hidden = module.induce(key_value=query)
+    self_attend_out = module.attend(query=query, key_value=self_hidden)
+
+    assert kv.key.size() == (
+        batch_size,
+        num_inducing_points,
+        num_heads,
+        channels // num_heads,
+    )
+    assert kv.value.size() == kv.key.size()
+    torch.testing.assert_close(forward_kv.key, kv.key)
+    torch.testing.assert_close(forward_kv.value, kv.value)
+    torch.testing.assert_close(attend_out, direct_out)
+    torch.testing.assert_close(attend_cache_out, direct_out)
+    torch.testing.assert_close(attend_cached_out, direct_out)
+    torch.testing.assert_close(forward_cache_out, direct_out)
+    torch.testing.assert_close(forward_cached_out, direct_out)
+    torch.testing.assert_close(self_attend_out, self_out)
