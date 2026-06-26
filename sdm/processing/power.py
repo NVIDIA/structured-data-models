@@ -48,7 +48,9 @@ def _yeojohnson_transform_batch(input: Tensor, lambdas: Tensor) -> Tensor:
     return torch.where(neg_gen, neg_gen_val, output)
 
 
-def _yeojohnson_inverse_transform_batch(input: Tensor, lambdas: Tensor) -> Tensor:
+def _yeojohnson_inverse_transform_batch(
+    input: Tensor, lambdas: Tensor
+) -> Tensor:
     """Apply inverse Yeo-Johnson transform column-wise.
 
     Args:
@@ -72,9 +74,7 @@ def _yeojohnson_inverse_transform_batch(input: Tensor, lambdas: Tensor) -> Tenso
     pos_l0_val = input.expm1()
     pos_gen_val = ((input * lmbda + 1).log() / lmbda).expm1()
     neg_l2_val = -(-input).expm1()
-    neg_gen_val = -(
-        (-(2 - lmbda) * input + 1).log() / (2 - lmbda)
-    ).expm1()
+    neg_gen_val = -((-(2 - lmbda) * input + 1).log() / (2 - lmbda)).expm1()
 
     inverse = torch.zeros_like(input)
     inverse = torch.where(pos_l0, pos_l0_val, inverse)

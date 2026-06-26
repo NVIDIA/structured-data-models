@@ -1,5 +1,4 @@
 import torch
-
 from sdm.processing import Power, Quantile
 
 

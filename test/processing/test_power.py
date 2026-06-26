@@ -148,5 +148,3 @@ def test_power_is_nan_aware() -> None:
     assert torch.equal(torch.isnan(transformed), torch.isnan(input))
     assert torch.equal(torch.isnan(inverse), torch.isnan(input))
     assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
-
-

@@ -41,7 +41,7 @@ def test_quantile_uniform_fit_transform_and_inverse_round_trip() -> None:
     assert torch.allclose(processor.inverse_transform(transformed), input)
 
 
-def test_quantile_uniform_batched_inference_batch_size_differs_from_n_quantiles() -> None:
+def test_quantile_uniform_variable_batch_size() -> None:
     fit_input = torch.tensor(
         [
             [0.0, 0.0, 100.0],
@@ -168,7 +168,9 @@ def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
     )
 
 
-def test_quantile_normal_batched_compile_preserves_bounds_and_inverse() -> None:
+def test_quantile_normal_batched_compile_preserves_bounds_and_inverse() -> (
+    None
+):
     fit_input = torch.tensor(
         [
             [-2.0, 0.0],
