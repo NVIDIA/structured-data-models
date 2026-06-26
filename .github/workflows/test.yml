@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
 jobs:
@@ -54,14 +55,75 @@ jobs:
       - name: Summarize code coverage
         if: always()
         continue-on-error: true
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: 'coverage.xml'
-          badge: true
-          thresholds: '80 90'
-          format: 'markdown'
-          output: both
-          hide_complexity: true
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          lower = 80.0
+          upper = 90.0
+          marker = "<!-- coverage-report -->"
+          coverage_path = Path("coverage.xml")
+
+          def pct(value):
+              return float(value or 0) * 100
+
+          def health(value):
+              if value < lower:
+                  return "Fail"
+              if value < upper:
+                  return "Warn"
+              return "Pass"
+
+          def badge_color(value):
+              if value < lower:
+                  return "critical"
+              if value < upper:
+                  return "yellow"
+              return "success"
+
+          if not coverage_path.exists():
+              Path("code-coverage-results.md").write_text(
+                  f"{marker}\nCoverage summary was not generated.\n",
+                  encoding="utf-8",
+              )
+              raise SystemExit(0)
+
+          root = ET.parse(coverage_path).getroot()
+          total = pct(root.get("line-rate"))
+          color = badge_color(total)
+          total_label = f"{total:.0f}%"
+          badge = (
+              "![Code Coverage]"
+              f"(https://img.shields.io/badge/Code%20Coverage-{total_label}-{color}?style=flat)"
+          )
+
+          lines = [
+              marker,
+              badge,
+              "",
+              "| Package | Line Rate | Branch Rate | Health |",
+              "| ------- | --------- | ----------- | ------ |",
+          ]
+
+          packages = root.findall(".//package")
+          for package in packages:
+              name = package.get("name") or "root"
+              line_rate = pct(package.get("line-rate"))
+              branch_rate = pct(package.get("branch-rate"))
+              lines.append(
+                  f"| {name} | {line_rate:.0f}% | {branch_rate:.0f}% | {health(line_rate)} |"
+              )
+
+          lines.append(
+              f"| **TOTAL** | **{total:.0f}%** | **{pct(root.get('branch-rate')):.0f}%** | **{health(total)}** |"
+          )
+          lines.append("")
+          Path("code-coverage-results.md").write_text(
+              "\n".join(lines),
+              encoding="utf-8",
+          )
+          PY
 
       - name: Print coverage in job summary
         if: always()
@@ -86,7 +148,38 @@ jobs:
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0  # v3.0.4
-        with:
-          recreate: true
-          path: code-coverage-results.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ ! -f code-coverage-results.md ]]; then
+            echo "Coverage summary was not generated." > code-coverage-results.md
+          fi
+
+          comment_id="$(
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --paginate \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- coverage-report -->"))) | .id' \
+              | tail -n 1
+          )"
+
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          body = Path("code-coverage-results.md").read_text(encoding="utf-8")
+          Path("coverage-comment.json").write_text(
+              json.dumps({"body": body}),
+              encoding="utf-8",
+          )
+          PY
+
+          if [[ -n "$comment_id" ]]; then
+            gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              --method PATCH \
+              --input coverage-comment.json
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --method POST \
+              --input coverage-comment.json
+          fi
