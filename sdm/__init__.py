@@ -3,6 +3,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from sdm.stype import Stype, StypeLike
+from sdm.task import TaskType
 from sdm.tensor import (
     CategoricalTensor,
     StringTensor,
@@ -18,6 +19,7 @@ except PackageNotFoundError:
 __all__ = [
     "Stype",
     "StypeLike",
+    "TaskType",
     "VarLenTensor",
     "StringTensor",
     "CategoricalTensor",
