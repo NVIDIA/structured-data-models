@@ -38,9 +38,6 @@ class InducedSelfAttentionBlock(torch.nn.Module):
         qassmax: Whether to use :class:`~sdm.nn.QASSMax`. Applied only to the
             first attention, where the inducing points aggregate information
             from the variable-length context.
-        max_context_size: Optional cap on the number of context elements the
-            inducing points attend to. If the context exceeds this size it is
-            randomly subsampled; if ``None`` all context elements are used.
         device: The device to use for module parameters.
         dtype: The dtype to use for module parameters.
     """
@@ -52,7 +49,7 @@ class InducedSelfAttentionBlock(torch.nn.Module):
         feedforward_channels: int,
         num_inducing_points: int = 16,
         qassmax: bool = False,
-        max_context_size: int | None = None,
+        norm_bias: bool = True,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -60,19 +57,20 @@ class InducedSelfAttentionBlock(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_inducing_points = num_inducing_points
-        self.max_context_size = max_context_size
 
         self.transformer_1 = TransformerBlock(
             channels=channels,
             num_heads=num_heads,
             feedforward_channels=feedforward_channels,
             qassmax=qassmax,
+            norm_bias=norm_bias,
             **factory_kwargs,
         )
         self.transformer_2 = TransformerBlock(
             channels=channels,
             num_heads=num_heads,
             feedforward_channels=feedforward_channels,
+            norm_bias=norm_bias,
             **factory_kwargs,
         )
 
@@ -87,7 +85,7 @@ class InducedSelfAttentionBlock(torch.nn.Module):
         x: Tensor,  # [..., S, C]
         context_size: int | None = None,
         context_mask: Tensor | None = None,  # [S]
-        generator: torch.Generator | None = None,
+        seqused_key_value: Tensor | None = None,  # [...]
     ) -> Tensor:  # [..., S, C]
         r"""Forward pass of the induced self-attention block.
 
@@ -97,13 +95,15 @@ class InducedSelfAttentionBlock(torch.nn.Module):
             context_size: Optional split point along ``S``. When given, the
                 inducing points only attend to ``x[..., :context_size, :]``,
                 preventing target elements from leaking into the context. A
-                value of ``0`` falls back to self-attention over the inducing
-                points. Mutually exclusive with ``context_mask``.
+                value of ``0`` falls back to attending over the full set ``x``.
+                Mutually exclusive with ``context_mask``.
             context_mask: Optional boolean mask with shape ``[S]`` selecting
                 the context elements. Must be shared across the batch. Mutually
                 exclusive with ``context_size``.
-            generator: Optional generator controlling context subsampling when
-                ``max_context_size`` is set.
+            seqused_key_value: Optional valid context lengths with shape
+                ``[...]`` and dtype ``torch.int32``, applied when the inducing
+                points attend to the context. Allows per-batch context sizes
+                beyond the shared ``context_size``/``context_mask``.
 
         Returns:
             Tensor with shape ``[..., S, C]``.
@@ -121,26 +121,16 @@ class InducedSelfAttentionBlock(torch.nn.Module):
         elif context_mask is not None:
             key_value = x[..., context_mask, :]
 
-        # When the context is empty, self-attend over the inducing points
-        # instead.
+        # When the restricted context is empty, fall back to the full set `x`
+        # and drop the (now invalid) length restriction.
         if key_value.size(-2) == 0:
-            hidden = self.transformer_1(query=self.inducing_points)  # [M, C]
-            return self.transformer_2(query=x, key_value=hidden)
-
-        if (
-            self.max_context_size is not None
-            and key_value.size(-2) > self.max_context_size
-        ):
-            index = torch.randperm(
-                key_value.size(-2),
-                device=key_value.device,
-                generator=generator,
-            )[: self.max_context_size]
-            key_value = key_value[..., index, :]
+            key_value = x  # [..., S, C]
+            seqused_key_value = None
 
         hidden = self.transformer_1(
             query=self.inducing_points,  # [M, C]
             key_value=key_value,  # [..., KV, C]
+            seqused_key_value=seqused_key_value,  # [...]
         )  # [..., M, C]
         return self.transformer_2(
             query=x,  # [..., S, C]
@@ -169,9 +159,6 @@ class SetTransformer(torch.nn.Module):
             first attention of each
             :class:`~sdm.nn.InducedSelfAttentionBlock`, where the inducing
             points aggregate information from the variable-length context.
-        max_context_size: Optional cap on the number of context elements the
-            inducing points attend to. If the context exceeds this size it is
-            randomly subsampled; if ``None`` all context elements are used.
         device: The device to use for module parameters.
         dtype: The dtype to use for module parameters.
     """
@@ -184,7 +171,7 @@ class SetTransformer(torch.nn.Module):
         num_layers: int,
         num_inducing_points: int = 16,
         qassmax: bool = False,
-        max_context_size: int | None = None,
+        norm_bias: bool = True,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -198,7 +185,7 @@ class SetTransformer(torch.nn.Module):
                 feedforward_channels=feedforward_channels,
                 num_inducing_points=num_inducing_points,
                 qassmax=qassmax,
-                max_context_size=max_context_size,
+                norm_bias=norm_bias,
                 **factory_kwargs,
             )
             for _ in range(num_layers)
@@ -209,7 +196,7 @@ class SetTransformer(torch.nn.Module):
         x: Tensor,  # [..., S, C]
         context_size: int | None = None,
         context_mask: Tensor | None = None,  # [S]
-        generator: torch.Generator | None = None,
+        seqused_key_value: Tensor | None = None,  # [...]
     ) -> Tensor:  # [..., S, C]
         r"""Forward pass of the Set Transformer encoder.
 
@@ -221,8 +208,9 @@ class SetTransformer(torch.nn.Module):
                 exclusive with ``context_mask``.
             context_mask: Optional boolean mask with shape ``[S]`` shared by
                 all blocks. Mutually exclusive with ``context_size``.
-            generator: Optional generator controlling context subsampling when
-                ``max_context_size`` is set.
+            seqused_key_value: Optional valid context lengths with shape
+                ``[...]`` and dtype ``torch.int32``, shared by all blocks. See
+                :meth:`InducedSelfAttentionBlock.forward`.
 
         Returns:
             Tensor with shape ``[..., S, C]``.
@@ -232,6 +220,6 @@ class SetTransformer(torch.nn.Module):
                 x,
                 context_size=context_size,
                 context_mask=context_mask,
-                generator=generator,
+                seqused_key_value=seqused_key_value,
             )
         return x

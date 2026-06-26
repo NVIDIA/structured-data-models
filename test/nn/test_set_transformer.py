@@ -1,6 +1,9 @@
 import pytest
 import torch
-from sdm.nn import InducedSelfAttentionBlock, SetTransformer
+from sdm.nn import (
+    InducedSelfAttentionBlock,
+    SetTransformer,
+)
 from sdm.testing import withCUDA
 
 
@@ -46,9 +49,9 @@ def test_induced_self_attention_block(
         out_perturbed[:, :context_size],
     )
 
-    # Empty context falls back to self-attention over inducing points.
+    # Empty context falls back to attending over the full set.
     out_empty = module(x, context_size=0)
-    assert out_empty.shape == x.shape
+    torch.testing.assert_close(out_empty, out)
 
 
 @withCUDA
@@ -76,25 +79,6 @@ def test_set_transformer(device: torch.device) -> None:
     out_size = module(x, context_size=context_size)
     out_mask = module(x, context_mask=context_mask)
     torch.testing.assert_close(out_size, out_mask)
-
-
-@withCUDA
-def test_set_transformer_subsampling(device: torch.device) -> None:
-    channels = 8
-    module = SetTransformer(
-        channels=channels,
-        num_heads=2,
-        feedforward_channels=16,
-        num_layers=2,
-        num_inducing_points=4,
-        max_context_size=3,
-        device=device,
-    )
-    x = torch.randn(2, 10, channels, device=device)
-
-    generator = torch.Generator(device=device).manual_seed(0)
-    out = module(x, context_size=8, generator=generator)
-    assert out.shape == x.shape
 
 
 def test_set_transformer_errors() -> None:
