@@ -216,6 +216,50 @@ class CategoricalTensor(Tensor):
 
         return pa.Table.from_arrays(arrays, names=columns)
 
+    @classmethod
+    def from_cudf(
+        cls: type[SelfCategoricalTensor],
+        series: Any,
+        *,
+        dtype: torch.dtype = torch.int32,
+        device: torch.device | str | None = None,
+    ) -> SelfCategoricalTensor:
+        r"""Build a categorical tensor from a cuDF categorical column."""
+        from cudf.api.types import (  # ty: ignore[unresolved-import]
+            is_string_dtype,
+        )
+
+        if dtype not in cls.ALLOWED_DTYPES:
+            raise ValueError(
+                f"Expected 'dtype' in '{cls.__name__}.from_cudf' to be "
+                f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
+            )
+
+        codes, categories = series.factorize(
+            sort=False,
+            use_na_sentinel=True,
+        )
+        code_dtype = "int32" if dtype == torch.int32 else "int64"
+        codes = codes.astype(code_dtype, copy=False)
+        data = torch.from_dlpack(codes).unsqueeze(-1).to(device)
+
+        category_device = device if device is not None else data.device
+        if len(categories) == 0:
+            category = torch.empty(
+                0,
+                dtype=torch.int64,
+                device=category_device,
+            )
+        elif is_string_dtype(categories.dtype):
+            category = StringTensor.from_cudf(
+                categories,
+                device=category_device,
+            )
+        else:
+            values = categories.to_cupy()
+            category = torch.from_dlpack(values).to(device)
+        return cls(data=data, categories=(category,))
+
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:
