@@ -6,29 +6,29 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import ModuleList, Parameter
+from torch.nn import Parameter
 
 from sdm.nn.attention import TransformerBlock
 
 
-class InducedSelfAttentionBlock(torch.nn.Module):
-    r"""Induced self-attention block (ISAB) from the Set Transformer.
+class InducedTransformerBlock(torch.nn.Module):
+    r"""Induced transformer block from the Set Transformer.
 
-    The block reduces the cost of self-attention over a set of ``S`` elements
-    from :math:`O(S^2)` to :math:`O(S)` by routing information through a small
-    set of ``M`` learned inducing points:
+    Introduced in the `"Set Transformer: A Framework for Attention-based
+    Permutation-Invariant Neural Networks"
+    <https://arxiv.org/abs/1810.00825>`_ paper, the block routes attention
+    through a small set of ``M`` learned inducing points, reducing the cost of
+    attending a query of size ``Q`` to a key/value context of size ``KV`` from
+    :math:`O(Q \cdot KV)` to :math:`O((Q + KV) \cdot M)`:
 
     .. math::
 
-        H = \mathrm{TransformerBlock}_1(I, X), \quad
-        \mathrm{ISAB}(X) = \mathrm{TransformerBlock}_2(X, H),
+        H = \mathrm{TransformerBlock}_1(I, \mathrm{key\_value}), \quad
+        \mathrm{out} = \mathrm{TransformerBlock}_2(\mathrm{query}, H),
 
-    where :math:`X` are the input elements, :math:`I` are the learned inducing
-    points, and :math:`H` are the inducing points after attending to ``X``.
-
-    Introduced in `"Set Transformer: A Framework for Attention-based
-    Permutation-Invariant Neural Networks"
-    <https://arxiv.org/abs/1810.00825>`_.
+    where :math:`I` are the learned inducing points and :math:`H` are the
+    inducing points after attending to the key/value elements. Passing
+    ``key_value=None`` recovers the induced self-attention block (ISAB).
 
     Args:
         channels: Input and output channel count.
@@ -37,7 +37,8 @@ class InducedSelfAttentionBlock(torch.nn.Module):
         num_inducing_points: Number of learned inducing points ``M``.
         qassmax: Whether to use :class:`~sdm.nn.QASSMax`. Applied only to the
             first attention, where the inducing points aggregate information
-            from the variable-length context.
+            from the variable-length key/value context.
+        norm_bias: Whether LayerNorm uses learnable bias.
         device: The device to use for module parameters.
         dtype: The dtype to use for module parameters.
     """
@@ -82,50 +83,27 @@ class InducedSelfAttentionBlock(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [..., S, C]
-        context_size: int | None = None,
-        context_mask: Tensor | None = None,  # [S]
+        query: Tensor,  # [..., Q, C]
+        key_value: Tensor | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-    ) -> Tensor:  # [..., S, C]
-        r"""Forward pass of the induced self-attention block.
+    ) -> Tensor:  # [..., Q, C]
+        r"""Forward pass of the induced transformer block.
 
         Args:
-            x: Input set elements with shape ``[..., S, C]``, where ``S`` is
-                the set size and ``C`` is the channel count.
-            context_size: Optional split point along ``S``. When given, the
-                inducing points only attend to ``x[..., :context_size, :]``,
-                preventing target elements from leaking into the context. A
-                value of ``0`` falls back to attending over the full set ``x``.
-                Mutually exclusive with ``context_mask``.
-            context_mask: Optional boolean mask with shape ``[S]`` selecting
-                the context elements. Must be shared across the batch. Mutually
-                exclusive with ``context_size``.
-            seqused_key_value: Optional valid context lengths with shape
+            query: Query-side hidden states with shape ``[..., Q, C]``, where
+                ``Q`` is the query set size and ``C`` is the channel count.
+            key_value: Optional key/value-side context states with shape
+                ``[..., KV, C]``. If omitted, ``query`` is used, recovering
+                induced self-attention.
+            seqused_key_value: Optional valid key/value lengths with shape
                 ``[...]`` and dtype ``torch.int32``, applied when the inducing
-                points attend to the context. Allows per-batch context sizes
-                beyond the shared ``context_size``/``context_mask``.
+                points attend to the key/value context.
 
         Returns:
-            Tensor with shape ``[..., S, C]``.
+            Tensor with shape ``[..., Q, C]``.
         """
-        if context_size is not None and context_mask is not None:
-            raise ValueError(
-                "Cannot pass both `context_size` and `context_mask`"
-            )
-        if context_mask is not None and context_mask.dtype != torch.bool:
-            raise ValueError("`context_mask` must have dtype torch.bool")
-
-        key_value = x  # [..., KV, C]
-        if context_size is not None:
-            key_value = x[..., :context_size, :]
-        elif context_mask is not None:
-            key_value = x[..., context_mask, :]
-
-        # When the restricted context is empty, fall back to the full set `x`
-        # and drop the (now invalid) length restriction.
-        if key_value.size(-2) == 0:
-            key_value = x  # [..., S, C]
-            seqused_key_value = None
+        if key_value is None:
+            key_value = query
 
         hidden = self.transformer_1(
             query=self.inducing_points,  # [M, C]
@@ -133,93 +111,6 @@ class InducedSelfAttentionBlock(torch.nn.Module):
             seqused_key_value=seqused_key_value,  # [...]
         )  # [..., M, C]
         return self.transformer_2(
-            query=x,  # [..., S, C]
+            query=query,  # [..., Q, C]
             key_value=hidden,  # [..., M, C]
-        )  # [..., S, C]
-
-
-class SetTransformer(torch.nn.Module):
-    r"""Set Transformer encoder: a stack of induced self-attention blocks.
-
-    Each :class:`InducedSelfAttentionBlock` processes the full set while only
-    letting the inducing points attend to the context portion, yielding a
-    permutation-equivariant, linear-time encoder over variable-sized sets.
-
-    Introduced in `"Set Transformer: A Framework for Attention-based
-    Permutation-Invariant Neural Networks"
-    <https://arxiv.org/abs/1810.00825>`_.
-
-    Args:
-        channels: Input and output channel count.
-        num_heads: Number of attention heads.
-        feedforward_channels: Hidden width of the MLP in each block.
-        num_layers: Number of induced self-attention blocks in the stack.
-        num_inducing_points: Number of learned inducing points per block.
-        qassmax: Whether to use :class:`~sdm.nn.QASSMax`. Applied only to the
-            first attention of each
-            :class:`~sdm.nn.InducedSelfAttentionBlock`, where the inducing
-            points aggregate information from the variable-length context.
-        device: The device to use for module parameters.
-        dtype: The dtype to use for module parameters.
-    """
-
-    def __init__(
-        self,
-        channels: int,
-        num_heads: int,
-        feedforward_channels: int,
-        num_layers: int,
-        num_inducing_points: int = 16,
-        qassmax: bool = False,
-        norm_bias: bool = True,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__()
-        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        self.blocks = ModuleList(
-            InducedSelfAttentionBlock(
-                channels=channels,
-                num_heads=num_heads,
-                feedforward_channels=feedforward_channels,
-                num_inducing_points=num_inducing_points,
-                qassmax=qassmax,
-                norm_bias=norm_bias,
-                **factory_kwargs,
-            )
-            for _ in range(num_layers)
-        )
-
-    def forward(
-        self,
-        x: Tensor,  # [..., S, C]
-        context_size: int | None = None,
-        context_mask: Tensor | None = None,  # [S]
-        seqused_key_value: Tensor | None = None,  # [...]
-    ) -> Tensor:  # [..., S, C]
-        r"""Forward pass of the Set Transformer encoder.
-
-        Args:
-            x: Input set elements with shape ``[..., S, C]``, where ``S`` is
-                the set size and ``C`` is the channel count.
-            context_size: Optional split point along ``S`` shared by all
-                blocks. See :meth:`InducedSelfAttentionBlock.forward`. Mutually
-                exclusive with ``context_mask``.
-            context_mask: Optional boolean mask with shape ``[S]`` shared by
-                all blocks. Mutually exclusive with ``context_size``.
-            seqused_key_value: Optional valid context lengths with shape
-                ``[...]`` and dtype ``torch.int32``, shared by all blocks. See
-                :meth:`InducedSelfAttentionBlock.forward`.
-
-        Returns:
-            Tensor with shape ``[..., S, C]``.
-        """
-        for block in self.blocks:
-            x = block(
-                x,
-                context_size=context_size,
-                context_mask=context_mask,
-                seqused_key_value=seqused_key_value,
-            )
-        return x
+        )  # [..., Q, C]

@@ -7,10 +7,7 @@ from sdm.nn.attention import (
     MultiHeadAttention,
     TransformerBlock,
 )
-from sdm.nn.set_transformer import (
-    InducedSelfAttentionBlock,
-    SetTransformer,
-)
+from sdm.nn.set_transformer import InducedTransformerBlock
 
 
 __all__ = [
@@ -19,6 +16,5 @@ __all__ = [
     "RotaryEmbedding",
     "MultiHeadAttention",
     "TransformerBlock",
-    "InducedSelfAttentionBlock",
-    "SetTransformer",
+    "InducedTransformerBlock",
 ]
