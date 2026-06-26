@@ -19,6 +19,7 @@ SelfCategoricalTensor = TypeVar(
 )
 
 if TYPE_CHECKING:
+    import cudf  # ty: ignore[unresolved-import]
     import pandas as pd
 
 
@@ -181,7 +182,7 @@ class CategoricalTensor(Tensor):
     @classmethod
     def from_cudf(
         cls: type[SelfCategoricalTensor],
-        series: Any,
+        series: "cudf.Series",
         *,
         dtype: torch.dtype = torch.int32,
         device: torch.device | str | None = None,
