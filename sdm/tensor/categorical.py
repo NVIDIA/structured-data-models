@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import pyarrow as pa
 import torch
@@ -17,6 +17,9 @@ SelfCategoricalTensor = TypeVar(
     "SelfCategoricalTensor",
     bound="CategoricalTensor",
 )
+
+if TYPE_CHECKING:
+    import cudf  # ty: ignore[unresolved-import]
 
 
 class CategoricalTensor(Tensor):
@@ -219,7 +222,7 @@ class CategoricalTensor(Tensor):
     @classmethod
     def from_cudf(
         cls: type[SelfCategoricalTensor],
-        series: Any,
+        series: "cudf.Series",
         *,
         dtype: torch.dtype = torch.int32,
         device: torch.device | str | None = None,
