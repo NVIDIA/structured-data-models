@@ -1,5 +1,8 @@
 from typing import cast
 
+import pandas as pd
+import pyarrow as pa
+import pytest
 import torch
 from sdm import CategoricalTensor
 
@@ -20,6 +23,96 @@ def test_to_copy() -> None:
     out = tensor.to(torch.float32)
     assert not isinstance(out, CategoricalTensor)
     assert out.dtype == torch.float32
+
+
+def test_from_arrow_string_values() -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.array(["b", "a", None, "b"]),
+    )
+
+    assert tensor.as_tensor().equal(
+        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
+    )
+    assert tensor.categories[0].tolist() == ["b", "a"]
+
+
+def test_from_arrow_chunked_values() -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.chunked_array([pa.array(["b", None]), pa.array(["a", "b"])]),
+    )
+
+    assert tensor.as_tensor().equal(
+        torch.tensor([[0], [-1], [1], [0]], dtype=torch.int32)
+    )
+    assert tensor.categories[0].tolist() == ["b", "a"]
+
+
+def test_from_arrow_numeric_values() -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.array([10, 20, None, 10], type=pa.int32()),
+    )
+
+    assert tensor.as_tensor().equal(
+        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
+    )
+    assert tensor.categories[0].equal(
+        torch.tensor([10, 20], dtype=torch.int32)
+    )
+
+
+def test_from_pandas_string_values() -> None:
+    tensor = CategoricalTensor.from_pandas(
+        pd.Series(["b", "a", None, "b"]),
+    )
+
+    assert tensor.as_tensor().equal(
+        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
+    )
+    assert tensor.categories[0].tolist() == ["b", "a"]
+
+
+def test_from_pandas_nullable_numeric_values() -> None:
+    tensor = CategoricalTensor.from_pandas(
+        pd.Series([10, 20, None, 10], dtype="Int32"),
+    )
+
+    assert tensor.as_tensor().equal(
+        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
+    )
+    assert tensor.categories[0].equal(
+        torch.tensor([10, 20], dtype=torch.int32)
+    )
+
+
+def test_from_pandas_all_missing_values() -> None:
+    tensor = CategoricalTensor.from_pandas(
+        pd.Series([None, None]),
+    )
+
+    assert tensor.as_tensor().equal(
+        torch.tensor([[-1], [-1]], dtype=torch.int32)
+    )
+    assert tensor.categories[0].numel() == 0
+
+
+def test_from_pandas_dtype() -> None:
+    tensor = CategoricalTensor.from_pandas(
+        pd.Series(["b", "a", None]),
+        dtype=torch.int64,
+    )
+
+    assert tensor.as_tensor().dtype == torch.int64
+    assert tensor.as_tensor().equal(
+        torch.tensor([[0], [1], [-1]], dtype=torch.int64)
+    )
+
+
+def test_from_pandas_errors() -> None:
+    with pytest.raises(ValueError, match="dtype"):
+        CategoricalTensor.from_pandas(
+            pd.Series(["a", "b"]),
+            dtype=torch.float32,
+        )
 
 
 def test_view_ops() -> None:

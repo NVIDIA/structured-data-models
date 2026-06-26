@@ -1,11 +1,15 @@
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
 
+import numpy as np
+import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
 from typing_extensions import override
+
+from sdm.tensor.string import StringTensor
 
 aten = torch.ops.aten
 
@@ -13,6 +17,9 @@ SelfCategoricalTensor = TypeVar(
     "SelfCategoricalTensor",
     bound="CategoricalTensor",
 )
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class CategoricalTensor(Tensor):
@@ -98,6 +105,79 @@ class CategoricalTensor(Tensor):
 
         return out
 
+    @classmethod
+    def from_arrow(
+        cls: type[SelfCategoricalTensor],
+        array: pa.Array | pa.ChunkedArray,
+        *,
+        dtype: torch.dtype = torch.int32,
+        device: torch.device | str | None = None,
+    ) -> SelfCategoricalTensor:
+        r"""Build a categorical tensor from an Arrow categorical column."""
+        if isinstance(array, pa.ChunkedArray):
+            if array.num_chunks == 1:
+                array = array.chunk(0)
+            else:
+                array = array.combine_chunks()
+        if dtype not in cls.ALLOWED_DTYPES:
+            raise ValueError(
+                f"Expected 'dtype' in '{cls.__name__}.from_arrow' to be "
+                f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
+            )
+
+        encoded = array.dictionary_encode()
+        values = encoded.indices.to_numpy(zero_copy_only=False)
+        if np.issubdtype(values.dtype, np.floating):
+            values = np.nan_to_num(values, nan=-1, copy=False)
+
+        values = values.astype("int64", copy=True)
+        data = torch.as_tensor(
+            values,
+            dtype=dtype,
+            device=device,
+        ).unsqueeze(-1)
+
+        dictionary = encoded.dictionary
+        if pa.types.is_string(dictionary.type) or pa.types.is_large_string(
+            dictionary.type
+        ):
+            category = StringTensor.from_arrow(dictionary, device=device)
+        else:
+            category = torch.as_tensor(
+                dictionary.to_numpy(zero_copy_only=False).copy(),
+                device=device,
+            )
+        return cls(data=data, categories=(category,))
+
+    @classmethod
+    def from_pandas(
+        cls: type[SelfCategoricalTensor],
+        series: "pd.Series",
+        *,
+        dtype: torch.dtype = torch.int32,
+        device: torch.device | str | None = None,
+    ) -> SelfCategoricalTensor:
+        r"""Build a categorical tensor from a pandas categorical column."""
+        import pandas as pd
+
+        if dtype not in cls.ALLOWED_DTYPES:
+            raise ValueError(
+                f"Expected 'dtype' in '{cls.__name__}.from_pandas' to be "
+                f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
+            )
+
+        categories = pd.unique(series[series.notna()])
+        values = pd.Index(categories).get_indexer(series)
+        values = values.astype("int64", copy=False)
+        data = torch.as_tensor(
+            values,
+            dtype=dtype,
+            device=device,
+        ).unsqueeze(-1)
+
+        category = _category_tensor(categories, device=device)
+        return cls(data=data, categories=(category,))
+
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:
@@ -163,6 +243,20 @@ class CategoricalTensor(Tensor):
 @CategoricalTensor.implements(aten.isnan.default)
 def _isnan(input: CategoricalTensor) -> Tensor:
     return input._data < 0
+
+
+def _category_tensor(
+    values: Sequence[Any],
+    *,
+    device: torch.device | str | None,
+) -> Tensor:
+    if len(values) == 0:
+        return torch.empty(0, dtype=torch.int64, device=device)
+
+    if all(isinstance(value, str) for value in values):
+        return StringTensor.from_list(list(values), device=device)
+
+    return torch.as_tensor(values, device=device)
 
 
 @CategoricalTensor.implements(aten.alias.default)
