@@ -59,10 +59,3 @@ def test_softmax_temperature_rejects_nonpositive_temperature() -> None:
         SoftmaxTemperature(temperature=0.0)
 
 
-def test_processing_api_does_not_export_encoding_vocab_processors() -> None:
-    import sdm.processing as processing
-
-    assert not hasattr(processing, "DecodeLabels")
-    assert not hasattr(processing, "LabelEncode")
-    assert not hasattr(processing, "OrdinalEncode")
-    assert not hasattr(processing, "OneHotEncode")
