@@ -27,18 +27,17 @@ class StandardScale(Processor, InvertibleMixin):
         self.register_buffer("scale", torch.empty(0))
 
     def _fit(self, input: Tensor) -> None:
-        needs_mean = self.with_mean or (self.with_std and input.size(0) > 1)
-        mean = (
-            input.mean(dim=0)
-            if needs_mean
-            else input.new_zeros(input.shape[1])
-        )
-        self.mean = mean if self.with_mean else input.new_zeros(input.shape[1])
+        data_mean = input.mean(dim=0)
+
+        if self.with_mean:
+            self.mean = data_mean
+        else:
+            self.mean = input.new_zeros(input.shape[1])
 
         if self.with_std and input.size(0) > 1:
             var = input.var(dim=0, correction=0)
             scale = var.sqrt()
-            scale[_constant_feature_mask(var, mean, input.shape[0])] = 1.0
+            scale[_constant_feature_mask(var, data_mean, input.shape[0])] = 1.0
             self.scale = scale
         else:
             self.scale = input.new_ones(input.shape[1])
