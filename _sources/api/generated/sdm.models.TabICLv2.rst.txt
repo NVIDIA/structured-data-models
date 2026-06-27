@@ -1,7 +1,7 @@
 ﻿TabICLv2
 ========
 
-.. currentmodule:: sdm.model
+.. currentmodule:: sdm.models
 
 .. autoclass:: TabICLv2
    :members:
