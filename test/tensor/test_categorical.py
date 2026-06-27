@@ -60,6 +60,17 @@ def test_from_arrow_numeric_values() -> None:
     )
 
 
+def test_from_arrow_all_missing_values() -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.array([None, None], type=pa.string()),
+    )
+
+    assert tensor.as_tensor().equal(
+        torch.tensor([[-1], [-1]], dtype=torch.int32)
+    )
+    assert tensor.categories[0].numel() == 0
+
+
 def test_from_arrow_dtype() -> None:
     tensor = CategoricalTensor.from_arrow(
         pa.array(["b", "a", None]),

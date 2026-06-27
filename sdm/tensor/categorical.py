@@ -1,8 +1,9 @@
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -17,9 +18,6 @@ SelfCategoricalTensor = TypeVar(
     "SelfCategoricalTensor",
     bound="CategoricalTensor",
 )
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 class CategoricalTensor(Tensor):
@@ -161,17 +159,14 @@ class CategoricalTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
         r"""Build a categorical tensor from a pandas categorical column."""
-        import pandas as pd
-
         if dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
                 f"Expected 'dtype' in '{cls.__name__}.from_pandas' to be "
                 f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
             )
 
-        categories = pd.unique(series[series.notna()])
+        categories = list(series.dropna().unique())
         values = pd.Index(categories).get_indexer(series)
-        values = values.astype("int64", copy=False)
         data = torch.as_tensor(
             values,
             dtype=dtype,
@@ -256,7 +251,7 @@ def _category_tensor(
     if len(values) == 0:
         return torch.empty(0, dtype=torch.int64, device=device)
 
-    if all(isinstance(value, str) for value in values):
+    if isinstance(values[0], str):
         return StringTensor.from_list(list(values), device=device)
 
     return torch.as_tensor(values, device=device)
