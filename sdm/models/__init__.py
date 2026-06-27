@@ -1,6 +1,6 @@
 """Structured Data Models."""
 
-from sdm.model.tabiclv2 import TabICLv2
+from sdm.models.tabiclv2 import TabICLv2
 
 
 __all__ = [

@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import TaskType
-from sdm.model.tabiclv2.row_embedding import RowEmbedding
+from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.testing import withCUDA
 
 

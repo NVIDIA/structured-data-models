@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import TaskType
-from sdm.model import TabICLv2
+from sdm.models import TabICLv2
 from sdm.testing import withCUDA
 
 

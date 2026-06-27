@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import TaskType
-from sdm.model.tabiclv2.icl import ICLBlock
+from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.testing import withCUDA
 from torch import Tensor
 
