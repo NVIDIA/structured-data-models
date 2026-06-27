@@ -39,8 +39,8 @@ jobs:
       - name: Summarize code coverage
         if: always()
         continue-on-error: true
+        shell: python
         run: |
-          python - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
 
@@ -107,7 +107,6 @@ jobs:
               "\n".join(lines),
               encoding="utf-8",
           )
-          PY
 
       - name: Print coverage in job summary
         if: always()
@@ -133,16 +132,7 @@ jobs:
               | tail -n 1
           )"
 
-          python - <<'PY'
-          from pathlib import Path
-          import json
-
-          body = Path("code-coverage-results.md").read_text(encoding="utf-8")
-          Path("coverage-comment.json").write_text(
-              json.dumps({"body": body}),
-              encoding="utf-8",
-          )
-          PY
+          jq -Rs '{body: .}' code-coverage-results.md > coverage-comment.json
 
           if [[ -n "$comment_id" ]]; then
             gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
