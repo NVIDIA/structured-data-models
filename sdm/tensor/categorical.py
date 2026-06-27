@@ -1,9 +1,8 @@
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import numpy as np
-import pandas as pd
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -18,6 +17,9 @@ SelfCategoricalTensor = TypeVar(
     "SelfCategoricalTensor",
     bound="CategoricalTensor",
 )
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class CategoricalTensor(Tensor):
@@ -159,6 +161,8 @@ class CategoricalTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
         r"""Build a categorical tensor from a pandas categorical column."""
+        import pandas as pd
+
         if dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
                 f"Expected 'dtype' in '{cls.__name__}.from_pandas' to be "
