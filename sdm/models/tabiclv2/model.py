@@ -7,8 +7,8 @@ from typing import Any
 import torch
 from torch import Tensor
 
-from sdm.model.tabiclv2.icl import ICLBlock
-from sdm.model.tabiclv2.row_embedding import RowEmbedding
+from sdm.models.tabiclv2.icl import ICLBlock
+from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.task import TaskType
 
 
@@ -18,12 +18,12 @@ class TabICLv2(torch.nn.Module):
     Introduced in `"TabICLv2: A better, faster, scalable, and open tabular
     foundation model" <https://arxiv.org/abs/2602.11139>`_, the model first
     encodes a table into per-row embeddings with
-    :class:`~sdm.model.tabiclv2.RowEmbedding`, then makes in-context
+    :class:`~sdm.models.tabiclv2.RowEmbedding`, then makes in-context
     predictions for the test rows with
-    :class:`~sdm.model.tabiclv2.ICLBlock`.
+    :class:`~sdm.models.tabiclv2.ICLBlock`.
 
-    The :class:`~sdm.model.tabiclv2.ICLBlock` operates on the concatenated
-    readout tokens produced by :class:`~sdm.model.tabiclv2.RowEmbedding`, so
+    The :class:`~sdm.models.tabiclv2.ICLBlock` operates on the concatenated
+    readout tokens produced by :class:`~sdm.models.tabiclv2.RowEmbedding`, so
     its channel count is derived as ``num_readout_tokens * channels``.
 
     Args:
