@@ -15,7 +15,7 @@ from torch.nn import (
     Sequential,
 )
 
-from sdm.nn.attention import TransformerBlock
+from sdm.nn import TransformerBlock
 from sdm.task import TaskType
 
 
