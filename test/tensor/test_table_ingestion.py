@@ -6,6 +6,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import Stype, TableTensor
+from sdm.testing import withCUDA
 
 _DATA = {
     "age": [10, 20, None, 40],
@@ -50,58 +51,86 @@ def _arrow_table(data: dict[str, list[Any]] | None = None) -> pa.Table:
     )
 
 
-def _assert_table_tensor(tensor: TableTensor) -> None:
+def _assert_table_tensor(
+    tensor: TableTensor,
+    *,
+    device: torch.device,
+) -> None:
     assert tensor.size() == (4, 4)
+    assert tensor.device == device
     assert tensor.columns == _EXPECTED_COLUMNS
     assert tensor.numerical.dtype == torch.float32
     assert torch.allclose(
-        tensor.numerical[:, 0],
+        tensor.numerical[:, 0].cpu(),
         torch.tensor([10.0, 20.0, float("nan"), 40.0]),
         equal_nan=True,
     )
-    assert tensor.categorical.as_tensor().equal(_EXPECTED_CATEGORICAL)
+    assert tensor.categorical.as_tensor().cpu().equal(_EXPECTED_CATEGORICAL)
 
 
+@withCUDA
 @pytest.mark.parametrize(
     "make_tensor",
     [
         pytest.param(
-            lambda: TableTensor.from_pandas(_df(), _STYPES),
+            lambda device: TableTensor.from_pandas(
+                _df(),
+                _STYPES,
+                device=device,
+            ),
             id="pandas",
         ),
         pytest.param(
-            lambda: TableTensor.from_arrow(_arrow_table(), _STYPES),
+            lambda device: TableTensor.from_arrow(
+                _arrow_table(),
+                _STYPES,
+                device=device,
+            ),
             id="arrow",
         ),
     ],
 )
-def test_from_table_backend(make_tensor: Callable[[], TableTensor]) -> None:
-    _assert_table_tensor(make_tensor())
+def test_from_table_backend(
+    make_tensor: Callable[[torch.device], TableTensor],
+    device: torch.device,
+) -> None:
+    _assert_table_tensor(make_tensor(device), device=device)
 
 
+@withCUDA
 @pytest.mark.parametrize(
     "make_tensor",
     [
         pytest.param(
-            lambda: TableTensor.from_pandas(_df(), _STYPES),
+            lambda device: TableTensor.from_pandas(
+                _df(),
+                _STYPES,
+                device=device,
+            ),
             id="pandas",
         ),
         pytest.param(
-            lambda: TableTensor.from_arrow(_arrow_table(), _STYPES),
+            lambda device: TableTensor.from_arrow(
+                _arrow_table(),
+                _STYPES,
+                device=device,
+            ),
             id="arrow",
         ),
     ],
 )
 def test_from_table_preserves_string_categories(
-    make_tensor: Callable[[], TableTensor],
+    make_tensor: Callable[[torch.device], TableTensor],
+    device: torch.device,
 ) -> None:
-    tensor = make_tensor()
+    tensor = make_tensor(device)
 
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
-def test_from_arrow_mapping() -> None:
+@withCUDA
+def test_from_arrow_mapping(device: torch.device) -> None:
     tensor = TableTensor.from_arrow(
         {
             "age": pa.array([10, 20], type=pa.int64()),
@@ -110,19 +139,24 @@ def test_from_arrow_mapping() -> None:
             "segment": pa.array(["a", "b"]),
         },
         _STYPES,
+        device=device,
     )
 
     assert tensor.size() == (2, 4)
-    assert tensor.categorical.as_tensor().equal(
-        torch.tensor([[0, 0], [1, 1]], dtype=torch.int32)
+    assert tensor.device == device
+    assert (
+        tensor.categorical.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0, 0], [1, 1]], dtype=torch.int32))
     )
 
 
+@withCUDA
 @pytest.mark.parametrize(
     "make_tensor",
     [
         pytest.param(
-            lambda: TableTensor.from_pandas(
+            lambda device: TableTensor.from_pandas(
                 _df(
                     {
                         "age": [1],
@@ -132,11 +166,12 @@ def test_from_arrow_mapping() -> None:
                     }
                 ),
                 _STYPES,
+                device=device,
             ),
             id="pandas",
         ),
         pytest.param(
-            lambda: TableTensor.from_arrow(
+            lambda device: TableTensor.from_arrow(
                 _arrow_table(
                     {
                         "age": [1],
@@ -146,18 +181,22 @@ def test_from_arrow_mapping() -> None:
                     }
                 ),
                 _STYPES,
+                device=device,
             ),
             id="arrow",
         ),
     ],
 )
 def test_categories_are_local_to_each_input(
-    make_tensor: Callable[[], TableTensor],
+    make_tensor: Callable[[torch.device], TableTensor],
+    device: torch.device,
 ) -> None:
-    tensor = make_tensor()
+    tensor = make_tensor(device)
 
-    assert tensor.categorical.as_tensor().equal(
-        torch.tensor([[0, 0]], dtype=torch.int32)
+    assert (
+        tensor.categorical.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0, 0]], dtype=torch.int32))
     )
 
 

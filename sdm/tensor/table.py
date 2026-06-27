@@ -9,7 +9,7 @@ from collections.abc import (
     Sized,
 )
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import torch
 from torch import Tensor
@@ -21,6 +21,13 @@ from sdm.tensor import CategoricalTensor
 aten = torch.ops.aten
 
 SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import pyarrow as pa
+
+    ArrowColumn = pa.Array | pa.ChunkedArray
+    ArrowTableLike = pa.Table | Mapping[str, ArrowColumn]
 
 
 class TableTensor(Tensor):
@@ -211,7 +218,7 @@ class TableTensor(Tensor):
     @classmethod
     def from_pandas(
         cls: type[SelfTableTensor],
-        df: Any,
+        df: "pd.DataFrame",
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
@@ -225,12 +232,13 @@ class TableTensor(Tensor):
             columns=cast(Mapping[StypeLike, Sequence[str]], columns),
             numerical=numerical,
             categorical=categorical,
+            device=device,
         )
 
     @classmethod
     def from_arrow(
         cls: type[SelfTableTensor],
-        table: Any,
+        table: "ArrowTableLike",
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
@@ -244,6 +252,7 @@ class TableTensor(Tensor):
             columns=cast(Mapping[StypeLike, Sequence[str]], columns),
             numerical=numerical,
             categorical=categorical,
+            device=device,
         )
 
     # Properties ##############################################################
@@ -1010,18 +1019,20 @@ def _columns_from_stypes(
     return {stype: tuple(names) for stype, names in columns.items()}
 
 
-def _column(df: Any, column: str) -> Any:
-    if isinstance(df, Mapping):
-        return df[column]
-    if hasattr(df, "column"):
-        try:
-            return df.column(column)
-        except TypeError:
-            pass
-    return df[column]
+def _arrow_column(table: "ArrowTableLike", column: str) -> "ArrowColumn":
+    import pyarrow as pa
+
+    if isinstance(table, pa.Table):
+        return table.column(column)
+    if isinstance(table, Mapping):
+        return table[column]
+    raise TypeError(
+        "Expected an Arrow table to be a 'pyarrow.Table' or mapping of "
+        f"Arrow columns (got '{type(table).__name__}')"
+    )
 
 
-def _arrow_array(value: Any) -> Any:
+def _arrow_array(value: "ArrowColumn") -> "pa.Array":
     import pyarrow as pa
 
     if isinstance(value, pa.ChunkedArray):
@@ -1061,7 +1072,7 @@ def _empty_block(
 
 
 def _pandas_numerical(
-    df: Any,
+    df: "pd.DataFrame",
     columns: Mapping[Stype, Sequence[str]],
     *,
     device: torch.device | str | None,
@@ -1083,7 +1094,7 @@ def _pandas_numerical(
 
 
 def _pandas_categorical(
-    df: Any,
+    df: "pd.DataFrame",
     columns: Mapping[Stype, Sequence[str]],
     *,
     device: torch.device | str | None,
@@ -1104,7 +1115,7 @@ def _pandas_categorical(
     categories = []
     for column in names:
         tensor = CategoricalTensor.from_pandas(
-            _column(df, column),
+            df[column],
             device=device,
         )
         data.append(tensor.as_tensor())
@@ -1117,7 +1128,7 @@ def _pandas_categorical(
 
 
 def _arrow_numerical(
-    table: Any,
+    table: "ArrowTableLike",
     columns: Mapping[Stype, Sequence[str]],
     *,
     device: torch.device | str | None,
@@ -1133,7 +1144,7 @@ def _arrow_numerical(
 
     tensors = []
     for column in names:
-        array = _arrow_array(_column(table, column))
+        array = _arrow_array(_arrow_column(table, column))
         values = array.to_numpy(zero_copy_only=False).astype(
             "float32",
             copy=False,
@@ -1143,7 +1154,7 @@ def _arrow_numerical(
 
 
 def _arrow_categorical(
-    table: Any,
+    table: "ArrowTableLike",
     columns: Mapping[Stype, Sequence[str]],
     *,
     device: torch.device | str | None,
@@ -1164,7 +1175,7 @@ def _arrow_categorical(
     categories = []
     for column in names:
         tensor = CategoricalTensor.from_arrow(
-            _arrow_array(_column(table, column)),
+            _arrow_array(_arrow_column(table, column)),
             device=device,
         )
         data.append(tensor.as_tensor())
