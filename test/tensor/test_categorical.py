@@ -60,6 +60,18 @@ def test_from_arrow_numeric_values() -> None:
     )
 
 
+def test_from_arrow_dtype() -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.array(["b", "a", None]),
+        dtype=torch.int64,
+    )
+
+    assert tensor.as_tensor().dtype == torch.int64
+    assert tensor.as_tensor().equal(
+        torch.tensor([[0], [1], [-1]], dtype=torch.int64)
+    )
+
+
 def test_from_pandas_string_values() -> None:
     tensor = CategoricalTensor.from_pandas(
         pd.Series(["b", "a", None, "b"]),

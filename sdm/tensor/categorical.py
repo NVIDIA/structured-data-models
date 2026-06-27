@@ -130,7 +130,10 @@ class CategoricalTensor(Tensor):
         if np.issubdtype(values.dtype, np.floating):
             values = np.nan_to_num(values, nan=-1, copy=False)
 
-        values = values.astype("int64", copy=True)
+        np_dtype = np.int32 if dtype == torch.int32 else np.int64
+        values = values.astype(np_dtype, copy=False)
+        if not values.flags.writeable:
+            values = values.copy()
         data = torch.as_tensor(
             values,
             dtype=dtype,
