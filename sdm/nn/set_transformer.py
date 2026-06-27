@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 from torch.nn import Parameter
 
-from sdm.nn.attention import TransformerBlock
+from sdm.nn import TransformerBlock
 
 
 class InducedTransformerBlock(torch.nn.Module):
