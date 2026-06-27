@@ -33,7 +33,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=xml:coverage.xml --cov-report=html:htmlcov
+          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --cov-report=xml:coverage.xml
 
       - name: Summarize code coverage
         if: always()
