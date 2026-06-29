@@ -1,3 +1,4 @@
+import warnings
 from typing import cast
 
 import pandas as pd
@@ -80,6 +81,23 @@ def test_from_arrow_dtype() -> None:
     assert tensor.as_tensor().dtype == torch.int64
     assert tensor.as_tensor().equal(
         torch.tensor([[0], [1], [-1]], dtype=torch.int64)
+    )
+
+
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+def test_from_arrow_cpu_does_not_warn_on_readonly_numpy(
+    dtype: torch.dtype,
+) -> None:
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        CategoricalTensor.from_arrow(
+            pa.array([10, 20, None, 10], type=pa.int32()),
+            dtype=dtype,
+        )
+
+    assert not any(
+        "NumPy array is not writable" in str(warning.message)
+        for warning in rec
     )
 
 

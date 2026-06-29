@@ -125,14 +125,18 @@ class CategoricalTensor(Tensor):
             )
 
         encoded = array.dictionary_encode()
-        values = encoded.indices.fill_null(-1).to_numpy()
-        if not values.flags.writeable:
-            values = values.copy()
-        data = torch.as_tensor(
-            values,
-            dtype=dtype,
-            device=device,
-        ).unsqueeze(-1)
+        torch_device = (
+            torch.device(device) if device is not None else torch.device("cpu")
+        )
+        values = encoded.indices.fill_null(-1).to_numpy(
+            zero_copy_only=False,
+            writable=torch_device.type == "cpu" and dtype == torch.int32,
+        )
+        if torch_device.type == "cpu" and dtype != torch.int32:
+            data = torch.tensor(values, dtype=dtype, device=device)
+        else:
+            data = torch.as_tensor(values, dtype=dtype, device=device)
+        data = data.unsqueeze(-1)
 
         dictionary = encoded.dictionary
         if pa.types.is_string(dictionary.type) or pa.types.is_large_string(
@@ -140,8 +144,12 @@ class CategoricalTensor(Tensor):
         ):
             category = StringTensor.from_arrow(dictionary, device=device)
         else:
+            values = dictionary.to_numpy(
+                zero_copy_only=False,
+                writable=torch_device.type == "cpu",
+            )
             category = torch.as_tensor(
-                dictionary.to_numpy(zero_copy_only=False).copy(),
+                values,
                 device=device,
             )
         return cls(data=data, categories=(category,))
