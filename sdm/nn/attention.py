@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.nn import GELU, LayerNorm, Linear, Sequential
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import RoPE
+from sdm.nn import RotaryEmbedding
 
 
 class QASSMax(torch.nn.Module):
@@ -276,7 +276,7 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[False] = False,
     ) -> Tensor: ...
@@ -288,7 +288,7 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -300,7 +300,7 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         *,
         return_kv: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -311,7 +311,7 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         return_kv: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -385,7 +385,7 @@ class MultiHeadAttention(torch.nn.Module):
 class TransformerBlock(torch.nn.Module):
     r"""Transformer block with pre-norm attention and feedforward modules.
 
-    Supports optional :class:`RoPE` on projected query/key tensors
+    Supports optional :class:`RotaryEmbedding` on projected query/key tensors
     and optional :class:`QASSMax` query scaling inside attention.
 
     Args:
@@ -436,7 +436,7 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[False] = False,
     ) -> Tensor: ...
@@ -448,7 +448,7 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         *,
         return_kv: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -460,7 +460,7 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         *,
         return_kv: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -471,7 +471,7 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RoPE | None = None,
+        rope: RotaryEmbedding | None = None,
         return_kv: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
