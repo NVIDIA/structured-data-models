@@ -99,9 +99,7 @@ class Pipeline:
                     step,
                 )
             try:
-                numerical = _validate_output(
-                    step.inverse_transform(numerical)
-                )
+                numerical = _validate_output(step.inverse_transform(numerical))
             except Exception as exc:
                 raise _step_error(exc, phase, position, step) from exc
         return _with_step_numerical(table, numerical, phase, position, step)
@@ -134,22 +132,19 @@ class Recipe:
         postprocess: Steps applied to model output after target inverse.
     """
 
-    preprocess: Iterable[Processor] | None = field(default_factory=Pipeline)
-    target: Iterable[Processor] | None = field(default_factory=Pipeline)
-    postprocess: Iterable[Processor] | None = field(default_factory=Pipeline)
+    preprocess: Pipeline = field(default_factory=Pipeline)
+    target: Pipeline = field(default_factory=Pipeline)
+    postprocess: Pipeline = field(default_factory=Pipeline)
 
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "preprocess",
-            _coerce_pipeline(self.preprocess),
-        )
-        object.__setattr__(self, "target", _coerce_pipeline(self.target))
-        object.__setattr__(
-            self,
-            "postprocess",
-            _coerce_pipeline(self.postprocess),
-        )
+    def __init__(
+        self,
+        preprocess: Iterable[Processor] | None = None,
+        target: Iterable[Processor] | None = None,
+        postprocess: Iterable[Processor] | None = None,
+    ) -> None:
+        object.__setattr__(self, "preprocess", _coerce_pipeline(preprocess))
+        object.__setattr__(self, "target", _coerce_pipeline(target))
+        object.__setattr__(self, "postprocess", _coerce_pipeline(postprocess))
 
     def fit_preprocess(self, table: TableTensor) -> Self:
         """Fit the preprocess phase on ``table`` and return this recipe."""
@@ -197,8 +192,7 @@ def _coerce_pipeline(
 def _validate_step(step: object) -> Processor:
     if not isinstance(step, Processor):
         raise TypeError(
-            "Expected a Processor step "
-            f"(got '{step.__class__.__name__}')"
+            f"Expected a Processor step (got '{step.__class__.__name__}')"
         )
     return step
 
@@ -244,11 +238,8 @@ def _step_error(
     position: int,
     step: Processor,
 ) -> Exception:
-    message = (
-        f"{phase} step {position} "
-        f"({step.__class__.__name__}): {exc}"
-    )
+    message = f"{phase} step {position} ({step.__class__.__name__}): {exc}"
     try:
         return exc.__class__(message)
-    except Exception:
+    except Exception:  # noqa: BLE001 - not all exceptions rebuild from a message
         return RuntimeError(message)

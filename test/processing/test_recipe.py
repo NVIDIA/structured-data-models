@@ -106,7 +106,7 @@ def test_pipeline_preserves_declared_stage_order() -> None:
 
 def test_pipeline_rejects_non_stage() -> None:
     with pytest.raises(TypeError, match="Expected a Processor step"):
-        Pipeline([object()])  # type: ignore[list-item]
+        Pipeline([object()])  # ty: ignore[invalid-argument-type]
 
 
 def test_recipe_normalizes_empty_phases_and_describes() -> None:
@@ -181,7 +181,7 @@ def test_recipe_bad_step_output_includes_phase_and_step_position() -> None:
     class BadOutput(Processor):
         requires_fit = False
 
-        def forward(self, input: torch.Tensor) -> object:
+        def forward(self, input: torch.Tensor) -> object:  # ty: ignore[invalid-method-override]
             return object()
 
     recipe = Recipe(preprocess=[Add(1), BadOutput()])
