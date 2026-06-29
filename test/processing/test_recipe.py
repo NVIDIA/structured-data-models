@@ -38,6 +38,13 @@ class Scale(Processor, InvertibleMixin):
         return input / self.factor
 
 
+class Identity(Processor):
+    requires_fit = False
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return input
+
+
 class FailingProcessor(Processor):
     requires_fit = False
 
@@ -104,6 +111,14 @@ def test_preprocess_transforms_numerical_and_passes_categorical() -> None:
     assert torch.equal(output.numerical, table.numerical + 5)
     assert output.categorical is table.categorical
     assert output.columns == table.columns
+
+
+def test_pipeline_returns_input_when_numerical_is_unchanged() -> None:
+    table = _table()
+
+    output = Pipeline([Identity(), Identity()]).transform(table)
+
+    assert output is table
 
 
 def test_recipe_execution_order_around_stub_model() -> None:

@@ -1,18 +1,12 @@
-"""Recipe composition for ordered table-processing slots."""
-
-from __future__ import annotations
-
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import TypeVar
 
 from torch import Tensor
+from typing_extensions import Self
 
 from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.tensor import TableTensor
-
-SelfPipeline = TypeVar("SelfPipeline", bound="Pipeline")
 
 
 class Pipeline:
@@ -29,17 +23,17 @@ class Pipeline:
     ) -> None:
         self.stages = tuple(_validate_stage(stage) for stage in stages or ())
 
-    def fit(self: SelfPipeline, input: TableTensor) -> SelfPipeline:
+    def fit(self, input: TableTensor) -> Self:
         """Fit stages in order using the numerical block of ``input``."""
         self._fit(input, slot="pipeline")
         return self
 
     def _fit(
-        self: SelfPipeline,
+        self,
         input: TableTensor,
         *,
         slot: str,
-    ) -> SelfPipeline:
+    ) -> Self:
         numerical = input.numerical
         for position, stage in enumerate(self.stages):
             try:
@@ -162,7 +156,7 @@ class Recipe:
             _coerce_pipeline(self.postprocess),
         )
 
-    def fit_preprocess(self, input: TableTensor) -> Recipe:
+    def fit_preprocess(self, input: TableTensor) -> Self:
         """Fit the preprocess slot on ``input`` and return this recipe."""
         self.preprocess._fit(input, slot="preprocess")
         return self
@@ -237,6 +231,8 @@ def _with_stage_numerical(
 
 
 def _with_numerical(input: TableTensor, numerical: Tensor) -> TableTensor:
+    if numerical is input.numerical:
+        return input
     return input.__class__(
         columns={
             Stype.numerical: input.columns[Stype.numerical],
