@@ -1,54 +1,41 @@
 import pytest
 import torch
-from sdm import TaskType
 from sdm.models import TabICLv2
 from sdm.testing import withCUDA
 
 
-def make_module(
-    task_type: TaskType,
-    channels: int = 16,
-    num_embedding_layers: int = 2,
-    num_icl_layers: int = 2,
-    num_heads: int = 4,
-    group_size: int = 3,
-    num_inducing_points: int = 5,
-    num_readout_tokens: int = 2,
-    device: torch.device | None = None,
-) -> TabICLv2:
-    return TabICLv2(
-        task_type=task_type,
-        channels=channels,
-        num_embedding_layers=num_embedding_layers,
-        num_icl_layers=num_icl_layers,
-        num_heads=num_heads,
-        group_size=group_size,
-        num_inducing_points=num_inducing_points,
-        num_readout_tokens=num_readout_tokens,
+@withCUDA
+@pytest.mark.parametrize("num_classes", [0, 10])
+def test_tabiclv2(device: torch.device, num_classes: int) -> None:
+    model = TabICLv2(
+        num_classes=num_classes,
+        num_quantiles=999,
+        channels=16,
+        num_embedding_layers=2,
+        num_embedding_heads=2,
+        num_inducing_points=8,
+        group_size=3,
+        num_readout_tokens=2,
+        num_icl_layers=2,
+        num_icl_heads=4,
         device=device,
     )
 
+    batch_size, num_rows, num_cols = 2, 8, 6
+    num_train = 5
 
-@withCUDA
-@pytest.mark.parametrize(
-    "task_type",
-    [TaskType.classification, TaskType.regression],
-)
-def test_tabiclv2_forward(
-    device: torch.device,
-    task_type: TaskType,
-) -> None:
-    batch_size, num_rows, num_cols, num_train = 2, 8, 6, 5
-    num_test = num_rows - num_train
-    module = make_module(task_type, device=device)
     x = torch.randn(batch_size, num_rows, num_cols, device=device)
-    if task_type == TaskType.classification:
-        y = torch.randint(0, 10, (batch_size, num_train), device=device)
+    if num_classes > 0:
+        y = torch.randint(
+            0,
+            num_classes,
+            (batch_size, num_train),
+            device=device,
+        )
     else:
         y = torch.randn(batch_size, num_train, device=device)
 
-    out = module(x, y)
-    out_channels = 10 if task_type == TaskType.classification else 999
-    assert out.shape == (batch_size, num_test, out_channels)
+    out = model(x, y)
+    assert out.size() == (batch_size, num_rows - num_train, num_classes or 999)
     assert out.dtype == x.dtype
     assert out.device == x.device
