@@ -59,7 +59,7 @@ model_input = recipe.transform_features(new_features)
 Run the model, then map its predictions back to the original space:
 
 ```python
-prediction = model(model_input)                   # predictions as a TableTensor
+prediction = model(model_input)
 prediction = recipe.inverse_transform_target(prediction)
 prediction = recipe.transform_output(prediction)  # identity if `output` is empty
 ```
