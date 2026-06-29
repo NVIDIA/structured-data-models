@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _ensure_floating
+from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 
 
@@ -34,7 +34,7 @@ class Clip(Processor, InvertibleMixin):
         self.register_buffer("upper_bound", torch.empty(0))
 
     def _fit(self, input: Tensor) -> None:
-        input = _ensure_floating(input)
+        input = _as_float(input)
         quantiles = input.new_tensor([self.q_low, self.q_high])
         q_low, q_high = torch.quantile(input, quantiles, dim=0)
         self.lower_bound = q_low
@@ -42,7 +42,7 @@ class Clip(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Clamp ``input`` to the fitted lower and upper bounds."""
-        return _ensure_floating(input).clamp(
+        return _as_float(input).clamp(
             min=self.lower_bound,
             max=self.upper_bound,
         )

@@ -3,7 +3,7 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _ensure_floating
+from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 
 BOUNDS_THRESH = 1e-7
@@ -76,7 +76,7 @@ class Quantile(Processor, InvertibleMixin):
         )[: self.subsample]
 
     def _fit(self, input: Tensor) -> None:
-        input = _ensure_floating(input)
+        input = _as_float(input)
         n_samples = input.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
@@ -172,7 +172,7 @@ class Quantile(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` into the configured output distribution."""
-        input = _ensure_floating(input)
+        input = _as_float(input)
         transformed = torch.empty_like(input)
         for i in range(input.shape[1]):
             transformed[:, i] = self._transform_col(
@@ -183,7 +183,7 @@ class Quantile(Processor, InvertibleMixin):
         return transformed
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
-        input = _ensure_floating(input)
+        input = _as_float(input)
         inverse = input.clone()
         for i in range(input.shape[1]):
             inverse[:, i] = self._transform_col(
