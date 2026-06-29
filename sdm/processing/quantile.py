@@ -80,6 +80,8 @@ class Quantile(Processor, InvertibleMixin):
         n_samples = input.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
+            # Keep quantiles well below the subsample size; very dense
+            # percentile grids are slow to fit and add little resolution.
             quantile_limit = min(quantile_limit, int(self.subsample * 0.2))
         self.n_quantiles = max(1, min(self._n_quantiles, quantile_limit))
 

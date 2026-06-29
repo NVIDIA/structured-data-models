@@ -16,9 +16,7 @@ def _nanstd(input: Tensor, *, dim: int) -> Tensor:
     correction = (count > 1).to(count.dtype)
     denominator = (count - correction).clamp_min(1)
     variance = sum_squares / denominator
-    return torch.where(
-        count > 0, variance.sqrt(), torch.full_like(variance, torch.nan)
-    )
+    return torch.where(count > 0, variance.sqrt(), torch.nan)
 
 
 class SigmaClip(Processor):
@@ -34,8 +32,8 @@ class SigmaClip(Processor):
         if threshold <= 0:
             raise ValueError("threshold must be positive.")
         self.threshold = threshold
-        self.register_buffer("mean", torch.empty(0))
-        self.register_buffer("std", torch.empty(0))
+        self.register_buffer("_mean", torch.empty(0))
+        self.register_buffer("_std", torch.empty(0))
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
@@ -44,25 +42,35 @@ class SigmaClip(Processor):
         min_std = input.new_tensor(1e-6)
 
         mean = torch.nanmean(input, dim=0)
-        std = torch.maximum(
-            _nanstd(input, dim=0),
-            min_std,
-        )
+        std = _nanstd(input, dim=0)
+        std = torch.where(std.isnan(), min_std, std)
+        std = torch.maximum(std, min_std)
 
-        lower_bound = mean - self.threshold * std
-        upper_bound = mean + self.threshold * std
+        inf = input.new_tensor(float("inf"))
+        lower_bound = torch.where(
+            mean.isnan(), -inf, mean - self.threshold * std
+        )
+        upper_bound = torch.where(
+            mean.isnan(), inf, mean + self.threshold * std
+        )
         outlier_mask = (input < lower_bound) | (input > upper_bound)
-        clean = torch.where(
-            outlier_mask, input.new_full(input.shape, torch.nan), input
-        )
+        clean = torch.where(outlier_mask, torch.nan, input)
 
-        self.mean = torch.nanmean(clean, dim=0)
-        self.std = torch.maximum(
-            _nanstd(clean, dim=0),
-            min_std,
+        mean_clean = torch.nanmean(clean, dim=0)
+        std_clean = _nanstd(clean, dim=0)
+        self._mean = torch.where(mean_clean.isnan(), mean, mean_clean)
+        self._std = torch.where(std_clean.isnan(), std, std_clean)
+        self._std = torch.maximum(self._std, min_std)
+        self.lower_bound = torch.where(
+            self._mean.isnan(),
+            -inf,
+            self._mean - self.threshold * self._std,
         )
-        self.lower_bound = self.mean - self.threshold * self.std
-        self.upper_bound = self.mean + self.threshold * self.std
+        self.upper_bound = torch.where(
+            self._mean.isnan(),
+            inf,
+            self._mean + self.threshold * self._std,
+        )
 
     def forward(self, input: Tensor) -> Tensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""

@@ -1,6 +1,7 @@
 import pytest
 import torch
 from sdm.processing import Quantile
+from sdm.testing import withCUDA
 
 
 def test_quantile_rejects_nonpositive_n_quantiles() -> None:
@@ -13,7 +14,10 @@ def test_quantile_rejects_nonpositive_subsample() -> None:
         Quantile(subsample=0)
 
 
-def test_quantile_uniform_fit_transform_and_inverse_round_trip() -> None:
+@withCUDA
+def test_quantile_uniform_fit_transform_and_inverse_round_trip(
+    device: torch.device,
+) -> None:
     input = torch.tensor(
         [
             [0.0, 0.0],
@@ -22,6 +26,7 @@ def test_quantile_uniform_fit_transform_and_inverse_round_trip() -> None:
             [3.0, 30.0],
         ],
         dtype=torch.float64,
+        device=device,
     )
 
     processor = Quantile(n_quantiles=4, subsample=None).fit(input)
@@ -33,64 +38,82 @@ def test_quantile_uniform_fit_transform_and_inverse_round_trip() -> None:
             [1.0, 1.0],
         ],
         dtype=torch.float64,
+        device=device,
     )
 
     transformed = processor.transform(input)
     assert torch.allclose(processor.references, expected[:, 0])
     assert torch.allclose(transformed, expected)
+    assert transformed.device == device
     assert torch.allclose(processor.inverse_transform(transformed), input)
 
 
-def test_quantile_repeated_values_map_to_midpoint() -> None:
-    input = torch.tensor([[0.0], [1.0], [1.0], [2.0]])
+@withCUDA
+def test_quantile_repeated_values_map_to_midpoint(
+    device: torch.device,
+) -> None:
+    input = torch.tensor([[0.0], [1.0], [1.0], [2.0]], device=device)
 
     processor = Quantile(n_quantiles=4, subsample=None).fit(input)
     transformed = processor.transform(input)
 
     assert torch.allclose(
         transformed.squeeze(1),
-        torch.tensor([0.0, 0.5, 0.5, 1.0]),
+        torch.tensor([0.0, 0.5, 0.5, 1.0], device=device),
     )
+    assert transformed.device == device
     assert torch.allclose(processor.inverse_transform(transformed), input)
 
 
-def test_quantile_constant_columns_round_trip() -> None:
-    input = torch.tensor([[2.0, 1.0], [2.0, 1.0], [2.0, 1.0]])
+@withCUDA
+def test_quantile_constant_columns_round_trip(device: torch.device) -> None:
+    input = torch.tensor(
+        [[2.0, 1.0], [2.0, 1.0], [2.0, 1.0]],
+        device=device,
+    )
 
     processor = Quantile(n_quantiles=3, subsample=None).fit(input)
     transformed = processor.transform(input)
 
     assert torch.equal(transformed, torch.zeros_like(input))
+    assert transformed.device == device
     assert torch.equal(processor.inverse_transform(transformed), input)
 
 
-def test_quantile_single_quantile_maps_to_single_reference() -> None:
+@withCUDA
+def test_quantile_single_quantile_maps_to_single_reference(
+    device: torch.device,
+) -> None:
     input = torch.tensor(
         [
             [2.0, 1.0],
             [3.0, 5.0],
         ],
         dtype=torch.float64,
+        device=device,
     )
 
     processor = Quantile(n_quantiles=1, subsample=None).fit(input)
     transformed = processor.transform(input)
 
     assert torch.equal(transformed, torch.zeros_like(input))
+    assert transformed.device == device
     assert torch.equal(
         processor.inverse_transform(transformed),
         processor.quantiles[0].expand_as(input),
     )
 
 
-def test_quantile_preserves_nan_positions() -> None:
+@withCUDA
+def test_quantile_preserves_nan_positions(device: torch.device) -> None:
     input = torch.tensor(
         [
             [0.0, 1.0],
             [torch.nan, 2.0],
             [2.0, torch.nan],
             [3.0, 4.0],
-        ]
+        ],
+        device=device,
     )
 
     processor = Quantile(n_quantiles=4, subsample=None).fit(input)
@@ -100,10 +123,37 @@ def test_quantile_preserves_nan_positions() -> None:
     assert torch.equal(torch.isnan(transformed), torch.isnan(input))
     assert torch.equal(torch.isnan(inverse), torch.isnan(input))
     assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
+    assert transformed.device == device
+    assert inverse.device == device
 
 
-def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
-    input = torch.tensor([[-2.0], [-1.0], [0.0], [4.0], [8.0]])
+@withCUDA
+def test_quantile_all_nan_column_remains_nan(device: torch.device) -> None:
+    input = torch.tensor(
+        [
+            [torch.nan, 1.0],
+            [torch.nan, 2.0],
+            [torch.nan, 3.0],
+        ],
+        device=device,
+    )
+
+    processor = Quantile(n_quantiles=3, subsample=None).fit(input)
+    transformed = processor.transform(input)
+
+    assert torch.isnan(processor.quantiles[:, 0]).all()
+    assert torch.isnan(transformed[:, 0]).all()
+    assert transformed.device == device
+
+
+@withCUDA
+def test_quantile_normal_distribution_is_finite_at_bounds(
+    device: torch.device,
+) -> None:
+    input = torch.tensor(
+        [[-2.0], [-1.0], [0.0], [4.0], [8.0]],
+        device=device,
+    )
 
     processor = Quantile(
         n_quantiles=5,
@@ -113,6 +163,7 @@ def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
     transformed = processor.transform(input)
 
     assert transformed.isfinite().all()
+    assert transformed.device == device
     assert torch.allclose(
         processor.inverse_transform(transformed),
         input,
@@ -120,8 +171,11 @@ def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
     )
 
 
-def test_quantile_normal_distribution_preserves_nan_positions() -> None:
-    input = torch.tensor([[0.0], [torch.nan], [2.0], [3.0]])
+@withCUDA
+def test_quantile_normal_distribution_preserves_nan_positions(
+    device: torch.device,
+) -> None:
+    input = torch.tensor([[0.0], [torch.nan], [2.0], [3.0]], device=device)
 
     processor = Quantile(
         n_quantiles=4,
@@ -135,10 +189,15 @@ def test_quantile_normal_distribution_preserves_nan_positions() -> None:
     assert torch.equal(torch.isnan(inverse), torch.isnan(input))
     finite = ~torch.isnan(input)
     assert torch.allclose(inverse[finite], input[finite])
+    assert transformed.device == device
+    assert inverse.device == device
 
 
-def test_quantile_subsample_is_reproducible_by_default() -> None:
-    input = torch.arange(60.0).view(30, 2)
+@withCUDA
+def test_quantile_subsample_is_reproducible_by_default(
+    device: torch.device,
+) -> None:
+    input = torch.arange(60.0, device=device).view(30, 2)
 
     first = Quantile(n_quantiles=4, subsample=12).fit(input)
     second = Quantile(n_quantiles=4, subsample=12).fit(input)

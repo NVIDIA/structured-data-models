@@ -2,7 +2,7 @@ import math
 
 import pytest
 import torch
-from sdm.nn.rope import RotaryEmbedding
+from sdm.nn import RotaryEmbedding
 from sdm.testing import withCUDA
 
 

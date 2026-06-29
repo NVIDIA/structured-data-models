@@ -16,17 +16,14 @@ class MeanImpute(Processor):
     def __init__(self, *, fill_value: float = 0.0) -> None:
         super().__init__()
         self.fill_value = fill_value
-        self.register_buffer("mean", torch.empty(0))
+        self.register_buffer("_mean", torch.empty(0))
 
     def _fit(self, input: Tensor) -> None:
         input = _ensure_floating(input)
         mean = torch.nanmean(input, dim=0)
-        empty = mean.new_full(mean.shape, self.fill_value)
-        self.mean = torch.where(torch.isnan(mean), empty, mean)
+        self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
     def forward(self, input: Tensor) -> Tensor:
         """Replace NaNs with the fitted per-column means."""
         input = _ensure_floating(input)
-        return torch.where(
-            torch.isnan(input), self.mean.expand_as(input), input
-        )
+        return torch.where(input.isnan(), self._mean, input)

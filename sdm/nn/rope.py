@@ -23,7 +23,7 @@ class RotaryEmbedding(torch.nn.Module):
         channels: int,
         theta: float = 100_000,
         requires_grad: bool = True,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()

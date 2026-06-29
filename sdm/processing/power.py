@@ -195,9 +195,9 @@ class Power(Processor, InvertibleMixin):
 
         self.lambdas = lambdas
 
-        self.upper_bound = -(1 / self.lambdas)
         lambda_eps = torch.finfo(input.dtype).eps
-        self.upper_bound[abs(self.lambdas) < lambda_eps] = torch.inf
+        self.upper_bound = -(1 / self.lambdas)
+        self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
             transformed = self._yeojohnson_transform(input)

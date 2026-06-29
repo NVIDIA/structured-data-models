@@ -1,12 +1,13 @@
 """Attention modules for structured tensor models."""
 
-from typing import Any, cast
+from typing import Any, Literal, cast, overload
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, LayerNorm, Linear, Sequential
 
+from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 
 
@@ -51,7 +52,7 @@ class QASSMax(torch.nn.Module):
         channels: int,
         num_heads: int,
         hidden_channels: int = 64,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
@@ -124,7 +125,7 @@ class SDPA(torch.nn.Module):
         channels: int,
         num_heads: int,
         qassmax: bool = False,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
@@ -243,7 +244,7 @@ class MultiHeadAttention(torch.nn.Module):
         channels: int,
         num_heads: int,
         qassmax: bool = False,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
@@ -268,21 +269,60 @@ class MultiHeadAttention(torch.nn.Module):
         torch.nn.init.zeros_(self.out_lin.weight)
         torch.nn.init.zeros_(self.out_lin.bias)
 
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
+        *,
+        return_kv: Literal[False] = False,
+    ) -> Tensor: ...
+
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
+        *,
+        return_kv: Literal[True],
+    ) -> tuple[Tensor, KVCacheEntry]: ...
+
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
+        *,
+        return_kv: bool,
+    ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
+
     def forward(
         self,
         query: Tensor,  # [..., Q, C]
-        key_value: Tensor | None = None,  # [..., KV, C]
+        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         rope: RotaryEmbedding | None = None,
-    ) -> Tensor:  # [..., Q, C]
+        return_kv: bool = False,
+    ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
         Args:
             query: Query tensor with shape ``[..., Q, C]``.
                 ``Q`` is the query sequence length, ``C`` is the number of
                 channels.
-            key_value: key/value tensor with shape ``[..., KV, C]``.
+            key_value: key/value tensor with shape ``[..., KV, C]`` or
+                precomputed key/value projections as a
+                :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -291,11 +331,22 @@ class MultiHeadAttention(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             rope: Rotary positional embedding applied after query/key
                 projection.
+            return_kv: Whether to return the computed key and value projections
+                alongside the attention output.
 
         Returns:
-            Tensor with shape ``[..., Q, C]``.
+            Tensor with shape ``[..., Q, C]`` when ``return_kv`` is ``False``.
+            Otherwise, a tuple of the output tensor and a
+            :class:`~sdm.cache.KVCacheEntry`.
         """
-        if key_value is None:
+        if isinstance(key_value, KVCacheEntry):
+            channels = query.size(-1)
+            q_weight = self.qkv_lin.weight[:channels]
+            q_bias = self.qkv_lin.bias[:channels]
+            query = F.linear(query, q_weight, q_bias)
+            key = key_value.key
+            value = key_value.value
+        elif key_value is None:
             query, key, value = self.qkv_lin(query).chunk(chunks=3, dim=-1)
         else:
             sections = [query.size(-1), 2 * query.size(-1)]
@@ -306,12 +357,14 @@ class MultiHeadAttention(torch.nn.Module):
 
         # [..., S, C] -> [..., S, H, C // H]
         query = query.unflatten(-1, [self.num_heads, -1])
-        key = key.unflatten(-1, [self.num_heads, -1])
-        value = value.unflatten(-1, [self.num_heads, -1])
+        if not isinstance(key_value, KVCacheEntry):
+            key = key.unflatten(-1, [self.num_heads, -1])
+            value = value.unflatten(-1, [self.num_heads, -1])
 
         if rope is not None:
             query = rope(query)
-            key = rope(key)
+            if not isinstance(key_value, KVCacheEntry):
+                key = rope(key)
             assert query.dtype == key.dtype == value.dtype
 
         out = self.sdpa(
@@ -323,7 +376,10 @@ class MultiHeadAttention(torch.nn.Module):
         )  # [..., Q, H, C // H]
 
         out = out.flatten(-2, -1)  # [..., Q, C]
-        return self.out_lin(out)  # [..., Q, C]
+        out = self.out_lin(out)  # [..., Q, C]
+        if return_kv:
+            return out, KVCacheEntry(key=key, value=value)
+        return out
 
 
 class TransformerBlock(torch.nn.Module):
@@ -349,7 +405,7 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         qassmax: bool = False,
         norm_bias: bool = True,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
@@ -373,21 +429,60 @@ class TransformerBlock(torch.nn.Module):
         torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).weight)
         torch.nn.init.zeros_(cast(Linear, self.mlp[-1]).bias)
 
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
+        *,
+        return_kv: Literal[False] = False,
+    ) -> Tensor: ...
+
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
+        *,
+        return_kv: Literal[True],
+    ) -> tuple[Tensor, KVCacheEntry]: ...
+
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
+        *,
+        return_kv: bool,
+    ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
+
     def forward(
         self,
         query: Tensor,  # [..., Q, C]
-        key_value: Tensor | None = None,  # [..., KV, C]
+        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         rope: RotaryEmbedding | None = None,
-    ) -> Tensor:  # [..., Q, C]
+        return_kv: bool = False,
+    ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
         Args:
             query: Query tensor with shape ``[..., Q, C]``.
                 ``Q`` is the query sequence length, ``C`` is the number of
                 channels.
-            key_value: key/value tensor with shape ``[..., KV, C]``.
+            key_value: key/value tensor with shape ``[..., KV, C]`` or
+                precomputed key/value projections as a
+                :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
@@ -396,15 +491,31 @@ class TransformerBlock(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             rope: Rotary positional embedding applied after query/key
                 projection.
+            return_kv: Whether to return the computed key and value projections
+                alongside the block output.
 
         Returns:
-            Tensor with shape ``[..., Q, C]``.
+            Tensor with shape ``[..., Q, C]`` when ``return_kv`` is ``False``.
+            Otherwise, a tuple of the output tensor and a
+            :class:`~sdm.cache.KVCacheEntry`.
         """
-        out = query + self.attn(
+        if isinstance(key_value, Tensor):
+            key_value = self.kv_norm(key_value)
+        attn_result = self.attn(
             query=self.q_norm(query),
-            key_value=None if key_value is None else self.kv_norm(key_value),
+            key_value=key_value,
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
             rope=rope,
+            return_kv=return_kv,
         )
-        return out + self.mlp(out)
+        if return_kv:
+            attn_out, kv = attn_result
+        else:
+            attn_out = attn_result
+
+        out = query + attn_out
+        out = out + self.mlp(out)
+        if return_kv:
+            return out, kv
+        return out
