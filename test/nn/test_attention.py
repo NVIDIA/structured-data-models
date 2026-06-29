@@ -231,7 +231,7 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
             dtype=dtype,
         )
 
-    out = module(query=query, key_value=None, rope=rope)
+    out = module(query=query, key_value=None, rope=rotary_embedding)
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
@@ -240,7 +240,7 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
-        rope=rope,
+        rope=rotary_embedding,
     )
     assert out.shape == query.shape
     assert out.dtype == query.dtype
