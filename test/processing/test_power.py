@@ -121,7 +121,9 @@ def test_power_inverse_overflow_with_positive_lambda_clamps_to_max(
     assert (processor.lambdas > 0).all()
     assert torch.isinf(processor.upper_bound).all()
 
-    extreme = torch.tensor([[float("inf")]], dtype=torch.float64, device=device)
+    extreme = torch.tensor(
+        [[float("inf")]], dtype=torch.float64, device=device
+    )
     inverse = processor.inverse_transform(extreme)
 
     assert torch.isfinite(inverse).all()

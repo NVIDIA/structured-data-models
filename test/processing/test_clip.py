@@ -60,8 +60,12 @@ def test_clip_constant_columns_are_exact(device: torch.device) -> None:
 
     processor = Clip(q_low=0.02, q_high=0.98).fit(input)
 
-    assert torch.equal(processor.lower_bound, torch.full((2,), 3.0, device=device))
-    assert torch.equal(processor.upper_bound, torch.full((2,), 3.0, device=device))
+    assert torch.equal(
+        processor.lower_bound, torch.full((2,), 3.0, device=device)
+    )
+    assert torch.equal(
+        processor.upper_bound, torch.full((2,), 3.0, device=device)
+    )
     transformed = processor.transform(input)
     assert torch.equal(transformed, input)
     assert transformed.device == device
