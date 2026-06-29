@@ -15,4 +15,5 @@ api/sdm
 api/tensor
 api/processing
 api/nn
+api/models
 ```
