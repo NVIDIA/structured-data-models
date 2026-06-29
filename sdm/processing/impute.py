@@ -19,11 +19,8 @@ class MeanImpute(Processor):
 
     def _fit(self, input: Tensor) -> None:
         mean = torch.nanmean(input, dim=0)
-        empty = mean.new_full(mean.shape, self.fill_value)
-        self.mean = torch.where(torch.isnan(mean), empty, mean)
+        self.mean = torch.where(mean.isnan(), self.fill_value, mean)
 
     def forward(self, input: Tensor) -> Tensor:
         """Replace NaNs with the fitted per-column means."""
-        return torch.where(
-            torch.isnan(input), self.mean.expand_as(input), input
-        )
+        return torch.where(input.isnan(), self.mean, input)

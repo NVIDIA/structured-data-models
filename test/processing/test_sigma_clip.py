@@ -61,6 +61,8 @@ def test_sigma_clip_single_finite_value_uses_minimum_std() -> None:
         transformed[~torch.isnan(input)],
         input[~torch.isnan(input)],
     )
+    future = torch.tensor([[10.0, 1.0]])
+    assert torch.equal(processor.transform(future), future)
 
 
 def test_sigma_clip_two_stage_outlier_behavior() -> None:

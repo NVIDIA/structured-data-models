@@ -42,25 +42,31 @@ class SigmaClip(Processor):
         min_std = input.new_tensor(1e-6)
 
         mean = torch.nanmean(input, dim=0)
-        std = torch.maximum(
-            _nanstd(input, dim=0),
-            min_std,
-        )
+        std = _nanstd(input, dim=0)
+        std = torch.where(std.isnan(), min_std, std)
+        std = torch.maximum(std, min_std)
 
-        lower_bound = mean - self.threshold * std
-        upper_bound = mean + self.threshold * std
+        inf = input.new_tensor(float("inf"))
+        lower_bound = torch.where(
+            mean.isnan(), -inf, mean - self.threshold * std
+        )
+        upper_bound = torch.where(
+            mean.isnan(), inf, mean + self.threshold * std
+        )
         outlier_mask = (input < lower_bound) | (input > upper_bound)
-        clean = torch.where(
-            outlier_mask, input.new_full(input.shape, torch.nan), input
-        )
+        clean = torch.where(outlier_mask, torch.nan, input)
 
-        self.mean = torch.nanmean(clean, dim=0)
-        self.std = torch.maximum(
-            _nanstd(clean, dim=0),
-            min_std,
+        mean_clean = torch.nanmean(clean, dim=0)
+        std_clean = _nanstd(clean, dim=0)
+        self.mean = torch.where(mean_clean.isnan(), mean, mean_clean)
+        self.std = torch.where(std_clean.isnan(), std, std_clean)
+        self.std = torch.maximum(self.std, min_std)
+        self.lower_bound = torch.where(
+            self.mean.isnan(), -inf, self.mean - self.threshold * self.std
         )
-        self.lower_bound = self.mean - self.threshold * self.std
-        self.upper_bound = self.mean + self.threshold * self.std
+        self.upper_bound = torch.where(
+            self.mean.isnan(), inf, self.mean + self.threshold * self.std
+        )
 
     def forward(self, input: Tensor) -> Tensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""
