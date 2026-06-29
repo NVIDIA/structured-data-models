@@ -99,6 +99,9 @@ title = "Structured Data Models Coverage Report"
 skip_covered = true
 skip_empty = true
 
+[tool.ty.src]
+include = ["sdm", "test"]
+
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
 src = ["pyproject.toml", "sdm", "test"]
 line-length = 79
