@@ -6,11 +6,11 @@ from sdm.processing.base import InvertibleMixin
 
 
 def test_public_recipe_imports() -> None:
-    from sdm.processing import Pipeline as PublicPipeline
-    from sdm.processing import Recipe as PublicRecipe
+    from sdm.processing.recipe import Pipeline as CanonicalPipeline
+    from sdm.processing.recipe import Recipe as CanonicalRecipe
 
-    assert PublicPipeline is Pipeline
-    assert PublicRecipe is Recipe
+    assert Pipeline is CanonicalPipeline
+    assert Recipe is CanonicalRecipe
 
 
 class Add(Processor):
@@ -36,6 +36,20 @@ class Scale(Processor, InvertibleMixin):
 
     def _inverse_transform(self, input: torch.Tensor) -> torch.Tensor:
         return input / self.factor
+
+
+class Shift(Processor, InvertibleMixin):
+    requires_fit = False
+
+    def __init__(self, offset: float) -> None:
+        super().__init__()
+        self.offset = offset
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return input + self.offset
+
+    def _inverse_transform(self, input: torch.Tensor) -> torch.Tensor:
+        return input - self.offset
 
 
 class Identity(Processor):
@@ -83,9 +97,11 @@ def test_empty_pipeline_returns_input_table() -> None:
 def test_pipeline_preserves_declared_stage_order() -> None:
     table = _table()
 
-    output = Pipeline([Add(1), Add(2)]).transform(table)
+    output = Pipeline([Add(1), Scale(2)]).transform(table)
+    reversed_output = Pipeline([Scale(2), Add(1)]).transform(table)
 
-    assert torch.equal(output.numerical, table.numerical + 3)
+    assert torch.equal(output.numerical, (table.numerical + 1) * 2)
+    assert not torch.equal(output.numerical, reversed_output.numerical)
 
 
 def test_pipeline_rejects_non_stage() -> None:
@@ -193,6 +209,6 @@ def test_fit_transform_accepts_and_returns_tabletensor() -> None:
 def test_inverse_transform_runs_stages_in_reverse_order() -> None:
     table = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
 
-    output = Pipeline([Scale(2), Scale(5)]).inverse_transform(table)
+    output = Pipeline([Shift(1), Scale(2)]).inverse_transform(table)
 
-    assert torch.equal(output.numerical, table.numerical / 10)
+    assert torch.equal(output.numerical, table.numerical / 2 - 1)

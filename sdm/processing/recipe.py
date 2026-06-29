@@ -23,69 +23,71 @@ class Pipeline:
     ) -> None:
         self.steps = tuple(_validate_step(step) for step in steps or ())
 
-    def fit(self, input: TableTensor) -> Self:
-        """Fit steps in order using the numerical block of ``input``."""
-        self._fit(input, phase="pipeline")
+    def fit(self, table: TableTensor) -> Self:
+        """Fit steps in order using the numerical block of ``table``."""
+        self._fit(table, phase="pipeline")
         return self
 
     def _fit(
         self,
-        input: TableTensor,
+        table: TableTensor,
         *,
         phase: str,
     ) -> Self:
-        numerical = input.numerical
+        numerical = table.numerical
+        last = len(self.steps) - 1
         for position, step in enumerate(self.steps):
             try:
                 step.fit(numerical)
-                numerical = _validate_output(step.transform(numerical))
+                if position != last:
+                    numerical = _validate_output(step.transform(numerical))
             except Exception as exc:
                 raise _step_error(exc, phase, position, step) from exc
         return self
 
-    def transform(self, input: TableTensor) -> TableTensor:
-        """Transform ``input`` by applying steps to its numerical block."""
-        return self._transform(input, phase="pipeline")
+    def transform(self, table: TableTensor) -> TableTensor:
+        """Transform ``table`` by applying steps to its numerical block."""
+        return self._transform(table, phase="pipeline")
 
-    def _transform(self, input: TableTensor, *, phase: str) -> TableTensor:
+    def _transform(self, table: TableTensor, *, phase: str) -> TableTensor:
         if len(self.steps) == 0:
-            return input
-        numerical = input.numerical
+            return table
+        numerical = table.numerical
         for position, step in enumerate(self.steps):
             try:
                 numerical = _validate_output(step.transform(numerical))
             except Exception as exc:
                 raise _step_error(exc, phase, position, step) from exc
-        return _with_step_numerical(input, numerical, phase, position, step)
+        return _with_step_numerical(table, numerical, phase, position, step)
 
-    def fit_transform(self, input: TableTensor) -> TableTensor:
-        """Fit and transform ``input`` by threading steps in order."""
-        return self._fit_transform(input, phase="pipeline")
+    def fit_transform(self, table: TableTensor) -> TableTensor:
+        """Fit and transform ``table`` by threading steps in order."""
+        return self._fit_transform(table, phase="pipeline")
 
-    def _fit_transform(self, input: TableTensor, *, phase: str) -> TableTensor:
+    def _fit_transform(self, table: TableTensor, *, phase: str) -> TableTensor:
         if len(self.steps) == 0:
-            return input
-        numerical = input.numerical
+            return table
+        numerical = table.numerical
         for position, step in enumerate(self.steps):
             try:
                 numerical = _validate_output(step.fit_transform(numerical))
             except Exception as exc:
                 raise _step_error(exc, phase, position, step) from exc
-        return _with_step_numerical(input, numerical, phase, position, step)
+        return _with_step_numerical(table, numerical, phase, position, step)
 
-    def inverse_transform(self, input: TableTensor) -> TableTensor:
-        """Apply invertible steps in reverse order to ``input``."""
-        return self._inverse_transform(input, phase="pipeline")
+    def inverse_transform(self, table: TableTensor) -> TableTensor:
+        """Apply invertible steps in reverse order to ``table``."""
+        return self._inverse_transform(table, phase="pipeline")
 
     def _inverse_transform(
         self,
-        input: TableTensor,
+        table: TableTensor,
         *,
         phase: str,
     ) -> TableTensor:
         if len(self.steps) == 0:
-            return input
-        numerical = input.numerical
+            return table
+        numerical = table.numerical
         for position, step in reversed(tuple(enumerate(self.steps))):
             if not isinstance(step, InvertibleMixin):
                 raise _step_error(
@@ -102,7 +104,7 @@ class Pipeline:
                 )
             except Exception as exc:
                 raise _step_error(exc, phase, position, step) from exc
-        return _with_step_numerical(input, numerical, phase, position, step)
+        return _with_step_numerical(table, numerical, phase, position, step)
 
     def describe(self) -> str:
         """Return a human-readable step-order summary."""
@@ -124,8 +126,7 @@ class Pipeline:
 class Recipe:
     """Processing contract around an external model boundary.
 
-    A recipe owns deterministic preprocessing composition only. It does not own
-    sampling, augmentation, model calls, or experiment control flow.
+    A recipe owns deterministic preprocessing composition.
 
     Args:
         preprocess: Steps applied before the model.
@@ -150,26 +151,26 @@ class Recipe:
             _coerce_pipeline(self.postprocess),
         )
 
-    def fit_preprocess(self, input: TableTensor) -> Self:
-        """Fit the preprocess phase on ``input`` and return this recipe."""
-        self.preprocess._fit(input, phase="preprocess")
+    def fit_preprocess(self, table: TableTensor) -> Self:
+        """Fit the preprocess phase on ``table`` and return this recipe."""
+        self.preprocess._fit(table, phase="preprocess")
         return self
 
-    def transform_preprocess(self, input: TableTensor) -> TableTensor:
+    def transform_preprocess(self, table: TableTensor) -> TableTensor:
         """Run feature preprocessing before an external model call."""
-        return self.preprocess._transform(input, phase="preprocess")
+        return self.preprocess._transform(table, phase="preprocess")
 
-    def fit_transform_preprocess(self, input: TableTensor) -> TableTensor:
+    def fit_transform_preprocess(self, table: TableTensor) -> TableTensor:
         """Fit and run feature preprocessing before an external model call."""
-        return self.preprocess._fit_transform(input, phase="preprocess")
+        return self.preprocess._fit_transform(table, phase="preprocess")
 
-    def inverse_transform_target(self, input: TableTensor) -> TableTensor:
+    def inverse_transform_target(self, table: TableTensor) -> TableTensor:
         """Run target inverse conversion after an external model call."""
-        return self.target._inverse_transform(input, phase="target")
+        return self.target._inverse_transform(table, phase="target")
 
-    def transform_postprocess(self, input: TableTensor) -> TableTensor:
+    def transform_postprocess(self, table: TableTensor) -> TableTensor:
         """Run shape-preserving postprocessing after an external model call."""
-        return self.postprocess._transform(input, phase="postprocess")
+        return self.postprocess._transform(table, phase="postprocess")
 
     def describe(self) -> str:
         """Return a human-readable summary without running inference."""
@@ -205,35 +206,35 @@ def _validate_step(step: object) -> Processor:
 def _validate_output(output: object) -> Tensor:
     if not isinstance(output, Tensor):
         raise TypeError(
-            "Expected numerical block transform to return a Tensor "
+            "Expected the step to return a Tensor for the numerical block "
             f"(got '{type(output).__name__}')"
         )
     return output
 
 
 def _with_step_numerical(
-    input: TableTensor,
+    table: TableTensor,
     numerical: Tensor,
     phase: str,
     position: int,
     step: Processor,
 ) -> TableTensor:
     try:
-        return _with_numerical(input, numerical)
+        return _with_numerical(table, numerical)
     except Exception as exc:
         raise _step_error(exc, phase, position, step) from exc
 
 
-def _with_numerical(input: TableTensor, numerical: Tensor) -> TableTensor:
-    if numerical is input.numerical:
-        return input
-    return input.__class__(
+def _with_numerical(table: TableTensor, numerical: Tensor) -> TableTensor:
+    if numerical is table.numerical:
+        return table
+    return table.__class__(
         columns={
-            Stype.numerical: input.columns[Stype.numerical],
-            Stype.categorical: input.columns[Stype.categorical],
+            Stype.numerical: table.columns[Stype.numerical],
+            Stype.categorical: table.columns[Stype.categorical],
         },
         numerical=numerical,
-        categorical=input.categorical,
+        categorical=table.categorical,
     )
 
 
