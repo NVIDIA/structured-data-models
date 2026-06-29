@@ -19,8 +19,8 @@ def _yeojohnson_transform_batch(input: Tensor, lambdas: Tensor) -> Tensor:
     """Apply Yeo-Johnson transform column-wise.
 
     Args:
-        input: ``(..., n_features)`` values.
-        lambdas: ``(n_features,)`` per-column ``lambda`` parameters.
+        input: ``[..., n_features]`` values.
+        lambdas: ``[n_features]`` per-column ``lambda`` parameters.
     """
     eps = torch.finfo(input.dtype).eps
     positive = input >= 0
@@ -54,8 +54,8 @@ def _yeojohnson_inverse_transform_batch(
     """Apply inverse Yeo-Johnson transform column-wise.
 
     Args:
-        input: ``(..., n_features)`` values.
-        lambdas: ``(n_features,)`` per-column ``lambda`` parameters.
+        input: ``[..., n_features]`` values.
+        lambdas: ``[n_features]`` per-column ``lambda`` parameters.
     """
     eps = torch.finfo(input.dtype).eps
     positive = input >= 0
@@ -231,7 +231,7 @@ class Power(Processor, InvertibleMixin):
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
-            transformed = self._yeojohnson_transform(input)
+            transformed = _yeojohnson_transform_batch(input, self.lambdas)
             self.mean, var = _nan_mean_var(transformed)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
@@ -240,27 +240,21 @@ class Power(Processor, InvertibleMixin):
             self.mean = input.new_zeros(n_features)
             self.scale = input.new_ones(n_features)
 
-    def _yeojohnson_transform(self, input: Tensor) -> Tensor:
-        return _yeojohnson_transform_batch(input, self.lambdas)
-
-    def _yeojohnson_inverse_transform(self, input: Tensor) -> Tensor:
-        return _yeojohnson_inverse_transform_batch(input, self.lambdas)
-
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""
-        transformed = self._yeojohnson_transform(input)
+        transformed = _yeojohnson_transform_batch(input, self.lambdas)
         return (transformed - self.mean) / self.scale
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
         unscaled = input * self.scale + self.mean
-        inverse = self._yeojohnson_inverse_transform(unscaled)
+        inverse = _yeojohnson_inverse_transform_batch(unscaled, self.lambdas)
 
         out_of_bounds = inverse.isinf()
         if out_of_bounds.any():
             eps = torch.finfo(input.dtype).eps
             unscaled = torch.minimum(unscaled, self.upper_bound - eps)
-            inverse[out_of_bounds] = self._yeojohnson_inverse_transform(
-                unscaled,
+            inverse[out_of_bounds] = _yeojohnson_inverse_transform_batch(
+                unscaled, self.lambdas
             )[out_of_bounds]
             invalid = inverse.isinf()
             inverse[invalid] = torch.fmin(inverse, self.max)[invalid]
