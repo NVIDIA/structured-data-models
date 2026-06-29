@@ -2,7 +2,6 @@ from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
 
-import numpy as np
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -126,12 +125,7 @@ class CategoricalTensor(Tensor):
             )
 
         encoded = array.dictionary_encode()
-        values = encoded.indices.to_numpy(zero_copy_only=False)
-        if np.issubdtype(values.dtype, np.floating):
-            values = np.nan_to_num(values, nan=-1, copy=False)
-
-        np_dtype = np.int32 if dtype == torch.int32 else np.int64
-        values = values.astype(np_dtype, copy=False)
+        values = encoded.indices.fill_null(-1).to_numpy()
         if not values.flags.writeable:
             values = values.copy()
         data = torch.as_tensor(
