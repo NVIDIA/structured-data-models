@@ -1,9 +1,9 @@
 # Recipe
 
 Recipes provide an inspectable processing contract around a model.
-A `Recipe` owns three ordered slots (`preprocess`, `target`, and
-`postprocess`). Configure each slot with a list of processing steps. Each
-slot accepts and returns a `TableTensor`.
+A `Recipe` owns three ordered phases (`preprocess`, `target`, and
+`postprocess`). Configure each phase with a list of processing steps. Each
+phase accepts and returns a `TableTensor`.
 
 ```python
 from sdm.processing import Clip, Recipe, StandardScale
@@ -21,7 +21,7 @@ recipe = Recipe(
 )
 ```
 
-Fit and apply the preprocessing slot before calling the model:
+Fit and apply the preprocessing phase before calling the model:
 
 ```python
 training_table = recipe.fit_transform_preprocess(train_data)
@@ -31,10 +31,10 @@ prediction = model(model_input)
 prediction = recipe.transform_postprocess(prediction)
 ```
 
-The `target` slot holds pre-fitted or stateless processors whose
+The `target` phase holds pre-fitted or stateless processors whose
 `inverse_transform` converts model outputs back to the original space.
 `Recipe` does not provide a `fit_target` method; fit target-side processors
 before passing them to the recipe.
 
-Each slot applies steps to the numerical block and rebuilds the
+Each phase applies steps to the numerical block and rebuilds the
 `TableTensor` with categorical blocks unchanged.

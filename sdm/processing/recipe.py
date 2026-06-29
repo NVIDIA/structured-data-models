@@ -10,7 +10,7 @@ from sdm.tensor import TableTensor
 
 
 class Pipeline:
-    """Ordered sequence of processing steps for one recipe slot.
+    """Ordered sequence of processing steps for one recipe phase.
 
     Args:
         steps: Ordered processing steps. ``None`` creates an empty identity
@@ -25,14 +25,14 @@ class Pipeline:
 
     def fit(self, input: TableTensor) -> Self:
         """Fit steps in order using the numerical block of ``input``."""
-        self._fit(input, slot="pipeline")
+        self._fit(input, phase="pipeline")
         return self
 
     def _fit(
         self,
         input: TableTensor,
         *,
-        slot: str,
+        phase: str,
     ) -> Self:
         numerical = input.numerical
         for position, step in enumerate(self.steps):
@@ -40,14 +40,14 @@ class Pipeline:
                 step.fit(numerical)
                 numerical = _validate_output(step.transform(numerical))
             except Exception as exc:
-                raise _step_error(exc, slot, position, step) from exc
+                raise _step_error(exc, phase, position, step) from exc
         return self
 
     def transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` by applying steps to its numerical block."""
-        return self._transform(input, slot="pipeline")
+        return self._transform(input, phase="pipeline")
 
-    def _transform(self, input: TableTensor, *, slot: str) -> TableTensor:
+    def _transform(self, input: TableTensor, *, phase: str) -> TableTensor:
         if len(self.steps) == 0:
             return input
         numerical = input.numerical
@@ -55,14 +55,14 @@ class Pipeline:
             try:
                 numerical = _validate_output(step.transform(numerical))
             except Exception as exc:
-                raise _step_error(exc, slot, position, step) from exc
-        return _with_step_numerical(input, numerical, slot, position, step)
+                raise _step_error(exc, phase, position, step) from exc
+        return _with_step_numerical(input, numerical, phase, position, step)
 
     def fit_transform(self, input: TableTensor) -> TableTensor:
         """Fit and transform ``input`` by threading steps in order."""
-        return self._fit_transform(input, slot="pipeline")
+        return self._fit_transform(input, phase="pipeline")
 
-    def _fit_transform(self, input: TableTensor, *, slot: str) -> TableTensor:
+    def _fit_transform(self, input: TableTensor, *, phase: str) -> TableTensor:
         if len(self.steps) == 0:
             return input
         numerical = input.numerical
@@ -70,18 +70,18 @@ class Pipeline:
             try:
                 numerical = _validate_output(step.fit_transform(numerical))
             except Exception as exc:
-                raise _step_error(exc, slot, position, step) from exc
-        return _with_step_numerical(input, numerical, slot, position, step)
+                raise _step_error(exc, phase, position, step) from exc
+        return _with_step_numerical(input, numerical, phase, position, step)
 
     def inverse_transform(self, input: TableTensor) -> TableTensor:
         """Apply invertible steps in reverse order to ``input``."""
-        return self._inverse_transform(input, slot="pipeline")
+        return self._inverse_transform(input, phase="pipeline")
 
     def _inverse_transform(
         self,
         input: TableTensor,
         *,
-        slot: str,
+        phase: str,
     ) -> TableTensor:
         if len(self.steps) == 0:
             return input
@@ -92,7 +92,7 @@ class Pipeline:
                     TypeError(
                         "Expected invertible step for inverse_transform"
                     ),
-                    slot,
+                    phase,
                     position,
                     step,
                 )
@@ -101,8 +101,8 @@ class Pipeline:
                     step.inverse_transform(numerical)
                 )
             except Exception as exc:
-                raise _step_error(exc, slot, position, step) from exc
-        return _with_step_numerical(input, numerical, slot, position, step)
+                raise _step_error(exc, phase, position, step) from exc
+        return _with_step_numerical(input, numerical, phase, position, step)
 
     def describe(self) -> str:
         """Return a human-readable step-order summary."""
@@ -151,25 +151,25 @@ class Recipe:
         )
 
     def fit_preprocess(self, input: TableTensor) -> Self:
-        """Fit the preprocess slot on ``input`` and return this recipe."""
-        self.preprocess._fit(input, slot="preprocess")
+        """Fit the preprocess phase on ``input`` and return this recipe."""
+        self.preprocess._fit(input, phase="preprocess")
         return self
 
     def transform_preprocess(self, input: TableTensor) -> TableTensor:
         """Run feature preprocessing before an external model call."""
-        return self.preprocess._transform(input, slot="preprocess")
+        return self.preprocess._transform(input, phase="preprocess")
 
     def fit_transform_preprocess(self, input: TableTensor) -> TableTensor:
         """Fit and run feature preprocessing before an external model call."""
-        return self.preprocess._fit_transform(input, slot="preprocess")
+        return self.preprocess._fit_transform(input, phase="preprocess")
 
     def inverse_transform_target(self, input: TableTensor) -> TableTensor:
         """Run target inverse conversion after an external model call."""
-        return self.target._inverse_transform(input, slot="target")
+        return self.target._inverse_transform(input, phase="target")
 
     def transform_postprocess(self, input: TableTensor) -> TableTensor:
         """Run shape-preserving postprocessing after an external model call."""
-        return self.postprocess._transform(input, slot="postprocess")
+        return self.postprocess._transform(input, phase="postprocess")
 
     def describe(self) -> str:
         """Return a human-readable summary without running inference."""
@@ -214,14 +214,14 @@ def _validate_output(output: object) -> Tensor:
 def _with_step_numerical(
     input: TableTensor,
     numerical: Tensor,
-    slot: str,
+    phase: str,
     position: int,
     step: Processor,
 ) -> TableTensor:
     try:
         return _with_numerical(input, numerical)
     except Exception as exc:
-        raise _step_error(exc, slot, position, step) from exc
+        raise _step_error(exc, phase, position, step) from exc
 
 
 def _with_numerical(input: TableTensor, numerical: Tensor) -> TableTensor:
@@ -239,12 +239,12 @@ def _with_numerical(input: TableTensor, numerical: Tensor) -> TableTensor:
 
 def _step_error(
     exc: Exception,
-    slot: str,
+    phase: str,
     position: int,
     step: Processor,
 ) -> Exception:
     message = (
-        f"{slot} step {position} "
+        f"{phase} step {position} "
         f"({step.__class__.__name__}): {exc}"
     )
     try:

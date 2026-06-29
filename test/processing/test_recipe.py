@@ -93,7 +93,7 @@ def test_pipeline_rejects_non_stage() -> None:
         Pipeline([object()])  # type: ignore[list-item]
 
 
-def test_recipe_normalizes_empty_slots_and_describes() -> None:
+def test_recipe_normalizes_empty_phases_and_describes() -> None:
     recipe = Recipe(preprocess=[Add(1)], target=None, postprocess=[])
 
     assert len(recipe.preprocess) == 1
@@ -154,14 +154,14 @@ def test_recipe_execution_order_around_stub_model() -> None:
     assert order == ["pre", "model", "target-inverse", "post"]
 
 
-def test_recipe_runtime_error_includes_slot_and_stage_position() -> None:
+def test_recipe_runtime_error_includes_phase_and_step_position() -> None:
     recipe = Recipe(preprocess=[Add(1), FailingProcessor(), Add(2)])
 
     with pytest.raises(RuntimeError, match=r"preprocess step 1"):
         recipe.transform_preprocess(_table())
 
 
-def test_recipe_bad_stage_output_includes_slot_and_stage_position() -> None:
+def test_recipe_bad_step_output_includes_phase_and_step_position() -> None:
     class BadOutput(Processor):
         requires_fit = False
 
