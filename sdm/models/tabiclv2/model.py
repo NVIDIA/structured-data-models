@@ -17,7 +17,7 @@ class TabICLv2(torch.nn.Module):
     <https://arxiv.org/abs/2602.11139>`_ paper.
 
     Args:
-        device: The device to use for module parameters.
+        device: The device.
     """
 
     def __init__(self, device: torch.device | str | None = None) -> None:
@@ -86,8 +86,8 @@ class _TabICLv2(torch.nn.Module):
         num_readout_tokens: The number of readout tokens produced per row.
         norm_bias: Whether :class:`~torch.nn.LayerNorm` layers use a learnable
             bias.
-        device: The device to use for module parameters.
-        dtype: The dtype to use for module parameters.
+        device: The device.
+        dtype: The dtype.
     """
 
     def __init__(
