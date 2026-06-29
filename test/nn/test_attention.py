@@ -294,7 +294,7 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         key_value=key_value,
         attn_mask=attn_mask,
         rope=rotary_embedding,
-        return_kv=True,
+        return_key_value=True,
     )
     cached_out = module(
         query=query,
@@ -303,7 +303,7 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         rope=rotary_embedding,
     )
 
-    self_out, self_kv = module(query=query, return_kv=True)
+    self_out, self_kv = module(query=query, return_key_value=True)
     self_cached_out = module(query=query, key_value=self_kv)
 
     assert kv.key.size() == (2, 5, num_heads, channels // num_heads)
@@ -459,7 +459,7 @@ def test_transformer_block_kv_cache() -> None:
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
-        return_kv=True,
+        return_key_value=True,
     )
     cached_out = module(
         query=query,

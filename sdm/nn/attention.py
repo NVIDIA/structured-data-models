@@ -278,7 +278,7 @@ class MultiHeadAttention(torch.nn.Module):
         attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
-        return_kv: Literal[False] = False,
+        return_key_value: Literal[False] = False,
     ) -> Tensor: ...
 
     @overload
@@ -290,7 +290,7 @@ class MultiHeadAttention(torch.nn.Module):
         attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
-        return_kv: Literal[True],
+        return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -302,7 +302,7 @@ class MultiHeadAttention(torch.nn.Module):
         attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
-        return_kv: bool,
+        return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -312,7 +312,7 @@ class MultiHeadAttention(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         rope: RotaryEmbedding | None = None,
-        return_kv: bool = False,
+        return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -331,11 +331,12 @@ class MultiHeadAttention(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             rope: Rotary Positional Embedding applied after query/key
                 projection.
-            return_kv: Whether to return the computed key and value projections
-                alongside the attention output.
+            return_key_value: Whether to return the computed key and value
+                projections alongside the attention output.
 
         Returns:
-            Tensor with shape ``[..., Q, C]`` when ``return_kv`` is ``False``.
+            Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
+            ``False``.
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
@@ -377,7 +378,7 @@ class MultiHeadAttention(torch.nn.Module):
 
         out = out.flatten(-2, -1)  # [..., Q, C]
         out = self.out_lin(out)  # [..., Q, C]
-        if return_kv:
+        if return_key_value:
             return out, KVCacheEntry(key=key, value=value)
         return out
 
@@ -438,7 +439,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
-        return_kv: Literal[False] = False,
+        return_key_value: Literal[False] = False,
     ) -> Tensor: ...
 
     @overload
@@ -450,7 +451,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
-        return_kv: Literal[True],
+        return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -462,7 +463,7 @@ class TransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         rope: RotaryEmbedding | None = None,
         *,
-        return_kv: bool,
+        return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -472,7 +473,7 @@ class TransformerBlock(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         rope: RotaryEmbedding | None = None,
-        return_kv: bool = False,
+        return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -491,11 +492,12 @@ class TransformerBlock(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             rope: Rotary Positional Embedding applied after query/key
                 projection.
-            return_kv: Whether to return the computed key and value projections
-                alongside the block output.
+            return_key_value: Whether to return the computed key and value
+                projections alongside the block output.
 
         Returns:
-            Tensor with shape ``[..., Q, C]`` when ``return_kv`` is ``False``.
+            Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
+            ``False``.
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
@@ -507,15 +509,15 @@ class TransformerBlock(torch.nn.Module):
             seqused_key_value=seqused_key_value,
             attn_mask=attn_mask,
             rope=rope,
-            return_kv=return_kv,
+            return_key_value=return_key_value,
         )
-        if return_kv:
+        if return_key_value:
             attn_out, kv = attn_result
         else:
             attn_out = attn_result
 
         out = query + attn_out
         out = out + self.mlp(out)
-        if return_kv:
+        if return_key_value:
             return out, kv
         return out
