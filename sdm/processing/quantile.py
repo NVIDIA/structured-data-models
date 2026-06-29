@@ -1,4 +1,3 @@
-import warnings
 from typing import Literal
 
 import torch
@@ -79,15 +78,7 @@ class Quantile(Processor, InvertibleMixin):
         n_samples = input.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
-            sample_limit = min(quantile_limit, self.subsample)
-            quantile_limit = min(sample_limit, int(self.subsample * 0.2))
-            if quantile_limit < min(self._n_quantiles, sample_limit):
-                warnings.warn(
-                    "Quantile follows the legacy kumo-ml cap of "
-                    "`int(subsample * 0.2)` fitted quantiles.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+            quantile_limit = min(quantile_limit, self.subsample)
         self.n_quantiles = max(1, min(self._n_quantiles, quantile_limit))
 
         self.references = torch.linspace(
