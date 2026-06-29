@@ -124,6 +124,8 @@ class TabICLv2(torch.nn.Module):
                 The first ``R_train`` rows along ``R`` refer to the in-context
                 examples.
             y: The targets of in-context examples with shape ``[B, R_train]``.
+                Integer ``y`` refer to classification tasks.
+                Floating-point ``y`` refer to regression tasks.
 
         Returns:
             Tensor with shape ``[B, R_test, num_classes]`` for integer ``y``
@@ -135,6 +137,11 @@ class TabICLv2(torch.nn.Module):
         if y.is_floating_point():
             return self.reg_model(x, y)
         return self.cls_model(x, y)
+
+    def __repr__(self) -> str:
+        device = next(self.parameters()).device
+        device_repr = f"device={device}" if device.type != "cpu" else ""
+        return f"{self.__class__.__name__}({device_repr})"
 
 
 class _TabICLv2(torch.nn.Module):

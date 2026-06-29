@@ -2,13 +2,13 @@ import math
 
 import pytest
 import torch
-from sdm.nn import RotaryEmbedding
+from sdm.nn import RoPE
 from sdm.testing import withCUDA
 
 
 @withCUDA
 def test_rope(device: torch.device) -> None:
-    module = RotaryEmbedding(channels=2, device=device)
+    module = RoPE(channels=2, device=device)
     with torch.no_grad():
         module.inv_freq.fill_(math.pi / 2)
 
@@ -32,4 +32,4 @@ def test_rope(device: torch.device) -> None:
         module(torch.randn(2, 4, 3, 4, device=device))
 
     with pytest.raises(ValueError, match="`channels` must be even"):
-        RotaryEmbedding(channels=3, device=device)
+        RoPE(channels=3, device=device)

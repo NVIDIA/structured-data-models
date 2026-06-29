@@ -1,6 +1,6 @@
 """Neural network modules for structured data models."""
 
-from sdm.nn.rope import RotaryEmbedding
+from sdm.nn.rope import RoPE
 from sdm.nn.attention import (
     QASSMax,
     SDPA,
@@ -13,7 +13,7 @@ from sdm.nn.set_transformer import InducedTransformerBlock
 __all__ = [
     "QASSMax",
     "SDPA",
-    "RotaryEmbedding",
+    "RoPE",
     "MultiHeadAttention",
     "TransformerBlock",
     "InducedTransformerBlock",

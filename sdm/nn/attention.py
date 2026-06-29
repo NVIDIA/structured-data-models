@@ -8,19 +8,19 @@ from torch import Tensor
 from torch.nn import GELU, LayerNorm, Linear, Sequential
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import RotaryEmbedding
+from sdm.nn import RoPE
 
 
 class QASSMax(torch.nn.Module):
-    r"""Learnable query scaler for Query-Aware Scalable SoftMax (QASSMax).
+    r"""Query-Aware Scalable SoftMax (QASSMax).
 
     This scaling method was introduced in the `"TabICLv2: A better, faster,
     scalable, and open tabular foundation model"
     <https://arxiv.org/abs/2602.11139>`_ paper as a temperature-scaling method
     for attention.
 
-    For a query tensor ``q`` and key length ``n``, this module returns a scaled
-    query
+    For a query tensor :math:`q` and key length :math:`n`, this module returns
+    a scaled query
 
     .. math::
 
@@ -28,7 +28,7 @@ class QASSMax(torch.nn.Module):
           \mathrm{MLP}_{\mathrm{base}}(\log n)_{hi} \cdot
           \left(1 + \tanh(\mathrm{MLP}_{\mathrm{gate}}(q_h)_i)\right),
 
-    where ``h`` indexes attention heads, ``i`` indexes head channels,
+    where :math:`h` indexes attention heads, :math:`i` indexes head channels,
     :math:`\mathrm{MLP}_{\mathrm{base}}` maps the log key length to per-head,
     per-channel scale factors, and :math:`\mathrm{MLP}_{\mathrm{gate}}` maps
     each per-head query vector to a bounded query-dependent gate.
@@ -153,9 +153,9 @@ class SDPA(torch.nn.Module):
             query: The query tensor with shape ``[..., Q, H, C]``.
                 ``Q`` is the query sequence length, ``H`` is the number of
                 attention heads, and ``C`` is the channels per head.
-            key: Key tensor with shape ``[..., KV, H, C]``.
+            key: The key tensor with shape ``[..., KV, H, C]``.
                 ``KV`` is the key/value sequence length.
-            value: Value tensor with shape ``[..., KV, H, C]``.
+            value: The value tensor with shape ``[..., KV, H, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 dtype ``torch.int32``.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
@@ -276,7 +276,7 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         *,
         return_kv: Literal[False] = False,
     ) -> Tensor: ...
@@ -288,7 +288,7 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         *,
         return_kv: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -300,7 +300,7 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         *,
         return_kv: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -311,16 +311,16 @@ class MultiHeadAttention(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         return_kv: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
         Args:
-            query: Query tensor with shape ``[..., Q, C]``.
+            query: The query tensor with shape ``[..., Q, C]``.
                 ``Q`` is the query sequence length, ``C`` is the number of
                 channels.
-            key_value: key/value tensor with shape ``[..., KV, C]`` or
+            key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
                 :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
@@ -329,7 +329,7 @@ class MultiHeadAttention(torch.nn.Module):
                 dtype ``torch.int32``.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            rope: Rotary positional embedding applied after query/key
+            rope: Rotary Positional Embedding applied after query/key
                 projection.
             return_kv: Whether to return the computed key and value projections
                 alongside the attention output.
@@ -385,7 +385,7 @@ class MultiHeadAttention(torch.nn.Module):
 class TransformerBlock(torch.nn.Module):
     r"""Transformer block with pre-norm attention and feedforward modules.
 
-    Supports optional :class:`RotaryEmbedding` on projected query/key tensors
+    Supports optional :class:`RoPE` on projected query/key tensors
     and optional :class:`QASSMax` query scaling inside attention.
 
     Args:
@@ -436,7 +436,7 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         *,
         return_kv: Literal[False] = False,
     ) -> Tensor: ...
@@ -448,7 +448,7 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         *,
         return_kv: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -460,7 +460,7 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         attn_mask: Tensor | None = None,
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         *,
         return_kv: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -471,16 +471,16 @@ class TransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-        rope: RotaryEmbedding | None = None,
+        rope: RoPE | None = None,
         return_kv: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
         Args:
-            query: Query tensor with shape ``[..., Q, C]``.
+            query: The query tensor with shape ``[..., Q, C]``.
                 ``Q`` is the query sequence length, ``C`` is the number of
                 channels.
-            key_value: key/value tensor with shape ``[..., KV, C]`` or
+            key_value: The key/value tensor with shape ``[..., KV, C]`` or
                 precomputed key/value projections as a
                 :class:`~sdm.cache.KVCacheEntry`.
                 ``KV`` is the key/value sequence length.
@@ -489,7 +489,7 @@ class TransformerBlock(torch.nn.Module):
                 dtype ``torch.int32``.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            rope: Rotary positional embedding applied after query/key
+            rope: Rotary Positional Embedding applied after query/key
                 projection.
             return_kv: Whether to return the computed key and value projections
                 alongside the block output.

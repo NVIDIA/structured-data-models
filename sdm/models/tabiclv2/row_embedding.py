@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
-from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
+from sdm.nn import InducedTransformerBlock, RoPE, TransformerBlock
 
 
 class RowEmbedding(torch.nn.Module):
@@ -65,7 +65,7 @@ class RowEmbedding(torch.nn.Module):
             for _ in range(num_layers)
         )
 
-        self.rope = RotaryEmbedding(
+        self.rope = RoPE(
             channels=channels // num_heads,
             theta=100_000,
             **factory_kwargs,
