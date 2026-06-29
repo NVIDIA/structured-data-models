@@ -7,7 +7,7 @@ from sdm.testing import withCUDA
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 def test_tabiclv2(device: torch.device, dtype: torch.dtype) -> None:
-    model = TabICLv2(device=device)
+    model = TabICLv2(pretrained=False, device=device)
 
     batch_size, num_rows, num_cols = 2, 8, 6
     num_train = 5

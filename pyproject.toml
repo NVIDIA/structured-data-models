@@ -37,6 +37,7 @@ dependencies = [
     "torch",
     "numpy",
     "pyarrow",
+    "huggingface_hub",
     "typing_extensions",
 ]
 
