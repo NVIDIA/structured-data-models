@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import Tensor
 
@@ -17,8 +19,8 @@ class SoftmaxTemperature(Processor):
 
     def __init__(self, *, temperature: float = 1.0, dim: int = -1) -> None:
         super().__init__()
-        if temperature <= 0:
-            raise ValueError("temperature must be positive.")
+        if not math.isfinite(temperature) or temperature <= 0:
+            raise ValueError("temperature must be finite and positive.")
         self.temperature = temperature
         self.dim = dim
 
