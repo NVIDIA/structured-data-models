@@ -81,42 +81,8 @@ design, `Recipe` has **no `fit_target` method**: fit target-side processors
 yourself before passing them in, and every target step must mix in
 `InvertibleMixin` or `inverse_transform_target` raises a `TypeError`.
 
-## Inspecting a recipe
-
-Because a recipe is a declared object, you can audit it without running
-inference. `describe()` (and `repr`) print the step order per phase:
-
-```python
->>> print(recipe.describe())
-Recipe(
-  preprocess: Clip -> StandardScale
-  target: identity
-  postprocess: SoftmaxTemperature
-)
-```
-
-A `Pipeline` is also `len()`-able and iterable over its steps.
-
-## Behaviors worth knowing
-
-- **Identity fast path.** An empty phase, or one whose steps leave the
-  numerical block unchanged, returns the input `TableTensor` object as-is — no
-  copy, no rebuild.
-- **Numerical-only contract.** Steps see and return only the numerical block;
-  the `TableTensor` is rebuilt with its categorical blocks untouched. A step
-  that returns a non-`Tensor` raises a `TypeError`.
-- **Error context.** Failures are re-raised with the offending phase and step
-  position, e.g. `preprocess step 1 (StandardScale): <original message>`,
-  which makes multi-step phases easy to debug.
-
 ## Available processors
 
-| Processor | Phase(s) | Invertible | Notes |
-| --- | --- | --- | --- |
-| `StandardScale` | preprocess / target | yes | Per-column center and scale. |
-| `Clip` | preprocess | yes (no-op inverse) | Clamp to fitted quantile bounds. |
-| `Power` | preprocess / target | yes | Yeo-Johnson power transform. |
-| `Quantile` | preprocess / target | yes | Map columns to a uniform/normal distribution. |
-| `SoftmaxTemperature` | postprocess | no | Temperature-scaled softmax over logits. |
-
-See {doc}`api/processing` for full signatures and parameters.
+`StandardScale`, `Clip`, `Power`, `Quantile`, and `SoftmaxTemperature` ship in
+`sdm.processing`. See {doc}`api/processing` for the full list, signatures, and
+which steps are invertible.
