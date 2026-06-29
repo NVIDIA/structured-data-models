@@ -52,7 +52,7 @@ class QASSMax(torch.nn.Module):
         channels: int,
         num_heads: int,
         hidden_channels: int = 64,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
@@ -125,7 +125,7 @@ class SDPA(torch.nn.Module):
         channels: int,
         num_heads: int,
         qassmax: bool = False,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
@@ -244,7 +244,7 @@ class MultiHeadAttention(torch.nn.Module):
         channels: int,
         num_heads: int,
         qassmax: bool = False,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
@@ -405,7 +405,7 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         qassmax: bool = False,
         norm_bias: bool = True,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()

@@ -1,3 +1,4 @@
+# ruff: noqa: D205
 """TabICLv2 tabular foundation model."""
 
 from typing import Any
@@ -11,7 +12,58 @@ from sdm.models.tabiclv2.row_embedding import RowEmbedding
 
 
 class TabICLv2(torch.nn.Module):
-    r"""The TabICLv2 tabular foundation model from the TabICLv2 paper.
+    r"""The tabular foundation model from the `"TabICLv2: A better, faster,
+    scalable, and open tabular foundation model"
+    <https://arxiv.org/abs/2602.11139>`_ paper.
+
+    Args:
+        device: The device.
+    """
+
+    def __init__(self, device: torch.device | str | None = None) -> None:
+        super().__init__()
+
+        self.cls_model = _TabICLv2(
+            num_classes=10,
+            num_quantiles=0,
+            norm_bias=True,
+            device=device,
+        )
+        self.reg_model = _TabICLv2(
+            num_classes=0,
+            num_quantiles=999,
+            norm_bias=False,
+            device=device,
+        )
+
+    def forward(  # TODO Add multi-class support.
+        self,
+        x: Tensor,  # [B, R, C]
+        y: Tensor,  # [B, R_train]
+    ) -> Tensor:  # [B, R_test, num_classes or 999]
+        r"""The forward pass.
+
+        Args:
+            x: The feature tensor with shape ``[B, R, C]`` for ``B`` tables,
+                ``R`` rows, and ``C`` columns.
+                The first ``R_train`` rows along ``R`` refer to the in-context
+                examples.
+            y: The targets with shape ``[B, R_train]``.
+
+        Returns:
+            Tensor with shape ``[B, R_test, num_classes]`` for integer ``y``
+            and ``[B, R_test, 999]`` for floating-point ``y``.
+            Integer ``y`` return class logits.
+            Floating-point ``y`` return 999 quantiles at probability levels
+            :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
+        """
+        if y.is_floating_point():
+            return self.reg_model(x, y)
+        return self.cls_model(x, y)
+
+
+class _TabICLv2(torch.nn.Module):
+    r"""The tabular foundation model from the TabICLv2 paper.
 
     Introduced in `"TabICLv2: A better, faster, scalable, and open tabular
     foundation model" <https://arxiv.org/abs/2602.11139>`_, the model first
@@ -34,8 +86,8 @@ class TabICLv2(torch.nn.Module):
         num_readout_tokens: The number of readout tokens produced per row.
         norm_bias: Whether :class:`~torch.nn.LayerNorm` layers use a learnable
             bias.
-        device: The device to use for module parameters.
-        dtype: The dtype to use for module parameters.
+        device: The device.
+        dtype: The dtype.
     """
 
     def __init__(
@@ -51,7 +103,7 @@ class TabICLv2(torch.nn.Module):
         num_icl_layers: int = 12,
         num_icl_heads: int = 8,
         norm_bias: bool = True,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()

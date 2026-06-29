@@ -58,7 +58,7 @@ class RowEmbedding(torch.nn.Module):
         num_inducing_points: int,
         num_readout_tokens: int,
         norm_bias: bool,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()

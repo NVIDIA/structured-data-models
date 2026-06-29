@@ -43,7 +43,7 @@ class ICLBlock(torch.nn.Module):
         num_layers: int,
         num_heads: int,
         norm_bias: bool,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
