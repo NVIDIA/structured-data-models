@@ -128,7 +128,7 @@ class InducedTransformerBlock(torch.nn.Module):
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 dtype ``torch.int32``.
             return_kv: Whether to return the computed key and value projections
-                for the final attention site alongside the block output.
+                for the final attention site alongside the output.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_kv`` is ``False``.
