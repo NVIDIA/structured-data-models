@@ -5,7 +5,7 @@ from torch import Tensor
 
 
 class RotaryEmbedding(torch.nn.Module):
-    """Rotary Positional Embeddings (RoPE).
+    """Rotary Positional Embedding (RoPE).
 
     Uses a split-half channel layout, pairing the first half channels with the
     last half, rather than interleaved even/odd pairs.
