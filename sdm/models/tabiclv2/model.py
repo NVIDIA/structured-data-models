@@ -1,15 +1,13 @@
 """TabICLv2 tabular foundation model."""
 
-from __future__ import annotations
-
 from typing import Any
 
 import torch
 from torch import Tensor
+from torch.nn import GELU, Linear, Sequential
 
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.task import TaskType
 
 
 class TabICLv2(torch.nn.Module):
@@ -27,7 +25,6 @@ class TabICLv2(torch.nn.Module):
     its channel count is derived as ``num_readout_tokens * channels``.
 
     Args:
-        task_type: A :class:`~sdm.TaskType` selecting the prediction head.
         channels: The per-token channel count of the row encoder.
         num_embedding_layers: The number of row-encoder attention layers.
         num_icl_layers: The number of in-context cross-attention layers.
@@ -43,14 +40,16 @@ class TabICLv2(torch.nn.Module):
 
     def __init__(
         self,
-        task_type: TaskType,
+        num_classes: int,
+        num_quantiles: int,
         channels: int = 128,
         num_embedding_layers: int = 3,
-        num_icl_layers: int = 12,
-        num_heads: int = 8,
-        group_size: int = 3,
+        num_embedding_heads: int = 8,
         num_inducing_points: int = 128,
+        group_size: int = 3,
         num_readout_tokens: int = 4,
+        num_icl_layers: int = 12,
+        num_icl_heads: int = 8,
         norm_bias: bool = True,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
@@ -58,46 +57,56 @@ class TabICLv2(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.task_type = task_type
-
         self.row_embedding = RowEmbedding(
-            task_type=task_type,
+            num_classes=num_classes,
             channels=channels,
             num_layers=num_embedding_layers,
-            num_heads=num_heads,
+            num_heads=num_embedding_heads,
             group_size=group_size,
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
             norm_bias=norm_bias,
             **factory_kwargs,
         )
-        self.icl = ICLBlock(
-            task_type=task_type,
+        self.icl_block = ICLBlock(
+            num_classes=num_classes,
             channels=num_readout_tokens * channels,
             num_layers=num_icl_layers,
-            num_heads=num_heads,
+            num_heads=num_icl_heads,
             norm_bias=norm_bias,
             **factory_kwargs,
+        )
+        self.head = Sequential(
+            Linear(
+                in_features=num_readout_tokens * channels,
+                out_features=2 * num_readout_tokens * channels,
+                **factory_kwargs,
+            ),
+            GELU(),
+            Linear(
+                in_features=2 * num_readout_tokens * channels,
+                out_features=num_classes or num_quantiles,
+                **factory_kwargs,
+            ),
         )
 
     def forward(
         self,
         x: Tensor,  # [B, R, C]
         y: Tensor,  # [B, R_train]
-    ) -> Tensor:  # [B, R_test, *]
-        r"""Forward pass of :class:`TabICLv2`.
+    ) -> Tensor:  # [B, R_test, num_classes or num_quantiles]
+        r"""The forward pass.
 
         Args:
-            x: Feature tensor with shape ``[B, R, C]`` for ``B`` tables, ``R``
-                rows, and ``C`` columns. The first ``R_train`` rows are the
-                in-context training rows and the rest are the test rows.
-            y: Training targets with shape ``[B, R_train]``. Long class indices
-                for classification, or float values for regression.
+            x: The feature tensor with shape ``[B, R, C]`` for ``B`` tables,
+                ``R`` rows, and ``C`` columns.
+                The first ``R_train`` rows along ``R`` refer to the in-context
+                examples.
+            y: The targets with shape ``[B, R_train]``.
 
         Returns:
-            For classification, class logits with shape ``[B, R_test, 10]``.
-            For regression, quantile predictions with shape
-            ``[B, R_test, 999]``.
+            Tensor with shape ``[B, R_test, num_classes or num_quantiles]``.
         """
         x = self.row_embedding(x, y)
-        return self.icl(x, y)
+        x = self.icl_block(x, y)
+        return self.head(x)
