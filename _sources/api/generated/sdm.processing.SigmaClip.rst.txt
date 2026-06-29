@@ -1,0 +1,8 @@
+﻿SigmaClip
+=========
+
+.. currentmodule:: sdm.processing
+
+.. autoclass:: SigmaClip
+   :members:
+   :show-inheritance:
