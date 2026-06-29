@@ -8,6 +8,10 @@ from sdm.testing import withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 def test_tabiclv2(device: torch.device, dtype: torch.dtype) -> None:
     model = TabICLv2(pretrained=False, device=device)
+    if device.type == "cpu":
+        assert repr(model) == "TabICLv2()"
+    else:
+        assert repr(model) == "TabICLv2(device=cuda:0)"
 
     batch_size, num_rows, num_cols = 2, 8, 6
     num_train = 5

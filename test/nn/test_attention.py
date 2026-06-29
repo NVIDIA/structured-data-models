@@ -223,15 +223,13 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
     key_value = torch.randn(2, 5, channels, dtype=dtype, device=device)
     attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool, device=device)
 
-    rotary_embedding = (
-        RotaryEmbedding(
+    rotary_embedding: RotaryEmbedding | None = None
+    if rope:
+        rotary_embedding = RotaryEmbedding(
             channels=channels // num_heads,
             device=device,
             dtype=dtype,
         )
-        if rope
-        else None
-    )
 
     out = module(query=query, key_value=None, rope=rotary_embedding)
     assert out.shape == query.shape
@@ -280,9 +278,10 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         ],
         dtype=torch.bool,
     ).expand(2, -1, -1)
-    rotary_embedding = (
-        RotaryEmbedding(channels=channels // num_heads) if rope else None
-    )
+
+    rotary_embedding: RotaryEmbedding | None = None
+    if rope:
+        rotary_embedding = RotaryEmbedding(channels=channels // num_heads)
 
     direct_out = module(
         query=query,
@@ -378,6 +377,7 @@ def test_transformer_block(
     )
     attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
     attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
+
     rotary_embedding: RotaryEmbedding | None = None
     if rope:
         rotary_embedding = RotaryEmbedding(
