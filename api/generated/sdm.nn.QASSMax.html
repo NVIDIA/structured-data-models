@@ -157,19 +157,19 @@ data-aria-dark="Switch to auto color mode">
 <dt class="sig sig-object py" id="sdm.nn.QASSMax">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.nn.</span></span><span class="sig-name descname"><span class="pre">QASSMax</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_heads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">hidden_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.12)"><span class="pre">dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.nn.QASSMax" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a></p>
-<p>Learnable query scaler for Query-Aware Scalable SoftMax (QASSMax).</p>
+<p>Query-Aware Scalable SoftMax (QASSMax).</p>
 <p>This scaling method was introduced in the <a class="reference external" href="https://arxiv.org/abs/2602.11139">“TabICLv2: A better, faster,
 scalable, and open tabular foundation model”</a> paper as a temperature-scaling method
 for attention.</p>
-<p>For a query tensor <code class="docutils literal notranslate"><span class="pre">q</span></code> and key length <code class="docutils literal notranslate"><span class="pre">n</span></code>, this module returns a scaled
-query</p>
+<p>For a query tensor <span class="math notranslate nohighlight">\(q\)</span> and key length <span class="math notranslate nohighlight">\(n\)</span>, this module returns
+a scaled query</p>
 <div class="math-wrapper docutils container">
 <div class="math notranslate nohighlight">
 \[\tilde{q}_{hi} = q_{hi} \cdot
   \mathrm{MLP}_{\mathrm{base}}(\log n)_{hi} \cdot
   \left(1 + \tanh(\mathrm{MLP}_{\mathrm{gate}}(q_h)_i)\right),\]</div>
 </div>
-<p>where <code class="docutils literal notranslate"><span class="pre">h</span></code> indexes attention heads, <code class="docutils literal notranslate"><span class="pre">i</span></code> indexes head channels,
+<p>where <span class="math notranslate nohighlight">\(h\)</span> indexes attention heads, <span class="math notranslate nohighlight">\(i\)</span> indexes head channels,
 <span class="math notranslate nohighlight">\(\mathrm{MLP}_{\mathrm{base}}\)</span> maps the log key length to per-head,
 per-channel scale factors, and <span class="math notranslate nohighlight">\(\mathrm{MLP}_{\mathrm{gate}}\)</span> maps
 each per-head query vector to a bounded query-dependent gate.</p>
@@ -244,7 +244,7 @@ per query position.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=8830d81d"></script>
+      <script src="../../_static/documentation_options.js?v=85f351f4"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

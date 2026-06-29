@@ -182,9 +182,9 @@ temperature-scaling, and padding support for key/value pairs.</p>
 <li><p><strong>query</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – The query tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">Q,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.
 <code class="docutils literal notranslate"><span class="pre">Q</span></code> is the query sequence length, <code class="docutils literal notranslate"><span class="pre">H</span></code> is the number of
 attention heads, and <code class="docutils literal notranslate"><span class="pre">C</span></code> is the channels per head.</p></li>
-<li><p><strong>key</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Key tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.
+<li><p><strong>key</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – The key tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.
 <code class="docutils literal notranslate"><span class="pre">KV</span></code> is the key/value sequence length.</p></li>
-<li><p><strong>value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Value tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – The value tensor with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">KV,</span> <span class="pre">H,</span> <span class="pre">C]</span></code>.</p></li>
 <li><p><strong>seqused_key_value</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a><em> | </em><em>None</em>) – Valid key/value lengths with shape <code class="docutils literal notranslate"><span class="pre">[...]</span></code> and
 dtype <code class="docutils literal notranslate"><span class="pre">torch.int32</span></code>.</p></li>
 <li><p><strong>attn_mask</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a><em> | </em><em>None</em>) – Boolean attention mask with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">Q,</span> <span class="pre">KV]</span></code>.
@@ -228,7 +228,7 @@ Entries set to <code class="docutils literal notranslate"><span class="pre">True
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=8830d81d"></script>
+      <script src="../../_static/documentation_options.js?v=85f351f4"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

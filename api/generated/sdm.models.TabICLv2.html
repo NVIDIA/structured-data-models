@@ -213,7 +213,9 @@ quantile predictions for regression.</p></li>
 <code class="docutils literal notranslate"><span class="pre">R</span></code> rows, and <code class="docutils literal notranslate"><span class="pre">C</span></code> columns.
 The first <code class="docutils literal notranslate"><span class="pre">R_train</span></code> rows along <code class="docutils literal notranslate"><span class="pre">R</span></code> refer to the in-context
 examples.</p></li>
-<li><p><strong>y</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – The targets of in-context examples with shape <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">R_train]</span></code>.</p></li>
+<li><p><strong>y</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – The targets of in-context examples with shape <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">R_train]</span></code>.
+Integer <code class="docutils literal notranslate"><span class="pre">y</span></code> refer to classification tasks.
+Floating-point <code class="docutils literal notranslate"><span class="pre">y</span></code> refer to regression tasks.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -249,7 +251,7 @@ Floating-point <code class="docutils literal notranslate"><span class="pre">y</s
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=8830d81d"></script>
+      <script src="../../_static/documentation_options.js?v=85f351f4"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
