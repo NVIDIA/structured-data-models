@@ -124,56 +124,91 @@ class Pipeline:
 class Recipe:
     """Processing contract around an external model boundary.
 
-    A recipe owns deterministic preprocessing composition.
+    A recipe owns deterministic, two-sided transforms keyed by the data each
+    phase operates on:
+
+    - ``features``: model inputs, transformed before the model.
+    - ``target``: labels, transformed forward before the model and inverted
+      after it (predictions back to the original space).
+    - ``output``: shape-preserving cleanup of the model output.
 
     Args:
-        preprocess: Steps applied before the model.
-        target: Target-side steps; inverse conversion runs after the model.
-        postprocess: Steps applied to model output after target inverse.
+        features: Steps applied to model inputs before the model.
+        target: Steps applied to labels; transformed forward before the model
+            and inverted after it.
+        output: Steps applied to model output after the target inverse.
     """
 
-    preprocess: Pipeline = field(default_factory=Pipeline)
+    features: Pipeline = field(default_factory=Pipeline)
     target: Pipeline = field(default_factory=Pipeline)
-    postprocess: Pipeline = field(default_factory=Pipeline)
+    output: Pipeline = field(default_factory=Pipeline)
 
     def __init__(
         self,
-        preprocess: Iterable[Processor] | None = None,
+        features: Iterable[Processor] | None = None,
         target: Iterable[Processor] | None = None,
-        postprocess: Iterable[Processor] | None = None,
+        output: Iterable[Processor] | None = None,
     ) -> None:
-        object.__setattr__(self, "preprocess", _coerce_pipeline(preprocess))
+        object.__setattr__(self, "features", _coerce_pipeline(features))
         object.__setattr__(self, "target", _coerce_pipeline(target))
-        object.__setattr__(self, "postprocess", _coerce_pipeline(postprocess))
+        object.__setattr__(self, "output", _coerce_pipeline(output))
 
-    def fit_preprocess(self, table: TableTensor) -> Self:
-        """Fit the preprocess phase on ``table`` and return this recipe."""
-        self.preprocess._fit(table, phase="preprocess")
+    def fit_features(self, table: TableTensor) -> Self:
+        """Fit the feature phase on ``table`` and return this recipe."""
+        self.features._fit(table, phase="features")
         return self
 
-    def transform_preprocess(self, table: TableTensor) -> TableTensor:
-        """Run feature preprocessing before an external model call."""
-        return self.preprocess._transform(table, phase="preprocess")
+    def transform_features(self, table: TableTensor) -> TableTensor:
+        """Transform model inputs before an external model call."""
+        return self.features._transform(table, phase="features")
 
-    def fit_transform_preprocess(self, table: TableTensor) -> TableTensor:
-        """Fit and run feature preprocessing before an external model call."""
-        return self.preprocess._fit_transform(table, phase="preprocess")
+    def fit_transform_features(self, table: TableTensor) -> TableTensor:
+        """Fit and transform model inputs before an external model call."""
+        return self.features._fit_transform(table, phase="features")
+
+    def fit_target(self, table: TableTensor) -> Self:
+        """Fit the target phase on ``table`` and return this recipe."""
+        self.target._fit(table, phase="target")
+        return self
+
+    def transform_target(self, table: TableTensor) -> TableTensor:
+        """Transform labels into model space before an external model call."""
+        return self.target._transform(table, phase="target")
+
+    def fit_transform_target(self, table: TableTensor) -> TableTensor:
+        """Fit and transform labels into model space before the model."""
+        return self.target._fit_transform(table, phase="target")
 
     def inverse_transform_target(self, table: TableTensor) -> TableTensor:
         """Run target inverse conversion after an external model call."""
         return self.target._inverse_transform(table, phase="target")
 
-    def transform_postprocess(self, table: TableTensor) -> TableTensor:
-        """Run shape-preserving postprocessing after an external model call."""
-        return self.postprocess._transform(table, phase="postprocess")
+    def transform_output(self, table: TableTensor) -> TableTensor:
+        """Run shape-preserving cleanup after an external model call."""
+        return self.output._transform(table, phase="output")
+
+    def fit_transform(
+        self,
+        features: TableTensor,
+        target: TableTensor,
+    ) -> tuple[TableTensor, TableTensor]:
+        """Fit and transform training ``features`` and ``target`` at once.
+
+        Convenience for the common training step. Returns the transformed
+        ``(features, target)`` tables, ready to feed the model and its loss.
+        """
+        return (
+            self.fit_transform_features(features),
+            self.fit_transform_target(target),
+        )
 
     def describe(self) -> str:
         """Return a human-readable summary without running inference."""
         return (
             "Recipe(\n"
-            f"  preprocess: {self.preprocess.describe()}\n"
+            f"  features: {self.features.describe()}\n"
             f"  target: {self.target.describe()}\n"
-            f"  postprocess: {self.postprocess.describe()}\n"
+            f"  output: {self.output.describe()}\n"
             ")"
         )
 

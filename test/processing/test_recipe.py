@@ -110,12 +110,12 @@ def test_pipeline_rejects_non_stage() -> None:
 
 
 def test_recipe_normalizes_empty_phases_and_describes() -> None:
-    recipe = Recipe(preprocess=[Add(1)], target=None, postprocess=[])
+    recipe = Recipe(features=[Add(1)], target=None, output=[])
 
-    assert len(recipe.preprocess) == 1
+    assert len(recipe.features) == 1
     assert len(recipe.target) == 0
-    assert len(recipe.postprocess) == 0
-    assert "preprocess: Add" in recipe.describe()
+    assert len(recipe.output) == 0
+    assert "features: Add" in recipe.describe()
     assert "target: identity" in repr(recipe)
 
 
@@ -156,25 +156,33 @@ def test_recipe_execution_order_around_stub_model() -> None:
             return input
 
     recipe = Recipe(
-        preprocess=[Recorder("pre")],
+        features=[Recorder("features")],
         target=[Recorder("target")],
-        postprocess=[Recorder("post")],
+        output=[Recorder("output")],
     )
     table = _table()
 
-    model_input = recipe.transform_preprocess(table)
+    target_input = recipe.fit_transform_target(table)
+    model_input = recipe.transform_features(table)
     order.append("model")
     target_output = recipe.inverse_transform_target(model_input)
-    recipe.transform_postprocess(target_output)
+    recipe.transform_output(target_output)
 
-    assert order == ["pre", "model", "target-inverse", "post"]
+    assert target_input is not None
+    assert order == [
+        "target",
+        "features",
+        "model",
+        "target-inverse",
+        "output",
+    ]
 
 
 def test_recipe_runtime_error_includes_phase_and_step_position() -> None:
-    recipe = Recipe(preprocess=[Add(1), FailingProcessor(), Add(2)])
+    recipe = Recipe(features=[Add(1), FailingProcessor(), Add(2)])
 
-    with pytest.raises(RuntimeError, match=r"preprocess step 1"):
-        recipe.transform_preprocess(_table())
+    with pytest.raises(RuntimeError, match=r"features step 1"):
+        recipe.transform_features(_table())
 
 
 def test_recipe_bad_step_output_includes_phase_and_step_position() -> None:
@@ -184,10 +192,10 @@ def test_recipe_bad_step_output_includes_phase_and_step_position() -> None:
         def forward(self, input: torch.Tensor) -> object:  # ty: ignore[invalid-method-override]
             return object()
 
-    recipe = Recipe(preprocess=[Add(1), BadOutput()])
+    recipe = Recipe(features=[Add(1), BadOutput()])
 
-    with pytest.raises(TypeError, match=r"preprocess step 1"):
-        recipe.transform_preprocess(_table())
+    with pytest.raises(TypeError, match=r"features step 1"):
+        recipe.transform_features(_table())
 
 
 def test_recipe_non_invertible_target_error_has_context() -> None:
@@ -195,6 +203,28 @@ def test_recipe_non_invertible_target_error_has_context() -> None:
 
     with pytest.raises(TypeError, match=r"target step 0"):
         recipe.inverse_transform_target(_table())
+
+
+def test_target_forward_then_inverse_round_trips() -> None:
+    recipe = Recipe(target=[Scale(2), Shift(1)])
+    table = _table()
+
+    transformed = recipe.fit_transform_target(table)
+    restored = recipe.inverse_transform_target(transformed)
+
+    assert torch.equal(transformed.numerical, table.numerical * 2 + 1)
+    assert torch.allclose(restored.numerical, table.numerical)
+
+
+def test_fit_transform_returns_features_and_target() -> None:
+    recipe = Recipe(features=[Add(5)], target=[Scale(2)])
+    features = _table()
+    target = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
+
+    out_features, out_target = recipe.fit_transform(features, target)
+
+    assert torch.equal(out_features.numerical, features.numerical + 5)
+    assert torch.equal(out_target.numerical, target.numerical * 2)
 
 
 def test_fit_transform_accepts_and_returns_tabletensor() -> None:
