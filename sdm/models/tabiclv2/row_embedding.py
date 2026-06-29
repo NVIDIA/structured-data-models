@@ -1,4 +1,4 @@
-"""Row embedding module for structured tensor models."""
+# ruff: noqa: D101, D102
 
 from typing import Any
 
@@ -10,44 +10,6 @@ from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
 
 
 class RowEmbedding(torch.nn.Module):
-    r"""Encode a table into per-row embeddings via induced set attention.
-
-    Each table is a tensor of shape ``[B, R, C]`` holding ``R`` rows of ``C``
-    feature columns for ``B`` tables. The first ``R_train`` rows additionally
-    carry a target ``y`` that is embedded and added to the row features.
-
-    The module applies two attention stages in sequence:
-
-    * **Column-wise (:class:`~sdm.nn.InducedTransformerBlock`).** Treating each
-      column as an independent set of rows, a stack of induced transformer
-      blocks lets a small set of learnable inducing points attend to the
-      context (training) rows, after which the full set of rows attends back to
-      those inducing points. This reduces the per-column cost from
-      :math:`O(R^2)` to :math:`O(R \cdot m)` for ``m`` inducing points.
-    * **Row-wise.** Each row attends across its columns (and the prepended
-      readout tokens) with rotary positional embeddings. The final layer
-      reads out only the readout tokens.
-
-    Restricting the inducing points to attend over the first ``R_train`` rows
-    keeps target information from leaking into the row representations.
-
-    Args:
-        num_classes: The number of supported classes for classification.
-            Set to ``0`` for regression.
-        channels: The number of hidden channels.
-        num_layers: The number of column/row attention layers.
-        num_heads: The number of attention heads.
-        group_size: The number of columns per feature group.
-        num_inducing_points: The number of learnable inducing points.
-        num_readout_tokens: The number of readout tokens.
-        feedforward_channels: The hidden width of the MLP.
-        qassmax: Whether to scale queries in the
-            :class:`~sdm.nn.InducedTransformerBlock` with :class:`QASSMax`.
-        norm_bias: Whether LayerNorm layers use a learnable bias.
-        device: The device.
-        dtype: The dtype.
-    """
-
     def __init__(
         self,
         num_classes: int,
@@ -117,21 +79,6 @@ class RowEmbedding(torch.nn.Module):
         y: Tensor,  # [B, R_train]
         train_mask: Tensor | None = None,  # [R],
     ) -> Tensor:  # [B, R, K * D]
-        r"""The forward pass.
-
-        Args:
-            x: The feature tensor with shape ``[B, R, C]`` for ``B`` tables,
-                ``R`` rows, and ``C`` columns.
-            y: The targets with shape ``[B, R_train]``.
-            train_mask: Training mask that denote the ``R_train`` rows along
-                ``R`` in ``x`` that refer to the in-context examples.
-                If not given, the first ``R_train`` rows along ``R`` refer to
-                the in-context examples.
-
-        Returns:
-            Tensor with shape ``[B, R, K * D]``, where ``K`` is the number of
-            readout tokens and ``D`` is ``channels``.
-        """
         B, R, C = x.size()
         R_train = y.size(-1)
         G, D = self.lin.in_features, self.lin.out_features
