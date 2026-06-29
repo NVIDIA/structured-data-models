@@ -135,95 +135,14 @@ class InducedTransformerBlock(torch.nn.Module):
             ``False``. Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        if isinstance(key_value, KVCacheEntry):
-            return self.attend(
-                query=query,
-                key_value=key_value,
-                return_key_value=return_key_value,
-            )
-        if key_value is None:
-            key_value = query
-
-        hidden = self.induce(
-            key_value=key_value,
-            seqused_key_value=seqused_key_value,
-        )
-        return self.attend(
-            query=query,
-            key_value=hidden,
-            return_key_value=return_key_value,
-        )
-
-    def induce(
-        self,
-        key_value: Tensor,  # [..., KV, C]
-        seqused_key_value: Tensor | None = None,  # [...]
-    ) -> Tensor:  # [..., M, C]
-        r"""Compute the induced hidden context.
-
-        Args:
-            key_value: Key/value-side context states with shape
-                ``[..., KV, C]``.
-            seqused_key_value: Optional valid key/value lengths with shape
-                ``[...]`` and dtype ``torch.int32``.
-
-        Returns:
-            Induced hidden context with shape ``[..., M, C]``.
-        """
-        return self.transformer_1(
-            query=self.inducing_points,  # [M, C]
-            key_value=key_value,  # [..., KV, C]
-            seqused_key_value=seqused_key_value,  # [...]
-        )  # [..., M, C]
-
-    @overload
-    def attend(
-        self,
-        query: Tensor,
-        key_value: Tensor | KVCacheEntry,
-        *,
-        return_key_value: Literal[False] = False,
-    ) -> Tensor: ...
-
-    @overload
-    def attend(
-        self,
-        query: Tensor,
-        key_value: Tensor | KVCacheEntry,
-        *,
-        return_key_value: Literal[True],
-    ) -> tuple[Tensor, KVCacheEntry]: ...
-
-    @overload
-    def attend(
-        self,
-        query: Tensor,
-        key_value: Tensor | KVCacheEntry,
-        *,
-        return_key_value: bool,
-    ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
-
-    def attend(
-        self,
-        query: Tensor,  # [..., Q, C]
-        key_value: Tensor | KVCacheEntry,  # [..., M, C]
-        return_key_value: bool = False,
-    ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
-        r"""Attend from query states to induced hidden context.
-
-        Args:
-            query: Query-side hidden states with shape ``[..., Q, C]``.
-            key_value: Induced hidden context with shape ``[..., M, C]`` or
-                precomputed final-attention K/V projections.
-            return_key_value: Whether to return the computed key and value
-                projections for the final attention site alongside the block
-                output.
-
-        Returns:
-            Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
-            ``False``. Otherwise, a tuple of the output tensor and a
-            :class:`~sdm.cache.KVCacheEntry`.
-        """
+        if not isinstance(key_value, KVCacheEntry):
+            if key_value is None:
+                key_value = query
+            key_value = self.transformer_1(
+                query=self.inducing_points,  # [M, C]
+                key_value=key_value,  # [..., KV, C]
+                seqused_key_value=seqused_key_value,  # [...]
+            )  # [..., M, C]
         return self.transformer_2(
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]

@@ -62,11 +62,6 @@ def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
         num_inducing_points=num_inducing_points,
         qassmax=qassmax,
     )
-    with torch.no_grad():
-        module.transformer_1.attn.out_lin.weight.copy_(torch.eye(channels))
-        module.transformer_1.attn.out_lin.bias.zero_()
-        module.transformer_2.attn.out_lin.weight.copy_(torch.eye(channels))
-        module.transformer_2.attn.out_lin.bias.zero_()
 
     query = torch.randn(batch_size, set_size, channels)
     key_value = torch.randn(batch_size, context_size, channels)
@@ -77,29 +72,18 @@ def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
         key_value=key_value,
         seqused_key_value=seqused_key_value,
     )
-    hidden = module.induce(
-        key_value=key_value,
-        seqused_key_value=seqused_key_value,
-    )
-    attend_out = module.attend(query=query, key_value=hidden)
-    attend_cache_out, kv = module.attend(
-        query=query,
-        key_value=hidden,
-        return_key_value=True,
-    )
-    attend_cached_out = module.attend(query=query, key_value=kv)
-
-    forward_cache_out, forward_kv = module(
+    cache_out, kv = module(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
         return_key_value=True,
     )
-    forward_cached_out = module(query=query, key_value=forward_kv)
+    cached_out = module(query=query, key_value=kv)
 
+    # Self-attention reuses the same cached key/value path.
     self_out = module(query=query)
-    self_hidden = module.induce(key_value=query)
-    self_attend_out = module.attend(query=query, key_value=self_hidden)
+    self_cache_out, self_kv = module(query=query, return_key_value=True)
+    self_cached_out = module(query=query, key_value=self_kv)
 
     assert kv.key.size() == (
         batch_size,
@@ -108,11 +92,7 @@ def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
         channels // num_heads,
     )
     assert kv.value.size() == kv.key.size()
-    torch.testing.assert_close(forward_kv.key, kv.key)
-    torch.testing.assert_close(forward_kv.value, kv.value)
-    torch.testing.assert_close(attend_out, direct_out)
-    torch.testing.assert_close(attend_cache_out, direct_out)
-    torch.testing.assert_close(attend_cached_out, direct_out)
-    torch.testing.assert_close(forward_cache_out, direct_out)
-    torch.testing.assert_close(forward_cached_out, direct_out)
-    torch.testing.assert_close(self_attend_out, self_out)
+    torch.testing.assert_close(cache_out, direct_out)
+    torch.testing.assert_close(cached_out, direct_out)
+    torch.testing.assert_close(self_cache_out, self_out)
+    torch.testing.assert_close(self_cached_out, self_out)
