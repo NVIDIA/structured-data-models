@@ -107,7 +107,7 @@ class Pipeline:
     def describe(self) -> str:
         """Return a human-readable stage-order summary."""
         if len(self.stages) == 0:
-            return "<empty>"
+            return "identity"
         return " -> ".join(stage.__class__.__name__ for stage in self.stages)
 
     def __len__(self) -> int:
@@ -244,8 +244,8 @@ def _stage_error(
     stage: Processor,
 ) -> Exception:
     message = (
-        f"[slot={slot}, stage={position}, "
-        f"name={stage.__class__.__name__}] {exc}"
+        f"{slot} stage {position} "
+        f"({stage.__class__.__name__}): {exc}"
     )
     try:
         return exc.__class__(message)
