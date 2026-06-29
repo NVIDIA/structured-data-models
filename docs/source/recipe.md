@@ -1,9 +1,9 @@
 # Recipes
 
 A `Recipe` is an inspectable definition of how data crosses a model
-boundary: it transforms inputs into the space your model expects and turns
-the model's outputs back into the original space. Defining it once means
-training and inference share the same auditable transforms.
+boundary: it transforms inputs into the space your model expects and maps
+the model's outputs back to the original space. Defining it once keeps the
+same auditable transforms on both sides of the model.
 
 ## Mental model
 
@@ -21,15 +21,15 @@ training and inference share the same auditable transforms.
   | `output`   | model output | —                 | forward transform (e.g. logits to probabilities) |
 
 ```text
-train:      features.forward + target.forward   ->   model
-inference:  features.forward  ->  model  ->  target.inverse  ->  output.forward
+inputs:   features.forward + target.forward  ->  model
+outputs:  model  ->  target.inverse  ->  output.forward
 ```
 
 ## Building a recipe
 
 Pass each phase a list of `Processor` steps; omit any you don't need (it
-defaults to identity). Stateful steps are fitted on the **training split only**,
-so no validation/test statistics leak in.
+defaults to identity). Stateful steps are fitted on your **labeled data only**,
+so no held-out statistics leak in.
 
 ```python
 from sdm.processing import Recipe, StandardScale
@@ -40,27 +40,28 @@ recipe = Recipe(
 )
 ```
 
-## Training
+## Model inputs
 
-`fit_transform` fits the `features` and `target` phases on the training tables
-and returns the transformed `(features, target)`. Both `train_features` and
-`train_labels` are `TableTensor`s.
+Fit the recipe on your labeled data and transform it in one call with
+`fit_transform`; transform later inputs with `transform_features` (no re-fit).
+All inputs are `TableTensor`s.
 
 ```python
-model_features, model_target = recipe.fit_transform(train_features, train_labels)
-train_your_model(model_features, model_target)  # your model and training loop
+# fit on labeled data, then hand to the model
+model_features, model_target = recipe.fit_transform(labeled_features, labels)
+
+# transform new inputs with the already-fitted recipe
+model_input = recipe.transform_features(new_features)
 ```
 
-## Inference
+## Model outputs
 
-Reuse the fitted recipe — transform features (no re-fit), call the model, then
-invert the target to return predictions to their original units.
+Run the model, then map its predictions back to the original space:
 
 ```python
-model_input = recipe.transform_features(test_features)  # TableTensor in and out
-prediction = your_model(model_input)                     # predictions as a TableTensor
+prediction = model(model_input)                   # predictions as a TableTensor
 prediction = recipe.inverse_transform_target(prediction)
-prediction = recipe.transform_output(prediction)         # identity if `output` is empty
+prediction = recipe.transform_output(prediction)  # identity if `output` is empty
 ```
 
 `target` steps run in reverse during the inverse, and every one must mix in
