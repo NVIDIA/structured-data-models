@@ -133,15 +133,9 @@ class Recipe:
         postprocess: Stages applied to model output after target inverse.
     """
 
-    preprocess: Pipeline | Iterable[Processor] | None = field(
-        default_factory=Pipeline
-    )
-    target: Pipeline | Iterable[Processor] | None = field(
-        default_factory=Pipeline
-    )
-    postprocess: Pipeline | Iterable[Processor] | None = field(
-        default_factory=Pipeline
-    )
+    preprocess: Iterable[Processor] | None = field(default_factory=Pipeline)
+    target: Iterable[Processor] | None = field(default_factory=Pipeline)
+    postprocess: Iterable[Processor] | None = field(default_factory=Pipeline)
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -192,7 +186,7 @@ class Recipe:
 
 
 def _coerce_pipeline(
-    value: Pipeline | Iterable[Processor] | None,
+    value: Iterable[Processor] | None,
 ) -> Pipeline:
     if isinstance(value, Pipeline):
         return value
@@ -253,4 +247,7 @@ def _stage_error(
         f"[slot={slot}, stage={position}, "
         f"name={stage.__class__.__name__}] {exc}"
     )
-    return exc.__class__(message)
+    try:
+        return exc.__class__(message)
+    except Exception:
+        return RuntimeError(message)
