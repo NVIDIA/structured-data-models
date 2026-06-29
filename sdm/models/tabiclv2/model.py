@@ -1,5 +1,4 @@
 # ruff: noqa: D205
-"""TabICLv2 tabular foundation model."""
 
 from typing import Any
 
@@ -14,11 +13,51 @@ from sdm.models.tabiclv2.row_embedding import RowEmbedding
 
 
 class TabICLv2(torch.nn.Module):
-    r"""The tabular foundation model from the `"TabICLv2: A better, faster,
-    scalable, and open tabular foundation model"
+    r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
+    Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
 
+    .. image:: https://arxiv.org/html/2602.11139v1/x2.png
+        :align: center
+        :width: 600px
+
+    :class:`TabICLv2` treats a table as an in-context learning problem: a set
+    of labeled training rows provides context, and the model predicts targets
+    for held-out test rows from the same table.
+
+    Feature columns are encoded via repeated feature grouping, where each
+    feature participates in multiple shifted feature groups.
+    This breaks symmetries between similarly distributed columns while
+    preserving fine-grained feature information.
+    Target-aware embeddings are then added to the training-row feature
+    representations, injecting label information early without giving test rows
+    access to their own targets.
+
+    Afterwards, the module applies three attention stages in sequence:
+
+    * **Column-wise:** Each grouped feature is processed as a set of row tokens
+      with induced set attention.
+      The inducing tokens summarize information from the in-context training
+      rows, then pass it back to the row tokens, giving each feature group a
+      target-aware representation of its values across examples.
+      Query-Aware Scalable SoftMax (:class:`~sdm.nn.QASSMax`) sharpens
+      attention over long contexts and reduces attention fading as the number
+      of rows grows.
+    * **Row-wise:** For each row, the feature-group embeddings are processed
+      together with learnable readout tokens.
+      Attention across the grouped features lets the model combine column
+      evidence and feature interactions within that row.
+      The readout token outputs are concatenated to form a fixed-size row
+      embedding.
+    * **Dataset-wise:** The row embeddings are processed across the dataset
+      for in-context prediction.
+      Training-row embeddings are combined with target embeddings, and test
+      rows attend to the labeled training rows. The resulting test-row states
+      are mapped to task outputs, such as class logits for classification or
+      quantile predictions for regression.
+
     Args:
+        pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
 
@@ -45,12 +84,9 @@ class TabICLv2(torch.nn.Module):
         if pretrained:
             self._load_from_pretrained()
 
-    @property
-    def device(self) -> torch.device:
-        r"""The model device."""
-        return next(self.parameters()).device
-
     def _load_from_pretrained(self) -> "TabICLv2":
+        device = next(self.parameters()).device
+
         for variant in ["classifier", "regressor"]:
             try:
                 path = hf_hub_download(
@@ -63,7 +99,7 @@ class TabICLv2(torch.nn.Module):
                     repo_id="jingang/TabICL",
                     filename=f"tabicl-{variant}-v2-20260212.ckpt",
                 )
-            ckpt = torch.load(path, map_location=self.device)["state_dict"]
+            ckpt = torch.load(path, map_location=device)["state_dict"]
 
             if variant == "classifier":
                 ckpt = _remap_ckpt(ckpt, is_classifier=True)
@@ -87,7 +123,7 @@ class TabICLv2(torch.nn.Module):
                 ``R`` rows, and ``C`` columns.
                 The first ``R_train`` rows along ``R`` refer to the in-context
                 examples.
-            y: The targets with shape ``[B, R_train]``.
+            y: The targets of in-context examples with shape ``[B, R_train]``.
 
         Returns:
             Tensor with shape ``[B, R_test, num_classes]`` for integer ``y``
@@ -102,33 +138,6 @@ class TabICLv2(torch.nn.Module):
 
 
 class _TabICLv2(torch.nn.Module):
-    r"""The tabular foundation model from the TabICLv2 paper.
-
-    Introduced in `"TabICLv2: A better, faster, scalable, and open tabular
-    foundation model" <https://arxiv.org/abs/2602.11139>`_, the model first
-    encodes a table into per-row embeddings with
-    :class:`~sdm.models.tabiclv2.RowEmbedding`, then makes in-context
-    predictions for the test rows with
-    :class:`~sdm.models.tabiclv2.ICLBlock`.
-
-    The :class:`~sdm.models.tabiclv2.ICLBlock` operates on the concatenated
-    readout tokens produced by :class:`~sdm.models.tabiclv2.RowEmbedding`, so
-    its channel count is derived as ``num_readout_tokens * channels``.
-
-    Args:
-        channels: The per-token channel count of the row encoder.
-        num_embedding_layers: The number of row-encoder attention layers.
-        num_icl_layers: The number of in-context cross-attention layers.
-        num_heads: The number of attention heads in both stages.
-        group_size: The number of columns grouped into each encoder token.
-        num_inducing_points: The number of inducing points in the row encoder.
-        num_readout_tokens: The number of readout tokens produced per row.
-        norm_bias: Whether :class:`~torch.nn.LayerNorm` layers use a learnable
-            bias.
-        device: The device.
-        dtype: The dtype.
-    """
-
     def __init__(
         self,
         num_classes: int,
@@ -186,18 +195,6 @@ class _TabICLv2(torch.nn.Module):
         x: Tensor,  # [B, R, C]
         y: Tensor,  # [B, R_train]
     ) -> Tensor:  # [B, R_test, num_classes or num_quantiles]
-        r"""The forward pass.
-
-        Args:
-            x: The feature tensor with shape ``[B, R, C]`` for ``B`` tables,
-                ``R`` rows, and ``C`` columns.
-                The first ``R_train`` rows along ``R`` refer to the in-context
-                examples.
-            y: The targets with shape ``[B, R_train]``.
-
-        Returns:
-            Tensor with shape ``[B, R_test, num_classes or num_quantiles]``.
-        """
         x = self.row_embedding(x, y)
         x = self.icl_block(x, y)
         return self.head(x)
