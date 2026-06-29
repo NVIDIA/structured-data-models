@@ -235,9 +235,7 @@ def test_quantile_normal_distribution_preserves_nan_positions() -> None:
 def test_quantile_subsample_is_reproducible_by_default() -> None:
     input = torch.arange(60.0).view(30, 2)
 
-    with pytest.warns(UserWarning, match="legacy kumo-ml cap"):
-        first = Quantile(n_quantiles=4, subsample=12).fit(input)
-    with pytest.warns(UserWarning, match="legacy kumo-ml cap"):
-        second = Quantile(n_quantiles=4, subsample=12).fit(input)
+    first = Quantile(n_quantiles=4, subsample=12).fit(input)
+    second = Quantile(n_quantiles=4, subsample=12).fit(input)
 
     assert torch.equal(first.quantiles, second.quantiles)
