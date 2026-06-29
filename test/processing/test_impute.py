@@ -4,7 +4,9 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_mean_impute_replaces_nan_with_column_mean(device: torch.device) -> None:
+def test_mean_impute_replaces_nan_with_column_mean(
+    device: torch.device,
+) -> None:
     input = torch.tensor(
         [
             [1.0, torch.nan],
@@ -68,7 +70,9 @@ def test_mean_impute_all_nan_column_uses_fill_value_and_keeps_shape(
     transformed = processor.transform(input)
 
     assert transformed.shape == input.shape
-    assert torch.equal(processor.mean, torch.tensor([-5.0, 2.0], device=device))
+    assert torch.equal(
+        processor.mean, torch.tensor([-5.0, 2.0], device=device)
+    )
     assert torch.equal(
         transformed,
         torch.tensor(
@@ -84,7 +88,9 @@ def test_mean_impute_all_nan_column_uses_fill_value_and_keeps_shape(
 
 @withCUDA
 def test_mean_impute_preserves_floating_dtype(device: torch.device) -> None:
-    input = torch.tensor([[1.0], [torch.nan]], dtype=torch.float32, device=device)
+    input = torch.tensor(
+        [[1.0], [torch.nan]], dtype=torch.float32, device=device
+    )
 
     transformed = MeanImpute().fit(input).transform(input)
 

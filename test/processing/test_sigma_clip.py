@@ -116,13 +116,16 @@ def test_sigma_clip_two_stage_outlier_behavior(device: torch.device) -> None:
     assert transformed[-1, 0] < input[-1, 0]
     assert torch.allclose(
         transformed[-1, 0],
-        torch.log1p(torch.tensor(100.0, dtype=torch.float64, device=device)) + 2.0,
+        torch.log1p(torch.tensor(100.0, dtype=torch.float64, device=device))
+        + 2.0,
     )
     assert transformed.device == device
 
 
 @withCUDA
-def test_sigma_clip_matches_tabicl_reference_values(device: torch.device) -> None:
+def test_sigma_clip_matches_tabicl_reference_values(
+    device: torch.device,
+) -> None:
     input = torch.tensor(
         [
             [-8.0, 1.0],
