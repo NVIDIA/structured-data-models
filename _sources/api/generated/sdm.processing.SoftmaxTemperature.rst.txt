@@ -1,0 +1,8 @@
+﻿SoftmaxTemperature
+==================
+
+.. currentmodule:: sdm.processing
+
+.. autoclass:: SoftmaxTemperature
+   :members:
+   :show-inheritance:
