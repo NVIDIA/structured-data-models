@@ -5,7 +5,7 @@ Key findings that these tests guard:
   is a fixed ~50 us constant regardless of n_rows.
 - For data >= 1k rows the abstraction adds < 50% relative overhead.
 - For data >= 10k rows the abstraction adds < 20% relative overhead.
-- The overhead does not grow with n_rows (O(1) in rows, O(stages) in depth).
+- The overhead does not grow with n_rows (O(1) in rows, O(steps) in depth).
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ class _ReturnTensor(Processor):
 def test_pipeline_overhead_is_constant_in_n_rows() -> None:
     """Pipeline abstraction overhead must not grow with n_rows.
 
-    The try/except loop + TableTensor rebuild are O(1) in n_rows. The stage
+    The try/except loop + TableTensor rebuild are O(1) in n_rows. The step
     returns a precomputed tensor so this test isolates abstraction overhead
     from tensor-kernel timing variance. We verify that overhead at 100k rows
     is at most 5x the overhead at 1k rows, ruling out per-row Python cost.
@@ -152,7 +152,7 @@ def test_recipe_relative_overhead_at_scale(n_rows: int, n_cols: int) -> None:
 
 
 def test_noop_pipeline_absolute_overhead_ceiling() -> None:
-    """Two-stage noop Pipeline (no tensor work) must complete in < 200 us.
+    """Two-step noop Pipeline (no tensor work) must complete in < 200 us.
 
     Guards the fixed Python cost: try/except loop, _validate_output isinstance
     checks, and TableTensor reconstruction. A regression here means the
@@ -184,11 +184,11 @@ def test_tabletensor_rebuild_absolute_overhead_ceiling() -> None:
     )
 
 
-def test_pipeline_overhead_scales_linearly_with_stage_count() -> None:
-    """Each additional noop stage must add O(1) cost, not O(n_rows).
+def test_pipeline_overhead_scales_linearly_with_step_count() -> None:
+    """Each additional noop step must add O(1) cost, not O(n_rows).
 
-    A 4-stage pipeline must complete in less than 8x the time of a 1-stage
-    pipeline. Failure means per-stage cost is growing with data size.
+    A 4-step pipeline must complete in less than 8x the time of a 1-step
+    pipeline. Failure means per-step cost is growing with data size.
     """
     table = _make_table(10_000, 64)
 
@@ -201,6 +201,6 @@ def test_pipeline_overhead_scales_linearly_with_stage_count() -> None:
     t4 = _bench(lambda: pl4.transform(table), n=200)
 
     assert t4 < t1 * 8 + 0.1, (
-        f"4-stage pipeline {t4:.3f} ms is more than 8x the 1-stage "
-        f"{t1:.3f} ms -- per-stage cost may be O(n_rows)"
+        f"4-step pipeline {t4:.3f} ms is more than 8x the 1-step "
+        f"{t1:.3f} ms -- per-step cost may be O(n_rows)"
     )

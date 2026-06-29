@@ -2,7 +2,7 @@
 
 Recipes provide an inspectable processing contract around a model.
 A `Recipe` owns three ordered slots (`preprocess`, `target`, and
-`postprocess`). Configure each slot with a list of processing stages. Each
+`postprocess`). Configure each slot with a list of processing steps. Each
 slot accepts and returns a `TableTensor`.
 
 ```python
@@ -36,5 +36,5 @@ The `target` slot holds pre-fitted or stateless processors whose
 `Recipe` does not provide a `fit_target` method; fit target-side processors
 before passing them to the recipe.
 
-Each slot applies stages to the numerical block and rebuilds the
+Each slot applies steps to the numerical block and rebuilds the
 `TableTensor` with categorical blocks unchanged.

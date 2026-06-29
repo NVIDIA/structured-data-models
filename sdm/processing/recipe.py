@@ -10,21 +10,21 @@ from sdm.tensor import TableTensor
 
 
 class Pipeline:
-    """Ordered sequence of processing stages for one recipe slot.
+    """Ordered sequence of processing steps for one recipe slot.
 
     Args:
-        stages: Ordered processing stages. ``None`` creates an empty identity
+        steps: Ordered processing steps. ``None`` creates an empty identity
             pipeline.
     """
 
     def __init__(
         self,
-        stages: Iterable[Processor] | None = None,
+        steps: Iterable[Processor] | None = None,
     ) -> None:
-        self.stages = tuple(_validate_stage(stage) for stage in stages or ())
+        self.steps = tuple(_validate_step(step) for step in steps or ())
 
     def fit(self, input: TableTensor) -> Self:
-        """Fit stages in order using the numerical block of ``input``."""
+        """Fit steps in order using the numerical block of ``input``."""
         self._fit(input, slot="pipeline")
         return self
 
@@ -35,46 +35,46 @@ class Pipeline:
         slot: str,
     ) -> Self:
         numerical = input.numerical
-        for position, stage in enumerate(self.stages):
+        for position, step in enumerate(self.steps):
             try:
-                stage.fit(numerical)
-                numerical = _validate_output(stage.transform(numerical))
+                step.fit(numerical)
+                numerical = _validate_output(step.transform(numerical))
             except Exception as exc:
-                raise _stage_error(exc, slot, position, stage) from exc
+                raise _step_error(exc, slot, position, step) from exc
         return self
 
     def transform(self, input: TableTensor) -> TableTensor:
-        """Transform ``input`` by applying stages to its numerical block."""
+        """Transform ``input`` by applying steps to its numerical block."""
         return self._transform(input, slot="pipeline")
 
     def _transform(self, input: TableTensor, *, slot: str) -> TableTensor:
-        if len(self.stages) == 0:
+        if len(self.steps) == 0:
             return input
         numerical = input.numerical
-        for position, stage in enumerate(self.stages):
+        for position, step in enumerate(self.steps):
             try:
-                numerical = _validate_output(stage.transform(numerical))
+                numerical = _validate_output(step.transform(numerical))
             except Exception as exc:
-                raise _stage_error(exc, slot, position, stage) from exc
-        return _with_stage_numerical(input, numerical, slot, position, stage)
+                raise _step_error(exc, slot, position, step) from exc
+        return _with_step_numerical(input, numerical, slot, position, step)
 
     def fit_transform(self, input: TableTensor) -> TableTensor:
-        """Fit and transform ``input`` by threading stages in order."""
+        """Fit and transform ``input`` by threading steps in order."""
         return self._fit_transform(input, slot="pipeline")
 
     def _fit_transform(self, input: TableTensor, *, slot: str) -> TableTensor:
-        if len(self.stages) == 0:
+        if len(self.steps) == 0:
             return input
         numerical = input.numerical
-        for position, stage in enumerate(self.stages):
+        for position, step in enumerate(self.steps):
             try:
-                numerical = _validate_output(stage.fit_transform(numerical))
+                numerical = _validate_output(step.fit_transform(numerical))
             except Exception as exc:
-                raise _stage_error(exc, slot, position, stage) from exc
-        return _with_stage_numerical(input, numerical, slot, position, stage)
+                raise _step_error(exc, slot, position, step) from exc
+        return _with_step_numerical(input, numerical, slot, position, step)
 
     def inverse_transform(self, input: TableTensor) -> TableTensor:
-        """Apply invertible stages in reverse order to ``input``."""
+        """Apply invertible steps in reverse order to ``input``."""
         return self._inverse_transform(input, slot="pipeline")
 
     def _inverse_transform(
@@ -83,38 +83,38 @@ class Pipeline:
         *,
         slot: str,
     ) -> TableTensor:
-        if len(self.stages) == 0:
+        if len(self.steps) == 0:
             return input
         numerical = input.numerical
-        for position, stage in reversed(tuple(enumerate(self.stages))):
-            if not isinstance(stage, InvertibleMixin):
-                raise _stage_error(
+        for position, step in reversed(tuple(enumerate(self.steps))):
+            if not isinstance(step, InvertibleMixin):
+                raise _step_error(
                     TypeError(
-                        "Expected invertible stage for inverse_transform"
+                        "Expected invertible step for inverse_transform"
                     ),
                     slot,
                     position,
-                    stage,
+                    step,
                 )
             try:
                 numerical = _validate_output(
-                    stage.inverse_transform(numerical)
+                    step.inverse_transform(numerical)
                 )
             except Exception as exc:
-                raise _stage_error(exc, slot, position, stage) from exc
-        return _with_stage_numerical(input, numerical, slot, position, stage)
+                raise _step_error(exc, slot, position, step) from exc
+        return _with_step_numerical(input, numerical, slot, position, step)
 
     def describe(self) -> str:
-        """Return a human-readable stage-order summary."""
-        if len(self.stages) == 0:
+        """Return a human-readable step-order summary."""
+        if len(self.steps) == 0:
             return "identity"
-        return " -> ".join(stage.__class__.__name__ for stage in self.stages)
+        return " -> ".join(step.__class__.__name__ for step in self.steps)
 
     def __len__(self) -> int:
-        return len(self.stages)
+        return len(self.steps)
 
     def __iter__(self) -> Iterator[Processor]:
-        return iter(self.stages)
+        return iter(self.steps)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.describe()})"
@@ -128,9 +128,9 @@ class Recipe:
     sampling, augmentation, model calls, or experiment control flow.
 
     Args:
-        preprocess: Stages applied before the model.
-        target: Target-side stages; inverse conversion runs after the model.
-        postprocess: Stages applied to model output after target inverse.
+        preprocess: Steps applied before the model.
+        target: Target-side steps; inverse conversion runs after the model.
+        postprocess: Steps applied to model output after target inverse.
     """
 
     preprocess: Iterable[Processor] | None = field(default_factory=Pipeline)
@@ -193,13 +193,13 @@ def _coerce_pipeline(
     return Pipeline(value)
 
 
-def _validate_stage(stage: Processor) -> Processor:
-    if not isinstance(stage, Processor):
+def _validate_step(step: object) -> Processor:
+    if not isinstance(step, Processor):
         raise TypeError(
-            "Expected a Processor stage "
-            f"(got '{stage.__class__.__name__}')"
+            "Expected a Processor step "
+            f"(got '{step.__class__.__name__}')"
         )
-    return stage
+    return step
 
 
 def _validate_output(output: object) -> Tensor:
@@ -211,17 +211,17 @@ def _validate_output(output: object) -> Tensor:
     return output
 
 
-def _with_stage_numerical(
+def _with_step_numerical(
     input: TableTensor,
     numerical: Tensor,
     slot: str,
     position: int,
-    stage: Processor,
+    step: Processor,
 ) -> TableTensor:
     try:
         return _with_numerical(input, numerical)
     except Exception as exc:
-        raise _stage_error(exc, slot, position, stage) from exc
+        raise _step_error(exc, slot, position, step) from exc
 
 
 def _with_numerical(input: TableTensor, numerical: Tensor) -> TableTensor:
@@ -237,15 +237,15 @@ def _with_numerical(input: TableTensor, numerical: Tensor) -> TableTensor:
     )
 
 
-def _stage_error(
+def _step_error(
     exc: Exception,
     slot: str,
     position: int,
-    stage: Processor,
+    step: Processor,
 ) -> Exception:
     message = (
-        f"{slot} stage {position} "
-        f"({stage.__class__.__name__}): {exc}"
+        f"{slot} step {position} "
+        f"({step.__class__.__name__}): {exc}"
     )
     try:
         return exc.__class__(message)

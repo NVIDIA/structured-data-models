@@ -89,7 +89,7 @@ def test_pipeline_preserves_declared_stage_order() -> None:
 
 
 def test_pipeline_rejects_non_stage() -> None:
-    with pytest.raises(TypeError, match="Expected a Processor stage"):
+    with pytest.raises(TypeError, match="Expected a Processor step"):
         Pipeline([object()])  # type: ignore[list-item]
 
 
@@ -157,7 +157,7 @@ def test_recipe_execution_order_around_stub_model() -> None:
 def test_recipe_runtime_error_includes_slot_and_stage_position() -> None:
     recipe = Recipe(preprocess=[Add(1), FailingProcessor(), Add(2)])
 
-    with pytest.raises(RuntimeError, match=r"preprocess stage 1"):
+    with pytest.raises(RuntimeError, match=r"preprocess step 1"):
         recipe.transform_preprocess(_table())
 
 
@@ -170,14 +170,14 @@ def test_recipe_bad_stage_output_includes_slot_and_stage_position() -> None:
 
     recipe = Recipe(preprocess=[Add(1), BadOutput()])
 
-    with pytest.raises(TypeError, match=r"preprocess stage 1"):
+    with pytest.raises(TypeError, match=r"preprocess step 1"):
         recipe.transform_preprocess(_table())
 
 
 def test_recipe_non_invertible_target_error_has_context() -> None:
     recipe = Recipe(target=[Add(1)])
 
-    with pytest.raises(TypeError, match=r"target stage 0"):
+    with pytest.raises(TypeError, match=r"target step 0"):
         recipe.inverse_transform_target(_table())
 
 
