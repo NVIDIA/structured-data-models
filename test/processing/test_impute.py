@@ -21,7 +21,7 @@ def test_mean_impute_replaces_nan_with_column_mean(
     transformed = processor.transform(input)
 
     assert torch.allclose(
-        processor.mean,
+        processor._mean,
         torch.tensor([2.0, 6.0], dtype=torch.float64, device=device),
     )
     assert torch.equal(
@@ -71,7 +71,7 @@ def test_mean_impute_all_nan_column_uses_fill_value_and_keeps_shape(
 
     assert transformed.shape == input.shape
     assert torch.equal(
-        processor.mean, torch.tensor([-5.0, 2.0], device=device)
+        processor._mean, torch.tensor([-5.0, 2.0], device=device)
     )
     assert torch.equal(
         transformed,
