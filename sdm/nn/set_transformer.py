@@ -84,7 +84,7 @@ class InducedTransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         *,
-        return_kv: Literal[False] = False,
+        return_key_value: Literal[False] = False,
     ) -> Tensor: ...
 
     @overload
@@ -94,7 +94,7 @@ class InducedTransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         *,
-        return_kv: Literal[True],
+        return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -104,7 +104,7 @@ class InducedTransformerBlock(torch.nn.Module):
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
         *,
-        return_kv: bool,
+        return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -112,7 +112,7 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-        return_kv: bool = False,
+        return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -127,19 +127,19 @@ class InducedTransformerBlock(torch.nn.Module):
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 dtype ``torch.int32``.
-            return_kv: Whether to return the computed key and value projections
-                for the final attention site alongside the output.
+            return_key_value: Whether to return the computed key and value
+                projections for the final attention site alongside the output.
 
         Returns:
-            Tensor with shape ``[..., Q, C]`` when ``return_kv`` is ``False``.
-            Otherwise, a tuple of the output tensor and a
+            Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
+            ``False``. Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
         if isinstance(key_value, KVCacheEntry):
             return self.attend(
                 query=query,
                 key_value=key_value,
-                return_kv=return_kv,
+                return_key_value=return_key_value,
             )
         if key_value is None:
             key_value = query
@@ -151,7 +151,7 @@ class InducedTransformerBlock(torch.nn.Module):
         return self.attend(
             query=query,
             key_value=hidden,
-            return_kv=return_kv,
+            return_key_value=return_key_value,
         )
 
     def induce(
@@ -182,7 +182,7 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,
         key_value: Tensor | KVCacheEntry,
         *,
-        return_kv: Literal[False] = False,
+        return_key_value: Literal[False] = False,
     ) -> Tensor: ...
 
     @overload
@@ -191,7 +191,7 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,
         key_value: Tensor | KVCacheEntry,
         *,
-        return_kv: Literal[True],
+        return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -200,14 +200,14 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,
         key_value: Tensor | KVCacheEntry,
         *,
-        return_kv: bool,
+        return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def attend(
         self,
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry,  # [..., M, C]
-        return_kv: bool = False,
+        return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""Attend from query states to induced hidden context.
 
@@ -215,16 +215,17 @@ class InducedTransformerBlock(torch.nn.Module):
             query: Query-side hidden states with shape ``[..., Q, C]``.
             key_value: Induced hidden context with shape ``[..., M, C]`` or
                 precomputed final-attention K/V projections.
-            return_kv: Whether to return the computed key and value projections
-                for the final attention site alongside the block output.
+            return_key_value: Whether to return the computed key and value
+                projections for the final attention site alongside the block
+                output.
 
         Returns:
-            Tensor with shape ``[..., Q, C]`` when ``return_kv`` is ``False``.
-            Otherwise, a tuple of the output tensor and a
+            Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
+            ``False``. Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
         return self.transformer_2(
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]
-            return_kv=return_kv,
+            return_key_value=return_key_value,
         )  # [..., Q, C]

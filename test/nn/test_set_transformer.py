@@ -85,7 +85,7 @@ def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
     attend_cache_out, kv = module.attend(
         query=query,
         key_value=hidden,
-        return_kv=True,
+        return_key_value=True,
     )
     attend_cached_out = module.attend(query=query, key_value=kv)
 
@@ -93,7 +93,7 @@ def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
-        return_kv=True,
+        return_key_value=True,
     )
     forward_cached_out = module(query=query, key_value=forward_kv)
 
