@@ -102,6 +102,22 @@ def test_quantile_preserves_nan_positions() -> None:
     assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
 
 
+def test_quantile_all_nan_column_remains_nan() -> None:
+    input = torch.tensor(
+        [
+            [torch.nan, 1.0],
+            [torch.nan, 2.0],
+            [torch.nan, 3.0],
+        ]
+    )
+
+    processor = Quantile(n_quantiles=3, subsample=None).fit(input)
+    transformed = processor.transform(input)
+
+    assert torch.isnan(processor.quantiles[:, 0]).all()
+    assert torch.isnan(transformed[:, 0]).all()
+
+
 def test_quantile_normal_distribution_is_finite_at_bounds() -> None:
     input = torch.tensor([[-2.0], [-1.0], [0.0], [4.0], [8.0]])
 

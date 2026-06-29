@@ -78,7 +78,7 @@ class Quantile(Processor, InvertibleMixin):
         n_samples = input.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
-            quantile_limit = min(quantile_limit, int(self.subsample * 0.2))
+            quantile_limit = min(quantile_limit, self.subsample)
         self.n_quantiles = max(1, min(self._n_quantiles, quantile_limit))
 
         self.references = torch.linspace(
