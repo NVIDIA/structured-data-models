@@ -2,12 +2,13 @@ r"""Set-transformer modules for structured tensor models."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, overload
 
 import torch
 from torch import Tensor
 from torch.nn import Parameter
 
+from sdm.cache import KVCacheEntry
 from sdm.nn import TransformerBlock
 
 
@@ -76,12 +77,47 @@ class InducedTransformerBlock(torch.nn.Module):
         )
         torch.nn.init.trunc_normal_(self.inducing_points, std=0.02)
 
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        *,
+        return_key_value: Literal[False] = False,
+    ) -> Tensor: ...
+
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        *,
+        return_key_value: Literal[True],
+    ) -> tuple[Tensor, KVCacheEntry]: ...
+
+    @overload
+    def forward(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None = None,
+        seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        *,
+        return_key_value: bool,
+    ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
+
     def forward(
         self,
         query: Tensor,  # [..., Q, C]
-        key_value: Tensor | None = None,  # [..., KV, C]
+        key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
-    ) -> Tensor:  # [..., Q, C]
+        attn_mask: Tensor | None = None,  # [..., KV]
+        return_key_value: bool = False,
+    ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
         Args:
@@ -95,19 +131,29 @@ class InducedTransformerBlock(torch.nn.Module):
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 dtype ``torch.int32``.
+            attn_mask: Boolean attention mask with shape ``[..., KV]``.
+                Entries set to ``True`` participate in attention.
+            return_key_value: Whether to return the computed key and value
+                projections for the final attention site alongside the output.
 
         Returns:
-            Tensor with shape ``[..., Q, C]``.
+            Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
+            ``False``. Otherwise, a tuple of the output tensor and a
+            :class:`~sdm.cache.KVCacheEntry`.
         """
-        if key_value is None:
-            key_value = query
-
-        hidden = self.transformer_1(
-            query=self.inducing_points,  # [M, C]
-            key_value=key_value,  # [..., KV, C]
-            seqused_key_value=seqused_key_value,  # [...]
-        )  # [..., M, C]
+        if not isinstance(key_value, KVCacheEntry):
+            if key_value is None:
+                key_value = query
+            if attn_mask is not None:
+                attn_mask = attn_mask.unsqueeze(-2)  # [..., 1, KV]
+            key_value = self.transformer_1(
+                query=self.inducing_points,  # [M, C]
+                key_value=key_value,  # [..., KV, C]
+                seqused_key_value=seqused_key_value,  # [...]
+                attn_mask=attn_mask,  # [..., 1, KV]
+            )  # [..., M, C]
         return self.transformer_2(
             query=query,  # [..., Q, C]
-            key_value=hidden,  # [..., M, C]
+            key_value=key_value,  # [..., M, C]
+            return_key_value=return_key_value,
         )  # [..., Q, C]
