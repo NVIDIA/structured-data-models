@@ -234,20 +234,6 @@ def _isnan(input: CategoricalTensor) -> Tensor:
     return input._data < 0
 
 
-def _category_tensor(
-    values: Sequence[Any],
-    *,
-    device: torch.device | str | None,
-) -> Tensor:
-    if len(values) == 0:
-        return torch.empty(0, dtype=torch.int64, device=device)
-
-    if isinstance(values[0], str):
-        return StringTensor.from_list(list(values), device=device)
-
-    return torch.as_tensor(values, device=device)
-
-
 @CategoricalTensor.implements(aten.alias.default)
 def _alias(input: CategoricalTensor) -> CategoricalTensor:
     return input.__class__(aten.alias.default(input._data), input._categories)
