@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from sdm.nn import (
     SDPA,
-    MultiHeadAttention,
+    Attention,
     QASSMax,
     RotaryEmbedding,
     TransformerBlock,
@@ -66,7 +66,7 @@ def test_qassmax(
 def test_sdpa(device: torch.device) -> None:
     channels = 3
     num_heads = 2
-    module = SDPA(channels=channels, num_heads=num_heads)
+    module = SDPA(channels=channels, num_query_heads=num_heads)
 
     # Match torch SDPA for unbatched query, key, and value tensors.
     query = torch.randn(4, num_heads, channels, device=device)
@@ -205,15 +205,51 @@ def test_sdpa(device: torch.device) -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize("force_fallback", [False, True])
+def test_sdpa_gqa(
+    device: torch.device,
+    force_fallback: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sdm.nn.attention as attention
+
+    if force_fallback:
+        # Exercise the `repeat_interleave` path for torch without `enable_gqa`.
+        monkeypatch.setattr(attention, "_SDPA_HAS_GQA", False)
+
+    channels = 8
+    num_query_heads = 4
+    num_key_value_heads = 2
+    module = SDPA(channels=channels, num_query_heads=num_query_heads)
+
+    query = torch.randn(2, 6, num_query_heads, channels, device=device)
+    key = torch.randn(2, 5, num_key_value_heads, channels, device=device)
+    value = torch.randn(2, 5, num_key_value_heads, channels, device=device)
+
+    out = module(query=query, key=key, value=value)
+    assert out.shape == query.shape
+
+    # Grouped-query attention must equal expanding key/value to the query head
+    # count via `repeat_interleave` (contiguous-group mapping).
+    groups = num_query_heads // num_key_value_heads
+    expected = reference_sdpa(
+        query=query,
+        key=key.repeat_interleave(groups, dim=-2),
+        value=value.repeat_interleave(groups, dim=-2),
+    )
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
 def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
     channels = 6
     num_heads = 3
     dtype = torch.float32
-    module = MultiHeadAttention(
+    module = Attention(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         qassmax=qassmax,
         device=device,
         dtype=dtype,
@@ -258,9 +294,9 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
 def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
     channels = 8
     num_heads = 2
-    module = MultiHeadAttention(
+    module = Attention(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         qassmax=qassmax,
     )
 
@@ -316,7 +352,7 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
 def test_attention_errors() -> None:
     channels = 6
     num_heads = 3
-    module = MultiHeadAttention(channels=channels, num_heads=num_heads)
+    module = Attention(channels=channels, num_query_heads=num_heads)
     query = torch.randn(2, 4, channels)
 
     with pytest.raises(ValueError, match="Cannot pass both"):
@@ -345,7 +381,52 @@ def test_attention_errors() -> None:
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
-        MultiHeadAttention(channels=5, num_heads=2)
+        Attention(channels=5, num_query_heads=2)
+
+    with pytest.raises(ValueError, match=r"`num_key_value_heads`"):
+        Attention(channels=8, num_query_heads=4, num_key_value_heads=3)
+
+
+@withCUDA
+@pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
+@pytest.mark.parametrize("qassmax", [False, True])
+def test_attention_gqa(
+    device: torch.device,
+    num_key_value_heads: int,
+    qassmax: bool,
+) -> None:
+    channels = 8
+    num_query_heads = 4
+    module = Attention(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+        qassmax=qassmax,
+        device=device,
+    )
+
+    head_dim = channels // num_query_heads
+    expected_qkv = (num_query_heads + 2 * num_key_value_heads) * head_dim
+    assert module.qkv_lin.out_features == expected_qkv
+
+    rope = RotaryEmbedding(channels=head_dim, device=device)
+    query = torch.randn(2, 3, channels, device=device)
+    key_value = torch.randn(2, 5, channels, device=device)
+
+    # Output shape is invariant to the key/value head count.
+    out, kv = module(
+        query=query,
+        key_value=key_value,
+        rope=rope,
+        return_key_value=True,
+    )
+    assert out.shape == query.shape
+    assert kv.key.size() == (2, 5, num_key_value_heads, head_dim)
+    assert kv.value.size() == (2, 5, num_key_value_heads, head_dim)
+
+    # The reduced-head key/value cache round-trips through the cached path.
+    cached_out = module(query=query, key_value=kv, rope=rope)
+    assert cached_out.shape == query.shape
 
 
 @withCUDA
@@ -364,7 +445,7 @@ def test_transformer_block(
     feedforward_channels = 16
     module = TransformerBlock(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         feedforward_channels=feedforward_channels,
         qassmax=qassmax,
         device=device,
@@ -416,7 +497,9 @@ def test_transformer_block(
         attn_mask=attn_mask,
         rope=rotary_embedding,
     )
-    torch.testing.assert_close(out1, out2)
+    # The seqused-mask and explicit-mask paths are mathematically equivalent
+    # but dispatch to different SDPA kernels on GPU, so allow float32 noise.
+    torch.testing.assert_close(out1, out2, atol=1e-4, rtol=1e-3)
 
     # Test no padding leakage
     new_key_value = key_value.clone()
@@ -439,7 +522,7 @@ def test_transformer_block_kv_cache() -> None:
     num_heads = 2
     module = TransformerBlock(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         feedforward_channels=16,
     )
     with torch.no_grad():

@@ -11,6 +11,21 @@ from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 
 
+def _detect_sdpa_gqa() -> bool:
+    # `inspect.signature` cannot introspect the SDPA builtin, so probe with a
+    # tiny call to detect whether `enable_gqa` is an accepted argument.
+    probe = torch.zeros(1, 1, 1, 1)
+    try:
+        F.scaled_dot_product_attention(probe, probe, probe, enable_gqa=False)
+    except TypeError:
+        return False
+    return True
+
+
+# Whether the installed torch exposes grouped-query attention natively.
+_SDPA_HAS_GQA = _detect_sdpa_gqa()
+
+
 class QASSMax(torch.nn.Module):
     r"""Query-Aware Scalable SoftMax (QASSMax).
 
@@ -41,7 +56,7 @@ class QASSMax(torch.nn.Module):
 
     Args:
         channels: The number of channels per attention head.
-        num_heads: The number of attention heads.
+        num_heads: The number of query attention heads.
         hidden_channels: The hidden width of the scale and gate MLPs.
         device: The device.
         dtype: The dtype.
@@ -112,9 +127,13 @@ class SDPA(torch.nn.Module):
     and extends it by arbitrary batch dimensions, :class:`QASSMax`-based
     temperature-scaling, and padding support for key/value pairs.
 
+    Supports grouped-query and multi-query attention: the query may carry more
+    heads than the key/value tensors, as long as the query head count is a
+    multiple of the key/value head count.
+
     Args:
         channels: The number of channels per attention head.
-        num_heads: The number of attention heads.
+        num_query_heads: The number of query attention heads.
         qassmax: Whether to scale queries via :class:`QASSMax`.
         device: The device.
         dtype: The dtype.
@@ -123,7 +142,7 @@ class SDPA(torch.nn.Module):
     def __init__(
         self,
         channels: int,
-        num_heads: int,
+        num_query_heads: int,
         qassmax: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -135,34 +154,36 @@ class SDPA(torch.nn.Module):
         if qassmax:
             self.qassmax = QASSMax(
                 channels=channels,
-                num_heads=num_heads,
+                num_heads=num_query_heads,
                 **factory_kwargs,
             )
 
     def forward(
         self,
-        query: Tensor,  # [..., Q, H, C]
-        key: Tensor,  # [..., KV, H, C]
-        value: Tensor,  # [..., KV, H, C]
+        query: Tensor,  # [..., Q, Hq, C]
+        key: Tensor,  # [..., KV, Hkv, C]
+        value: Tensor,  # [..., KV, Hkv, C]
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
-    ) -> Tensor:  # [..., Q, H, C]
+    ) -> Tensor:  # [..., Q, Hq, C]
         r"""The forward pass.
 
         Args:
-            query: The query tensor with shape ``[..., Q, H, C]``.
-                ``Q`` is the query sequence length, ``H`` is the number of
-                attention heads, and ``C`` is the channels per head.
-            key: The key tensor with shape ``[..., KV, H, C]``.
-                ``KV`` is the key/value sequence length.
-            value: The value tensor with shape ``[..., KV, H, C]``.
+            query: The query tensor with shape ``[..., Q, Hq, C]``.
+                ``Q`` is the query sequence length, ``Hq`` is the number of
+                query attention heads, and ``C`` is the channels per head.
+            key: The key tensor with shape ``[..., KV, Hkv, C]``.
+                ``KV`` is the key/value sequence length and ``Hkv`` is the
+                number of key/value heads (``Hkv <= Hq`` and ``Hq % Hkv == 0``
+                for grouped-query attention).
+            value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 dtype ``torch.int32``.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
 
         Returns:
-            Tensor with shape ``[..., Q, H, C]``.
+            Tensor with shape ``[..., Q, Hq, C]``.
         """
         if query.numel() == 0:
             return query
@@ -215,28 +236,56 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
+        # Grouped-query / multi-query attention: the query may carry more heads
+        # than key/value. Torch maps query head ``i`` to key/value head
+        # ``i // (Hq // Hkv)``, matching ``repeat_interleave`` on the head axis
+        # (``-2`` in the pre-transpose ``[B, S, H, C]`` layout).
+        query_heads = query.size(-2)
+        key_value_heads = key.size(-2)
+        enable_gqa = query_heads != key_value_heads
+        if enable_gqa and not _SDPA_HAS_GQA:
+            groups = query_heads // key_value_heads
+            key = key.repeat_interleave(groups, dim=-2)
+            value = value.repeat_interleave(groups, dim=-2)
+            enable_gqa = False
+
+        # Only pass `enable_gqa` for genuine grouped-query attention so the
+        # standard multi-head path stays byte-identical to plain SDPA (and so
+        # the kwarg is never sent to torch builds that lack it).
+        gqa_kwargs = {"enable_gqa": True} if enable_gqa else {}
+
         out = F.scaled_dot_product_attention(
-            query=query.transpose(-3, -2),  # [B, H, Q, C],
-            key=key.transpose(-3, -2),  # [B, H, KV, C],
-            value=value.transpose(-3, -2),  # [B, H, KV, C],
+            query=query.transpose(-3, -2),  # [B, Hq, Q, C],
+            key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
+            value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
             attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
             if attn_mask is not None
             else None,
-        ).transpose(-3, -2)  # [B, Q, H, C]
+            **gqa_kwargs,
+        ).transpose(-3, -2)  # [B, Q, Hq, C]
 
-        return out.view(batch_shape + out.size()[-3:])  # [..., Q, H, C]
+        return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
 
-class MultiHeadAttention(torch.nn.Module):
-    r"""Multi-Head Attention layer.
+class Attention(torch.nn.Module):
+    r"""Multi-head attention layer with grouped-query attention support.
 
     This module owns the query, key, value, and output projections.
     It performs self-attention when ``key_value`` is omitted and
     cross-attention when ``key_value`` is given.
 
+    Setting ``num_key_value_heads`` below ``num_query_heads`` enables
+    grouped-query attention (GQA); setting it to ``1`` enables multi-query
+    attention (MQA). The default ``num_key_value_heads == num_query_heads``
+    recovers standard multi-head attention.
+
     Args:
         channels: The number of input and output channels.
-        num_heads: The number of attention heads.
+        num_query_heads: The number of query attention heads.
+            ``channels`` must be divisible by ``num_query_heads``.
+        num_key_value_heads: The number of key/value attention heads.
+            Defaults to ``num_query_heads`` (standard multi-head attention).
+            Must divide ``num_query_heads``.
         qassmax: Whether to scale queries with :class:`QASSMax`.
         device: The device.
         dtype: The dtype.
@@ -245,25 +294,41 @@ class MultiHeadAttention(torch.nn.Module):
     def __init__(
         self,
         channels: int,
-        num_heads: int,
+        num_query_heads: int,
+        num_key_value_heads: int | None = None,
         qassmax: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        if channels % num_heads != 0:
+        if num_key_value_heads is None:
+            num_key_value_heads = num_query_heads
+        if channels % num_query_heads != 0:
             raise ValueError(
-                f"`channels` ({channels}) must be divisible by `num_heads` "
-                f"({num_heads})"
+                f"`channels` ({channels}) must be divisible by "
+                f"`num_query_heads` ({num_query_heads})"
+            )
+        if num_query_heads % num_key_value_heads != 0:
+            raise ValueError(
+                f"`num_query_heads` ({num_query_heads}) must be divisible by "
+                f"`num_key_value_heads` ({num_key_value_heads})"
             )
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_heads = num_heads
-        self.qkv_lin = Linear(channels, 3 * channels, **factory_kwargs)
+        self.num_query_heads = num_query_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = channels // num_query_heads
+        # Query projection spans all channels; key/value span fewer heads.
+        self.q_dim = num_query_heads * self.head_dim  # == channels
+        self.kv_dim = num_key_value_heads * self.head_dim
+
+        self.qkv_lin = Linear(
+            channels, self.q_dim + 2 * self.kv_dim, **factory_kwargs
+        )
         self.sdpa = SDPA(
-            channels=channels // num_heads,
-            num_heads=num_heads,
+            channels=self.head_dim,
+            num_query_heads=num_query_heads,
             qassmax=qassmax,
             **factory_kwargs,
         )
@@ -344,26 +409,29 @@ class MultiHeadAttention(torch.nn.Module):
             :class:`~sdm.cache.KVCacheEntry`.
         """
         if isinstance(key_value, KVCacheEntry):
-            channels = query.size(-1)
-            q_weight = self.qkv_lin.weight[:channels]
-            q_bias = self.qkv_lin.bias[:channels]
+            q_weight = self.qkv_lin.weight[: self.q_dim]
+            q_bias = self.qkv_lin.bias[: self.q_dim]
             query = F.linear(query, q_weight, q_bias)
             key = key_value.key
             value = key_value.value
         elif key_value is None:
-            query, key, value = self.qkv_lin(query).chunk(chunks=3, dim=-1)
+            query, key, value = self.qkv_lin(query).split(
+                [self.q_dim, self.kv_dim, self.kv_dim], dim=-1
+            )
         else:
-            sections = [query.size(-1), 2 * query.size(-1)]
+            sections = [self.q_dim, 2 * self.kv_dim]
             q_weight, kv_weight = self.qkv_lin.weight.split(sections, dim=0)
             q_bias, kv_bias = self.qkv_lin.bias.split(sections, dim=0)
             query = F.linear(query, q_weight, q_bias)
             key, value = F.linear(key_value, kv_weight, kv_bias).chunk(2, -1)
 
-        # [..., S, C] -> [..., S, H, C // H]
-        query = query.unflatten(-1, [self.num_heads, -1])
+        # [..., S, C] -> [..., S, H, C // H], with separate query/kv heads.
+        query = query.unflatten(-1, [self.num_query_heads, self.head_dim])
         if not isinstance(key_value, KVCacheEntry):
-            key = key.unflatten(-1, [self.num_heads, -1])
-            value = value.unflatten(-1, [self.num_heads, -1])
+            key = key.unflatten(-1, [self.num_key_value_heads, self.head_dim])
+            value = value.unflatten(
+                -1, [self.num_key_value_heads, self.head_dim]
+            )
 
         if rope is not None:
             query = rope(query)
@@ -372,12 +440,12 @@ class MultiHeadAttention(torch.nn.Module):
             assert query.dtype == key.dtype == value.dtype
 
         out = self.sdpa(
-            query=query,  # [..., Q, H, C // H]
-            key=key,  # [..., KV, H, C // H]
-            value=value,  # [..., KV, H, C // H]
+            query=query,  # [..., Q, Hq, C // Hq]
+            key=key,  # [..., KV, Hkv, C // Hq]
+            value=value,  # [..., KV, Hkv, C // Hq]
             seqused_key_value=seqused_key_value,  # [...]
             attn_mask=attn_mask,  # [..., Q, KV]
-        )  # [..., Q, H, C // H]
+        )  # [..., Q, Hq, C // Hq]
 
         out = out.flatten(-2, -1)  # [..., Q, C]
         out = self.out_lin(out)  # [..., Q, C]
@@ -394,8 +462,10 @@ class TransformerBlock(torch.nn.Module):
 
     Args:
         channels: The number of input and output channels.
-        num_heads: The number of attention heads.
+        num_query_heads: The number of query attention heads.
         feedforward_channels: The hidden width of the MLP.
+        num_key_value_heads: The number of key/value attention heads.
+            Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
         norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
         device: The device.
@@ -405,8 +475,9 @@ class TransformerBlock(torch.nn.Module):
     def __init__(
         self,
         channels: int,
-        num_heads: int,
+        num_query_heads: int,
         feedforward_channels: int,
+        num_key_value_heads: int | None = None,
         qassmax: bool = False,
         norm_bias: bool = True,
         device: torch.device | str | None = None,
@@ -417,9 +488,10 @@ class TransformerBlock(torch.nn.Module):
 
         self.q_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
         self.kv_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
-        self.attn = MultiHeadAttention(
+        self.attn = Attention(
             channels=channels,
-            num_heads=num_heads,
+            num_query_heads=num_query_heads,
+            num_key_value_heads=num_key_value_heads,
             qassmax=qassmax,
             **factory_kwargs,
         )

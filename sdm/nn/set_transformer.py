@@ -33,8 +33,10 @@ class InducedTransformerBlock(torch.nn.Module):
 
     Args:
         channels: The number of input and output channels.
-        num_heads: The number of attention heads.
+        num_query_heads: The number of query attention heads.
         feedforward_channels: The hidden width of the MLP.
+        num_key_value_heads: The number of key/value attention heads.
+            Defaults to ``num_query_heads`` (standard multi-head attention).
         num_inducing_points: The number of learned inducing points :math:`M`.
         qassmax: Whether to scale induced vectors with :class:`QASSMax`.
         norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
@@ -45,8 +47,9 @@ class InducedTransformerBlock(torch.nn.Module):
     def __init__(
         self,
         channels: int,
-        num_heads: int,
+        num_query_heads: int,
         feedforward_channels: int,
+        num_key_value_heads: int | None = None,
         num_inducing_points: int = 16,
         qassmax: bool = False,
         norm_bias: bool = True,
@@ -58,7 +61,8 @@ class InducedTransformerBlock(torch.nn.Module):
 
         self.transformer_1 = TransformerBlock(
             channels=channels,
-            num_heads=num_heads,
+            num_query_heads=num_query_heads,
+            num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
             qassmax=qassmax,
             norm_bias=norm_bias,
@@ -66,7 +70,8 @@ class InducedTransformerBlock(torch.nn.Module):
         )
         self.transformer_2 = TransformerBlock(
             channels=channels,
-            num_heads=num_heads,
+            num_query_heads=num_query_heads,
+            num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
             norm_bias=norm_bias,
             **factory_kwargs,
