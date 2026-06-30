@@ -144,6 +144,8 @@ class CategoricalTensor(Tensor):
         ):
             category = StringTensor.from_arrow(dictionary, device=device)
         else:
+            # Tensor-compatible non-string category dictionaries, such as
+            # numeric and bool values, can use a regular torch.Tensor.
             values = dictionary.to_numpy(
                 zero_copy_only=False,
                 writable=torch_device.type == "cpu",
