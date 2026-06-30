@@ -130,13 +130,13 @@ class CategoricalTensor(Tensor):
         )
         values = encoded.indices.fill_null(-1).to_numpy(
             zero_copy_only=False,
-            writable=torch_device.type == "cpu" and dtype == torch.int32,
+            writable=torch_device.type == "cpu",
         )
-        if torch_device.type == "cpu" and dtype != torch.int32:
-            data = torch.tensor(values, dtype=dtype, device=device)
-        else:
-            data = torch.as_tensor(values, dtype=dtype, device=device)
-        data = data.unsqueeze(-1)
+        data = torch.as_tensor(
+            values,
+            dtype=dtype,
+            device=device,
+        ).unsqueeze(-1)
 
         dictionary = encoded.dictionary
         if pa.types.is_string(dictionary.type) or pa.types.is_large_string(
