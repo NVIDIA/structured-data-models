@@ -83,6 +83,7 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
     ) -> Tensor: ...
@@ -93,6 +94,7 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
     ) -> tuple[Tensor, KVCacheEntry]: ...
@@ -103,6 +105,7 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,
         key_value: Tensor | KVCacheEntry | None = None,
         seqused_key_value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
@@ -112,6 +115,7 @@ class InducedTransformerBlock(torch.nn.Module):
         query: Tensor,  # [..., Q, C]
         key_value: Tensor | KVCacheEntry | None = None,  # [..., KV, C]
         seqused_key_value: Tensor | None = None,  # [...]
+        attn_mask: Tensor | None = None,  # [..., KV]
         return_key_value: bool = False,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
@@ -127,6 +131,8 @@ class InducedTransformerBlock(torch.nn.Module):
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 dtype ``torch.int32``.
+            attn_mask: Boolean attention mask with shape ``[..., KV]``.
+                Entries set to ``True`` participate in attention.
             return_key_value: Whether to return the computed key and value
                 projections for the final attention site alongside the output.
 
@@ -138,10 +144,13 @@ class InducedTransformerBlock(torch.nn.Module):
         if not isinstance(key_value, KVCacheEntry):
             if key_value is None:
                 key_value = query
+            if attn_mask is not None:
+                attn_mask = attn_mask.unsqueeze(-2)  # [..., 1, KV]
             key_value = self.transformer_1(
                 query=self.inducing_points,  # [M, C]
                 key_value=key_value,  # [..., KV, C]
                 seqused_key_value=seqused_key_value,  # [...]
+                attn_mask=attn_mask,  # [..., 1, KV]
             )  # [..., M, C]
         return self.transformer_2(
             query=query,  # [..., Q, C]

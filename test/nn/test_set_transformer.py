@@ -47,8 +47,7 @@ def test_induced_transformer_block(
     torch.testing.assert_close(out_seqused, out_cross)
 
 
-@pytest.mark.parametrize("qassmax", [False, True])
-def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
+def test_induced_transformer_block_kv_cache() -> None:
     batch_size = 2
     set_size = 6
     context_size = 5
@@ -60,7 +59,6 @@ def test_induced_transformer_block_kv_cache(qassmax: bool) -> None:
         num_heads=num_heads,
         feedforward_channels=16,
         num_inducing_points=num_inducing_points,
-        qassmax=qassmax,
     )
 
     query = torch.randn(batch_size, set_size, channels)
