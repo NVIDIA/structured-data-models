@@ -181,7 +181,7 @@ data-aria-dark="Switch to auto color mode">
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 </span><span data-line="2"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">StringTensor</span>
 </span><span data-line="3">
-</span><span data-line="4"><span class="n">array</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">,</span> <span class="s2">&quot;hello world&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">])</span>
+</span><span data-line="4"><span class="n">array</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">,</span> <span class="s2">&quot;hello world&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">])</span>
 </span><span data-line="5"><span class="n">tensor</span> <span class="o">=</span> <span class="n">StringTensor</span><span class="o">.</span><span class="n">from_arrow</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
 </span></pre></div>
 </div>
@@ -265,7 +265,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=09ef6664"></script>
+      <script src="../../_static/documentation_options.js?v=46cf0fbf"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
