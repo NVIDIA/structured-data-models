@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import pyarrow as pa
 import torch
@@ -16,9 +16,6 @@ SelfCategoricalTensor = TypeVar(
     "SelfCategoricalTensor",
     bound="CategoricalTensor",
 )
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 class CategoricalTensor(Tensor):
@@ -109,7 +106,7 @@ class CategoricalTensor(Tensor):
         cls: type[SelfCategoricalTensor],
         array: pa.Array | pa.ChunkedArray,
         *,
-        dtype: torch.dtype = torch.int32,
+        dtype: torch.dtype | None = torch.int32,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
         r"""Build a categorical tensor from an Arrow categorical column."""
@@ -118,11 +115,6 @@ class CategoricalTensor(Tensor):
                 array = array.chunk(0)
             else:
                 array = array.combine_chunks()
-        if dtype not in cls.ALLOWED_DTYPES:
-            raise ValueError(
-                f"Expected 'dtype' in '{cls.__name__}.from_arrow' to be "
-                f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
-            )
 
         encoded = array.dictionary_encode()
         torch_device = (
@@ -143,6 +135,8 @@ class CategoricalTensor(Tensor):
             dictionary.type
         ):
             category = StringTensor.from_arrow(dictionary, device=device)
+        elif pa.types.is_null(dictionary.type):
+            category = torch.empty(0, dtype=torch.int64, device=device)
         else:
             # Tensor-compatible non-string category dictionaries, such as
             # numeric and bool values, can use a regular torch.Tensor.
@@ -159,30 +153,17 @@ class CategoricalTensor(Tensor):
     @classmethod
     def from_pandas(
         cls: type[SelfCategoricalTensor],
-        series: "pd.Series",
+        series: Any,
         *,
-        dtype: torch.dtype = torch.int32,
+        dtype: torch.dtype | None = torch.int32,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
         r"""Build a categorical tensor from a pandas categorical column."""
-        import pandas as pd
-
-        if dtype not in cls.ALLOWED_DTYPES:
-            raise ValueError(
-                f"Expected 'dtype' in '{cls.__name__}.from_pandas' to be "
-                f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
-            )
-
-        categories = list(series.dropna().unique())
-        values = pd.Index(categories).get_indexer(series)
-        data = torch.as_tensor(
-            values,
+        return cls.from_arrow(
+            pa.array(series),
             dtype=dtype,
             device=device,
-        ).unsqueeze(-1)
-
-        category = _category_tensor(categories, device=device)
-        return cls(data=data, categories=(category,))
+        )
 
     # Properties ##############################################################
 
