@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.utils import _pytree as pytree
 from typing_extensions import override
 
-from sdm.tensor.string import StringTensor
+from sdm.tensor import StringTensor
 
 aten = torch.ops.aten
 
