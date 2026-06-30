@@ -223,7 +223,15 @@ class TableTensor(Tensor):
         *,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
-        r"""Build a table tensor from a pandas-like dataframe."""
+        r"""Build a table tensor from a pandas-like dataframe.
+
+        Args:
+            df: The dataframe to ingest. Only columns listed in ``stypes`` are
+                materialized; other columns are ignored.
+            stypes: The semantic type for each column to ingest, keyed by
+                column name.
+            device: The device to place the resulting tensor on.
+        """
         import pyarrow as pa
 
         return cls.from_arrow(
@@ -240,7 +248,16 @@ class TableTensor(Tensor):
         *,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
-        r"""Build a table tensor from an Arrow table or column mapping."""
+        r"""Build a table tensor from an Arrow table or column mapping.
+
+        Args:
+            table: A ``pyarrow.Table`` or a mapping from column name to an
+                Arrow array. Only columns listed in ``stypes`` are
+                materialized; other columns are ignored.
+            stypes: The semantic type for each column to ingest, keyed by
+                column name.
+            device: The device to place the resulting tensor on.
+        """
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
@@ -257,7 +274,7 @@ class TableTensor(Tensor):
         else:
             numerical_tensors = []
             for column in numerical_names:
-                array = _to_arrow_array(_to_arrow_column(table, column))
+                array = _to_arrow_column(table, column)
                 values = array.to_numpy(zero_copy_only=False).astype(
                     "float32",
                     copy=False,
@@ -283,7 +300,7 @@ class TableTensor(Tensor):
                 torch.cat(
                     [
                         CategoricalTensor.from_arrow(
-                            _to_arrow_array(_to_arrow_column(table, column)),
+                            _to_arrow_column(table, column),
                             device=device,
                         )
                         for column in categorical_names
@@ -295,11 +312,13 @@ class TableTensor(Tensor):
         column_groups = {
             stype: tuple(names) for stype, names in columns.items()
         }
+        # The blocks already carry the resolved device, so let the constructor
+        # infer it. Forwarding ``device`` here would compare a non-indexed
+        # device such as ``"cuda"`` against the materialized ``"cuda:0"``.
         return cls(
             columns=cast(Mapping[StypeLike, Sequence[str]], column_groups),
             numerical=numerical,
             categorical=categorical,
-            device=device,
         )
 
     # Properties ##############################################################
@@ -1055,25 +1074,16 @@ def _to_arrow_column(table: "ArrowTableLike", column: str) -> "ArrowColumn":
     if isinstance(table, pa.Table):
         return table.column(column)
     if isinstance(table, Mapping):
-        return table[column]
+        value = table[column]
+        if isinstance(value, (pa.Array, pa.ChunkedArray)):
+            return value
+        raise TypeError(
+            "Expected an Arrow column to be a 'pyarrow.Array' or "
+            f"'pyarrow.ChunkedArray' (got '{type(value).__name__}')"
+        )
     raise TypeError(
         "Expected an Arrow table to be a 'pyarrow.Table' or mapping of "
         f"Arrow columns (got '{type(table).__name__}')"
-    )
-
-
-def _to_arrow_array(value: "ArrowColumn") -> "pa.Array":
-    import pyarrow as pa
-
-    if isinstance(value, pa.ChunkedArray):
-        if value.num_chunks == 1:
-            return value.chunk(0)
-        return value.combine_chunks()
-    if isinstance(value, pa.Array):
-        return value
-    raise TypeError(
-        "Expected an Arrow column to be a 'pyarrow.Array' or "
-        f"'pyarrow.ChunkedArray' (got '{type(value).__name__}')"
     )
 
 

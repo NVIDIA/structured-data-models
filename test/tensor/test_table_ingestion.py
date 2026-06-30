@@ -6,7 +6,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import Stype, TableTensor
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 _DATA = {
     "age": [10, 20, None, 40],
@@ -220,3 +220,23 @@ def test_tensor_frame_bridge_shape() -> None:
     assert tf.num_rows == 4
     assert tf.feat_dict[Stype.numerical].shape == (4, 2)
     assert tf.feat_dict[Stype.categorical].shape == (4, 2)
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    "device",
+    ["cuda", torch.device("cuda")],
+    ids=["str", "device"],
+)
+def test_from_table_accepts_non_indexed_cuda_device(
+    device: torch.device | str,
+) -> None:
+    # A non-indexed device such as "cuda" must resolve to the concrete device
+    # of the materialized blocks (e.g. "cuda:0") instead of being rejected.
+    for tensor in (
+        TableTensor.from_pandas(_df(), _STYPES, device=device),
+        TableTensor.from_arrow(_arrow_table(), _STYPES, device=device),
+    ):
+        assert tensor.device.type == "cuda"
+        assert tensor.numerical.device.type == "cuda"
+        assert tensor.categorical.as_tensor().device.type == "cuda"
