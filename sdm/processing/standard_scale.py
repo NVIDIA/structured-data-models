@@ -2,6 +2,7 @@ import torch
 from torch import Tensor
 
 from sdm.processing._stats import _constant_feature_mask
+from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 
 
@@ -27,6 +28,7 @@ class StandardScale(Processor, InvertibleMixin):
         self.register_buffer("scale", torch.empty(0))
 
     def _fit(self, input: Tensor) -> None:
+        input = _as_float(input)
         data_mean = input.mean(dim=0)
 
         if self.with_mean:
@@ -44,7 +46,7 @@ class StandardScale(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` using the fitted mean and scale."""
-        return (input - self.mean) / self.scale
+        return (_as_float(input) - self.mean) / self.scale
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
-        return input * self.scale + self.mean
+        return _as_float(input) * self.scale + self.mean

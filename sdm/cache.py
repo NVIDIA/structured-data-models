@@ -1,12 +1,11 @@
 """Generic runtime cache primitives."""
 
-from dataclasses import dataclass
+from typing import NamedTuple
 
 from torch import Tensor
 
 
-@dataclass(frozen=True)
-class KVCacheEntry:
+class KVCacheEntry(NamedTuple):
     r"""Cached key/value projections for one attention site.
 
     The entry intentionally does not know where it is stored or whether it is
