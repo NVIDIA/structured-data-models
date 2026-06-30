@@ -16,7 +16,7 @@ def test_to_copy() -> None:
     out = tensor.to(torch.int32)
     assert isinstance(out, CategoricalTensor)
     assert out.dtype == torch.int32
-    assert out.dtype == torch.int32
+    assert out.as_tensor().dtype == torch.int32
     for out_category, category in zip(out.categories, tensor.categories):
         assert out_category.equal(category)
         assert out_category.data_ptr() != category.data_ptr()
