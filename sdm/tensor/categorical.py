@@ -136,6 +136,8 @@ class CategoricalTensor(Tensor):
         ):
             category = StringTensor.from_arrow(dictionary, device=device)
         elif pa.types.is_null(dictionary.type):
+            # All-null columns have no material category values; rows already
+            # use the -1 missing sentinel in the index tensor.
             category = torch.empty(0, dtype=torch.int64, device=device)
         else:
             # Tensor-compatible non-string category dictionaries, such as
