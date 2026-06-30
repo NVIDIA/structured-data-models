@@ -106,10 +106,33 @@ class CategoricalTensor(Tensor):
         cls: type[SelfCategoricalTensor],
         array: pa.Array | pa.ChunkedArray,
         *,
-        dtype: torch.dtype | None = torch.int32,
+        dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
-        r"""Build a categorical tensor from an Arrow categorical column."""
+        r"""Create tensor from a ``pyarrow`` array.
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            from sdm import CategoricalTensor
+
+            array = pa.array(["foo", None, "bar"])
+            tensor = CategoricalTensor.from_arrow(array)
+
+            print(tensor)
+            >>> tensor([[ 0],
+            >>>         [-1],
+            >>>         [ 1]])
+            print(tensor.categories[0].to_list())
+            >>> ['foo', 'bar']
+
+        Args:
+            array: The ``pyarrow`` array.
+            dtype: The dtype.
+            device: The device.
+        """
+        device = torch.device("cpu" if device is None else device)
+
         if isinstance(array, pa.ChunkedArray):
             if array.num_chunks == 1:
                 array = array.chunk(0)
@@ -117,12 +140,9 @@ class CategoricalTensor(Tensor):
                 array = array.combine_chunks()
 
         encoded = array.dictionary_encode()
-        torch_device = (
-            torch.device(device) if device is not None else torch.device("cpu")
-        )
         values = encoded.indices.fill_null(-1).to_numpy(
             zero_copy_only=False,
-            writable=torch_device.type == "cpu",
+            writable=device.type == "cpu",
         )
         data = torch.as_tensor(
             values,
@@ -131,25 +151,22 @@ class CategoricalTensor(Tensor):
         ).unsqueeze(-1)
 
         dictionary = encoded.dictionary
-        if pa.types.is_string(dictionary.type) or pa.types.is_large_string(
-            dictionary.type
-        ):
+        is_string = pa.types.is_string(dictionary.type)
+        is_large_string = pa.types.is_large_string(dictionary.type)
+        if is_string or is_large_string:
             category = StringTensor.from_arrow(dictionary, device=device)
         elif pa.types.is_null(dictionary.type):
-            # All-null columns have no material category values; rows already
-            # use the -1 missing sentinel in the index tensor.
             category = torch.empty(0, dtype=torch.int64, device=device)
-        else:
-            # Tensor-compatible non-string category dictionaries, such as
-            # numeric and bool values, can use a regular torch.Tensor.
+        else:  # Use regular torch.Tensor for Tensor-compatible dictionaries:
             values = dictionary.to_numpy(
                 zero_copy_only=False,
-                writable=torch_device.type == "cpu",
+                writable=device.type == "cpu",
             )
             category = torch.as_tensor(
                 values,
                 device=device,
             )
+
         return cls(data=data, categories=(category,))
 
     @classmethod
@@ -160,7 +177,13 @@ class CategoricalTensor(Tensor):
         dtype: torch.dtype | None = torch.int32,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
-        r"""Build a categorical tensor from a pandas categorical column."""
+        r"""Create tensor from a ``pandas`` series.
+
+        Args:
+            series: The ``pandas.Series``.
+            dtype: The dtype.
+            device: The device.
+        """
         return cls.from_arrow(
             pa.array(series),
             dtype=dtype,

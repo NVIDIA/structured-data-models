@@ -39,7 +39,7 @@ class StringTensor(VarLenTensor):
             import pyarrow as pa
             from sdm import StringTensor
 
-            array = pa.array("foo", "bar", "hello world", ""])
+            array = pa.array(["foo", "bar", "hello world", ""])
             tensor = StringTensor.from_arrow(array, size=(2, 2))
 
         Args:

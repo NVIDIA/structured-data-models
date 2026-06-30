@@ -62,25 +62,26 @@ def test_qassmax(
     assert out.device == query.device
 
 
-def test_sdpa() -> None:
+@withCUDA
+def test_sdpa(device: torch.device) -> None:
     channels = 3
     num_heads = 2
     module = SDPA(channels=channels, num_heads=num_heads)
 
     # Match torch SDPA for unbatched query, key, and value tensors.
-    query = torch.randn(4, num_heads, channels)
-    key = torch.randn(5, num_heads, channels)
-    value = torch.randn(5, num_heads, channels)
+    query = torch.randn(4, num_heads, channels, device=device)
+    key = torch.randn(5, num_heads, channels, device=device)
+    value = torch.randn(5, num_heads, channels, device=device)
 
     out = module(query=query, key=key, value=value)
     expected = reference_sdpa(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
 
     # Broadcast batch dimensions and apply a boolean attention mask.
-    query = torch.randn(2, 3, num_heads, channels)
-    key = torch.randn(5, num_heads, channels)
-    value = torch.randn(1, 5, num_heads, channels)
-    attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool)
+    query = torch.randn(2, 3, num_heads, channels, device=device)
+    key = torch.randn(5, num_heads, channels, device=device)
+    value = torch.randn(1, 5, num_heads, channels, device=device)
+    attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool, device=device)
 
     out = module(
         query=query,
@@ -100,12 +101,18 @@ def test_sdpa() -> None:
     batch_size = 2
     query_len = 4
     key_value_len = 5
-    query = torch.randn(batch_size, query_len, num_heads, channels)
-    key = torch.randn(batch_size, key_value_len, num_heads, channels)
-    value = torch.randn(batch_size, key_value_len, num_heads, channels)
+    query = torch.randn(
+        batch_size, query_len, num_heads, channels, device=device
+    )
+    key = torch.randn(
+        batch_size, key_value_len, num_heads, channels, device=device
+    )
+    value = torch.randn(
+        batch_size, key_value_len, num_heads, channels, device=device
+    )
     value[0, 3:] = 1000
     value[1, 1:] = -1000
-    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32)
+    seqused_key_value = torch.tensor([3, 1], dtype=torch.int32, device=device)
 
     out = module(
         query=query,
@@ -114,7 +121,9 @@ def test_sdpa() -> None:
         seqused_key_value=seqused_key_value,
     )
 
-    key_index = torch.arange(key_value_len).view(1, 1, key_value_len)
+    key_index = torch.arange(key_value_len, device=device).view(
+        1, 1, key_value_len
+    )
     attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
     attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
     expected = reference_sdpa(
@@ -136,9 +145,14 @@ def test_sdpa() -> None:
         num_queries,
         num_heads,
         channels,
+        device=device,
     )
-    key = torch.randn(batch_size, 1, num_train, num_heads, channels)
-    value = torch.randn(batch_size, 1, num_train, num_heads, channels)
+    key = torch.randn(
+        batch_size, 1, num_train, num_heads, channels, device=device
+    )
+    value = torch.randn(
+        batch_size, 1, num_train, num_heads, channels, device=device
+    )
 
     out = module(query=query, key=key, value=value)
     expected = reference_sdpa(
@@ -149,17 +163,19 @@ def test_sdpa() -> None:
     torch.testing.assert_close(out, expected)
 
     # Reject invalid mask and sequence-length combinations.
-    query = torch.randn(1, 2, num_heads, channels)
-    key = torch.randn(1, 2, num_heads, channels)
-    value = torch.randn(1, 2, num_heads, channels)
-    attn_mask = torch.ones(1, 2, 2, dtype=torch.bool)
+    query = torch.randn(1, 2, num_heads, channels, device=device)
+    key = torch.randn(1, 2, num_heads, channels, device=device)
+    value = torch.randn(1, 2, num_heads, channels, device=device)
+    attn_mask = torch.ones(1, 2, 2, dtype=torch.bool, device=device)
 
     with pytest.raises(ValueError, match="Cannot pass both"):
         module(
             query=query,
             key=key,
             value=value,
-            seqused_key_value=torch.tensor([1], dtype=torch.int32),
+            seqused_key_value=torch.tensor(
+                [1], dtype=torch.int32, device=device
+            ),
             attn_mask=attn_mask,
         )
 
@@ -171,7 +187,9 @@ def test_sdpa() -> None:
             query=query,
             key=key,
             value=value,
-            seqused_key_value=torch.tensor([1], dtype=torch.int64),
+            seqused_key_value=torch.tensor(
+                [1], dtype=torch.int64, device=device
+            ),
         )
 
     with pytest.raises(
@@ -182,7 +200,7 @@ def test_sdpa() -> None:
             query=query,
             key=key,
             value=value,
-            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
+            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32, device=device),
         )
 
 
@@ -205,15 +223,13 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
     key_value = torch.randn(2, 5, channels, dtype=dtype, device=device)
     attn_mask = torch.randint(0, 2, (2, 4, 5), dtype=torch.bool, device=device)
 
-    rotary_embedding = (
-        RotaryEmbedding(
+    rotary_embedding: RotaryEmbedding | None = None
+    if rope:
+        rotary_embedding = RotaryEmbedding(
             channels=channels // num_heads,
             device=device,
             dtype=dtype,
         )
-        if rope
-        else None
-    )
 
     out = module(query=query, key_value=None, rope=rotary_embedding)
     assert out.shape == query.shape
@@ -262,9 +278,10 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         ],
         dtype=torch.bool,
     ).expand(2, -1, -1)
-    rotary_embedding = (
-        RotaryEmbedding(channels=channels // num_heads) if rope else None
-    )
+
+    rotary_embedding: RotaryEmbedding | None = None
+    if rope:
+        rotary_embedding = RotaryEmbedding(channels=channels // num_heads)
 
     direct_out = module(
         query=query,
@@ -277,7 +294,7 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         key_value=key_value,
         attn_mask=attn_mask,
         rope=rotary_embedding,
-        return_kv=True,
+        return_key_value=True,
     )
     cached_out = module(
         query=query,
@@ -286,7 +303,7 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
         rope=rotary_embedding,
     )
 
-    self_out, self_kv = module(query=query, return_kv=True)
+    self_out, self_kv = module(query=query, return_key_value=True)
     self_cached_out = module(query=query, key_value=self_kv)
 
     assert kv.key.size() == (2, 5, num_heads, channels // num_heads)
@@ -360,6 +377,7 @@ def test_transformer_block(
     )
     attn_mask = key_index < seqused_key_value.view(batch_size, 1, 1)
     attn_mask = attn_mask.expand(batch_size, query_len, key_value_len)
+
     rotary_embedding: RotaryEmbedding | None = None
     if rope:
         rotary_embedding = RotaryEmbedding(
@@ -441,7 +459,7 @@ def test_transformer_block_kv_cache() -> None:
         query=query,
         key_value=key_value,
         seqused_key_value=seqused_key_value,
-        return_kv=True,
+        return_key_value=True,
     )
     cached_out = module(
         query=query,

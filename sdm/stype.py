@@ -1,4 +1,4 @@
-"""Semantic column types sidentifiers."""
+"""Semantic column types identifiers."""
 
 from enum import Enum
 from typing import Literal, TypeAlias
