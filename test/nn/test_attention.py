@@ -205,9 +205,15 @@ def test_sdpa(device: torch.device) -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    ("num_query_heads", "num_key_value_heads"),
+    [(4, 1), (4, 2), (6, 3)],  # MQA (1) and GQA group sizes.
+)
 @pytest.mark.parametrize("force_fallback", [False, True])
 def test_sdpa_gqa(
     device: torch.device,
+    num_query_heads: int,
+    num_key_value_heads: int,
     force_fallback: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -218,8 +224,6 @@ def test_sdpa_gqa(
         monkeypatch.setattr(attention, "_SDPA_HAS_GQA", False)
 
     channels = 8
-    num_query_heads = 4
-    num_key_value_heads = 2
     module = SDPA(channels=channels, num_query_heads=num_query_heads)
 
     query = torch.randn(2, 6, num_query_heads, channels, device=device)
@@ -229,8 +233,8 @@ def test_sdpa_gqa(
     out = module(query=query, key=key, value=value)
     assert out.shape == query.shape
 
-    # Grouped-query attention must equal expanding key/value to the query head
-    # count via `repeat_interleave` (contiguous-group mapping).
+    # Grouped/multi-query attention must equal expanding key/value to the query
+    # head count via `repeat_interleave` (contiguous-group mapping).
     groups = num_query_heads // num_key_value_heads
     expected = reference_sdpa(
         query=query,
@@ -238,6 +242,15 @@ def test_sdpa_gqa(
         value=value.repeat_interleave(groups, dim=-2),
     )
     torch.testing.assert_close(out, expected)
+
+
+def test_sdpa_head_divisibility_error() -> None:
+    module = SDPA(channels=4, num_query_heads=4)
+    query = torch.randn(1, 3, 4, 4)
+    key = torch.randn(1, 5, 3, 4)  # query heads (4) not divisible by 3
+    value = torch.randn(1, 5, 3, 4)
+    with pytest.raises(ValueError, match="must be divisible"):
+        module(query=query, key=key, value=value)
 
 
 @withCUDA
@@ -430,6 +443,72 @@ def test_attention_gqa(
 
 
 @withCUDA
+@pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
+@pytest.mark.parametrize("rope_on", [False, True])
+def test_attention_gqa_numerical(
+    device: torch.device,
+    num_key_value_heads: int,
+    rope_on: bool,
+) -> None:
+    # float64 makes the comparison exact and TF32-immune: the module computes
+    # K/V via one fused F.linear while the reference below uses separate
+    # projections, and on some GPUs differently-shaped fp32 (TF32) matmuls
+    # round differently. fp64 still catches any q/k/v mis-slice or swap.
+    dtype = torch.float64
+    channels = 8
+    num_query_heads = 4
+    head_dim = channels // num_query_heads
+    q_dim = num_query_heads * head_dim
+    kv_dim = num_key_value_heads * head_dim
+    module = Attention(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+        device=device,
+        dtype=dtype,
+    )
+    # Randomize projections (out_lin is zero-initialized) so distinct query,
+    # key, and value weights make any q/k/v mis-slice or swap fail allclose.
+    with torch.no_grad():
+        module.qkv_lin.weight.normal_()
+        module.qkv_lin.bias.normal_()
+        module.out_lin.weight.normal_()
+        module.out_lin.bias.normal_()
+
+    query = torch.randn(2, 3, channels, device=device, dtype=dtype)
+    key_value = torch.randn(2, 5, channels, device=device, dtype=dtype)
+    rope = (
+        RotaryEmbedding(channels=head_dim, device=device, dtype=dtype)
+        if rope_on
+        else None
+    )
+
+    out = module(query=query, key_value=key_value, rope=rope)
+
+    # Hand-built reference using the module's own projection weights.
+    qw, kw, vw = module.qkv_lin.weight.split([q_dim, kv_dim, kv_dim], dim=0)
+    qb, kb, vb = module.qkv_lin.bias.split([q_dim, kv_dim, kv_dim], dim=0)
+    q = F.linear(query, qw, qb).unflatten(-1, (num_query_heads, head_dim))
+    k = F.linear(key_value, kw, kb).unflatten(
+        -1, (num_key_value_heads, head_dim)
+    )
+    v = F.linear(key_value, vw, vb).unflatten(
+        -1, (num_key_value_heads, head_dim)
+    )
+    if rope is not None:
+        q = rope(q)
+        k = rope(k)
+    groups = num_query_heads // num_key_value_heads
+    ref = reference_sdpa(
+        query=q,
+        key=k.repeat_interleave(groups, dim=-2),
+        value=v.repeat_interleave(groups, dim=-2),
+    )
+    ref = module.out_lin(ref.flatten(-2, -1))
+    torch.testing.assert_close(out, ref)
+
+
+@withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
 def test_transformer_block(
@@ -498,8 +577,9 @@ def test_transformer_block(
         rope=rotary_embedding,
     )
     # The seqused-mask and explicit-mask paths are mathematically equivalent
-    # but dispatch to different SDPA kernels on GPU, so allow float32 noise.
-    torch.testing.assert_close(out1, out2, atol=1e-4, rtol=1e-3)
+    # but dispatch to different SDPA kernels on GPU (and fp32 matmuls may use
+    # TF32), so allow generous float32 noise. A real regression would be O(1).
+    torch.testing.assert_close(out1, out2, atol=5e-4, rtol=5e-3)
 
     # Test no padding leakage
     new_key_value = key_value.clone()

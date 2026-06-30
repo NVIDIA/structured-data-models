@@ -242,6 +242,11 @@ class SDPA(torch.nn.Module):
         # (``-2`` in the pre-transpose ``[B, S, H, C]`` layout).
         query_heads = query.size(-2)
         key_value_heads = key.size(-2)
+        if query_heads % key_value_heads != 0:
+            raise ValueError(
+                f"query head count ({query_heads}) must be divisible by "
+                f"key/value head count ({key_value_heads})"
+            )
         enable_gqa = query_heads != key_value_heads
         if enable_gqa and not _SDPA_HAS_GQA:
             groups = query_heads // key_value_heads
