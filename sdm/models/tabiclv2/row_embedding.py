@@ -105,8 +105,8 @@ class RowEmbedding(torch.nn.Module):
         for col_layer in self.col_layers:
             x = col_layer(
                 query=x,  # [..., C, R, D]
-                key_value=x[:, :, train_mask],  # [B, C, R_train, D]
-            )  # [B, C, R, D]
+                key_value=x[..., train_mask, :],  # [..., C, R_train, D]
+            )  # [..., C, R, D]
 
         x = torch.cat(  # Prepend readout tokens before row-wise attention.
             [

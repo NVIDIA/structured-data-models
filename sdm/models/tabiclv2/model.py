@@ -114,7 +114,7 @@ class TabICLv2(torch.nn.Module):
     def forward(  # TODO Add multi-class support.
         self,
         x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
+        y: Tensor,  # [..., R_train] or [..., R_train, 1]
     ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
 
@@ -124,7 +124,7 @@ class TabICLv2(torch.nn.Module):
                 The first ``R_train`` rows along ``R`` refer to the in-context
                 examples.
             y: The targets of in-context examples with shape
-                ``[..., R_train]``.
+                ``[..., R_train]`` or ``[..., R_train, 1]``.
                 Integer ``y`` refer to classification tasks.
                 Floating-point ``y`` refer to regression tasks.
 
@@ -201,12 +201,9 @@ class _TabICLv2(torch.nn.Module):
     def forward(
         self,
         x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
+        y: Tensor,  # [..., R_train] or [..., R_train, 1]
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
         y = y.squeeze(-1) if x.dim() == y.dim() else y
-        x = x.unsqueeze(0) if x.dim() == 2 else x
-        y = y.unsqueeze(0) if y.dim() == 1 else y
-
         x = self.row_embedding(x, y)
         x = self.icl_block(x, y)
         return self.head(x)
