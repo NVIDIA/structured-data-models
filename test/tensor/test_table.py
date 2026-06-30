@@ -97,7 +97,7 @@ def test_save_load() -> None:
     assert isinstance(out, TableTensor)
     assert out.size() == tensor.size()
     assert out.numerical.equal(tensor.numerical)
-    assert out.categorical.as_tensor().equal(tensor.categorical.as_tensor())
+    assert out.categorical.equal(tensor.categorical)
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
     for category1, category2 in zip(

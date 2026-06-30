@@ -16,7 +16,7 @@ def test_to_copy() -> None:
     out = tensor.to(torch.int32)
     assert isinstance(out, CategoricalTensor)
     assert out.dtype == torch.int32
-    assert out.as_tensor().dtype == torch.int32
+    assert out.dtype == torch.int32
     for out_category, category in zip(out.categories, tensor.categories):
         assert out_category.equal(category)
         assert out_category.data_ptr() != category.data_ptr()
@@ -70,7 +70,7 @@ def test_from_arrow_dtype() -> None:
         dtype=torch.int64,
     )
 
-    assert tensor.as_tensor().dtype == torch.int64
+    assert tensor.dtype == torch.int64
     assert tensor.equal(torch.tensor([[0], [1], [-1]], dtype=torch.int64))
 
 
@@ -126,7 +126,7 @@ def test_from_pandas_dtype() -> None:
         dtype=torch.int64,
     )
 
-    assert tensor.as_tensor().dtype == torch.int64
+    assert tensor.dtype == torch.int64
     assert tensor.equal(torch.tensor([[0], [1], [-1]], dtype=torch.int64))
 
 
