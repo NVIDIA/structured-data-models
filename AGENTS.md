@@ -53,3 +53,4 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.
 - Document public constructor parameters.
+- Avoid creating functions for non-usable small code snippet.
