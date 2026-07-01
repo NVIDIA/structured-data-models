@@ -8,6 +8,7 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -117,6 +118,8 @@ class TabICLv2(BaseModel):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
+        *,
+        cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
 
@@ -128,8 +131,8 @@ class TabICLv2(BaseModel):
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
         """
         if y.is_floating_point():
-            return self.reg_model(x, y)
-        return self.cls_model(x, y)
+            return self.reg_model(x, y, cache=cache)
+        return self.cls_model(x, y, cache=cache)
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -194,9 +197,11 @@ class _TabICLv2(torch.nn.Module):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
+        *,
+        cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x, y)
-        x = self.icl_block(x, y)
+        x = self.row_embedding(x, y, cache=cache)
+        x = self.icl_block(x, y, cache=cache)
         return self.head(x)
 
 
