@@ -8,7 +8,7 @@ from collections.abc import (
     Sequence,
 )
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import pyarrow as pa
 import torch
@@ -21,10 +21,6 @@ from sdm.tensor import CategoricalTensor
 aten = torch.ops.aten
 
 SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
-
-if TYPE_CHECKING:
-    ArrowColumn = pa.Array | pa.ChunkedArray
-    ArrowTableLike = pa.Table | Mapping[str, ArrowColumn]
 
 
 class TableTensor(Tensor):
