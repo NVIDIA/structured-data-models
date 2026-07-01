@@ -19,7 +19,18 @@ table = TableTensor.from_pandas(df, device)
 model = TabICLv2(device=device)
 
 # Unified and custom recipes for pre- and post-processing:
-recipe = Recipe()
+recipe = Recipe(
+    features=[
+        ShuffleColumns(),
+        ImputeMissing(),
+        StandardScale(),
+        SigmaClip(threshold=4.0),
+
+    ],
+    target=[
+        ShuffleClasses(),
+    ],
+)
 
 # Common execution interface:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
