@@ -1,6 +1,8 @@
 import io
 from typing import cast
 
+import pandas as pd
+import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
@@ -495,3 +497,57 @@ def test_share_memory() -> None:
         assert tensor.is_shared()
     except RuntimeError:
         pass
+
+
+def test_from_arrow() -> None:
+    table = pa.table(
+        {
+            "age": pa.array([10, 20], type=pa.int64()),
+            "income": pa.array([1.0, 2.5], type=pa.float64()),
+            "country": pa.array(["US", "CA"]),
+            "segment": pa.array(["a", "b"]),
+        }
+    )
+
+    tensor = TableTensor.from_arrow(
+        table=table,
+        stypes={
+            "age": "numerical",
+            "income": "numerical",
+            "country": "categorical",
+            "segment": "categorical",
+        },
+    )
+
+    assert tensor.size() == (2, 4)
+    assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
+    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
+    assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+def test_from_pandas() -> None:
+    df = pd.DataFrame(
+        {
+            "age": [10, 20],
+            "income": [1.0, 2.5],
+            "country": ["US", "CA"],
+            "segment": ["a", "b"],
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={
+            "age": "numerical",
+            "income": "numerical",
+            "country": "categorical",
+            "segment": "categorical",
+        },
+    )
+
+    assert tensor.size() == (2, 4)
+    assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
+    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
+    assert tensor.categorical.categories[1].tolist() == ["a", "b"]

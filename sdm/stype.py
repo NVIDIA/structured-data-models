@@ -1,7 +1,7 @@
 """Semantic column types identifiers."""
 
 from enum import Enum
-from typing import Literal, TypeAlias
+from typing import TypeAlias
 
 
 class Stype(str, Enum):
@@ -20,4 +20,4 @@ class Stype(str, Enum):
     categorical = "categorical"
 
 
-StypeLike: TypeAlias = Stype | Literal["numerical", "categorical"]
+StypeLike: TypeAlias = Stype | str
