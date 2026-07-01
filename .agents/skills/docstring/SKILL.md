@@ -5,9 +5,8 @@ description: Write or review docstrings for public modules, classes, and functio
 
 # Docstring Writing and Reviewing Guide
 
-Use this when writing or reviewing docstrings for public modules, classes, and
-functions in `sdm/`. Follow these best practices up front to keep docstrings
-consistent across the codebase.
+Use this when writing or reviewing docstrings for public modules, classes, and functions in `sdm/`.
+Follow these best practices up front to keep docstrings consistent across the codebase.
 
 ## General Principles
 
@@ -71,8 +70,5 @@ r"""
 
 ## Verification
 
-Run `uv run ruff check`. This is a structural backstop only: it flags missing
-public class/method/function docstrings, capitalization, end punctuation,
-`r"""` for backslashes, and `Args:`/signature mismatches. It does **not**
-require an `Args:` section to exist, or verify citations, shape notation, or
-behavior notes — confirm those by hand against the principles above.
+Run `uv run ruff check`. This is a structural backstop only: it flags missing public class/method/function docstrings, capitalization, end punctuation, `r"""` for backslashes, and `Args:`/signature mismatches.
+It does **not** require an `Args:` section to exist, or verify citations, shape notation, or behavior notes — confirm those by hand against the principles above.
