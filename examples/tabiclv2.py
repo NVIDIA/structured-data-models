@@ -17,9 +17,7 @@ table = TableTensor(  # TODO Replace with `from_pandas` call.
 model = TabICLv2(device=device)
 
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
-    model(  # TODO Make this interface work.
+    model(
         x=table.drop_columns("target"),
         y=table[:300, "target"],
-        # recipe=None,  # TODO Add recipe.
-        # num_estimators=8,  # TODO Add ensembling.
     )
