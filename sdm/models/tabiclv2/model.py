@@ -8,11 +8,12 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 
 
-class TabICLv2(torch.nn.Module):
+class TabICLv2(BaseModel):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
@@ -84,6 +85,8 @@ class TabICLv2(torch.nn.Module):
         if pretrained:
             self._load_from_pretrained()
 
+        self.eval()
+
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
 
@@ -110,23 +113,12 @@ class TabICLv2(torch.nn.Module):
 
         return self
 
-    @torch.inference_mode()
-    def forward(  # TODO Add multi-class support.
+    def _forward(  # TODO Add multi-class support.
         self,
         x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train] or [..., R_train, 1]
+        y: Tensor,  # [..., R_train]
     ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
-
-        Args:
-            x: The feature tensor with shape ``[..., R, C]`` with ``R`` rows
-                and ``C`` columns.
-                The first ``R_train`` rows along ``R`` refer to the in-context
-                examples.
-            y: The targets of in-context examples with shape
-                ``[..., R_train]`` or ``[..., R_train, 1]``.
-                Integer ``y`` refer to classification tasks.
-                Floating-point ``y`` refer to regression tasks.
 
         Returns:
             Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
@@ -201,9 +193,8 @@ class _TabICLv2(torch.nn.Module):
     def forward(
         self,
         x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train] or [..., R_train, 1]
+        y: Tensor,  # [..., R_train]
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        y = y.squeeze(-1) if x.dim() == y.dim() else y
         x = self.row_embedding(x, y)
         x = self.icl_block(x, y)
         return self.head(x)
