@@ -33,8 +33,8 @@ if TYPE_CHECKING:
 class TableTensor(Tensor):
     r"""A :class:`torch.Tensor` for tensorized, lossless table data.
 
-    A ``TableTensor`` stores column blocks separately per semantic type, while
-    exposing a single tensor-shaped table interface.
+    A :class:`TableTensor` stores column blocks separately per semantic type,
+    while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
     .. code-block:: python
@@ -319,6 +319,23 @@ class TableTensor(Tensor):
             columns=cast(Mapping[StypeLike, Sequence[str]], column_groups),
             numerical=numerical,
             categorical=categorical,
+    def from_tensor(
+        cls: type[SelfTableTensor],
+        tensor: Tensor,
+        columns: Sequence[str] | None = None,
+    ) -> SelfTableTensor:
+        r"""Create tensor from a numerical :class:`torch.Tensor`.
+
+        Args:
+            tensor: The numerical tensor.
+            columns: The column names of the tensor.
+        """
+        if columns is None:
+            columns = [str(i) for i in range(tensor.size(-1))]
+
+        return cls(
+            columns={Stype.numerical: columns},
+            numerical=tensor,
         )
 
     # Properties ##############################################################
@@ -518,7 +535,7 @@ class TableTensor(Tensor):
                 for column in columns
             ]
             if len(columns) > max_cols:
-                [*columns[: max_cols - 1], "...", columns[-1]]
+                columns = [*columns[: max_cols - 1], "...", columns[-1]]
             return "[" + ", ".join(column for column in columns) + "]"
 
         stype_repr = [

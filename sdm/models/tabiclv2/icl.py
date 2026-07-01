@@ -46,23 +46,23 @@ class ICLBlock(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [B, R, D]
-        y: Tensor,  # [B, R_train]
-    ) -> Tensor:  # [B, R_test, D]
+        x: Tensor,  # [..., R, D]
+        y: Tensor,  # [..., R_train]
+    ) -> Tensor:  # [..., R_test, D]
         R_train = y.size(-1)
 
         if self.y_emb is not None:
-            y_emb = self.y_emb(y)  # [B, R_train, D]
+            y_emb = self.y_emb(y)  # [..., R_train, D]
         else:
             assert self.y_lin is not None
-            y_emb = self.y_lin(y.unsqueeze(-1))  # [B, R_train, D]
+            y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
 
-        x[:, :R_train] += y_emb.to(x.dtype)
+        x[..., :R_train, :] += y_emb.to(x.dtype)
 
         for i, layer in enumerate(self.layers):
             x = layer(
-                query=x[:, R_train:] if i == len(self.layers) - 1 else x,
-                key_value=x[:, :R_train],
+                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
+                key_value=x[..., :R_train, :],
             )
 
-        return self.norm(x)  # [B, R_test, D]
+        return self.norm(x)  # [..., R_test, D]
