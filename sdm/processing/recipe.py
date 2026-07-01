@@ -1,8 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from typing_extensions import Self
-
 from sdm.processing.base import Processor
 from sdm.processing.pipeline import Pipeline
 from sdm.tensor import TableTensor
@@ -12,13 +10,18 @@ from sdm.tensor import TableTensor
 class Recipe:
     """Processing contract around an external model boundary.
 
-    A recipe owns deterministic, two-sided transforms keyed by the data each
-    phase operates on:
+    A recipe bundles three :class:`~sdm.processing.Pipeline` objects, one per
+    role the data plays relative to the model:
 
     - ``features``: model inputs, transformed before the model.
     - ``target``: labels, transformed forward before the model and inverted
       after it (predictions back to the original space).
     - ``output``: shape-preserving cleanup of the model output.
+
+    Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
+    steps are invertible, ``inverse_transform``. Call them directly, e.g.
+    ``recipe.features.transform(table)`` or
+    ``recipe.target.inverse_transform(prediction)``.
 
     Args:
         features: Steps applied to model inputs before the model.
@@ -53,40 +56,6 @@ class Recipe:
             output if isinstance(output, Pipeline) else Pipeline(output),
         )
 
-    def fit_features(self, table: TableTensor) -> Self:
-        """Fit the feature phase on ``table`` and return this recipe."""
-        self.features._fit(table, phase="features")
-        return self
-
-    def transform_features(self, table: TableTensor) -> TableTensor:
-        """Transform model inputs before an external model call."""
-        return self.features._transform(table, phase="features")
-
-    def fit_transform_features(self, table: TableTensor) -> TableTensor:
-        """Fit and transform model inputs before an external model call."""
-        return self.features._fit_transform(table, phase="features")
-
-    def fit_target(self, table: TableTensor) -> Self:
-        """Fit the target phase on ``table`` and return this recipe."""
-        self.target._fit(table, phase="target")
-        return self
-
-    def transform_target(self, table: TableTensor) -> TableTensor:
-        """Transform labels into model space before an external model call."""
-        return self.target._transform(table, phase="target")
-
-    def fit_transform_target(self, table: TableTensor) -> TableTensor:
-        """Fit and transform labels into model space before the model."""
-        return self.target._fit_transform(table, phase="target")
-
-    def inverse_transform_target(self, table: TableTensor) -> TableTensor:
-        """Run target inverse conversion after an external model call."""
-        return self.target._inverse_transform(table, phase="target")
-
-    def transform_output(self, table: TableTensor) -> TableTensor:
-        """Run shape-preserving cleanup after an external model call."""
-        return self.output._transform(table, phase="output")
-
     def fit_transform(
         self,
         features: TableTensor,
@@ -98,21 +67,21 @@ class Recipe:
         ``(features, target)`` tables, ready to feed the model and its loss.
         """
         return (
-            self.fit_transform_features(features),
-            self.fit_transform_target(target),
+            self.features.fit_transform(features),
+            self.target.fit_transform(target),
         )
 
     def __repr__(self) -> str:
-        phases = "\n".join(
+        roles = "\n".join(
             f"  {name}: "
             + (
-                " -> ".join(step.__class__.__name__ for step in phase)
+                " -> ".join(step.__class__.__name__ for step in pipeline)
                 or "identity"
             )
-            for name, phase in (
+            for name, pipeline in (
                 ("features", self.features),
                 ("target", self.target),
                 ("output", self.output),
             )
         )
-        return f"Recipe(\n{phases}\n)"
+        return f"Recipe(\n{roles}\n)"
