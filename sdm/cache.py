@@ -18,7 +18,7 @@ class KVCacheEntry(NamedTuple):
     key: Tensor
     value: Tensor
 
-    def to(self, device: torch.device | str) -> "KVCacheEntry":
+    def to(self, device: torch.device | str | None) -> "KVCacheEntry":
         r"""Perform :class:`~torch.Tensor` device conversion.
 
         Args:
@@ -73,14 +73,14 @@ class Cache(MutableMapping[str, object]):
     def __repr__(self) -> str:
         return repr(self._items)
 
-    def to(self, device: torch.device | str) -> "Cache":
+    def to(self, device: torch.device | str | None) -> "Cache":
         r"""Perform nested :class:`~torch.Tensor` device conversion.
 
         Args:
             device: The device.
         """
 
-        def _to(value: object, device: torch.device | str) -> object:
+        def _to(value: object, device: torch.device | str | None) -> object:
             if isinstance(value, Tensor):
                 return value.to(device)
             if isinstance(value, KVCacheEntry):
