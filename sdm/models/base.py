@@ -1,9 +1,10 @@
+import warnings
 from abc import ABC, abstractmethod
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, TableTensor
+from sdm import CategoricalTensor, Stype, TableTensor
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -14,6 +15,9 @@ class BaseModel(torch.nn.Module, ABC):
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
     """
+
+    def __init__(self):
+        super().__init__()
 
     @torch.inference_mode()
     def forward(
@@ -28,12 +32,12 @@ class BaseModel(torch.nn.Module, ABC):
                 and ``C`` columns.
                 The first ``R_train`` rows along ``R`` refer to the in-context
                 examples.
-                Feature tensors may be plain tensors or
-                :class:`~sdm.TableTensor` instances.
+                Features may be given as :class:`torch.Tensor` or
+                :class:`~sdm.tensor.TableTensor` instances.
             y: The targets of in-context examples with shape
-                ``[..., R_train]`` or `[..., R_train, 1]``.
-                Target tensors may be plain tensors or
-                :class:`~sdm.TableTensor` instances.
+                ``[..., R_train]`` or ``[..., R_train, 1]``.
+                Targets may be given as :class:`torch.Tensor` or
+                :class:`~sdm.tensor.TableTensor` instances.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
@@ -41,10 +45,18 @@ class BaseModel(torch.nn.Module, ABC):
         if isinstance(x, TableTensor):
             invalid_columns = x.size(-1) - x.numerical.size(-1)
             if invalid_columns > 0:
-                raise ValueError(
-                    f"Expected 'x' to only hold numerical columns"
-                    f"(got {invalid_columns} non-numerical "
-                    f"{'column' if invalid_columns == 1 else 'columns'})"
+                invalid_stypes = [
+                    stype.value
+                    for stype, tensor in x.items()
+                    if tensor.size(-1) > 0 and stype not in (Stype.numerical,)
+                ]
+                warnings.warn(
+                    f"Expected 'x' to only hold numerical columns but also "
+                    f"found {'/'.join(invalid_stypes)} data. "
+                    f"This data will be ignored. "
+                    f"Make sure that your recipe converts such types to "
+                    f"numerical data to include them as features.",
+                    stacklevel=2,
                 )
             x = x.numerical
 
@@ -88,12 +100,12 @@ class BaseModel(torch.nn.Module, ABC):
         Args:
             x: The feature tensor with shape ``[..., R_train, C]`` with
                 ``R_train`` rows and ``C`` columns.
-                Feature tensors may be plain tensors or
-                :class:`~sdm.TableTensor` instances.
+                Features may be given as :class:`torch.Tensor` or
+                :class:`~sdm.tensor.TableTensor` instances.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-                Target tensors may be plain tensors or
-                :class:`~sdm.TableTensor` instances.
+                Targets may be given as :class:`torch.Tensor` or
+                :class:`~sdm.tensor.TableTensor` instances.
         """
         # TODO Implement real key/value caching.
         self.clear()
@@ -122,8 +134,8 @@ class BaseModel(torch.nn.Module, ABC):
         Args:
             x: The feature tensor with shape ``[..., R_test, C]`` with
                 ``R_test`` rows and ``C`` columns.
-                Feature tensors may be plain tensors or
-                :class:`~sdm.TableTensor` instances.
+                Features may be given as :class:`torch.Tensor` or
+                :class:`~sdm.tensor.TableTensor` instances.
 
         Returns:
             The prediction for ``[..., R_test]`` test rows.
