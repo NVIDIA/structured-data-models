@@ -1,3 +1,5 @@
+"""Ordered execution of processing steps over a table's numerical block."""
+
 from collections.abc import Iterable, Iterator
 
 from torch import Tensor
@@ -30,7 +32,15 @@ class Pipeline:
         self.steps = steps
 
     def fit(self, table: TableTensor) -> Self:
-        """Fit steps in order using the numerical block of ``table``."""
+        """Fit steps in order using the numerical block of ``table``.
+
+        Args:
+            table: Data whose numerical block ``[..., N]`` fits the steps;
+                categorical columns are ignored.
+
+        Returns:
+            The pipeline itself, to allow call chaining.
+        """
         numerical = table.numerical
         last = len(self.steps) - 1
         for position, step in enumerate(self.steps):
@@ -43,7 +53,16 @@ class Pipeline:
         return self
 
     def transform(self, table: TableTensor) -> TableTensor:
-        """Transform ``table`` by applying steps to its numerical block."""
+        """Transform ``table`` by applying steps to its numerical block.
+
+        Args:
+            table: Data with a numerical block ``[..., N]`` to transform;
+                categorical columns pass through unchanged.
+
+        Returns:
+            A table with the transformed numerical block; the input is
+            returned unchanged when the pipeline is empty.
+        """
         if len(self.steps) == 0:
             return table
         numerical = table.numerical
@@ -55,7 +74,17 @@ class Pipeline:
         return _with_numerical(table, numerical)
 
     def fit_transform(self, table: TableTensor) -> TableTensor:
-        """Fit and transform ``table`` by threading steps in order."""
+        """Fit and transform ``table`` by threading steps in order.
+
+        Args:
+            table: Data with a numerical block ``[..., N]`` used to both fit
+                and transform the steps; categorical columns pass through
+                unchanged.
+
+        Returns:
+            A table with the transformed numerical block; the input is
+            returned unchanged when the pipeline is empty.
+        """
         if len(self.steps) == 0:
             return table
         numerical = table.numerical
@@ -67,7 +96,17 @@ class Pipeline:
         return _with_numerical(table, numerical)
 
     def inverse_transform(self, table: TableTensor) -> TableTensor:
-        """Apply invertible steps in reverse order to ``table``."""
+        """Apply invertible steps in reverse order to ``table``.
+
+        Args:
+            table: Data with a numerical block ``[..., N]`` to invert;
+                categorical columns pass through unchanged. Every step must
+                mix in :class:`~sdm.processing.InvertibleMixin`.
+
+        Returns:
+            A table with the inverted numerical block; the input is returned
+            unchanged when the pipeline is empty.
+        """
         if len(self.steps) == 0:
             return table
         numerical = table.numerical

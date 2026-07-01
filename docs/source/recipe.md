@@ -53,11 +53,3 @@ prediction = recipe.output.transform(prediction)  # identity if `output` is empt
 
 Target steps run in reverse during the inverse, and every one must mix in
 {py:class}`~sdm.processing.InvertibleMixin`.
-
-## Available processors
-
-{py:class}`~sdm.processing.StandardScale`, {py:class}`~sdm.processing.Clip`,
-{py:class}`~sdm.processing.Power`, {py:class}`~sdm.processing.Quantile`,
-{py:class}`~sdm.processing.SigmaClip`, {py:class}`~sdm.processing.MeanImpute`,
-and {py:class}`~sdm.processing.SoftmaxTemperature` ship in `sdm.processing`. See
-{doc}`api/processing` for signatures and which steps are invertible.
