@@ -11,6 +11,11 @@ from torch.nn import GELU, Linear, Sequential
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
+from sdm.processing import (
+    Recipe,
+    SigmaClip,
+    StandardScale,
+)
 
 
 class TabICLv2(BaseModel):
@@ -86,6 +91,18 @@ class TabICLv2(BaseModel):
             self._load_from_pretrained()
 
         self.eval()
+
+    @staticmethod
+    def default_recipe() -> Recipe:
+        """Return the default single-estimator regression recipe."""
+        # TODO Add permutation, decode, and to-numerical processors.
+        # TODO Add fixed clipping e.g. via lambda method to [-100, 100].
+        return Recipe(
+            features=[
+                StandardScale(epsilon=1e-6),
+                SigmaClip(threshold=4.0),
+            ],
+        )
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
