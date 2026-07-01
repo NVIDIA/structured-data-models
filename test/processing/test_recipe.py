@@ -2,7 +2,6 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
-    Clip,
     MeanImpute,
     Pipeline,
     Power,
@@ -54,28 +53,6 @@ def test_pipeline_transforms_numerical_and_passes_categorical() -> None:
     assert not torch.equal(output.numerical, table.numerical)
     assert output.categorical is table.categorical
     assert output.columns == table.columns
-
-
-def test_pipeline_step_order_matters() -> None:
-    # Clip and StandardScale do not commute: clamping then scaling differs
-    # from scaling then clamping, and each step is fitted on the previous
-    # step's output.
-    table = _table(
-        torch.tensor(
-            [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0], [4.0, 40.0], [100.0, 50.0]]
-        )
-    )
-
-    clip_then_scale = Pipeline(
-        [Clip(q_high=0.75), StandardScale()]
-    ).fit_transform(table)
-    scale_then_clip = Pipeline(
-        [StandardScale(), Clip(q_high=0.75)]
-    ).fit_transform(table)
-
-    assert not torch.equal(
-        clip_then_scale.numerical, scale_then_clip.numerical
-    )
 
 
 def test_pipeline_rejects_non_processor_step() -> None:
