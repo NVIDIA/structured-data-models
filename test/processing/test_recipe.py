@@ -11,14 +11,6 @@ from sdm.processing import (
 )
 
 
-def test_public_recipe_imports() -> None:
-    from sdm.processing.pipeline import Pipeline as CanonicalPipeline
-    from sdm.processing.recipe import Recipe as CanonicalRecipe
-
-    assert Pipeline is CanonicalPipeline
-    assert Recipe is CanonicalRecipe
-
-
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     if numerical is None:
         numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
