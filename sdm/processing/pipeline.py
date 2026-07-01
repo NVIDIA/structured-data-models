@@ -35,7 +35,7 @@ class Pipeline:
         """Fit steps in order using the numerical block of ``table``.
 
         Args:
-            table: Data whose numerical block ``[..., N]`` fits the steps;
+            table: Data whose numerical block ``[..., C_num]`` fits the steps;
                 categorical columns are ignored.
 
         Returns:
@@ -56,7 +56,7 @@ class Pipeline:
         """Transform ``table`` by applying steps to its numerical block.
 
         Args:
-            table: Data with a numerical block ``[..., N]`` to transform;
+            table: Data with a numerical block ``[..., C_num]`` to transform;
                 categorical columns pass through unchanged.
 
         Returns:
@@ -77,8 +77,8 @@ class Pipeline:
         """Fit and transform ``table`` by threading steps in order.
 
         Args:
-            table: Data with a numerical block ``[..., N]`` used to both fit
-                and transform the steps; categorical columns pass through
+            table: Data with a numerical block ``[..., C_num]`` used to both
+                fit and transform the steps; categorical columns pass through
                 unchanged.
 
         Returns:
@@ -99,7 +99,7 @@ class Pipeline:
         """Apply invertible steps in reverse order to ``table``.
 
         Args:
-            table: Data with a numerical block ``[..., N]`` to invert;
+            table: Data with a numerical block ``[..., C_num]`` to invert;
                 categorical columns pass through unchanged. Every step must
                 mix in :class:`~sdm.processing.InvertibleMixin`.
 
