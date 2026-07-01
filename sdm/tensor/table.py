@@ -6,11 +6,11 @@ from collections.abc import (
     Iterator,
     Mapping,
     Sequence,
-    Sized,
 )
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
 
+import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import override
@@ -23,9 +23,6 @@ aten = torch.ops.aten
 SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
 
 if TYPE_CHECKING:
-    import pandas as pd
-    import pyarrow as pa
-
     ArrowColumn = pa.Array | pa.ChunkedArray
     ArrowTableLike = pa.Table | Mapping[str, ArrowColumn]
 
@@ -216,109 +213,85 @@ class TableTensor(Tensor):
         return out
 
     @classmethod
-    def from_pandas(
-        cls: type[SelfTableTensor],
-        df: "pd.DataFrame",
-        stypes: Mapping[str, StypeLike],
-        *,
-        device: torch.device | str | None = None,
-    ) -> SelfTableTensor:
-        r"""Build a table tensor from a pandas-like dataframe.
-
-        Args:
-            df: The dataframe to ingest. Only columns listed in ``stypes`` are
-                materialized; other columns are ignored.
-            stypes: The semantic type for each column to ingest, keyed by
-                column name.
-            device: The device to place the resulting tensor on.
-        """
-        import pyarrow as pa
-
-        return cls.from_arrow(
-            pa.Table.from_pandas(df, preserve_index=False),
-            stypes,
-            device=device,
-        )
-
-    @classmethod
     def from_arrow(
         cls: type[SelfTableTensor],
-        table: "ArrowTableLike",
+        table: pa.Table,
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
-        r"""Build a table tensor from an Arrow table or column mapping.
+        r"""Create a tensor from a ``pyarrow`` table.
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            from sdm import TableTensor
+
+            table = pa.table({
+                "age": pa.array([25, 31, 42], type=pa.int64()),
+                "city": pa.array(["SF", "NYC", "SF"], type=pa.string()),
+            })
+            tensor = TableTensor.from_arrow(
+                table=table,
+                stypes={"age": "numerical", "city": "categorical"},
+            )
 
         Args:
-            table: A ``pyarrow.Table`` or a mapping from column name to an
-                Arrow array. Only columns listed in ``stypes`` are
-                materialized; other columns are ignored.
-            stypes: The semantic type for each column to ingest, keyed by
-                column name.
-            device: The device to place the resulting tensor on.
+            table: The table.
+            stypes: The semantic type for each column. Columns that are present
+                in ``table`` but not included in ``stypes`` will be ignored.
+            device: The device.
         """
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
 
-        num_rows = _num_rows(table)
+        blocks: dict[Stype, Tensor] = {}
+        for stype in columns:
+            tensors: list[Tensor] = []
+            for column in columns[stype]:
+                array = table.column(column)
+                if stype == Stype.numerical:
+                    tensor = torch.from_numpy(array.to_numpy())
+                    tensor = tensor.to(torch.get_default_dtype())
+                    tensor = tensor.unsqueeze(-1)
+                elif stype == Stype.categorical:
+                    tensor = CategoricalTensor.from_arrow(array)
+                else:
+                    raise NotImplementedError
+                tensors.append(tensor)
 
-        numerical_names = columns[Stype.numerical]
-        if len(numerical_names) == 0:
-            numerical = torch.empty(
-                (num_rows, 0),
-                dtype=torch.float32,
-                device=device,
-            )
-        else:
-            numerical_tensors = []
-            for column in numerical_names:
-                array = _to_arrow_column(table, column)
-                values = array.to_numpy(zero_copy_only=False).astype(
-                    "float32",
-                    copy=False,
-                )
-                numerical_tensors.append(
-                    torch.as_tensor(values, device=device)
-                )
-            numerical = torch.stack(numerical_tensors, dim=-1)
+            blocks[stype] = torch.cat(tensors, dim=-1).to(device)
 
-        categorical_names = columns[Stype.categorical]
-        if len(categorical_names) == 0:
-            categorical = CategoricalTensor(
-                data=torch.empty(
-                    (num_rows, 0),
-                    dtype=torch.int32,
-                    device=device,
-                ),
-                categories=(),
-            )
-        else:
-            categorical = cast(
-                CategoricalTensor,
-                torch.cat(
-                    [
-                        CategoricalTensor.from_arrow(
-                            _to_arrow_column(table, column),
-                            device=device,
-                        )
-                        for column in categorical_names
-                    ],
-                    dim=-1,
-                ),
-            )
-
-        column_groups = {
-            stype: tuple(names) for stype, names in columns.items()
-        }
-        # The blocks already carry the resolved device, so let the constructor
-        # infer it. Forwarding ``device`` here would compare a non-indexed
-        # device such as ``"cuda"`` against the materialized ``"cuda:0"``.
         return cls(
-            columns=cast(Mapping[StypeLike, Sequence[str]], column_groups),
-            numerical=numerical,
-            categorical=categorical,
+            columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+            device=device,
+            **blocks,
+        )
+
+    @classmethod
+    def from_pandas(
+        cls: type[SelfTableTensor],
+        df: Any,
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> SelfTableTensor:
+        r"""Create a tensor from a ``pandas`` dataframe.
+
+        Args:
+            df: The dataframe.
+            stypes: The semantic type for each column. Columns that are present
+                in ``df`` but not included in ``stypes`` will be ignored.
+            device: The device.
+        """
+        return cls.from_arrow(
+            table=pa.Table.from_pandas(df, preserve_index=False),
+            stypes=stypes,
+            device=device,
+        )
+
+    @classmethod
     def from_tensor(
         cls: type[SelfTableTensor],
         tensor: Tensor,
@@ -1083,36 +1056,3 @@ def _is_column_dim(input: TableTensor, dim: int) -> bool:
     if dim < -input.dim() or dim >= input.dim():
         return False
     return dim % input.dim() == input.dim() - 1
-
-
-def _to_arrow_column(table: "ArrowTableLike", column: str) -> "ArrowColumn":
-    import pyarrow as pa
-
-    if isinstance(table, pa.Table):
-        return table.column(column)
-    if isinstance(table, Mapping):
-        value = table[column]
-        if isinstance(value, (pa.Array, pa.ChunkedArray)):
-            return value
-        raise TypeError(
-            "Expected an Arrow column to be a 'pyarrow.Array' or "
-            f"'pyarrow.ChunkedArray' (got '{type(value).__name__}')"
-        )
-    raise TypeError(
-        "Expected an Arrow table to be a 'pyarrow.Table' or mapping of "
-        f"Arrow columns (got '{type(table).__name__}')"
-    )
-
-
-def _num_rows(df: Any) -> int:
-    if hasattr(df, "num_rows"):
-        return int(df.num_rows)
-    if isinstance(df, Mapping):
-        try:
-            value = next(iter(df.values()))
-        except StopIteration:
-            return 0
-        if isinstance(value, Sized):
-            return len(value)
-        raise TypeError("Expected mapping table columns to have a row count")
-    return len(df)
