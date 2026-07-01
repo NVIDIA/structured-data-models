@@ -85,6 +85,8 @@ class TabICLv2(BaseModel):
         if pretrained:
             self._load_from_pretrained()
 
+        self.eval()
+
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
 
@@ -117,16 +119,6 @@ class TabICLv2(BaseModel):
         y: Tensor,  # [..., R_train]
     ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
-
-        Args:
-            x: The feature tensor with shape ``[..., R, C]`` with ``R`` rows
-                and ``C`` columns.
-                The first ``R_train`` rows along ``R`` refer to the in-context
-                examples.
-            y: The targets of in-context examples with shape
-                ``[..., R_train]``.
-                Integer ``y`` refer to classification tasks.
-                Floating-point ``y`` refer to regression tasks.
 
         Returns:
             Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
