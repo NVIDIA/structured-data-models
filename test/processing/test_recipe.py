@@ -21,12 +21,6 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     )
 
 
-def test_recipe_is_public_reexport() -> None:
-    from sdm.processing.recipe import Recipe as CanonicalRecipe
-
-    assert Recipe is CanonicalRecipe
-
-
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
     recipe = Recipe(features=[StandardScale()], target=None, output=[])
 

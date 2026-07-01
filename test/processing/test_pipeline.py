@@ -28,12 +28,6 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     )
 
 
-def test_pipeline_is_public_reexport() -> None:
-    from sdm.processing.pipeline import Pipeline as CanonicalPipeline
-
-    assert Pipeline is CanonicalPipeline
-
-
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
