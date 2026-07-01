@@ -19,8 +19,8 @@ SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
 class TableTensor(Tensor):
     r"""A :class:`torch.Tensor` for tensorized, lossless table data.
 
-    A ``TableTensor`` stores column blocks separately per semantic type, while
-    exposing a single tensor-shaped table interface.
+    A :class:`TableTensor` stores column blocks separately per semantic type,
+    while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
     .. code-block:: python
