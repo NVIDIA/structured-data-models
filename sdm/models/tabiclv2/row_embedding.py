@@ -6,6 +6,7 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
+from sdm.cache import Cache
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
 
 
@@ -77,7 +78,9 @@ class RowEmbedding(torch.nn.Module):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
+        *,
         train_mask: Tensor | None = None,  # [R],
+        cache: Cache | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *B, R, C = x.size()
         R_train = y.size(-1)
@@ -92,21 +95,34 @@ class RowEmbedding(torch.nn.Module):
         x = x[..., index]  # [..., R, C, G]
         x = self.lin(x)  # [..., R, C, D]
 
-        if self.y_emb is not None:
-            y_emb = self.y_emb(y).view(*B, R_train, 1, D)
-        else:
-            assert self.y_lin is not None
-            y_emb = self.y_lin(y.unsqueeze(-1)).view(*B, R_train, 1, D)
+        if y.numel() > 0:
+            if self.y_emb is not None:
+                y_emb = self.y_emb(y).view(*B, R_train, 1, D)
+            else:
+                assert self.y_lin is not None
+                y_emb = self.y_lin(y.unsqueeze(-1)).view(*B, R_train, 1, D)
 
-        x[..., train_mask, :, :] += y_emb.to(x.dtype)
+            x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis):
         x = x.transpose(-2, -3)  # [..., C, R, D]
-        for col_layer in self.col_layers:
-            x = col_layer(
+        for i, col_layer in enumerate(self.col_layers):
+            key = f"row_embedding.col_layer{i}"
+            if cache is not None and y.numel() == 0:
+                key_value = cache[key]
+            else:
+                key_value = x[..., train_mask, :]
+
+            result = col_layer(
                 query=x,  # [..., C, R, D]
-                key_value=x[..., train_mask, :],  # [..., C, R_train, D]
+                key_value=key_value,  # [..., C, R_train, D],
+                return_key_value=cache is not None and y.numel() > 0,
             )  # [..., C, R, D]
+
+            if isinstance(result, Tensor):
+                x = result
+            else:
+                x, cache[key] = result
 
         x = torch.cat(  # Prepend readout tokens before row-wise attention.
             [

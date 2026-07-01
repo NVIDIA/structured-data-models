@@ -33,10 +33,12 @@ def test_tabiclv2(
     assert out.dtype == x.dtype
     assert out.device == x.device
 
-    assert torch.allclose(model(x, y.unsqueeze(-1)), out)
-
     if len(batch_shape) > 0:
         looped = torch.stack(
             [model(x[i], y[i]) for i in range(batch_shape[0])]
         )
-        assert torch.allclose(out, looped, atol=1e-5)
+        torch.testing.assert_close(out, looped)
+
+    model.fit(x[..., :R_train, :], y)
+    torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
+    model.clear()

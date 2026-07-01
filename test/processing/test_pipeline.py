@@ -46,6 +46,13 @@ def test_pipeline_transforms_numerical_and_passes_categorical() -> None:
     assert output.columns == table.columns
 
 
+def test_repr_lists_steps_or_reports_identity() -> None:
+    assert repr(Pipeline()) == "Pipeline(identity)"
+    assert repr(Pipeline([StandardScale(), Power()])) == (
+        "Pipeline(StandardScale -> Power)"
+    )
+
+
 def test_pipeline_rejects_non_processor_step() -> None:
     with pytest.raises(TypeError, match="Expected a Processor step"):
         Pipeline([object()])  # ty: ignore[invalid-argument-type]

@@ -23,4 +23,6 @@ __all__ = [
     "SigmaClip",
     "SoftmaxTemperature",
     "StandardScale",
+    "Pipeline",
+    "Recipe",
 ]
