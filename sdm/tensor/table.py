@@ -201,6 +201,29 @@ class TableTensor(Tensor):
 
         return out
 
+    @classmethod
+    def from_tensor(
+        cls: type[SelfTableTensor],
+        tensor: Tensor,
+        columns: Sequence[str] | None = None,
+    ) -> SelfTableTensor:
+        r"""Create tensor from a numerical :class:`torch.Tensor`.
+
+        Args:
+            tensor: The numerical tensor.
+            columns: The column names of the tensor.
+        """
+        if columns is None:
+            columns = [str(i) for i in range(tensor.size(-1))]
+
+        if not tensor.is_floating_point():
+            tensor = tensor.to(torch.get_default_dtype())
+
+        return cls(
+            columns={Stype.numerical: columns},
+            numerical=tensor,
+        )
+
     # Properties ##############################################################
 
     @property
