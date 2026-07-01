@@ -6,6 +6,7 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList
 
+from sdm.cache import Cache
 from sdm.nn import TransformerBlock
 
 
@@ -48,21 +49,36 @@ class ICLBlock(torch.nn.Module):
         self,
         x: Tensor,  # [..., R, D]
         y: Tensor,  # [..., R_train]
+        *,
+        cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, D]
         R_train = y.size(-1)
 
-        if self.y_emb is not None:
-            y_emb = self.y_emb(y)  # [..., R_train, D]
-        else:
-            assert self.y_lin is not None
-            y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
+        if y.numel() > 0:
+            if self.y_emb is not None:
+                y_emb = self.y_emb(y)  # [..., R_train, D]
+            else:
+                assert self.y_lin is not None
+                y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
 
-        x[..., :R_train, :] += y_emb.to(x.dtype)
+            x[..., :R_train, :] += y_emb.to(x.dtype)
 
         for i, layer in enumerate(self.layers):
-            x = layer(
+            key = f"icl_block.layer{i}"
+            if cache is not None and y.numel() == 0:
+                key_value = cache[key]
+            else:
+                key_value = x[..., :R_train, :]
+
+            result = layer(
                 query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
-                key_value=x[..., :R_train, :],
+                key_value=key_value,  # [..., R_train, D]
+                return_key_value=cache is not None and y.numel() > 0,
             )
+
+            if isinstance(result, Tensor):
+                x = result
+            else:
+                x, cache[key] = result
 
         return self.norm(x)  # [..., R_test, D]

@@ -1,17 +1,14 @@
-"""Generic runtime cache primitives."""
+"""Cache primitives."""
 
+from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from typing import NamedTuple
 
+import torch
 from torch import Tensor
 
 
 class KVCacheEntry(NamedTuple):
-    r"""Cached key/value projections for one attention site.
-
-    The entry intentionally does not know where it is stored or whether it is
-    valid for a particular request. The owning model or caller manages cache
-    keys and invalidation. The key and value tensors stay separate to avoid
-    baking a packed cache layout into this generic primitive.
+    r"""Cached key/value projections for a single transformer block.
 
     Args:
         key: Cached key projection tensor.
@@ -21,48 +18,99 @@ class KVCacheEntry(NamedTuple):
     key: Tensor
     value: Tensor
 
+    def to(self, device: torch.device | str | None) -> "KVCacheEntry":
+        r"""Perform :class:`~torch.Tensor` device conversion.
 
-class ModelCache:
-    r"""Model-owned runtime cache for named values.
+        Args:
+            device: The device.
+        """
+        return self.__class__(
+            key=self.key.to(device),
+            value=self.value.to(device),
+        )
 
-    ``ModelCache`` owns model-level cache lifecycle and invalidation. Attention
-    modules should not receive this object; they should only return or consume
-    values such as :class:`KVCacheEntry`. Repeated values, such as per-layer KV
-    entries, can be stored as plain dictionaries.
-    """
+    def cpu(self) -> "KVCacheEntry":
+        r"""Copy :class:`KVCacheEntry` data in CPU memory."""
+        return self.to("cpu")
 
-    def __init__(self) -> None:
-        r"""Initialize an empty model cache."""
-        self._items: dict[str, object] = {}
+    def cuda(
+        self,
+        device: torch.device | str | int | None = None,
+    ) -> "KVCacheEntry":
+        r"""Copy :class:`KVCacheEntry` data in CUDA memory."""
+        if device is None:
+            return self.to("cuda")
+        if isinstance(device, int):
+            return self.to(torch.device("cuda", device))
+        return self.to(device)
 
-    def __setitem__(self, name: str, value: object) -> None:
-        r"""Store a value by name."""
-        self._items[name] = value
 
-    def __getitem__(self, name: str) -> object:
-        r"""Return a value by name, or raise when absent."""
-        return self._items[name]
+class Cache(MutableMapping[str, object]):
+    r"""A mutable mapping of model cache values."""
 
-    def get(self, name: str, default: object = None) -> object:
-        r"""Return a value by name, or ``default`` when absent."""
-        return self._items.get(name, default)
+    def __init__(
+        self,
+        *args: Mapping[str, object] | Iterable[tuple[str, object]],
+        **kwargs: object,
+    ) -> None:
+        self._items: dict[str, object] = dict(*args, **kwargs)
 
-    def __delitem__(self, name: str) -> None:
-        r"""Remove a value by name."""
-        del self._items[name]
+    def __getitem__(self, key: str) -> object:
+        return self._items[key]
 
-    def clear(self) -> None:
-        r"""Clear all cached values."""
-        self._items.clear()
+    def __setitem__(self, key: str, value: object) -> None:
+        self._items[key] = value
 
-    def keys(self):
-        r"""Return stored value names."""
-        return self._items.keys()
+    def __delitem__(self, key: str) -> None:
+        del self._items[key]
 
-    def __contains__(self, name: object) -> bool:
-        r"""Return whether the cache contains a name."""
-        return name in self._items
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._items)
 
     def __len__(self) -> int:
-        r"""Return the number of values in this cache."""
         return len(self._items)
+
+    def __repr__(self) -> str:
+        return repr(self._items)
+
+    def to(self, device: torch.device | str | None) -> "Cache":
+        r"""Perform nested :class:`~torch.Tensor` device conversion.
+
+        Args:
+            device: The device.
+        """
+
+        def _to(value: object, device: torch.device | str | None) -> object:
+            if isinstance(value, Tensor):
+                return value.to(device)
+            if isinstance(value, KVCacheEntry):
+                return value.to(device)
+            if isinstance(value, Cache):
+                return value.to(device)
+            if isinstance(value, list):
+                return [_to(item, device=device) for item in value]
+            if isinstance(value, tuple):
+                return tuple(_to(item, device=device) for item in value)
+            if isinstance(value, dict):
+                return {
+                    key: _to(item, device=device)
+                    for key, item in value.items()
+                }
+            return value
+
+        return self.__class__({k: _to(v, device) for k, v in self.items()})
+
+    def cpu(self) -> "Cache":
+        r"""Copy :class:`Cache` data in CPU memory."""
+        return self.to("cpu")
+
+    def cuda(
+        self,
+        device: torch.device | str | int | None = None,
+    ) -> "Cache":
+        r"""Copy :class:`Cache` data in CUDA memory."""
+        if device is None:
+            return self.to("cuda")
+        if isinstance(device, int):
+            return self.to(torch.device("cuda", device))
+        return self.to(device)
