@@ -1,4 +1,5 @@
 import math
+import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain
@@ -242,7 +243,12 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 array = table.column(column)
                 if stype == Stype.numerical:
-                    tensor = torch.from_numpy(array.to_numpy())
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(  # Safe to filter.
+                            "ignore",
+                            message="The given NumPy array is not writable",
+                        )
+                        tensor = torch.from_numpy(array.to_numpy())
                     tensor = tensor.to(torch.get_default_dtype())
                     tensor = tensor.unsqueeze(-1)
                 elif stype == Stype.categorical:
