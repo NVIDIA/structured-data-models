@@ -5,10 +5,8 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-# @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
-# @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
-@pytest.mark.parametrize("dtype", [torch.int64])
-@pytest.mark.parametrize("batch_shape", [()])
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+@pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
 def test_tabiclv2(
     device: torch.device,
     dtype: torch.dtype,
