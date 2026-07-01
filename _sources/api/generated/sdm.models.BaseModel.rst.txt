@@ -1,0 +1,8 @@
+﻿BaseModel
+=========
+
+.. currentmodule:: sdm.models
+
+.. autoclass:: BaseModel
+   :members:
+   :show-inheritance:
