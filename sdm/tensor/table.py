@@ -216,9 +216,6 @@ class TableTensor(Tensor):
         if columns is None:
             columns = [str(i) for i in range(tensor.size(-1))]
 
-        if not tensor.is_floating_point():
-            tensor = tensor.to(torch.get_default_dtype())
-
         return cls(
             columns={Stype.numerical: columns},
             numerical=tensor,
