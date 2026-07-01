@@ -21,7 +21,7 @@ SelfCategoricalTensor = TypeVar(
 class CategoricalTensor(Tensor):
     r"""A :class:`torch.Tensor` for categorical column data.
 
-    A ``CategoricalTensor`` stores categorical indices in ``data`` and one
+    A :class:`CategoricalTensor` stores categorical indices in ``data`` and one
     category vector per column in ``categories``.
     Data values are direct indices into the corresponding category vector.
     Negative indices represent missing values.
