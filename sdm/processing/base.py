@@ -54,8 +54,8 @@ class Processor(torch.nn.Module, abc.ABC):
         """Fit the processor on ``input`` and return it.
 
         Args:
-            input: Training tensor used to learn processor state. Concrete
-                processors document the accepted shape.
+            input: Feature tensor whose per-column state is learned.
+                Concrete processors document the accepted shape.
 
         Returns:
             This processor.
@@ -82,7 +82,7 @@ class Processor(torch.nn.Module, abc.ABC):
         """Fit on ``input`` and return the transformed result.
 
         Args:
-            input: Training tensor to fit and transform. Concrete
+            input: Feature tensor to fit on and transform. Concrete
                 processors document the accepted shape.
 
         Returns:
