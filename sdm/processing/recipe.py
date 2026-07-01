@@ -1,123 +1,11 @@
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from torch import Tensor
 from typing_extensions import Self
 
-from sdm import Stype
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import Processor
+from sdm.processing.pipeline import Pipeline
 from sdm.tensor import TableTensor
-
-
-class Pipeline:
-    """Ordered sequence of processing steps for one recipe phase.
-
-    Args:
-        steps: Ordered processing steps. ``None`` creates an empty identity
-            pipeline.
-    """
-
-    def __init__(
-        self,
-        steps: Iterable[Processor] | None = None,
-    ) -> None:
-        self.steps = tuple(_validate_step(step) for step in steps or ())
-
-    def fit(self, table: TableTensor) -> Self:
-        """Fit steps in order using the numerical block of ``table``."""
-        self._fit(table, phase="pipeline")
-        return self
-
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        phase: str,
-    ) -> Self:
-        numerical = table.numerical
-        last = len(self.steps) - 1
-        for position, step in enumerate(self.steps):
-            try:
-                step.fit(numerical)
-                if position != last:
-                    numerical = _validate_output(step.transform(numerical))
-            except Exception as exc:
-                raise _step_error(exc, phase, position, step) from exc
-        return self
-
-    def transform(self, table: TableTensor) -> TableTensor:
-        """Transform ``table`` by applying steps to its numerical block."""
-        return self._transform(table, phase="pipeline")
-
-    def _transform(self, table: TableTensor, *, phase: str) -> TableTensor:
-        if len(self.steps) == 0:
-            return table
-        numerical = table.numerical
-        for position, step in enumerate(self.steps):
-            try:
-                numerical = _validate_output(step.transform(numerical))
-            except Exception as exc:
-                raise _step_error(exc, phase, position, step) from exc
-        return _with_step_numerical(table, numerical, phase, position, step)
-
-    def fit_transform(self, table: TableTensor) -> TableTensor:
-        """Fit and transform ``table`` by threading steps in order."""
-        return self._fit_transform(table, phase="pipeline")
-
-    def _fit_transform(self, table: TableTensor, *, phase: str) -> TableTensor:
-        if len(self.steps) == 0:
-            return table
-        numerical = table.numerical
-        for position, step in enumerate(self.steps):
-            try:
-                numerical = _validate_output(step.fit_transform(numerical))
-            except Exception as exc:
-                raise _step_error(exc, phase, position, step) from exc
-        return _with_step_numerical(table, numerical, phase, position, step)
-
-    def inverse_transform(self, table: TableTensor) -> TableTensor:
-        """Apply invertible steps in reverse order to ``table``."""
-        return self._inverse_transform(table, phase="pipeline")
-
-    def _inverse_transform(
-        self,
-        table: TableTensor,
-        *,
-        phase: str,
-    ) -> TableTensor:
-        if len(self.steps) == 0:
-            return table
-        numerical = table.numerical
-        for position, step in reversed(tuple(enumerate(self.steps))):
-            if not isinstance(step, InvertibleMixin):
-                raise _step_error(
-                    TypeError(
-                        "Expected invertible step for inverse_transform"
-                    ),
-                    phase,
-                    position,
-                    step,
-                )
-            try:
-                numerical = _validate_output(step.inverse_transform(numerical))
-            except Exception as exc:
-                raise _step_error(exc, phase, position, step) from exc
-        return _with_step_numerical(table, numerical, phase, position, step)
-
-    def describe(self) -> str:
-        """Return a human-readable step-order summary."""
-        if len(self.steps) == 0:
-            return "identity"
-        return " -> ".join(step.__class__.__name__ for step in self.steps)
-
-    def __len__(self) -> int:
-        return len(self.steps)
-
-    def __iter__(self) -> Iterator[Processor]:
-        return iter(self.steps)
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.describe()})"
 
 
 @dataclass(frozen=True)
@@ -149,9 +37,21 @@ class Recipe:
         target: Iterable[Processor] | None = None,
         output: Iterable[Processor] | None = None,
     ) -> None:
-        object.__setattr__(self, "features", _coerce_pipeline(features))
-        object.__setattr__(self, "target", _coerce_pipeline(target))
-        object.__setattr__(self, "output", _coerce_pipeline(output))
+        object.__setattr__(
+            self,
+            "features",
+            features if isinstance(features, Pipeline) else Pipeline(features),
+        )
+        object.__setattr__(
+            self,
+            "target",
+            target if isinstance(target, Pipeline) else Pipeline(target),
+        )
+        object.__setattr__(
+            self,
+            "output",
+            output if isinstance(output, Pipeline) else Pipeline(output),
+        )
 
     def fit_features(self, table: TableTensor) -> Self:
         """Fit the feature phase on ``table`` and return this recipe."""
@@ -202,79 +102,17 @@ class Recipe:
             self.fit_transform_target(target),
         )
 
-    def describe(self) -> str:
-        """Return a human-readable summary without running inference."""
-        return (
-            "Recipe(\n"
-            f"  features: {self.features.describe()}\n"
-            f"  target: {self.target.describe()}\n"
-            f"  output: {self.output.describe()}\n"
-            ")"
-        )
-
     def __repr__(self) -> str:
-        return self.describe()
-
-
-def _coerce_pipeline(
-    value: Iterable[Processor] | None,
-) -> Pipeline:
-    if isinstance(value, Pipeline):
-        return value
-    return Pipeline(value)
-
-
-def _validate_step(step: object) -> Processor:
-    if not isinstance(step, Processor):
-        raise TypeError(
-            f"Expected a Processor step (got '{step.__class__.__name__}')"
+        phases = "\n".join(
+            f"  {name}: "
+            + (
+                " -> ".join(step.__class__.__name__ for step in phase)
+                or "identity"
+            )
+            for name, phase in (
+                ("features", self.features),
+                ("target", self.target),
+                ("output", self.output),
+            )
         )
-    return step
-
-
-def _validate_output(output: object) -> Tensor:
-    if not isinstance(output, Tensor):
-        raise TypeError(
-            "Expected the step to return a Tensor for the numerical block "
-            f"(got '{type(output).__name__}')"
-        )
-    return output
-
-
-def _with_step_numerical(
-    table: TableTensor,
-    numerical: Tensor,
-    phase: str,
-    position: int,
-    step: Processor,
-) -> TableTensor:
-    try:
-        return _with_numerical(table, numerical)
-    except Exception as exc:
-        raise _step_error(exc, phase, position, step) from exc
-
-
-def _with_numerical(table: TableTensor, numerical: Tensor) -> TableTensor:
-    if numerical is table.numerical:
-        return table
-    return table.__class__(
-        columns={
-            Stype.numerical: table.columns[Stype.numerical],
-            Stype.categorical: table.columns[Stype.categorical],
-        },
-        numerical=numerical,
-        categorical=table.categorical,
-    )
-
-
-def _step_error(
-    exc: Exception,
-    phase: str,
-    position: int,
-    step: Processor,
-) -> Exception:
-    message = f"{phase} step {position} ({step.__class__.__name__}): {exc}"
-    try:
-        return exc.__class__(message)
-    except Exception:  # noqa: BLE001 - not all exceptions rebuild from a message
-        return RuntimeError(message)
+        return f"Recipe(\n{phases}\n)"

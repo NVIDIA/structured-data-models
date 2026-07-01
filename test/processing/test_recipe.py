@@ -6,7 +6,7 @@ from sdm.processing.base import InvertibleMixin
 
 
 def test_public_recipe_imports() -> None:
-    from sdm.processing.recipe import Pipeline as CanonicalPipeline
+    from sdm.processing.pipeline import Pipeline as CanonicalPipeline
     from sdm.processing.recipe import Recipe as CanonicalRecipe
 
     assert Pipeline is CanonicalPipeline
@@ -115,7 +115,7 @@ def test_recipe_normalizes_empty_phases_and_describes() -> None:
     assert len(recipe.features) == 1
     assert len(recipe.target) == 0
     assert len(recipe.output) == 0
-    assert "features: Add" in recipe.describe()
+    assert "features: Add" in repr(recipe)
     assert "target: identity" in repr(recipe)
 
 

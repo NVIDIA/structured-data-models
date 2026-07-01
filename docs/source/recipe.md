@@ -1,18 +1,21 @@
 # Recipes
 
-A `Recipe` is an inspectable definition of how data crosses a model
-boundary: it transforms inputs into the space your model expects and maps
-the model's outputs back to the original space. Defining it once keeps the
-same auditable transforms on both sides of the model.
+A {py:class}`~sdm.processing.Recipe` is an inspectable definition of how data
+crosses a model boundary: it transforms inputs into the space your model
+expects and maps the model's outputs back to the original space. Defining it
+once keeps the same auditable transforms on both sides of the model.
 
 ## Mental model
 
-- A **`Pipeline`** is an ordered list of `steps` (each a `Processor`) applied to
-  the **numerical block** of a `TableTensor`. Categorical columns pass through
+- A {py:class}`~sdm.processing.Pipeline` is an ordered list of `steps` (each a
+  {py:class}`~sdm.processing.Processor`) applied to the **numerical block** of a
+  {py:class}`~sdm.tensor.TableTensor`. Categorical columns pass through
   unchanged.
 
-- A **`Recipe`** groups three pipelines — **phases** — named after the data they
-  act on. Every phase method takes a `TableTensor` and returns a `TableTensor`.
+- A {py:class}`~sdm.processing.Recipe` groups three pipelines — **phases** —
+  named after the data they act on. Every phase method takes a
+  {py:class}`~sdm.tensor.TableTensor` and returns a
+  {py:class}`~sdm.tensor.TableTensor`.
 
   | Phase      | Acts on      | Before the model  | After the model                                  |
   | ---------- | ------------ | ----------------- | ------------------------------------------------ |
@@ -27,9 +30,9 @@ outputs:  model  ->  target.inverse  ->  output.forward
 
 ## Building a recipe
 
-Pass each phase a list of `Processor` steps; omit any you don't need (it
-defaults to identity). Stateful steps are fitted on your **labeled data only**,
-so no held-out statistics leak in.
+Pass each phase a list of {py:class}`~sdm.processing.Processor` steps; omit any
+you don't need (it defaults to identity). Stateful steps are fitted on your
+**labeled data only**, so no held-out statistics leak in.
 
 ```python
 from sdm.processing import Recipe, StandardScale
@@ -44,7 +47,7 @@ recipe = Recipe(
 
 Fit the recipe on your labeled data and transform it in one call with
 `fit_transform`; transform later inputs with `transform_features` (no re-fit).
-All inputs are `TableTensor`s.
+All inputs are {py:class}`~sdm.tensor.TableTensor`s.
 
 ```python
 # fit on labeled data, then hand to the model
@@ -65,10 +68,12 @@ prediction = recipe.transform_output(prediction)  # identity if `output` is empt
 ```
 
 `target` steps run in reverse during the inverse, and every one must mix in
-`InvertibleMixin` — otherwise `inverse_transform_target` raises `TypeError`.
+{py:class}`~sdm.processing.InvertibleMixin` — otherwise `inverse_transform_target`
+raises `TypeError`.
 
 ## Available processors
 
-`StandardScale`, `Clip`, `Power`, `Quantile`, and `SoftmaxTemperature` ship in
-`sdm.processing`. See {doc}`api/processing` for signatures and which steps are
-invertible.
+{py:class}`~sdm.processing.StandardScale`, {py:class}`~sdm.processing.Clip`,
+{py:class}`~sdm.processing.Power`, {py:class}`~sdm.processing.Quantile`, and
+{py:class}`~sdm.processing.SoftmaxTemperature` ship in `sdm.processing`. See
+{doc}`api/processing` for signatures and which steps are invertible.
