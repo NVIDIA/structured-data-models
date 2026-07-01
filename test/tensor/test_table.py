@@ -76,6 +76,16 @@ def test_column_names() -> None:
         )
 
 
+def test_from_tensor() -> None:
+    tensor = TableTensor.from_tensor(torch.randn(5, 2))
+    assert tensor.size() == (5, 2)
+    assert tensor.numerical.size() == (5, 2)
+    assert tensor.columns == {
+        Stype.numerical: ("0", "1"),
+        Stype.categorical: (),
+    }
+
+
 def test_save_load() -> None:
     tensor = TableTensor(
         columns={
