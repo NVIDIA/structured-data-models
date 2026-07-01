@@ -95,7 +95,7 @@ class TabICLv2(BaseModel):
     @staticmethod
     def default_recipe() -> Recipe:
         """Return the default single-estimator regression recipe."""
-        # TODO Add permutation, decode, and to-numerical processors.
+        # TODO Add permutation, decode, and to-numerical (including impute).
         # TODO Add fixed clipping e.g. via lambda method to [-100, 100].
         return Recipe(
             features=[
