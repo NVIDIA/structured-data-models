@@ -8,11 +8,12 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 
 
-class TabICLv2(torch.nn.Module):
+class TabICLv2(BaseModel):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
@@ -84,6 +85,8 @@ class TabICLv2(torch.nn.Module):
         if pretrained:
             self._load_from_pretrained()
 
+        self.eval()
+
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
 
@@ -110,24 +113,16 @@ class TabICLv2(torch.nn.Module):
 
         return self
 
-    @torch.inference_mode()
-    def forward(  # TODO Add multi-class support.
+    def _forward(  # TODO Add multi-class support.
         self,
-        x: Tensor,  # [B, R, C]
-        y: Tensor,  # [B, R_train]
-    ) -> Tensor:  # [B, R_test, num_classes or 999]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+    ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
 
-        Args:
-            x: The feature tensor with shape ``[B, R, C]`` for ``B`` tables,
-                ``R`` rows, and ``C`` columns.
-                The first ``R_train`` rows along ``R`` refer to the in-context
-                examples.
-            y: The targets of in-context examples with shape ``[B, R_train]``.
-
         Returns:
-            Tensor with shape ``[B, R_test, num_classes]`` for integer ``y``
-            and ``[B, R_test, 999]`` for floating-point ``y``.
+            Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
+            and ``[..., R_test, 999]`` for floating-point ``y``.
             Integer ``y`` return class logits.
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
@@ -135,6 +130,11 @@ class TabICLv2(torch.nn.Module):
         if y.is_floating_point():
             return self.reg_model(x, y)
         return self.cls_model(x, y)
+
+    def __repr__(self) -> str:
+        device = next(self.parameters()).device
+        device_repr = f"device={device}" if device.type != "cpu" else ""
+        return f"{self.__class__.__name__}({device_repr})"
 
 
 class _TabICLv2(torch.nn.Module):
@@ -192,9 +192,9 @@ class _TabICLv2(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [B, R, C]
-        y: Tensor,  # [B, R_train]
-    ) -> Tensor:  # [B, R_test, num_classes or num_quantiles]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
         x = self.row_embedding(x, y)
         x = self.icl_block(x, y)
         return self.head(x)
@@ -287,7 +287,6 @@ def _remap_ckpt(
                     out[new_key] = value
 
         elif key == "row_interactor.cls_tokens":
-            value = value.unsqueeze(0).unsqueeze(0)
             out["row_embedding.readout_token"] = value
 
         elif key.startswith("row_interactor.tf_row.blocks."):

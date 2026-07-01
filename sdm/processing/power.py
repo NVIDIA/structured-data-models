@@ -5,6 +5,7 @@ import torch
 from torch import Tensor
 
 from sdm.processing._stats import _constant_feature_mask
+from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 
 
@@ -178,6 +179,7 @@ class Power(Processor, InvertibleMixin):
         )
 
     def _fit(self, input: Tensor) -> None:
+        input = _as_float(input)
         n_samples, n_features = input.shape
 
         var = input.var(dim=0, correction=0)
@@ -227,10 +229,12 @@ class Power(Processor, InvertibleMixin):
 
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""
+        input = _as_float(input)
         transformed = self._yeojohnson_transform(input)
         return (transformed - self.mean) / self.scale
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
+        input = _as_float(input)
         unscaled = input * self.scale + self.mean
         inverse = self._yeojohnson_inverse_transform(unscaled)
 

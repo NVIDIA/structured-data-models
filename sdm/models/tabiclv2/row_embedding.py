@@ -49,7 +49,7 @@ class RowEmbedding(torch.nn.Module):
         )
 
         self.readout_token = Parameter(
-            torch.empty((1, 1, num_readout_tokens, channels), **factory_kwargs)
+            torch.empty((num_readout_tokens, channels), **factory_kwargs)
         )
         torch.nn.init.trunc_normal_(self.readout_token, std=0.02)
 
@@ -75,11 +75,11 @@ class RowEmbedding(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [B, R, C]
-        y: Tensor,  # [B, R_train]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
         train_mask: Tensor | None = None,  # [R],
-    ) -> Tensor:  # [B, R, K * D]
-        B, R, C = x.size()
+    ) -> Tensor:  # [..., R, K * D]
+        *B, R, C = x.size()
         R_train = y.size(-1)
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
@@ -89,39 +89,41 @@ class RowEmbedding(torch.nn.Module):
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
         index = (index.view(C, 1) + shift.view(1, G)) % C  # [C, G]
-        x = x[:, :, index]  # [B, R, C, G]
-        x = self.lin(x)  # [B, R, C, D]
+        x = x[..., index]  # [..., R, C, G]
+        x = self.lin(x)  # [..., R, C, D]
 
         if self.y_emb is not None:
-            y_emb = self.y_emb(y).view(B, R_train, 1, D)
+            y_emb = self.y_emb(y).view(*B, R_train, 1, D)
         else:
             assert self.y_lin is not None
-            y_emb = self.y_lin(y.unsqueeze(-1)).view(B, R_train, 1, D)
+            y_emb = self.y_lin(y.unsqueeze(-1)).view(*B, R_train, 1, D)
 
-        x[:, train_mask] += y_emb.to(x.dtype)
+        x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis):
-        x = x.transpose(1, 2)  # [B, C, R, D]
+        x = x.transpose(-2, -3)  # [..., C, R, D]
         for col_layer in self.col_layers:
             x = col_layer(
-                query=x,  # [B, C, R, D]
-                key_value=x[:, :, train_mask],  # [B, C, R_train, D]
-            )  # [B, C, R, D]
+                query=x,  # [..., C, R, D]
+                key_value=x[..., train_mask, :],  # [..., C, R_train, D]
+            )  # [..., C, R, D]
 
         x = torch.cat(  # Prepend readout tokens before row-wise attention.
             [
-                self.readout_token.to(x.dtype).expand(B, R, K, D),
-                x.transpose(1, 2),  # [B, R, C, D]
+                self.readout_token.to(x.dtype)
+                .view(*(1,) * len(B), 1, K, D)
+                .expand(*B, R, K, D),
+                x.transpose(-2, -3),  # [..., R, C, D]
             ],
             dim=-2,
-        )  # [B, R, K + C, D]
+        )  # [..., R, K + C, D]
 
         # Row-wise attention (B * R as the batch axis).
         for i, row_layer in enumerate(self.row_layers):
             x = row_layer(
-                query=x[:, :, :K] if i == len(self.row_layers) - 1 else x,
-                key_value=x,  # [B, R, K + C, D]
+                query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
+                key_value=x,  # [..., R, K + C, D]
                 rope=self.rope,
-            )  # [B, R, K + C, D] or [B, R, K, D]
+            )  # [..., R, K + C, D] or [..., R, K, D]
 
-        return self.norm(x).view(B, R, K * D)  # [B, R, K * D]
+        return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]
