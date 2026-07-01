@@ -22,8 +22,8 @@ class BaseModel(torch.nn.Module, ABC):
     @torch.inference_mode()
     def forward(
         self,
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train] or [..., R_train, 1]
+        x: Tensor | TableTensor,  # [..., R, C]
+        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
     ) -> Tensor:  # [..., R - R_test, *]
         r"""The in-context learning forward pass.
 
@@ -32,12 +32,8 @@ class BaseModel(torch.nn.Module, ABC):
                 and ``C`` columns.
                 The first ``R_train`` rows along ``R`` refer to the in-context
                 examples.
-                Features may be given as :class:`torch.Tensor` or
-                :class:`~sdm.tensor.TableTensor` instances.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-                Targets may be given as :class:`torch.Tensor` or
-                :class:`~sdm.tensor.TableTensor` instances.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
@@ -89,8 +85,8 @@ class BaseModel(torch.nn.Module, ABC):
     @torch.inference_mode()
     def fit(
         self,
-        x: Tensor,  # [..., R_train, C]
-        y: Tensor,  # [..., R_train] or [..., R_train, 1]
+        x: Tensor | TableTensor,  # [..., R_train, C]
+        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -100,12 +96,8 @@ class BaseModel(torch.nn.Module, ABC):
         Args:
             x: The feature tensor with shape ``[..., R_train, C]`` with
                 ``R_train`` rows and ``C`` columns.
-                Features may be given as :class:`torch.Tensor` or
-                :class:`~sdm.tensor.TableTensor` instances.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-                Targets may be given as :class:`torch.Tensor` or
-                :class:`~sdm.tensor.TableTensor` instances.
         """
         # TODO Implement real key/value caching.
         self.clear()
@@ -123,7 +115,7 @@ class BaseModel(torch.nn.Module, ABC):
     @torch.inference_mode()
     def predict(
         self,
-        x: Tensor,  # [..., R_test, C]
+        x: Tensor | TableTensor,  # [..., R_test, C]
     ) -> Tensor:  # [..., R_test, *]
         r"""Predict unseen test examples.
 
@@ -134,8 +126,6 @@ class BaseModel(torch.nn.Module, ABC):
         Args:
             x: The feature tensor with shape ``[..., R_test, C]`` with
                 ``R_test`` rows and ``C`` columns.
-                Features may be given as :class:`torch.Tensor` or
-                :class:`~sdm.tensor.TableTensor` instances.
 
         Returns:
             The prediction for ``[..., R_test]`` test rows.
