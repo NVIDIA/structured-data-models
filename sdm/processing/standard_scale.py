@@ -1,3 +1,5 @@
+"""Standardization transforms for structured-data feature tensors."""
+
 import torch
 from torch import Tensor
 
@@ -8,6 +10,9 @@ from sdm.processing.base import InvertibleMixin, Processor
 
 class StandardScale(Processor, InvertibleMixin):
     """Center and scale each feature column.
+
+    Constant columns use a unit scale to keep the transform finite and
+    invertible.
 
     Args:
         with_mean: If ``True``, center each column by its fitted mean.
@@ -45,7 +50,14 @@ class StandardScale(Processor, InvertibleMixin):
             self.scale = input.new_ones(input.shape[1])
 
     def forward(self, input: Tensor) -> Tensor:
-        """Transform ``input`` using the fitted mean and scale."""
+        """Transform ``input`` using the fitted mean and scale.
+
+        Args:
+            input: Feature tensor with shape ``[N, C]``.
+
+        Returns:
+            Tensor with shape ``[N, C]``.
+        """
         return (_as_float(input) - self.mean) / self.scale
 
     def _inverse_transform(self, input: Tensor) -> Tensor:

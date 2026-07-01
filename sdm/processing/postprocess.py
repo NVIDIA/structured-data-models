@@ -1,3 +1,5 @@
+"""Postprocessing transforms for model outputs."""
+
 import math
 
 import torch
@@ -24,7 +26,14 @@ class SoftmaxTemperature(Processor):
         self.temperature = temperature
 
     def forward(self, input: Tensor) -> Tensor:
-        """Return ``softmax(input / temperature)`` over the last dimension."""
+        """Return ``softmax(input / temperature)`` over the last dimension.
+
+        Args:
+            input: Logit tensor with shape ``[..., C]``.
+
+        Returns:
+            Probability tensor with shape ``[..., C]``.
+        """
         return torch.softmax(
             _as_float(input) / self.temperature,
             dim=-1,

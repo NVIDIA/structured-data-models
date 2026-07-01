@@ -1,3 +1,5 @@
+"""Clipping transforms for structured-data feature tensors."""
+
 import torch
 from torch import Tensor
 
@@ -9,7 +11,8 @@ class Clip(Processor, InvertibleMixin):
     """Clamp feature columns to fitted quantile bounds.
 
     This transform is not reconstructive; ``inverse_transform`` intentionally
-    returns its input unchanged.
+    returns its input unchanged. Quantile bounds are fitted independently for
+    each feature column.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
@@ -41,7 +44,14 @@ class Clip(Processor, InvertibleMixin):
         self.upper_bound = q_high
 
     def forward(self, input: Tensor) -> Tensor:
-        """Clamp ``input`` to the fitted lower and upper bounds."""
+        """Clamp ``input`` to the fitted lower and upper bounds.
+
+        Args:
+            input: Feature tensor with shape ``[N, C]``.
+
+        Returns:
+            Tensor with shape ``[N, C]``.
+        """
         return _as_float(input).clamp(
             min=self.lower_bound,
             max=self.upper_bound,

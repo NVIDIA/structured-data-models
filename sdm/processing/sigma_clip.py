@@ -1,3 +1,5 @@
+"""Outlier clipping transforms for structured-data feature tensors."""
+
 import torch
 from torch import Tensor
 
@@ -21,6 +23,10 @@ def _nanstd(input: Tensor, *, dim: int) -> Tensor:
 
 class SigmaClip(Processor):
     """Two-stage z-score outlier clipping with soft logarithmic bounds.
+
+    The first pass masks values outside the initial z-score bounds, then the
+    second pass refits bounds on the remaining values. The transform applies
+    logarithmic soft clipping instead of hard truncation.
 
     Args:
         threshold: Positive z-score multiplier setting how many standard
@@ -73,7 +79,14 @@ class SigmaClip(Processor):
         )
 
     def forward(self, input: Tensor) -> Tensor:
-        """Clip ``input`` using the fitted soft lower and upper bounds."""
+        """Clip ``input`` using the fitted soft lower and upper bounds.
+
+        Args:
+            input: Feature tensor with shape ``[N, C]``.
+
+        Returns:
+            Tensor with shape ``[N, C]``.
+        """
         input = _as_float(input)
         log_abs = torch.log1p(input.abs())
         clipped = torch.maximum(-log_abs + self.lower_bound, input)

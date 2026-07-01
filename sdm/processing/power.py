@@ -1,3 +1,5 @@
+"""Power transforms for structured-data feature tensors."""
+
 import math
 from collections.abc import Callable
 
@@ -228,7 +230,14 @@ class Power(Processor, InvertibleMixin):
         return inverse
 
     def forward(self, input: Tensor) -> Tensor:
-        """Transform ``input`` with fitted Yeo-Johnson parameters."""
+        """Transform ``input`` with fitted Yeo-Johnson parameters.
+
+        Args:
+            input: Feature tensor with shape ``[N, C]``.
+
+        Returns:
+            Tensor with shape ``[N, C]``.
+        """
         input = _as_float(input)
         transformed = self._yeojohnson_transform(input)
         return (transformed - self.mean) / self.scale
