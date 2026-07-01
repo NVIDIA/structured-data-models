@@ -1,12 +1,6 @@
 import math
 from collections import defaultdict
-from collections.abc import (
-    Callable,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-)
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
