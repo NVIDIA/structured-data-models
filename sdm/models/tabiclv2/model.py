@@ -113,23 +113,24 @@ class TabICLv2(torch.nn.Module):
     @torch.inference_mode()
     def forward(  # TODO Add multi-class support.
         self,
-        x: Tensor,  # [B, R, C]
-        y: Tensor,  # [B, R_train]
-    ) -> Tensor:  # [B, R_test, num_classes or 999]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train] or [..., R_train, 1]
+    ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
 
         Args:
-            x: The feature tensor with shape ``[B, R, C]`` for ``B`` tables,
-                ``R`` rows, and ``C`` columns.
+            x: The feature tensor with shape ``[..., R, C]`` with ``R`` rows
+                and ``C`` columns.
                 The first ``R_train`` rows along ``R`` refer to the in-context
                 examples.
-            y: The targets of in-context examples with shape ``[B, R_train]``.
+            y: The targets of in-context examples with shape
+                ``[..., R_train]`` or ``[..., R_train, 1]``.
                 Integer ``y`` refer to classification tasks.
                 Floating-point ``y`` refer to regression tasks.
 
         Returns:
-            Tensor with shape ``[B, R_test, num_classes]`` for integer ``y``
-            and ``[B, R_test, 999]`` for floating-point ``y``.
+            Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
+            and ``[..., R_test, 999]`` for floating-point ``y``.
             Integer ``y`` return class logits.
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
@@ -199,9 +200,10 @@ class _TabICLv2(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [B, R, C]
-        y: Tensor,  # [B, R_train]
-    ) -> Tensor:  # [B, R_test, num_classes or num_quantiles]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train] or [..., R_train, 1]
+    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        y = y.squeeze(-1) if x.dim() == y.dim() else y
         x = self.row_embedding(x, y)
         x = self.icl_block(x, y)
         return self.head(x)
@@ -294,7 +296,6 @@ def _remap_ckpt(
                     out[new_key] = value
 
         elif key == "row_interactor.cls_tokens":
-            value = value.unsqueeze(0).unsqueeze(0)
             out["row_embedding.readout_token"] = value
 
         elif key.startswith("row_interactor.tf_row.blocks."):

@@ -398,7 +398,7 @@ class TableTensor(Tensor):
                 for column in columns
             ]
             if len(columns) > max_cols:
-                [*columns[: max_cols - 1], "...", columns[-1]]
+                columns = [*columns[: max_cols - 1], "...", columns[-1]]
             return "[" + ", ".join(column for column in columns) + "]"
 
         stype_repr = [
