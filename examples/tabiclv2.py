@@ -6,13 +6,14 @@ from sklearn.datasets import load_breast_cancer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 df = load_breast_cancer(as_frame=True).frame
-table = TableTensor(  # TODO Replace with `from_pandas` call.
-    columns={"numerical": df.columns[:-1], "categorical": ["target"]},
-    numerical=torch.from_numpy(df.to_numpy()[:, :-1]).float(),
-    categorical=torch.from_numpy(df["target"].to_numpy()).view(-1, 1),
+table = TableTensor.from_pandas(
+    df=df,
+    stypes={
+        **dict.fromkeys(df.columns[:-1], "numerical"),
+        "target": "categorical",
+    },
     device=device,
 )
-# table = TableTensor.from_pandas(df, device=device)
 
 model = TabICLv2(device=device)
 
