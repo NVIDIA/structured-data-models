@@ -1,0 +1,8 @@
+﻿Pipeline
+========
+
+.. currentmodule:: sdm.processing
+
+.. autoclass:: Pipeline
+   :members:
+   :show-inheritance:
