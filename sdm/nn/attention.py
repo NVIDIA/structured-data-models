@@ -164,6 +164,9 @@ class SDPA(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, H, C]``.
         """
+        if query.numel() == 0:
+            return query
+
         if attn_mask is not None and seqused_key_value is not None:
             raise ValueError(
                 "Cannot pass both `attn_mask` and `seqused_key_value`"

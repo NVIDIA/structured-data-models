@@ -42,8 +42,5 @@ def test_tabiclv2(
         torch.testing.assert_close(out, looped)
 
     model.fit(x[..., :R_train, :], y)
-    # out2 = model.predict(x[..., R_train:, :])
+    torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
     model.clear()
-    # print(out)
-    # print(out2)
-    # # torch.testing.assert_close(out, looped, atol=1e-5)

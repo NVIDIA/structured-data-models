@@ -65,6 +65,7 @@ class BaseModel(torch.nn.Module, ABC):
         self.clear()
         self._cache = Cache({"y.dtype": y.dtype})
         x, y = self._preprocess(x, y)
+        x = x[..., : y.size(-1), :]
         self._forward(x, y, cache=self._cache)
 
     def clear(self) -> None:
