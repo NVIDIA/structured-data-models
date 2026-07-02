@@ -170,7 +170,7 @@ class BaseModel(torch.nn.Module, ABC):
         pass
 
     @abstractmethod
-    def get_default_recipe(self) -> Recipe:
+    def default_recipe(self) -> Recipe:
         r"""Return the default processing recipe for this model.
 
         Model subclasses must override this method to expose the model-specific
