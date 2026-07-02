@@ -91,8 +91,13 @@ class TabICLv2(BaseModel):
         self.eval()
 
     @staticmethod
-    def default_recipe() -> Recipe:
-        """Return the default single-estimator regression recipe."""
+    def get_default_recipe() -> Recipe:
+        r"""Return the default single-estimator regression recipe.
+
+        Returns:
+            The default :class:`~sdm.processing.Recipe` applied during pre- and
+            postprocessing.
+        """
         return default_regression_recipe()
 
     def _load_from_pretrained(self) -> "TabICLv2":
