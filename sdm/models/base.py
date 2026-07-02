@@ -73,15 +73,6 @@ class BaseModel(torch.nn.Module, ABC):
         r"""Clears cached in-context examples."""
         self._cache = None
 
-    @abstractmethod
-    def get_recipe(self) -> Recipe:
-        r"""Return the processing recipe for this model.
-
-        Model subclasses must override this method to expose the model-specific
-        preprocessing and postprocessing recipe.
-        """
-        ...
-
     @torch.inference_mode()
     def predict(
         self,
@@ -174,4 +165,17 @@ class BaseModel(torch.nn.Module, ABC):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
+        pass
+
+    @abstractmethod
+    def get_default_recipe(self) -> Recipe:
+        r"""Return the default processing recipe for this model.
+
+        Model subclasses must override this method to expose the model-specific
+        preprocessing and postprocessing recipe.
+
+        Returns:
+            The :class:`~sdm.processing.Recipe` applied during pre- and
+            postprocessing by default.
+        """
         pass
