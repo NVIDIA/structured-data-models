@@ -3,7 +3,6 @@ import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     MeanImpute,
-    Pipeline,
     Power,
     SoftmaxTemperature,
     StandardScale,
@@ -31,15 +30,15 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
-    assert Pipeline().transform(table) is table
-    assert Pipeline().fit_transform(table) is table
-    assert Pipeline().inverse_transform(table) is table
+    assert Sequential().transform(table) is table
+    assert Sequential().fit_transform(table) is table
+    assert Sequential().inverse_transform(table) is table
 
 
 def test_pipeline_transforms_numerical_and_passes_categorical() -> None:
     table = _table()
 
-    output = Pipeline([StandardScale()]).fit_transform(table)
+    output = Sequential([StandardScale()]).fit_transform(table)
 
     assert not torch.equal(output.numerical, table.numerical)
     assert output.categorical is table.categorical
@@ -47,20 +46,20 @@ def test_pipeline_transforms_numerical_and_passes_categorical() -> None:
 
 
 def test_repr_lists_steps_or_reports_identity() -> None:
-    assert repr(Pipeline()) == "Pipeline(identity)"
-    assert repr(Pipeline([StandardScale(), Power()])) == (
-        "Pipeline(StandardScale -> Power)"
+    assert repr(Sequential()) == "Sequential(identity)"
+    assert repr(Sequential([StandardScale(), Power()])) == (
+        "Sequential(StandardScale -> Power)"
     )
 
 
 def test_pipeline_rejects_non_processor_step() -> None:
     with pytest.raises(TypeError, match="Expected a Processor step"):
-        Pipeline([object()])  # ty: ignore[invalid-argument-type]
+        Sequential([object()])  # ty: ignore[invalid-argument-type]
 
 
 def test_pipeline_error_includes_step_position() -> None:
     # The second step is unfitted, so its transform raises with its position.
-    pipeline = Pipeline([SoftmaxTemperature(), StandardScale()])
+    pipeline = Sequential([SoftmaxTemperature(), StandardScale()])
 
     with pytest.raises(RuntimeError, match=r"step 1 \(StandardScale\)"):
         pipeline.transform(_table())
@@ -69,7 +68,7 @@ def test_pipeline_error_includes_step_position() -> None:
 def test_inverse_transform_rejects_non_invertible_step() -> None:
     # MeanImpute is not invertible, so inverse_transform reports its position.
     with pytest.raises(TypeError, match=r"step 0 \(MeanImpute\)"):
-        Pipeline([MeanImpute()]).inverse_transform(_table())
+        Sequential([MeanImpute()]).inverse_transform(_table())
 
 
 def test_inverse_transform_runs_steps_in_reverse_order() -> None:
@@ -81,7 +80,7 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
         )
     )
 
-    pipeline = Pipeline([Power(), StandardScale()])
+    pipeline = Sequential([Power(), StandardScale()])
     transformed = pipeline.fit_transform(table)
     restored = pipeline.inverse_transform(transformed)
 
