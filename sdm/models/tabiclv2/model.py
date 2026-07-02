@@ -11,13 +11,9 @@ from torch.nn import GELU, Linear, Sequential
 from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
+from sdm.models.tabiclv2.recipe import default_regression_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import (
-    MeanImpute,
-    Recipe,
-    SigmaClip,
-    StandardScale,
-)
+from sdm.processing import Recipe
 
 
 class TabICLv2(BaseModel):
@@ -96,72 +92,8 @@ class TabICLv2(BaseModel):
 
     @staticmethod
     def default_recipe() -> Recipe:
-        """Return the default single-estimator regression recipe.
-
-        Reproduces the deterministic feature path of the original TabICLv2
-        regressor: per-column mean imputation, standard scaling, and
-        two-stage 4-sigma outlier clipping. The target is standard-scaled and
-        its inverse maps predictions back to the original space.
-
-        Steps that depend on processors or stages not yet implemented are kept
-        as commented placeholders and ``TODO``s below: constant/unique column
-        removal (TabICL ``UniqueFeatureFilter``), feature-order shuffle, output
-        identity, fixed ``[-100, 100]`` clipping, categorical to-numerical
-        encoding, the quantile-to-point regression decode, and the multi-view
-        ``Choice`` (V2) and per-task ``TaskDispatch`` (V3) extensions.
-        """
-        # TODO Add decode and to-numerical (categorical encoding).
-        # TODO Add fixed clipping e.g. via lambda method to [-100, 100].
-        # TODO Implement and enable the Identity, ConstantFilter (drops
-        #   constant/unique columns, like TabICL UniqueFeatureFilter), and
-        #   FeaturePermute processors.
-        # TODO Wrap normalization in Choice([...]) and add n_estimators.
-        # TODO Bundle classification via TaskDispatch on target and output.
-        return Recipe(
-            features=[
-                MeanImpute(),
-                # ConstantFilter(),
-                StandardScale(epsilon=1e-6),
-                SigmaClip(threshold=4.0),
-                # FeaturePermute(method="latin"),
-            ],
-            target=[
-                StandardScale(),
-            ],
-            output=[
-                # Identity(),
-            ],
-        )
-
-    # Classification variant (commented until LabelEncode and LabelShuffle
-    # exist; SoftmaxTemperature and the feature steps already do). It mirrors
-    # the TabICLv2 classifier: the same feature transforms as regression, plus
-    # label encoding and a per-member class shift on the target (its inverse
-    # un-shuffles the class logits), and softmax temperature on the output.
-    #
-    # Feature steps map to TabICL as in default_recipe. Target adds LabelEncode
-    # (TabICL LabelEncoder) and LabelShuffle (class_shuffle_method="shift");
-    # output is SoftmaxTemperature (softmax_temperature=0.9).
-    #
-    # @staticmethod
-    # def default_classification_recipe() -> Recipe:
-    #     """Return the default single-estimator classification recipe."""
-    #     return Recipe(
-    #         features=[
-    #             MeanImpute(),
-    #             # ConstantFilter(),
-    #             StandardScale(epsilon=1e-6),
-    #             SigmaClip(threshold=4.0),
-    #             # FeaturePermute(method="latin"),
-    #         ],
-    #         target=[
-    #             # LabelEncode(),
-    #             # LabelShuffle(method="shift"),
-    #         ],
-    #         output=[
-    #             SoftmaxTemperature(temperature=0.9),
-    #         ],
-    #     )
+        """Return the default single-estimator regression recipe."""
+        return default_regression_recipe()
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
