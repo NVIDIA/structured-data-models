@@ -133,6 +133,36 @@ class TabICLv2(BaseModel):
             ],
         )
 
+    # Classification variant (commented until LabelEncode and LabelShuffle
+    # exist; SoftmaxTemperature and the feature steps already do). It mirrors
+    # the TabICLv2 classifier: the same feature transforms as regression, plus
+    # label encoding and a per-member class shift on the target (its inverse
+    # un-shuffles the class logits), and softmax temperature on the output.
+    #
+    # Feature steps map to TabICL as in default_recipe. Target adds LabelEncode
+    # (TabICL LabelEncoder) and LabelShuffle (class_shuffle_method="shift");
+    # output is SoftmaxTemperature (softmax_temperature=0.9).
+    #
+    # @staticmethod
+    # def default_classification_recipe() -> Recipe:
+    #     """Return the default single-estimator classification recipe."""
+    #     return Recipe(
+    #         features=[
+    #             MeanImpute(),
+    #             # ConstantFilter(),
+    #             StandardScale(epsilon=1e-6),
+    #             SigmaClip(threshold=4.0),
+    #             # FeaturePermute(method="latin"),
+    #         ],
+    #         target=[
+    #             # LabelEncode(),
+    #             # LabelShuffle(method="shift"),
+    #         ],
+    #         output=[
+    #             SoftmaxTemperature(temperature=0.9),
+    #         ],
+    #     )
+
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
 
