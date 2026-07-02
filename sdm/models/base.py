@@ -73,6 +73,7 @@ class BaseModel(torch.nn.Module, ABC):
         r"""Clears cached in-context examples."""
         self._cache = None
 
+    @abstractmethod
     def get_recipe(self) -> Recipe:
         r"""Return the default processing recipe for this model.
 
