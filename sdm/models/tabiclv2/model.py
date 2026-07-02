@@ -96,7 +96,20 @@ class TabICLv2(BaseModel):
 
     @staticmethod
     def default_recipe() -> Recipe:
-        """Return the default single-estimator regression recipe."""
+        """Return the default single-estimator regression recipe.
+
+        Reproduces the deterministic feature path of the original TabICLv2
+        regressor: per-column mean imputation, standard scaling, and
+        two-stage 4-sigma outlier clipping. The target is standard-scaled and
+        its inverse maps predictions back to the original space.
+
+        Steps that depend on processors or stages not yet implemented are kept
+        as commented placeholders and ``TODO``s below: constant/unique column
+        removal (TabICL ``UniqueFeatureFilter``), feature-order shuffle, output
+        identity, fixed ``[-100, 100]`` clipping, categorical to-numerical
+        encoding, the quantile-to-point regression decode, and the multi-view
+        ``Choice`` (V2) and per-task ``TaskDispatch`` (V3) extensions.
+        """
         # TODO Add decode and to-numerical (categorical encoding).
         # TODO Add fixed clipping e.g. via lambda method to [-100, 100].
         # TODO Implement and enable the Identity, ConstantFilter (drops
