@@ -169,9 +169,8 @@ class BaseModel(torch.nn.Module, ABC):
     ) -> Tensor:  # [..., R - R_train, *]
         pass
 
-    @staticmethod
     @abstractmethod
-    def default_recipe() -> Recipe:
+    def default_recipe(self) -> Recipe:
         r"""Return the default processing recipe for this model.
 
         Model subclasses must override this method to expose the model-specific
