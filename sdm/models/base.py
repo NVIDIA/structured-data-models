@@ -67,6 +67,7 @@ class BaseModel(torch.nn.Module, ABC):
         self._cache = Cache({"y.dtype": y.dtype})
         x = x[..., : y.size(-1), :]
         self._forward(x, y, cache=self._cache)
+        self._cache.freeze()
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
