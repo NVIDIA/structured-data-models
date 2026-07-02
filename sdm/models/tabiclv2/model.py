@@ -12,6 +12,7 @@ from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
+from sdm.processing import Recipe
 
 
 class TabICLv2(BaseModel):
@@ -133,6 +134,14 @@ class TabICLv2(BaseModel):
         if y.is_floating_point():
             return self.reg_model(x, y, cache=cache)
         return self.cls_model(x, y, cache=cache)
+
+    def get_default_recipe(self) -> Recipe:
+        r"""Return the default processing recipe for this model.
+
+        :class:`TabICLv2` performs no additional pre- or postprocessing by
+        default, so this returns an empty (identity) recipe.
+        """
+        return Recipe()
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device

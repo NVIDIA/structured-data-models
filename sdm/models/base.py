@@ -7,6 +7,7 @@ from torch import Tensor
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.cache import Cache
+from sdm.processing import Recipe
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -167,3 +168,15 @@ class BaseModel(torch.nn.Module, ABC):
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         pass
+
+    @abstractmethod
+    def get_default_recipe(self) -> Recipe:
+        r"""Return the default processing recipe for this model.
+
+        Model subclasses must override this method to expose the model-specific
+        preprocessing and postprocessing recipe.
+
+        Returns:
+            The :class:`~sdm.processing.Recipe` applied during pre- and
+            postprocessing by default.
+        """
