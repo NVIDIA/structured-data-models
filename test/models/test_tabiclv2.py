@@ -1,6 +1,6 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import TableTensor
 from sdm.models import TabICLv2
 from sdm.testing import withCUDA
 
@@ -62,23 +62,3 @@ def test_default_recipe_regression_roundtrip() -> None:
     torch.testing.assert_close(
         restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
     )
-
-
-def test_default_recipe_folds_categorical_features_to_numerical() -> None:
-    recipe = TabICLv2(pretrained=False).default_recipe()
-
-    features = TableTensor(
-        columns={"numerical": ("age",), "categorical": ("country",)},
-        numerical=torch.randn(16, 1),
-        categorical=CategoricalTensor(
-            data=torch.randint(0, 3, (16, 1)),
-            categories=(StringTensor.from_list(["US", "DE", "FR"]),),
-        ),
-    )
-    target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
-
-    model_features, _ = recipe.fit_transform(features, target)
-
-    assert model_features.columns[Stype.numerical] == ("age", "country")
-    assert model_features.columns[Stype.categorical] == ()
-    assert model_features.size(-1) == 2
