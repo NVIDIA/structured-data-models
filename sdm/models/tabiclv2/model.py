@@ -91,7 +91,7 @@ class TabICLv2(BaseModel):
         self.eval()
 
     @staticmethod
-    def get_default_recipe() -> Recipe:
+    def default_recipe() -> Recipe:
         r"""Return the default single-estimator regression recipe.
 
         Returns:
