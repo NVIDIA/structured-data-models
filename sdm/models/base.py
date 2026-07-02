@@ -113,12 +113,13 @@ class BaseModel(torch.nn.Module, ABC):
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
     ) -> tuple[Tensor, Tensor]:
         if isinstance(x, TableTensor):
-            invalid_columns = x.size(-1) - x.numerical.size(-1)
+            invalid_columns = x.size(-1) - x.numerical.size(-1)  # TODO Add id.
             if invalid_columns > 0:
                 invalid_stypes = [
                     stype.value
                     for stype, tensor in x.items()
-                    if tensor.size(-1) > 0 and stype not in (Stype.numerical,)
+                    if tensor.size(-1) > 0
+                    and stype not in (Stype.numerical, Stype.id)
                 ]
                 warnings.warn(
                     f"Expected 'x' to only hold numerical columns but also "
