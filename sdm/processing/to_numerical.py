@@ -21,7 +21,7 @@ class ToNumerical(Processor):
     requires_fit = False
     input_scope = "table"
 
-    # TODO: Implement supported stypes 
+    # TODO: Implement supported stypes
 
     def forward(self, input: Tensor) -> Tensor:
         """Return ``input`` with all feature columns in ``numerical``."""

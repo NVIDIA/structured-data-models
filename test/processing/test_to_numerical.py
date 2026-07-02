@@ -1,11 +1,7 @@
-import warnings
-
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.cache import Cache
-from sdm.models.base import BaseModel
-from sdm.processing import Recipe, ToNumerical
+from sdm.processing import ToNumerical
 
 
 def _table() -> TableTensor:
@@ -43,8 +39,6 @@ def test_to_numerical_converts_categorical_stype() -> None:
     assert torch.equal(output.numerical[..., :2], table.numerical)
     assert torch.equal(output.numerical[..., 2:], categorical_ids)
     assert output.categorical.size(-1) == 0
-
-
 
 
 def test_to_numerical_is_identity_for_already_numerical_table() -> None:
