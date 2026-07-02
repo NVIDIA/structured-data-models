@@ -7,6 +7,7 @@ from torch import Tensor
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.cache import Cache
+from sdm.processing import Recipe
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -71,6 +72,15 @@ class BaseModel(torch.nn.Module, ABC):
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
         self._cache = None
+
+    def get_recipe(self) -> Recipe:
+        r"""Return the default processing recipe for this model.
+
+        The base implementation is an identity recipe. Model subclasses can
+        override this method to expose model-specific preprocessing and
+        postprocessing defaults.
+        """
+        return Recipe()
 
     @torch.inference_mode()
     def predict(
