@@ -17,8 +17,20 @@ table = TableTensor.from_pandas(
 
 model = TabICLv2(device=device)
 
+# Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
         x=table.drop_columns("target"),
         y=table[:300, "target"],
     )
+
+# Fit + Predict forward pass via key/value caching for fast inference:
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
+    model.fit(
+        x=table[:300].drop_columns("target"),
+        y=table[:300, "target"],
+    )
+    model.predict(
+        x=table[300:].drop_columns("target"),
+    )
+    model.clear()
