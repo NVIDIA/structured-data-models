@@ -46,7 +46,7 @@ def test_tabiclv2(
 
 
 def test_default_recipe_regression_roundtrip() -> None:
-    recipe = TabICLv2.default_recipe()
+    recipe = TabICLv2(pretrained=False).default_recipe()
 
     features = TableTensor.from_tensor(
         torch.randn(16, 4), columns=["a", "b", "c", "d"]
