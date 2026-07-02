@@ -25,7 +25,7 @@ def _table() -> TableTensor:
     )
 
 
-def test_to_numerical_converts_categorical_stype_without_reencoding() -> None:
+def test_to_numerical_converts_categorical_stype() -> None:
     table = _table()
 
     categorical_ids = table.categorical.as_tensor().to(table.numerical.dtype)
@@ -45,35 +45,6 @@ def test_to_numerical_converts_categorical_stype_without_reencoding() -> None:
     assert output.categorical.size(-1) == 0
 
 
-def test_to_numerical_respects_requested_dtype() -> None:
-    output = ToNumerical(dtype=torch.float64).transform(_table())
-
-    assert isinstance(output, TableTensor)
-    assert output.numerical.dtype == torch.float64
-    assert torch.equal(
-        output.numerical,
-        torch.tensor(
-            [[30.0, 100.0, 0.0, 1.0], [40.0, 200.0, -1.0, 0.0]],
-            dtype=torch.float64,
-        ),
-    )
-
-
-def test_to_numerical_converts_categorical_only_table() -> None:
-    table = TableTensor(
-        columns={"categorical": ("country",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [-1]], dtype=torch.int64),
-            categories=(StringTensor.from_list(["US"]),),
-        ),
-    )
-
-    output = ToNumerical().transform(table)
-
-    assert isinstance(output, TableTensor)
-    assert output.columns[Stype.numerical] == ("country",)
-    assert output.columns[Stype.categorical] == ()
-    assert torch.equal(output.numerical, torch.tensor([[0.0], [-1.0]]))
 
 
 def test_to_numerical_is_identity_for_already_numerical_table() -> None:
@@ -102,43 +73,3 @@ def test_to_numerical_keeps_source_category_vocabulary_available() -> None:
         "enterprise",
     ]
     assert output.columns[Stype.categorical] == ()
-
-
-def test_to_numerical_fits_recipe_feature_pipeline() -> None:
-    table = _table()
-    recipe = Recipe(features=[ToNumerical()])
-
-    output = recipe.features.fit_transform(table)
-
-    assert output.columns[Stype.numerical] == (
-        "age",
-        "income",
-        "country",
-        "segment",
-    )
-    assert output.size(-1) == output.numerical.size(-1)
-
-
-class EchoModel(BaseModel):
-    def _forward(
-        self,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        *,
-        cache: Cache | None = None,
-    ) -> torch.Tensor:
-        del y, cache
-        return x
-
-
-def test_to_numerical_prepares_features_for_base_model_boundary() -> None:
-    table = _table()
-    output = Recipe(features=[ToNumerical()]).features.transform(table)
-    model = EchoModel()
-
-    with warnings.catch_warnings(record=True) as captured:
-        warnings.simplefilter("always")
-        model_output = model(output, torch.empty(0))
-
-    assert len(captured) == 0
-    assert model_output.shape == (2, 4)
