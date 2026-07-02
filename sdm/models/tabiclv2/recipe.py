@@ -85,8 +85,8 @@ def default_regression_recipe() -> Recipe:
 #         ],
 #         output=[
 #             TaskDispatch({
-#                 Task.CLASSIFICATION: SoftmaxTemperature(temperature=0.9),
-#                 Task.REGRESSION: Identity(),
+#                 classification: SoftmaxTemperature(temperature=0.9),
+#                 regression: Identity(),
 #             }),
 #         ],
 #     )
