@@ -6,6 +6,17 @@ from sdm.tensor import TableTensor
 
 @dataclass(frozen=True)
 class Relationship:
+    r"""Join relationship between two tables.
+
+    Args:
+        left_table: Name of the left related table, or ``None`` for the base
+            table.
+        left_columns: Column names from the left table.
+        right_table: Name of the right related table, or ``None`` for the base
+            table.
+        right_columns: Column names from the right table.
+    """
+
     left_table: str | None
     left_columns: Sequence[str]
     right_table: str | None
@@ -33,6 +44,14 @@ class Relationship:
 
 @dataclass(frozen=True, init=False)
 class RelatedTables:
+    r"""Related table context for relational data models.
+
+    Args:
+        tables: Related tables keyed by table name.
+        relationships: Join relationships among related tables and the
+            implicit base table.
+    """
+
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
 
@@ -78,3 +97,12 @@ class RelatedTables:
 
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", parsed_relationships)
+
+    def __post_init__(self) -> None:
+        if not any(
+            relationship.left_table is None or relationship.right_table is None
+            for relationship in self.relationships
+        ):
+            raise ValueError(
+                "Expected at least one relationship to refer to the base table"
+            )
