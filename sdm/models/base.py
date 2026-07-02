@@ -64,10 +64,11 @@ class BaseModel(torch.nn.Module, ABC):
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
         """
         self.clear()
-        self._cache = Cache({"y.dtype": y.dtype})
         x, y = self._preprocess(x, y)
+        self._cache = Cache({"y.dtype": y.dtype})
         x = x[..., : y.size(-1), :]
         self._forward(x, y, cache=self._cache)
+        self._cache.freeze()
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
@@ -97,9 +98,10 @@ class BaseModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        y = x.new_empty(
+        y = torch.empty(
             (*x.size()[:-2], 0),
             dtype=cast(torch.dtype, self._cache["y.dtype"]),
+            device=x.device,
         )
         x, y = self._preprocess(x, y)
         return self._forward(x, y, cache=self._cache)
