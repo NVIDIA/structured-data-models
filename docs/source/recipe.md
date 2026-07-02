@@ -42,19 +42,30 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
+{py:class}`~sdm.processing.ConstantFilter` is a lossy, table-scoped
+feature cleanup step: it learns which columns have too few unique values and
+returns a table with matching data blocks and column metadata. Put it early in
+the features pipeline, before scaling or normalization steps that should see
+the filtered feature space.
+
 {py:meth}`~sdm.processing.Processor.resolve` returns the concrete processor
 for a processing context. Plain processors return themselves; processors that
-depend on a view or estimator can override it. Some table-level processors
-represent a model-view policy rather than a one-shot data cleanup. For example,
-{py:class}`~sdm.processing.FeaturePermute` preserves the single-estimator
-behavior when used directly and becomes a concrete non-identity view after
-`resolve(estimator=...)`:
+depend on a view or estimator can override it. Estimator-resolved view
+processors preserve single-estimator behavior when used directly and become
+concrete non-identity views after `resolve(estimator=...)`:
 
 ```python
-from sdm.processing import FeaturePermute
+from sdm.processing import FeaturePermute, LabelShuffle
 
 feature_view = FeaturePermute(method="shift").resolve(estimator=1)
+target_view = LabelShuffle(method="shift").resolve(estimator=1)
 ```
+
+{py:class}`~sdm.processing.LabelShuffle` maps integer-encoded target labels in
+the target pipeline. Use {py:meth}`~sdm.processing.LabelShuffle.correct_output`
+to restore class-score outputs to the original class order before ensemble
+averaging; target-pipeline `inverse_transform` maps label ids, not class-score
+tensors.
 
 Fit the {py:class}`~sdm.processing.Recipe` on your labeled data and transform it
 in one call with {py:meth}`~sdm.processing.Recipe.fit_transform`; transform
@@ -66,8 +77,9 @@ model_features, model_target = recipe.fit_transform(labeled_features, labels)
 model_input = recipe.features.transform(new_features)
 ```
 
-The model returns a {py:class}`~sdm.tensor.TableTensor`; map its predictions
-back to the original space:
+For regression or label-id outputs, the model returns a
+{py:class}`~sdm.tensor.TableTensor`; map its predictions back to the original
+space:
 
 ```python
 prediction = recipe.target.inverse_transform(model(model_input))
