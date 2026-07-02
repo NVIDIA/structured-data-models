@@ -254,13 +254,6 @@ class VarLenTensor(Tensor):
             else:
                 array = array.combine_chunks()
 
-        if not isinstance(array, pa.Array):
-            raise TypeError(
-                f"Expected 'array' in '{cls.__name__}.from_arrow' to be a "
-                f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
-                f"(got '{type(array).__name__}')"
-            )
-
         if size is None:
             size = (len(array),)
         elif math.prod(size) != len(array):

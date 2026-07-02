@@ -1,11 +1,13 @@
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, SupportsIndex, TypeVar
+from itertools import chain
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
+import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import override
 
-from sdm.tensor import CategoricalTensor
+from sdm.tensor import CategoricalTensor, StringTensor
 
 aten = torch.ops.aten
 
@@ -113,6 +115,43 @@ class ColumnarTensor(Tensor):
         out._columns = columns
 
         return out
+
+    @classmethod
+    def from_arrow(
+        cls: type[SelfColumnarTensor],
+        array: pa.Array | pa.ChunkedArray,
+        *,
+        device: torch.device | str | None = None,
+    ) -> SelfColumnarTensor:
+        r"""Create tensor from a ``pyarrow`` array.
+
+        Args:
+            array: The ``pyarrow`` array.
+            device: The device.
+        """
+        device = torch.device("cpu" if device is None else device)
+
+        if isinstance(array, pa.ChunkedArray):
+            if array.num_chunks == 1:
+                array = array.chunk(0)
+            else:
+                array = array.combine_chunks()
+
+        if array.null_count > 0:
+            raise ValueError(f"'{cls.__name__}' cannot represent null values")
+
+        is_string = pa.types.is_string(array.type)
+        is_large_string = pa.types.is_large_string(array.type)
+        if not is_string and not is_large_string:
+            column = StringTensor.from_arrow(array, device=device)
+        else:
+            values = array.to_numpy(
+                zero_copy_only=False,
+                writable=device.type == "cpu",
+            )
+            column = torch.as_tensor(values, device=device)
+
+        return cls(columns=(column,), device=device)
 
     # Decorators ##############################################################
 
@@ -292,4 +331,28 @@ def _pin_memory(input: ColumnarTensor) -> ColumnarTensor:
         columns=[column.pin_memory() for column in input._columns],
         size=input.size()[:-1],
         device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
+    if not all(isinstance(tensor, ColumnarTensor) for tensor in tensors):
+        raise TypeError(
+            f"Expected all tensors to be '{ColumnarTensor.__name__}' instances"
+        )
+
+    tensors = cast(Sequence[ColumnarTensor], tensors)
+    dim %= tensors[0].dim()
+    if dim == tensors[0].dim() - 1:
+        return tensors[0].__class__(
+            columns=tuple(chain.from_iterable(t._columns for t in tensors)),
+            device=tensors[0].device,
+        )
+
+    return tensors[0].__class__(
+        columns=[
+            torch.cat([tensor._columns[i] for tensor in tensors], dim=dim)
+            for i in range(tensors[0].size(-1))
+        ],
+        device=tensors[0].device,
     )

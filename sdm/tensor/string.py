@@ -53,13 +53,6 @@ class StringTensor(VarLenTensor):
             else:
                 array = array.combine_chunks()
 
-        if not isinstance(array, pa.Array):
-            raise TypeError(
-                f"Expected 'array' in '{cls.__name__}.from_arrow' to be a "
-                f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
-                f"(got '{type(array).__name__}')"
-            )
-
         if size is None:
             size = (len(array),)
         elif math.prod(size) != len(array):
@@ -100,11 +93,6 @@ class StringTensor(VarLenTensor):
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
                 f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
-            )
-        if self.requires_grad:
-            raise RuntimeError(
-                "Can't call 'to_arrow()' on Tensor that requires grad. "
-                "Use 'Tensor.detach().to_arrow()' instead."
             )
 
         data, offset = cast(StringTensor, self.contiguous()).data_offset
@@ -214,9 +202,5 @@ class StringTensor(VarLenTensor):
         out += f", size={tuple(self.size())}"
         if self.device.type != "cpu":
             out += f", device={self.device}"
-        if self._data.grad_fn is not None:
-            out += f", grad_fn=<{type(self._data.grad_fn).__name__}>"
-        elif self.requires_grad:
-            out += ", requires_grad=True>"
         out += ")"
         return out
