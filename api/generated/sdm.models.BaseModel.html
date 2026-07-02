@@ -124,6 +124,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.models.BaseModel.clear"><code class="docutils literal notranslate">clear()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.BaseModel.fit"><code class="docutils literal notranslate">fit()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.BaseModel.forward"><code class="docutils literal notranslate">forward()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.BaseModel.get_default_recipe"><code class="docutils literal notranslate">get_default_recipe()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.BaseModel.predict"><code class="docutils literal notranslate">predict()</span></code></a></li>
 </ul>
 </li>
@@ -229,6 +230,23 @@ examples.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.models.BaseModel.get_default_recipe">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.BaseModel.get_default_recipe" title="Link to this definition">¶</a></dt>
+<dd><p>Return the default processing recipe for this model.</p>
+<p>Model subclasses must override this method to expose the model-specific
+preprocessing and postprocessing recipe.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The <a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> applied during pre- and
+postprocessing by default.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.models.BaseModel.predict">
 <span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.models.BaseModel.predict" title="Link to this definition">¶</a></dt>
 <dd><p>Predict unseen test examples.</p>
@@ -278,7 +296,7 @@ examples.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=e50ad053"></script>
+      <script src="../../_static/documentation_options.js?v=0cd585e1"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
