@@ -1,6 +1,8 @@
 import io
 from typing import cast
 
+import pandas as pd
+import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
@@ -76,6 +78,16 @@ def test_column_names() -> None:
         )
 
 
+def test_from_tensor() -> None:
+    tensor = TableTensor.from_tensor(torch.randn(5, 2))
+    assert tensor.size() == (5, 2)
+    assert tensor.numerical.size() == (5, 2)
+    assert tensor.columns == {
+        Stype.numerical: ("0", "1"),
+        Stype.categorical: (),
+    }
+
+
 def test_save_load() -> None:
     tensor = TableTensor(
         columns={
@@ -97,7 +109,7 @@ def test_save_load() -> None:
     assert isinstance(out, TableTensor)
     assert out.size() == tensor.size()
     assert out.numerical.equal(tensor.numerical)
-    assert out.categorical.as_tensor().equal(tensor.categorical.as_tensor())
+    assert out.categorical.equal(tensor.categorical)
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
     for category1, category2 in zip(
@@ -485,3 +497,57 @@ def test_share_memory() -> None:
         assert tensor.is_shared()
     except RuntimeError:
         pass
+
+
+def test_from_arrow() -> None:
+    table = pa.table(
+        {
+            "age": pa.array([10, 20], type=pa.int64()),
+            "income": pa.array([1.0, 2.5], type=pa.float64()),
+            "country": pa.array(["US", "CA"]),
+            "segment": pa.array(["a", "b"]),
+        }
+    )
+
+    tensor = TableTensor.from_arrow(
+        table=table,
+        stypes={
+            "age": "numerical",
+            "income": "numerical",
+            "country": "categorical",
+            "segment": "categorical",
+        },
+    )
+
+    assert tensor.size() == (2, 4)
+    assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
+    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
+    assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+def test_from_pandas() -> None:
+    df = pd.DataFrame(
+        {
+            "age": [10, 20],
+            "income": [1.0, 2.5],
+            "country": ["US", "CA"],
+            "segment": ["a", "b"],
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={
+            "age": "numerical",
+            "income": "numerical",
+            "country": "categorical",
+            "segment": "categorical",
+        },
+    )
+
+    assert tensor.size() == (2, 4)
+    assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
+    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
+    assert tensor.categorical.categories[1].tolist() == ["a", "b"]

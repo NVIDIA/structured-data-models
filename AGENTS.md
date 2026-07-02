@@ -23,6 +23,8 @@ Do not add platform or serving abstractions unless explicitly requested.
 - `sdm/tensor`: Custom PyTorch-native `Tensor` subclasses for tensorized raw table data.
 - `sdm/processing`: Common tensorized preprocessing and postprocessing routines for structured data models.
 - `sdm/nn`: Common neural network building blocks for structured data models.
+- `sdm/models`: (Pretrained) structured data models based on a common interface.
+- `sdm/testing`: Testing utilities.
 
 # Core Design Principles
 
@@ -53,3 +55,6 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.
 - Document public constructor parameters.
+- Avoid creating functions for non-usable small code snippet.
+- In `__init__.py`, order imports and `__all__` in *dependency order* (base
+  classes/mixins first, then concrete), never alphabetically.

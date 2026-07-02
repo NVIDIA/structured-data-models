@@ -1,9 +1,11 @@
 import math
+import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain
 from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
+import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import override
@@ -19,8 +21,8 @@ SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
 class TableTensor(Tensor):
     r"""A :class:`torch.Tensor` for tensorized, lossless table data.
 
-    A ``TableTensor`` stores column blocks separately per semantic type, while
-    exposing a single tensor-shaped table interface.
+    A :class:`TableTensor` stores column blocks separately per semantic type,
+    while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
     .. code-block:: python
@@ -200,6 +202,110 @@ class TableTensor(Tensor):
         out._column_to_loc = column_to_loc
 
         return out
+
+    @classmethod
+    def from_arrow(
+        cls: type[SelfTableTensor],
+        table: pa.Table,
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> SelfTableTensor:
+        r"""Create a tensor from a ``pyarrow`` table.
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            from sdm import TableTensor
+
+            table = pa.table({
+                "age": pa.array([25, 31, 42], type=pa.int64()),
+                "city": pa.array(["SF", "NYC", "SF"], type=pa.string()),
+            })
+            tensor = TableTensor.from_arrow(
+                table=table,
+                stypes={"age": "numerical", "city": "categorical"},
+            )
+
+        Args:
+            table: The table.
+            stypes: The semantic type for each column. Columns that are present
+                in ``table`` but not included in ``stypes`` will be ignored.
+            device: The device.
+        """
+        columns: dict[Stype, list[str]] = defaultdict(list)
+        for column, stype in stypes.items():
+            columns[Stype(stype)].append(column)
+
+        blocks: dict[Stype, Tensor] = {}
+        for stype in columns:
+            tensors: list[Tensor] = []
+            for column in columns[stype]:
+                array = table.column(column)
+                if stype == Stype.numerical:
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(  # Safe to filter.
+                            "ignore",
+                            message="The given NumPy array is not writable",
+                        )
+                        tensor = torch.from_numpy(array.to_numpy())
+                    tensor = tensor.to(torch.get_default_dtype())
+                    tensor = tensor.unsqueeze(-1)
+                elif stype == Stype.categorical:
+                    tensor = CategoricalTensor.from_arrow(array)
+                else:
+                    raise NotImplementedError
+                tensors.append(tensor)
+
+            blocks[stype] = torch.cat(tensors, dim=-1).to(device)
+
+        return cls(
+            columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+            device=device,
+            **blocks,
+        )
+
+    @classmethod
+    def from_pandas(
+        cls: type[SelfTableTensor],
+        df: Any,
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> SelfTableTensor:
+        r"""Create a tensor from a ``pandas`` dataframe.
+
+        Args:
+            df: The dataframe.
+            stypes: The semantic type for each column. Columns that are present
+                in ``df`` but not included in ``stypes`` will be ignored.
+            device: The device.
+        """
+        return cls.from_arrow(
+            table=pa.Table.from_pandas(df, preserve_index=False),
+            stypes=stypes,
+            device=device,
+        )
+
+    @classmethod
+    def from_tensor(
+        cls: type[SelfTableTensor],
+        tensor: Tensor,
+        columns: Sequence[str] | None = None,
+    ) -> SelfTableTensor:
+        r"""Create tensor from a numerical :class:`torch.Tensor`.
+
+        Args:
+            tensor: The numerical tensor.
+            columns: The column names of the tensor.
+        """
+        if columns is None:
+            columns = [str(i) for i in range(tensor.size(-1))]
+
+        return cls(
+            columns={Stype.numerical: columns},
+            numerical=tensor,
+        )
 
     # Properties ##############################################################
 
@@ -398,7 +504,7 @@ class TableTensor(Tensor):
                 for column in columns
             ]
             if len(columns) > max_cols:
-                [*columns[: max_cols - 1], "...", columns[-1]]
+                columns = [*columns[: max_cols - 1], "...", columns[-1]]
             return "[" + ", ".join(column for column in columns) + "]"
 
         stype_repr = [

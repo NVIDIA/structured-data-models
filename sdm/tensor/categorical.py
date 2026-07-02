@@ -2,10 +2,13 @@ from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
 from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
+import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
 from typing_extensions import override
+
+from sdm.tensor import StringTensor
 
 aten = torch.ops.aten
 
@@ -18,7 +21,7 @@ SelfCategoricalTensor = TypeVar(
 class CategoricalTensor(Tensor):
     r"""A :class:`torch.Tensor` for categorical column data.
 
-    A ``CategoricalTensor`` stores categorical indices in ``data`` and one
+    A :class:`CategoricalTensor` stores categorical indices in ``data`` and one
     category vector per column in ``categories``.
     Data values are direct indices into the corresponding category vector.
     Negative indices represent missing values.
@@ -97,6 +100,95 @@ class CategoricalTensor(Tensor):
         out._categories = tuple(categories)
 
         return out
+
+    @classmethod
+    def from_arrow(
+        cls: type[SelfCategoricalTensor],
+        array: pa.Array | pa.ChunkedArray,
+        *,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+    ) -> SelfCategoricalTensor:
+        r"""Create tensor from a ``pyarrow`` array.
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            from sdm import CategoricalTensor
+
+            array = pa.array(["foo", None, "bar"])
+            tensor = CategoricalTensor.from_arrow(array)
+
+            print(tensor)
+            >>> tensor([[ 0],
+            >>>         [-1],
+            >>>         [ 1]])
+            print(tensor.categories[0].to_list())
+            >>> ['foo', 'bar']
+
+        Args:
+            array: The ``pyarrow`` array.
+            dtype: The dtype.
+            device: The device.
+        """
+        device = torch.device("cpu" if device is None else device)
+
+        if isinstance(array, pa.ChunkedArray):
+            if array.num_chunks == 1:
+                array = array.chunk(0)
+            else:
+                array = array.combine_chunks()
+
+        encoded = array.dictionary_encode()
+        values = encoded.indices.fill_null(-1).to_numpy(
+            zero_copy_only=False,
+            writable=device.type == "cpu",
+        )
+        data = torch.as_tensor(
+            values,
+            dtype=dtype,
+            device=device,
+        ).unsqueeze(-1)
+
+        dictionary = encoded.dictionary
+        is_string = pa.types.is_string(dictionary.type)
+        is_large_string = pa.types.is_large_string(dictionary.type)
+        if is_string or is_large_string:
+            category = StringTensor.from_arrow(dictionary, device=device)
+        elif pa.types.is_null(dictionary.type):
+            category = torch.empty(0, dtype=torch.int64, device=device)
+        else:  # Use regular torch.Tensor for Tensor-compatible dictionaries:
+            values = dictionary.to_numpy(
+                zero_copy_only=False,
+                writable=device.type == "cpu",
+            )
+            category = torch.as_tensor(
+                values,
+                device=device,
+            )
+
+        return cls(data=data, categories=(category,))
+
+    @classmethod
+    def from_pandas(
+        cls: type[SelfCategoricalTensor],
+        series: Any,
+        *,
+        dtype: torch.dtype | None = torch.int32,
+        device: torch.device | str | None = None,
+    ) -> SelfCategoricalTensor:
+        r"""Create tensor from a ``pandas`` series.
+
+        Args:
+            series: The ``pandas.Series``.
+            dtype: The dtype.
+            device: The device.
+        """
+        return cls.from_arrow(
+            pa.array(series),
+            dtype=dtype,
+            device=device,
+        )
 
     # Properties ##############################################################
 
