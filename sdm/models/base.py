@@ -75,13 +75,12 @@ class BaseModel(torch.nn.Module, ABC):
 
     @abstractmethod
     def get_recipe(self) -> Recipe:
-        r"""Return the default processing recipe for this model.
+        r"""Return the processing recipe for this model.
 
-        The base implementation is an identity recipe. Model subclasses can
-        override this method to expose model-specific preprocessing and
-        postprocessing defaults.
+        Model subclasses must override this method to expose the model-specific
+        preprocessing and postprocessing recipe.
         """
-        return Recipe()
+        ...
 
     @torch.inference_mode()
     def predict(
