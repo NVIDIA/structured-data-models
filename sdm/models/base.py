@@ -113,7 +113,8 @@ class BaseModel(torch.nn.Module, ABC):
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
     ) -> tuple[Tensor, Tensor]:
         if isinstance(x, TableTensor):
-            invalid_columns = x.size(-1) - x.numerical.size(-1)  # TODO Add id.
+            # TODO Add id support.
+            invalid_columns = x.size(-1) - x.numerical.size(-1)
             if invalid_columns > 0:
                 invalid_stypes = [
                     stype.value
