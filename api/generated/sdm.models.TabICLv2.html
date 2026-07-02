@@ -122,7 +122,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.TabICLv2"><code class="docutils literal notranslate"><span class="pre">TabICLv2</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.models.TabICLv2.get_default_recipe"><code class="docutils literal notranslate">get_default_recipe()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.TabICLv2.default_recipe"><code class="docutils literal notranslate">default_recipe()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -211,14 +211,16 @@ quantile predictions for regression.</p></li>
 </dd>
 </dl>
 <dl class="py method">
-<dt class="sig sig-object py" id="sdm.models.TabICLv2.get_default_recipe">
-<span class="sig-name descname"><span class="pre">get_default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.TabICLv2.get_default_recipe" title="Link to this definition">¶</a></dt>
-<dd><p>Return the default processing recipe for this model.</p>
-<p><a class="reference internal" href="#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> performs no additional pre- or postprocessing by
-default, so this returns an empty (identity) recipe.</p>
+<dt class="sig sig-object py" id="sdm.models.TabICLv2.default_recipe">
+<span class="sig-name descname"><span class="pre">default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.TabICLv2.default_recipe" title="Link to this definition">¶</a></dt>
+<dd><p>Return the default single-estimator regression recipe.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The default <a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> applied during pre- and
+postprocessing.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -243,7 +245,7 @@ default, so this returns an empty (identity) recipe.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=24cb5c20"></script>
+      <script src="../../_static/documentation_options.js?v=d2616779"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

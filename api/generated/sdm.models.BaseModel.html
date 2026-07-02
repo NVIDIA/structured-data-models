@@ -123,9 +123,9 @@ data-aria-dark="Switch to auto color mode">
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.BaseModel"><code class="docutils literal notranslate"><span class="pre">BaseModel</span></code></a><ul>
 <li><a class="reference internal" href="#sdm.models.BaseModel.clear"><code class="docutils literal notranslate">clear()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.BaseModel.default_recipe"><code class="docutils literal notranslate">default_recipe()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.BaseModel.fit"><code class="docutils literal notranslate">fit()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.BaseModel.forward"><code class="docutils literal notranslate">forward()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.models.BaseModel.get_default_recipe"><code class="docutils literal notranslate">get_default_recipe()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.BaseModel.predict"><code class="docutils literal notranslate">predict()</span></code></a></li>
 </ul>
 </li>
@@ -186,6 +186,23 @@ key/value caching, and ensembling.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.models.BaseModel.default_recipe">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.BaseModel.default_recipe" title="Link to this definition">¶</a></dt>
+<dd><p>Return the default processing recipe for this model.</p>
+<p>Model subclasses must override this method to expose the model-specific
+preprocessing and postprocessing recipe.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The <a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> applied during pre- and
+postprocessing by default.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.models.BaseModel.fit">
 <span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#sdm.models.BaseModel.fit" title="Link to this definition">¶</a></dt>
 <dd><p>Fit and cache in-context examples.</p>
@@ -226,23 +243,6 @@ examples.</p></li>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.models.BaseModel.get_default_recipe">
-<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.BaseModel.get_default_recipe" title="Link to this definition">¶</a></dt>
-<dd><p>Return the default processing recipe for this model.</p>
-<p>Model subclasses must override this method to expose the model-specific
-preprocessing and postprocessing recipe.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The <a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> applied during pre- and
-postprocessing by default.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -297,7 +297,7 @@ postprocessing by default.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=24cb5c20"></script>
+      <script src="../../_static/documentation_options.js?v=d2616779"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
