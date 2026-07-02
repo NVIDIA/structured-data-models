@@ -79,8 +79,8 @@ def default_regression_recipe() -> Recipe:
 #         ],
 #         target=[
 #             TaskDispatch({
-#                 Task.CLASSIFICATION: LabelShuffle(method="shift"),
-#                 Task.REGRESSION: StandardScale(),
+#                 classification: ClassShuffle(method="shift"),
+#                 regression: StandardScale(),
 #             }),
 #         ],
 #         output=[
@@ -89,5 +89,4 @@ def default_regression_recipe() -> Recipe:
 #                 Task.REGRESSION: Identity(),
 #             }),
 #         ],
-#         n_estimators=8,
 #     )
