@@ -42,6 +42,18 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
+{py:class}`~sdm.processing.ToNumerical` is a stateless, table-scoped
+stype conversion step for models such as TabICL that accept only numerical
+feature tensors. It does not fit or create a categorical encoder:
+{py:class}`~sdm.tensor.CategoricalTensor` already stores ordinal category ids
+and category vocabularies. `ToNumerical` moves those existing ids into the
+numerical block, leaves missing categorical values as `-1`, and clears the
+categorical block so the model sees both original numerical and converted
+categorical features. The current implementation converts all categorical
+columns; future stype-aware dispatch can add source-stype selection without
+changing the numerical model-facing contract. Keep the source table or schema
+if you need category vocabularies for explanation or decoding.
+
 Fit the {py:class}`~sdm.processing.Recipe` on your labeled data and transform it
 in one call with {py:meth}`~sdm.processing.Recipe.fit_transform`; transform
 later inputs with `recipe.features.transform` (no re-fit). All values are

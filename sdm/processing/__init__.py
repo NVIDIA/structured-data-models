@@ -10,6 +10,7 @@ from sdm.processing.quantile import Quantile
 from sdm.processing.recipe import Recipe
 from sdm.processing.sigma_clip import SigmaClip
 from sdm.processing.standard_scale import StandardScale
+from sdm.processing.to_numerical import ToNumerical
 
 __all__ = [
     "Processor",
@@ -21,6 +22,7 @@ __all__ = [
     "SigmaClip",
     "SoftmaxTemperature",
     "StandardScale",
+    "ToNumerical",
     "Pipeline",
     "Recipe",
 ]
