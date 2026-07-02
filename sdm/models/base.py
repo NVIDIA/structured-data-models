@@ -169,6 +169,7 @@ class BaseModel(torch.nn.Module, ABC):
     ) -> Tensor:  # [..., R - R_train, *]
         pass
 
+    @staticmethod
     @abstractmethod
     def default_recipe() -> Recipe:
         r"""Return the default processing recipe for this model.
