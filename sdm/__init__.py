@@ -5,6 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 from sdm.stype import Stype, StypeLike
 from sdm.tensor import (
     CategoricalTensor,
+    ColumnarTensor,
     StringTensor,
     TableTensor,
     VarLenTensor,
@@ -22,6 +23,7 @@ __all__ = [
     "StypeLike",
     "VarLenTensor",
     "StringTensor",
+    "ColumnarTensor",
     "CategoricalTensor",
     "TableTensor",
     "Relationship",
