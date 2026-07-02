@@ -1,24 +1,27 @@
 import abc
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import torch
-from torch import Tensor
 from typing_extensions import Self
 
 
 class Processor(torch.nn.Module, abc.ABC):
-    """Fittable, tensor-in/tensor-out transform.
+    """Fittable processing transform.
 
     Subclass and implement ``forward`` (the transform). Override ``_fit`` to
     learn state from data (the default is a no-op). For an inverse, also mix
     in ``InvertibleMixin`` and implement ``_inverse_transform``.
 
+    ``Pipeline`` routes steps with ``operates_on = "numerical"`` to a
+    table's numerical tensor block. Steps with ``operates_on = "table"``
+    receive and return the whole table.
+
     Set ``requires_fit = False`` for stateless processors that can safely run
     without a prior ``fit`` call.
-
     """
 
     requires_fit: ClassVar[bool] = True
+    operates_on: ClassVar[Literal["numerical", "table"]] = "numerical"
 
     def __init__(self) -> None:
         super().__init__()
@@ -31,31 +34,40 @@ class Processor(torch.nn.Module, abc.ABC):
                 "call 'fit()' before."
             )
 
-    def _fit(self, input: Tensor) -> None:
+    def _fit(self, input: Any) -> None:
         pass
 
     @abc.abstractmethod
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input: Any) -> Any:
         """Transform ``input`` and return the result.
 
         Called via ``processor(input)`` (``torch.nn.Module.__call__``) or,
         with a fitted-state check, via :meth:`transform`.
         """
 
-    def fit(self, input: Tensor) -> Self:
+    def fit(self, input: Any) -> Self:
         """Fit the processor on ``input`` and return it."""
         self._fit(input)
         self._fitted = True
         return self
 
-    def transform(self, input: Tensor) -> Tensor:
+    def transform(self, input: Any) -> Any:
         """Transform ``input`` using the fitted processor."""
         self._check_is_fitted()
         return self(input)
 
-    def fit_transform(self, input: Tensor) -> Tensor:
+    def fit_transform(self, input: Any) -> Any:
         """Fit on ``input`` and return the transformed result."""
         return self.fit(input).transform(input)
+
+    def resolve(
+        self,
+        *,
+        estimator: int = 0,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        """Return the concrete processor for a processing context."""
+        return self
 
 
 class InvertibleMixin(abc.ABC):
@@ -66,9 +78,9 @@ class InvertibleMixin(abc.ABC):
     """
 
     @abc.abstractmethod
-    def _inverse_transform(self, input: Tensor) -> Tensor: ...
+    def _inverse_transform(self, input: Any) -> Any: ...
 
-    def inverse_transform(self, input: Tensor) -> Tensor:
+    def inverse_transform(self, input: Any) -> Any:
         """Invert the transform of ``input`` using the fitted processor."""
         self._check_is_fitted()
         return self._inverse_transform(input)

@@ -1,13 +1,46 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
+    FeaturePermute,
+    Identity,
     MeanImpute,
     Pipeline,
     Power,
+    Processor,
     SoftmaxTemperature,
     StandardScale,
 )
+
+
+class Add(Processor):
+    requires_fit = False
+
+    def __init__(self, value: float) -> None:
+        super().__init__()
+        self.value = value
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return input + self.value
+
+
+def _wide_table() -> TableTensor:
+    return TableTensor(
+        columns={
+            "numerical": ("x0", "x1", "x2"),
+            "categorical": ("kind", "segment"),
+        },
+        numerical=torch.tensor(
+            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        ),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int64),
+            categories=(
+                StringTensor.from_list(["a", "b"]),
+                StringTensor.from_list(["small", "large"]),
+            ),
+        ),
+    )
 
 
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
@@ -86,3 +119,64 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
     restored = pipeline.inverse_transform(transformed)
 
     assert torch.allclose(restored.numerical, table.numerical, atol=1e-4)
+
+
+def test_identity_processor_is_invertible_no_op() -> None:
+    table = _table()
+    processor = Identity()
+
+    assert processor.transform(table) is table
+    assert processor.inverse_transform(table) is table
+
+
+def test_feature_permute_default_single_estimator_is_identity() -> None:
+    table = _wide_table()
+
+    output = FeaturePermute().transform(table)
+
+    assert output is table
+
+
+def test_table_processor_composes_with_numerical_processor() -> None:
+    table = _wide_table()
+    permute = FeaturePermute(method="shift").resolve(estimator=1)
+
+    output = Pipeline([permute, Add(10)]).transform(table)
+
+    assert output.columns[Stype.numerical] == ("x1", "x2", "x0")
+    assert output.columns[Stype.categorical] == ("segment", "kind")
+    assert torch.equal(
+        output.numerical,
+        table.numerical.index_select(-1, torch.tensor([1, 2, 0])) + 10,
+    )
+    assert torch.equal(
+        output.categorical.as_tensor(),
+        table.categorical.as_tensor().index_select(-1, torch.tensor([1, 0])),
+    )
+
+
+def test_table_processor_inverse_restores_permuted_blocks() -> None:
+    table = _wide_table()
+    permute = FeaturePermute(method="shift").resolve(estimator=1)
+    pipeline = Pipeline([permute])
+
+    transformed = pipeline.transform(table)
+    restored = pipeline.inverse_transform(transformed)
+
+    assert restored.columns == table.columns
+    assert torch.equal(restored.numerical, table.numerical)
+    assert torch.equal(
+        restored.categorical.as_tensor(), table.categorical.as_tensor()
+    )
+
+
+def test_table_processor_bad_output_reports_step_position() -> None:
+    class BadTableOutput(Processor):
+        requires_fit = False
+        operates_on = "table"
+
+        def forward(self, input: TableTensor) -> object:
+            return object()
+
+    with pytest.raises(TypeError, match=r"step 0 \(BadTableOutput\)"):
+        Pipeline([BadTableOutput()]).transform(_table())
