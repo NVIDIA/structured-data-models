@@ -66,7 +66,7 @@ def default_regression_recipe() -> Recipe:
 # classifier the classification branch. Class-index-to-label decoding stays
 # driver-side (argmax + CategoricalTensor categories), not an output step.
 #
-# def default_recipe() -> Recipe:
+# def get_default_recipe() -> Recipe:
 #     return Recipe(
 #         features=[
 #             MeanImpute(),
