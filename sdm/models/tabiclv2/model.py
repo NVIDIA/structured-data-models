@@ -99,12 +99,15 @@ class TabICLv2(BaseModel):
         """Return the default single-estimator regression recipe."""
         # TODO Add decode and to-numerical (categorical encoding).
         # TODO Add fixed clipping e.g. via lambda method to [-100, 100].
-        # TODO Implement and enable the Identity and FeaturePermute processors.
-        # TODO V2: wrap normalization in Choice([...]) and add n_estimators.
-        # TODO V3: bundle classification via TaskDispatch on target and output.
+        # TODO Implement and enable the Identity, ConstantFilter (drops
+        #   constant/unique columns, like TabICL UniqueFeatureFilter), and
+        #   FeaturePermute processors.
+        # TODO Wrap normalization in Choice([...]) and add n_estimators.
+        # TODO Bundle classification via TaskDispatch on target and output.
         return Recipe(
             features=[
                 MeanImpute(),
+                # ConstantFilter(),
                 StandardScale(epsilon=1e-6),
                 SigmaClip(threshold=4.0),
                 # FeaturePermute(method="latin"),
