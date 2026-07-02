@@ -12,14 +12,12 @@ from sdm.processing.sigma_clip import SigmaClip
 from sdm.processing.standard_scale import StandardScale
 
 __all__ = [
-    "Clip",
+    "Processor",
     "InvertibleMixin",
-    "Pipeline",
+    "Clip",
     "MeanImpute",
     "Power",
-    "Processor",
     "Quantile",
-    "Recipe",
     "SigmaClip",
     "SoftmaxTemperature",
     "StandardScale",
