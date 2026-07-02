@@ -1,9 +1,24 @@
 """Default preprocessing recipes for the TabICLv2 model.
 
-These factories compose shared :mod:`sdm.processing` processors into the
+Each factory composes shared :mod:`sdm.processing` processors into the
 deterministic ``TableTensor``-to-model-input path of the original TabICLv2
-regressor and classifier (``soda-inria/tabicl``). Steps that need processors
-or stages not yet implemented are kept as commented placeholders and ``TODO``s.
+model (``soda-inria/tabicl``).
+
+Supported now:
+
+- :func:`default_regression_recipe` -- single-estimator regression.
+
+Planned, staged towards one task-aware recipe:
+
+- per-member normalization via ``Choice`` plus ``n_estimators``.
+- a single recipe that serves both regression and classification,
+  dispatching the target and output roles per task with ``TaskDispatch``.
+  The end-state is sketched (commented) at the bottom of this module.
+
+Steps that need processors not implemented yet (``Identity``,
+``ConstantFilter``, ``FeaturePermute``, ``LabelShuffle``, ``Choice``,
+``TaskDispatch``) are kept as commented placeholders.
+
 """
 
 from sdm.processing import (
@@ -17,23 +32,20 @@ from sdm.processing import (
 def default_regression_recipe() -> Recipe:
     """Return the default single-estimator regression recipe.
 
-    Reproduces the deterministic feature path of the original TabICLv2
-    regressor: per-column mean imputation, standard scaling, and two-stage
-    4-sigma outlier clipping. The target is standard-scaled and its inverse
-    maps predictions back to the original space.
+    Mirrors the original TabICLv2 regressor: mean imputation
+    (``SimpleImputer``), standard scaling (``CustomStandardScaler``), and
+    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the features;
+    the target is standard-scaled and its inverse maps predictions back to the
+    original space. Commented lines mark processors not implemented yet.
     """
-    # TODO Add decode and to-numerical (categorical encoding).
-    # TODO Add fixed clipping e.g. via lambda method to [-100, 100].
-    # TODO Implement and enable the Identity, ConstantFilter (drops
-    #   constant/unique columns, like TabICL UniqueFeatureFilter), and
-    #   FeaturePermute processors.
-    # TODO Wrap normalization in Choice([...]) and add n_estimators.
-    # TODO Bundle classification via TaskDispatch on target and output.
     return Recipe(
         features=[
             MeanImpute(),
             # ConstantFilter(),
             StandardScale(epsilon=1e-6),
+            # TabICL also clips z-scores to [-100, 100] here; left out for now
+            # (likely subsumed by SigmaClip); revisit after benchmarking.
+            # Clip(min_value=-100.0, max_value=100.0),
             SigmaClip(threshold=4.0),
             # FeaturePermute(method="latin"),
         ],
@@ -46,27 +58,36 @@ def default_regression_recipe() -> Recipe:
     )
 
 
-# Classification variant, commented until LabelShuffle and LabelDecode exist
-# (SoftmaxTemperature and the feature steps already do). It mirrors the
-# TabICLv2 classifier: the same feature transforms as regression, a per-member
-# class shift on the target (its inverse un-shuffles the class logits), and
-# softmax temperature plus label decode on the output.
+# End-state target, once the missing processors exist: a single
+# task-aware recipe that serves both regression and classification. It cycles
+# per-member normalization with ``Choice`` + ``n_estimators`` and
+# dispatches the target and output roles per task with ``TaskDispatch``.
+# ``TabICLv2.default_recipe()`` would then pick the regression branch, and a
+# classifier the classification branch. Class-index-to-label decoding stays
+# driver-side (argmax + CategoricalTensor categories), not an output step.
 #
-# def default_classification_recipe() -> Recipe:
-#     """Return the default single-estimator classification recipe."""
+# def default_recipe() -> Recipe:
 #     return Recipe(
 #         features=[
 #             MeanImpute(),
 #             # ConstantFilter(),
 #             StandardScale(epsilon=1e-6),
+#             # norm options: none, power, quantile, quantile_rtdl, robust
+#             Choice([Identity(), Quantile(output_distribution="normal")]),
 #             SigmaClip(threshold=4.0),
-#             # FeaturePermute(method="latin"),
+#             FeaturePermute(method="latin"),
 #         ],
 #         target=[
-#             # LabelShuffle(method="shift"),
+#             TaskDispatch({
+#                 Task.CLASSIFICATION: LabelShuffle(method="shift"),
+#                 Task.REGRESSION: StandardScale(),
+#             }),
 #         ],
 #         output=[
-#             SoftmaxTemperature(temperature=0.9),
-#             LabelDecode(),
+#             TaskDispatch({
+#                 Task.CLASSIFICATION: SoftmaxTemperature(temperature=0.9),
+#                 Task.REGRESSION: Identity(),
+#             }),
 #         ],
+#         n_estimators=8,
 #     )
