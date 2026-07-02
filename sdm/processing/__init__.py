@@ -2,6 +2,7 @@
 
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.clip import Clip
+from sdm.processing.feature_permute import FeaturePermute
 from sdm.processing.impute import MeanImpute
 from sdm.processing.pipeline import Pipeline
 from sdm.processing.postprocess import SoftmaxTemperature
@@ -15,6 +16,7 @@ __all__ = [
     "Processor",
     "InvertibleMixin",
     "Clip",
+    "FeaturePermute",
     "MeanImpute",
     "Power",
     "Quantile",

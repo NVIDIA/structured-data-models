@@ -61,6 +61,15 @@ class Processor(torch.nn.Module, abc.ABC):
         """Fit on ``input`` and return the transformed result."""
         return self.fit(input).transform(input)
 
+    def resolve(
+        self,
+        *,
+        estimator: int = 0,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        """Return the concrete processor for a processing context."""
+        return self
+
 
 class InvertibleMixin(abc.ABC):
     """Adds ``inverse_transform`` to a :class:`Processor`.

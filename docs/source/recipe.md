@@ -42,6 +42,20 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
+{py:meth}`~sdm.processing.Processor.resolve` returns the concrete processor
+for a processing context. Plain processors return themselves; processors that
+depend on a view or estimator can override it. Some table-level processors
+represent a model-view policy rather than a one-shot data cleanup. For example,
+{py:class}`~sdm.processing.FeaturePermute` preserves the single-estimator
+behavior when used directly and becomes a concrete non-identity view after
+`resolve(estimator=...)`:
+
+```python
+from sdm.processing import FeaturePermute
+
+feature_view = FeaturePermute(method="shift").resolve(estimator=1)
+```
+
 Fit the {py:class}`~sdm.processing.Recipe` on your labeled data and transform it
 in one call with {py:meth}`~sdm.processing.Recipe.fit_transform`; transform
 later inputs with `recipe.features.transform` (no re-fit). All values are
