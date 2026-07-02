@@ -13,6 +13,7 @@ from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import (
+    MeanImpute,
     Recipe,
     SigmaClip,
     StandardScale,
@@ -96,11 +97,14 @@ class TabICLv2(BaseModel):
     @staticmethod
     def default_recipe() -> Recipe:
         """Return the default single-estimator regression recipe."""
-        # TODO Add decode and to-numerical (including impute).
+        # TODO Add decode and to-numerical (categorical encoding).
         # TODO Add fixed clipping e.g. via lambda method to [-100, 100].
         # TODO Implement and enable the Identity and FeaturePermute processors.
+        # TODO V2: wrap normalization in Choice([...]) and add n_estimators.
+        # TODO V3: bundle classification via TaskDispatch on target and output.
         return Recipe(
             features=[
+                MeanImpute(),
                 StandardScale(epsilon=1e-6),
                 SigmaClip(threshold=4.0),
                 # FeaturePermute(method="latin"),
