@@ -14,10 +14,13 @@ class Stype(str, Enum):
     Attributes:
         numerical: Numerical columns.
         categorical: Categorical columns.
+        id: Identifier values used to distinguish or link entities. Identifier
+        columns are not used as model features by default.
     """
 
     numerical = "numerical"
     categorical = "categorical"
+    id = "id"
 
 
 StypeLike: TypeAlias = Stype | str
