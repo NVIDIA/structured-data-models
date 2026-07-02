@@ -1,4 +1,4 @@
-"""Foundation models and tensor containers for structured data."""
+"""Structured data modeling primitives."""
 
 from importlib.metadata import PackageNotFoundError, version
 
@@ -8,6 +8,8 @@ from sdm.tensor import (
     StringTensor,
     TableTensor,
     VarLenTensor,
+    Relationship,
+    RelatedTables,
 )
 
 try:
@@ -22,5 +24,7 @@ __all__ = [
     "StringTensor",
     "CategoricalTensor",
     "TableTensor",
+    "Relationship",
+    "RelatedTables",
     "__version__",
 ]

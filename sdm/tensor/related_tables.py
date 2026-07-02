@@ -46,6 +46,29 @@ class Relationship:
 class RelatedTables:
     r"""Related table context for relational data models.
 
+    .. code-block:: python
+
+        from sdm import RelatedTables
+
+        related_tables = RelatedTables(
+            tables={
+                "users": ...,
+                "orders": ...,
+                "items": ...,
+            },
+            relationships=[
+                # Foreign key from the base table to the entity table:
+                dict(left_table=None, left_column="user_id",
+                     right_table="users", right_column="user_id"),
+                # Foreign key from orders to users:
+                dict(left_table="orders", left_column="user_id",
+                     right_table="users", right_column="user_id"),
+                # Foreign key from orders to items:
+                dict(left_table="orders", left_column="item_id",
+                     right_table="items", right_column="item_id"),
+            ],
+        )
+
     Args:
         tables: Related tables keyed by table name.
         relationships: Join relationships among related tables and the
