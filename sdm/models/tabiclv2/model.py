@@ -146,14 +146,6 @@ class TabICLv2(BaseModel):
             return self.reg_model(x, y, cache=cache)
         return self.cls_model(x, y, cache=cache)
 
-    def get_default_recipe(self) -> Recipe:
-        r"""Return the default processing recipe for this model.
-
-        :class:`TabICLv2` performs no additional pre- or postprocessing by
-        default, so this returns an empty (identity) recipe.
-        """
-        return Recipe()
-
     def __repr__(self) -> str:
         device = next(self.parameters()).device
         device_repr = f"device={device}" if device.type != "cpu" else ""
