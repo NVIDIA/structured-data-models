@@ -1,13 +1,87 @@
+from typing import cast
+
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
+    InvertibleMixin,
     MeanImpute,
     Pipeline,
     Power,
+    Processor,
     SoftmaxTemperature,
     StandardScale,
 )
+
+
+class Add(Processor):
+    requires_fit = False
+
+    def __init__(self, value: float) -> None:
+        super().__init__()
+        self.value = value
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return input + self.value
+
+
+class ReverseBlocks(Processor, InvertibleMixin):
+    requires_fit = False
+    input_scope = "table"
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        if not isinstance(input, TableTensor):
+            raise TypeError("Expected TableTensor")
+
+        numerical_index = torch.arange(
+            input.numerical.size(-1) - 1,
+            -1,
+            -1,
+            device=input.numerical.device,
+        )
+        categorical_index = torch.arange(
+            input.categorical.size(-1) - 1,
+            -1,
+            -1,
+            device=input.categorical.device,
+        )
+        return TableTensor(
+            columns={
+                Stype.numerical: tuple(
+                    reversed(input.columns[Stype.numerical])
+                ),
+                Stype.categorical: tuple(
+                    reversed(input.columns[Stype.categorical])
+                ),
+            },
+            numerical=input.numerical.index_select(-1, numerical_index),
+            categorical=cast(
+                CategoricalTensor,
+                input.categorical.index_select(-1, categorical_index),
+            ),
+        )
+
+    def _inverse_transform(self, input: torch.Tensor) -> torch.Tensor:
+        return self.forward(input)
+
+
+def _wide_table() -> TableTensor:
+    return TableTensor(
+        columns={
+            "numerical": ("x0", "x1", "x2"),
+            "categorical": ("kind", "segment"),
+        },
+        numerical=torch.tensor(
+            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        ),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int64),
+            categories=(
+                StringTensor.from_list(["a", "b"]),
+                StringTensor.from_list(["small", "large"]),
+            ),
+        ),
+    )
 
 
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
@@ -86,3 +160,58 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
     restored = pipeline.inverse_transform(transformed)
 
     assert torch.allclose(restored.numerical, table.numerical, atol=1e-4)
+
+
+def test_table_processor_composes_with_block_processor() -> None:
+    table = _wide_table()
+
+    output = Pipeline([ReverseBlocks(), Add(10)]).transform(table)
+
+    assert output.columns[Stype.numerical] == ("x2", "x1", "x0")
+    assert output.columns[Stype.categorical] == ("segment", "kind")
+    assert torch.equal(
+        output.numerical,
+        table.numerical.index_select(-1, torch.tensor([2, 1, 0])) + 10,
+    )
+    assert torch.equal(
+        output.categorical.as_tensor(),
+        table.categorical.as_tensor().index_select(-1, torch.tensor([1, 0])),
+    )
+
+
+def test_fit_threads_table_processor_output_to_later_steps() -> None:
+    table = _wide_table()
+    scale = StandardScale()
+
+    Pipeline([ReverseBlocks(), scale]).fit(table)
+
+    reversed_numerical = table.numerical.index_select(
+        -1, torch.tensor([2, 1, 0])
+    )
+    assert torch.equal(scale.mean, reversed_numerical.mean(dim=0))
+
+
+def test_table_processor_inverse_restores_blocks() -> None:
+    table = _wide_table()
+    pipeline = Pipeline([ReverseBlocks()])
+
+    transformed = pipeline.transform(table)
+    restored = pipeline.inverse_transform(transformed)
+
+    assert restored.columns == table.columns
+    assert torch.equal(restored.numerical, table.numerical)
+    assert torch.equal(
+        restored.categorical.as_tensor(), table.categorical.as_tensor()
+    )
+
+
+def test_table_processor_bad_output_reports_step_position() -> None:
+    class BadTableOutput(Processor):
+        requires_fit = False
+        input_scope = "table"
+
+        def forward(self, input: torch.Tensor) -> torch.Tensor:
+            return torch.empty(0)
+
+    with pytest.raises(TypeError, match=r"step 0 \(BadTableOutput\)"):
+        Pipeline([BadTableOutput()]).transform(_table())

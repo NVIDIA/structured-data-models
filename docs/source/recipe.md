@@ -7,14 +7,23 @@ both sides of the model.
 
 ## Concepts
 
-- A **step** is a {py:class}`~sdm.processing.Processor` that transforms the
-  **numerical block** of a {py:class}`~sdm.tensor.TableTensor`; categorical
-  columns pass through unchanged. A *stateful* step learns parameters when you
-  call `fit` (for example {py:class}`~sdm.processing.StandardScale` learns each
-  column's mean and standard deviation); a stateless one does not (for example
+- A **step** is a {py:class}`~sdm.processing.Processor`. Most processors use
+  the default `input_scope = "block"` contract: they receive one tensor block
+  selected by the pipeline and return a tensor with the same leading shape. A
+  processor may instead declare `input_scope = "table"` when it needs the whole
+  {py:class}`~sdm.tensor.TableTensor`, for example to reorder or drop columns
+  while keeping column metadata and typed blocks consistent. This is routing
+  granularity, not a semantic-type capability declaration; future stype
+  dispatch can choose which stype block is passed to a block-scoped processor.
+  A *stateful* step learns parameters when you call `fit` (for example
+  {py:class}`~sdm.processing.StandardScale` learns each column's mean and
+  standard deviation); a stateless one does not (for example
   {py:class}`~sdm.processing.SoftmaxTemperature`).
 
-- A {py:class}`~sdm.processing.Pipeline` is an ordered list of steps.
+- A {py:class}`~sdm.processing.Pipeline` is an ordered list of steps. During
+  `fit`, table-level steps are transformed before fitting later steps, so later
+  block-scoped processors learn from the same table state they will see during
+  `transform`.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
   attributes:

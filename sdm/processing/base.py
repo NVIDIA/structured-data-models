@@ -1,5 +1,5 @@
 import abc
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 import torch
 from torch import Tensor
@@ -13,12 +13,16 @@ class Processor(torch.nn.Module, abc.ABC):
     learn state from data (the default is a no-op). For an inverse, also mix
     in ``InvertibleMixin`` and implement ``_inverse_transform``.
 
+    ``Pipeline`` routes steps with ``input_scope = "block"`` to one tensor
+    block selected by the pipeline. Steps with ``input_scope = "table"``
+    receive and return the whole table.
+
     Set ``requires_fit = False`` for stateless processors that can safely run
     without a prior ``fit`` call.
-
     """
 
     requires_fit: ClassVar[bool] = True
+    input_scope: ClassVar[Literal["block", "table"]] = "block"
 
     def __init__(self) -> None:
         super().__init__()
