@@ -54,3 +54,5 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Use established names.
 - Document public constructor parameters.
 - Avoid creating functions for non-usable small code snippet.
+- In `__init__.py`, order imports and `__all__` in *dependency order* (base
+  classes/mixins first, then concrete), never alphabetically.
