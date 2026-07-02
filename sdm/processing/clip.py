@@ -1,5 +1,3 @@
-"""Clipping transforms for structured-data feature tensors."""
-
 import torch
 from torch import Tensor
 
@@ -44,14 +42,7 @@ class Clip(Processor, InvertibleMixin):
         self.upper_bound = q_high
 
     def forward(self, input: Tensor) -> Tensor:
-        """Clamp ``input`` to the fitted lower and upper bounds.
-
-        Args:
-            input: Feature tensor with shape ``[N, C]``.
-
-        Returns:
-            Tensor with shape ``[N, C]``.
-        """
+        """Clamp ``input`` to the fitted lower and upper bounds."""
         return _as_float(input).clamp(
             min=self.lower_bound,
             max=self.upper_bound,

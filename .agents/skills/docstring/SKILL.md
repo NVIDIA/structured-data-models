@@ -10,7 +10,7 @@ Follow these best practices up front to keep docstrings consistent across the co
 
 ## General Principles
 
-- Every module starts with a one-line module docstring, a single declarative line summarizing the module's purpose.
+- Do not add module-level docstrings to individual modules; keep only a short package summary in the package `__init__.py`.
 - Every public class and function has a docstring, a one-line summary, then an `Args:` section.
 - When a class or function implements functionality proposed in an academic paper, cite it in the first sentence of its docstring.
 - Document every public parameter, especially, constructor parameters. Document them in the **class** docstring's `Args:`, not in `__init__`.
@@ -23,9 +23,6 @@ Follow these best practices up front to keep docstrings consistent across the co
 ## Example
 
 ```python
-"""Scaled normalization transforms for structured-data models."""
-
-
 class MyClass:
     r"""My Class from the `"My Paper" <https://arxiv.org/abs/2602.11139>`_ paper.
 

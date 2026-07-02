@@ -1,5 +1,3 @@
-"""Quantile transforms for structured-data feature tensors."""
-
 from typing import Literal
 
 import torch
@@ -177,14 +175,7 @@ class Quantile(Processor, InvertibleMixin):
         return input_col
 
     def forward(self, input: Tensor) -> Tensor:
-        """Transform ``input`` into the configured output distribution.
-
-        Args:
-            input: Feature tensor with shape ``[N, C]``.
-
-        Returns:
-            Tensor with shape ``[N, C]``.
-        """
+        """Transform ``input`` into the configured output distribution."""
         input = _as_float(input)
         transformed = torch.empty_like(input)
         for i in range(input.shape[1]):

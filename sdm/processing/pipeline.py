@@ -1,5 +1,3 @@
-"""Ordered execution of processing steps over a table's numerical block."""
-
 from collections.abc import Iterable, Iterator
 
 from torch import Tensor

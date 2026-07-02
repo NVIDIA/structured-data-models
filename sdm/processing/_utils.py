@@ -1,5 +1,3 @@
-"""Shared tensor conversion helpers for processing transforms."""
-
 import torch
 from torch import Tensor
 

@@ -1,5 +1,3 @@
-"""Base classes for fittable tensor processing transforms."""
-
 import abc
 from typing import TYPE_CHECKING, ClassVar
 

@@ -1,5 +1,3 @@
-"""Imputation transforms for structured-data feature tensors."""
-
 import torch
 from torch import Tensor
 
@@ -26,13 +24,6 @@ class MeanImpute(Processor):
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
     def forward(self, input: Tensor) -> Tensor:
-        """Replace NaNs with the fitted per-column means.
-
-        Args:
-            input: Feature tensor with shape ``[N, C]``.
-
-        Returns:
-            Tensor with shape ``[N, C]``.
-        """
+        """Replace NaNs with the fitted per-column means."""
         input = _as_float(input)
         return torch.where(input.isnan(), self._mean, input)

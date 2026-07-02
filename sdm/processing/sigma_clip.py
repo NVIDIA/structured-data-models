@@ -1,5 +1,3 @@
-"""Outlier clipping transforms for structured-data feature tensors."""
-
 import torch
 from torch import Tensor
 
@@ -79,14 +77,7 @@ class SigmaClip(Processor):
         )
 
     def forward(self, input: Tensor) -> Tensor:
-        """Clip ``input`` using the fitted soft lower and upper bounds.
-
-        Args:
-            input: Feature tensor with shape ``[N, C]``.
-
-        Returns:
-            Tensor with shape ``[N, C]``.
-        """
+        """Clip ``input`` using the fitted soft lower and upper bounds."""
         input = _as_float(input)
         log_abs = torch.log1p(input.abs())
         clipped = torch.maximum(-log_abs + self.lower_bound, input)

@@ -1,5 +1,3 @@
-"""Standardization transforms for structured-data feature tensors."""
-
 import torch
 from torch import Tensor
 
@@ -68,14 +66,7 @@ class StandardScale(Processor, InvertibleMixin):
             self.scale = input.new_ones(input.shape[1])
 
     def forward(self, input: Tensor) -> Tensor:
-        """Transform ``input`` using the fitted mean and scale.
-
-        Args:
-            input: Feature tensor with shape ``[N, C]``.
-
-        Returns:
-            Tensor with shape ``[N, C]``.
-        """
+        """Transform ``input`` using the fitted mean and scale."""
         return (_as_float(input) - self.mean) / self.scale
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
