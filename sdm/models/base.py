@@ -180,4 +180,3 @@ class BaseModel(torch.nn.Module, ABC):
             The :class:`~sdm.processing.Recipe` applied during pre- and
             postprocessing by default.
         """
-        pass
