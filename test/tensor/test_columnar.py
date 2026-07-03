@@ -196,6 +196,48 @@ def test_slicing_ops() -> None:
     assert chunks[0]._columns == (tensor._columns[0],)
 
 
+def test_index_ops() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(24).view(2, 3, 4),
+            torch.arange(100, 124).view(2, 3, 4),
+        )
+    )
+
+    out = tensor.index_select(1, torch.tensor([2, 0]))
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 4, 2)
+
+    out = tensor.index_select(-1, torch.tensor([1, 0]))
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == tensor.size()
+    assert out._columns[0].equal(tensor._columns[1])
+    assert out._columns[1].equal(tensor._columns[0])
+
+    out = tensor[:, torch.tensor([2, 0])]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 4, 2)
+
+    out = tensor[..., torch.tensor([1, 0])]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == tensor.size()
+    assert out._columns[0].equal(tensor._columns[1])
+    assert out._columns[1].equal(tensor._columns[0])
+
+    out = tensor[..., torch.tensor([True, False])]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 3, 4, 1)
+    assert out._columns[0].equal(tensor._columns[0])
+
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+    out = tensor[mask]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 4, 2)
+
+    with pytest.raises(RuntimeError, match="column dimension"):
+        _ = tensor[torch.tensor([0]), :, :, torch.tensor([1])]
+
+
 def test_tolist() -> None:
     tensor = ColumnarTensor(
         (

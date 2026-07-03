@@ -608,6 +608,89 @@ def _split_with_sizes(
     return _wrap_split(input, columns_list, dim=dim, split_sizes=split_sizes)
 
 
+@ColumnarTensor.implements(aten.index_select.default)
+def _index_select(
+    input: ColumnarTensor,
+    dim: int,
+    index: Tensor,
+) -> ColumnarTensor:
+    dim %= input.dim()
+    if _is_column_dim(input, dim):
+        return input.__class__(
+            columns=[
+                aten.alias.default(input._columns[i]) for i in index.tolist()
+            ],
+            size=input.size()[:-1],
+            device=input.device,
+        )
+
+    size = list(input.size()[:-1])
+    size[dim] = index.numel()
+    return input.__class__(
+        columns=[column.index_select(dim, index) for column in input._columns],
+        size=size,
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.index.Tensor)
+def _index(
+    input: ColumnarTensor,
+    indices: Sequence[Tensor | None],
+) -> ColumnarTensor:
+    current_dim = 0
+    column_index: Tensor | None = None
+    has_other_index = False
+    for index in indices:
+        if index is None:
+            current_dim += 1
+            continue
+
+        num_indexed_dims = index.dim() if index.dtype == torch.bool else 1
+        if current_dim <= input.dim() - 1 < current_dim + num_indexed_dims:
+            if num_indexed_dims != 1:
+                raise RuntimeError(
+                    f"Can't index the column dimension of "
+                    f"'{input.__class__.__name__}'"
+                )
+            column_index = index
+        else:
+            has_other_index = True
+        current_dim += num_indexed_dims
+
+    if column_index is not None:
+        if has_other_index or column_index.dim() != 1:
+            raise RuntimeError(
+                f"Can't index the column dimension of "
+                f"'{input.__class__.__name__}' together with other dimensions"
+            )
+        if column_index.dtype == torch.bool:
+            column_index = column_index.nonzero().view(-1)
+        return input.__class__(
+            columns=[
+                aten.alias.default(input._columns[i])
+                for i in column_index.tolist()
+            ],
+            size=input.size()[:-1],
+            device=input.device,
+        )
+
+    if len(input._columns) == 0:
+        dummy = torch.empty(input.size()[:-1], device=input.device)
+        return input.__class__(
+            columns=(),
+            size=aten.index.Tensor(dummy, indices).size(),
+            device=input.device,
+        )
+
+    return input.__class__(
+        columns=[
+            aten.index.Tensor(column, indices) for column in input._columns
+        ],
+        device=input.device,
+    )
+
+
 # Helpers #####################################################################
 
 
