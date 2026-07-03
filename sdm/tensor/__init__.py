@@ -10,7 +10,6 @@ from sdm.tensor.related_tables import Relationship, RelatedTables
 __all__ = [
     "VarLenTensor",
     "StringTensor",
-    "ColumnarTensor",
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
