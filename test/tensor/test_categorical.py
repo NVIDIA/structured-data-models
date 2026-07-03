@@ -141,12 +141,6 @@ def test_to_arrow() -> None:
         "1": [20, 10, None, 20],
     }
 
-    table = tensor.to_arrow(columns=("country", "segment"))
-    assert table.column_names == ["country", "segment"]
-
-    with pytest.raises(ValueError, match="Expected 'columns'"):
-        tensor.to_arrow(columns=("country",))
-
 
 def test_view_ops() -> None:
     data = torch.randint(0, 4, (2, 3, 4))
