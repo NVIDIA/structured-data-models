@@ -165,6 +165,11 @@ class RowEmbedding(torch.nn.Module):
 
 
 def _mixed_radix_bases(num_classes: int, max_classes: int) -> list[int]:
+    if max_classes < 2 and num_classes > max_classes:
+        raise ValueError(
+            "Mixed-radix encoding requires at least two native classes"
+        )
+
     num_digits = math.ceil(math.log(num_classes) / math.log(max_classes))
     base = min(math.ceil(num_classes ** (1.0 / num_digits)), max_classes)
     bases = [base] * num_digits

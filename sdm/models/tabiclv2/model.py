@@ -1,6 +1,7 @@
 # ruff: noqa: D205
 
-from typing import Any
+from itertools import permutations
+from typing import Any, Literal, cast
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -8,12 +9,17 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm import TableTensor
 from sdm.cache import Cache
 from sdm.models import BaseModel
-from sdm.models.tabiclv2.icl import ICLBlock
+from sdm.models.tabiclv2.icl import ICLBlock, _predict_hierarchical
 from sdm.models.tabiclv2.recipe import default_regression_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
+
+_CLASSIFICATION_TEMPERATURE = 0.9
+_NUM_CLASSES_CACHE_KEY = "tabiclv2.num_classes"
+_ClassShuffleMethod = Literal["none", "random", "shift"]
 
 
 class TabICLv2(BaseModel):
@@ -60,6 +66,13 @@ class TabICLv2(BaseModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
+    Classification contexts with more than ten classes use mixed-radix target
+    embeddings followed by hierarchical classification over the cached row
+    representations. Key/value caching through :meth:`fit` is unavailable for
+    these contexts because each hierarchy node uses a different target and
+    training-row context. :meth:`predict_proba` additionally supports
+    class-shuffled logit ensembling for classification.
+
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
@@ -99,6 +112,75 @@ class TabICLv2(BaseModel):
         """
         return default_regression_recipe()
 
+    @torch.inference_mode()
+    def predict_proba(
+        self,
+        x: Tensor | TableTensor,  # [..., R, C]
+        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        *,
+        n_estimators: int = 8,
+        class_shuffle_method: _ClassShuffleMethod = "shift",
+        generator: torch.Generator | None = None,
+    ) -> Tensor:  # [..., R_test, num_classes]
+        r"""Predict classification probabilities with shuffled ensembling.
+
+        Each estimator permutes class labels before the complete model forward,
+        restores the resulting logit columns to the original class order, and
+        contributes to a logit-space average. Temperature softmax is applied
+        once after aggregation. This method always receives the full context
+        and does not use key/value state recorded by :meth:`fit`.
+
+        Args:
+            x: Feature tensor with shape ``[..., R, C]``. The first
+                ``R_train`` rows are in-context examples.
+            y: Integer-encoded targets with shape ``[..., R_train]`` or
+                ``[..., R_train, 1]``. Every table must contain contiguous
+                class indices beginning at zero, and batched tables must have
+                the same number of classes.
+            n_estimators: Maximum number of ensemble members. Shift ensembling
+                uses at most one member per distinct class permutation.
+            class_shuffle_method: Class permutation strategy. ``"shift"``
+                uses deterministic circular shifts, ``"random"`` samples
+                permutations, and ``"none"`` evaluates one identity member.
+            generator: Optional generator controlling random permutations.
+
+        Returns:
+            Class probabilities with shape ``[..., R_test, num_classes]``.
+        """
+        if n_estimators < 1:
+            raise ValueError("Expected 'n_estimators' to be positive")
+        if class_shuffle_method not in {"none", "random", "shift"}:
+            raise ValueError(
+                "Expected 'class_shuffle_method' to be one of "
+                "'none', 'random', or 'shift'"
+            )
+
+        x, y = self._preprocess(x, y)
+        if y.is_floating_point() or y.is_complex():
+            raise TypeError("Expected integer targets for 'predict_proba'")
+        y = y.long()
+        num_classes = _validate_classification_labels(y)
+
+        class_permutations = _class_permutations(
+            num_classes=num_classes,
+            n_estimators=n_estimators,
+            method=class_shuffle_method,
+            generator=generator,
+            device=y.device,
+        )
+        logits_sum: Tensor | None = None
+        for permutation in class_permutations:
+            shuffled_y = permutation[y]
+            logits = self.cls_model(x, shuffled_y)
+            corrected = logits.index_select(-1, permutation)
+            logits_sum = (
+                corrected if logits_sum is None else logits_sum + corrected
+            )
+
+        assert logits_sum is not None
+        logits = logits_sum / class_permutations.size(0)
+        return (logits / _CLASSIFICATION_TEMPERATURE).softmax(dim=-1)
+
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
 
@@ -125,7 +207,7 @@ class TabICLv2(BaseModel):
 
         return self
 
-    def _forward(  # TODO Add multi-class support.
+    def _forward(
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
@@ -137,10 +219,13 @@ class TabICLv2(BaseModel):
         Returns:
             Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
             and ``[..., R_test, 999]`` for floating-point ``y``.
-            Integer ``y`` return class logits.
+            Integer ``y`` return class logits only for the classes observed in
+            every context, including when fewer than ten classes are present.
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
         """
+        if y.is_complex():
+            raise TypeError("Expected real-valued targets")
         if y.is_floating_point():
             return self.reg_model(x, y, cache=cache)
         return self.cls_model(x, y, cache=cache)
@@ -203,6 +288,7 @@ class _TabICLv2(torch.nn.Module):
                 **factory_kwargs,
             ),
         )
+        self.max_classes = num_classes
 
     def forward(
         self,
@@ -211,12 +297,149 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x, y, cache=cache)
-        x = self.icl_block(x, y, cache=cache)
-        return self.head(x)
+        if self.max_classes == 0:
+            row_embeddings = self.row_embedding(x, y, cache=cache)
+            return self._predict_standard(
+                row_embeddings,
+                y,
+                cache=cache,
+            )
+
+        y = y.long()
+        num_classes = self._num_classes(y, cache=cache)
+        if self.max_classes < 2 and num_classes > self.max_classes:
+            raise ValueError(
+                "Hierarchical classification requires at least two native "
+                "classes"
+            )
+        if cache is not None and num_classes > self.max_classes:
+            raise NotImplementedError(
+                f"Key/value caching is not supported with more than "
+                f"{self.max_classes} classes (got {num_classes})"
+            )
+        if cache is not None and cache.is_recording:
+            cache[_NUM_CLASSES_CACHE_KEY] = num_classes
+
+        row_embeddings = self.row_embedding(x, y, cache=cache)
+        if num_classes <= self.max_classes:
+            return self._predict_standard(
+                row_embeddings,
+                y,
+                cache=cache,
+            )[..., :num_classes]
+
+        probabilities = _predict_hierarchical(
+            row_embeddings=row_embeddings,
+            y=y,
+            num_classes=num_classes,
+            max_classes=self.max_classes,
+            temperature=_CLASSIFICATION_TEMPERATURE,
+            predictor=self._predict_standard,
+        )
+        return _probabilities_to_logits(probabilities)
+
+    def _num_classes(
+        self,
+        y: Tensor,
+        *,
+        cache: Cache | None,
+    ) -> int:
+        if y.numel() > 0:
+            return _validate_classification_labels(y)
+        if cache is not None and cache.is_replaying:
+            return cast(int, cache[_NUM_CLASSES_CACHE_KEY])
+        raise ValueError(
+            "Expected at least one in-context classification label"
+        )
+
+    def _predict_standard(
+        self,
+        row_embeddings: Tensor,
+        y: Tensor,
+        *,
+        cache: Cache | None = None,
+    ) -> Tensor:
+        out = self.icl_block(row_embeddings, y, cache=cache)
+        return self.head(out)
 
 
 # Helpers #####################################################################
+
+
+def _validate_classification_labels(y: Tensor) -> int:
+    if y.numel() == 0:
+        raise ValueError(
+            "Expected at least one in-context classification label"
+        )
+
+    flat_y = y.reshape(-1, y.size(-1))
+    num_classes = flat_y[0].unique().numel()
+    for table_idx, labels in enumerate(flat_y):
+        classes = labels.unique(sorted=True)
+        expected = torch.arange(
+            classes.numel(),
+            dtype=y.dtype,
+            device=y.device,
+        )
+        if not classes.equal(expected):
+            raise ValueError(
+                f"Expected table {table_idx}'s classification labels to "
+                "contain contiguous class indices beginning at zero"
+            )
+        if classes.numel() != num_classes:
+            raise ValueError(
+                "Expected every table in a batch to contain the same number "
+                f"of classes (got {num_classes} and {classes.numel()})"
+            )
+
+    return num_classes
+
+
+def _probabilities_to_logits(probabilities: Tensor) -> Tensor:
+    return (probabilities + 1e-6).log().mul(_CLASSIFICATION_TEMPERATURE)
+
+
+def _class_permutations(
+    *,
+    num_classes: int,
+    n_estimators: int,
+    method: _ClassShuffleMethod,
+    generator: torch.Generator | None,
+    device: torch.device,
+) -> Tensor:
+    indices = torch.arange(num_classes, device=device)
+    if n_estimators == 1 or method == "none" or num_classes <= 1:
+        return indices.unsqueeze(0)
+    if method == "shift":
+        offsets = torch.arange(
+            min(n_estimators, num_classes),
+            device=device,
+        ).unsqueeze(-1)
+        return indices.unsqueeze(0).sub(offsets).remainder(num_classes)
+
+    generator_device = device if generator is None else generator.device
+    if num_classes <= 5:
+        all_permutations = torch.tensor(
+            tuple(permutations(range(num_classes))),
+            device=device,
+        )
+        selection = torch.randperm(
+            all_permutations.size(0),
+            generator=generator,
+            device=generator_device,
+        )[:n_estimators]
+        return all_permutations.index_select(0, selection.to(device=device))
+
+    return torch.stack(
+        [
+            torch.randperm(
+                num_classes,
+                generator=generator,
+                device=generator_device,
+            )
+            for _ in range(n_estimators)
+        ]
+    ).to(device=device)
 
 
 def _remap_ckpt(
