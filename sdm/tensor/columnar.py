@@ -1,11 +1,12 @@
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, SupportsIndex, TypeVar
 
+import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import override
 
-from sdm.tensor import CategoricalTensor
+from sdm.tensor import CategoricalTensor, StringTensor
 
 aten = torch.ops.aten
 
@@ -113,6 +114,44 @@ class ColumnarTensor(Tensor):
         out._columns = columns
 
         return out
+
+    @classmethod
+    def from_arrow(
+        cls: type[SelfColumnarTensor],
+        array: pa.Array | pa.ChunkedArray,
+        *,
+        device: torch.device | str | None = None,
+    ) -> SelfColumnarTensor:
+        r"""Create tensor from a ``pyarrow`` array.
+
+        Args:
+            array: The ``pyarrow`` array.
+            device: The device.
+        """
+        device = torch.device("cpu" if device is None else device)
+
+        if isinstance(array, pa.ChunkedArray):
+            if array.num_chunks == 1:
+                array = array.chunk(0)
+            else:
+                array = array.combine_chunks()
+
+        is_string = pa.types.is_string(array.type)
+        is_large_string = pa.types.is_large_string(array.type)
+        if is_string or is_large_string:
+            column = StringTensor.from_arrow(array, device=device)
+        else:
+            if array.null_count > 0 and pa.types.is_integer(array.type):
+                raise ValueError(
+                    f"'{cls.__name__}' cannot represent null integer values"
+                )
+            values = array.to_numpy(
+                zero_copy_only=False,
+                writable=device.type == "cpu",
+            )
+            column = torch.as_tensor(values, device=device)
+
+        return cls(columns=(column,), device=device)
 
     # Decorators ##############################################################
 
