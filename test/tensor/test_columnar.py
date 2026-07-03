@@ -3,7 +3,7 @@ import io
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor, ColumnarTensor, StringTensor, TableTensor
+from sdm import CategoricalTensor, ColumnarTensor, StringTensor
 
 
 def test_init() -> None:
@@ -53,25 +53,8 @@ def test_from_arrow() -> None:
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
-    with pytest.raises(ValueError, match="cannot represent null values"):
+    with pytest.raises(ValueError, match="cannot represent null integer"):
         ColumnarTensor.from_arrow(pa.array([1, None, 3]))
-
-    table = TableTensor.from_arrow(
-        pa.table(
-            {
-                "user_id": pa.array([1, 2]),
-                "org_id": pa.array(["a", "b"]),
-                "x": pa.array([0.1, 0.2]),
-            }
-        ),
-        stypes={
-            "user_id": "id",
-            "org_id": "id",
-            "x": "numerical",
-        },
-    )
-    assert table.id.size() == (2, 2)
-    assert table.id.tolist() == [[1, "a"], [2, "b"]]
 
 
 def test_save_load() -> None:

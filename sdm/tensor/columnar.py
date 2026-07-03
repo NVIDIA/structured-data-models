@@ -137,14 +137,15 @@ class ColumnarTensor(Tensor):
             else:
                 array = array.combine_chunks()
 
-        if array.null_count > 0:
-            raise ValueError(f"'{cls.__name__}' cannot represent null values")
-
         is_string = pa.types.is_string(array.type)
         is_large_string = pa.types.is_large_string(array.type)
-        if not is_string and not is_large_string:
+        if is_string or is_large_string:
             column = StringTensor.from_arrow(array, device=device)
         else:
+            if array.null_count > 0 and pa.types.is_integer(array.type):
+                raise ValueError(
+                    f"'{cls.__name__}' cannot represent null integer values"
+                )
             values = array.to_numpy(
                 zero_copy_only=False,
                 writable=device.type == "cpu",
