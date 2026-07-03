@@ -146,6 +146,56 @@ def test_view_ops() -> None:
         _ = tensor.permute(2, 0, 1)
 
 
+def test_slicing_ops() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(24).view(2, 3, 4),
+            torch.arange(100, 124).view(2, 3, 4),
+        )
+    )
+
+    out = tensor.select(0, 1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 4, 2)
+
+    out = tensor.select(-1, 1)
+    assert not isinstance(out, ColumnarTensor)
+    assert out.equal(tensor._columns[1])
+
+    out = tensor[:, 1:]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 4, 2)
+
+    out = tensor[..., 1:]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 3, 4, 1)
+    assert out._columns == (tensor._columns[1],)
+
+    out = tensor.narrow(1, 1, 1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 1, 4, 2)
+
+    rows = tensor.unbind(0)
+    assert len(rows) == 2
+    assert all(isinstance(row, ColumnarTensor) for row in rows)
+    assert rows[0].size() == (3, 4, 2)
+
+    columns = tensor.unbind(-1)
+    assert len(columns) == 2
+    assert columns[0].equal(tensor._columns[0])
+    assert columns[1].equal(tensor._columns[1])
+
+    chunks = tensor.split(1, dim=1)
+    assert len(chunks) == 3
+    assert all(isinstance(chunk, ColumnarTensor) for chunk in chunks)
+    assert chunks[0].size() == (2, 1, 4, 2)
+
+    chunks = tensor.split(1, dim=-1)
+    assert len(chunks) == 2
+    assert chunks[0].size() == (2, 3, 4, 1)
+    assert chunks[0]._columns == (tensor._columns[0],)
+
+
 def test_tolist() -> None:
     tensor = ColumnarTensor(
         (

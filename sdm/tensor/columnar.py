@@ -468,6 +468,146 @@ def _permute(input: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
     )
 
 
+@ColumnarTensor.implements(aten.select.int)
+def _select(input: ColumnarTensor, dim: int, index: int) -> Tensor:
+    dim %= input.dim()
+    if _is_column_dim(input, dim):
+        return aten.alias.default(input._columns[index])
+
+    size = (*input.size()[:dim], *input.size()[dim + 1 : -1])
+    return input.__class__(
+        columns=[column.select(dim, index) for column in input._columns],
+        size=size,
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.slice.Tensor)
+def _slice(
+    input: ColumnarTensor,
+    dim: int = 0,
+    start: int | None = None,
+    end: int | None = None,
+    step: int = 1,
+) -> ColumnarTensor:
+    dim %= input.dim()
+    if _is_column_dim(input, dim):
+        return input.__class__(
+            columns=input._columns[slice(start, end, step)],
+            size=input.size()[:-1],
+            device=input.device,
+        )
+
+    return input.__class__(
+        columns=[
+            aten.slice.Tensor(column, dim, start, end, step)
+            for column in input._columns
+        ],
+        size=_slice_size(input.size()[:-1], dim, start, end, step),
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.narrow.default)
+def _narrow(
+    input: ColumnarTensor,
+    dim: int,
+    start: int,
+    length: int,
+) -> ColumnarTensor:
+    dim %= input.dim()
+    if _is_column_dim(input, dim):
+        return input.__class__(
+            columns=input._columns[start : start + length],
+            size=input.size()[:-1],
+            device=input.device,
+        )
+
+    size = list(input.size()[:-1])
+    size[dim] = length
+    return input.__class__(
+        columns=[
+            column.narrow(dim=dim, start=start, length=length)
+            for column in input._columns
+        ],
+        size=size,
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.unbind.int)
+def _unbind(input: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
+    dim %= input.dim()
+    if _is_column_dim(input, dim):
+        return tuple(aten.alias.default(column) for column in input._columns)
+
+    columns_list = [column.unbind(dim) for column in input._columns]
+    if len(columns_list) == 0:
+        size = (*input.size()[:dim], *input.size()[dim + 1 : -1])
+        return tuple(
+            input.__class__(columns=(), size=size, device=input.device)
+            for _ in range(input.size(dim))
+        )
+
+    return tuple(
+        input.__class__(columns=columns, device=input.device)
+        for columns in zip(*columns_list)
+    )
+
+
+@ColumnarTensor.implements(aten.split.Tensor)
+def _split(
+    input: ColumnarTensor,
+    split_size: int,
+    dim: int = 0,
+) -> tuple[ColumnarTensor, ...]:
+    dim %= input.dim()
+    if _is_column_dim(input, dim):
+        return tuple(
+            input.__class__(
+                columns=input._columns[i : i + split_size],
+                size=input.size()[:-1],
+                device=input.device,
+            )
+            for i in range(0, input.size(-1), split_size)
+        )
+
+    columns_list = [
+        column.split(split_size, dim=dim) for column in input._columns
+    ]
+    return _wrap_split(input, columns_list, dim=dim, split_size=split_size)
+
+
+@ColumnarTensor.implements(aten.split.sizes)
+@ColumnarTensor.implements(aten.split.default)
+@ColumnarTensor.implements(aten.split_with_sizes.default)
+def _split_with_sizes(
+    input: ColumnarTensor,
+    split_sizes: Sequence[int],
+    dim: int = 0,
+) -> tuple[ColumnarTensor, ...]:
+    dim %= input.dim()
+    split_sizes = tuple(split_sizes)
+    if _is_column_dim(input, dim):
+        end = 0
+        out = []
+        for split_size in split_sizes:
+            start, end = end, end + split_size
+            out.append(
+                input.__class__(
+                    columns=input._columns[start:end],
+                    size=input.size()[:-1],
+                    device=input.device,
+                )
+            )
+        return tuple(out)
+
+    columns_list = [
+        column.split(split_sizes, dim=dim) for column in input._columns
+    ]
+    return _wrap_split(input, columns_list, dim=dim, split_sizes=split_sizes)
+
+
 # Helpers #####################################################################
 
 
@@ -541,3 +681,50 @@ def _raise_if_column_dim(
             f"Can't operate on the column dimension of "
             f"'{input.__class__.__name__}'"
         )
+
+
+def _is_column_dim(input: ColumnarTensor, dim: int) -> bool:
+    return dim % input.dim() == input.dim() - 1
+
+
+def _slice_size(
+    size: Sequence[int],
+    dim: int,
+    start: int | None,
+    end: int | None,
+    step: int,
+) -> tuple[int, ...]:
+    out = list(size)
+    out[dim] = len(range(size[dim])[slice(start, end, step)])
+    return tuple(out)
+
+
+def _wrap_split(
+    input: ColumnarTensor,
+    columns_list: Sequence[Sequence[Tensor]],
+    *,
+    dim: int,
+    split_size: int | None = None,
+    split_sizes: Sequence[int] | None = None,
+) -> tuple[ColumnarTensor, ...]:
+    if len(columns_list) == 0:
+        if split_sizes is None:
+            assert split_size is not None
+            split_sizes = tuple(
+                min(split_size, input.size(dim) - i)
+                for i in range(0, input.size(dim), split_size)
+            )
+
+        return tuple(
+            input.__class__(
+                columns=(),
+                size=(*input.size()[:dim], size, *input.size()[dim + 1 : -1]),
+                device=input.device,
+            )
+            for size in split_sizes
+        )
+
+    return tuple(
+        input.__class__(columns=columns, device=input.device)
+        for columns in zip(*columns_list)
+    )
