@@ -570,8 +570,11 @@ def _to_copy(
             tensor,
             device=device,
             dtype=dtype
-            if not isinstance(tensor, CategoricalTensor)
-            or dtype in (torch.int32, torch.int64)
+            if (
+                not isinstance(tensor, CategoricalTensor)
+                or dtype in (torch.int32, torch.int64)
+            )
+            and not isinstance(tensor, ColumnarTensor)
             else None,
             layout=layout,
             pin_memory=pin_memory,
