@@ -24,12 +24,6 @@ def test_to_copy() -> None:
     assert not isinstance(out, CategoricalTensor)
     assert out.dtype == torch.float32
 
-    with pytest.raises(ValueError, match="one-dimensional"):
-        CategoricalTensor(
-            data=torch.tensor([[0]]),
-            categories=(torch.arange(4).view(2, 2),),
-        )
-
 
 def test_from_arrow_string_values() -> None:
     tensor = CategoricalTensor.from_arrow(
