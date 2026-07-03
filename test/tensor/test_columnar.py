@@ -49,7 +49,7 @@ def test_empty() -> None:
     with pytest.raises(ValueError, match="zero columnar data"):
         ColumnarTensor(())
 
-    with pytest.raises(ValueError, match="at least one dimension"):
+    with pytest.raises(ValueError, match="to be non-empty"):
         ColumnarTensor((), size=())
 
 
