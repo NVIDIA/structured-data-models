@@ -21,11 +21,16 @@ TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 
 def to_arrow(tensor: Tensor) -> pa.Array:
-    r"""Convert a tensor to flat ``pyarrow`` list array.
+    r"""Convert a tensor to flat ``pyarrow`` array.
 
     Args:
         tensor: The tensor.
     """
+    from sdm.tensor import VarLenTensor
+
+    if isinstance(tensor, VarLenTensor):
+        return tensor.to_arrow()
+
     tensor = tensor.detach().contiguous().view(-1).cpu()
 
     type = TORCH_ARROW_DTYPES.get(tensor.dtype)
