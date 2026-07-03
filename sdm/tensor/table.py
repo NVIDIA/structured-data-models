@@ -12,6 +12,7 @@ from typing_extensions import override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
+from sdm.tensor.var_len import TORCH_ARROW_DTYPES, VarLenTensor
 
 aten = torch.ops.aten
 
@@ -546,6 +547,45 @@ class TableTensor(Tensor):
             return self
         return _contiguous(self, memory_format=memory_format)
 
+    def to_arrow(self, *, zero_copy_only: bool = False) -> pa.Table:
+        r"""Convert this table to a ``pyarrow`` table.
+
+        Args:
+            zero_copy_only: If set to :obj:`True`, raise an error when a
+                column cannot be represented without materializing a copy.
+        """
+        if self.dim() != 2:
+            raise ValueError(
+                f"Expected '{self.__class__.__name__}' to be two-dimensional "
+                f"for arrow conversion (got {self.dim()}D)"
+            )
+
+        arrays, names = [], []
+        for stype, tensor in self.items():
+            for i, name in enumerate(self._columns[stype]):
+                if stype == Stype.categorical:
+                    array = _categorical_to_arrow_array(
+                        tensor=cast(CategoricalTensor, tensor),
+                        index=i,
+                        zero_copy_only=zero_copy_only,
+                    )
+                elif stype == Stype.datetime:
+                    array = _tensor_to_arrow_array(
+                        tensor[..., i],
+                        type=pa.timestamp("us"),
+                        zero_copy_only=zero_copy_only,
+                    )
+                else:
+                    array = _tensor_to_arrow_array(
+                        tensor[..., i],
+                        zero_copy_only=zero_copy_only,
+                    )
+
+                arrays.append(array)
+                names.append(name)
+
+        return pa.Table.from_arrays(arrays, names=names)
+
     @override
     def tolist() -> Any:
         raise NotImplementedError("'tolist() is not yet implemented")  # TODO
@@ -583,6 +623,98 @@ class TableTensor(Tensor):
             out += f"  device={self.device},\n"
         out += ")"
         return out
+
+
+def _tensor_to_arrow_array(
+    tensor: Tensor,
+    *,
+    zero_copy_only: bool,
+    type: pa.DataType | None = None,
+) -> pa.Array:
+    if isinstance(tensor, VarLenTensor):
+        if zero_copy_only and not tensor.is_contiguous():
+            raise RuntimeError(
+                f"Can't convert non-contiguous '{tensor.__class__.__name__}' "
+                f"to arrow with 'zero_copy_only=True'"
+            )
+        return tensor.to_arrow()
+
+    if not tensor.is_cpu:
+        raise TypeError(
+            f"Can't convert {tensor.device} device type tensor to arrow. "
+            f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
+        )
+    if tensor.requires_grad:
+        raise RuntimeError(
+            "Can't call 'to_arrow()' on Tensor that requires grad. "
+            "Use 'Tensor.detach().to_arrow()' instead."
+        )
+    if tensor.dim() != 1:
+        raise ValueError(
+            f"Expected a one-dimensional tensor for arrow conversion "
+            f"(got {tensor.dim()}D)"
+        )
+    if not tensor.is_contiguous():
+        if zero_copy_only:
+            raise RuntimeError(
+                "Can't convert non-contiguous tensor to arrow with "
+                "'zero_copy_only=True'"
+            )
+        tensor = tensor.contiguous()
+
+    type = TORCH_ARROW_DTYPES.get(tensor.dtype) if type is None else type
+    if type is None:
+        raise TypeError(f"Unsupported data type '{tensor.dtype}'")
+
+    return pa.Array.from_buffers(
+        type=type,
+        length=tensor.numel(),
+        buffers=[None, pa.py_buffer(tensor.numpy())],
+    )
+
+
+def _categorical_to_arrow_array(
+    tensor: CategoricalTensor,
+    index: int,
+    *,
+    zero_copy_only: bool,
+) -> pa.Array:
+    data = tensor._data[..., index]
+    if data.dim() != 1:
+        raise ValueError(
+            f"Expected a one-dimensional categorical column for arrow "
+            f"conversion (got {data.dim()}D)"
+        )
+    if not data.is_cpu:
+        raise TypeError(
+            f"Can't convert {data.device} device type tensor to arrow. "
+            f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
+        )
+
+    if data.lt(0).any().item():
+        if zero_copy_only:
+            raise RuntimeError(
+                "Can't convert categorical column with missing values to "
+                "arrow with 'zero_copy_only=True'"
+            )
+
+        category = tensor.categories[index]
+        values = category[data.clamp(min=0)].tolist()
+        mask = (data < 0).tolist()
+        return pa.array(
+            None if is_missing else value
+            for value, is_missing in zip(values, mask)
+        )
+
+    indices = _tensor_to_arrow_array(
+        data,
+        zero_copy_only=zero_copy_only,
+    )
+    dictionary = _tensor_to_arrow_array(
+        tensor.categories[index],
+        zero_copy_only=zero_copy_only,
+    )
+    return pa.DictionaryArray.from_arrays(indices, dictionary)
 
 
 @TableTensor.implements(aten.alias.default)
