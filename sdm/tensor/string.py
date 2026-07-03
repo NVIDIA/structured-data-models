@@ -95,16 +95,19 @@ class StringTensor(VarLenTensor):
                 f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
             )
 
-        data, offset = cast(StringTensor, self.contiguous()).data_offset
+        tensor = cast(StringTensor, self.contiguous())
 
         return pa.Array.from_buffers(
-            pa.string() if offset.dtype == torch.int32 else pa.large_string(),
-            length=self.numel(),
+            pa.string()
+            if tensor._offset.dtype == torch.int32
+            else pa.large_string(),
+            length=tensor.numel(),
             buffers=[
                 None,
-                pa.py_buffer(offset.numpy()),
-                pa.py_buffer(data.numpy()),
+                pa.py_buffer(tensor._offset.numpy()),
+                pa.py_buffer(tensor._data.numpy()),
             ],
+            offset=int(tensor.storage_offset()),
         )
 
     @classmethod
