@@ -297,18 +297,7 @@ class VarLenTensor(Tensor):
 
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to flat ``pyarrow`` list array."""
-        if not self.is_cpu:
-            raise TypeError(
-                f"Can't convert {self.device} device type tensor to arrow. "
-                f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
-            )
-        if self.requires_grad:
-            raise RuntimeError(
-                "Can't call 'to_arrow()' on Tensor that requires grad. "
-                "Use 'Tensor.detach().to_arrow()' instead."
-            )
-
-        tensor = cast(VarLenTensor, self.contiguous())
+        tensor = cast(VarLenTensor, self.detach().contiguous().cpu())
 
         value_type = TORCH_ARROW_DTYPES.get(tensor._data.dtype)
         if value_type is None:
