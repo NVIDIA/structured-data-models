@@ -59,6 +59,29 @@ def test_from_arrow() -> None:
         ColumnarTensor.from_arrow(pa.array([1, None, 3]))
 
 
+def test_to_arrow() -> None:
+    column1 = torch.arange(6).view(2, 3)
+    column2 = StringTensor.from_list([["a", "b", "c"], ["d", "e", "f"]])
+    tensor = ColumnarTensor((column1, column2))
+
+    table = tensor.to_arrow()
+    assert table.column_names == ["0", "1"]
+    assert table.to_pydict() == {
+        "0": [0, 1, 2, 3, 4, 5],
+        "1": ["a", "b", "c", "d", "e", "f"],
+    }
+    assert (
+        table["0"].chunk(0).buffers()[1].address
+        == (column1.numpy().__array_interface__["data"][0])
+    )
+
+    table = tensor.to_arrow(columns=("id", "label"))
+    assert table.column_names == ["id", "label"]
+
+    with pytest.raises(ValueError, match="Expected 'columns'"):
+        tensor.to_arrow(columns=("id",))
+
+
 def test_save_load() -> None:
     tensor = ColumnarTensor((torch.arange(3),))
 
