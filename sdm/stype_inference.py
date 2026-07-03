@@ -1,5 +1,8 @@
+import importlib.util
 from collections.abc import Mapping
 from typing import Any
+
+import pyarrow as pa
 
 from sdm.stype import Stype
 
@@ -10,17 +13,17 @@ __all__ = [
 
 def infer_stypes(table: Any) -> dict[str, Stype]:
     r"""Infer semantic column types for a pandas or Arrow table."""
-    pandas_dataframe = _pandas_dataframe_type()
-    if pandas_dataframe is not None and isinstance(table, pandas_dataframe):
-        return {
-            str(column): _infer_pandas_stype(
-                table[column],
-                column=str(column),
-            )
-            for column in table.columns
-        }
+    if importlib.util.find_spec("pandas") is not None:
+        import pandas as pd
 
-    import pyarrow as pa
+        if isinstance(table, pd.DataFrame):
+            return {
+                str(column): _infer_pandas_stype(
+                    table[column],
+                    column=str(column),
+                )
+                for column in table.columns
+            }
 
     if isinstance(table, pa.Table):
         return {
@@ -32,13 +35,17 @@ def infer_stypes(table: Any) -> dict[str, Stype]:
         }
 
     if isinstance(table, Mapping):
-        return {
-            str(column): _infer_arrow_stype(
-                _arrow_column_type(value),
-                column=str(column),
+        stypes: dict[str, Stype] = {}
+        for column, value in table.items():
+            if not isinstance(value, pa.ChunkedArray | pa.Array):
+                raise TypeError(
+                    "Expected an Arrow mapping column to be a 'pyarrow.Array' "
+                    f"or 'pyarrow.ChunkedArray' (got '{type(value).__name__}')"
+                )
+            stypes[str(column)] = _infer_arrow_stype(
+                value.type, column=str(column)
             )
-            for column, value in table.items()
-        }
+        return stypes
 
     raise TypeError(
         "Expected 'table' to be a pandas DataFrame, pyarrow Table, or "
@@ -52,6 +59,15 @@ def _infer_pandas_stype(
     *,
     column: str | None = None,
 ) -> Stype:
+    r"""Infer the :class:`~sdm.stype.Stype` of a pandas column.
+
+    Boolean, string, object, and categorical dtypes map to
+    :attr:`Stype.categorical`. Numeric dtypes map to :attr:`Stype.numerical`.
+
+    Args:
+        column_data: The ``pandas.Series`` to infer.
+        column: The column name, used for error messages.
+    """
     import pandas as pd
     from pandas.api.types import (
         is_bool_dtype,
@@ -70,16 +86,28 @@ def _infer_pandas_stype(
         return Stype.categorical
     if is_numeric_dtype(dtype):
         return Stype.numerical
-    raise TypeError(_unsupported_pandas_dtype_message(dtype, column=column))
+    if column is None:
+        raise TypeError(f"Unsupported pandas dtype '{dtype}'")
+    raise TypeError(
+        f"Unsupported pandas dtype for column '{column}': '{dtype}'"
+    )
 
 
 def _infer_arrow_stype(
-    data_type: Any,
+    data_type: pa.DataType,
     *,
     column: str | None = None,
 ) -> Stype:
-    import pyarrow as pa
+    r"""Infer the :class:`~sdm.stype.Stype` of an Arrow data type.
 
+    Integer, floating-point, and decimal types map to
+    :attr:`Stype.numerical`. String, boolean, and dictionary-encoded types
+    map to :attr:`Stype.categorical`.
+
+    Args:
+        data_type: The Arrow data type to infer.
+        column: The column name, used for error messages.
+    """
     if (
         pa.types.is_integer(data_type)
         or pa.types.is_floating(data_type)
@@ -93,43 +121,8 @@ def _infer_arrow_stype(
         or pa.types.is_dictionary(data_type)
     ):
         return Stype.categorical
-    raise TypeError(_unsupported_arrow_type_message(data_type, column=column))
-
-
-def _pandas_dataframe_type() -> type[Any] | None:
-    try:
-        import pandas as pd
-    except ImportError:
-        return None
-    return pd.DataFrame
-
-
-def _arrow_column_type(value: Any) -> Any:
-    import pyarrow as pa
-
-    if isinstance(value, pa.ChunkedArray | pa.Array):
-        return value.type
+    if column is None:
+        raise TypeError(f"Unsupported Arrow type '{data_type}'")
     raise TypeError(
-        "Expected an Arrow mapping column to be a 'pyarrow.Array' or "
-        f"'pyarrow.ChunkedArray' (got '{type(value).__name__}')"
+        f"Unsupported Arrow type for column '{column}': '{data_type}'"
     )
-
-
-def _unsupported_pandas_dtype_message(
-    dtype: Any,
-    *,
-    column: str | None,
-) -> str:
-    if column is None:
-        return f"Unsupported pandas dtype '{dtype}'"
-    return f"Unsupported pandas dtype for column '{column}': '{dtype}'"
-
-
-def _unsupported_arrow_type_message(
-    data_type: Any,
-    *,
-    column: str | None,
-) -> str:
-    if column is None:
-        return f"Unsupported Arrow type '{data_type}'"
-    return f"Unsupported Arrow type for column '{column}': '{data_type}'"
