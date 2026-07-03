@@ -67,7 +67,7 @@ class BaseModel(torch.nn.Module, ABC):
         x, y = self._preprocess(x, y)
         cache = Cache({"y.dtype": y.dtype})
         x = x[..., : y.size(-1), :]
-        self._forward(x, y, cache=self._cache)
+        self._forward(x, y, cache=cache)
         self._cache = cache
         self._cache.freeze()
 
