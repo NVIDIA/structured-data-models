@@ -117,10 +117,8 @@ class TableTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
         r"""Create a tensor wrapper."""
-        if size is not None:
-            size = tuple(size)
-            if len(size) == 0:
-                raise ValueError("Expected 'size' to be non-empty")
+        if size is not None and len(size) == 0:
+            raise ValueError("Expected 'size' to be non-empty")
 
         size = tuple(size) if size is not None else size
         device = torch.device(device) if device is not None else device
@@ -165,9 +163,7 @@ class TableTensor(Tensor):
                 categories=(),
             )
         if id is None:
-            # TODO Add id support.
-            id = torch.empty((*size, 0), device=device)  # type: ignore
-            assert id is not None
+            id = ColumnarTensor((), size=size, device=device)
 
         columns = {
             Stype(stype): tuple(names)
@@ -266,8 +262,7 @@ class TableTensor(Tensor):
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.id:
-                    # TODO Add id support.
-                    tensor = ColumnarTensor.from_arrow(array)  # type: ignore
+                    tensor = ColumnarTensor.from_arrow(array)
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
@@ -575,8 +570,11 @@ def _to_copy(
             tensor,
             device=device,
             dtype=dtype
-            if not isinstance(tensor, CategoricalTensor)
-            or dtype in (torch.int32, torch.int64)
+            if (
+                not isinstance(tensor, CategoricalTensor)
+                or dtype in (torch.int32, torch.int64)
+            )
+            and not isinstance(tensor, ColumnarTensor)
             else None,
             layout=layout,
             pin_memory=pin_memory,
@@ -689,18 +687,7 @@ def _squeeze(input: TableTensor) -> TableTensor:
 
 @TableTensor.implements(aten.squeeze.dim)
 def _squeeze_dim(input: TableTensor, dim: int) -> TableTensor:
-    blocks = {stype: tensor.squeeze(dim) for stype, tensor in input.items()}
-
-    if dim % input.dim() == input.dim() - 1:
-        raise RuntimeError(
-            f"Can't squeeze the column dimension of "
-            f"'{input.__class__.__name__}'"
-        )
-
-    return input.__class__(
-        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
-        **blocks,
-    )
+    return _squeeze_dims(input, (dim,))
 
 
 @TableTensor.implements(aten.squeeze.dims)
@@ -1069,7 +1056,7 @@ def _block_size_repr(size: Sequence[int]) -> str:
     return f"{str(tuple(size))[:-1]}, *)"
 
 
-def _is_column_dim(input: TableTensor, dim: int) -> bool:
+def _is_column_dim(input: Tensor, dim: int) -> bool:
     if dim < -input.dim() or dim >= input.dim():
         return False
     return dim % input.dim() == input.dim() - 1

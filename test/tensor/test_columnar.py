@@ -21,13 +21,15 @@ def test_init() -> None:
     with pytest.raises(ValueError, match="to have size"):
         ColumnarTensor((torch.ones(2), torch.ones(3)))
 
-    value1 = torch.ones(2)
-    value2 = CategoricalTensor(
-        data=torch.randint(0, 2, (2,)),
-        categories=(torch.arange(2), torch.arange(2)),
-    )
-    with pytest.raises(ValueError, match="hold a single column"):
-        ColumnarTensor((value1, value2))
+    with pytest.raises(TypeError, match="single column tensor"):
+        ColumnarTensor(
+            (
+                CategoricalTensor(
+                    data=torch.randint(0, 2, (2, 1)),
+                    categories=(torch.arange(2),),
+                ),
+            )
+        )
 
 
 def test_empty() -> None:
@@ -37,7 +39,7 @@ def test_empty() -> None:
     with pytest.raises(ValueError, match="zero columnar data"):
         ColumnarTensor(())
 
-    with pytest.raises(ValueError, match="at least one dimension"):
+    with pytest.raises(ValueError, match="to be non-empty"):
         ColumnarTensor((), size=())
 
 
@@ -94,6 +96,182 @@ def test_to_copy() -> None:
 
     with pytest.raises(TypeError, match="convert"):
         tensor.to(torch.float32)
+
+
+def test_view_ops() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(6).view(2, 3),
+            torch.arange(10, 16).view(2, 3),
+        )
+    )
+
+    out = tensor.view(6, 2)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (6, 2)
+    assert out.tolist() == [
+        [0, 10],
+        [1, 11],
+        [2, 12],
+        [3, 13],
+        [4, 14],
+        [5, 15],
+    ]
+
+    with pytest.raises(RuntimeError, match="Can't reshape"):
+        _ = tensor.view(-1)
+
+    out = tensor.unsqueeze(0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (1, 2, 3, 2)
+
+    out = tensor.unsqueeze(0).squeeze(0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == tensor.size()
+
+    with pytest.raises(RuntimeError, match="unsqueeze"):
+        _ = tensor.unsqueeze(-1)
+
+    out = tensor.unsqueeze(1).expand(-1, 4, 3, -1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 4, 3, 2)
+
+    out = tensor.transpose(0, 1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 2, 2)
+
+    out = tensor.permute(1, 0, 2)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 2, 2)
+
+    with pytest.raises(RuntimeError, match="column dimension"):
+        _ = tensor.permute(2, 0, 1)
+
+
+def test_slicing_ops() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(24).view(2, 3, 4),
+            torch.arange(100, 124).view(2, 3, 4),
+        )
+    )
+
+    out = tensor.select(0, 1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 4, 2)
+
+    out = tensor.select(-1, 1)
+    assert not isinstance(out, ColumnarTensor)
+    assert out.equal(tensor._columns[1])
+
+    out = tensor[:, 1:]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 4, 2)
+
+    out = tensor[..., 1:]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 3, 4, 1)
+    assert out._columns == (tensor._columns[1],)
+
+    out = tensor.narrow(1, 1, 1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 1, 4, 2)
+
+    rows = tensor.unbind(0)
+    assert len(rows) == 2
+    assert all(isinstance(row, ColumnarTensor) for row in rows)
+    assert rows[0].size() == (3, 4, 2)
+
+    columns = tensor.unbind(-1)
+    assert len(columns) == 2
+    assert columns[0].equal(tensor._columns[0])
+    assert columns[1].equal(tensor._columns[1])
+
+    chunks = tensor.split(1, dim=1)
+    assert len(chunks) == 3
+    assert all(isinstance(chunk, ColumnarTensor) for chunk in chunks)
+    assert chunks[0].size() == (2, 1, 4, 2)
+
+    chunks = tensor.split(1, dim=-1)
+    assert len(chunks) == 2
+    assert chunks[0].size() == (2, 3, 4, 1)
+    assert chunks[0]._columns == (tensor._columns[0],)
+
+
+def test_index_ops() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(24).view(2, 3, 4),
+            torch.arange(100, 124).view(2, 3, 4),
+        )
+    )
+
+    out = tensor.index_select(1, torch.tensor([2, 0]))
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 4, 2)
+
+    out = tensor.index_select(-1, torch.tensor([1, 0]))
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == tensor.size()
+    assert out._columns[0].equal(tensor._columns[1])
+    assert out._columns[1].equal(tensor._columns[0])
+
+    out = tensor[:, torch.tensor([2, 0])]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 4, 2)
+
+    out = tensor[..., torch.tensor([1, 0])]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == tensor.size()
+    assert out._columns[0].equal(tensor._columns[1])
+    assert out._columns[1].equal(tensor._columns[0])
+
+    out = tensor[..., torch.tensor([True, False])]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 3, 4, 1)
+    assert out._columns[0].equal(tensor._columns[0])
+
+    mask = torch.tensor([[True, False, True], [False, True, False]])
+    out = tensor[mask]
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 4, 2)
+
+    with pytest.raises(RuntimeError, match="column dimension"):
+        _ = tensor[torch.tensor([0]), :, :, torch.tensor([1])]
+
+
+def test_cat_stack() -> None:
+    tensor1 = ColumnarTensor(
+        (
+            torch.arange(6).view(2, 3),
+            torch.arange(10, 16).view(2, 3),
+        )
+    )
+    tensor2 = ColumnarTensor(
+        (
+            torch.arange(20, 26).view(2, 3),
+            torch.arange(30, 36).view(2, 3),
+        )
+    )
+
+    out = torch.cat([tensor1, tensor2], dim=0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (4, 3, 2)
+    assert out._columns[0].equal(
+        torch.cat([tensor1._columns[0], tensor2._columns[0]])
+    )
+
+    out = torch.cat([tensor1, tensor2], dim=-1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 3, 4)
+    assert out._columns == (*tensor1._columns, *tensor2._columns)
+
+    out = torch.stack([tensor1, tensor2], dim=0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 3, 2)
+
+    with pytest.raises(RuntimeError, match="stack after"):
+        _ = torch.stack([tensor1, tensor2], dim=-1)
 
 
 def test_tolist() -> None:

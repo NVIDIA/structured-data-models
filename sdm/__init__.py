@@ -4,11 +4,11 @@ from importlib.metadata import PackageNotFoundError, version
 
 from sdm.stype import Stype, StypeLike
 from sdm.tensor import (
+    VarLenTensor,
+    StringTensor,
     CategoricalTensor,
     ColumnarTensor,
-    StringTensor,
     TableTensor,
-    VarLenTensor,
     Relationship,
     RelatedTables,
 )
@@ -23,8 +23,8 @@ __all__ = [
     "StypeLike",
     "VarLenTensor",
     "StringTensor",
-    "ColumnarTensor",
     "CategoricalTensor",
+    "ColumnarTensor",
     "TableTensor",
     "Relationship",
     "RelatedTables",
