@@ -165,9 +165,7 @@ class TableTensor(Tensor):
                 categories=(),
             )
         if id is None:
-            # TODO Add id support.
-            id = torch.empty((*size, 0), device=device)  # type: ignore
-            assert id is not None
+            id = ColumnarTensor((), size=size, device=device)
 
         columns = {
             Stype(stype): tuple(names)
@@ -266,7 +264,6 @@ class TableTensor(Tensor):
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.id:
-                    # TODO Add id support.
                     tensor = ColumnarTensor.from_arrow(array)
                 else:
                     raise NotImplementedError
