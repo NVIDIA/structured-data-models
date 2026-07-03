@@ -1,3 +1,4 @@
+import math
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, SupportsIndex, TypeVar
 
@@ -332,3 +333,211 @@ def _pin_memory(input: ColumnarTensor) -> ColumnarTensor:
         size=input.size()[:-1],
         device=input.device,
     )
+
+
+@ColumnarTensor.implements(aten.view.default)
+def _view(input: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
+    size = _infer_view_size(input, size)
+    return input.__class__(
+        columns=[
+            column.view(_column_size(column, size[:-1]))
+            for column in input._columns
+        ],
+        size=size[:-1],
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten._unsafe_view.default)
+def _unsafe_view(
+    input: ColumnarTensor,
+    size: Sequence[int],
+) -> ColumnarTensor:
+    size = _infer_view_size(input, size)
+    return input.__class__(
+        columns=[
+            aten._unsafe_view(column, _column_size(column, size[:-1]))
+            for column in input._columns
+        ],
+        size=size[:-1],
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.squeeze.default)
+def _squeeze(input: ColumnarTensor) -> ColumnarTensor:
+    return _squeeze_dims(input, range(input.dim() - 1))
+
+
+@ColumnarTensor.implements(aten.squeeze.dim)
+def _squeeze_dim(input: ColumnarTensor, dim: int) -> ColumnarTensor:
+    return _squeeze_dims(input, (dim,))
+
+
+@ColumnarTensor.implements(aten.squeeze.dims)
+def _squeeze_dims(
+    input: ColumnarTensor,
+    dim: Sequence[int],
+) -> ColumnarTensor:
+    dims = tuple(d % input.dim() for d in dim)
+    _raise_if_column_dim(input, dims)
+    return input.__class__(
+        columns=[column.squeeze(dims) for column in input._columns],
+        size=_squeeze_size(input.size(), dims)[:-1],
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.unsqueeze.default)
+def _unsqueeze(input: ColumnarTensor, dim: int) -> ColumnarTensor:
+    dim %= input.dim() + 1
+    if dim == input.dim():
+        raise RuntimeError(
+            f"Can't unsqueeze after the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    size = (*input.size()[:dim], 1, *input.size()[dim:])
+    return input.__class__(
+        columns=[column.unsqueeze(dim) for column in input._columns],
+        size=size[:-1],
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.expand.default)
+def _expand(
+    input: ColumnarTensor,
+    size: Sequence[int],
+    *,
+    implicit: bool = False,
+) -> ColumnarTensor:
+    size = _expand_size(input, size)
+    return input.__class__(
+        columns=[
+            aten.expand.default(
+                column,
+                _column_size(column, size[:-1]),
+                implicit=implicit,
+            )
+            for column in input._columns
+        ],
+        size=size[:-1],
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.transpose.int)
+def _transpose(
+    input: ColumnarTensor,
+    dim0: int,
+    dim1: int,
+) -> ColumnarTensor:
+    dim0 %= input.dim()
+    dim1 %= input.dim()
+    _raise_if_column_dim(input, (dim0, dim1))
+
+    size = list(input.size())
+    size[dim0], size[dim1] = size[dim1], size[dim0]
+    return input.__class__(
+        columns=[column.transpose(dim0, dim1) for column in input._columns],
+        size=size[:-1],
+        device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.permute.default)
+def _permute(input: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
+    dims = tuple(dim % input.dim() for dim in dims)
+    if dims[-1] != input.dim() - 1:
+        raise RuntimeError(
+            f"Can't permute the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    size = tuple(input.size(dim) for dim in dims)
+    return input.__class__(
+        columns=[
+            column.permute(dims)
+            if isinstance(column, CategoricalTensor)
+            else column.permute(dims[:-1])
+            for column in input._columns
+        ],
+        size=size[:-1],
+        device=input.device,
+    )
+
+
+# Helpers #####################################################################
+
+
+def _column_size(column: Tensor, size: Sequence[int]) -> tuple[int, ...]:
+    size = tuple(size)
+    if isinstance(column, CategoricalTensor):
+        return (*size, 1)
+    return size
+
+
+def _infer_view_size(
+    input: ColumnarTensor,
+    size: Sequence[int],
+) -> tuple[int, ...]:
+    size = tuple(size)
+    if size.count(-1) > 1:
+        raise RuntimeError("Only one dimension can be inferred")
+
+    if -1 in size:
+        known = math.prod(dim_size for dim_size in size if dim_size != -1)
+        if known == 0 or input.numel() % known != 0:
+            raise RuntimeError(
+                f"Shape {size} is invalid for input of size {input.numel()}"
+            )
+        dim = size.index(-1)
+        size = (*size[:dim], input.numel() // known, *size[dim + 1 :])
+
+    if len(size) == 0 or size[-1] != input.size(-1):
+        raise RuntimeError(
+            f"Can't reshape '{input.__class__.__name__}' with "
+            f"{input.size(-1)} columns into shape {size}"
+        )
+
+    return size
+
+
+def _expand_size(
+    input: ColumnarTensor,
+    size: Sequence[int],
+) -> tuple[int, ...]:
+    size = tuple(size)
+    if len(size) == 0 or size[-1] not in (-1, input.size(-1)):
+        raise RuntimeError(
+            f"Can't expand '{input.__class__.__name__}' with "
+            f"{input.size(-1)} columns to shape {size}"
+        )
+    return tuple(
+        input.size(i) if dim_size == -1 else dim_size
+        for i, dim_size in enumerate(size)
+    )
+
+
+def _squeeze_size(
+    size: Sequence[int],
+    dims: Sequence[int],
+) -> tuple[int, ...]:
+    dims_set = set(dims)
+    return tuple(
+        dim_size
+        for i, dim_size in enumerate(size)
+        if i not in dims_set or dim_size != 1
+    )
+
+
+def _raise_if_column_dim(
+    input: ColumnarTensor,
+    dims: Sequence[int],
+) -> None:
+    if input.dim() - 1 in dims:
+        raise RuntimeError(
+            f"Can't operate on the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )

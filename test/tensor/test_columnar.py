@@ -96,6 +96,56 @@ def test_to_copy() -> None:
         tensor.to(torch.float32)
 
 
+def test_view_ops() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(6).view(2, 3),
+            torch.arange(10, 16).view(2, 3),
+        )
+    )
+
+    out = tensor.view(6, 2)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (6, 2)
+    assert out.tolist() == [
+        [0, 10],
+        [1, 11],
+        [2, 12],
+        [3, 13],
+        [4, 14],
+        [5, 15],
+    ]
+
+    with pytest.raises(RuntimeError, match="Can't reshape"):
+        _ = tensor.view(-1)
+
+    out = tensor.unsqueeze(0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (1, 2, 3, 2)
+
+    out = tensor.unsqueeze(0).squeeze(0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == tensor.size()
+
+    with pytest.raises(RuntimeError, match="unsqueeze"):
+        _ = tensor.unsqueeze(-1)
+
+    out = tensor.unsqueeze(1).expand(-1, 4, 3, -1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 4, 3, 2)
+
+    out = tensor.transpose(0, 1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 2, 2)
+
+    out = tensor.permute(1, 0, 2)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (3, 2, 2)
+
+    with pytest.raises(RuntimeError, match="column dimension"):
+        _ = tensor.permute(2, 0, 1)
+
+
 def test_tolist() -> None:
     tensor = ColumnarTensor(
         (

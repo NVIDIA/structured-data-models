@@ -267,7 +267,7 @@ class TableTensor(Tensor):
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.id:
                     # TODO Add id support.
-                    tensor = ColumnarTensor.from_arrow(array)  # type: ignore
+                    tensor = ColumnarTensor.from_arrow(array)
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
