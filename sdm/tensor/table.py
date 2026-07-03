@@ -12,6 +12,7 @@ from typing_extensions import override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
+from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
 
@@ -297,6 +298,29 @@ class TableTensor(Tensor):
             **blocks,
         )
 
+    def to_arrow(self) -> pa.Table:
+        r"""Convert this tensor to a flat ``pyarrow`` table."""
+        arrays: list[pa.Array] = []
+        columns: list[str] = []
+        for stype, tensor in self.items():
+            if tensor.numel() == 0:
+                continue
+
+            columns.extend(self._columns[stype])
+
+            if isinstance(tensor, CategoricalTensor | ColumnarTensor):
+                arrays.extend(tensor.to_arrow().itercolumns())
+            elif stype == Stype.datetime:
+                tensor = tensor.movedim(-1, 0).contiguous().cpu()
+                array = tensor.numpy().reshape(tensor.size(0), -1)
+                array = array.view("datetime64[us]")
+                arrays.extend(pa.array(a) for a in array)
+            else:
+                tensor = tensor.detach().movedim(-1, 0).contiguous().cpu()
+                arrays.extend(to_arrow(t) for t in tensor)
+
+        return pa.Table.from_arrays(arrays, names=columns)
+
     @classmethod
     def from_pandas(
         cls: type[SelfTableTensor],
@@ -318,6 +342,10 @@ class TableTensor(Tensor):
             stypes=stypes,
             device=device,
         )
+
+    def to_pandas(self) -> Any:
+        r"""Convert this tensor to a ``pandas`` dataframe."""
+        return self.to_arrow().to_pandas()
 
     @classmethod
     def from_tensor(
