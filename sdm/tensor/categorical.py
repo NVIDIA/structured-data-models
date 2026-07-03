@@ -176,6 +176,45 @@ class CategoricalTensor(Tensor):
 
         return cls(data=data, categories=(category,))
 
+    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
+        r"""Convert this tensor to a flat ``pyarrow`` table.
+
+        Args:
+            columns: Column names.
+        """
+        if columns is None:
+            columns = tuple(str(i) for i in range(self.size(-1)))
+        elif len(columns) != self.size(-1):
+            raise ValueError(
+                f"Expected 'columns' to contain {self.size(-1)} entries "
+                f"(got {len(columns)})"
+            )
+
+        data_t = self._data.movedim(-1, 0).contiguous()
+
+        arrays = []
+        for data, category, na_mask in zip(
+            data_t.cpu().unbind(0),
+            self.categories,
+            (data_t < 0).cpu().unbind(0),
+        ):
+            if na_mask.any().item():
+                indices = pa.array(
+                    data.clamp(min=0).view(-1).numpy(),
+                    mask=na_mask.view(-1).numpy(),
+                )
+            else:
+                indices = to_arrow(data.view(-1))
+
+            arrays.append(
+                pa.DictionaryArray.from_arrays(
+                    indices=indices,
+                    dictionary=to_arrow(category),
+                )
+            )
+
+        return pa.Table.from_arrays(arrays, names=columns)
+
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:
@@ -273,45 +312,6 @@ class CategoricalTensor(Tensor):
             for i, category in enumerate(self._categories)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
-
-    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
-        r"""Convert this tensor to a flat ``pyarrow`` table.
-
-        Args:
-            columns: Column names.
-        """
-        if columns is None:
-            columns = tuple(str(i) for i in range(self.size(-1)))
-        elif len(columns) != self.size(-1):
-            raise ValueError(
-                f"Expected 'columns' to contain {self.size(-1)} entries "
-                f"(got {len(columns)})"
-            )
-
-        data_t = self._data.movedim(-1, 0).contiguous()
-
-        arrays = []
-        for data, category, na_mask in zip(
-            data_t.cpu().unbind(0),
-            self.categories,
-            (data_t < 0).cpu().unbind(0),
-        ):
-            if na_mask.any().item():
-                indices = pa.array(
-                    data.clamp(min=0).view(-1).numpy(),
-                    mask=na_mask.view(-1).numpy(),
-                )
-            else:
-                indices = to_arrow(data.view(-1))
-
-            arrays.append(
-                pa.DictionaryArray.from_arrays(
-                    indices=indices,
-                    dictionary=to_arrow(category),
-                )
-            )
-
-        return pa.Table.from_arrays(arrays, names=columns)
 
 
 @CategoricalTensor.implements(aten.isnan.default)
