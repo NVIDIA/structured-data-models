@@ -77,6 +77,7 @@ class TableTensor(Tensor):
         columns: Column names grouped by semantic type.
         numerical: The numerical column block of shape ``[..., C_num]``.
         categorical: The categorical column block of shape ``[..., C_cat]``.
+        datetime: The ``datetime64[us]`` column block of shape ``[..., C_dt]``.
         id: The identifier column block of shape ``[..., C_id]``.
         device: The device.
     """
@@ -87,6 +88,7 @@ class TableTensor(Tensor):
 
     _numerical: Tensor
     _categorical: CategoricalTensor
+    _datetime: Tensor
     _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
     _column_to_loc: dict[str, tuple[Stype, int]]
@@ -102,6 +104,7 @@ class TableTensor(Tensor):
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
+        datetime: Tensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
     ) -> None:
@@ -112,6 +115,7 @@ class TableTensor(Tensor):
         size: Sequence[int] | None = None,
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
+        datetime: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
@@ -126,10 +130,17 @@ class TableTensor(Tensor):
         for stype, block in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
+            (Stype.datetime, datetime),
             (Stype.id, id),
         ):
             if block is None:
                 continue
+
+            if stype == Stype.datetime and block.dtype != torch.int64:
+                raise ValueError(
+                    f"Expected '{stype.value}' block to have dtype "
+                    f"'{torch.int64}' (got '{block.dtype}')"
+                )
 
             size = tuple(block.size()[:-1]) if size is None else size
             device = block.device if device is None else device
@@ -162,6 +173,8 @@ class TableTensor(Tensor):
                 data=torch.empty((*size, 0), dtype=torch.int32, device=device),
                 categories=(),
             )
+        if datetime is None:
+            datetime = torch.empty((*size, 0), dtype=torch.long, device=device)
         if id is None:
             id = ColumnarTensor((), size=size, device=device)
 
@@ -172,12 +185,14 @@ class TableTensor(Tensor):
         columns = {
             Stype.numerical: tuple(columns.get(Stype.numerical, ())),
             Stype.categorical: tuple(columns.get(Stype.categorical, ())),
+            Stype.datetime: tuple(columns.get(Stype.datetime, ())),
             Stype.id: tuple(columns.get(Stype.id, ())),
         }
 
         for stype, block in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
+            (Stype.datetime, datetime),
             (Stype.id, id),
         ):
             if block.size(-1) != len(columns[stype]):
@@ -205,6 +220,7 @@ class TableTensor(Tensor):
 
         out._numerical = numerical
         out._categorical = categorical
+        out._datetime = datetime
         out._id = id
         out._columns = columns
         out._column_to_loc = column_to_loc
@@ -256,11 +272,17 @@ class TableTensor(Tensor):
                             "ignore",
                             message="The given NumPy array is not writable",
                         )
-                        tensor = torch.from_numpy(array.to_numpy())
-                    tensor = tensor.to(torch.get_default_dtype())
-                    tensor = tensor.unsqueeze(-1)
+                        tensor = torch.from_numpy(
+                            array.to_numpy(zero_copy_only=False)
+                        )
+                    tensor = tensor.to(torch.get_default_dtype()).unsqueeze(-1)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
+                elif stype == Stype.datetime:
+                    array = array.cast(pa.timestamp("us"))
+                    tensor = torch.from_numpy(
+                        array.to_numpy(zero_copy_only=False).astype("int64")
+                    ).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
                 else:
@@ -348,6 +370,11 @@ class TableTensor(Tensor):
         return self._categorical
 
     @property
+    def datetime(self) -> Tensor:
+        r"""Return the datetime column block."""
+        return self._datetime
+
+    @property
     def id(self) -> ColumnarTensor:
         r"""Return the identifier column block."""
         return self._id
@@ -356,6 +383,7 @@ class TableTensor(Tensor):
         r"""Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
+        yield Stype.datetime, self._datetime
         yield Stype.id, self._id
 
     @property
@@ -448,6 +476,7 @@ class TableTensor(Tensor):
             self._columns,
             self._numerical,
             self._categorical,
+            self._datetime,
             self._id,
         )
         return (self.__class__, args)
@@ -584,10 +613,10 @@ def _to_copy(
             device=device,
             dtype=dtype
             if (
-                not isinstance(tensor, CategoricalTensor)
+                stype not in (Stype.categorical)
                 or dtype in (torch.int32, torch.int64)
             )
-            and not isinstance(tensor, ColumnarTensor)
+            and stype not in (Stype.datetime, Stype.id)
             else None,
             layout=layout,
             pin_memory=pin_memory,
