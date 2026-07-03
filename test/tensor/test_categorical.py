@@ -138,6 +138,27 @@ def test_from_pandas_errors() -> None:
         )
 
 
+def test_tolist() -> None:
+    tensor = CategoricalTensor(
+        data=torch.tensor(
+            [
+                [[0, 1], [-1, 0]],
+                [[1, -1], [0, 1]],
+            ],
+            dtype=torch.int32,
+        ),
+        categories=(
+            torch.tensor([10, 20]),
+            torch.tensor([30, 40]),
+        ),
+    )
+
+    assert tensor.tolist() == [
+        [[10, 40], [None, 30]],
+        [[20, None], [10, 40]],
+    ]
+
+
 def test_view_ops() -> None:
     data = torch.randint(0, 4, (2, 3, 4))
     categories = tuple(torch.arange(4) for _ in range(data.size(-1)))

@@ -251,6 +251,43 @@ class CategoricalTensor(Tensor):
         self._data.share_memory_()
         return self
 
+    @override
+    def tolist(self) -> Any:
+        def apply_na_mask(values: Any, na_mask: Any) -> Any:
+            if isinstance(na_mask, bool):
+                return None if na_mask else values
+
+            return [
+                apply_na_mask(value, isna)
+                for value, isna in zip(values, na_mask)
+            ]
+
+        def decode_column(data: Tensor, category: Tensor) -> Any:
+            na_mask = data < 0
+            out = category[data.clamp(min=0)]
+            return apply_na_mask(out.tolist(), na_mask.tolist())
+
+        def columns_to_rows(
+            columns: Sequence[Any],
+            size: tuple[int, ...],
+        ) -> Any:
+            if len(size) == 0:
+                return list(columns)
+
+            return [
+                columns_to_rows(
+                    columns=[column[i] for column in columns],
+                    size=size[1:],
+                )
+                for i in range(size[0])
+            ]
+
+        columns = [
+            decode_column(self._data[..., i], category)
+            for i, category in enumerate(self._categories)
+        ]
+        return columns_to_rows(columns, tuple(self.size()[:-1]))
+
 
 @CategoricalTensor.implements(aten.isnan.default)
 def _isnan(input: CategoricalTensor) -> Tensor:
