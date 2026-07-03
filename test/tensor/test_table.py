@@ -5,7 +5,13 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 
 
 def test_init() -> None:
@@ -125,6 +131,63 @@ def test_save_load() -> None:
         tensor.categorical.categories,
     ):
         assert category1.equal(category2)
+
+
+def test_to_arrow() -> None:
+    user_id = torch.arange(3)
+    item_id = StringTensor.from_list(["a", "b", "c"])
+    tensor = TableTensor(
+        columns={"id": ["user_id", "item_id"]},
+        id=ColumnarTensor((user_id, item_id)),
+    )
+
+    table = tensor.to_arrow(zero_copy_only=True)
+    assert table.column_names == ["user_id", "item_id"]
+    assert table.to_pydict() == {
+        "user_id": [0, 1, 2],
+        "item_id": ["a", "b", "c"],
+    }
+    assert (
+        table["user_id"].chunk(0).buffers()[1].address
+        == (user_id.numpy().__array_interface__["data"][0])
+    )
+    assert (
+        table["item_id"].chunk(0).buffers()[1].address
+        == (item_id._offset.numpy().__array_interface__["data"][0])
+    )
+    assert (
+        table["item_id"].chunk(0).buffers()[2].address
+        == (item_id._data.numpy().__array_interface__["data"][0])
+    )
+
+    tensor = TableTensor(
+        columns={"numerical": ["age", "income"]},
+        numerical=torch.arange(6, dtype=torch.float32).view(3, 2),
+    )
+    with pytest.raises(RuntimeError, match="zero_copy_only=True"):
+        tensor.to_arrow(zero_copy_only=True)
+
+    table = tensor.to_arrow()
+    assert table.to_pydict() == {
+        "age": [0.0, 2.0, 4.0],
+        "income": [1.0, 3.0, 5.0],
+    }
+
+    tensor = TableTensor(
+        columns={
+            "categorical": ["country"],
+            "datetime": ["time"],
+        },
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1], [0]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["US", "CA"]),),
+        ),
+        datetime=torch.tensor([[0], [1], [2]], dtype=torch.int64),
+    )
+    table = tensor.to_arrow(zero_copy_only=True)
+    assert pa.types.is_dictionary(table["country"].type)
+    assert table["country"].to_pylist() == ["US", "CA", "US"]
+    assert table["time"].type == pa.timestamp("us")
 
 
 def test_to_copy() -> None:
