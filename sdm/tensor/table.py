@@ -117,10 +117,8 @@ class TableTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
         r"""Create a tensor wrapper."""
-        if size is not None:
-            size = tuple(size)
-            if len(size) == 0:
-                raise ValueError("Expected 'size' to be non-empty")
+        if size is not None and len(size) == 0:
+            raise ValueError("Expected 'size' to be non-empty")
 
         size = tuple(size) if size is not None else size
         device = torch.device(device) if device is not None else device
@@ -1055,7 +1053,7 @@ def _block_size_repr(size: Sequence[int]) -> str:
     return f"{str(tuple(size))[:-1]}, *)"
 
 
-def _is_column_dim(input: TableTensor, dim: int) -> bool:
+def _is_column_dim(input: Tensor, dim: int) -> bool:
     if dim < -input.dim() or dim >= input.dim():
         return False
     return dim % input.dim() == input.dim() - 1

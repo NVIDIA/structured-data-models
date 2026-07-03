@@ -60,8 +60,8 @@ class ColumnarTensor(Tensor):
         r"""Create a tensor wrapper."""
         from sdm.tensor import CategoricalTensor, TableTensor
 
-        columns = tuple(columns)
-        device = torch.device(device) if device is not None else None
+        if size is not None and len(size) == 0:
+            raise ValueError("Expected 'size' to be non-empty")
 
         for i, column in enumerate(columns):
             if isinstance(column, CategoricalTensor | TableTensor):
@@ -69,38 +69,30 @@ class ColumnarTensor(Tensor):
                     f"Expected value {i} in '{cls.__name__}' to be a single "
                     f"column tensor (got '{column.__class__.__name__}')"
                 )
-
-        if size is None:
-            if len(columns) == 0:
-                raise ValueError(
-                    "Expected 'size' to be given for zero columnar data"
-                )
-            size = tuple(columns[0].size())
-        else:
-            size = tuple(size)
-
-        if len(size) < 1:
-            raise ValueError(
-                f"Expected 'size' to have at least one dimension "
-                f"(got {len(size)})"
-            )
+        columns = tuple(columns)
+        size = tuple(size) if size is not None else size
+        device = torch.device(device) if device is not None else None
 
         for i, column in enumerate(columns):
+            size = tuple(column.size()) if size is None else size
+            device = column.device if device is None else device
+
             if column.size() != size:
                 raise ValueError(
                     f"Expected value {i} in '{cls.__name__}' to have size "
                     f"{size} (got {tuple(column.size())})"
                 )
 
-            device = column.device if device is None else device
             if column.device != device:
                 raise ValueError(
                     f"Expected value {i} in '{cls.__name__}' to be on "
                     f"device '{device}' (got '{column.device}')"
                 )
 
-        if device is None:
-            device = torch.get_default_device()
+        if size is None:
+            raise ValueError(
+                "Expected 'size' to be given for zero columnar data"
+            )
 
         out = Tensor._make_wrapper_subclass(
             cls,
@@ -336,6 +328,13 @@ def _pin_memory(input: ColumnarTensor) -> ColumnarTensor:
 @ColumnarTensor.implements(aten.view.default)
 def _view(input: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
     size = tuple(size)
+    for i, dim_size in enumerate(size):
+        if dim_size < -1:
+            raise RuntimeError(
+                f"Invalid shape dimension {dim_size} at index {i} of shape "
+                f"{size}"
+            )
+
     if size.count(-1) > 1:
         raise RuntimeError("Only one dimension can be inferred")
 
@@ -388,9 +387,9 @@ def _squeeze_dim(input: ColumnarTensor, dim: int) -> ColumnarTensor:
 
 @ColumnarTensor.implements(aten.squeeze.dims)
 def _squeeze_dims(input: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
-    dims = tuple(d % input.dim() for d in dim)
+    dims = tuple(_normalize_dim(input, d) for d in dim)
 
-    if any(_is_column_dim(input, d) for d in dims):
+    if any(dim == input.dim() - 1 for dim in dims):
         raise RuntimeError(
             f"Can't squeeze the column dimension of "
             f"'{input.__class__.__name__}'"
@@ -398,24 +397,33 @@ def _squeeze_dims(input: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
 
     return input.__class__(
         columns=[column.squeeze(dims) for column in input._columns],
-        size=_squeeze_size(input.size(), dims)[:-1],
+        size=tuple(
+            dim_size
+            for i, dim_size in enumerate(input.size()[:-1])
+            if i not in dims or dim_size != 1
+        ),
         device=input.device,
     )
 
 
 @ColumnarTensor.implements(aten.unsqueeze.default)
 def _unsqueeze(input: ColumnarTensor, dim: int) -> ColumnarTensor:
-    dim %= input.dim() + 1
+    if dim < -input.dim() - 1 or dim > input.dim():
+        raise IndexError(
+            f"Dimension out of range (expected to be in range of "
+            f"[{-input.dim() - 1}, {input.dim()}], but got {dim})"
+        )
+    dim = dim % (input.dim() + 1)
+
     if dim == input.dim():
         raise RuntimeError(
             f"Can't unsqueeze after the column dimension of "
             f"'{input.__class__.__name__}'"
         )
 
-    size = (*input.size()[:dim], 1, *input.size()[dim:])
     return input.__class__(
         columns=[column.unsqueeze(dim) for column in input._columns],
-        size=size[:-1],
+        size=(*input.size()[:dim], 1, *input.size()[dim:-1]),
         device=input.device,
     )
 
@@ -427,7 +435,24 @@ def _expand(
     *,
     implicit: bool = False,
 ) -> ColumnarTensor:
-    size = _expand_size(input, size)
+    size = tuple(size)
+
+    if len(size) < input.dim():
+        raise RuntimeError(
+            f"expand: the number of sizes provided ({len(size)}) must be "
+            f"greater or equal to the number of dimensions in the tensor "
+            f"({input.dim()})"
+        )
+
+    if size[-1] not in (-1, input.size(-1)):
+        _columns = "column" if input.size(-1) == 1 else "columns"
+        raise RuntimeError(
+            f"Can't expand '{input.__class__.__name__}' with "
+            f"{input.size(-1)} {_columns} to shape {size}"
+        )
+
+    old_size = (*(1,) * (len(size) - input.dim()), *input.size())
+
     return input.__class__(
         columns=[
             aten.expand.default(
@@ -437,7 +462,9 @@ def _expand(
             )
             for column in input._columns
         ],
-        size=size[:-1],
+        size=tuple(
+            old if new == -1 else new for old, new in zip(old_size, size)
+        )[:-1],
         device=input.device,
     )
 
@@ -448,14 +475,26 @@ def _transpose(
     dim0: int,
     dim1: int,
 ) -> ColumnarTensor:
-    dim0 %= input.dim()
-    dim1 %= input.dim()
-    _raise_if_column_dim(input, (dim0, dim1))
+
+    dim0 = _normalize_dim(input, dim0)
+    dim1 = _normalize_dim(input, dim1)
+
+    if dim0 == dim1 == input.dim() - 1:
+        return _alias(input)
+
+    if input.dim() - 1 in (dim0, dim1):
+        raise RuntimeError(
+            f"Can't transpose the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
+    columns = [column.transpose(dim0, dim1) for column in input._columns]
 
     size = list(input.size())
     size[dim0], size[dim1] = size[dim1], size[dim0]
+
     return input.__class__(
-        columns=[column.transpose(dim0, dim1) for column in input._columns],
+        columns=columns,
         size=size[:-1],
         device=input.device,
     )
@@ -463,31 +502,30 @@ def _transpose(
 
 @ColumnarTensor.implements(aten.permute.default)
 def _permute(input: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
-    dims = tuple(dim % input.dim() for dim in dims)
+    dims = tuple(_normalize_dim(input, dim) for dim in dims)
     if dims[-1] != input.dim() - 1:
         raise RuntimeError(
             f"Can't permute the column dimension of "
             f"'{input.__class__.__name__}'"
         )
 
-    size = tuple(input.size(dim) for dim in dims)
     return input.__class__(
         columns=[column.permute(dims[:-1]) for column in input._columns],
-        size=size[:-1],
+        size=tuple(input.size(dim) for dim in dims[:-1]),
         device=input.device,
     )
 
 
 @ColumnarTensor.implements(aten.select.int)
 def _select(input: ColumnarTensor, dim: int, index: int) -> Tensor:
-    dim %= input.dim()
-    if _is_column_dim(input, dim):
+    dim = _normalize_dim(input, dim)
+
+    if dim == input.dim() - 1:
         return aten.alias.default(input._columns[index])
 
-    size = (*input.size()[:dim], *input.size()[dim + 1 : -1])
     return input.__class__(
         columns=[column.select(dim, index) for column in input._columns],
-        size=size,
+        size=(*input.size()[:dim], *input.size()[dim + 1 : -1]),
         device=input.device,
     )
 
@@ -500,8 +538,9 @@ def _slice(
     end: int | None = None,
     step: int = 1,
 ) -> ColumnarTensor:
-    dim %= input.dim()
-    if _is_column_dim(input, dim):
+    dim = _normalize_dim(input, dim)
+
+    if dim == input.dim() - 1:
         return input.__class__(
             columns=input._columns[slice(start, end, step)],
             size=input.size()[:-1],
@@ -513,7 +552,11 @@ def _slice(
             aten.slice.Tensor(column, dim, start, end, step)
             for column in input._columns
         ],
-        size=_slice_size(input.size()[:-1], dim, start, end, step),
+        size=(
+            *input.size()[:dim],
+            len(range(input.size(dim))[slice(start, end, step)]),
+            *input.size()[dim + 1 : -1],
+        ),
         device=input.device,
     )
 
@@ -525,37 +568,25 @@ def _narrow(
     start: int,
     length: int,
 ) -> ColumnarTensor:
-    dim %= input.dim()
-    if _is_column_dim(input, dim):
-        return input.__class__(
-            columns=input._columns[start : start + length],
-            size=input.size()[:-1],
-            device=input.device,
-        )
-
-    size = list(input.size()[:-1])
-    size[dim] = length
-    return input.__class__(
-        columns=[
-            column.narrow(dim=dim, start=start, length=length)
-            for column in input._columns
-        ],
-        size=size,
-        device=input.device,
-    )
+    return _slice(input, dim=dim, start=start, end=start + length)
 
 
 @ColumnarTensor.implements(aten.unbind.int)
 def _unbind(input: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
-    dim %= input.dim()
-    if _is_column_dim(input, dim):
+    dim = _normalize_dim(input, dim)
+
+    if dim == input.dim() - 1:
         return tuple(aten.alias.default(column) for column in input._columns)
 
     columns_list = [column.unbind(dim) for column in input._columns]
     if len(columns_list) == 0:
         size = (*input.size()[:dim], *input.size()[dim + 1 : -1])
         return tuple(
-            input.__class__(columns=(), size=size, device=input.device)
+            input.__class__(
+                columns=(),
+                size=size,
+                device=input.device,
+            )
             for _ in range(input.size(dim))
         )
 
@@ -571,21 +602,11 @@ def _split(
     split_size: int,
     dim: int = 0,
 ) -> tuple[ColumnarTensor, ...]:
-    dim %= input.dim()
-    if _is_column_dim(input, dim):
-        return tuple(
-            input.__class__(
-                columns=input._columns[i : i + split_size],
-                size=input.size()[:-1],
-                device=input.device,
-            )
-            for i in range(0, input.size(-1), split_size)
-        )
-
-    columns_list = [
-        column.split(split_size, dim=dim) for column in input._columns
-    ]
-    return _wrap_split(input, columns_list, dim=dim, split_size=split_size)
+    split_sizes = tuple(
+        min(split_size, input.size(dim) - start)
+        for start in range(0, input.size(dim), split_size)
+    )
+    return _split_with_sizes(input, split_sizes, dim=dim)
 
 
 @ColumnarTensor.implements(aten.split.sizes)
@@ -596,26 +617,48 @@ def _split_with_sizes(
     split_sizes: Sequence[int],
     dim: int = 0,
 ) -> tuple[ColumnarTensor, ...]:
-    dim %= input.dim()
+    dim = _normalize_dim(input, dim)
     split_sizes = tuple(split_sizes)
-    if _is_column_dim(input, dim):
-        end = 0
-        out = []
-        for split_size in split_sizes:
-            start, end = end, end + split_size
-            out.append(
-                input.__class__(
-                    columns=input._columns[start:end],
-                    size=input.size()[:-1],
-                    device=input.device,
-                )
-            )
-        return tuple(out)
 
-    columns_list = [
-        column.split(split_sizes, dim=dim) for column in input._columns
-    ]
-    return _wrap_split(input, columns_list, dim=dim, split_sizes=split_sizes)
+    if dim == input.dim() - 1:
+        if sum(split_sizes) != input.size(dim):
+            raise RuntimeError(
+                f"split_with_sizes expects split_sizes to sum exactly to "
+                f"{input.size(dim)} (input tensor's size at dimension {dim}), "
+                f"but got split_sizes={split_sizes}"
+            )
+
+        start = 0
+        outs = []
+        for split_size in split_sizes:
+            out = input.__class__(
+                columns=input._columns[start : start + split_size],
+                size=input.size()[:-1],
+                device=input.device,
+            )
+            start += split_size
+            outs.append(out)
+        return tuple(outs)
+
+    columns_list = [col.split(split_sizes, dim=dim) for col in input._columns]
+    if len(columns_list) == 0:
+        return tuple(
+            input.__class__(
+                columns=(),
+                size=(
+                    *input.size()[:dim],
+                    split_size,
+                    *input.size()[dim + 1 : -1],
+                ),
+                device=input.device,
+            )
+            for split_size in split_sizes
+        )
+
+    return tuple(
+        input.__class__(columns=columns, device=input.device)
+        for columns in zip(*columns_list)
+    )
 
 
 @ColumnarTensor.implements(aten.index_select.default)
@@ -624,21 +667,21 @@ def _index_select(
     dim: int,
     index: Tensor,
 ) -> ColumnarTensor:
-    dim %= input.dim()
-    if _is_column_dim(input, dim):
+    dim = _normalize_dim(input, dim)
+    if dim == input.dim() - 1:
         return input.__class__(
-            columns=[
-                aten.alias.default(input._columns[i]) for i in index.tolist()
-            ],
+            columns=[input._columns[i] for i in index.tolist()],
             size=input.size()[:-1],
             device=input.device,
         )
 
-    size = list(input.size()[:-1])
-    size[dim] = index.numel()
     return input.__class__(
         columns=[column.index_select(dim, index) for column in input._columns],
-        size=size,
+        size=(
+            *input.size()[:dim],
+            index.numel(),
+            *input.size()[dim + 1 : -1],
+        ),
         device=input.device,
     )
 
@@ -649,19 +692,21 @@ def _index(
     indices: Sequence[Tensor | None],
 ) -> ColumnarTensor:
     current_dim = 0
-    column_index: Tensor | None = None
     has_other_index = False
+    column_index: Tensor | None = None
     for index in indices:
         if index is None:
             current_dim += 1
             continue
 
+        # Check whether we index the column dimension:
         num_indexed_dims = index.dim() if index.dtype == torch.bool else 1
         if current_dim <= input.dim() - 1 < current_dim + num_indexed_dims:
             if num_indexed_dims != 1:
                 raise RuntimeError(
                     f"Can't index the column dimension of "
-                    f"'{input.__class__.__name__}'"
+                    f"'{input.__class__.__name__}' with a multi-dimensional "
+                    f"index"
                 )
             column_index = index
         else:
@@ -677,19 +722,16 @@ def _index(
         if column_index.dtype == torch.bool:
             column_index = column_index.nonzero().view(-1)
         return input.__class__(
-            columns=[
-                aten.alias.default(input._columns[i])
-                for i in column_index.tolist()
-            ],
+            columns=[input._columns[i] for i in column_index.tolist()],
             size=input.size()[:-1],
             device=input.device,
         )
 
     if len(input._columns) == 0:
-        dummy = torch.empty(input.size()[:-1], device=input.device)
+        dummy = torch.empty(input.size(), device=input.device)
         return input.__class__(
             columns=(),
-            size=aten.index.Tensor(dummy, indices).size(),
+            size=aten.index.Tensor(dummy, indices).size()[:-1],
             device=input.device,
         )
 
@@ -709,22 +751,25 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
         )
 
     tensors = cast(Sequence[ColumnarTensor], tensors)
-    dim %= tensors[0].dim()
-    if _is_column_dim(tensors[0], dim):
+    dim = _normalize_dim(tensors[0], dim)
+
+    if dim == tensors[0].dim() - 1:
         return tensors[0].__class__(
             columns=tuple(chain.from_iterable(t._columns for t in tensors)),
             size=tensors[0].size()[:-1],
             device=tensors[0].device,
         )
 
-    size = list(tensors[0].size()[:-1])
-    size[dim] = sum(tensor.size(dim) for tensor in tensors)
     return tensors[0].__class__(
         columns=[
             torch.cat([tensor._columns[i] for tensor in tensors], dim=dim)
             for i in range(tensors[0].size(-1))
         ],
-        size=size,
+        size=(
+            *tensors[0].size()[:dim],
+            sum(tensor.size(dim) for tensor in tensors),
+            *tensors[0].size()[dim + 1 : -1],
+        ),
         device=tensors[0].device,
     )
 
@@ -737,21 +782,30 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
         )
 
     tensors = cast(Sequence[ColumnarTensor], tensors)
-    dim %= tensors[0].dim() + 1
+
+    if dim < -tensors[0].dim() - 1 or dim > tensors[0].dim():
+        raise IndexError(
+            f"Dimension out of range (expected to be in range of "
+            f"[{-tensors[0].dim() - 1}, {tensors[0].dim()}], but got {dim})"
+        )
+    dim = dim % (tensors[0].dim() + 1)
+
     if dim >= tensors[0].dim():
         raise RuntimeError(
             f"Can't stack after the column dimension of "
             f"'{tensors[0].__class__.__name__}'"
         )
 
-    size = list(tensors[0].size()[:-1])
-    size.insert(dim, len(tensors))
     return tensors[0].__class__(
         columns=[
             torch.stack([tensor._columns[i] for tensor in tensors], dim=dim)
             for i in range(tensors[0].size(-1))
         ],
-        size=size,
+        size=(
+            *tensors[0].size()[:dim],
+            len(tensors),
+            *tensors[0].size()[dim:-1],
+        ),
         device=tensors[0].device,
     )
 
@@ -759,96 +813,10 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 # Helpers #####################################################################
 
 
-def _is_column_dim(input: ColumnarTensor, dim: int) -> bool:
+def _normalize_dim(input: Tensor, dim: int) -> int:
     if dim < -input.dim() or dim >= input.dim():
-        return False
-    return dim % input.dim() == input.dim() - 1
-
-
-def _expand_size(
-    input: ColumnarTensor,
-    size: Sequence[int],
-) -> tuple[int, ...]:
-    size = tuple(size)
-    if len(size) == 0 or size[-1] not in (-1, input.size(-1)):
-        raise RuntimeError(
-            f"Can't expand '{input.__class__.__name__}' with "
-            f"{input.size(-1)} columns to shape {size}"
+        raise IndexError(
+            f"Dimension out of range (expected to be in range of "
+            f"[{-input.dim()}, {input.dim() - 1}], but got {dim})"
         )
-    return tuple(
-        input.size(i) if dim_size == -1 else dim_size
-        for i, dim_size in enumerate(size)
-    )
-
-
-def _squeeze_size(
-    size: Sequence[int],
-    dims: Sequence[int],
-) -> tuple[int, ...]:
-    dims_set = set(dims)
-    return tuple(
-        dim_size
-        for i, dim_size in enumerate(size)
-        if i not in dims_set or dim_size != 1
-    )
-
-
-def _raise_if_column_dim(
-    input: ColumnarTensor,
-    dims: Sequence[int],
-) -> None:
-    if input.dim() - 1 in dims:
-        raise RuntimeError(
-            f"Can't operate on the column dimension of "
-            f"'{input.__class__.__name__}'"
-        )
-
-
-def _slice_size(
-    size: Sequence[int],
-    dim: int,
-    start: int | None,
-    end: int | None,
-    step: int,
-) -> tuple[int, ...]:
-    out = list(size)
-    out[dim] = len(range(size[dim])[slice(start, end, step)])
-    return tuple(out)
-
-
-def _is_table_tensor(input: Tensor) -> bool:
-    return any(
-        cls.__module__ == "sdm.tensor.table" and cls.__name__ == "TableTensor"
-        for cls in type(input).__mro__
-    )
-
-
-def _wrap_split(
-    input: ColumnarTensor,
-    columns_list: Sequence[Sequence[Tensor]],
-    *,
-    dim: int,
-    split_size: int | None = None,
-    split_sizes: Sequence[int] | None = None,
-) -> tuple[ColumnarTensor, ...]:
-    if len(columns_list) == 0:
-        if split_sizes is None:
-            assert split_size is not None
-            split_sizes = tuple(
-                min(split_size, input.size(dim) - i)
-                for i in range(0, input.size(dim), split_size)
-            )
-
-        return tuple(
-            input.__class__(
-                columns=(),
-                size=(*input.size()[:dim], size, *input.size()[dim + 1 : -1]),
-                device=input.device,
-            )
-            for size in split_sizes
-        )
-
-    return tuple(
-        input.__class__(columns=columns, device=input.device)
-        for columns in zip(*columns_list)
-    )
+    return dim % input.dim()
