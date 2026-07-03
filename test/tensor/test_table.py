@@ -26,6 +26,7 @@ def test_init() -> None:
         "  blocks={\n"
         "    numerical (2): ['age', 'income'],\n"
         "    categorical (2): ['country', 'segment'],\n"
+        "    id (0): [],\n"
         "  },\n"
         ")"
     )
@@ -38,6 +39,7 @@ def test_init() -> None:
     assert tensor.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.id: (),
     }
     assert tensor._column_to_loc == {
         "age": (Stype.numerical, 0),
@@ -60,6 +62,7 @@ def test_empty() -> None:
     assert tensor.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
+        Stype.id: (),
     }
     assert tensor._column_to_loc == {}
 
@@ -85,6 +88,7 @@ def test_from_tensor() -> None:
     assert tensor.columns == {
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
+        Stype.id: (),
     }
 
 
@@ -289,6 +293,7 @@ def test_unbind_split() -> None:
     assert out[0].columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.id: (),
     }
 
     with pytest.raises(RuntimeError, match="split size 1"):
@@ -356,6 +361,7 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.id: (),
     }
 
     out = cast(TableTensor, tensor.view(-1, 3))[:, "age"]
@@ -372,6 +378,7 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: ("country",),
+        Stype.id: (),
     }
 
     out = tensor[..., "country"]
@@ -461,6 +468,7 @@ def test_cat_stack() -> None:
     assert out.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.id: (),
     }
 
     out = torch.stack([tensor1, tensor1], dim=0)
