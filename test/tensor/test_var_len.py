@@ -122,7 +122,7 @@ def test_arrow() -> None:
     assert tensor.tolist() == [[2], [3, 4]]
 
     tensor = VarLenTensor.from_list([[1, 2], [], [3]])
-    array = tensor[1:].to_arrow()
+    array = cast(VarLenTensor, tensor[1:]).to_arrow()
     assert array.offset == 1
     assert array.to_pylist() == [[], [3]]
     assert (
