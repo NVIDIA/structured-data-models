@@ -7,10 +7,10 @@ from sdm import CategoricalTensor, ColumnarTensor, RelatedTables, TableTensor
 @pytest.fixture
 def data() -> tuple[TableTensor, RelatedTables]:
     task_table = TableTensor(
-        columns={
-            "categorical": ["target"],
-            "id": ["instance_id", "user_id"],
-        },
+        columns=dict(
+            categorical=["target"],
+            id=["instance_id", "user_id"],
+        ),
         categorical=CategoricalTensor(
             data=torch.randint(0, 2, (4, 1)),
             categories=(torch.tensor([False, True]),),
