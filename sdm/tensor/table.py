@@ -12,7 +12,8 @@ from typing_extensions import override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
-from sdm.tensor.var_len import TORCH_ARROW_DTYPES, VarLenTensor
+from sdm.tensor.io import TORCH_ARROW_DTYPES
+from sdm.tensor.var_len import VarLenTensor
 
 aten = torch.ops.aten
 
