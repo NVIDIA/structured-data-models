@@ -238,6 +238,40 @@ def test_index_ops() -> None:
         _ = tensor[torch.tensor([0]), :, :, torch.tensor([1])]
 
 
+def test_cat_stack() -> None:
+    tensor1 = ColumnarTensor(
+        (
+            torch.arange(6).view(2, 3),
+            torch.arange(10, 16).view(2, 3),
+        )
+    )
+    tensor2 = ColumnarTensor(
+        (
+            torch.arange(20, 26).view(2, 3),
+            torch.arange(30, 36).view(2, 3),
+        )
+    )
+
+    out = torch.cat([tensor1, tensor2], dim=0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (4, 3, 2)
+    assert out._columns[0].equal(
+        torch.cat([tensor1._columns[0], tensor2._columns[0]])
+    )
+
+    out = torch.cat([tensor1, tensor2], dim=-1)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 3, 4)
+    assert out._columns == (*tensor1._columns, *tensor2._columns)
+
+    out = torch.stack([tensor1, tensor2], dim=0)
+    assert isinstance(out, ColumnarTensor)
+    assert out.size() == (2, 2, 3, 2)
+
+    with pytest.raises(RuntimeError, match="stack after"):
+        _ = torch.stack([tensor1, tensor2], dim=-1)
+
+
 def test_tolist() -> None:
     tensor = ColumnarTensor(
         (

@@ -1,6 +1,7 @@
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, SupportsIndex, TypeVar
+from itertools import chain
+from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
 
 import pyarrow as pa
 import torch
@@ -688,6 +689,61 @@ def _index(
             aten.index.Tensor(column, indices) for column in input._columns
         ],
         device=input.device,
+    )
+
+
+@ColumnarTensor.implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
+    if not all(isinstance(tensor, ColumnarTensor) for tensor in tensors):
+        raise TypeError(
+            f"Expected all tensors to be '{ColumnarTensor.__name__}' instances"
+        )
+
+    tensors = cast(Sequence[ColumnarTensor], tensors)
+    dim %= tensors[0].dim()
+    if _is_column_dim(tensors[0], dim):
+        return tensors[0].__class__(
+            columns=tuple(chain.from_iterable(t._columns for t in tensors)),
+            size=tensors[0].size()[:-1],
+            device=tensors[0].device,
+        )
+
+    size = list(tensors[0].size()[:-1])
+    size[dim] = sum(tensor.size(dim) for tensor in tensors)
+    return tensors[0].__class__(
+        columns=[
+            torch.cat([tensor._columns[i] for tensor in tensors], dim=dim)
+            for i in range(tensors[0].size(-1))
+        ],
+        size=size,
+        device=tensors[0].device,
+    )
+
+
+@ColumnarTensor.implements(aten.stack.default)
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
+    if not all(isinstance(tensor, ColumnarTensor) for tensor in tensors):
+        raise TypeError(
+            f"Expected all tensors to be '{ColumnarTensor.__name__}' instances"
+        )
+
+    tensors = cast(Sequence[ColumnarTensor], tensors)
+    dim %= tensors[0].dim() + 1
+    if dim >= tensors[0].dim():
+        raise RuntimeError(
+            f"Can't stack after the column dimension of "
+            f"'{tensors[0].__class__.__name__}'"
+        )
+
+    size = list(tensors[0].size()[:-1])
+    size.insert(dim, len(tensors))
+    return tensors[0].__class__(
+        columns=[
+            torch.stack([tensor._columns[i] for tensor in tensors], dim=dim)
+            for i in range(tensors[0].size(-1))
+        ],
+        size=size,
+        device=tensors[0].device,
     )
 
 
