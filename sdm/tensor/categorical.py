@@ -9,6 +9,7 @@ from torch.utils import _pytree as pytree
 from typing_extensions import override
 
 from sdm.tensor import StringTensor
+from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
 
@@ -85,6 +86,12 @@ class CategoricalTensor(Tensor):
                 f"the number of category vectors (got {data.size(-1)} and "
                 f"{len(categories)})"
             )
+        for i, category in enumerate(categories):
+            if category.dim() != 1:
+                raise ValueError(
+                    f"Expected category {i} in '{cls.__name__}' to be "
+                    f"one-dimensional (got {category.dim()}D)"
+                )
 
         out = Tensor._make_wrapper_subclass(
             cls,
@@ -266,6 +273,45 @@ class CategoricalTensor(Tensor):
             for i, category in enumerate(self._categories)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
+
+    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
+        r"""Convert this tensor to a flat ``pyarrow`` table.
+
+        Args:
+            columns: Column names.
+        """
+        if columns is None:
+            columns = tuple(str(i) for i in range(self.size(-1)))
+        elif len(columns) != self.size(-1):
+            raise ValueError(
+                f"Expected 'columns' to contain {self.size(-1)} entries "
+                f"(got {len(columns)})"
+            )
+
+        data_t = self._data.movedim(-1, 0).contiguous()
+
+        arrays = []
+        for data, category, na_mask in zip(
+            data_t.cpu().unbind(0),
+            self.categories,
+            (data_t < 0).cpu().unbind(0),
+        ):
+            if na_mask.any().item():
+                indices = pa.array(
+                    data.clamp(min=0).view(-1).numpy(),
+                    mask=na_mask.view(-1).numpy(),
+                )
+            else:
+                indices = to_arrow(data.view(-1))
+
+            arrays.append(
+                pa.DictionaryArray.from_arrays(
+                    indices=indices,
+                    dictionary=to_arrow(category),
+                )
+            )
+
+        return pa.Table.from_arrays(arrays, names=columns)
 
 
 @CategoricalTensor.implements(aten.isnan.default)

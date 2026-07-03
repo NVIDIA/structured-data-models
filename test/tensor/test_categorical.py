@@ -4,7 +4,7 @@ from typing import cast
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor
+from sdm import CategoricalTensor, StringTensor
 
 
 def test_to_copy() -> None:
@@ -23,6 +23,12 @@ def test_to_copy() -> None:
     out = tensor.to(torch.float32)
     assert not isinstance(out, CategoricalTensor)
     assert out.dtype == torch.float32
+
+    with pytest.raises(ValueError, match="one-dimensional"):
+        CategoricalTensor(
+            data=torch.tensor([[0]]),
+            categories=(torch.arange(4).view(2, 2),),
+        )
 
 
 def test_from_arrow_string_values() -> None:
@@ -109,6 +115,37 @@ def test_tolist() -> None:
         [[10, 40], [None, 30]],
         [[20, None], [10, 40]],
     ]
+
+
+def test_to_arrow() -> None:
+    tensor = CategoricalTensor(
+        data=torch.tensor(
+            [
+                [[0, 1], [-1, 0]],
+                [[1, -1], [0, 1]],
+            ],
+            dtype=torch.int32,
+        ),
+        categories=(
+            StringTensor.from_list(["US", "CA"]),
+            torch.tensor([10, 20]),
+        ),
+    )
+
+    table = tensor.to_arrow()
+    assert table.column_names == ["0", "1"]
+    assert pa.types.is_dictionary(table["0"].type)
+    assert pa.types.is_dictionary(table["1"].type)
+    assert table.to_pydict() == {
+        "0": ["US", None, "CA", "US"],
+        "1": [20, 10, None, 20],
+    }
+
+    table = tensor.to_arrow(columns=("country", "segment"))
+    assert table.column_names == ["country", "segment"]
+
+    with pytest.raises(ValueError, match="Expected 'columns'"):
+        tensor.to_arrow(columns=("country",))
 
 
 def test_view_ops() -> None:

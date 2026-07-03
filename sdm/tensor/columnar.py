@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 from typing_extensions import override
 
-from sdm.tensor import StringTensor, VarLenTensor
+from sdm.tensor import StringTensor
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
@@ -161,13 +161,10 @@ class ColumnarTensor(Tensor):
                 f"(got {len(columns)})"
             )
 
-        arrays = [
-            column.to_arrow()
-            if isinstance(column, VarLenTensor)
-            else to_arrow(column)
-            for column in self.unbind(-1)
-        ]
-        return pa.Table.from_arrays(arrays, names=columns)
+        return pa.Table.from_arrays(
+            arrays=[to_arrow(column) for column in self.unbind(-1)],
+            names=columns,
+        )
 
     # Decorators ##############################################################
 
