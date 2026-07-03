@@ -89,7 +89,7 @@ class StringTensor(VarLenTensor):
     @override
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to flat ``pyarrow`` string array."""
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
                 f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
@@ -203,7 +203,7 @@ class StringTensor(VarLenTensor):
         # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"
         return out

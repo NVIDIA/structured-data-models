@@ -91,7 +91,7 @@ def test_to_copy() -> None:
 
     out = tensor.to("cpu")
     assert isinstance(out, ColumnarTensor)
-    assert out.device.type == "cpu"
+    assert out.is_cpu
     assert out.tolist() == tensor.tolist()
 
     with pytest.raises(TypeError, match="convert"):

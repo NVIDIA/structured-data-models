@@ -297,7 +297,7 @@ class VarLenTensor(Tensor):
 
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to flat ``pyarrow`` list array."""
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
                 f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
@@ -417,7 +417,7 @@ class VarLenTensor(Tensor):
         start = int(self.storage_offset())
         offset = self._offset[start : start + self.numel() + 1]
         data = self._data[offset[0] : offset[-1]]
-        if offset.device.type == "cpu" and offset[0].item() == 0:
+        if offset.is_cpu and int(offset[0]) == 0:
             return data, offset
         return data, offset - offset[0]
 
@@ -555,7 +555,7 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
             out += f", grad_fn=<{type(self._data.grad_fn).__name__}>"
