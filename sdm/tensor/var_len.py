@@ -8,24 +8,10 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
+from sdm.tensor.io import ARROW_TORCH_DTYPES, to_arrow
+
 aten = torch.ops.aten
 
-ARROW_TORCH_DTYPES = {
-    # TODO Support boolean dtype.
-    # TODO Support bfloat16 dtype.
-    pa.uint8(): torch.uint8,
-    pa.uint16(): torch.uint16,
-    pa.uint32(): torch.uint32,
-    pa.uint64(): torch.uint64,
-    pa.int8(): torch.int8,
-    pa.int16(): torch.int16,
-    pa.int32(): torch.int32,
-    pa.int64(): torch.int64,
-    pa.float16(): torch.float16,
-    pa.float32(): torch.float32,
-    pa.float64(): torch.float64,
-}
-TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
@@ -298,24 +284,15 @@ class VarLenTensor(Tensor):
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to flat ``pyarrow`` list array."""
         tensor = cast(VarLenTensor, self.detach().contiguous().cpu())
-
-        value_type = TORCH_ARROW_DTYPES.get(tensor._data.dtype)
-        if value_type is None:
-            raise TypeError(f"Unsupported data type '{tensor._data.dtype}'")
-
-        values = pa.Array.from_buffers(
-            value_type,
-            length=tensor._data.numel(),
-            buffers=[None, pa.py_buffer(tensor._data.numpy())],
-        )
+        array = to_arrow(tensor._data)
 
         return pa.Array.from_buffers(
-            pa.list_(value_type)
+            pa.list_(array.type)
             if tensor._offset.dtype == torch.int32
-            else pa.large_list(value_type),
+            else pa.large_list(array.type),
             length=tensor.numel(),
             buffers=[None, pa.py_buffer(tensor._offset.numpy())],
-            children=[values],
+            children=[array],
             offset=int(tensor.storage_offset()),
         )
 
