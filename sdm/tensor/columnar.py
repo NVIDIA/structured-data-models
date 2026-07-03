@@ -1,6 +1,5 @@
 from collections.abc import Callable, Sequence
-from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, TypeVar
 
 import pyarrow as pa
 import torch
@@ -332,28 +331,4 @@ def _pin_memory(input: ColumnarTensor) -> ColumnarTensor:
         columns=[column.pin_memory() for column in input._columns],
         size=input.size()[:-1],
         device=input.device,
-    )
-
-
-@ColumnarTensor.implements(aten.cat.default)
-def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
-    if not all(isinstance(tensor, ColumnarTensor) for tensor in tensors):
-        raise TypeError(
-            f"Expected all tensors to be '{ColumnarTensor.__name__}' instances"
-        )
-
-    tensors = cast(Sequence[ColumnarTensor], tensors)
-    dim %= tensors[0].dim()
-    if dim == tensors[0].dim() - 1:
-        return tensors[0].__class__(
-            columns=tuple(chain.from_iterable(t._columns for t in tensors)),
-            device=tensors[0].device,
-        )
-
-    return tensors[0].__class__(
-        columns=[
-            torch.cat([tensor._columns[i] for tensor in tensors], dim=dim)
-            for i in range(tensors[0].size(-1))
-        ],
-        device=tensors[0].device,
     )
