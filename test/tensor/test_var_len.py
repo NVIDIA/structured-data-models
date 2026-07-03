@@ -110,6 +110,17 @@ def test_arrow() -> None:
     assert array.type == pa.large_list(pa.float32())
     assert array.to_pylist() == [[3.0]]
 
+    values = pa.array([0, 1, 2, 3, 4], type=pa.int64())[2:]
+    tensor = VarLenTensor.from_arrow(
+        pa.ListArray.from_arrays(
+            pa.array([0, 1, 3], type=pa.int32()),
+            values,
+        ),
+    )
+    assert tensor._data.equal(torch.tensor([2, 3, 4]))
+    assert tensor._offset.equal(torch.tensor([0, 1, 3]))
+    assert tensor.tolist() == [[2], [3, 4]]
+
 
 def test_list() -> None:
     tensor = VarLenTensor.from_list([[1, 2], [], [3]])

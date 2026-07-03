@@ -280,13 +280,14 @@ class VarLenTensor(Tensor):
 
         buffer = array.values.buffers()[1]
         if buffer is not None and buffer.size > 0:
-            data = torch.frombuffer(buffer, dtype=dtype).to(device)
+            data = torch.frombuffer(buffer, dtype=dtype)
+            if array.values.offset != 0:
+                data = data[array.values.offset :]
+            data = data.to(device)
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
         offset = torch.frombuffer(array.buffers()[1], dtype=offset_dtype)
-        if array.values.offset != 0:
-            offset = offset + array.values.offset
         offset = offset.to(device)
 
         return cls(
@@ -309,25 +310,26 @@ class VarLenTensor(Tensor):
                 "Use 'Tensor.detach().to_arrow()' instead."
             )
 
-        data, offset = cast(VarLenTensor, self.contiguous()).data_offset
+        tensor = cast(VarLenTensor, self.contiguous())
 
-        value_type = TORCH_ARROW_DTYPES.get(data.dtype)
+        value_type = TORCH_ARROW_DTYPES.get(tensor._data.dtype)
         if value_type is None:
-            raise TypeError(f"Unsupported data type '{data.dtype}'")
+            raise TypeError(f"Unsupported data type '{tensor._data.dtype}'")
 
         values = pa.Array.from_buffers(
             value_type,
-            length=data.numel(),
-            buffers=[None, pa.py_buffer(data.numpy())],
+            length=tensor._data.numel(),
+            buffers=[None, pa.py_buffer(tensor._data.numpy())],
         )
 
         return pa.Array.from_buffers(
             pa.list_(value_type)
-            if offset.dtype == torch.int32
+            if tensor._offset.dtype == torch.int32
             else pa.large_list(value_type),
-            length=self.numel(),
-            buffers=[None, pa.py_buffer(offset.numpy())],
+            length=tensor.numel(),
+            buffers=[None, pa.py_buffer(tensor._offset.numpy())],
             children=[values],
+            offset=int(tensor.storage_offset()),
         )
 
     @classmethod
@@ -417,6 +419,8 @@ class VarLenTensor(Tensor):
         start = int(self.storage_offset())
         offset = self._offset[start : start + self.numel() + 1]
         data = self._data[offset[0] : offset[-1]]
+        if offset.device.type == "cpu" and offset[0].item() == 0:
+            return data, offset
         return data, offset - offset[0]
 
     # Decorators ##############################################################
