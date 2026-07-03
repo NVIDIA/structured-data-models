@@ -12,26 +12,31 @@ __all__ = [
 
 
 def infer_stypes(table: Any) -> dict[str, Stype]:
-    r"""Infer semantic column types for a pandas or Arrow table."""
+    r"""Infer semantic column types for a pandas or Arrow table.
+
+    Integer, floating-point, and decimal columns are inferred as
+    :attr:`Stype.numerical`. String, boolean, and dictionary-encoded
+    (categorical) columns are inferred as :attr:`Stype.categorical`. Any other
+    type raises a :class:`TypeError`. pandas inputs are routed through their
+    Arrow schema so inference stays consistent across backends.
+
+    Args:
+        table: A ``pandas.DataFrame``, ``pyarrow.Table``, or mapping of column
+            names to ``pyarrow.Array``/``pyarrow.ChunkedArray`` values.
+    """
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
-            return {
-                str(column): _infer_pandas_stype(
-                    table[column],
-                    column=str(column),
-                )
-                for column in table.columns
-            }
+            table = pa.Schema.from_pandas(table, preserve_index=False)
 
     if isinstance(table, pa.Table):
+        table = table.schema
+
+    if isinstance(table, pa.Schema):
         return {
-            field.name: _infer_arrow_stype(
-                field.type,
-                column=field.name,
-            )
-            for field in table.schema
+            field.name: _infer_arrow_stype(field.type, column=field.name)
+            for field in table
         }
 
     if isinstance(table, Mapping):
@@ -49,47 +54,7 @@ def infer_stypes(table: Any) -> dict[str, Stype]:
 
     raise TypeError(
         "Expected 'table' to be a pandas DataFrame, pyarrow Table, or "
-        "mapping of Arrow arrays "
-        f"(got '{type(table).__name__}')"
-    )
-
-
-def _infer_pandas_stype(
-    column_data: Any,
-    *,
-    column: str | None = None,
-) -> Stype:
-    r"""Infer the :class:`~sdm.stype.Stype` of a pandas column.
-
-    Boolean, string, object, and categorical dtypes map to
-    :attr:`Stype.categorical`. Numeric dtypes map to :attr:`Stype.numerical`.
-
-    Args:
-        column_data: The ``pandas.Series`` to infer.
-        column: The column name, used for error messages.
-    """
-    import pandas as pd
-    from pandas.api.types import (
-        is_bool_dtype,
-        is_numeric_dtype,
-        is_object_dtype,
-        is_string_dtype,
-    )
-
-    dtype = column_data.dtype
-    if (
-        is_bool_dtype(dtype)
-        or is_string_dtype(dtype)
-        or is_object_dtype(dtype)
-        or isinstance(dtype, pd.CategoricalDtype)
-    ):
-        return Stype.categorical
-    if is_numeric_dtype(dtype):
-        return Stype.numerical
-    if column is None:
-        raise TypeError(f"Unsupported pandas dtype '{dtype}'")
-    raise TypeError(
-        f"Unsupported pandas dtype for column '{column}': '{dtype}'"
+        f"mapping of Arrow arrays (got '{type(table).__name__}')"
     )
 
 
@@ -98,16 +63,6 @@ def _infer_arrow_stype(
     *,
     column: str | None = None,
 ) -> Stype:
-    r"""Infer the :class:`~sdm.stype.Stype` of an Arrow data type.
-
-    Integer, floating-point, and decimal types map to
-    :attr:`Stype.numerical`. String, boolean, and dictionary-encoded types
-    map to :attr:`Stype.categorical`.
-
-    Args:
-        data_type: The Arrow data type to infer.
-        column: The column name, used for error messages.
-    """
     if (
         pa.types.is_integer(data_type)
         or pa.types.is_floating(data_type)

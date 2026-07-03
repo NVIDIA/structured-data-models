@@ -4,7 +4,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 from sdm import Stype, infer_stypes
-from sdm.stype_inference import _infer_arrow_stype, _infer_pandas_stype
+from sdm.stype_inference import _infer_arrow_stype
 
 
 def test_infer_stypes_from_pandas_dataframe() -> None:
@@ -75,7 +75,7 @@ def test_pandas_unsupported_dtype_raises_clear_error() -> None:
 
     with pytest.raises(
         TypeError,
-        match=r"Unsupported pandas dtype.*created_at.*datetime64",
+        match=r"Unsupported Arrow type.*created_at.*timestamp",
     ):
         infer_stypes(df)
 
@@ -88,14 +88,6 @@ def test_arrow_unsupported_type_raises_clear_error() -> None:
         match=r"Unsupported Arrow type.*created_at.*timestamp",
     ):
         infer_stypes(table)
-
-
-def test_pandas_column_helper() -> None:
-    assert _infer_pandas_stype(pd.Series([1.0, 2.5])) == Stype.numerical
-    assert _infer_pandas_stype(pd.Series([True, False])) == Stype.categorical
-
-    with pytest.raises(TypeError, match="Unsupported pandas dtype"):
-        _infer_pandas_stype(pd.Series(pd.date_range("2026-01-01", periods=2)))
 
 
 def test_arrow_column_helper() -> None:
