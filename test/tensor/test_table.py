@@ -6,12 +6,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
-from sdm import (
-    CategoricalTensor,
-    StringTensor,
-    Stype,
-    TableTensor,
-)
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 
 
 def test_init() -> None:
