@@ -3,7 +3,7 @@ import io
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm import CategoricalTensor, ColumnarTensor, StringTensor, TableTensor
 
 
 def test_init() -> None:
@@ -21,13 +21,25 @@ def test_init() -> None:
     with pytest.raises(ValueError, match="to have size"):
         ColumnarTensor((torch.ones(2), torch.ones(3)))
 
-    value1 = torch.ones(2)
-    value2 = CategoricalTensor(
-        data=torch.randint(0, 2, (2,)),
-        categories=(torch.arange(2), torch.arange(2)),
-    )
-    with pytest.raises(ValueError, match="hold a single column"):
-        ColumnarTensor((value1, value2))
+    with pytest.raises(TypeError, match="single column tensor"):
+        ColumnarTensor(
+            (
+                CategoricalTensor(
+                    data=torch.randint(0, 2, (2, 1)),
+                    categories=(torch.arange(2),),
+                ),
+            )
+        )
+
+    with pytest.raises(TypeError, match="single column tensor"):
+        ColumnarTensor(
+            (
+                TableTensor(
+                    columns={"numerical": ["x"]},
+                    numerical=torch.ones(2, 1),
+                ),
+            )
+        )
 
 
 def test_empty() -> None:

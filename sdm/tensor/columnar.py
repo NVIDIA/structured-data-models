@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 from typing_extensions import override
 
-from sdm.tensor import CategoricalTensor, StringTensor
+from sdm.tensor import StringTensor
 
 aten = torch.ops.aten
 
@@ -58,18 +58,24 @@ class ColumnarTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> SelfColumnarTensor:
         r"""Create a tensor wrapper."""
+        from sdm.tensor import CategoricalTensor, TableTensor
+
         columns = tuple(columns)
         device = torch.device(device) if device is not None else None
+
+        for i, column in enumerate(columns):
+            if isinstance(column, CategoricalTensor | TableTensor):
+                raise TypeError(
+                    f"Expected value {i} in '{cls.__name__}' to be a single "
+                    f"column tensor (got '{column.__class__.__name__}')"
+                )
 
         if size is None:
             if len(columns) == 0:
                 raise ValueError(
                     "Expected 'size' to be given for zero columnar data"
                 )
-            if isinstance(columns[0], CategoricalTensor):
-                size = tuple(columns[0].size()[:-1])
-            else:
-                size = tuple(columns[0].size())
+            size = tuple(columns[0].size())
         else:
             size = tuple(size)
 
@@ -80,19 +86,10 @@ class ColumnarTensor(Tensor):
             )
 
         for i, column in enumerate(columns):
-            if isinstance(column, CategoricalTensor):
-                if column.size(-1) != 1:
-                    raise ValueError(
-                        f"Expected categorical tensor {i} in '{cls.__name__}' "
-                        f"to only hold a single column"
-                    )
-                column_size = column.size()[:-1]
-            else:
-                column_size = column.size()
-            if column_size != size:
+            if column.size() != size:
                 raise ValueError(
                     f"Expected value {i} in '{cls.__name__}' to have size "
-                    f"{size} (got {tuple(column_size)})"
+                    f"{size} (got {tuple(column.size())})"
                 )
 
             device = column.device if device is None else device
@@ -338,12 +335,34 @@ def _pin_memory(input: ColumnarTensor) -> ColumnarTensor:
 
 @ColumnarTensor.implements(aten.view.default)
 def _view(input: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
-    size = _infer_view_size(input, size)
+    size = tuple(size)
+    if size.count(-1) > 1:
+        raise RuntimeError("Only one dimension can be inferred")
+
+    if -1 in size:
+        known = math.prod(dim_size for dim_size in size if dim_size != -1)
+        if known == 0:
+            raise RuntimeError(
+                f"Cannot reshape tensor of {input.numel()} elements into "
+                f"shape {size} because the unspecified dimension size -1 can "
+                f"be any value and is ambiguous"
+            )
+        if input.numel() % known != 0:
+            raise RuntimeError(
+                f"Shape {size} is invalid for input of size {input.numel()}"
+            )
+        dim = size.index(-1)
+        size = (*size[:dim], input.numel() // known, *size[dim + 1 :])
+
+    if len(size) == 0 or size[-1] != input.size(-1):
+        _columns = "column" if input.size(-1) == 1 else "columns"
+        raise RuntimeError(
+            f"Can't reshape '{input.__class__.__name__}' with "
+            f"{input.size(-1)} {_columns} into shape {size}"
+        )
+
     return input.__class__(
-        columns=[
-            column.view(_column_size(column, size[:-1]))
-            for column in input._columns
-        ],
+        columns=[column.view(size[:-1]) for column in input._columns],
         size=size[:-1],
         device=input.device,
     )
@@ -354,15 +373,7 @@ def _unsafe_view(
     input: ColumnarTensor,
     size: Sequence[int],
 ) -> ColumnarTensor:
-    size = _infer_view_size(input, size)
-    return input.__class__(
-        columns=[
-            aten._unsafe_view(column, _column_size(column, size[:-1]))
-            for column in input._columns
-        ],
-        size=size[:-1],
-        device=input.device,
-    )
+    return _view(input, size)
 
 
 @ColumnarTensor.implements(aten.squeeze.default)
@@ -376,12 +387,15 @@ def _squeeze_dim(input: ColumnarTensor, dim: int) -> ColumnarTensor:
 
 
 @ColumnarTensor.implements(aten.squeeze.dims)
-def _squeeze_dims(
-    input: ColumnarTensor,
-    dim: Sequence[int],
-) -> ColumnarTensor:
+def _squeeze_dims(input: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
     dims = tuple(d % input.dim() for d in dim)
-    _raise_if_column_dim(input, dims)
+
+    if any(_is_column_dim(input, d) for d in dims):
+        raise RuntimeError(
+            f"Can't squeeze the column dimension of "
+            f"'{input.__class__.__name__}'"
+        )
+
     return input.__class__(
         columns=[column.squeeze(dims) for column in input._columns],
         size=_squeeze_size(input.size(), dims)[:-1],
@@ -418,7 +432,7 @@ def _expand(
         columns=[
             aten.expand.default(
                 column,
-                _column_size(column, size[:-1]),
+                size[:-1],
                 implicit=implicit,
             )
             for column in input._columns
@@ -458,12 +472,7 @@ def _permute(input: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
 
     size = tuple(input.size(dim) for dim in dims)
     return input.__class__(
-        columns=[
-            column.permute(dims)
-            if isinstance(column, CategoricalTensor)
-            else column.permute(dims[:-1])
-            for column in input._columns
-        ],
+        columns=[column.permute(dims[:-1]) for column in input._columns],
         size=size[:-1],
         device=input.device,
     )
@@ -750,37 +759,10 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 # Helpers #####################################################################
 
 
-def _column_size(column: Tensor, size: Sequence[int]) -> tuple[int, ...]:
-    size = tuple(size)
-    if isinstance(column, CategoricalTensor):
-        return (*size, 1)
-    return size
-
-
-def _infer_view_size(
-    input: ColumnarTensor,
-    size: Sequence[int],
-) -> tuple[int, ...]:
-    size = tuple(size)
-    if size.count(-1) > 1:
-        raise RuntimeError("Only one dimension can be inferred")
-
-    if -1 in size:
-        known = math.prod(dim_size for dim_size in size if dim_size != -1)
-        if known == 0 or input.numel() % known != 0:
-            raise RuntimeError(
-                f"Shape {size} is invalid for input of size {input.numel()}"
-            )
-        dim = size.index(-1)
-        size = (*size[:dim], input.numel() // known, *size[dim + 1 :])
-
-    if len(size) == 0 or size[-1] != input.size(-1):
-        raise RuntimeError(
-            f"Can't reshape '{input.__class__.__name__}' with "
-            f"{input.size(-1)} columns into shape {size}"
-        )
-
-    return size
+def _is_column_dim(input: ColumnarTensor, dim: int) -> bool:
+    if dim < -input.dim() or dim >= input.dim():
+        return False
+    return dim % input.dim() == input.dim() - 1
 
 
 def _expand_size(
@@ -822,10 +804,6 @@ def _raise_if_column_dim(
         )
 
 
-def _is_column_dim(input: ColumnarTensor, dim: int) -> bool:
-    return dim % input.dim() == input.dim() - 1
-
-
 def _slice_size(
     size: Sequence[int],
     dim: int,
@@ -836,6 +814,13 @@ def _slice_size(
     out = list(size)
     out[dim] = len(range(size[dim])[slice(start, end, step)])
     return tuple(out)
+
+
+def _is_table_tensor(input: Tensor) -> bool:
+    return any(
+        cls.__module__ == "sdm.tensor.table" and cls.__name__ == "TableTensor"
+        for cls in type(input).__mro__
+    )
 
 
 def _wrap_split(

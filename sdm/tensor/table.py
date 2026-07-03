@@ -689,18 +689,7 @@ def _squeeze(input: TableTensor) -> TableTensor:
 
 @TableTensor.implements(aten.squeeze.dim)
 def _squeeze_dim(input: TableTensor, dim: int) -> TableTensor:
-    blocks = {stype: tensor.squeeze(dim) for stype, tensor in input.items()}
-
-    if dim % input.dim() == input.dim() - 1:
-        raise RuntimeError(
-            f"Can't squeeze the column dimension of "
-            f"'{input.__class__.__name__}'"
-        )
-
-    return input.__class__(
-        columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
-        **blocks,
-    )
+    return _squeeze_dims(input, (dim,))
 
 
 @TableTensor.implements(aten.squeeze.dims)
