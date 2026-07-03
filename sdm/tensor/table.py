@@ -115,8 +115,8 @@ class TableTensor(Tensor):
         size: Sequence[int] | None = None,
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
-        datetime: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
+        datetime: Tensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:

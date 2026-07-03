@@ -26,6 +26,7 @@ def test_init() -> None:
         "  blocks={\n"
         "    numerical (2): ['age', 'income'],\n"
         "    categorical (2): ['country', 'segment'],\n"
+        "    datetime (0): [],\n"
         "    id (0): [],\n"
         "  },\n"
         ")"
@@ -39,6 +40,7 @@ def test_init() -> None:
     assert tensor.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.datetime: (),
         Stype.id: (),
     }
     assert tensor._column_to_loc == {
@@ -62,6 +64,7 @@ def test_empty() -> None:
     assert tensor.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
+        Stype.datetime: (),
         Stype.id: (),
     }
     assert tensor._column_to_loc == {}
@@ -88,6 +91,7 @@ def test_from_tensor() -> None:
     assert tensor.columns == {
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
+        Stype.datetime: (),
         Stype.id: (),
     }
 
@@ -293,6 +297,7 @@ def test_unbind_split() -> None:
     assert out[0].columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.datetime: (),
         Stype.id: (),
     }
 
@@ -361,6 +366,7 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.datetime: (),
         Stype.id: (),
     }
 
@@ -378,6 +384,7 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: ("country",),
+        Stype.datetime: (),
         Stype.id: (),
     }
 
@@ -468,6 +475,7 @@ def test_cat_stack() -> None:
     assert out.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.datetime: (),
         Stype.id: (),
     }
 
