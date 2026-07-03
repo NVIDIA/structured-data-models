@@ -11,7 +11,7 @@ from torch import Tensor
 from typing_extensions import override
 
 from sdm import Stype, StypeLike
-from sdm.tensor import CategoricalTensor
+from sdm.tensor import CategoricalTensor, ColumnarTensor
 
 aten = torch.ops.aten
 
@@ -77,6 +77,7 @@ class TableTensor(Tensor):
         columns: Column names grouped by semantic type.
         numerical: The numerical column block of shape ``[..., C_num]``.
         categorical: The categorical column block of shape ``[..., C_cat]``.
+        id: The identifier column block of shape ``[..., C_id]``.
         device: The device.
     """
 
@@ -86,6 +87,7 @@ class TableTensor(Tensor):
 
     _numerical: Tensor
     _categorical: CategoricalTensor
+    _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
     _column_to_loc: dict[str, tuple[Stype, int]]
 
@@ -100,6 +102,7 @@ class TableTensor(Tensor):
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
+        id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
     ) -> None:
         pass
@@ -110,6 +113,7 @@ class TableTensor(Tensor):
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
+        id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
         r"""Create a tensor wrapper."""
@@ -124,6 +128,7 @@ class TableTensor(Tensor):
         for stype, block in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
+            (Stype.id, id),
         ):
             if block is None:
                 continue
@@ -159,6 +164,10 @@ class TableTensor(Tensor):
                 data=torch.empty((*size, 0), dtype=torch.int32, device=device),
                 categories=(),
             )
+        if id is None:
+            # TODO Add id support.
+            id = torch.empty((*size, 0), device=device)  # type: ignore
+            assert id is not None
 
         columns = {
             Stype(stype): tuple(names)
@@ -167,11 +176,13 @@ class TableTensor(Tensor):
         columns = {
             Stype.numerical: tuple(columns.get(Stype.numerical, ())),
             Stype.categorical: tuple(columns.get(Stype.categorical, ())),
+            Stype.id: tuple(columns.get(Stype.id, ())),
         }
 
         for stype, block in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
+            (Stype.id, id),
         ):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
@@ -198,6 +209,7 @@ class TableTensor(Tensor):
 
         out._numerical = numerical
         out._categorical = categorical
+        out._id = id
         out._columns = columns
         out._column_to_loc = column_to_loc
 
@@ -253,6 +265,9 @@ class TableTensor(Tensor):
                     tensor = tensor.unsqueeze(-1)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
+                elif stype == Stype.id:
+                    # TODO Add id support.
+                    tensor = ColumnarTensor.from_arrow(array)  # type: ignore
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
@@ -324,10 +339,16 @@ class TableTensor(Tensor):
         r"""Return the categorical column block."""
         return self._categorical
 
+    @property
+    def id(self) -> ColumnarTensor:
+        r"""Return the identifier column block."""
+        return self._id
+
     def items(self) -> Iterator[tuple[Stype, Tensor]]:
         r"""Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
+        yield Stype.id, self._id
 
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
@@ -419,6 +440,7 @@ class TableTensor(Tensor):
             self._columns,
             self._numerical,
             self._categorical,
+            self._id,
         )
         return (self.__class__, args)
 
@@ -872,25 +894,24 @@ def _split(
     split_size: int,
     dim: int = 0,
 ) -> tuple[TableTensor, ...]:
-    tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
-        stype: tensor.split(split_size, dim) for stype, tensor in input.items()
-    }
-
-    if dim % input.dim() == input.dim() - 1:
+    if _is_column_dim(input, dim):
         if split_size != 1:
             raise RuntimeError(
                 f"Can only split the column dimension of "
                 f"'{input.__class__.__name__}' with split size 1"
             )
-
         return tuple(
             input.__class__(
-                columns={stype: (input._columns[stype][i],)},
-                **{stype: tensor},
+                columns={stype: (name,)},
+                **{stype: tensor.narrow(-1, i, 1)},
             )
-            for stype, tensors in tensors_dict.items()
-            for i, tensor in enumerate(tensors)
+            for stype, tensor in input.items()
+            for i, name in enumerate(input._columns[stype])
         )
+
+    tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
+        stype: tensor.split(split_size, dim) for stype, tensor in input.items()
+    }
 
     stypes = tuple(tensors_dict.keys())
     return tuple(
@@ -937,15 +958,15 @@ def _index_select(
     dim: int,
     index: Tensor,
 ) -> TableTensor:
+    if _is_column_dim(input, dim):
+        raise RuntimeError(
+            f"Can't index the column dimension of '{input.__class__.__name__}'"
+        )
+
     blocks = {
         stype: tensor.index_select(dim, index)
         for stype, tensor in input.items()
     }
-
-    if dim % input.dim() == input.dim() - 1:
-        raise RuntimeError(
-            f"Can't index the column dimension of '{input.__class__.__name__}'"
-        )
 
     return input.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
