@@ -52,12 +52,14 @@ def test_arrow() -> None:
     array = tensor[1:].to_arrow()
     assert array.offset == 1
     assert array.to_pylist() == ["é", "", "abc"]
-    assert array.buffers()[1].address == tensor._offset.numpy().__array_interface__[
-        "data"
-    ][0]
-    assert array.buffers()[2].address == tensor._data.numpy().__array_interface__[
-        "data"
-    ][0]
+    assert (
+        array.buffers()[1].address
+        == tensor._offset.numpy().__array_interface__["data"][0]
+    )
+    assert (
+        array.buffers()[2].address
+        == tensor._data.numpy().__array_interface__["data"][0]
+    )
 
 
 def test_allowed_dtype() -> None:

@@ -125,12 +125,14 @@ def test_arrow() -> None:
     array = tensor[1:].to_arrow()
     assert array.offset == 1
     assert array.to_pylist() == [[], [3]]
-    assert array.buffers()[1].address == tensor._offset.numpy().__array_interface__[
-        "data"
-    ][0]
-    assert array.values.buffers()[1].address == tensor._data.numpy().__array_interface__[
-        "data"
-    ][0]
+    assert (
+        array.buffers()[1].address
+        == tensor._offset.numpy().__array_interface__["data"][0]
+    )
+    assert (
+        array.values.buffers()[1].address
+        == tensor._data.numpy().__array_interface__["data"][0]
+    )
 
 
 def test_list() -> None:
