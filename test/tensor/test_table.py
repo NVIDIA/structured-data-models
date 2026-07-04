@@ -1,4 +1,5 @@
 import io
+from datetime import datetime
 from typing import cast
 
 import pandas as pd
@@ -7,7 +8,6 @@ import pytest
 import torch
 from sdm import (
     CategoricalTensor,
-    ColumnarTensor,
     StringTensor,
     Stype,
     TableTensor,
@@ -131,87 +131,6 @@ def test_save_load() -> None:
         tensor.categorical.categories,
     ):
         assert category1.equal(category2)
-
-
-def test_to_arrow() -> None:
-    tensor = TableTensor(
-        columns={
-            "numerical": ["age", "income"],
-            "categorical": ["country"],
-            "datetime": ["time"],
-            "id": ["user_id", "item_id"],
-        },
-        numerical=torch.tensor(
-            [
-                [[0.0, 10.0], [1.0, 11.0]],
-                [[2.0, 12.0], [3.0, 13.0]],
-            ]
-        ),
-        categorical=CategoricalTensor(
-            data=torch.tensor([[[0], [1]], [[-1], [0]]], dtype=torch.int32),
-            categories=(StringTensor.from_list(["US", "CA"]),),
-        ),
-        datetime=torch.tensor(
-            [
-                [[0], [torch.iinfo(torch.int64).min]],
-                [[2], [3]],
-            ],
-            dtype=torch.int64,
-        ),
-        id=ColumnarTensor(
-            (
-                torch.tensor([[0, 1], [2, 3]]),
-                StringTensor.from_list([["a", "b"], ["c", "d"]]),
-            )
-        ),
-    )
-
-    table = tensor.to_arrow()
-    assert table.column_names == [
-        "age",
-        "income",
-        "country",
-        "time",
-        "user_id",
-        "item_id",
-    ]
-    assert table.to_pydict() == {
-        "age": [0.0, 1.0, 2.0, 3.0],
-        "income": [10.0, 11.0, 12.0, 13.0],
-        "country": ["US", "CA", None, "US"],
-        "time": [
-            pd.Timestamp(0).to_pydatetime(),
-            None,
-            pd.Timestamp(2, unit="us").to_pydatetime(),
-            pd.Timestamp(3, unit="us").to_pydatetime(),
-        ],
-        "user_id": [0, 1, 2, 3],
-        "item_id": ["a", "b", "c", "d"],
-    }
-    assert pa.types.is_dictionary(table["country"].type)
-    assert table["time"].type == pa.timestamp("us")
-
-    df = tensor.to_pandas()
-    assert list(df.columns) == table.column_names
-    assert df["age"].tolist() == [0.0, 1.0, 2.0, 3.0]
-    assert df["income"].tolist() == [10.0, 11.0, 12.0, 13.0]
-    assert df["user_id"].tolist() == [0, 1, 2, 3]
-    assert df["item_id"].tolist() == ["a", "b", "c", "d"]
-    assert df["time"].tolist() == [
-        pd.Timestamp(0),
-        pd.NaT,
-        pd.Timestamp(2, unit="us"),
-        pd.Timestamp(3, unit="us"),
-    ]
-    country = (
-        df["country"]
-        .astype("object")
-        .where(
-            pd.notna(df["country"]),
-            None,
-        )
-    )
-    assert country.tolist() == ["US", "CA", None, "US"]
 
 
 def test_to_copy() -> None:
@@ -602,31 +521,60 @@ def test_share_memory() -> None:
         pass
 
 
-def test_from_arrow() -> None:
-    table = pa.table(
-        {
-            "age": pa.array([10, 20], type=pa.int64()),
-            "income": pa.array([1.0, 2.5], type=pa.float64()),
-            "country": pa.array(["US", "CA"]),
-            "segment": pa.array(["a", "b"]),
-        }
-    )
+def test_arrow() -> None:
+    data = {
+        "age": [0.0, 1.0, 2.0, 3.0],
+        "income": [10.0, 11.0, 12.0, 13.0],
+        "country": ["US", "CA", "", "US"],
+        "time": [
+            datetime(2024, 1, 1, 0, 0),
+            None,
+            datetime(2024, 1, 2, 0, 0),
+            datetime(2024, 1, 3, 0, 0),
+        ],
+        "user_id": [0, 1, 2, 3],
+        "item_id": ["a", "b", "c", "d"],
+    }
 
     tensor = TableTensor.from_arrow(
-        table=table,
+        pa.table(data),
         stypes={
             "age": "numerical",
             "income": "numerical",
             "country": "categorical",
-            "segment": "categorical",
+            "time": "datetime",
+            "user_id": "id",
+            "item_id": "id",
         },
     )
 
-    assert tensor.size() == (2, 4)
-    assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
-    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
-    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
-    assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+    assert tensor.size() == (4, 6)
+    assert tensor.numerical.equal(
+        torch.tensor(
+            [
+                [0.0, 10.0],
+                [1.0, 11.0],
+                [2.0, 12.0],
+                [3.0, 13.0],
+            ]
+        )
+    )
+    assert tensor.categorical.equal(torch.tensor([[0], [1], [2], [0]]))
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
+    assert tensor.datetime.equal(
+        torch.tensor(
+            [
+                [1704067200000000],
+                [-9223372036854775808],
+                [1704153600000000],
+                [1704240000000000],
+            ]
+        )
+    )
+    assert tensor.id[:, 0].equal(torch.tensor([0, 1, 2, 3]))
+    assert tensor.id[:, 1].equal(StringTensor.from_list(["a", "b", "c", "d"]))
+
+    assert tensor.to_arrow().to_pydict() == data
 
 
 def test_from_pandas() -> None:
