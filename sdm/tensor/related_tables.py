@@ -56,7 +56,7 @@ class Relationship:
             for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
-                        f"Column name '{reserved}' is reserved for internal "
+                        f"Column name '{column}' is reserved for internal "
                         f"row indexing"
                     )
 
