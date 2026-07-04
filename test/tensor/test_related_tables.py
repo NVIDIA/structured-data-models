@@ -97,4 +97,13 @@ def data() -> tuple[TableTensor, RelatedTables]:
 
 def test_edge_indices(data: tuple[TableTensor, RelatedTables]) -> None:
     task_table, related_tables = data
-    related_tables.edge_indices(task_table)
+    edge_indices = related_tables.edge_indices(task_table)
+
+    assert len(edge_indices) == 3
+    assert edge_indices[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
+    assert edge_indices[1].equal(
+        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 1, 3, 3, 3]])
+    )
+    assert edge_indices[2].equal(
+        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 3]])
+    )
