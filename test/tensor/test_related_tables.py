@@ -95,5 +95,6 @@ def data() -> tuple[TableTensor, RelatedTables]:
     return task_table, related_tables
 
 
-def test_kumorfm(data: tuple[TableTensor, RelatedTables]) -> None:
-    _task_table, _related_tables = data
+def test_edge_indices(data: tuple[TableTensor, RelatedTables]) -> None:
+    task_table, related_tables = data
+    related_tables.edge_indices(task_table)

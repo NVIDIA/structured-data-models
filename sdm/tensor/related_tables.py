@@ -1,5 +1,9 @@
+from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+
+import torch
+from torch import Tensor
 
 from sdm import Stype
 from sdm.tensor import TableTensor
@@ -151,3 +155,22 @@ class RelatedTables:
                             f"Expected column '{column}' in table '{table}' "
                             f"to have semantic type '{Stype.id.value}'"
                         )
+
+    def edge_indices(
+        self,
+        task_table: TableTensor,
+        *,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+    ) -> tuple[Tensor, ...]:
+
+        columns: dict[str | None, list[str]] = defaultdict(list)
+        for rel in self.relationships:
+            columns[rel.left_table].extend(rel.left_columns)
+            columns[rel.right_table].extend(rel.right_columns)
+
+        tables = {
+            name: table[..., columns[name]]
+            for name, table in self.tables.items()
+            if name in columns
+        } | {None: task_table[..., columns[None]]}
