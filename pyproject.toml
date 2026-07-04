@@ -100,10 +100,10 @@ skip_covered = true
 skip_empty = true
 
 [tool.ty.src]
-include = ["sdm", "test"]
+include = ["sdm", "test", "examples"]
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
-src = ["pyproject.toml", "sdm", "test"]
+src = ["pyproject.toml", "sdm", "test", "examples"]
 line-length = 79
 indent-width = 4
 target-version = "py310"
