@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import torch
 from torch import Tensor
 
@@ -7,7 +9,7 @@ from sdm.tensor import TableTensor
 
 
 class ToNumerical(Processor):
-    """Move supported table stypes into the numerical block.
+    """Move categorical columns into the numerical block.
 
     This is an stype conversion step:
     :class:`~sdm.tensor.CategoricalTensor` already stores ordinal category ids
@@ -16,39 +18,59 @@ class ToNumerical(Processor):
     numerical-only models can consume both original numerical and categorical
     features. Missing categorical values remain ``-1``.
 
+    Only ``numerical`` and ``categorical`` columns are supported. Any other
+    semantic type raises an error; drop those columns before this step.
+
     """
 
     requires_fit = False
     input_scope = "table"
 
-    # TODO: Implement supported stypes
+    supported_stypes: ClassVar[tuple[Stype, ...]] = (
+        Stype.numerical,
+        Stype.categorical,
+    )
 
     def forward(self, input: Tensor) -> Tensor:
-        """Return ``input`` with all feature columns in ``numerical``."""
+        """Return ``input`` with categorical columns moved to ``numerical``."""
         if not isinstance(input, TableTensor):
             raise TypeError(
                 "Expected ToNumerical input to be a TableTensor "
                 f"(got '{type(input).__name__}')"
             )
 
-        dtype = input.numerical.dtype
+        unsupported = tuple(
+            stype.value
+            for stype, block in input.items()
+            if block.size(-1) > 0 and stype not in self.supported_stypes
+        )
+        if unsupported:
+            supported = [stype.value for stype in self.supported_stypes]
+            raise NotImplementedError(
+                f"ToNumerical only converts {supported} columns; got "
+                f"unsupported stype(s) {list(unsupported)}. Drop those "
+                "columns before this step."
+            )
 
+        # Already numerical-only: nothing to move.
+        if all(
+            stype == Stype.numerical or block.size(-1) == 0
+            for stype, block in input.items()
+        ):
+            return input
+
+        dtype = input.numerical.dtype
         blocks: list[Tensor] = []
         columns: list[str] = []
-        if input.numerical.size(-1) > 0:
-            blocks.append(input.numerical)
-            columns.extend(input.columns[Stype.numerical])
+        for stype, block in input.items():
+            if block.size(-1) == 0:
+                continue
+            # Casting to the (floating-point) numerical dtype also unwraps a
+            # CategoricalTensor to its raw ordinal ids as a plain tensor.
+            blocks.append(block.to(dtype))  # [..., C_stype]
+            columns.extend(input.columns[stype])
 
-        if input.categorical.size(-1) > 0:
-            blocks.append(input.categorical.as_tensor().to(dtype))
-            columns.extend(input.columns[Stype.categorical])
-
-        if not blocks:
-            return input
-        if len(blocks) == 1 and blocks[0] is input.numerical:
-            return input
-
-        numerical = (
+        numerical = (  # [..., sum(C_stype)]
             blocks[0] if len(blocks) == 1 else torch.cat(blocks, dim=-1)
         )
         return input.__class__(
