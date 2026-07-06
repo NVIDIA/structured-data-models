@@ -384,6 +384,15 @@ class Attention(torch.nn.Module):
             q_weight = self.qkv_lin.weight[: self.q_dim]
             q_bias = self.qkv_lin.bias[: self.q_dim]
             query = F.linear(query, q_weight, q_bias)
+            if key_value.key.dtype != query.dtype:
+                # Compare against the projected query so autocast runs (which
+                # cast at the projection) validate correctly.
+                raise ValueError(
+                    f"Key/value projections were cached under dtype "
+                    f"'{key_value.key.dtype}' but the query projects to "
+                    f"dtype '{query.dtype}'. Run caching and cached "
+                    f"inference under the same dtype context."
+                )
             key = key_value.key
             value = key_value.value
         elif key_value is None:

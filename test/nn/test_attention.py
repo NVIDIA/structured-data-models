@@ -543,3 +543,16 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+def test_attention_key_value_cache_dtype_mismatch() -> None:
+    from sdm.cache import KVCacheEntry
+
+    module = Attention(channels=8, num_query_heads=2)
+    query = torch.randn(2, 3, 8)
+    cached = KVCacheEntry(
+        key=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
+        value=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
+    )
+    with pytest.raises(ValueError, match="same dtype context"):
+        module(query=query, key_value=cached)

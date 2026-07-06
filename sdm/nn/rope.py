@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 import torch
@@ -38,6 +39,20 @@ class RotaryEmbedding(torch.nn.Module):
             inv_freq,
             requires_grad=requires_grad,
         )
+
+    def _apply(
+        self,
+        fn: Callable[[Tensor], Tensor],
+        recurse: bool = True,
+    ) -> "RotaryEmbedding":
+        # Rotary phases are precision-critical: keep the inverse frequencies
+        # in float32 through casts such as `module.to(torch.bfloat16)` (device
+        # moves still apply). The forward pass type-promotes as needed and
+        # casts sin/cos to the input dtype.
+        out = super()._apply(fn, recurse)
+        if self.inv_freq.dtype not in (torch.float32, torch.float64):
+            self.inv_freq.data = self.inv_freq.data.float()
+        return out
 
     def forward(
         self,

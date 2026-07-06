@@ -33,3 +33,19 @@ def test_rope(device: torch.device) -> None:
 
     with pytest.raises(ValueError, match="`channels` must be even"):
         RotaryEmbedding(channels=3, device=device)
+
+
+def test_rope_inverse_frequencies_stay_float32() -> None:
+    module = RotaryEmbedding(channels=4)
+    module.to(torch.bfloat16)
+    # Rotary phases are precision-critical: casting the module must not
+    # round the inverse frequencies.
+    assert module.inv_freq.dtype == torch.float32
+
+    x = torch.randn(2, 5, 3, 4, dtype=torch.bfloat16)
+    out = module(x)
+    assert out.dtype == torch.bfloat16
+
+    reference = RotaryEmbedding(channels=4)
+    expected = reference(x.float()).to(torch.bfloat16)
+    torch.testing.assert_close(out, expected, atol=1e-2, rtol=1e-2)
