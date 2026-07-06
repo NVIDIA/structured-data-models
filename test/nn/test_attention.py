@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -20,6 +21,10 @@ def reference_sdpa(
     value: Tensor,
     attn_mask: Tensor | None = None,
 ) -> Tensor:
+    # Expand KV for MQA and GQA
+    groups = query.size(-2) // key.size(-2)
+    key = key.repeat_interleave(groups, dim=-2)
+    value = value.repeat_interleave(groups, dim=-2)
     return F.scaled_dot_product_attention(
         query=query.transpose(-3, -2),
         key=key.transpose(-3, -2),
@@ -63,24 +68,50 @@ def test_qassmax(
 
 
 @withCUDA
-def test_sdpa(device: torch.device) -> None:
+@pytest.mark.parametrize(
+    ("num_key_value_heads", "enable_gqa"),
+    [
+        pytest.param(None, False, id="mha"),
+        pytest.param(1, True, id="mqa"),
+        pytest.param(2, True, id="gqa"),
+    ],
+)
+def test_sdpa(
+    device: torch.device,
+    num_key_value_heads: int | None,
+    enable_gqa: bool,
+) -> None:
     channels = 3
-    num_heads = 2
-    module = SDPA(channels=channels, num_query_heads=num_heads)
+    num_query_heads = 4
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+    )
+    key_value_heads = (
+        num_query_heads if num_key_value_heads is None else num_key_value_heads
+    )
 
     # Match torch SDPA for unbatched query, key, and value tensors.
-    query = torch.randn(4, num_heads, channels, device=device)
-    key = torch.randn(5, num_heads, channels, device=device)
-    value = torch.randn(5, num_heads, channels, device=device)
+    query = torch.randn(4, num_query_heads, channels, device=device)
+    key = torch.randn(5, key_value_heads, channels, device=device)
+    value = torch.randn(5, key_value_heads, channels, device=device)
 
-    out = module(query=query, key=key, value=value)
+    with patch(
+        "sdm.nn.attention.F.scaled_dot_product_attention",
+        wraps=F.scaled_dot_product_attention,
+    ) as mock_sdpa:
+        out = module(query=query, key=key, value=value)
+    mock_sdpa.assert_called_once()
+    assert mock_sdpa.call_args.kwargs["enable_gqa"] is enable_gqa
+
     expected = reference_sdpa(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
 
     # Broadcast batch dimensions and apply a boolean attention mask.
-    query = torch.randn(2, 3, num_heads, channels, device=device)
-    key = torch.randn(5, num_heads, channels, device=device)
-    value = torch.randn(1, 5, num_heads, channels, device=device)
+    query = torch.randn(2, 3, num_query_heads, channels, device=device)
+    key = torch.randn(5, key_value_heads, channels, device=device)
+    value = torch.randn(1, 5, key_value_heads, channels, device=device)
     attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool, device=device)
 
     out = module(
@@ -102,13 +133,25 @@ def test_sdpa(device: torch.device) -> None:
     query_len = 4
     key_value_len = 5
     query = torch.randn(
-        batch_size, query_len, num_heads, channels, device=device
+        batch_size,
+        query_len,
+        num_query_heads,
+        channels,
+        device=device,
     )
     key = torch.randn(
-        batch_size, key_value_len, num_heads, channels, device=device
+        batch_size,
+        key_value_len,
+        key_value_heads,
+        channels,
+        device=device,
     )
     value = torch.randn(
-        batch_size, key_value_len, num_heads, channels, device=device
+        batch_size,
+        key_value_len,
+        key_value_heads,
+        channels,
+        device=device,
     )
     value[0, 3:] = 1000
     value[1, 1:] = -1000
@@ -143,15 +186,25 @@ def test_sdpa(device: torch.device) -> None:
         batch_size,
         num_test,
         num_queries,
-        num_heads,
+        num_query_heads,
         channels,
         device=device,
     )
     key = torch.randn(
-        batch_size, 1, num_train, num_heads, channels, device=device
+        batch_size,
+        1,
+        num_train,
+        key_value_heads,
+        channels,
+        device=device,
     )
     value = torch.randn(
-        batch_size, 1, num_train, num_heads, channels, device=device
+        batch_size,
+        1,
+        num_train,
+        key_value_heads,
+        channels,
+        device=device,
     )
 
     out = module(query=query, key=key, value=value)
@@ -162,20 +215,23 @@ def test_sdpa(device: torch.device) -> None:
     )
     torch.testing.assert_close(out, expected)
 
-    # Reject invalid mask and sequence-length combinations.
-    query = torch.randn(1, 2, num_heads, channels, device=device)
-    key = torch.randn(1, 2, num_heads, channels, device=device)
-    value = torch.randn(1, 2, num_heads, channels, device=device)
-    attn_mask = torch.ones(1, 2, 2, dtype=torch.bool, device=device)
+
+def test_sdpa_errors() -> None:
+    channels = 3
+    num_heads = 2
+    module = SDPA(channels=channels, num_query_heads=num_heads)
+
+    query = torch.randn(1, 2, num_heads, channels)
+    key = torch.randn(1, 2, num_heads, channels)
+    value = torch.randn(1, 2, num_heads, channels)
+    attn_mask = torch.ones(1, 2, 2, dtype=torch.bool)
 
     with pytest.raises(ValueError, match="Cannot pass both"):
         module(
             query=query,
             key=key,
             value=value,
-            seqused_key_value=torch.tensor(
-                [1], dtype=torch.int32, device=device
-            ),
+            seqused_key_value=torch.tensor([1], dtype=torch.int32),
             attn_mask=attn_mask,
         )
 
@@ -187,9 +243,7 @@ def test_sdpa(device: torch.device) -> None:
             query=query,
             key=key,
             value=value,
-            seqused_key_value=torch.tensor(
-                [1], dtype=torch.int64, device=device
-            ),
+            seqused_key_value=torch.tensor([1], dtype=torch.int64),
         )
 
     with pytest.raises(
@@ -200,46 +254,9 @@ def test_sdpa(device: torch.device) -> None:
             query=query,
             key=key,
             value=value,
-            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32, device=device),
+            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
         )
 
-
-@withCUDA
-@pytest.mark.parametrize(
-    ("num_query_heads", "num_key_value_heads"),
-    [(4, 1), (4, 2), (6, 3)],  # MQA (1) and GQA group sizes.
-)
-def test_sdpa_gqa(
-    device: torch.device,
-    num_query_heads: int,
-    num_key_value_heads: int,
-) -> None:
-    channels = 8
-    module = SDPA(
-        channels=channels,
-        num_query_heads=num_query_heads,
-        num_key_value_heads=num_key_value_heads,
-    )
-
-    query = torch.randn(2, 6, num_query_heads, channels, device=device)
-    key = torch.randn(2, 5, num_key_value_heads, channels, device=device)
-    value = torch.randn(2, 5, num_key_value_heads, channels, device=device)
-
-    out = module(query=query, key=key, value=value)
-    assert out.shape == query.shape
-
-    # Grouped/multi-query attention must equal expanding key/value to the query
-    # head count via `repeat_interleave` (contiguous-group mapping).
-    groups = num_query_heads // num_key_value_heads
-    expected = reference_sdpa(
-        query=query,
-        key=key.repeat_interleave(groups, dim=-2),
-        value=value.repeat_interleave(groups, dim=-2),
-    )
-    torch.testing.assert_close(out, expected)
-
-
-def test_sdpa_head_divisibility_error() -> None:
     with pytest.raises(ValueError, match="must be divisible"):
         SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
 
@@ -386,9 +403,6 @@ def test_attention_errors() -> None:
 
     with pytest.raises(ValueError, match="must be divisible"):
         Attention(channels=5, num_query_heads=2)
-
-    with pytest.raises(ValueError, match=r"`num_key_value_heads`"):
-        Attention(channels=8, num_query_heads=4, num_key_value_heads=3)
 
 
 @withCUDA

@@ -240,7 +240,6 @@ class SDPA(torch.nn.Module):
             attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
             if attn_mask is not None
             else None,
-            # `enable_gqa` requires torch>=2.5 (the package's minimum).
             enable_gqa=self.num_query_heads != self.num_key_value_heads,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
