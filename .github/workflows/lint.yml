@@ -34,8 +34,7 @@ jobs:
 
       - name: Install package and pre-commit
         run: |
-          uv pip install 'https://download.pytorch.org/whl/cpu/torch-2.12.1%2Bcpu-cp310-cp310-manylinux_2_28_x86_64.whl'
-          uv pip install . pre-commit
+          uv pip install --torch-backend=cpu . pre-commit
 
       - name: Run pre-commit
         run: |
