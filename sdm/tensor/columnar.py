@@ -9,6 +9,7 @@ from torch import Tensor
 from typing_extensions import override
 
 from sdm.tensor import StringTensor
+from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
 
@@ -64,7 +65,9 @@ class ColumnarTensor(Tensor):
             raise ValueError("Expected 'size' to be non-empty")
 
         for i, column in enumerate(columns):
-            if isinstance(column, CategoricalTensor | TableTensor):
+            if isinstance(
+                column, CategoricalTensor | ColumnarTensor | TableTensor
+            ):
                 raise TypeError(
                     f"Expected value {i} in '{cls.__name__}' to be a single "
                     f"column tensor (got '{column.__class__.__name__}')"
@@ -143,6 +146,25 @@ class ColumnarTensor(Tensor):
             column = torch.as_tensor(values, device=device)
 
         return cls(columns=(column,), device=device)
+
+    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
+        r"""Convert this tensor to a flat ``pyarrow`` table.
+
+        Args:
+            columns: The column names.
+        """
+        if columns is None:
+            columns = tuple(str(i) for i in range(self.size(-1)))
+        elif len(columns) != self.size(-1):
+            raise ValueError(
+                f"Expected 'columns' to contain {self.size(-1)} entries "
+                f"(got {len(columns)})"
+            )
+
+        return pa.Table.from_arrays(
+            arrays=[to_arrow(column) for column in self.unbind(-1)],
+            names=columns,
+        )
 
     # Decorators ##############################################################
 

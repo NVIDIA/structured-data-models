@@ -4,7 +4,7 @@ from typing import cast
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor
+from sdm import CategoricalTensor, StringTensor
 
 
 def test_to_copy() -> None:
@@ -109,6 +109,31 @@ def test_tolist() -> None:
         [[10, 40], [None, 30]],
         [[20, None], [10, 40]],
     ]
+
+
+def test_to_arrow() -> None:
+    tensor = CategoricalTensor(
+        data=torch.tensor(
+            [
+                [[0, 1], [-1, 0]],
+                [[1, -1], [0, 1]],
+            ],
+            dtype=torch.int32,
+        ),
+        categories=(
+            StringTensor.from_list(["US", "CA"]),
+            torch.tensor([10, 20]),
+        ),
+    )
+
+    table = tensor.to_arrow()
+    assert table.column_names == ["0", "1"]
+    assert pa.types.is_dictionary(table["0"].type)
+    assert pa.types.is_dictionary(table["1"].type)
+    assert table.to_pydict() == {
+        "0": ["US", None, "CA", "US"],
+        "1": [20, 10, None, 20],
+    }
 
 
 def test_view_ops() -> None:
