@@ -127,3 +127,13 @@ def test_singular_column_keys(data: tuple[TableTensor, RelatedTables]) -> None:
     edge_indices = related_tables.edge_indices(task_table)
 
     assert edge_indices[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
+
+
+def test_node_batch(data: tuple[TableTensor, RelatedTables]) -> None:
+    task_table, related_tables = data
+
+    out = related_tables.node_batch(task_table)
+
+    assert out.equal(
+        torch.tensor([0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 1, 3, 3, 3, 0, 0, 1, 3, 3])
+    )

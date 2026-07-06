@@ -1,6 +1,7 @@
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from math import prod
 
 import pyarrow as pa
 import torch
@@ -230,3 +231,106 @@ class RelatedTables:
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
+
+    def node_batch(
+        self,
+        task_table: TableTensor,
+        *,
+        device: torch.device | str | None = None,
+    ) -> Tensor:
+        r"""Assign each graph node to a task-row graph.
+
+        Args:
+            task_table: The task table referenced by relationships whose
+                ``left_table`` or ``right_table`` is ``None``.
+            device: The device.
+
+        Returns:
+            A PyG-style batch vector with shape ``[N]`` where ``N`` is the
+            total number of rows across the task table and all related tables.
+            Values are task table row indices, and ``-1`` marks nodes not
+            reachable from a task row.
+        """
+        device = (
+            torch.device(device) if device is not None else task_table.device
+        )
+
+        tables: dict[str | None, TableTensor] = {None: task_table}
+        tables.update(self.tables)
+
+        offsets: dict[str | None, int] = {}
+        num_nodes = 0
+        for name, table in tables.items():
+            offsets[name] = num_nodes
+            num_nodes += prod(table.size()[:-1])
+
+        node_batch = torch.full(
+            (num_nodes,),
+            -1,
+            dtype=torch.long,
+            device=device,
+        )
+        num_task_rows = prod(task_table.size()[:-1])
+        task_rows = torch.arange(
+            num_task_rows,
+            dtype=torch.long,
+            device=device,
+        )
+        node_batch[task_rows + offsets[None]] = task_rows
+
+        edge_indices = self.edge_indices(
+            task_table,
+            dtype=torch.long,
+            device=device,
+        )
+        for _ in range(max(num_nodes, 1)):
+            changed = False
+            for rel, edge_index in zip(self.relationships, edge_indices):
+                edge_index = edge_index.clone()
+                edge_index[0] += offsets[rel.left_table]
+                edge_index[1] += offsets[rel.right_table]
+
+                for src, dst in (
+                    (edge_index[0], edge_index[1]),
+                    (edge_index[1], edge_index[0]),
+                ):
+                    src_owner = node_batch[src]
+                    mask = src_owner >= 0
+                    if not mask.any():
+                        continue
+
+                    dst = dst[mask]
+                    proposed_owner = src_owner[mask]
+
+                    order = dst.argsort()
+                    dst = dst[order]
+                    proposed_owner = proposed_owner[order]
+
+                    duplicate = dst[1:] == dst[:-1]
+                    conflict = duplicate & (
+                        proposed_owner[1:] != proposed_owner[:-1]
+                    )
+                    if conflict.any():
+                        raise ValueError(
+                            "Expected each graph node to belong to at most "
+                            "one task row"
+                        )
+
+                    existing_owner = node_batch[dst]
+                    conflict = (existing_owner >= 0) & (
+                        existing_owner != proposed_owner
+                    )
+                    if conflict.any():
+                        raise ValueError(
+                            "Expected each graph node to belong to at most "
+                            "one task row"
+                        )
+
+                    mask = existing_owner < 0
+                    node_batch[dst[mask]] = proposed_owner[mask]
+                    changed = changed or bool(mask.any())
+
+            if not changed:
+                return node_batch
+
+        return node_batch
