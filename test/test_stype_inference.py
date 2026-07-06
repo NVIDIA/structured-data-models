@@ -114,7 +114,7 @@ def test_infer_stypes_id_name_heuristic_respects_dtype() -> None:
     }
 
 
-def test_infer_stypes_id_columns_override() -> None:
+def test_infer_stypes_result_can_be_overridden_afterward() -> None:
     table = pa.table(
         {
             "age": pa.array([25, 31], type=pa.int64()),
@@ -122,7 +122,13 @@ def test_infer_stypes_id_columns_override() -> None:
         }
     )
 
-    assert infer_stypes(table, id_columns=["account_number"]) == {
+    stypes = infer_stypes(table)
+    assert (
+        stypes["account_number"] == Stype.numerical
+    )  # missed by the heuristic
+
+    stypes["account_number"] = Stype.id  # inspect and correct it directly
+    assert stypes == {
         "age": Stype.numerical,
         "account_number": Stype.id,
     }

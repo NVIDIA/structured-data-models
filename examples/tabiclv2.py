@@ -7,8 +7,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 df = load_breast_cancer(as_frame=True).frame
 
-# `target` is 0/1-encoded, so it infers as numerical by default; override it
-# to reflect that it is really a categorical label.
+# `infer_stypes` returns a plain, mutable dict -- inspect it and correct any
+# entry that doesn't match intent. Here, `target` is 0/1-encoded, so it
+# infers as numerical by default even though it's really a categorical label.
 stypes = infer_stypes(df)
 stypes["target"] = Stype.categorical
 

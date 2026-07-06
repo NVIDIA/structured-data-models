@@ -1,6 +1,6 @@
 import importlib.util
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 import pyarrow as pa
@@ -14,11 +14,7 @@ __all__ = [
 _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 
-def infer_stypes(
-    table: Any,
-    *,
-    id_columns: Iterable[str] | None = None,
-) -> dict[str, Stype]:
+def infer_stypes(table: Any) -> dict[str, Stype]:
     r"""Infer semantic column types for a pandas or Arrow table.
 
     Integer, floating-point, and decimal columns are inferred as
@@ -32,21 +28,14 @@ def infer_stypes(
     :class:`TypeError`. pandas inputs are routed through their Arrow schema
     so inference stays consistent across backends.
 
-    The name-based :attr:`Stype.id` heuristic is best-effort. Use
-    ``id_columns`` to state identifier columns explicitly instead of relying
-    on naming convention.
+    Inference is best-effort. The returned mapping is a plain, mutable
+    ``dict`` -- inspect it and overwrite individual entries if the inferred
+    stype doesn't match intent.
 
     Args:
         table: A ``pandas.DataFrame``, ``pyarrow.Table``, or mapping of column
             names to ``pyarrow.Array``/``pyarrow.ChunkedArray`` values.
-        id_columns: Column names to always infer as :attr:`Stype.id`,
-            regardless of name or dtype. Takes precedence over the name-based
-            heuristic.
     """
-    id_column_set = (
-        frozenset(id_columns) if id_columns is not None else frozenset()
-    )
-
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
@@ -58,9 +47,7 @@ def infer_stypes(
 
     if isinstance(table, pa.Schema):
         return {
-            field.name: _infer_column_stype(
-                field.name, field.type, id_column_set
-            )
+            field.name: _infer_column_stype(field.name, field.type)
             for field in table
         }
 
@@ -72,9 +59,7 @@ def infer_stypes(
                     "Expected an Arrow mapping column to be a 'pyarrow.Array' "
                     f"or 'pyarrow.ChunkedArray' (got '{type(value).__name__}')"
                 )
-            stypes[str(column)] = _infer_column_stype(
-                str(column), value.type, id_column_set
-            )
+            stypes[str(column)] = _infer_column_stype(str(column), value.type)
         return stypes
 
     raise TypeError(
@@ -83,13 +68,7 @@ def infer_stypes(
     )
 
 
-def _infer_column_stype(
-    column: str,
-    data_type: pa.DataType,
-    id_columns: frozenset[str],
-) -> Stype:
-    if column in id_columns:
-        return Stype.id
+def _infer_column_stype(column: str, data_type: pa.DataType) -> Stype:
     if (
         pa.types.is_integer(data_type)
         or pa.types.is_string(data_type)
