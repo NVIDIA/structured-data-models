@@ -1,15 +1,41 @@
-"""Inference acceleration benchmark for :class:`TabICLv2`.
+r"""Inference acceleration benchmark for :class:`TabICLv2`.
 
-Sweeps NVIDIA-recommended inference configurations (TF32, bf16, SDPA
-backend pinning, ``torch.compile`` modes) over representative in-context
-learning workloads and reports wall-clock latency, table-stream cost
-(amortized over a stream of fresh table shapes, including recompiles),
-peak memory, and accuracy versus an fp32 reference.
+Sweeps NVIDIA-recommended inference configurations over representative
+in-context learning workloads and reports wall-clock latency,
+table-stream cost (amortized over a stream of fresh table shapes,
+including recompiles), peak memory, and accuracy versus an fp32
+reference.
+
+What to expect from each precision (measured on GB200):
+
+* ``fp32`` (``ieee`` matmuls): the accuracy reference; slowest.
+* ``tf32``: ~1.4x end-to-end for fp32 pipelines with negligible drift;
+  the safe default (``torch.set_float32_matmul_precision("high")``).
+* ``bf16`` (autocast or full-cast): ~3-4x and roughly half the peak
+  memory; passes the accuracy gates here (small logit drift; watch the
+  first-call-per-shape warmup, which is higher than fp32).
+* ``fp8`` (Transformer Engine, per-tensor scaling): speeds up only the
+  swapped ``Linear`` GEMMs; at this model's small GEMM sizes (128-1536
+  channels) quantization overhead usually cancels the gain, so expect
+  parity with bf16 at best and the largest logit drift of the 8-bit
+  options. GEMM dims must be multiples of 16.
+* ``mxfp8`` (block-scaled fp8, Blackwell): better accuracy than
+  per-tensor fp8 at similar speed; still GEMM-bound, so the same
+  small-GEMM caveat applies.
+* ``nvfp4`` (4-bit block-scaled, Blackwell): built for very large
+  GEMMs; at this model's sizes expect quantization overhead to swamp
+  any gain and the highest accuracy risk. Measured for completeness -
+  not a recommended default for TabICLv2.
+
+The fp8/mxfp8/nvfp4 configurations require the optional
+``transformer_engine`` package (available in NVIDIA NGC containers) and
+swap eligible ``torch.nn.Linear`` modules for ``te.Linear``.
 
 Each cell runs in a fresh subprocess so that inductor caches, CUDA-graph
 pools, and allocator state cannot leak between configurations::
 
-    python examples/benchmark_tabiclv2.py --out bench.json --budget-minutes 110
+    python examples/benchmark_tabiclv2.py --out bench.json \\
+        --budget-minutes 110 --configs c0-fp32,c3-bf16-full,c10-mxfp8
 """
 
 import argparse
@@ -20,6 +46,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import ExitStack
 from typing import Any
 
 import torch
@@ -28,22 +55,24 @@ from torch import Tensor
 from torch.nn.attention import SDPBackend, sdpa_kernel
 
 CONFIGS = {
-    # name: (precision, sdpa_priority, compile_kwargs)
-    "c0-fp32": ("fp32", False, None),
-    "c1-tf32": ("tf32", False, None),
-    "c2-bf16-autocast": ("bf16-autocast", False, None),
-    "c3-bf16-full": ("bf16-full", False, None),
-    "c4-bf16-cudnn-sdpa": ("bf16-full", True, None),
-    "c5-compile": ("bf16-full", True, {"fullgraph": True}),
+    # name: (precision, sdpa_priority, compile_kwargs, te_recipe)
+    "c0-fp32": ("fp32", False, None, None),
+    "c1-tf32": ("tf32", False, None, None),
+    "c2-bf16-autocast": ("bf16-autocast", False, None, None),
+    "c3-bf16-full": ("bf16-full", False, None, None),
+    "c4-bf16-cudnn-sdpa": ("bf16-full", True, None, None),
+    "c5-compile": ("bf16-full", True, {"fullgraph": True}, None),
     "c6-compile-dynamic": (
         "bf16-full",
         True,
         {"fullgraph": True, "dynamic": True},
+        None,
     ),
     "c7-compile-ro": (
         "bf16-full",
         True,
         {"fullgraph": True, "dynamic": True, "mode": "reduce-overhead"},
+        None,
     ),
     "c8-compile-ma": (
         "bf16-full",
@@ -53,7 +82,12 @@ CONFIGS = {
             "dynamic": True,
             "mode": "max-autotune-no-cudagraphs",
         },
+        None,
     ),
+    # Transformer Engine low-precision GEMMs on a bf16 base model.
+    "c9-fp8": ("bf16-full", True, None, "fp8"),
+    "c10-mxfp8": ("bf16-full", True, None, "mxfp8"),
+    "c11-nvfp4": ("bf16-full", True, None, "nvfp4"),
 }
 
 WORKLOADS = {
@@ -127,6 +161,57 @@ def cast_inputs(x: Tensor, y: Tensor, precision: str) -> tuple[Tensor, Tensor]:
     return x, y
 
 
+def load_transformer_engine() -> tuple[Any, Any]:
+    """Import Transformer Engine lazily (optional heavy dependency)."""
+    import importlib
+
+    te = importlib.import_module("transformer_engine.pytorch")
+    recipes = importlib.import_module("transformer_engine.common.recipe")
+    return te, recipes
+
+
+def make_te_recipe(recipes: Any, name: str) -> Any:
+    """Build the Transformer Engine scaling recipe for ``name``."""
+    if name == "fp8":
+        return recipes.DelayedScaling()
+    if name == "mxfp8":
+        return recipes.MXFP8BlockScaling()
+    if name == "nvfp4":
+        return recipes.NVFP4BlockScaling()
+    raise ValueError(f"unknown recipe '{name}'")
+
+
+def swap_te_linears(model: TabICLv2, te: Any) -> int:
+    """Swap eligible ``Linear`` modules for ``te.Linear``.
+
+    Transformer Engine low-precision GEMMs require both feature
+    dimensions to be multiples of 16; ineligible layers (for example the
+    feature-grouping projection and the output head) stay in bf16.
+    """
+    swapped = 0
+    for module in model.modules():
+        for name, child in list(module.named_children()):
+            if (
+                isinstance(child, torch.nn.Linear)
+                and child.in_features % 16 == 0
+                and child.out_features % 16 == 0
+            ):
+                replacement = te.Linear(
+                    child.in_features,
+                    child.out_features,
+                    bias=child.bias is not None,
+                    params_dtype=child.weight.dtype,
+                    device=child.weight.device,
+                )
+                with torch.no_grad():
+                    replacement.weight.copy_(child.weight)
+                    if child.bias is not None:
+                        replacement.bias.copy_(child.bias)
+                setattr(module, name, replacement)
+                swapped += 1
+    return swapped
+
+
 def timed_loop(fn: Any, min_seconds: float = 3.0) -> dict[str, float]:
     """Measure sync-bounded wall-clock latency of ``fn``."""
     times: list[float] = []
@@ -182,17 +267,19 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
     """Run one (config, workload, task, route) benchmark cell."""
     config, workload = spec["config"], spec["workload"]
     task, route = spec["task"], spec["route"]
-    precision, pin_sdpa, compile_kwargs = CONFIGS[config]
+    precision, pin_sdpa, compile_kwargs, te_recipe = CONFIGS[config]
     device = torch.device("cuda")
     result: dict[str, Any] = dict(spec)
 
     model = TabICLv2(pretrained=True, device=device)
     apply_precision(model, precision)
 
-    contexts: list[Any] = []
+    # Context factories: `sdpa_kernel` is a generator-based context manager
+    # and therefore single-use, so build a fresh instance per call.
+    context_factories: list[Any] = []
     if pin_sdpa:
-        contexts.append(
-            sdpa_kernel(
+        context_factories.append(
+            lambda: sdpa_kernel(
                 [
                     SDPBackend.CUDNN_ATTENTION,
                     SDPBackend.FLASH_ATTENTION,
@@ -203,16 +290,22 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
             )
         )
     if precision == "bf16-autocast":
-        contexts.append(torch.amp.autocast("cuda", torch.bfloat16))
+        context_factories.append(
+            lambda: torch.amp.autocast("cuda", torch.bfloat16)
+        )
+    if te_recipe is not None:
+        te, recipes = load_transformer_engine()
+        result["te_swapped_linears"] = swap_te_linears(model, te)
+        fp8_recipe = make_te_recipe(recipes, te_recipe)
+        context_factories.append(
+            lambda: te.fp8_autocast(enabled=True, fp8_recipe=fp8_recipe)
+        )
 
     def call(x: Tensor, y: Tensor) -> Tensor:
-        for ctx in contexts:
-            ctx.__enter__()
-        try:
+        with ExitStack() as stack:
+            for factory in context_factories:
+                stack.enter_context(factory())
             return model(x, y)
-        finally:
-            for ctx in reversed(contexts):
-                ctx.__exit__(None, None, None)
 
     cold_compile_s = 0.0
     if compile_kwargs is not None:
@@ -234,42 +327,44 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
             call(x, y)
         result.update(timed_loop(lambda: call(x, y)))
 
-        # Table-stream: fresh shapes, including any recompiles.
+        # Table-stream: fresh shapes, including any recompiles. Jittered
+        # shapes can violate low-precision GEMM divisibility constraints;
+        # such failures are counted rather than aborting the cell.
+        stream_errors = 0
         stream_start = time.perf_counter()
         for jitter in range(1, STREAM_LENGTH + 1):
             xs, ys = make_table(
                 workload, task, seed=jitter, device=device, jitter=jitter
             )
             xs, ys = cast_inputs(xs, ys, precision)
-            call(xs, ys)
+            try:
+                call(xs, ys)
+            except RuntimeError:
+                stream_errors += 1
         torch.cuda.synchronize()
         result["table_stream_per_table_s"] = (
             time.perf_counter() - stream_start
         ) / STREAM_LENGTH
+        if stream_errors:
+            result["table_stream_errors"] = stream_errors
     else:  # fit/predict route.
         num_train = WORKLOADS[workload][3]
         x_train, x_test = x[..., :num_train, :], x[..., num_train:, :]
 
         def fit_predict() -> Tensor:
-            for ctx in contexts:
-                ctx.__enter__()
-            try:
+            with ExitStack() as stack:
+                for factory in context_factories:
+                    stack.enter_context(factory())
                 model.fit(x_train, y)
                 pred = model.predict(x_test)
                 model.clear()
                 return pred
-            finally:
-                for ctx in reversed(contexts):
-                    ctx.__exit__(None, None, None)
 
         def predict_only() -> Tensor:
-            for ctx in contexts:
-                ctx.__enter__()
-            try:
+            with ExitStack() as stack:
+                for factory in context_factories:
+                    stack.enter_context(factory())
                 return model.predict(x_test)
-            finally:
-                for ctx in reversed(contexts):
-                    ctx.__exit__(None, None, None)
 
         out = fit_predict().clone()
         fit_predict()  # Warmup both graphs.
@@ -337,6 +432,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="bench.json")
     parser.add_argument("--budget-minutes", type=float, default=110.0)
+    parser.add_argument(
+        "--configs",
+        default=",".join(CONFIGS),
+        help="Comma-separated subset of configurations to benchmark "
+        f"(default: all). Choices: {', '.join(CONFIGS)}.",
+    )
     parser.add_argument("--run-cell", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--workdir", default=None, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -365,6 +466,13 @@ def main() -> None:
                 records.append(record)
                 print(format_record(record), flush=True)
 
+    selected = [c.strip() for c in args.configs.split(",") if c.strip()]
+    unknown = [c for c in selected if c not in CONFIGS]
+    if unknown:
+        raise SystemExit(f"unknown --configs entries: {', '.join(unknown)}")
+    if "c0-fp32" not in selected:
+        selected.insert(0, "c0-fp32")  # Always run the accuracy reference.
+
     # Stage 1: full config grid on the size extremes (classification,
     # one-shot route). c0 first: it writes the accuracy reference.
     stage1 = [
@@ -375,7 +483,7 @@ def main() -> None:
             "route": "oneshot",
         }
         for workload in ("small", "large")
-        for config in CONFIGS
+        for config in selected
     ]
     enqueue(stage1)
 
