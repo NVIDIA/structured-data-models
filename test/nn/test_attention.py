@@ -444,10 +444,6 @@ def test_attention_gqa_numerical(
     num_key_value_heads: int,
     rope_on: bool,
 ) -> None:
-    # float64 makes the comparison exact and TF32-immune: the module computes
-    # K/V via one fused F.linear while the reference below uses separate
-    # projections, and on some GPUs differently-shaped fp32 (TF32) matmuls
-    # round differently. fp64 still catches any q/k/v mis-slice or swap.
     dtype = torch.float64
     channels = 8
     num_query_heads = 4
