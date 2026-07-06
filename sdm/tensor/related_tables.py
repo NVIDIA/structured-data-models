@@ -289,7 +289,7 @@ class RelatedTables:
             edge_indices.append(edge_index.flip(0))
 
         if len(edge_indices) == 0:
-            dtype = torch.long if dtype is None else dtype
+            dtype = torch.int64 if dtype is None else dtype
             edge_index = torch.empty((2, 0), dtype=dtype, device=device)
         elif len(edge_indices) == 1:
             edge_index = edge_indices[0]
