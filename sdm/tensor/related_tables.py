@@ -2,7 +2,7 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from math import prod
-from typing import NamedTuple
+from typing import Literal, NamedTuple, overload
 
 import pyarrow as pa
 import torch
@@ -251,7 +251,7 @@ class RelatedTables:
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> HomogeneousGraph:
-        r"""Materialize graph data for related tables.
+        r"""Materialize homogeneous graph edges for table relationships.
 
         Args:
             task_table: The task table referenced by relationships whose
@@ -304,12 +304,40 @@ class RelatedTables:
             task_edge_indices=task_edge_indices,
         )
 
+    @overload
     def row_batch(
         self,
         graph: HomogeneousGraph,
+        *,
+        return_num_hops: Literal[False] = False,
+    ) -> Tensor: ...
+
+    @overload
+    def row_batch(
+        self,
+        graph: HomogeneousGraph,
+        *,
+        return_num_hops: Literal[True],
+    ) -> tuple[Tensor, int]: ...
+
+    @overload
+    def row_batch(
+        self,
+        graph: HomogeneousGraph,
+        *,
+        return_num_hops: bool,
+    ) -> Tensor | tuple[Tensor, int]: ...
+
+    def row_batch(
+        self,
+        graph: HomogeneousGraph,
+        *,
         return_num_hops: bool = False,
     ) -> Tensor | tuple[Tensor, int]:
-        r"""Assign each graph row to a task row.
+        r"""Return the task-row assignment for each related table row.
+
+        Related table neighborhoods are assumed to be disjoint: Each reachable
+        table row should belong to at most one task-table row.
 
         Args:
             graph: The homogeneous graph.
@@ -318,6 +346,8 @@ class RelatedTables:
             A row-batch vector with shape ``[R]`` where ``R`` is the
             total number of rows across all related tables, which assigns each
             row to its task row, or ``-1`` otherwise.
+            If ``return_num_hops`` is ``True``, also returns the number of hops
+            used for the final assignment.
         """
         row_batch = graph.edge_index.new_full((graph.num_rows,), fill_value=-1)
         frontier = torch.zeros_like(row_batch, dtype=torch.bool)
