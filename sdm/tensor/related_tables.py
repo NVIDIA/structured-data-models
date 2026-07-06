@@ -340,13 +340,15 @@ class RelatedTables:
 
         Args:
             graph: The homogeneous graph.
+            return_num_hops: Whether to also return the number of propagation
+            hops needed to assign reachable rows.
 
         Returns:
             A row-batch vector with shape ``[R]`` where ``R`` is the
             total number of rows across all related tables, which assigns each
             row to its task row, or ``-1`` otherwise.
-            If ``return_num_hops`` is ``True``, also returns the number of hops
-            used for the final assignment.
+            If ``return_num_hops`` is ``True``, also returns the number of
+            propagation hops used.
         """
         row_batch = graph.edge_index.new_full((graph.num_rows,), fill_value=-1)
         frontier = torch.zeros_like(row_batch, dtype=torch.bool)
