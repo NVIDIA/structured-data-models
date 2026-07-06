@@ -303,7 +303,7 @@ class TableTensor(Tensor):
         arrays: list[pa.Array] = []
         columns: list[str] = []
         for stype, tensor in self.items():
-            if tensor.numel() == 0:
+            if tensor.size(-1) == 0:
                 continue
 
             columns.extend(self._columns[stype])

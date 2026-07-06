@@ -590,6 +590,27 @@ def test_arrow() -> None:
     assert tensor.to_arrow().to_pydict() == data
 
 
+def test_arrow_empty() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "age": pa.array([], type=pa.float32()),
+                "country": pa.array([], type=pa.string()),
+            }
+        ),
+        stypes={
+            "age": "numerical",
+            "country": "categorical",
+        },
+    )
+
+    table = tensor.to_arrow()
+
+    assert table.num_rows == 0
+    assert table.column_names == ["age", "country"]
+    assert table.to_pydict() == {"age": [], "country": []}
+
+
 def test_from_pandas() -> None:
     df = pd.DataFrame(
         {
