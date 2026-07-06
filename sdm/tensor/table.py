@@ -579,7 +579,7 @@ class TableTensor(Tensor):
         out += "  blocks={\n"
         out += "\n".join(stype_repr) + "\n"
         out += "  },\n"
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             out += f"  device={self.device},\n"
         out += ")"
         return out

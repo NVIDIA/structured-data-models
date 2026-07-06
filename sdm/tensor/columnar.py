@@ -234,7 +234,7 @@ class ColumnarTensor(Tensor):
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"
         return out
