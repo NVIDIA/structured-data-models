@@ -98,7 +98,7 @@ def data() -> tuple[TableTensor, RelatedTables]:
 def test_edge_indices(data: tuple[TableTensor, RelatedTables]) -> None:
     task_table, related_tables = data
     edge_indices = related_tables.edge_indices(task_table)
-    edge_index = related_tables.edge_index(task_table)
+    graph = related_tables.homogeneous_graph(task_table)
 
     assert len(edge_indices) == 3
     assert edge_indices[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
@@ -108,21 +108,28 @@ def test_edge_indices(data: tuple[TableTensor, RelatedTables]) -> None:
     assert edge_indices[2].equal(
         torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 3]])
     )
-    assert edge_index.equal(
+    assert graph.num_rows == 15
+    assert graph.node_offsets == {"users": 0, "orders": 4, "items": 10}
+    assert graph.edge_index.equal(
         torch.tensor(
             [
-                [0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 8, 9, 10, 11, 12, 13],
-                [4, 5, 6, 7, 4, 4, 5, 7, 7, 7, 14, 15, 16, 17, 18, 17],
+                [4, 5, 6, 7, 8, 9, 4, 5, 6, 7, 8, 9],
+                [0, 0, 1, 3, 3, 3, 10, 11, 12, 13, 14, 13],
             ]
         )
     )
+    assert set(graph.task_edge_indices) == {0}
+    assert graph.task_edge_indices[0].equal(
+        torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
+    )
 
 
-def test_node_batch(data: tuple[TableTensor, RelatedTables]) -> None:
+def test_row_batch(data: tuple[TableTensor, RelatedTables]) -> None:
     task_table, related_tables = data
+    graph = related_tables.homogeneous_graph(task_table)
 
-    out = related_tables.node_batch(task_table)
+    out = related_tables.row_batch(graph)
 
     assert out.equal(
-        torch.tensor([0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 1, 3, 3, 3, 0, 0, 1, 3, 3])
+        torch.tensor([0, 1, 2, 3, 0, 0, 1, 3, 3, 3, 0, 0, 1, 3, 3])
     )

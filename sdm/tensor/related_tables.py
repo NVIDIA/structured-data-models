@@ -2,6 +2,7 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from math import prod
+from typing import NamedTuple
 
 import pyarrow as pa
 import torch
@@ -24,14 +25,13 @@ class Relationship:
         left_table: Name of the left related table, or ``None`` for the task
             table.
         left_columns: Column names from the left table.
-        right_table: Name of the right related table, or ``None`` for the task
-            table.
+        right_table: Name of the right related table.
         right_columns: Column names from the right table.
     """
 
     left_table: str | None
     left_columns: Sequence[str]
-    right_table: str | None
+    right_table: str
     right_columns: Sequence[str]
 
     def __post_init__(self) -> None:
@@ -47,12 +47,6 @@ class Relationship:
                 "Expected 'left_columns' and 'right_columns' to be non-empty"
             )
 
-        if self.left_table is None and self.right_table is None:
-            raise ValueError(
-                "Expected either 'left_table' or 'right_table' to refer to a "
-                "related table"
-            )
-
         for column in (*self.left_columns, *self.right_columns):
             for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
@@ -60,6 +54,24 @@ class Relationship:
                         f"Column name '{column}' is reserved for internal "
                         f"row indexing"
                     )
+
+
+class HomogeneousGraph(NamedTuple):
+    r"""Materialized homogeneous graph.
+
+    Args:
+        num_rows: The number of rows in the homogeneous graph.
+        node_offsets: Global node offsets keyed by related table name.
+        edge_index: Edge index with shape ``[2, num_edges]`` over the
+            concatenated rows of all related tables.
+        task_edge_indices: Task-to-related-table edge indices keyed by
+            relationship index.
+    """
+
+    num_rows: int
+    node_offsets: dict[str, int]
+    edge_index: Tensor
+    task_edge_indices: dict[int, Tensor]
 
 
 @dataclass(frozen=True, init=False)
@@ -120,8 +132,8 @@ class RelatedTables:
                 assert left_columns is not None
                 if isinstance(left_columns, str):
                     left_columns = (left_columns,)
-                right_table = relationship.get("right_table")
-                assert right_table is None or isinstance(right_table, str)
+                right_table = relationship["right_table"]
+                assert isinstance(right_table, str)
                 if "right_column" in relationships:
                     right_columns = relationship["right_column"]
                 else:
@@ -231,14 +243,14 @@ class RelatedTables:
 
         return tuple(edge_indices)
 
-    def edge_index(
+    def homogeneous_graph(
         self,
         task_table: TableTensor,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
-    ) -> Tensor:
-        r"""Materialize a homogeneous graph edge index.
+    ) -> HomogeneousGraph:
+        r"""Materialize graph data for related tables.
 
         Args:
             task_table: The task table referenced by relationships whose
@@ -247,128 +259,91 @@ class RelatedTables:
             device: The device.
 
         Returns:
-            Edge index with shape ``[2, num_edges]`` over the concatenated rows
-            of the task table followed by all related tables.
+            A materialized related-table graph.
         """
-        tables: dict[str | None, TableTensor] = {None: task_table}
-        tables.update(self.tables)
-
-        offsets: dict[str | None, int] = {}
         offset = 0
-        for name, table in tables.items():
+        offsets: dict[str, int] = {}
+        for name, table in self.tables.items():
             offsets[name] = offset
             offset += prod(table.size()[:-1])
 
-        edge_indices = self.edge_indices(
-            task_table,
-            dtype=dtype,
-            device=device,
+        edge_indices: list[Tensor] = []
+        task_edge_indices: dict[int, Tensor] = {}
+        for i, (relationship, edge_index) in enumerate(
+            zip(
+                self.relationships,
+                self.edge_indices(task_table, dtype=dtype, device=device),
+            )
+        ):
+            if relationship.left_table is None:
+                task_edge_indices[i] = edge_index
+                continue
+
+            edge_index += edge_index.new_tensor(
+                [
+                    [offsets[relationship.left_table]],
+                    [offsets[relationship.right_table]],
+                ],
+            )
+            edge_indices.append(edge_index)
+            edge_indices.append(edge_index.flip(0))
+
+        if len(edge_indices) == 0:
+            dtype = torch.long if dtype is None else dtype
+            edge_index = torch.empty((2, 0), dtype=dtype, device=device)
+        elif len(edge_indices) == 1:
+            edge_index = edge_indices[0]
+        else:
+            edge_index = torch.cat(edge_indices, dim=1)
+
+        return HomogeneousGraph(
+            num_rows=offset,
+            node_offsets=offsets,
+            edge_index=edge_index,
+            task_edge_indices=task_edge_indices,
         )
 
-        global_edge_indices: list[Tensor] = []
-        for rel, edge_index in zip(self.relationships, edge_indices):
-            edge_index = edge_index.clone()
-            edge_index[0] += offsets[rel.left_table]
-            edge_index[1] += offsets[rel.right_table]
-            global_edge_indices.append(edge_index)
-
-        if not global_edge_indices:
-            dtype = torch.long if dtype is None else dtype
-            return torch.empty((2, 0), dtype=dtype, device=device)
-
-        return torch.cat(global_edge_indices, dim=1)
-
-    def node_batch(
+    def row_batch(
         self,
-        task_table: TableTensor,
-        *,
-        device: torch.device | str | None = None,
-    ) -> Tensor:
-        r"""Assign each graph node to a task-row graph.
+        graph: HomogeneousGraph,
+        return_num_hops: bool = False,
+    ) -> Tensor | tuple[Tensor, int]:
+        r"""Assign each graph row to a task row.
 
         Args:
-            task_table: The task table referenced by relationships whose
-                ``left_table`` or ``right_table`` is ``None``.
-            device: The device.
+            graph: The homogeneous graph.
 
         Returns:
-            A PyG-style batch vector with shape ``[N]`` where ``N`` is the
-            total number of rows across the task table and all related tables.
-            Values are task table row indices, and ``-1`` marks nodes not
-            reachable from a task row.
+            A row-batch vector with shape ``[R]`` where ``R`` is the
+            total number of rows across all related tables, which assigns each
+            row to its task row, or ``-1`` otherwise.
         """
-        device = (
-            torch.device(device) if device is not None else task_table.device
-        )
+        row_batch = graph.edge_index.new_full((graph.num_rows,), fill_value=-1)
+        frontier = torch.zeros_like(row_batch, dtype=torch.bool)
 
-        tables: dict[str | None, TableTensor] = {None: task_table}
-        tables.update(self.tables)
+        for i, task_edge_index in graph.task_edge_indices.items():
+            rel = self.relationships[i]
+            dst = task_edge_index[1] + graph.node_offsets[rel.right_table]
 
-        offsets: dict[str | None, int] = {}
-        num_nodes = 0
-        for name, table in tables.items():
-            offsets[name] = num_nodes
-            num_nodes += prod(table.size()[:-1])
+            row_batch[dst] = task_edge_index[0]
+            frontier[dst] = True
 
-        node_batch = torch.full(
-            (num_nodes,),
-            -1,
-            dtype=torch.long,
-            device=device,
-        )
-        num_task_rows = prod(task_table.size()[:-1])
-        task_rows = torch.arange(
-            num_task_rows,
-            dtype=torch.long,
-            device=device,
-        )
-        node_batch[task_rows + offsets[None]] = task_rows
+        num_hops = 0
+        while True:
+            src, dst = graph.edge_index
+            mask = frontier[src] & (row_batch[dst] < 0)
 
-        edge_index = self.edge_index(
-            task_table,
-            dtype=torch.long,
-            device=device,
-        )
-        edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
-
-        for _ in range(max(num_nodes, 1)):
-            changed = False
-            src, dst = edge_index
-            src_owner = node_batch[src]
-            mask = src_owner >= 0
-            if not mask.any():
-                return node_batch
-
+            src = src[mask]
+            if src.numel() == 0:
+                break
             dst = dst[mask]
-            proposed_owner = src_owner[mask]
 
-            order = dst.argsort()
-            dst = dst[order]
-            proposed_owner = proposed_owner[order]
+            row_batch[dst] = row_batch[src]
+            frontier.fill_(False)
+            frontier[dst] = True
+            num_hops += 1
 
-            duplicate = dst[1:] == dst[:-1]
-            conflict = duplicate & (proposed_owner[1:] != proposed_owner[:-1])
-            if conflict.any():
-                raise ValueError(
-                    "Expected each graph node to belong to at most one "
-                    "task row"
-                )
+        if return_num_hops:
+            return row_batch, num_hops
 
-            existing_owner = node_batch[dst]
-            conflict = (existing_owner >= 0) & (
-                existing_owner != proposed_owner
-            )
-            if conflict.any():
-                raise ValueError(
-                    "Expected each graph node to belong to at most one "
-                    "task row"
-                )
-
-            mask = existing_owner < 0
-            node_batch[dst[mask]] = proposed_owner[mask]
-            changed = changed or bool(mask.any())
-
-            if not changed:
-                return node_batch
-
-        return node_batch
+        return row_batch
