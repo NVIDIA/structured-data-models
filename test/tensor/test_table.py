@@ -51,6 +51,12 @@ def test_init() -> None:
         "segment": (Stype.categorical, 1),
     }
 
+    with pytest.raises(ValueError, match=r"datetime.*dtype"):
+        TableTensor(
+            columns={"datetime": ["created_at"]},
+            datetime=torch.zeros(2, 1),
+        )
+
 
 def test_empty() -> None:
     with pytest.raises(ValueError, match="to be given"):
@@ -133,12 +139,14 @@ def test_to_copy() -> None:
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country", "segment"],
+            "datetime": ["created_at"],
         },
         numerical=torch.randn(2, 2),
         categorical=CategoricalTensor(
             data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
             categories=(torch.arange(2), torch.arange(2)),
         ),
+        datetime=torch.tensor([[1], [2]], dtype=torch.int64),
     )
 
     out = tensor.to(torch.float64)
@@ -147,39 +155,10 @@ def test_to_copy() -> None:
     assert out.dtype == torch.float64
     assert out.numerical.dtype == torch.float64
     assert out.categorical.dtype == torch.int32
+    assert out.datetime.equal(tensor.datetime)
+    assert out.datetime.dtype == torch.int64
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
-
-
-def test_datetime() -> None:
-    tensor = TableTensor.from_arrow(
-        table=pa.table(
-            {
-                "created_at": pa.array(
-                    [datetime(2024, 1, 1), datetime(2024, 1, 2)],
-                    type=pa.timestamp("ms"),
-                )
-            }
-        ),
-        stypes={"created_at": "datetime"},
-    )
-
-    expected = torch.tensor(
-        [[1704067200000000], [1704153600000000]],
-        dtype=torch.int64,
-    )
-    assert tensor.datetime.equal(expected)
-    assert tensor.columns[Stype.datetime] == ("created_at",)
-
-    out = cast(TableTensor, tensor.to(torch.float64))
-    assert out.datetime.equal(expected)
-    assert out.datetime.dtype == torch.int64
-
-    with pytest.raises(ValueError, match=r"datetime.*dtype"):
-        TableTensor(
-            columns={"datetime": ["created_at"]},
-            datetime=torch.zeros(2, 1),
-        )
 
 
 def test_clone_contiguous() -> None:
@@ -554,6 +533,10 @@ def test_from_arrow() -> None:
             "income": pa.array([1.0, 2.5], type=pa.float64()),
             "country": pa.array(["US", "CA"]),
             "segment": pa.array(["a", "b"]),
+            "created_at": pa.array(
+                [datetime(2024, 1, 1), datetime(2024, 1, 2)],
+                type=pa.timestamp("ms"),
+            ),
         }
     )
 
@@ -564,14 +547,21 @@ def test_from_arrow() -> None:
             "income": "numerical",
             "country": "categorical",
             "segment": "categorical",
+            "created_at": "datetime",
         },
     )
 
-    assert tensor.size() == (2, 4)
+    assert tensor.size() == (2, 5)
     assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
     assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+    assert tensor.datetime.equal(
+        torch.tensor(
+            [[1704067200000000], [1704153600000000]],
+            dtype=torch.int64,
+        )
+    )
 
 
 def test_from_pandas() -> None:
