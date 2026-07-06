@@ -554,7 +554,7 @@ def test_attention_key_value_cache_dtype_mismatch() -> None:
         key=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
         value=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
     )
-    with pytest.raises(ValueError, match="same dtype context"):
+    with pytest.raises(ValueError, match="Re-run the caching step"):
         module(query=query, key_value=cached)
 
 

@@ -39,8 +39,15 @@ def test_rope_inverse_frequencies_stay_float32() -> None:
     module = RotaryEmbedding(channels=4)
     module.to(torch.bfloat16)
     # Rotary phases are precision-critical: casting the module must not
-    # round the inverse frequencies.
+    # round the inverse frequencies - the exact float32 values must
+    # survive, not merely the dtype.
     assert module.inv_freq.dtype == torch.float32
+    torch.testing.assert_close(
+        module.inv_freq,
+        RotaryEmbedding(channels=4).inv_freq,
+        atol=0.0,
+        rtol=0.0,
+    )
 
     x = torch.randn(2, 5, 3, 4, dtype=torch.bfloat16)
     out = module(x)

@@ -390,8 +390,9 @@ class Attention(torch.nn.Module):
                 raise ValueError(
                     f"Key/value projections were cached under dtype "
                     f"'{key_value.key.dtype}' but the query projects to "
-                    f"dtype '{query.dtype}'. Run caching and cached "
-                    f"inference under the same dtype context."
+                    f"dtype '{query.dtype}'. Re-run the caching step under "
+                    f"the current dtype configuration, or restore the "
+                    f"configuration that was active when caching."
                 )
             key = key_value.key
             value = key_value.value

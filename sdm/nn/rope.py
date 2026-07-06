@@ -47,11 +47,13 @@ class RotaryEmbedding(torch.nn.Module):
     ) -> "RotaryEmbedding":
         # Rotary phases are precision-critical: keep the inverse frequencies
         # in float32 through casts such as `module.to(torch.bfloat16)` (device
-        # moves still apply). The forward pass type-promotes as needed and
-        # casts sin/cos to the input dtype.
+        # moves still apply). The original values are restored rather than
+        # upcast, since the cast itself already rounds them. The forward pass
+        # type-promotes as needed and casts sin/cos to the input dtype.
+        original = self.inv_freq.data
         out = super()._apply(fn, recurse)
-        if self.inv_freq.dtype not in (torch.float32, torch.float64):
-            self.inv_freq.data = self.inv_freq.data.float()
+        if self.inv_freq.dtype != original.dtype:
+            self.inv_freq.data = original.to(self.inv_freq.device)
         return out
 
     def forward(

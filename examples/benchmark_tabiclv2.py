@@ -14,11 +14,14 @@ one-shot classification unless noted; see the PR for the full table):
 * ``tf32``: 1.4x for fp32 pipelines with negligible drift; the safe
   default (``torch.set_float32_matmul_precision("high")``, 72 ms).
 * ``bf16`` (full-cast): 4x and half the peak memory (26 ms), passing
-  all accuracy gates; 7x when combined with
-  ``compile(fullgraph=True, dynamic=True)`` (15 ms), and up to ~10x on
-  small launch-bound tables with ``mode="reduce-overhead"`` (1.3 ms).
-  Keep ``dynamic=True`` for in-context learning: without it every new
-  table shape recompiles (~5 s/table).
+  all accuracy gates; 6.5x when combined with
+  ``compile(fullgraph=True, dynamic=True)`` (15.8 ms), and up to ~10x
+  on small launch-bound tables with ``mode="reduce-overhead"``
+  (1.3 ms). Static compilation reaches 7.1x steady-state but recompiles
+  every new table shape (~5 s/table), so keep ``dynamic=True`` for
+  in-context learning. The autocast variant of this recipe (as shipped
+  in ``examples/tabiclv2.py``) measures 6.2x (16.6 ms) one-shot and
+  ~9 ms fit/predict.
 * ``fp8`` (Transformer Engine, per-tensor scaling): measured *slower*
   than bf16 here (27 ms large, 21 ms vs 11 ms small) - at this model's
   GEMM sizes (128-1536 channels) quantization overhead cancels the
@@ -29,9 +32,10 @@ one-shot classification unless noted; see the PR for the full table):
   options (27 ms large) but still no win over bf16 at these GEMM
   sizes; same shape constraints as fp8.
 * ``nvfp4`` (4-bit block-scaled, Blackwell): slowest of the family
-  (33 ms large) and the only configuration to fail an accuracy gate
-  (small-table top-1 agreement 98.4% < 99.5%). Built for much larger
-  GEMMs - not recommended for TabICLv2.
+  (33 ms large) and the only configuration to fail an accuracy gate:
+  pooled over five seeded tables its median per-row logit shift is 26%
+  of the decision margin (threshold 10%), with top-1 agreement at
+  99.7%. Built for much larger GEMMs - not recommended for TabICLv2.
 
 The fp8/mxfp8/nvfp4 configurations require the optional
 ``transformer_engine`` package (available in NVIDIA NGC containers) and
@@ -88,6 +92,14 @@ CONFIGS = {
             "dynamic": True,
             "mode": "max-autotune-no-cudagraphs",
         },
+        None,
+    ),
+    # The examples/tabiclv2.py recipe: autocast (TableTensor-friendly)
+    # combined with dynamic fullgraph compilation.
+    "c12-autocast-compile": (
+        "bf16-autocast",
+        False,
+        {"fullgraph": True, "dynamic": True},
         None,
     ),
     # Transformer Engine low-precision GEMMs on a bf16 base model.
@@ -265,14 +277,18 @@ def accuracy_block(
     if task == "cls":
         agree = (out.argmax(-1) == ref.argmax(-1)).float().mean().item()
         top2 = ref.topk(2, dim=-1).values
-        margin = (top2[..., 0] - top2[..., 1]).median().item()
-        mean_delta = (out - ref).abs().mean().item()
+        # Per-row worst logit shift relative to that row's own decision
+        # margin: a flip-risk statistic rather than a global average.
+        margin = (top2[..., 0] - top2[..., 1]).clamp(min=1e-9)
+        delta = (out - ref).abs().amax(-1)
         block["top1_agreement"] = agree
-        block["margin_ratio"] = mean_delta / max(margin, 1e-9)
+        block["margin_ratio"] = (delta / margin).median().item()
         block["pass"] = agree >= 0.995 and block["margin_ratio"] < 0.1
     else:
-        iqr = (ref[..., 988] - ref[..., 9]).abs().clamp(min=1e-9)
-        rel = (out - ref).abs() / iqr.unsqueeze(-1)
+        # Scale errors by each row's predicted quantile span (robust to
+        # near-zero central quantiles and independent of quantile count).
+        span = (ref.amax(-1) - ref.amin(-1)).clamp(min=1e-9)
+        rel = (out - ref).abs() / span.unsqueeze(-1)
         block["median_rel_err"] = rel.median().item()
         block["p99_rel_err"] = rel.flatten().quantile(0.99).item()
         block["pass"] = (
@@ -368,6 +384,7 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
         ) / STREAM_LENGTH
         if stream_errors:
             result["table_stream_errors"] = stream_errors
+            result["table_stream_per_table_s"] = None
     else:  # fit/predict route.
         num_train = WORKLOADS[workload][3]
         x_train, x_test = x[..., :num_train, :], x[..., num_train:, :]
@@ -389,6 +406,7 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
 
         out = fit_predict().clone()
         fit_predict()  # Warmup both graphs.
+        torch.cuda.synchronize()
         with ExitStack() as stack:
             for factory in context_factories:
                 stack.enter_context(factory())
@@ -402,14 +420,26 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
 
     result["peak_mem_mb"] = torch.cuda.max_memory_allocated() / 2**20
 
+    if route == "oneshot":
+        # Pool the accuracy check over several seeded tables so gates do
+        # not hinge on a handful of test rows from a single table.
+        pooled = []
+        for seed in range(5):
+            xs, ys = make_table(workload, task, seed=seed, device=device)
+            xs, ys = cast_inputs(xs, ys, precision)
+            pooled.append(call(xs, ys).clone().float().cpu())
+        out = torch.stack(pooled)
+
     # Accuracy vs the fp32 reference produced by the c0 cell.
     ref_path = os.path.join(workdir, f"ref-{workload}-{task}-{route}.pt")
-    if config == "c0-fp32":
+    if config == "c0-fp32" and not spec.get("sentinel"):
         torch.save(out.float().cpu(), ref_path)
         result["accuracy"] = {"pass": True, "is_reference": True}
+    elif config == "c0-fp32":
+        result["accuracy"] = {"pass": True, "is_sentinel": True}
     elif os.path.exists(ref_path):
-        ref = torch.load(ref_path, map_location=device)
-        result["accuracy"] = accuracy_block(task, out, ref)
+        ref = torch.load(ref_path, map_location="cpu")
+        result["accuracy"] = accuracy_block(task, out.float().cpu(), ref)
     else:
         result["accuracy"] = {"pass": None, "missing_reference": True}
     return result
@@ -494,8 +524,8 @@ def main() -> None:
     unknown = [c for c in selected if c not in CONFIGS]
     if unknown:
         raise SystemExit(f"unknown --configs entries: {', '.join(unknown)}")
-    if "c0-fp32" not in selected:
-        selected.insert(0, "c0-fp32")  # Always run the accuracy reference.
+    # The accuracy reference must exist before any dependent cell runs.
+    selected = ["c0-fp32"] + [c for c in selected if c != "c0-fp32"]
 
     # Stage 1: full config grid on the size extremes (classification,
     # one-shot route). c0 first: it writes the accuracy reference.
@@ -534,7 +564,24 @@ def main() -> None:
         and r["config"] != "c0-fp32"
         and r.get("accuracy", {}).get("pass")
     ]
-    top = [r["config"] for r in sorted(scored, key=lambda r: r["p50_s"])[:2]]
+    # Rank by the worse of steady-state and per-fresh-table cost so a
+    # config that recompiles per shape cannot win on p50 alone, and keep
+    # the example recipe in the promoted set.
+    top = [
+        r["config"]
+        for r in sorted(
+            scored,
+            key=lambda r: (
+                max(
+                    r["p50_s"],
+                    r.get("table_stream_per_table_s") or r["p50_s"],
+                ),
+                r["p50_s"],
+            ),
+        )[:2]
+    ]
+    if "c12-autocast-compile" in selected:
+        top = list(dict.fromkeys([*top, "c12-autocast-compile"]))
     stage2 = []
     for config in ["c0-fp32", *top]:
         for workload in ("medium", "batched"):

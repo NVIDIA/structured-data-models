@@ -6,11 +6,14 @@ from sklearn.datasets import load_breast_cancer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # NVIDIA inference recipe (measured on GB200; see
-# examples/benchmark_tabiclv2.py for the full ablation): TF32 matmuls are
-# a free ~1.4x for fp32, bf16 gives ~4x at half the memory, and compiling
-# the submodels adds up to ~7x (or ~10x on small launch-bound tables with
-# mode="reduce-overhead"). Keep dynamic=True: in-context learning sees a
-# new shape per table, and static compilation recompiles every time.
+# examples/benchmark_tabiclv2.py for the full ablation). This exact
+# configuration - TF32 + bf16 autocast + dynamic fullgraph compilation -
+# measures 6.2x on large-table one-shot inference (103 -> 16.6 ms) and
+# 2.8x on fit/predict serving (25.8 -> 9.0 ms). Casting the model fully
+# to bf16 instead of autocast is slightly faster still, and
+# mode="reduce-overhead" reaches ~10x on small launch-bound tables. Keep
+# dynamic=True: in-context learning sees a new shape per table, and
+# static compilation recompiles every time (~5 s/table).
 torch.set_float32_matmul_precision("high")
 
 df = load_breast_cancer(as_frame=True).frame
@@ -21,9 +24,12 @@ table = TableTensor.from_pandas(
     device=device,
 )
 model = TabICLv2(device=device)
+# Compilation pays off when the model is called repeatedly (the first
+# call per graph spends ~a minute compiling); for one-off exploratory
+# runs, skip it and keep the bf16 autocast below (~3.4x by itself).
+# Compile the submodels your workload uses (classification here).
 if table.is_cuda:
     model.cls_model.compile(fullgraph=True, dynamic=True)
-    model.reg_model.compile(fullgraph=True, dynamic=True)
 
 # Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
