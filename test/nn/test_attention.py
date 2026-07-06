@@ -262,19 +262,39 @@ def test_sdpa_errors() -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    "num_key_value_heads",
+    [
+        pytest.param(None, id="mha"),
+        pytest.param(1, id="mqa"),
+        pytest.param(2, id="gqa"),
+    ],
+)
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
-def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
-    channels = 6
-    num_heads = 3
+def test_attention(
+    device: torch.device,
+    num_key_value_heads: int | None,
+    qassmax: bool,
+    rope: bool,
+) -> None:
+    channels = 8
+    num_query_heads = 4
     dtype = torch.float32
     module = Attention(
         channels=channels,
-        num_query_heads=num_heads,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
         qassmax=qassmax,
         device=device,
         dtype=dtype,
     )
+    key_value_heads = (
+        num_query_heads if num_key_value_heads is None else num_key_value_heads
+    )
+    head_dim = channels // num_query_heads
+    expected_qkv = (num_query_heads + 2 * key_value_heads) * head_dim
+    assert module.qkv_lin.out_features == expected_qkv
 
     query = torch.randn(2, 4, channels, dtype=dtype, device=device)
     key_value = torch.randn(2, 5, channels, dtype=dtype, device=device)
@@ -283,7 +303,7 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
     rotary_embedding: RotaryEmbedding | None = None
     if rope:
         rotary_embedding = RotaryEmbedding(
-            channels=channels // num_heads,
+            channels=head_dim,
             device=device,
             dtype=dtype,
         )
@@ -293,15 +313,26 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
     assert out.dtype == query.dtype
     assert out.device == query.device
 
-    out = module(
+    out, kv = module(
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
         rope=rotary_embedding,
+        return_key_value=True,
     )
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
+    assert kv.key.size() == (2, 5, key_value_heads, head_dim)
+    assert kv.value.size() == (2, 5, key_value_heads, head_dim)
+
+    cached_out = module(
+        query=query,
+        key_value=kv,
+        attn_mask=attn_mask,
+        rope=rotary_embedding,
+    )
+    assert cached_out.shape == query.shape
 
     query = torch.randn(2, 4, channels, dtype=dtype, device=device)
     out = module(query=query, key_value=query, rope=rotary_embedding)
@@ -407,48 +438,6 @@ def test_attention_errors() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
-@pytest.mark.parametrize("qassmax", [False, True])
-def test_attention_gqa(
-    device: torch.device,
-    num_key_value_heads: int,
-    qassmax: bool,
-) -> None:
-    channels = 8
-    num_query_heads = 4
-    module = Attention(
-        channels=channels,
-        num_query_heads=num_query_heads,
-        num_key_value_heads=num_key_value_heads,
-        qassmax=qassmax,
-        device=device,
-    )
-
-    head_dim = channels // num_query_heads
-    expected_qkv = (num_query_heads + 2 * num_key_value_heads) * head_dim
-    assert module.qkv_lin.out_features == expected_qkv
-
-    rope = RotaryEmbedding(channels=head_dim, device=device)
-    query = torch.randn(2, 3, channels, device=device)
-    key_value = torch.randn(2, 5, channels, device=device)
-
-    # Output shape is invariant to the key/value head count.
-    out, kv = module(
-        query=query,
-        key_value=key_value,
-        rope=rope,
-        return_key_value=True,
-    )
-    assert out.shape == query.shape
-    assert kv.key.size() == (2, 5, num_key_value_heads, head_dim)
-    assert kv.value.size() == (2, 5, num_key_value_heads, head_dim)
-
-    # The reduced-head key/value cache round-trips through the cached path.
-    cached_out = module(query=query, key_value=kv, rope=rope)
-    assert cached_out.shape == query.shape
-
-
-@withCUDA
-@pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
 @pytest.mark.parametrize("rope_on", [False, True])
 def test_attention_gqa_numerical(
     device: torch.device,
@@ -503,12 +492,8 @@ def test_attention_gqa_numerical(
     if rope is not None:
         q = rope(q)
         k = rope(k)
-    groups = num_query_heads // num_key_value_heads
-    ref = reference_sdpa(
-        query=q,
-        key=k.repeat_interleave(groups, dim=-2),
-        value=v.repeat_interleave(groups, dim=-2),
-    )
+
+    ref = reference_sdpa(query=q, key=k, value=v)
     ref = module.out_lin(ref.flatten(-2, -1))
     torch.testing.assert_close(out, ref)
 
