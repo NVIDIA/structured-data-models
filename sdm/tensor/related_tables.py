@@ -1,6 +1,7 @@
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+from sdm import Stype
 from sdm.tensor import TableTensor
 
 
@@ -120,6 +121,7 @@ class RelatedTables:
 
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", parsed_relationships)
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         if not any(
@@ -129,3 +131,23 @@ class RelatedTables:
             raise ValueError(
                 "Expected at least one relationship to refer to the base table"
             )
+
+        for relationship in self.relationships:
+            for table, columns in (
+                (relationship.left_table, relationship.left_columns),
+                (relationship.right_table, relationship.right_columns),
+            ):
+                if table is None:
+                    continue
+
+                if table not in self.tables:
+                    raise ValueError(
+                        f"Expected '{table}' to be registered as a table"
+                    )
+
+                for column in columns:
+                    if self.tables[table].stype(column) != Stype.id:
+                        raise ValueError(
+                            f"Expected column '{column}' in table '{table}' "
+                            f"to have semantic type '{Stype.id.value}'"
+                        )

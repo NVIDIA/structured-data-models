@@ -325,6 +325,19 @@ class TableTensor(Tensor):
         return self._columns.copy()
 
     @property
+    def stypes(self) -> Mapping[str, Stype]:
+        r"""Return the semantic type for each column."""
+        return {key: stype for key, (stype, _) in self._column_to_loc.items()}
+
+    def stype(self, column: str) -> Stype:
+        r"""Return the semantic type for a column.
+
+        Args:
+            column: The column name.
+        """
+        return self._column_to_loc[column][0]
+
+    @property
     def numerical(self) -> Tensor:
         r"""Return the numerical column block."""
         return self._numerical
