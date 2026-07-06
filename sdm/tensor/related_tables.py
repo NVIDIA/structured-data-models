@@ -280,12 +280,13 @@ class RelatedTables:
                 task_edge_indices[i] = edge_index
                 continue
 
-            edge_index += edge_index.new_tensor(
+            edge_offset = edge_index.new_tensor(
                 [
                     [offsets[relationship.left_table]],
                     [offsets[relationship.right_table]],
                 ],
             )
+            edge_index = edge_index + edge_offset
             edge_indices.append(edge_index)
             edge_indices.append(edge_index.flip(0))
 
