@@ -107,3 +107,13 @@ def test_edge_indices(data: tuple[TableTensor, RelatedTables]) -> None:
     assert edge_indices[2].equal(
         torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 3]])
     )
+
+
+def test_node_batch(data: tuple[TableTensor, RelatedTables]) -> None:
+    task_table, related_tables = data
+
+    out = related_tables.node_batch(task_table)
+
+    assert out.equal(
+        torch.tensor([0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 1, 3, 3, 3, 0, 0, 1, 3, 3])
+    )
