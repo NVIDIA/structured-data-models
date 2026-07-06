@@ -28,8 +28,8 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install 'https://download.pytorch.org/whl/cpu/torch-2.12.1%2Bcpu-cp310-cp310-manylinux_2_28_x86_64.whl'
-          uv pip install -e '.[test]'
+          # `-e` for coverage report.
+          uv pip install --torch-backend=cpu -e '.[test]'
 
       - name: Run tests
         run: |
