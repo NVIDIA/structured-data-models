@@ -209,22 +209,17 @@ def test_sdpa(device: torch.device) -> None:
     ("num_query_heads", "num_key_value_heads"),
     [(4, 1), (4, 2), (6, 3)],  # MQA (1) and GQA group sizes.
 )
-@pytest.mark.parametrize("force_fallback", [False, True])
 def test_sdpa_gqa(
     device: torch.device,
     num_query_heads: int,
     num_key_value_heads: int,
-    force_fallback: bool,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import sdm.nn.attention as attention
-
-    if force_fallback:
-        # Exercise the `repeat_interleave` path for torch without `enable_gqa`.
-        monkeypatch.setattr(attention, "_SDPA_HAS_GQA", False)
-
     channels = 8
-    module = SDPA(channels=channels, num_query_heads=num_query_heads)
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+    )
 
     query = torch.randn(2, 6, num_query_heads, channels, device=device)
     key = torch.randn(2, 5, num_key_value_heads, channels, device=device)
@@ -245,12 +240,8 @@ def test_sdpa_gqa(
 
 
 def test_sdpa_head_divisibility_error() -> None:
-    module = SDPA(channels=4, num_query_heads=4)
-    query = torch.randn(1, 3, 4, 4)
-    key = torch.randn(1, 5, 3, 4)  # query heads (4) not divisible by 3
-    value = torch.randn(1, 5, 3, 4)
     with pytest.raises(ValueError, match="must be divisible"):
-        module(query=query, key=key, value=value)
+        SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
 
 
 @withCUDA
@@ -576,10 +567,13 @@ def test_transformer_block(
         attn_mask=attn_mask,
         rope=rotary_embedding,
     )
-    # The seqused-mask and explicit-mask paths are mathematically equivalent
-    # but dispatch to different SDPA kernels on GPU (and fp32 matmuls may use
-    # TF32), so allow generous float32 noise. A real regression would be O(1).
-    torch.testing.assert_close(out1, out2, atol=5e-4, rtol=5e-3)
+    # Both paths reduce to the same boolean mask and SDPA kernel, but with
+    # `qassmax` the key lengths enter :class:`QASSMax` as differently-shaped
+    # tensors (`[..., 1]` from `seqused_key_value` vs `[..., Q]` from the
+    # mask), so its MLP GEMMs may round differently in float32. A real
+    # regression would be O(1).
+    tolerance = {"atol": 5e-4, "rtol": 5e-3} if qassmax else {}
+    torch.testing.assert_close(out1, out2, **tolerance)
 
     # Test no padding leakage
     new_key_value = key_value.clone()
