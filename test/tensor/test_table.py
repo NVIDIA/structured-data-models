@@ -108,12 +108,14 @@ def test_save_load() -> None:
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country"],
+            "datetime": ["created_at"],
         },
         numerical=torch.randn(3, 2),
         categorical=CategoricalTensor(
             data=torch.arange(3).view(3, 1),
             categories=(StringTensor.from_list(["USA, GER, FRA"]),),
         ),
+        datetime=torch.tensor([[1], [2], [3]], dtype=torch.int64),
     )
 
     buffer = io.BytesIO()
@@ -125,6 +127,7 @@ def test_save_load() -> None:
     assert out.size() == tensor.size()
     assert out.numerical.equal(tensor.numerical)
     assert out.categorical.equal(tensor.categorical)
+    assert out.datetime.equal(tensor.datetime)
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
     for category1, category2 in zip(
