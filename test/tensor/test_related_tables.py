@@ -95,5 +95,35 @@ def data() -> tuple[TableTensor, RelatedTables]:
     return task_table, related_tables
 
 
-def test_kumorfm(data: tuple[TableTensor, RelatedTables]) -> None:
-    _task_table, _related_tables = data
+def test_edge_indices(data: tuple[TableTensor, RelatedTables]) -> None:
+    task_table, related_tables = data
+    edge_indices = related_tables.edge_indices(task_table)
+
+    assert len(edge_indices) == 3
+    assert edge_indices[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
+    assert edge_indices[1].equal(
+        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 1, 3, 3, 3]])
+    )
+    assert edge_indices[2].equal(
+        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 3]])
+    )
+
+
+def test_singular_column_keys(data: tuple[TableTensor, RelatedTables]) -> None:
+    task_table, related_tables = data
+    users = related_tables.tables["users"]
+    related_tables = RelatedTables(
+        tables={"users": users},
+        relationships=[
+            {
+                "left_table": None,
+                "left_column": "instance_id",
+                "right_table": "users",
+                "right_column": "instance_id",
+            }
+        ],
+    )
+
+    edge_indices = related_tables.edge_indices(task_table)
+
+    assert edge_indices[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))

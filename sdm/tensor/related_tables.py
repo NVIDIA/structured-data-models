@@ -1,8 +1,18 @@
+from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
+import pyarrow as pa
+import torch
+from torch import Tensor
+
 from sdm import Stype
 from sdm.tensor import TableTensor
+
+PREFIX = "sdm_internal"
+ROW_ID = f"__{PREFIX}_row_id__"
+LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
+RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
 
 @dataclass(frozen=True)
@@ -10,10 +20,10 @@ class Relationship:
     r"""Join relationship between two tables.
 
     Args:
-        left_table: Name of the left related table, or ``None`` for the base
+        left_table: Name of the left related table, or ``None`` for the task
             table.
         left_columns: Column names from the left table.
-        right_table: Name of the right related table, or ``None`` for the base
+        right_table: Name of the right related table, or ``None`` for the task
             table.
         right_columns: Column names from the right table.
     """
@@ -42,6 +52,14 @@ class Relationship:
                 "related table"
             )
 
+        for column in (*self.left_columns, *self.right_columns):
+            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+                if column == reserved:
+                    raise ValueError(
+                        f"Column name '{column}' is reserved for internal "
+                        f"row indexing"
+                    )
+
 
 @dataclass(frozen=True, init=False)
 class RelatedTables:
@@ -58,7 +76,7 @@ class RelatedTables:
                 "items": ...,
             },
             relationships=[
-                # Foreign key from the base table to the entity table:
+                # Foreign key from the task table to the entity table:
                 dict(left_table=None, left_column="user_id",
                      right_table="users", right_column="user_id"),
                 # Foreign key from orders to users:
@@ -73,7 +91,7 @@ class RelatedTables:
     Args:
         tables: Related tables keyed by table name.
         relationships: Join relationships among related tables and the
-            implicit base table.
+            implicit task table.
     """
 
     tables: Mapping[str, TableTensor]
@@ -94,7 +112,7 @@ class RelatedTables:
             else:
                 left_table = relationship.get("left_table")
                 assert left_table is None or isinstance(left_table, str)
-                if "left_column" in relationships:
+                if "left_column" in relationship:
                     left_columns = relationship["left_column"]
                 else:
                     left_columns = relationship["left_columns"]
@@ -103,7 +121,7 @@ class RelatedTables:
                     left_columns = (left_columns,)
                 right_table = relationship.get("right_table")
                 assert right_table is None or isinstance(right_table, str)
-                if "right_column" in relationships:
+                if "right_column" in relationship:
                     right_columns = relationship["right_column"]
                 else:
                     right_columns = relationship["right_columns"]
@@ -129,7 +147,7 @@ class RelatedTables:
             for relationship in self.relationships
         ):
             raise ValueError(
-                "Expected at least one relationship to refer to the base table"
+                "Expected at least one relationship to refer to the task table"
             )
 
         for relationship in self.relationships:
@@ -151,3 +169,64 @@ class RelatedTables:
                             f"Expected column '{column}' in table '{table}' "
                             f"to have semantic type '{Stype.id.value}'"
                         )
+
+    def edge_indices(
+        self,
+        task_table: TableTensor,
+        *,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+    ) -> tuple[Tensor, ...]:
+        r"""Materialize graph edges for table relationships.
+
+        Args:
+            task_table: The task table referenced by relationships whose
+            ``left_table`` or ``right_table`` is ``None``.
+            dtype: The dtype.
+            device: The device.
+
+        Returns:
+            The edge indices for each relationship in order.
+            Each edge index has shape ``[2, num_edges]`` and stores left table
+            indices in the first row and right table indices in the second row.
+        """
+        columns: dict[str | None, list[str]] = defaultdict(list)
+        for rel in self.relationships:
+            columns[rel.left_table].extend(rel.left_columns)
+            columns[rel.right_table].extend(rel.right_columns)
+
+        tables = {
+            name: table[..., columns[name]].to_arrow()
+            for name, table in self.tables.items()
+            if name in columns
+        } | {None: task_table[..., columns[None]].to_arrow()}
+
+        tables = {
+            name: table.append_column(
+                ROW_ID,
+                pa.array(torch.arange(table.num_rows, dtype=dtype).numpy()),
+            )
+            for name, table in tables.items()
+        }
+
+        edge_indices: list[Tensor] = []
+        for rel in self.relationships:
+            left = tables[rel.left_table]
+            left = left.select((*rel.left_columns, ROW_ID))
+            left = left.rename_columns({ROW_ID: LEFT_ROW_ID})
+            right = tables[rel.right_table]
+            right = right.select((*rel.right_columns, ROW_ID))
+            right = right.rename_columns({ROW_ID: RIGHT_ROW_ID})
+
+            joined = left.join(
+                right,
+                keys=list(rel.left_columns),
+                right_keys=list(rel.right_columns),
+                join_type="inner",
+            )
+
+            src = torch.from_numpy(joined[LEFT_ROW_ID].to_numpy()).to(device)
+            dst = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy()).to(device)
+            edge_indices.append(torch.stack([src, dst], dim=0))
+
+        return tuple(edge_indices)
