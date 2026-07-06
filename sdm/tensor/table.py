@@ -308,7 +308,8 @@ class TableTensor(Tensor):
 
             columns.extend(self._columns[stype])
 
-            if isinstance(tensor, CategoricalTensor | ColumnarTensor):
+            if stype in (Stype.categorical, Stype.id):
+                tensor = cast(CategoricalTensor | ColumnarTensor, tensor)
                 arrays.extend(tensor.to_arrow().itercolumns())
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous().cpu()
