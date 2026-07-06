@@ -194,7 +194,7 @@ data-aria-dark="Switch to auto color mode">
 <dt class="sig sig-object py" id="sdm.processing.Sequential.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Sequential.forward" title="Link to this definition">¶</a></dt>
 <dd><p>Transform <code class="docutils literal notranslate"><span class="pre">input</span></code> and return the result.</p>
-<p>Called via <code class="docutils literal notranslate"><span class="pre">processor(input)</span></code> (<code class="docutils literal notranslate"><span class="pre">torch.nn.Module.__call__</span></code>) or,
+<p>Called through <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> as <code class="docutils literal notranslate"><span class="pre">processor(input)</span></code> or,
 with a fitted-state check, via <a class="reference internal" href="#sdm.processing.Sequential.transform" title="sdm.processing.Sequential.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -248,7 +248,7 @@ with a fitted-state check, via <a class="reference internal" href="#sdm.processi
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=fb54adcc"></script>
+      <script src="../../_static/documentation_options.js?v=1c954eda"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
