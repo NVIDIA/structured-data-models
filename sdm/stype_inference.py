@@ -15,7 +15,7 @@ _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 
 def infer_stypes(table: Any) -> dict[str, Stype]:
-    r"""Infer semantic column types for a pandas or Arrow table.
+    r"""Infer stypes for :class:`pandas.DataFrame` or :class:`pyarrow.Table`.
 
     Integer, floating-point, and decimal columns are inferred as
     :attr:`Stype.numerical`. String, boolean, and dictionary-encoded
@@ -25,16 +25,18 @@ def infer_stypes(table: Any) -> dict[str, Stype]:
     ``user_id``, ``userId``, ``id``, but not ``solid`` or ``covid``), since
     identifier columns cannot be told apart from ordinary numerical or
     categorical columns by dtype alone. Any other type raises a
-    :class:`TypeError`. pandas inputs are routed through their Arrow schema
-    so inference stays consistent across backends.
+    :class:`TypeError`. :class:`pandas.DataFrame` inputs are routed through
+    their :class:`pyarrow.Schema` so inference stays consistent across
+    backends.
 
     Inference is best-effort. The returned mapping is a plain, mutable
-    ``dict`` -- inspect it and overwrite individual entries if the inferred
-    stype doesn't match intent.
+    :class:`dict` -- inspect it and overwrite individual entries if the
+    inferred stype doesn't match intent.
 
     Args:
-        table: A ``pandas.DataFrame``, ``pyarrow.Table``, or mapping of column
-            names to ``pyarrow.Array``/``pyarrow.ChunkedArray`` values.
+        table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
+            :class:`collections.abc.Mapping` of column names to
+            :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray` values.
     """
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd

@@ -219,7 +219,7 @@ class VarLenTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfVarLenTensor:
-        r"""Create tensor from a ``pyarrow`` list array.
+        r"""Create tensor from a list :class:`~pyarrow.Array`.
 
         .. code-block:: python
 
@@ -230,7 +230,8 @@ class VarLenTensor(Tensor):
             tensor = VarLenTensor.from_arrow(array)
 
         Args:
-            array: The ``pyarrow`` list array.
+            array: The list :class:`pyarrow.Array` or
+                :class:`pyarrow.ChunkedArray`.
             size: The shape of the tensor.
             device: The device.
         """
@@ -283,7 +284,7 @@ class VarLenTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
-        r"""Convert this tensor to flat ``pyarrow`` list array."""
+        r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
         tensor = cast(VarLenTensor, self.detach().contiguous().cpu())
         array = to_arrow(tensor._data)
 
@@ -395,7 +396,11 @@ class VarLenTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        r"""Register a ``__torch_dispatch__`` implementation."""
+        r"""Register a ``__torch_dispatch__`` implementation.
+
+        See PyTorch's
+        :ref:`calling convention <torch-dispatch-calling-convention>`.
+        """
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 

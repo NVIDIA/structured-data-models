@@ -116,10 +116,11 @@ class ColumnarTensor(Tensor):
         *,
         device: torch.device | str | None = None,
     ) -> SelfColumnarTensor:
-        r"""Create tensor from a ``pyarrow`` array.
+        r"""Create tensor from a :class:`~pyarrow.Array`.
 
         Args:
-            array: The ``pyarrow`` array.
+            array: The :class:`pyarrow.Array` or
+                :class:`pyarrow.ChunkedArray`.
             device: The device.
         """
         device = torch.device("cpu" if device is None else device)
@@ -148,7 +149,7 @@ class ColumnarTensor(Tensor):
         return cls(columns=(column,), device=device)
 
     def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
-        r"""Convert this tensor to a flat ``pyarrow`` table.
+        r"""Convert this tensor to a flat :class:`pyarrow.Table`.
 
         Args:
             columns: The column names.
@@ -173,7 +174,11 @@ class ColumnarTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        r"""Register a ``__torch_dispatch__`` implementation."""
+        r"""Register a ``__torch_dispatch__`` implementation.
+
+        See PyTorch's
+        :ref:`calling convention <torch-dispatch-calling-convention>`.
+        """
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 

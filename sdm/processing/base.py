@@ -38,7 +38,7 @@ class Processor(torch.nn.Module, abc.ABC):
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` and return the result.
 
-        Called via ``processor(input)`` (``torch.nn.Module.__call__``) or,
+        Called through :class:`torch.nn.Module` as ``processor(input)`` or,
         with a fitted-state check, via :meth:`transform`.
         """
 

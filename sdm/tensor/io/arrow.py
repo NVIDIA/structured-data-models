@@ -21,7 +21,7 @@ TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 
 def to_arrow(tensor: Tensor) -> pa.Array:
-    r"""Convert a tensor to flat ``pyarrow`` array.
+    r"""Convert a tensor to a flat :class:`pyarrow.Array`.
 
     Args:
         tensor: The tensor.

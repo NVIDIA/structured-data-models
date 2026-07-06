@@ -236,7 +236,7 @@ class TableTensor(Tensor):
         *,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
-        r"""Create a tensor from a ``pyarrow`` table.
+        r"""Create a tensor from a :class:`pyarrow.Table`.
 
         .. code-block:: python
 
@@ -299,7 +299,7 @@ class TableTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Table:
-        r"""Convert this tensor to a flat ``pyarrow`` table."""
+        r"""Convert this tensor to a flat :class:`pyarrow.Table`."""
         arrays: list[pa.Array] = []
         columns: list[str] = []
         for stype, tensor in self.items():
@@ -330,7 +330,7 @@ class TableTensor(Tensor):
         *,
         device: torch.device | str | None = None,
     ) -> SelfTableTensor:
-        r"""Create a tensor from a ``pandas`` dataframe.
+        r"""Create a tensor from a :class:`pandas.DataFrame`.
 
         Args:
             df: The dataframe.
@@ -345,7 +345,7 @@ class TableTensor(Tensor):
         )
 
     def to_pandas(self) -> Any:
-        r"""Convert this tensor to a ``pandas`` dataframe."""
+        r"""Convert this tensor to a :class:`pandas.DataFrame`."""
         return self.to_arrow().to_pandas()
 
     @classmethod
@@ -487,7 +487,11 @@ class TableTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        r"""Register a ``__torch_dispatch__`` implementation."""
+        r"""Register a ``__torch_dispatch__`` implementation.
+
+        See PyTorch's
+        :ref:`calling convention <torch-dispatch-calling-convention>`.
+        """
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
