@@ -102,7 +102,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2 current"><a class="current reference internal" href="#">QASSMax</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.SDPA.html">SDPA</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.RotaryEmbedding.html">RotaryEmbedding</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.nn.MultiHeadAttention.html">MultiHeadAttention</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.nn.Attention.html">Attention</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.TransformerBlock.html">TransformerBlock</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.InducedTransformerBlock.html">InducedTransformerBlock</a></li>
 </ul>
@@ -193,7 +193,7 @@ queries.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>channels</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of channels per attention head.</p></li>
-<li><p><strong>num_heads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of attention heads.</p></li>
+<li><p><strong>num_heads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of query attention heads.</p></li>
 <li><p><strong>hidden_channels</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The hidden width of the scale and gate MLPs.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.12)"><em>device</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>) – The device.</p></li>
 <li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.12)"><em>dtype</em></a><em> | </em><em>None</em>) – The dtype.</p></li>
@@ -255,7 +255,7 @@ per query position.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=9b5360ab"></script>
+      <script src="../../_static/documentation_options.js?v=e51f66e0"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

@@ -1,0 +1,8 @@
+﻿Attention
+=========
+
+.. currentmodule:: sdm.nn
+
+.. autoclass:: Attention
+   :members:
+   :show-inheritance:

@@ -1,8 +1,0 @@
-﻿MultiHeadAttention
-==================
-
-.. currentmodule:: sdm.nn
-
-.. autoclass:: MultiHeadAttention
-   :members:
-   :show-inheritance:
