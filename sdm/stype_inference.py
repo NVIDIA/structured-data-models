@@ -33,8 +33,8 @@ def infer_stypes(table: Any) -> dict[str, Stype]:
     stype doesn't match intent.
 
     Args:
-        table: A :pandas:`pandas.DataFrame`, :class:`pyarrow.Table`, or mapping of column
-            names to :class:`pyarrow.Array`/:class`pyarrow.ChunkedArray` values.
+        table: A ``pandas.DataFrame``, ``pyarrow.Table``, or mapping of column
+            names to ``pyarrow.Array``/``pyarrow.ChunkedArray`` values.
     """
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
