@@ -1,5 +1,5 @@
 import abc
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
@@ -18,7 +18,7 @@ class Processor(torch.nn.Module, abc.ABC):
 
     """
 
-    requires_fit: ClassVar[bool] = True
+    requires_fit: bool = True
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,8 +44,9 @@ class Processor(torch.nn.Module, abc.ABC):
 
     def fit(self, input: Tensor) -> Self:
         """Fit the processor on ``input`` and return it."""
-        self._fit(input)
-        self._fitted = True
+        if self.requires_fit:
+            self._fit(input)
+            self._fitted = True
         return self
 
     def transform(self, input: Tensor) -> Tensor:
@@ -56,6 +57,9 @@ class Processor(torch.nn.Module, abc.ABC):
     def fit_transform(self, input: Tensor) -> Tensor:
         """Fit on ``input`` and return the transformed result."""
         return self.fit(input).transform(input)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return f"{' ' * indent}{self.__class__.__name__}()"
 
 
 class InvertibleMixin(abc.ABC):

@@ -121,6 +121,7 @@ class RelatedTables:
 
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", parsed_relationships)
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         if not any(
