@@ -1,4 +1,5 @@
 import io
+from datetime import datetime
 from typing import cast
 
 import pandas as pd
@@ -148,6 +149,37 @@ def test_to_copy() -> None:
     assert out.categorical.dtype == torch.int32
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
+
+
+def test_datetime() -> None:
+    tensor = TableTensor.from_arrow(
+        table=pa.table(
+            {
+                "created_at": pa.array(
+                    [datetime(2024, 1, 1), datetime(2024, 1, 2)],
+                    type=pa.timestamp("ms"),
+                )
+            }
+        ),
+        stypes={"created_at": "datetime"},
+    )
+
+    expected = torch.tensor(
+        [[1704067200000000], [1704153600000000]],
+        dtype=torch.int64,
+    )
+    assert tensor.datetime.equal(expected)
+    assert tensor.columns[Stype.datetime] == ("created_at",)
+
+    out = cast(TableTensor, tensor.to(torch.float64))
+    assert out.datetime.equal(expected)
+    assert out.datetime.dtype == torch.int64
+
+    with pytest.raises(ValueError, match=r"datetime.*dtype"):
+        TableTensor(
+            columns={"datetime": ["created_at"]},
+            datetime=torch.zeros(2, 1),
+        )
 
 
 def test_clone_contiguous() -> None:

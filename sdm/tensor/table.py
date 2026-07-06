@@ -613,7 +613,7 @@ def _to_copy(
             device=device,
             dtype=dtype
             if (
-                stype not in (Stype.categorical)
+                stype != Stype.categorical
                 or dtype in (torch.int32, torch.int64)
             )
             and stype not in (Stype.datetime, Stype.id)
