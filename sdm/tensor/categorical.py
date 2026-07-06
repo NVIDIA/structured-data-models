@@ -169,27 +169,6 @@ class CategoricalTensor(Tensor):
 
         return cls(data=data, categories=(category,))
 
-    @classmethod
-    def from_pandas(
-        cls: type[SelfCategoricalTensor],
-        series: Any,
-        *,
-        dtype: torch.dtype | None = torch.int32,
-        device: torch.device | str | None = None,
-    ) -> SelfCategoricalTensor:
-        r"""Create tensor from a ``pandas`` series.
-
-        Args:
-            series: The ``pandas.Series``.
-            dtype: The dtype.
-            device: The device.
-        """
-        return cls.from_arrow(
-            pa.array(series),
-            dtype=dtype,
-            device=device,
-        )
-
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:

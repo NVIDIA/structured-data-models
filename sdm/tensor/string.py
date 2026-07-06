@@ -89,22 +89,25 @@ class StringTensor(VarLenTensor):
     @override
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to flat ``pyarrow`` string array."""
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             raise TypeError(
                 f"Can't convert {self.device} device type tensor to arrow. "
                 f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
             )
 
-        data, offset = cast(StringTensor, self.contiguous()).data_offset
+        tensor = cast(StringTensor, self.contiguous())
 
         return pa.Array.from_buffers(
-            pa.string() if offset.dtype == torch.int32 else pa.large_string(),
-            length=self.numel(),
+            pa.string()
+            if tensor._offset.dtype == torch.int32
+            else pa.large_string(),
+            length=tensor.numel(),
             buffers=[
                 None,
-                pa.py_buffer(offset.numpy()),
-                pa.py_buffer(data.numpy()),
+                pa.py_buffer(tensor._offset.numpy()),
+                pa.py_buffer(tensor._data.numpy()),
             ],
+            offset=int(tensor.storage_offset()),
         )
 
     @classmethod
@@ -200,7 +203,7 @@ class StringTensor(VarLenTensor):
         # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"
         return out

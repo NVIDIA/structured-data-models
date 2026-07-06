@@ -132,7 +132,6 @@ select = [
 ]
 ignore = [
     "B905",  # Ignore "zip() without explicit `strict`"
-    "C408",  # Ignore "Unnecessary `dict()` call"
     "D100",  # Ignore "Missing docstring in public module"
     "D105",  # Ignore "missing docstring in magic method"
     "D107",  # Ignore "missing docstring in __init__"
