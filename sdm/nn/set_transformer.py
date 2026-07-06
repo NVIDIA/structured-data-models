@@ -135,7 +135,7 @@ class InducedTransformerBlock(torch.nn.Module):
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for induced self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
-                dtype ``torch.int32``.
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., KV]``.
                 Entries set to ``True`` participate in attention.
             return_key_value: Whether to return the computed key and value

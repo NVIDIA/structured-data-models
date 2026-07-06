@@ -108,7 +108,7 @@ class QASSMax(torch.nn.Module):
 class SDPA(torch.nn.Module):
     r"""Scaled Dot-Product Attention (SDPA).
 
-    This module wraps :meth:`torch.nn.functional.scaled_dot_product_attention`
+    This module wraps :func:`torch.nn.functional.scaled_dot_product_attention`
     and extends it by arbitrary batch dimensions, :class:`QASSMax`-based
     temperature-scaling, and padding support for key/value pairs.
 
@@ -175,7 +175,7 @@ class SDPA(torch.nn.Module):
                 number of key/value heads (``num_key_value_heads``).
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
-                dtype ``torch.int32``.
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
 
@@ -366,7 +366,7 @@ class Attention(torch.nn.Module):
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
-                dtype ``torch.int32``.
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
             rope: Rotary Positional Embedding applied after query/key
@@ -534,7 +534,7 @@ class TransformerBlock(torch.nn.Module):
                 ``KV`` is the key/value sequence length.
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
-                dtype ``torch.int32``.
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
             rope: Rotary Positional Embedding applied after query/key
