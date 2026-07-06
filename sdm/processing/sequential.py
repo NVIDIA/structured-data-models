@@ -11,11 +11,16 @@ class Sequential(Processor, InvertibleMixin):
     """
 
     def __init__(self, *args: Processor) -> None:
+        super().__init__()
         self.steps: tuple[Processor, ...] = args
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
     def _fit(self, input: Tensor) -> None:
         self.fit_transform(input)
+
+    def forward(self, input: Tensor) -> Tensor:  # noqa: D102
+        # TODO: Consolidate ``forward`` and ``transform`` in the base class.
+        return self.transform(input)
 
     def transform(self, input: Tensor) -> Tensor:  # noqa: D102
         out = input
@@ -27,9 +32,11 @@ class Sequential(Processor, InvertibleMixin):
         out = input
         for step in self.steps:
             out = step.fit_transform(out)
+        if self.requires_fit:
+            self._fitted = True
         return out
 
-    def inverse_transform(self, input: Tensor) -> Tensor:  # noqa: D102
+    def _inverse_transform(self, input: Tensor) -> Tensor:
         out = input
         for step in self.steps[::-1]:
             fn = getattr(step, "inverse_transform", None)

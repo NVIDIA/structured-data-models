@@ -2,6 +2,7 @@ import pytest
 import torch
 from sdm import TableTensor
 from sdm.models import TabICLv2
+from sdm.processing import Sequential
 from sdm.testing import withCUDA
 
 
@@ -53,12 +54,14 @@ def test_default_recipe_regression_roundtrip() -> None:
     )
     target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
 
-    model_features, model_target = recipe.fit_transform(features, target)
+    model_features = recipe.features.fit_transform(features.numerical)
+    model_target = recipe.target.fit_transform(target.numerical)
 
     assert model_features.size() == features.size()
     assert model_target.size() == target.size()
 
+    assert isinstance(recipe.target, Sequential)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(
-        restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
+        restored, target.numerical, atol=1e-4, rtol=1e-4
     )
