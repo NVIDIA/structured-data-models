@@ -336,8 +336,10 @@ class RelatedTables:
     ) -> Tensor | tuple[Tensor, int]:
         r"""Return the task-row assignment for each related table row.
 
-        Related table neighborhoods are assumed to be disjoint: Each reachable
-        table row should belong to at most one task-table row.
+        .. note::
+
+            Related table neighborhoods are assumed to be disjoint: Each
+            reachable table row should belong to at most one task-table row.
 
         Args:
             graph: The homogeneous graph.
