@@ -281,7 +281,8 @@ class VarLenTensor(Tensor):
         buffer = array.values.buffers()[1]
         if buffer is not None and buffer.size > 0:
             data = torch.frombuffer(buffer, dtype=dtype)
-            data = data[array.values.offset :].to(device)
+            start = array.values.offset
+            data = data[start : start + len(array.values)].to(device)
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
