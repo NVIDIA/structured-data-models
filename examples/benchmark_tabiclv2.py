@@ -6,26 +6,32 @@ table-stream cost (amortized over a stream of fresh table shapes,
 including recompiles), peak memory, and accuracy versus an fp32
 reference.
 
-What to expect from each precision (measured on GB200):
+What to expect from each precision (measured on GB200, 8192x64-row
+one-shot classification unless noted; see the PR for the full table):
 
-* ``fp32`` (``ieee`` matmuls): the accuracy reference; slowest.
-* ``tf32``: ~1.4x end-to-end for fp32 pipelines with negligible drift;
-  the safe default (``torch.set_float32_matmul_precision("high")``).
-* ``bf16`` (autocast or full-cast): ~3-4x and roughly half the peak
-  memory; passes the accuracy gates here (small logit drift; watch the
-  first-call-per-shape warmup, which is higher than fp32).
-* ``fp8`` (Transformer Engine, per-tensor scaling): speeds up only the
-  swapped ``Linear`` GEMMs; at this model's small GEMM sizes (128-1536
-  channels) quantization overhead usually cancels the gain, so expect
-  parity with bf16 at best and the largest logit drift of the 8-bit
-  options. GEMM dims must be multiples of 16.
-* ``mxfp8`` (block-scaled fp8, Blackwell): better accuracy than
-  per-tensor fp8 at similar speed; still GEMM-bound, so the same
-  small-GEMM caveat applies.
-* ``nvfp4`` (4-bit block-scaled, Blackwell): built for very large
-  GEMMs; at this model's sizes expect quantization overhead to swamp
-  any gain and the highest accuracy risk. Measured for completeness -
-  not a recommended default for TabICLv2.
+* ``fp32`` (``ieee`` matmuls): the accuracy reference; slowest
+  (103 ms).
+* ``tf32``: 1.4x for fp32 pipelines with negligible drift; the safe
+  default (``torch.set_float32_matmul_precision("high")``, 72 ms).
+* ``bf16`` (full-cast): 4x and half the peak memory (26 ms), passing
+  all accuracy gates; 7x when combined with
+  ``compile(fullgraph=True, dynamic=True)`` (15 ms), and up to ~10x on
+  small launch-bound tables with ``mode="reduce-overhead"`` (1.3 ms).
+  Keep ``dynamic=True`` for in-context learning: without it every new
+  table shape recompiles (~5 s/table).
+* ``fp8`` (Transformer Engine, per-tensor scaling): measured *slower*
+  than bf16 here (27 ms large, 21 ms vs 11 ms small) - at this model's
+  GEMM sizes (128-1536 channels) quantization overhead cancels the
+  gain. Accuracy gates pass. Shapes are constrained: feature dims must
+  be multiples of 16 and leading-dimension products multiples of 8, so
+  arbitrary table sizes need padding.
+* ``mxfp8`` (block-scaled fp8, Blackwell): the best of the 8-bit
+  options (27 ms large) but still no win over bf16 at these GEMM
+  sizes; same shape constraints as fp8.
+* ``nvfp4`` (4-bit block-scaled, Blackwell): slowest of the family
+  (33 ms large) and the only configuration to fail an accuracy gate
+  (small-table top-1 agreement 98.4% < 99.5%). Built for much larger
+  GEMMs - not recommended for TabICLv2.
 
 The fp8/mxfp8/nvfp4 configurations require the optional
 ``transformer_engine`` package (available in NVIDIA NGC containers) and
@@ -185,11 +191,23 @@ def swap_te_linears(model: TabICLv2, te: Any) -> int:
     """Swap eligible ``Linear`` modules for ``te.Linear``.
 
     Transformer Engine low-precision GEMMs require both feature
-    dimensions to be multiples of 16; ineligible layers (for example the
-    feature-grouping projection and the output head) stay in bf16.
+    dimensions to be multiples of 16 and the product of the leading
+    dimensions to be divisible by 8. Ineligible layers stay in bf16:
+    the feature-grouping projection and output head (feature dims), and
+    the :class:`~sdm.nn.QASSMax` scaling MLPs (which can see a single
+    key-length row, so their leading product can be 1).
     """
+    from sdm.nn import QASSMax
+
+    excluded: set[int] = set()
+    for module in model.modules():
+        if isinstance(module, QASSMax):
+            excluded.update(id(m) for m in module.modules())
+
     swapped = 0
     for module in model.modules():
+        if id(module) in excluded:
+            continue
         for name, child in list(module.named_children()):
             if (
                 isinstance(child, torch.nn.Linear)
@@ -339,7 +357,10 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
             xs, ys = cast_inputs(xs, ys, precision)
             try:
                 call(xs, ys)
-            except RuntimeError:
+            except (RuntimeError, ValueError):
+                # Low-precision GEMMs constrain shapes (for example fp8
+                # requires leading-dimension products divisible by 8), so
+                # arbitrary table sizes may need padding.
                 stream_errors += 1
         torch.cuda.synchronize()
         result["table_stream_per_table_s"] = (
@@ -368,10 +389,13 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
 
         out = fit_predict().clone()
         fit_predict()  # Warmup both graphs.
-        start = time.perf_counter()
-        model.fit(x_train, y)
-        torch.cuda.synchronize()
-        result["fit_s"] = time.perf_counter() - start
+        with ExitStack() as stack:
+            for factory in context_factories:
+                stack.enter_context(factory())
+            start = time.perf_counter()
+            model.fit(x_train, y)
+            torch.cuda.synchronize()
+            result["fit_s"] = time.perf_counter() - start
         predict_only()
         result.update(timed_loop(predict_only))
         model.clear()
