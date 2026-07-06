@@ -1,8 +1,8 @@
-﻿Pipeline
-========
+﻿Sequential
+==========
 
 .. currentmodule:: sdm.processing
 
-.. autoclass:: Pipeline
+.. autoclass:: Sequential
    :members:
    :show-inheritance:

@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Recipe - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="sdm.nn" href="../nn.html" /><link rel="prev" title="Pipeline" href="sdm.processing.Pipeline.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Recipe - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="sdm.nn" href="../nn.html" /><link rel="prev" title="StandardScale" href="sdm.processing.StandardScale.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -86,6 +86,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1 current"><a class="reference internal" href="../processing.html">sdm.processing</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.MeanImpute.html">MeanImpute</a></li>
@@ -94,7 +95,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SigmaClip.html">SigmaClip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.Pipeline.html">Pipeline</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Recipe</a></li>
 </ul>
 </li>
@@ -124,10 +124,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.Recipe"><code class="docutils literal notranslate"><span class="pre">Recipe</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.processing.Recipe.fit_transform"><code class="docutils literal notranslate">fit_transform()</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#sdm.processing.Recipe"><code class="docutils literal notranslate"><span class="pre">Recipe</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -166,10 +163,10 @@ data-aria-dark="Switch to auto color mode">
 <h1>Recipe<a class="headerlink" href="#recipe" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.Recipe">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Recipe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.Recipe" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Recipe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.Recipe" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Processing contract around an external model boundary.</p>
-<p>A recipe bundles three <a class="reference internal" href="sdm.processing.Pipeline.html#sdm.processing.Pipeline" title="sdm.processing.Pipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">Pipeline</span></code></a> objects, one per
+<p>A recipe bundles three <code class="xref py py-class docutils literal notranslate"><span class="pre">Pipeline</span></code> objects, one per
 role the data plays relative to the model:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">features</span></code>: model inputs, transformed before the model.</p></li>
@@ -184,32 +181,13 @@ steps are invertible, <code class="docutils literal notranslate"><span class="pr
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.Pipeline.html#sdm.processing.Pipeline" title="sdm.processing.pipeline.Pipeline"><em>Pipeline</em></a>) – Steps applied to model inputs before the model.</p></li>
-<li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.Pipeline.html#sdm.processing.Pipeline" title="sdm.processing.pipeline.Pipeline"><em>Pipeline</em></a>) – Steps applied to labels; transformed forward before the model
+<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to model inputs before the model.</p></li>
+<li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to labels; transformed forward before the model
 and inverted after it.</p></li>
-<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.Pipeline.html#sdm.processing.Pipeline" title="sdm.processing.pipeline.Pipeline"><em>Pipeline</em></a>) – Steps applied to model output after the target inverse.</p></li>
+<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to model output after the target inverse.</p></li>
 </ul>
 </dd>
 </dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.processing.Recipe.fit_transform">
-<span class="sig-name descname"><span class="pre">fit_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#sdm.processing.Recipe.fit_transform" title="Link to this definition">¶</a></dt>
-<dd><p>Fit and transform training <code class="docutils literal notranslate"><span class="pre">features</span></code> and <code class="docutils literal notranslate"><span class="pre">target</span></code> at once.</p>
-<p>Convenience for the common training step. Returns the transformed
-<code class="docutils literal notranslate"><span class="pre">(features,</span> <span class="pre">target)</span></code> tables, ready to feed the model and its loss.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>features</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>)</p></li>
-<li><p><strong>target</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a>[<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>, <a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>]</p>
-</dd>
-</dl>
-</dd></dl>
-
 </dd></dl>
 
 </section>
@@ -220,10 +198,10 @@ and inverted after it.</p></li>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.Pipeline.html">
+    <a href="sdm.processing.StandardScale.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Pipeline</div></div>
+        <span>Previous</span><div class="title">StandardScale</div></div>
     </a>
   </div><div class="navigation-next">
     <a href="../nn.html">
@@ -238,7 +216,7 @@ and inverted after it.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=f6e9e3ee"></script>
+      <script src="../../_static/documentation_options.js?v=85d321e3"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
