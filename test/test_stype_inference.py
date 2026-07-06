@@ -46,7 +46,7 @@ def test_infer_stypes_from_arrow_table() -> None:
     )
 
     assert infer_stypes(table) == {
-        "id": Stype.numerical,
+        "id": Stype.id,
         "amount": Stype.numerical,
         "ratio": Stype.numerical,
         "name": Stype.categorical,
@@ -63,8 +63,68 @@ def test_infer_stypes_from_arrow_mapping() -> None:
             "name": pa.array(["a", "b"], type=pa.string()),
         }
     ) == {
-        "id": Stype.numerical,
+        "id": Stype.id,
         "name": Stype.categorical,
+    }
+
+
+def test_infer_stypes_detects_id_columns_by_name() -> None:
+    table = pa.table(
+        {
+            "user_id": pa.array([1, 2], type=pa.int64()),
+            "userId": pa.array(["a", "b"], type=pa.string()),
+            "order_id_hash": pa.array([1, 2], type=pa.int32()),
+        }
+    )
+
+    assert infer_stypes(table) == {
+        "user_id": Stype.id,
+        "userId": Stype.id,
+        "order_id_hash": Stype.id,
+    }
+
+
+def test_infer_stypes_avoids_id_name_false_positives() -> None:
+    table = pa.table(
+        {
+            "is_valid": pa.array([True, False], type=pa.bool_()),
+            "solid": pa.array([1, 2], type=pa.int64()),
+            "covid_cases": pa.array([1, 2], type=pa.int64()),
+        }
+    )
+
+    assert infer_stypes(table) == {
+        "is_valid": Stype.categorical,
+        "solid": Stype.numerical,
+        "covid_cases": Stype.numerical,
+    }
+
+
+def test_infer_stypes_id_name_heuristic_respects_dtype() -> None:
+    table = pa.table(
+        {
+            "amount_id": pa.array([1.0, 2.0], type=pa.float64()),
+            "category_id": pa.array(["x", "y"]).dictionary_encode(),
+        }
+    )
+
+    assert infer_stypes(table) == {
+        "amount_id": Stype.numerical,
+        "category_id": Stype.categorical,
+    }
+
+
+def test_infer_stypes_id_columns_override() -> None:
+    table = pa.table(
+        {
+            "age": pa.array([25, 31], type=pa.int64()),
+            "account_number": pa.array([1, 2], type=pa.int64()),
+        }
+    )
+
+    assert infer_stypes(table, id_columns=["account_number"]) == {
+        "age": Stype.numerical,
+        "account_number": Stype.id,
     }
 
 

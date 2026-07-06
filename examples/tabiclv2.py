@@ -1,19 +1,18 @@
 import torch
-from sdm import TableTensor
+from sdm import Stype, TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from sklearn.datasets import load_breast_cancer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 df = load_breast_cancer(as_frame=True).frame
-table = TableTensor.from_pandas(
-    df=df,
-    stypes={
-        **dict.fromkeys(df.columns[:-1], "numerical"),
-        "target": "categorical",
-    },
-    device=device,
-)
+
+# `target` is 0/1-encoded, so it infers as numerical by default; override it
+# to reflect that it is really a categorical label.
+stypes = infer_stypes(df)
+stypes["target"] = Stype.categorical
+
+table = TableTensor.from_pandas(df=df, stypes=stypes, device=device)
 
 model = TabICLv2(device=device)
 
