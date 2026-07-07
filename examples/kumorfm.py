@@ -1,20 +1,13 @@
-from time import perf_counter
-
-import torch
-
-t = perf_counter()
 import argparse
 from collections.abc import Sequence
 
-import pandas as pd
 import relbench
+import torch
 from relbench.datasets import get_dataset
 from relbench.tasks import get_task
-from sdm import TableTensor
+from sdm import RelatedTables, TableTensor, infer_stypes
 from torch_geometric.data import HeteroData
-from torch_geometric.sampler import NeighborSampler
-
-print("import", perf_counter() - t)
+from torch_geometric.sampler import NeighborSampler, NodeSamplerInput
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
@@ -25,7 +18,6 @@ args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Collect Task Table ##########################################################
-t = perf_counter()
 task_tables: Sequence[TableTensor] = []
 task = get_task(args.dataset, args.task, download=True)
 for split in ["train", "val", "test"]:
@@ -46,29 +38,42 @@ train_table = train_table[
     torch.randperm(len(train_table))[: args.context_size]
 ]
 test_table = task_tables[-1]
-print("task", perf_counter() - t)
 
 # Collect Related Tables ######################################################
-t = perf_counter()
-tables: dict[str, TableTensor] = {}
 db = get_dataset(args.dataset, download=True).get_db(upto_test_timestamp=False)
-for name, table in db.table_dict.items():
-    stypes: dict[str, str] = {}
-    for column in table.df.columns:
-        if column == table.pkey_col or column in table.fkey_col_to_pkey_table:
-            stypes[column] = "id"
-        elif column == table.time_col:
-            stypes[column] = "datetime"
-        elif pd.api.types.is_string_dtype(table.df[column]):
-            stypes[column] = "categorical"
-        elif pd.api.types.is_datetime64_any_dtype(table.df[column]):
-            stypes[column] = "datetime"
-        else:
-            stypes[column] = "numerical"
-    tables[name] = TableTensor.from_pandas(table.df, stypes)
-print("graph", perf_counter() - t)
+related_tables = RelatedTables(
+    tables={
+        name: TableTensor.from_pandas(
+            df=table.df,
+            stypes=infer_stypes(table.df),
+        )
+        for name, table in db.table_dict.items()
+    },
+    relationships=[
+        {
+            "left_table": left_table,
+            "left_column": left_column,
+            "right_table": right_table,
+            "right_column": db.table_dict[right_table].pkey_col,
+        }
+        for left_table, table in db.table_dict.items()
+        for left_column, right_table in table.fkey_col_to_pkey_table.items()
+    ]
+    + [
+        {
+            "left_column": task.entity_col,
+            "right_table": task.entity_table,
+            "right_column": task.entity_col,
+        }
+    ],
+)
+
+print(related_tables)
+quit()
 
 # Create PyG-based Neighbor Sampler ###########################################
+from time import perf_counter
+
 t = perf_counter()
 hetero_data = HeteroData()
 for src_table_name, table in db.table_dict.items():
@@ -93,11 +98,15 @@ sampler = NeighborSampler(
     time_attr="time",
 )
 
-# sampler.sample_from_nodes(
-#         node=
-#
-#         )
+out = sampler.sample_from_nodes(
+    NodeSamplerInput(
+        input_id=None,
+        node=torch.arange(10),
+        time=train_table[task.time_col].datetime.view(-1),
+        input_type=task.entity_table,
+    )
+)
+print(out)
 
 
 print("sampler", perf_counter() - t)
-print(train_table)

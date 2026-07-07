@@ -244,6 +244,67 @@ class RelatedTables:
 
         return tuple(edge_indices)
 
+    def sampler(
+        self,
+        time_columns: Mapping[str, str] | None = None,
+    ) -> "RelatedTablesSampler":
+        r"""Return a :class:`RelatedTablesSampler` for BFS sampling.
+
+        .. code-block:: python
+
+            from sdm import RelatedTables, TableTensor
+
+            task_table = TableTensor.from_pandas(
+                df=pd.DataFrame({
+                    "user_id": [...],
+                    "time": [...],
+                    "target": [...],
+                }),
+                stypes={
+                    "user_id": "id",
+                    "time": "datetime",
+                    "target": "categorical",
+                },
+            )
+
+            related_tables = RelatedTables(
+                tables={
+                    "users": TableTensor.from_pandas(...),
+                    "orders": Tabletensor.from_pandas(...),
+                    "items": TableTensor.from_pandas(...),
+                },
+                relationships=[
+                    # Foreign key from the task table to the entity table:
+                    dict(left_table=None, left_column="user_id",
+                         right_table="users", right_column="user_id"),
+                    # Foreign key from orders to users:
+                    dict(left_table="orders", left_column="user_id",
+                         right_table="users", right_column="user_id"),
+                    # Foreign key from orders to items:
+                    dict(left_table="orders", left_column="item_id",
+                         right_table="items", right_column="item_id"),
+                ],
+            )
+
+            sampler = related_tables.sampler(
+                time_dict={"orders": "order_date"},
+            )
+
+            # A local view of related tables
+            task_subtable, related_subtables = sampler(
+                task_table: task_table[:512],
+                num_neighbors=[16, 16],
+            )
+
+        Args:
+            time_columns: The time column that refer to the create datetime per
+                related table to prevent temporal leakage.
+        """
+        return RelatedTablesSampler(
+            related_tables=self,
+            time_columns=time_columns,
+        )
+
     def homogeneous_graph(
         self,
         task_table: TableTensor,
@@ -382,3 +443,20 @@ class RelatedTables:
             return row_batch, num_hops
 
         return row_batch
+
+
+class RelatedTablesSampler:
+    def __init__(
+        self,
+        related_tables: "RelatedTables",
+        time_columns: Mapping[str, str] | None = None,
+    ) -> None:
+        pass
+
+    def __call__(
+        self,
+        table: TableTensor,
+        num_neighbors: Sequence[int],
+        task_time_column: str | None = None,
+    ) -> tuple[TableTensor, RelatedTables]:
+        raise NotImplementedError
