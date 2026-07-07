@@ -7,6 +7,7 @@ from torch import Tensor
 from sdm.processing._stats import _constant_feature_mask
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
@@ -154,6 +155,8 @@ class Power(Processor, InvertibleMixin):
         standardize: If ``True``, zero-mean and unit-variance the transformed
             features using statistics fitted after the power transform.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

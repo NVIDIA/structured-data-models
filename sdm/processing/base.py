@@ -1,5 +1,5 @@
 import abc
-from typing import TYPE_CHECKING, ClassVar, Literal, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
 import torch
 from typing_extensions import Self
@@ -7,7 +7,7 @@ from typing_extensions import Self
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
-SupportedStypes: TypeAlias = frozenset[Stype] | Literal["all"]
+SupportedStypes: TypeAlias = frozenset[Stype]
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -21,7 +21,7 @@ class Processor(torch.nn.Module, abc.ABC):
     ``supported_stypes`` for processors that support non-numerical columns.
     """
 
-    supported_stypes: ClassVar[SupportedStypes] = frozenset({Stype.numerical})
+    supported_stypes: ClassVar[SupportedStypes]
     requires_fit: bool = True
 
     def __init__(self) -> None:
@@ -30,9 +30,6 @@ class Processor(torch.nn.Module, abc.ABC):
 
     def _check_supported_stypes(self, input: TableTensor) -> None:
         supported_stypes = self.supported_stypes
-        if supported_stypes == "all":
-            return
-
         for stype, columns in input.columns.items():
             if stype not in supported_stypes and len(columns) > 0:
                 raise ValueError(

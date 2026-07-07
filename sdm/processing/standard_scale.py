@@ -3,6 +3,7 @@ import torch
 from sdm.processing._stats import _constant_feature_mask
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
@@ -19,6 +20,8 @@ class StandardScale(Processor, InvertibleMixin):
         epsilon: Value added to each fitted standard deviation. The default
             preserves exact constant-column handling.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

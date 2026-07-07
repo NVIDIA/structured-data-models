@@ -1,4 +1,5 @@
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
@@ -9,7 +10,7 @@ class Sequential(Processor, InvertibleMixin):
         args: Sequence of :class:`Processor` instances.
     """
 
-    supported_stypes = "all"
+    supported_stypes = frozenset(Stype)
 
     def __init__(self, *args: Processor) -> None:
         super().__init__()

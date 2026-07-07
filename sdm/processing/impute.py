@@ -2,6 +2,7 @@ import torch
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
@@ -12,6 +13,8 @@ class MeanImpute(Processor):
         fill_value: Value used for columns whose fitted mean is undefined
             (e.g. all-NaN columns).
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
