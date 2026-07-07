@@ -41,7 +41,7 @@ class Clip(Processor, InvertibleMixin):
         self.lower_bound = q_low
         self.upper_bound = q_high
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Clamp ``input`` to the fitted lower and upper bounds."""
         return _as_float(input).clamp(
             min=self.lower_bound,
