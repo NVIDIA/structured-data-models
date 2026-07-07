@@ -1,4 +1,4 @@
-"""Relational data routines."""
+"""Relational data processing."""
 
 from sdm.relational.data import Relationship, RelationalData
 from sdm.relational.sampler import RelationalSampler
