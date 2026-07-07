@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import TableTensor
-from sdm.processing import LabelShuffle, Recipe
+from sdm.processing import LabelShuffle, Recipe, Sequential
 
 
 def test_label_shuffle_default_single_estimator_is_identity() -> None:
@@ -44,9 +44,12 @@ def test_label_shuffle_learns_classes_in_recipe_target_pipeline() -> None:
     target = TableTensor.from_tensor(torch.tensor([[0], [1], [2]]))
     recipe = Recipe(target=[LabelShuffle().resolve(estimator=1)])
 
+    assert isinstance(recipe.target, Sequential)
     transformed = recipe.target.fit_transform(target)
     restored = recipe.target.inverse_transform(transformed)
 
+    assert isinstance(transformed, TableTensor)
+    assert isinstance(restored, TableTensor)
     assert torch.equal(transformed.numerical, torch.tensor([[2], [0], [1]]))
     assert torch.equal(restored.numerical, target.numerical)
 

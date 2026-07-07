@@ -51,7 +51,7 @@ class ConstantFilter(Processor):
 
         self.columns_to_keep = columns_to_keep
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Drop columns that were constant in the fitted data."""
         if not isinstance(input, TableTensor):
             raise TypeError(

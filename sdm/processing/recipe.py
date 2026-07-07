@@ -1,16 +1,14 @@
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from sdm.processing.base import Processor
-from sdm.processing.pipeline import Pipeline
-from sdm.tensor import TableTensor
+from sdm.processing import Processor, Sequential
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False, repr=False)
 class Recipe:
     """Processing contract around an external model boundary.
 
-    A recipe bundles three :class:`~sdm.processing.Pipeline` objects, one per
+    A recipe bundles three :class:`~sdm.processing.Sequential` objects, one per
     role the data plays relative to the model:
 
     - ``features``: model inputs, transformed before the model.
@@ -30,58 +28,41 @@ class Recipe:
         output: Steps applied to model output after the target inverse.
     """
 
-    features: Pipeline = field(default_factory=Pipeline)
-    target: Pipeline = field(default_factory=Pipeline)
-    output: Pipeline = field(default_factory=Pipeline)
+    features: Processor
+    target: Processor
+    output: Processor
 
     def __init__(
         self,
-        features: Iterable[Processor] | None = None,
-        target: Iterable[Processor] | None = None,
-        output: Iterable[Processor] | None = None,
+        features: Processor | Iterable[Processor] | None = None,
+        target: Processor | Iterable[Processor] | None = None,
+        output: Processor | Iterable[Processor] | None = None,
     ) -> None:
-        object.__setattr__(
-            self,
-            "features",
-            features if isinstance(features, Pipeline) else Pipeline(features),
-        )
-        object.__setattr__(
-            self,
-            "target",
-            target if isinstance(target, Pipeline) else Pipeline(target),
-        )
-        object.__setattr__(
-            self,
-            "output",
-            output if isinstance(output, Pipeline) else Pipeline(output),
-        )
 
-    def fit_transform(
-        self,
-        features: TableTensor,
-        target: TableTensor,
-    ) -> tuple[TableTensor, TableTensor]:
-        """Fit and transform training ``features`` and ``target`` at once.
+        if features is None:
+            features = Sequential()
+        elif not isinstance(features, Processor):
+            features = Sequential(*features)
 
-        Convenience for the common training step. Returns the transformed
-        ``(features, target)`` tables, ready to feed the model and its loss.
-        """
-        return (
-            self.features.fit_transform(features),
-            self.target.fit_transform(target),
-        )
+        if target is None:
+            target = Sequential()
+        elif not isinstance(target, Processor):
+            target = Sequential(*target)
+
+        if output is None:
+            output = Sequential()
+        elif not isinstance(output, Processor):
+            output = Sequential(*output)
+
+        object.__setattr__(self, "features", features)
+        object.__setattr__(self, "target", target)
+        object.__setattr__(self, "output", output)
 
     def __repr__(self) -> str:
-        roles = "\n".join(
-            f"  {name}: "
-            + (
-                " -> ".join(step.__class__.__name__ for step in pipeline)
-                or "identity"
-            )
-            for name, pipeline in (
-                ("features", self.features),
-                ("target", self.target),
-                ("output", self.output),
-            )
+        return (
+            f"{self.__class__.__name__}("
+            f"  features={self.features.__repr__(indent=2)[2:]},\n"
+            f"  target={self.target.__repr__(indent=2)[2:]},\n"
+            f"  output={self.output.__repr__(indent=2)[2:]},\n"
+            ")"
         )
-        return f"Recipe(\n{roles}\n)"

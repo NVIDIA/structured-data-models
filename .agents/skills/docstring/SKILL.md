@@ -10,7 +10,7 @@ Follow these best practices up front to keep docstrings consistent across the co
 
 ## General Principles
 
-- Every module starts with a one-line module docstring, a single declarative line summarizing the module's purpose.
+- Do not add module-level docstrings to individual modules; keep only a short package summary in the package `__init__.py`.
 - Every public class and function has a docstring, a one-line summary, then an `Args:` section.
 - When a class or function implements functionality proposed in an academic paper, cite it in the first sentence of its docstring.
 - Document every public parameter, especially, constructor parameters. Document them in the **class** docstring's `Args:`, not in `__init__`.
@@ -18,13 +18,11 @@ Follow these best practices up front to keep docstrings consistent across the co
 - Describe tensor parameters with their shape in double-backtick notation, using a leading `...` for the batch dimensions (e.g., `[..., S, H, C]`). Spell out each remaining dimension letter, and keep the notation consistent across related processors/modules.
 - If splitting a long line leads to a line-too-long error, put `# noqa: <code>` to ignore the error.
 - Document non-obvious behavior: implicit caps, defaults, transformations, or side effects that affect results. If it would surprise a caller, state it.
+- Do not add docstrings to methods that already have one in superclass's methods even if the class/methods are public. For example, `Processor.transform()` already has a general docstring that's applicable to its subclasses. In this case, put a comment `# noqa: D102` to ignore the linter error.
 
 ## Example
 
 ```python
-"""Scaled normalization transforms for structured-data models."""
-
-
 class MyClass:
     r"""My Class from the `"My Paper" <https://arxiv.org/abs/2602.11139>`_ paper.
 

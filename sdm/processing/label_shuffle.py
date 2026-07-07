@@ -77,7 +77,7 @@ class LabelShuffle(Processor, InvertibleMixin):
             _estimator=estimator,
         )
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Map original label ids into the estimator-specific label space."""
         return self._map_labels(input, inverse=False)
 

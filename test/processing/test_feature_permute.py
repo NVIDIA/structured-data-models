@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import FeaturePermute, Pipeline
+from sdm.processing import FeaturePermute, Sequential
 
 
 def _table() -> TableTensor:
@@ -52,11 +52,12 @@ def test_feature_permute_resolved_shift_permutes_table_blocks() -> None:
 
 def test_feature_permute_inverse_restores_permuted_blocks() -> None:
     table = _table()
-    pipeline = Pipeline([FeaturePermute(method="shift").resolve(estimator=1)])
+    pipeline = Sequential(FeaturePermute(method="shift").resolve(estimator=1))
 
     transformed = pipeline.transform(table)
     restored = pipeline.inverse_transform(transformed)
 
+    assert isinstance(restored, TableTensor)
     assert restored.columns == table.columns
     assert torch.equal(restored.numerical, table.numerical)
     assert torch.equal(
@@ -86,17 +87,16 @@ def test_feature_permute_random_is_deterministic() -> None:
 def test_feature_permute_random_inverse_round_trips() -> None:
     table = _table()
     generator = torch.Generator().manual_seed(123)
-    pipeline = Pipeline(
-        [
-            FeaturePermute(method="random", generator=generator).resolve(
-                estimator=1
-            )
-        ]
+    pipeline = Sequential(
+        FeaturePermute(method="random", generator=generator).resolve(
+            estimator=1
+        )
     )
 
     transformed = pipeline.transform(table)
     restored = pipeline.inverse_transform(transformed)
 
+    assert isinstance(restored, TableTensor)
     assert restored.columns == table.columns
     assert torch.equal(restored.numerical, table.numerical)
     assert torch.equal(

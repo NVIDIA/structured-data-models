@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ConstantFilter, Pipeline, StandardScale
+from sdm.processing import ConstantFilter, Sequential, StandardScale
 
 
 def _table() -> TableTensor:
@@ -61,8 +61,9 @@ def test_constant_filter_noop_returns_input_table() -> None:
 def test_constant_filter_composes_before_block_processor() -> None:
     table = _table()
 
-    output = Pipeline([ConstantFilter(), StandardScale()]).fit_transform(table)
+    output = Sequential(ConstantFilter(), StandardScale()).fit_transform(table)
 
+    assert isinstance(output, TableTensor)
     assert output.columns[Stype.numerical] == ("variable",)
     assert torch.allclose(output.numerical.mean(dim=0), torch.zeros(1))
 

@@ -1,6 +1,7 @@
 """Cache primitives."""
 
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
+from enum import Enum
 from typing import NamedTuple
 
 import torch
@@ -48,21 +49,60 @@ class KVCacheEntry(NamedTuple):
 class Cache(MutableMapping[str, object]):
     r"""A mutable mapping of model cache values."""
 
+    class Mode(str, Enum):
+        r"""The operating mode of a :class:`Cache`.
+
+        A cache alternates between two phases: (1) recording key/value
+        projections from a fit pass, and (2) replaying them across subsequent
+        predict passes.
+        Possible values are:
+
+        Attributes:
+            record: Allows recording of data.
+            replay: Allows replaying of data.
+        """
+
+        record = "record"
+        replay = "replay"
+
     def __init__(
         self,
         *args: Mapping[str, object] | Iterable[tuple[str, object]],
         **kwargs: object,
     ) -> None:
+        self._mode = Cache.Mode.record
         self._items: dict[str, object] = dict(*args, **kwargs)
 
-    def __getitem__(self, key: str) -> object:
-        return self._items[key]
+    @property
+    def is_recording(self) -> bool:
+        r"""Whether the cache is in recording mode."""
+        return self._mode == Cache.Mode.record
+
+    @property
+    def is_replaying(self) -> bool:
+        r"""Whether the cache is in replaying mode."""
+        return self._mode == Cache.Mode.replay
+
+    def freeze(self) -> None:
+        r"""Freeze the cache to replay mode."""
+        self._mode = Cache.Mode.replay
 
     def __setitem__(self, key: str, value: object) -> None:
+        if not self.is_recording:
+            raise RuntimeError(
+                "'__setitem__' requires the cache to be in 'record' mode"
+            )
         self._items[key] = value
 
     def __delitem__(self, key: str) -> None:
+        if not self.is_recording:
+            raise RuntimeError(
+                "'__delitem__' requires the cache to be in 'record' mode"
+            )
         del self._items[key]
+
+    def __getitem__(self, key: str) -> object:
+        return self._items[key]
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._items)
