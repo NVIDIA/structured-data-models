@@ -166,6 +166,78 @@ def test_replace_blocks_validates_replacement_shape() -> None:
         tensor.replace_blocks(numerical=torch.ones(2, 3))
 
 
+def test_select_stype() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+            "datetime": ["created_at"],
+            "id": ["user_id"],
+        },
+        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["USA", "Germany"]),),
+        ),
+        datetime=torch.tensor([[10], [20]], dtype=torch.int64),
+        id=ColumnarTensor((torch.tensor([100, 200]),)),
+    )
+
+    numerical = tensor.select_stype(Stype.numerical)
+    assert isinstance(numerical, TableTensor)
+    assert numerical.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+    assert numerical.numerical is tensor.numerical
+    assert numerical.categorical.size() == (2, 0)
+    assert numerical.datetime.size() == (2, 0)
+    assert numerical.id.size() == (2, 0)
+
+    categorical = tensor.select_stype("categorical")
+    assert categorical.columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("country",),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+    assert categorical.categorical is tensor.categorical
+
+    with pytest.raises(ValueError, match="is not a valid Stype"):
+        tensor.select_stype("unknown")
+
+
+def test_select_stype_recombines_with_cat() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
+        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["USA", "Germany"]),),
+        ),
+    )
+
+    out = cast(
+        TableTensor,
+        torch.cat(
+            (
+                tensor.select_stype(Stype.numerical),
+                tensor.select_stype(Stype.categorical),
+            ),
+            dim=-1,
+        ),
+    )
+
+    assert out.columns == tensor.columns
+    assert out.numerical.equal(tensor.numerical)
+    assert out.categorical.equal(tensor.categorical)
+
+
 def test_save_load() -> None:
     tensor = TableTensor(
         columns={

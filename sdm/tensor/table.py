@@ -439,6 +439,31 @@ class TableTensor(Tensor):
             id=self.id if id is None else id,
         )
 
+    def select_stype(
+        self: SelfTableTensor,
+        stype: StypeLike,
+    ) -> SelfTableTensor:
+        r"""Return a table containing only semantic type ``stype`` columns.
+
+        Args:
+            stype: The semantic type to select.
+        """
+        stype = Stype(stype)
+        columns = cast(
+            Mapping[StypeLike, Sequence[str]],
+            {stype: self._columns[stype]},
+        )
+        if stype == Stype.numerical:
+            return self.__class__(columns=columns, numerical=self.numerical)
+        if stype == Stype.categorical:
+            return self.__class__(
+                columns=columns,
+                categorical=self.categorical,
+            )
+        if stype == Stype.datetime:
+            return self.__class__(columns=columns, datetime=self.datetime)
+        return self.__class__(columns=columns, id=self.id)
+
     def select_columns(self, columns: str | Iterable[str]) -> "TableTensor":
         r"""Return a table containing only ``columns``.
 
