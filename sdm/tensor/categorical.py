@@ -116,7 +116,7 @@ class CategoricalTensor(Tensor):
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
-        r"""Create tensor from a ``pyarrow`` array.
+        r"""Create tensor from a :class:`~pyarrow.Array`.
 
         .. code-block:: python
 
@@ -134,7 +134,8 @@ class CategoricalTensor(Tensor):
             >>> ['foo', 'bar']
 
         Args:
-            array: The ``pyarrow`` array.
+            array: The :class:`pyarrow.Array` or
+                :class:`pyarrow.ChunkedArray`.
             dtype: The dtype.
             device: The device.
         """
@@ -177,7 +178,7 @@ class CategoricalTensor(Tensor):
         return cls(data=data, categories=(category,))
 
     def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
-        r"""Convert this tensor to a flat ``pyarrow`` table.
+        r"""Convert this tensor to a flat :class:`pyarrow.Table`.
 
         Args:
             columns: Column names.
@@ -233,7 +234,11 @@ class CategoricalTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        r"""Register a ``__torch_dispatch__`` implementation."""
+        r"""Register a ``__torch_dispatch__`` implementation.
+
+        See PyTorch's
+        :ref:`calling convention <torch-dispatch-calling-convention>`.
+        """
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 

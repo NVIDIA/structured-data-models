@@ -56,6 +56,12 @@ def test_init() -> None:
         "segment": (Stype.categorical, 1),
     }
 
+    with pytest.raises(ValueError, match=r"datetime.*dtype"):
+        TableTensor(
+            columns={"datetime": ["created_at"]},
+            datetime=torch.zeros(2, 1),
+        )
+
 
 def test_empty() -> None:
     with pytest.raises(ValueError, match="to be given"):
@@ -107,12 +113,14 @@ def test_save_load() -> None:
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country"],
+            "datetime": ["created_at"],
         },
         numerical=torch.randn(3, 2),
         categorical=CategoricalTensor(
             data=torch.arange(3).view(3, 1),
             categories=(StringTensor.from_list(["USA, GER, FRA"]),),
         ),
+        datetime=torch.tensor([[1], [2], [3]], dtype=torch.int64),
     )
 
     buffer = io.BytesIO()
@@ -124,6 +132,7 @@ def test_save_load() -> None:
     assert out.size() == tensor.size()
     assert out.numerical.equal(tensor.numerical)
     assert out.categorical.equal(tensor.categorical)
+    assert out.datetime.equal(tensor.datetime)
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
     for category1, category2 in zip(
@@ -138,12 +147,14 @@ def test_to_copy() -> None:
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country", "segment"],
+            "datetime": ["created_at"],
         },
         numerical=torch.randn(2, 2),
         categorical=CategoricalTensor(
             data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
             categories=(torch.arange(2), torch.arange(2)),
         ),
+        datetime=torch.tensor([[1], [2]], dtype=torch.int64),
     )
 
     out = tensor.to(torch.float64)
@@ -152,6 +163,8 @@ def test_to_copy() -> None:
     assert out.dtype == torch.float64
     assert out.numerical.dtype == torch.float64
     assert out.categorical.dtype == torch.int32
+    assert out.datetime.equal(tensor.datetime)
+    assert out.datetime.dtype == torch.int64
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
 
@@ -575,6 +588,27 @@ def test_arrow() -> None:
     assert tensor.id[:, 1].equal(StringTensor.from_list(["a", "b", "c", "d"]))
 
     assert tensor.to_arrow().to_pydict() == data
+
+
+def test_arrow_empty() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "age": pa.array([], type=pa.float32()),
+                "country": pa.array([], type=pa.string()),
+            }
+        ),
+        stypes={
+            "age": "numerical",
+            "country": "categorical",
+        },
+    )
+
+    table = tensor.to_arrow()
+
+    assert table.num_rows == 0
+    assert table.column_names == ["age", "country"]
+    assert table.to_pydict() == {"age": [], "country": []}
 
 
 def test_from_pandas() -> None:

@@ -32,7 +32,7 @@ class StringTensor(VarLenTensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
-        r"""Create tensor from a ``pyarrow`` string array.
+        r"""Create tensor from a string :class:`~pyarrow.Array`.
 
         .. code-block:: python
 
@@ -43,7 +43,8 @@ class StringTensor(VarLenTensor):
             tensor = StringTensor.from_arrow(array, size=(2, 2))
 
         Args:
-            array: The ``pyarrow`` string array.
+            array: The string :class:`pyarrow.Array` or
+                :class:`pyarrow.ChunkedArray`.
             size: The shape of the tensor.
             device: The device.
         """
@@ -88,7 +89,7 @@ class StringTensor(VarLenTensor):
 
     @override
     def to_arrow(self) -> pa.Array:
-        r"""Convert this tensor to flat ``pyarrow`` string array."""
+        r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
         tensor = cast(StringTensor, self.contiguous().cpu())
 
         return pa.Array.from_buffers(

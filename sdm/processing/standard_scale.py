@@ -9,6 +9,9 @@ from sdm.processing.base import InvertibleMixin, Processor
 class StandardScale(Processor, InvertibleMixin):
     """Center and scale each feature column.
 
+    Constant columns use a unit scale to keep the transform finite and
+    invertible.
+
     Args:
         with_mean: If ``True``, center each column by its fitted mean.
         with_std: If ``True``, scale each column by its fitted standard

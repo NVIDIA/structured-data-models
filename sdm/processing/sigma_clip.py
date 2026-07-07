@@ -22,6 +22,10 @@ def _nanstd(input: Tensor, *, dim: int) -> Tensor:
 class SigmaClip(Processor):
     """Two-stage z-score outlier clipping with soft logarithmic bounds.
 
+    The first pass masks values outside the initial z-score bounds, then the
+    second pass refits bounds on the remaining values. The transform applies
+    logarithmic soft clipping instead of hard truncation.
+
     Args:
         threshold: Positive z-score multiplier setting how many standard
             deviations from the mean mark the soft clipping bounds.

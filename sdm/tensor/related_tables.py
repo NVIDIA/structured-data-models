@@ -125,7 +125,7 @@ class RelatedTables:
             else:
                 left_table = relationship.get("left_table")
                 assert left_table is None or isinstance(left_table, str)
-                if "left_column" in relationships:
+                if "left_column" in relationship:
                     left_columns = relationship["left_column"]
                 else:
                     left_columns = relationship["left_columns"]
@@ -134,7 +134,7 @@ class RelatedTables:
                     left_columns = (left_columns,)
                 right_table = relationship["right_table"]
                 assert isinstance(right_table, str)
-                if "right_column" in relationships:
+                if "right_column" in relationship:
                     right_columns = relationship["right_column"]
                 else:
                     right_columns = relationship["right_columns"]
@@ -152,6 +152,7 @@ class RelatedTables:
 
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", parsed_relationships)
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         if not any(

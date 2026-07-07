@@ -14,7 +14,7 @@ both sides of the model.
   column's mean and standard deviation); a stateless one does not (for example
   {py:class}`~sdm.processing.SoftmaxTemperature`).
 
-- A {py:class}`~sdm.processing.Pipeline` is an ordered list of steps.
+- A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
   attributes:

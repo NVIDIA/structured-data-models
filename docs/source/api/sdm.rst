@@ -6,3 +6,4 @@ sdm
    :nosignatures:
 
    sdm.Stype
+   sdm.infer_stypes

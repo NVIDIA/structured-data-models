@@ -1,5 +1,5 @@
 import abc
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
@@ -11,14 +11,12 @@ class Processor(torch.nn.Module, abc.ABC):
 
     Subclass and implement ``forward`` (the transform). Override ``_fit`` to
     learn state from data (the default is a no-op). For an inverse, also mix
-    in ``InvertibleMixin`` and implement ``_inverse_transform``.
-
-    Set ``requires_fit = False`` for stateless processors that can safely run
+    in :class:`InvertibleMixin` and implement ``_inverse_transform``. Set
+    ``requires_fit = False`` for stateless processors that can safely run
     without a prior ``fit`` call.
-
     """
 
-    requires_fit: ClassVar[bool] = True
+    requires_fit: bool = True
 
     def __init__(self) -> None:
         super().__init__()
@@ -38,24 +36,62 @@ class Processor(torch.nn.Module, abc.ABC):
     def forward(self, input: Tensor) -> Tensor:
         """Transform ``input`` and return the result.
 
-        Called via ``processor(input)`` (``torch.nn.Module.__call__``) or,
+        Called through :class:`torch.nn.Module` as ``processor(input)`` or,
         with a fitted-state check, via :meth:`transform`.
+
+        Args:
+            input: Tensor to transform. Concrete processors document the
+                accepted shape.
+
+        Returns:
+            Tensor with the same shape as ``input`` unless the concrete
+            processor documents otherwise.
         """
 
     def fit(self, input: Tensor) -> Self:
-        """Fit the processor on ``input`` and return it."""
-        self._fit(input)
-        self._fitted = True
+        """Fit the processor on ``input`` and return it.
+
+        Args:
+            input: Feature tensor used to compute the processor state.
+                Concrete processors document the accepted shape.
+
+        Returns:
+            This processor.
+        """
+        if self.requires_fit:
+            self._fit(input)
+            self._fitted = True
         return self
 
     def transform(self, input: Tensor) -> Tensor:
-        """Transform ``input`` using the fitted processor."""
+        """Transform ``input`` using the fitted processor.
+
+        Args:
+            input: Tensor to transform. Concrete processors document the
+                accepted shape.
+
+        Returns:
+            Transformed tensor with the shape documented by the concrete
+            processor.
+        """
         self._check_is_fitted()
         return self(input)
 
     def fit_transform(self, input: Tensor) -> Tensor:
-        """Fit on ``input`` and return the transformed result."""
+        """Fit on ``input`` and return the transformed result.
+
+        Args:
+            input: Feature tensor to fit on and transform. Concrete
+                processors document the accepted shape.
+
+        Returns:
+            Transformed tensor with the shape documented by the concrete
+            processor.
+        """
         return self.fit(input).transform(input)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return f"{' ' * indent}{self.__class__.__name__}()"
 
 
 class InvertibleMixin(abc.ABC):
@@ -69,7 +105,15 @@ class InvertibleMixin(abc.ABC):
     def _inverse_transform(self, input: Tensor) -> Tensor: ...
 
     def inverse_transform(self, input: Tensor) -> Tensor:
-        """Invert the transform of ``input`` using the fitted processor."""
+        """Invert the transform of ``input`` using the fitted processor.
+
+        Args:
+            input: Tensor in transformed space. Concrete processors
+                document the accepted shape.
+
+        Returns:
+            Tensor mapped back to the original processor space.
+        """
         self._check_is_fitted()
         return self._inverse_transform(input)
 
