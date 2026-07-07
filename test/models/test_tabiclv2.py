@@ -37,6 +37,7 @@ def test_tabiclv2(
 
     assert out.dtype == x.dtype
     assert out.device == x.device
+    assert torch.is_inference(out)
 
     if len(batch_shape) > 0:
         looped = torch.stack(
