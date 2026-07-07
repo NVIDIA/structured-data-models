@@ -1,0 +1,6 @@
+﻿sdm.infer\_stypes
+=================
+
+.. currentmodule:: sdm
+
+.. autofunction:: infer_stypes
