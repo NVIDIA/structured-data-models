@@ -173,10 +173,10 @@ data-aria-dark="Switch to auto color mode">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Processor</span></span><a class="headerlink" href="#sdm.processing.Processor" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
 <p>Fittable, tensor-in/tensor-out transform.</p>
-<p>Subclass and implement <code class="docutils literal notranslate"><span class="pre">forward</span></code> (the transform). Override <code class="docutils literal notranslate"><span class="pre">_fit</span></code> to
-learn state from data (the default is a no-op). For an inverse, also mix
-in <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a> and implement <code class="docutils literal notranslate"><span class="pre">_inverse_transform</span></code>. Set
-<code class="docutils literal notranslate"><span class="pre">requires_fit</span> <span class="pre">=</span> <span class="pre">False</span></code> for stateless processors that can safely run
+<p>Subclass and implement <code class="docutils literal notranslate"><span class="pre">_transform</span></code> (the transform operation). Override
+<code class="docutils literal notranslate"><span class="pre">_fit</span></code> to learn state from data (the default is a no-op). For an inverse,
+also mix in <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a> and implement <code class="docutils literal notranslate"><span class="pre">_inverse_transform</span></code>.
+Set <code class="docutils literal notranslate"><span class="pre">requires_fit</span> <span class="pre">=</span> <span class="pre">False</span></code> for stateless processors that can safely run
 without a prior <code class="docutils literal notranslate"><span class="pre">fit</span></code> call.</p>
 <dl class="field-list simple">
 </dl>
@@ -219,18 +219,18 @@ processor.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.Processor.forward">
-<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.forward" title="Link to this definition">¶</a></dt>
-<dd><p>Transform <code class="docutils literal notranslate"><span class="pre">input</span></code> and return the result.</p>
-<p>Called through <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> as <code class="docutils literal notranslate"><span class="pre">processor(input)</span></code> or,
-with a fitted-state check, via <a class="reference internal" href="#sdm.processing.Processor.transform" title="sdm.processing.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>.</p>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.forward" title="Link to this definition">¶</a></dt>
+<dd><p>Alias of <a class="reference internal" href="#sdm.processing.Processor.transform" title="sdm.processing.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>.</p>
+<p>This is the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> entry point, so
+<code class="docutils literal notranslate"><span class="pre">processor(input)</span></code> and <code class="docutils literal notranslate"><span class="pre">processor.transform(input)</span></code> share the same
+fitted-state checks.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Tensor to transform. Concrete processors document the
 accepted shape.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Tensor with the same shape as <code class="docutils literal notranslate"><span class="pre">input</span></code> unless the concrete
-processor documents otherwise.</p>
+<dd class="field-even"><p>Tensor with the shape documented by the concrete processor.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
@@ -285,7 +285,7 @@ processor.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=83f52c8e"></script>
+      <script src="../../_static/documentation_options.js?v=d7f6684b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
