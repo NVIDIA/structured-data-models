@@ -20,10 +20,10 @@ both sides of the model.
   standard deviation); a stateless one does not (for example
   {py:class}`~sdm.processing.SoftmaxTemperature`).
 
-- A {py:class}`~sdm.processing.Pipeline` is an ordered list of steps. During
-  `fit`, table-level steps are transformed before fitting later steps, so later
-  block-scoped processors learn from the same table state they will see during
-  `transform`.
+- A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
+  During `fit`, table-level steps are transformed before fitting later steps,
+  so later block-scoped processors learn from the same table state they will
+  see during `transform`.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
   attributes:

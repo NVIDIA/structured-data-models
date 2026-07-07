@@ -5,17 +5,20 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
+@pytest.mark.parametrize("num_key_value_heads", [None, 1])
 @pytest.mark.parametrize("qassmax", [False, True])
 def test_induced_transformer_block(
     device: torch.device,
     qassmax: bool,
+    num_key_value_heads: int | None,
 ) -> None:
     batch_size = 2
     set_size = 6
     channels = 8
     module = InducedTransformerBlock(
         channels=channels,
-        num_heads=2,
+        num_query_heads=2,
+        num_key_value_heads=num_key_value_heads,
         feedforward_channels=16,
         num_inducing_points=4,
         qassmax=qassmax,
@@ -56,7 +59,7 @@ def test_induced_transformer_block_kv_cache() -> None:
     num_inducing_points = 4
     module = InducedTransformerBlock(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         feedforward_channels=16,
         num_inducing_points=num_inducing_points,
     )

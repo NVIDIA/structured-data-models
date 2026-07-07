@@ -31,7 +31,7 @@ class ToNumerical(Processor):
         Stype.categorical,
     )
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Return ``input`` with categorical columns moved to ``numerical``."""
         if not isinstance(input, TableTensor):
             raise TypeError(

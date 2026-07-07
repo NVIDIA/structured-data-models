@@ -39,7 +39,7 @@ class RowEmbedding(torch.nn.Module):
         self.col_layers = ModuleList(
             InducedTransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 num_inducing_points=num_inducing_points,
                 qassmax=True,
@@ -57,7 +57,7 @@ class RowEmbedding(torch.nn.Module):
         self.row_layers = ModuleList(
             TransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=False,
                 norm_bias=norm_bias,

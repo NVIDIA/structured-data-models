@@ -1,11 +1,11 @@
 import warnings
-from typing import cast
+from typing import Any, cast
 
-import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor
+from sdm import CategoricalTensor, StringTensor
+from sdm.testing import withCUDA
 
 
 def test_to_copy() -> None:
@@ -91,49 +91,141 @@ def test_from_arrow_cpu_does_not_warn_on_readonly_numpy(
     )
 
 
-def test_from_pandas_string_values() -> None:
-    tensor = CategoricalTensor.from_pandas(
-        pd.Series(["b", "a", None, "b"]),
+def test_tolist() -> None:
+    tensor = CategoricalTensor(
+        data=torch.tensor(
+            [
+                [[0, 1], [-1, 0]],
+                [[1, -1], [0, 1]],
+            ],
+            dtype=torch.int32,
+        ),
+        categories=(
+            torch.tensor([10, 20]),
+            torch.tensor([30, 40]),
+        ),
     )
 
-    assert tensor.equal(torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32))
+    assert tensor.tolist() == [
+        [[10, 40], [None, 30]],
+        [[20, None], [10, 40]],
+    ]
+
+
+def test_to_arrow() -> None:
+    tensor = CategoricalTensor(
+        data=torch.tensor(
+            [
+                [[0, 1], [-1, 0]],
+                [[1, -1], [0, 1]],
+            ],
+            dtype=torch.int32,
+        ),
+        categories=(
+            StringTensor.from_list(["US", "CA"]),
+            torch.tensor([10, 20]),
+        ),
+    )
+
+    table = tensor.to_arrow()
+    assert table.column_names == ["0", "1"]
+    assert pa.types.is_dictionary(table["0"].type)
+    assert pa.types.is_dictionary(table["1"].type)
+    assert table.to_pydict() == {
+        "0": ["US", None, "CA", "US"],
+        "1": [20, 10, None, 20],
+    }
+
+
+def _import_cudf() -> Any:
+    pytest.importorskip("cupy")
+    cudf = pytest.importorskip("cudf")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available")
+    return cudf
+
+
+@withCUDA
+def test_from_cudf_string_values(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series(["b", "a", None, "b"]),
+        device=device,
+    )
+
+    assert tensor.as_tensor().device == device
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32))
+    )
+    assert tensor.categories[0].device == device
     assert tensor.categories[0].tolist() == ["b", "a"]
 
 
-def test_from_pandas_nullable_numeric_values() -> None:
-    tensor = CategoricalTensor.from_pandas(
-        pd.Series([10, 20, None, 10], dtype="Int32"),
+@withCUDA
+def test_from_cudf_numeric_values(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series([10, 20, None, 10], dtype="int32"),
+        device=device,
     )
 
-    assert tensor.equal(torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32))
-    assert tensor.categories[0].equal(
-        torch.tensor([10, 20], dtype=torch.int32)
+    assert tensor.as_tensor().device == device
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32))
+    )
+    assert tensor.categories[0].device == device
+    assert (
+        tensor.categories[0]
+        .cpu()
+        .equal(torch.tensor([10, 20], dtype=torch.int32))
     )
 
 
-def test_from_pandas_all_missing_values() -> None:
-    tensor = CategoricalTensor.from_pandas(
-        pd.Series([None, None]),
+@withCUDA
+def test_from_cudf_all_missing_values(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series([None, None], dtype="int32"),
+        device=device,
     )
 
-    assert tensor.equal(torch.tensor([[-1], [-1]], dtype=torch.int32))
+    assert tensor.as_tensor().device == device
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[-1], [-1]], dtype=torch.int32))
+    )
+    assert tensor.categories[0].device == device
     assert tensor.categories[0].numel() == 0
 
 
-def test_from_pandas_dtype() -> None:
-    tensor = CategoricalTensor.from_pandas(
-        pd.Series(["b", "a", None]),
+@withCUDA
+def test_from_cudf_dtype(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series(["b", "a", None]),
         dtype=torch.int64,
+        device=device,
     )
 
-    assert tensor.dtype == torch.int64
-    assert tensor.equal(torch.tensor([[0], [1], [-1]], dtype=torch.int64))
+    assert tensor.as_tensor().device == device
+    assert tensor.as_tensor().dtype == torch.int64
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0], [1], [-1]], dtype=torch.int64))
+    )
 
 
-def test_from_pandas_errors() -> None:
+def test_from_cudf_errors() -> None:
+    cudf = _import_cudf()
     with pytest.raises(ValueError, match="dtype"):
-        CategoricalTensor.from_pandas(
-            pd.Series(["a", "b"]),
+        CategoricalTensor.from_cudf(
+            cudf.Series(["a", "b"]),
             dtype=torch.float32,
         )
 

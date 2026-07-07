@@ -35,7 +35,7 @@ class ICLBlock(torch.nn.Module):
         for _ in range(num_layers):
             layer = TransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=True,
                 norm_bias=norm_bias,
