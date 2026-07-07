@@ -2,8 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-from sdm.stype import Stype, StypeLike
-from sdm.stype_inference import infer_stypes
+from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
     VarLenTensor,
     StringTensor,
