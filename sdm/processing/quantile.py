@@ -5,6 +5,8 @@ from torch import Tensor
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
+from sdm.tensor import TableTensor
 
 BOUNDS_THRESH = 1e-7
 
@@ -41,6 +43,8 @@ class Quantile(Processor, InvertibleMixin):
         random_state: Seed for deterministic subsampling. If ``None``, use the
             global PyTorch generator.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -79,9 +83,9 @@ class Quantile(Processor, InvertibleMixin):
             generator=generator,
         )[: self.subsample]
 
-    def _fit(self, input: Tensor) -> None:
-        input = _as_float(input)
-        n_samples = input.shape[0]
+    def _fit(self, input: TableTensor) -> None:
+        numerical = _as_float(input.numerical)
+        n_samples = numerical.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
             # Keep quantiles well below the subsample size; very dense
@@ -93,14 +97,14 @@ class Quantile(Processor, InvertibleMixin):
             0,
             1,
             self.n_quantiles,
-            device=input.device,
-            dtype=input.dtype,
+            device=numerical.device,
+            dtype=numerical.dtype,
         )
 
         if self.subsample is not None and self.subsample < n_samples:
-            input_sample = input[self._subsample_indices(input)]
+            input_sample = numerical[self._subsample_indices(numerical)]
         else:
-            input_sample = input
+            input_sample = numerical
 
         self.quantiles = torch.nanquantile(
             input_sample,
@@ -174,25 +178,25 @@ class Quantile(Processor, InvertibleMixin):
 
         return input_col
 
-    def _transform(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` into the configured output distribution."""
-        input = _as_float(input)
-        transformed = torch.empty_like(input)
-        for i in range(input.shape[1]):
+        numerical = _as_float(input.numerical)
+        transformed = torch.empty_like(numerical)
+        for i in range(numerical.shape[1]):
             transformed[:, i] = self._transform_col(
-                input[:, i],
+                numerical[:, i],
                 self.quantiles[:, i],
                 inverse=False,
             )
-        return transformed
+        return input.replace_blocks(numerical=transformed)
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
-        input = _as_float(input)
-        inverse = input.clone()
-        for i in range(input.shape[1]):
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+        numerical = _as_float(input.numerical)
+        inverse = numerical.clone()
+        for i in range(numerical.shape[1]):
             inverse[:, i] = self._transform_col(
-                input[:, i],
+                numerical[:, i],
                 self.quantiles[:, i],
                 inverse=True,
             )
-        return inverse
+        return input.replace_blocks(numerical=inverse)

@@ -1,6 +1,12 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import ToNumerical
 
 
@@ -50,9 +56,14 @@ def test_to_numerical_is_identity_for_already_numerical_table() -> None:
     assert ToNumerical().transform(table) is table
 
 
-def test_to_numerical_requires_table_input() -> None:
-    with pytest.raises(TypeError, match="TableTensor"):
-        ToNumerical().transform(torch.ones(2, 3))
+def test_to_numerical_rejects_unsupported_stype() -> None:
+    table = TableTensor(
+        columns={"id": ("row_id",)},
+        id=ColumnarTensor((torch.arange(2),)),
+    )
+
+    with pytest.raises(ValueError, match="id"):
+        ToNumerical().transform(table)
 
 
 def test_to_numerical_keeps_source_category_vocabulary_available() -> None:
@@ -67,3 +78,23 @@ def test_to_numerical_keeps_source_category_vocabulary_available() -> None:
         "enterprise",
     ]
     assert output.columns[Stype.categorical] == ()
+
+
+def test_to_numerical_converts_categorical_only_table() -> None:
+    table = TableTensor(
+        columns={"categorical": ("country",)},
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int64),
+            categories=(StringTensor.from_list(["US", "DE"]),),
+        ),
+    )
+
+    output = ToNumerical().transform(table)
+
+    assert isinstance(output, TableTensor)
+    assert output.columns[Stype.numerical] == ("country",)
+    assert output.columns[Stype.categorical] == ()
+    assert torch.equal(
+        output.numerical,
+        table.categorical.as_tensor().to(table.numerical.dtype),
+    )

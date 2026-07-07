@@ -1,5 +1,6 @@
 import pytest
 import torch
+from sdm import TableTensor
 from sdm.processing import (
     Clip,
     MeanImpute,
@@ -33,7 +34,7 @@ def test_numeric_processors_accept_integer_input(processor) -> None:
         ]
     )
 
-    output = processor.fit_transform(input)
+    output = processor.fit_transform(TableTensor.from_tensor(input)).numerical
 
     assert output.dtype == torch.get_default_dtype()
     assert output.shape == input.shape
@@ -44,7 +45,11 @@ def test_numeric_processors_promote_integer_input_to_default_dtype() -> None:
     previous_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch.float64)
     try:
-        output = StandardScale().fit_transform(input)
+        output = (
+            StandardScale()
+            .fit_transform(TableTensor.from_tensor(input))
+            .numerical
+        )
     finally:
         torch.set_default_dtype(previous_dtype)
 

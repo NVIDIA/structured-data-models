@@ -7,6 +7,8 @@ from torch import Tensor
 from sdm.processing._stats import _constant_feature_mask
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
+from sdm.tensor import TableTensor
 
 
 def _yeojohnson_transform(input: Tensor, lmbda: float) -> Tensor:
@@ -154,7 +156,13 @@ class Power(Processor, InvertibleMixin):
             features using statistics fitted after the power transform.
     """
 
-    def __init__(self, *, standardize: bool = True) -> None:
+    supported_stypes = frozenset({Stype.numerical})
+
+    def __init__(
+        self,
+        *,
+        standardize: bool = True,
+    ) -> None:
         super().__init__()
         self.standardize = standardize
         self.register_buffer("lambdas", torch.empty(0))
@@ -178,36 +186,36 @@ class Power(Processor, InvertibleMixin):
             upper_bound,
         )
 
-    def _fit(self, input: Tensor) -> None:
-        input = _as_float(input)
-        n_samples, n_features = input.shape
+    def _fit(self, input: TableTensor) -> None:
+        numerical = _as_float(input.numerical)
+        n_samples, n_features = numerical.shape
 
-        var = input.var(dim=0, correction=0)
-        mean = input.mean(dim=0)
-        self.max = _nan_max(input)
-        lambdas = input.new_empty(n_features)
+        var = numerical.var(dim=0, correction=0)
+        mean = numerical.mean(dim=0)
+        self.max = _nan_max(numerical)
+        lambdas = numerical.new_empty(n_features)
 
         constant_features = _constant_feature_mask(var, mean, n_samples)
         for i in range(n_features):
-            col = input[:, i]
+            col = numerical[:, i]
             lmbda = 1.0 if constant_features[i] else self._optimize_lambda(col)
             lambdas[i] = lmbda
 
         self.lambdas = lambdas
 
-        lambda_eps = torch.finfo(input.dtype).eps
+        lambda_eps = torch.finfo(numerical.dtype).eps
         self.upper_bound = -(1 / self.lambdas)
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
-            transformed = self._yeojohnson_transform(input)
+            transformed = self._yeojohnson_transform(numerical)
             self.mean, var = _nan_mean_var(transformed)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
             self.scale = scale
         else:
-            self.mean = input.new_zeros(n_features)
-            self.scale = input.new_ones(n_features)
+            self.mean = numerical.new_zeros(n_features)
+            self.scale = numerical.new_ones(n_features)
 
     def _yeojohnson_transform(self, input: Tensor) -> Tensor:
         transformed = input.clone()
@@ -227,20 +235,21 @@ class Power(Processor, InvertibleMixin):
             )
         return inverse
 
-    def _transform(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""
-        input = _as_float(input)
-        transformed = self._yeojohnson_transform(input)
-        return (transformed - self.mean) / self.scale
+        numerical = _as_float(input.numerical)
+        transformed = self._yeojohnson_transform(numerical)
+        numerical = (transformed - self.mean) / self.scale
+        return input.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
-        input = _as_float(input)
-        unscaled = input * self.scale + self.mean
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+        numerical = _as_float(input.numerical)
+        unscaled = numerical * self.scale + self.mean
         inverse = self._yeojohnson_inverse_transform(unscaled)
 
         out_of_bounds = inverse.isinf()
         if out_of_bounds.any():
-            eps = torch.finfo(input.dtype).eps
+            eps = torch.finfo(numerical.dtype).eps
             unscaled = torch.minimum(unscaled, self.upper_bound - eps)
             inverse[out_of_bounds] = self._yeojohnson_inverse_transform(
                 unscaled,
@@ -248,4 +257,4 @@ class Power(Processor, InvertibleMixin):
             invalid = inverse.isinf()
             inverse[invalid] = torch.fmin(inverse, self.max)[invalid]
 
-        return inverse
+        return input.replace_blocks(numerical=inverse)

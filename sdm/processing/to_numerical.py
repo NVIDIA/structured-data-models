@@ -1,5 +1,3 @@
-from typing import ClassVar
-
 import torch
 from torch import Tensor
 
@@ -24,34 +22,10 @@ class ToNumerical(Processor):
     """
 
     requires_fit = False
-    input_scope = "table"
+    supported_stypes = frozenset({Stype.numerical, Stype.categorical})
 
-    supported_stypes: ClassVar[tuple[Stype, ...]] = (
-        Stype.numerical,
-        Stype.categorical,
-    )
-
-    def _transform(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Return ``input`` with categorical columns moved to ``numerical``."""
-        if not isinstance(input, TableTensor):
-            raise TypeError(
-                "Expected ToNumerical input to be a TableTensor "
-                f"(got '{type(input).__name__}')"
-            )
-
-        unsupported = tuple(
-            stype.value
-            for stype, block in input.items()
-            if block.size(-1) > 0 and stype not in self.supported_stypes
-        )
-        if unsupported:
-            supported = [stype.value for stype in self.supported_stypes]
-            raise NotImplementedError(
-                f"ToNumerical only converts {supported} columns; got "
-                f"unsupported stype(s) {list(unsupported)}. Drop those "
-                "columns before this step."
-            )
-
         # Already numerical-only: nothing to move.
         if all(
             stype == Stype.numerical or block.size(-1) == 0
