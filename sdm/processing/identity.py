@@ -1,6 +1,5 @@
-from torch import Tensor
-
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.tensor import TableTensor
 
 
 class Identity(Processor, InvertibleMixin):
@@ -11,9 +10,9 @@ class Identity(Processor, InvertibleMixin):
 
     requires_fit = False
 
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input: TableTensor) -> TableTensor:
         """Return ``input`` unchanged."""
         return input
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
         return input

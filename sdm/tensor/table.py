@@ -420,6 +420,39 @@ class TableTensor(Tensor):
         r"""Return typed column blocks per semantic type."""
         return dict(self.items())
 
+    def replace_blocks(
+        self: SelfTableTensor,
+        *,
+        numerical: Tensor | None = None,
+        categorical: CategoricalTensor | None = None,
+        datetime: Tensor | None = None,
+        id: ColumnarTensor | None = None,
+    ) -> SelfTableTensor:
+        r"""Return a table with one or more semantic blocks replaced.
+
+        Provided blocks replace the corresponding semantic type while omitted
+        blocks are reused from this table. The returned table preserves the
+        current column schema and is validated by the ``TableTensor``
+        constructor.
+
+        Args:
+            numerical: Replacement numerical block with shape
+                ``[..., C_num]``.
+            categorical: Replacement categorical block with shape
+                ``[..., C_cat]``.
+            datetime: Replacement datetime block with shape ``[..., C_dt]``.
+            id: Replacement identifier block with shape ``[..., C_id]``.
+        """
+        return self.__class__(
+            columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
+            numerical=self.numerical if numerical is None else numerical,
+            categorical=(
+                self.categorical if categorical is None else categorical
+            ),
+            datetime=self.datetime if datetime is None else datetime,
+            id=self.id if id is None else id,
+        )
+
     def select_columns(self, columns: str | Iterable[str]) -> "TableTensor":
         r"""Return a table containing only ``columns``.
 
@@ -698,7 +731,10 @@ def _is_pinned(input: TableTensor) -> bool:
 
 @TableTensor.implements(aten._pin_memory.default)
 def _pin_memory(input: TableTensor) -> TableTensor:
-    blocks = {stype: tensor.pin_memory() for stype, tensor in input.items()}
+    blocks = {
+        stype: tensor.pin_memory() if tensor.numel() > 0 else tensor
+        for stype, tensor in input.items()
+    }
     return input.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
         **blocks,

@@ -1,8 +1,8 @@
 import torch
-from torch import Tensor
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.tensor import TableTensor
 
 
 class Clip(Processor, InvertibleMixin):
@@ -34,19 +34,20 @@ class Clip(Processor, InvertibleMixin):
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
-    def _fit(self, input: Tensor) -> None:
-        input = _as_float(input)
-        quantiles = input.new_tensor([self.q_low, self.q_high])
-        q_low, q_high = torch.quantile(input, quantiles, dim=0)
+    def _fit(self, input: TableTensor) -> None:
+        numerical = _as_float(input.numerical)
+        quantiles = numerical.new_tensor([self.q_low, self.q_high])
+        q_low, q_high = torch.quantile(numerical, quantiles, dim=0)
         self.lower_bound = q_low
         self.upper_bound = q_high
 
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input: TableTensor) -> TableTensor:
         """Clamp ``input`` to the fitted lower and upper bounds."""
-        return _as_float(input).clamp(
+        numerical = _as_float(input.numerical).clamp(
             min=self.lower_bound,
             max=self.upper_bound,
         )
+        return input.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
         return input

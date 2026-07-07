@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from typing import Any, cast
 
 import pytest
 import torch
@@ -42,8 +41,8 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
 class StatelessProcessor(Processor):
     requires_fit = False
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        return input + 1
+    def forward(self, input: TableTensor) -> TableTensor:
+        return input.replace_blocks(numerical=input.numerical + 1)
 
 
 def test_stateless_processor_runs_without_fit() -> None:
@@ -54,4 +53,3 @@ def test_stateless_processor_runs_without_fit() -> None:
     assert torch.equal(processor.transform(table).numerical, input + 1)
     assert torch.equal(processor(table).numerical, input + 1)
     assert torch.equal(processor.fit_transform(table).numerical, input + 1)
-

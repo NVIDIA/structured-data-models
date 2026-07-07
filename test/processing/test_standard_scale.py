@@ -92,7 +92,7 @@ def test_standard_scale_nan_columns_follow_torch_reductions(
 def test_standard_scale_single_sample_uses_unit_scale(
     device: torch.device,
 ) -> None:
-    input = torch.tensor([[42.0, -2.0]], device=device))
+    input = torch.tensor([[42.0, -2.0]], device=device)
 
     processor = StandardScale().fit(TableTensor.from_tensor(input))
     transformed = processor.transform(TableTensor.from_tensor(input)).numerical
