@@ -12,9 +12,10 @@ from torch.nn import GELU, Linear, Sequential
 from sdm import TableTensor
 from sdm.cache import Cache
 from sdm.models import BaseModel
-from sdm.models.tabiclv2.icl import ICLBlock, _predict_hierarchical
+from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_regression_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
+from sdm.nn import HierarchicalClassifier
 from sdm.processing import Recipe
 
 _CLASSIFICATION_TEMPERATURE = 0.9
@@ -289,6 +290,12 @@ class _TabICLv2(torch.nn.Module):
             ),
         )
         self.max_classes = num_classes
+        self.hierarchical_classifier: HierarchicalClassifier | None = None
+        if num_classes > 0:
+            self.hierarchical_classifier = HierarchicalClassifier(
+                max_classes=num_classes,
+                temperature=_CLASSIFICATION_TEMPERATURE,
+            )
 
     def forward(
         self,
@@ -328,12 +335,11 @@ class _TabICLv2(torch.nn.Module):
                 cache=cache,
             )[..., :num_classes]
 
-        probabilities = _predict_hierarchical(
+        assert self.hierarchical_classifier is not None
+        probabilities = self.hierarchical_classifier(
             row_embeddings=row_embeddings,
             y=y,
             num_classes=num_classes,
-            max_classes=self.max_classes,
-            temperature=_CLASSIFICATION_TEMPERATURE,
             predictor=self._predict_standard,
         )
         return _probabilities_to_logits(probabilities)

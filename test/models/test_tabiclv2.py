@@ -4,10 +4,6 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.models.tabiclv2.icl import (
-    _balanced_grouping,
-    _predict_hierarchical,
-)
 from sdm.models.tabiclv2.model import (
     _class_permutations,
     _probabilities_to_logits,
@@ -15,7 +11,7 @@ from sdm.models.tabiclv2.model import (
     _validate_classification_labels,
 )
 from sdm.models.tabiclv2.row_embedding import RowEmbedding, _mixed_radix_bases
-from sdm.nn import Attention
+from sdm.nn import Attention, HierarchicalClassifier
 from sdm.processing import Sequential
 from sdm.testing import withCUDA
 
@@ -176,98 +172,6 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     torch.testing.assert_close(out, row_embedding(x, y_swapped))
 
 
-def test_hierarchical_balanced_grouping() -> None:
-    assignments, num_groups = _balanced_grouping(
-        num_classes=5,
-        max_classes=10,
-        device=torch.device("cpu"),
-    )
-    assert num_groups == 1
-    torch.testing.assert_close(assignments, torch.zeros(5, dtype=torch.long))
-
-    assignments, num_groups = _balanced_grouping(
-        num_classes=25,
-        max_classes=10,
-        device=torch.device("cpu"),
-    )
-    assert num_groups == 3
-    torch.testing.assert_close(
-        assignments,
-        torch.tensor([0] * 9 + [1] * 8 + [2] * 8),
-    )
-
-    assignments, num_groups = _balanced_grouping(
-        num_classes=101,
-        max_classes=10,
-        device=torch.device("cpu"),
-    )
-    assert num_groups == 10
-    torch.testing.assert_close(
-        assignments,
-        torch.arange(10).repeat_interleave(torch.tensor([11] + [10] * 9)),
-    )
-
-
-@withCUDA
-@pytest.mark.parametrize(
-    ("num_classes", "max_classes", "expected_calls"),
-    [(3, 2, 2), (25, 10, 4), (101, 10, 13)],
-)
-def test_hierarchical_probabilities(
-    device: torch.device,
-    num_classes: int,
-    max_classes: int,
-    expected_calls: int,
-) -> None:
-    calls = 0
-
-    def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        nonlocal calls
-        calls += 1
-        test_size = rows.size(0) - labels.size(0)
-        return rows.new_zeros((test_size, max_classes))
-
-    test_size = 2
-    row_embeddings = torch.randn(
-        num_classes + test_size,
-        4,
-        device=device,
-    )
-    y = torch.arange(num_classes, device=device)
-    probabilities = _predict_hierarchical(
-        row_embeddings=row_embeddings,
-        y=y,
-        num_classes=num_classes,
-        max_classes=max_classes,
-        temperature=0.9,
-        predictor=predictor,
-    )
-
-    assert probabilities.size() == (test_size, num_classes)
-    assert probabilities.dtype == row_embeddings.dtype
-    assert probabilities.device == device
-    assert calls == expected_calls
-    torch.testing.assert_close(
-        probabilities.sum(dim=-1),
-        torch.ones(test_size, device=device),
-    )
-
-    expected = torch.full(
-        (num_classes,),
-        1 / num_classes,
-        device=device,
-    )
-    if (num_classes, max_classes) == (3, 2):
-        expected = torch.tensor([0.25, 0.25, 0.5], device=device)
-    elif num_classes == 25:
-        expected[:9] = 1 / 27
-        expected[9:] = 1 / 24
-    elif num_classes == 101:
-        expected[:6] = 1 / 120
-        expected[6:] = 1 / 100
-    torch.testing.assert_close(probabilities[0], expected)
-
-
 @withCUDA
 @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
 def test_tabiclv2_many_classes(
@@ -275,6 +179,7 @@ def test_tabiclv2_many_classes(
     batch_shape: tuple[int, ...],
 ) -> None:
     model = _make_small_classifier(max_classes=3, device=device)
+    assert isinstance(model.hierarchical_classifier, HierarchicalClassifier)
     num_classes, test_size = 7, 2
     x = torch.randn(
         *batch_shape,
@@ -417,13 +322,7 @@ def test_classification_rejects_complex_targets() -> None:
         model(x, y)
 
 
-def test_hierarchical_requires_two_native_classes() -> None:
-    with pytest.raises(ValueError, match="at least two native classes"):
-        _balanced_grouping(
-            num_classes=2,
-            max_classes=1,
-            device=torch.device("cpu"),
-        )
+def test_tabiclv2_requires_two_native_classes() -> None:
     with pytest.raises(ValueError, match="at least two native classes"):
         _mixed_radix_bases(num_classes=2, max_classes=1)
 
