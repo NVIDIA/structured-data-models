@@ -1110,15 +1110,25 @@ def _slice(
     end: int | None = None,
     step: int = 1,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        # `x[..., :]`-style indexing emits a no-op slice over the trailing
+        # dimension on torch<2.9 (newer releases elide it); pass it through
+        # since it keeps every column, and keep rejecting actual slicing.
+        full = (
+            (start is None or start == 0)
+            and (end is None or end >= inp.size(dim))
+            and step == 1
+        )
+        if not full:
+            raise RuntimeError(
+                f"Can't slice the column dimension of "
+                f"'{inp.__class__.__name__}'"
+            )
+
     blocks = {
         stype: aten.slice.Tensor(tensor, dim, start, end, step)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't slice the column dimension of '{inp.__class__.__name__}'"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),

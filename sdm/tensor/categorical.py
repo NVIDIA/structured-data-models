@@ -462,6 +462,19 @@ def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(inp._data.pin_memory(), inp._categories)
 
 
+# On CUDA machines, the composite `pin_memory` reaches `__torch_dispatch__`
+# undecomposed for blocks pinned inside `TableTensor`'s handler; without an
+# explicit handler, the vanilla-tensor fallback drops the categories.
+@CategoricalTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: CategoricalTensor,
+    device: torch.device | None = None,
+) -> CategoricalTensor:
+    if inp.is_pinned():
+        return inp
+    return cast(CategoricalTensor, aten._pin_memory.default(inp))
+
+
 @CategoricalTensor.implements(aten.view.default)
 @preserve_view_inference_mode
 def _view(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:

@@ -348,6 +348,18 @@ def test_pin_memory() -> None:
 
     assert not tensor.is_pinned()
 
+    # Column-less instances are vacuously pinned and pinning must be a
+    # no-op. On CUDA machines, the composite `pin_memory` reaches
+    # `__torch_dispatch__` undecomposed for blocks pinned inside
+    # `TableTensor`'s handler; invoke the protocol directly to exercise
+    # the `aten.pin_memory.default` registration on any device:
+    empty = ColumnarTensor(columns=(), size=(2,))
+    assert empty.is_pinned()
+    out = ColumnarTensor.__torch_dispatch__(
+        torch.ops.aten.pin_memory.default, (ColumnarTensor,), (empty,)
+    )
+    assert out is empty
+
 
 @onlyCUDA
 def test_pin_memory_cuda() -> None:
