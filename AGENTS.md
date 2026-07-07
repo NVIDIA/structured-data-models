@@ -49,6 +49,8 @@ Do not add platform or serving abstractions unless explicitly requested.
   Call out cases where vectorization is not practical.
 - Preserve tensor device and dtype.
   Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, Python scalars, or newly-created CPU tensors.
+- Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
+- Avoid creating unnecessary views right before broadcasts.
 - Add short tensor shape comments for complex tensor operations.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.

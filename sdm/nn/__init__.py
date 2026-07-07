@@ -4,7 +4,7 @@ from sdm.nn.rope import RotaryEmbedding
 from sdm.nn.attention import (
     QASSMax,
     SDPA,
-    MultiHeadAttention,
+    Attention,
     TransformerBlock,
 )
 from sdm.nn.set_transformer import InducedTransformerBlock
@@ -14,7 +14,7 @@ __all__ = [
     "QASSMax",
     "SDPA",
     "RotaryEmbedding",
-    "MultiHeadAttention",
+    "Attention",
     "TransformerBlock",
     "InducedTransformerBlock",
 ]

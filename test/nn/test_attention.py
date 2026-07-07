@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from sdm.nn import (
     SDPA,
-    MultiHeadAttention,
+    Attention,
     QASSMax,
     RotaryEmbedding,
     TransformerBlock,
@@ -20,6 +20,10 @@ def reference_sdpa(
     value: Tensor,
     attn_mask: Tensor | None = None,
 ) -> Tensor:
+    # Expand KV for MQA and GQA
+    groups = query.size(-2) // key.size(-2)
+    key = key.repeat_interleave(groups, dim=-2)
+    value = value.repeat_interleave(groups, dim=-2)
     return F.scaled_dot_product_attention(
         query=query.transpose(-3, -2),
         key=key.transpose(-3, -2),
@@ -63,24 +67,42 @@ def test_qassmax(
 
 
 @withCUDA
-def test_sdpa(device: torch.device) -> None:
+@pytest.mark.parametrize(
+    "num_key_value_heads",
+    [
+        pytest.param(None, id="mha"),
+        pytest.param(1, id="mqa"),
+        pytest.param(2, id="gqa"),
+    ],
+)
+def test_sdpa(
+    device: torch.device,
+    num_key_value_heads: int | None,
+) -> None:
     channels = 3
-    num_heads = 2
-    module = SDPA(channels=channels, num_heads=num_heads)
+    num_query_heads = 4
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+    )
+    if num_key_value_heads is None:
+        num_key_value_heads = num_query_heads
 
     # Match torch SDPA for unbatched query, key, and value tensors.
-    query = torch.randn(4, num_heads, channels, device=device)
-    key = torch.randn(5, num_heads, channels, device=device)
-    value = torch.randn(5, num_heads, channels, device=device)
+    query = torch.randn(4, num_query_heads, channels, device=device)
+    key = torch.randn(5, num_key_value_heads, channels, device=device)
+    value = torch.randn(5, num_key_value_heads, channels, device=device)
 
     out = module(query=query, key=key, value=value)
+
     expected = reference_sdpa(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
 
     # Broadcast batch dimensions and apply a boolean attention mask.
-    query = torch.randn(2, 3, num_heads, channels, device=device)
-    key = torch.randn(5, num_heads, channels, device=device)
-    value = torch.randn(1, 5, num_heads, channels, device=device)
+    query = torch.randn(2, 3, num_query_heads, channels, device=device)
+    key = torch.randn(5, num_key_value_heads, channels, device=device)
+    value = torch.randn(1, 5, num_key_value_heads, channels, device=device)
     attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool, device=device)
 
     out = module(
@@ -102,13 +124,25 @@ def test_sdpa(device: torch.device) -> None:
     query_len = 4
     key_value_len = 5
     query = torch.randn(
-        batch_size, query_len, num_heads, channels, device=device
+        batch_size,
+        query_len,
+        num_query_heads,
+        channels,
+        device=device,
     )
     key = torch.randn(
-        batch_size, key_value_len, num_heads, channels, device=device
+        batch_size,
+        key_value_len,
+        num_key_value_heads,
+        channels,
+        device=device,
     )
     value = torch.randn(
-        batch_size, key_value_len, num_heads, channels, device=device
+        batch_size,
+        key_value_len,
+        num_key_value_heads,
+        channels,
+        device=device,
     )
     value[0, 3:] = 1000
     value[1, 1:] = -1000
@@ -143,15 +177,25 @@ def test_sdpa(device: torch.device) -> None:
         batch_size,
         num_test,
         num_queries,
-        num_heads,
+        num_query_heads,
         channels,
         device=device,
     )
     key = torch.randn(
-        batch_size, 1, num_train, num_heads, channels, device=device
+        batch_size,
+        1,
+        num_train,
+        num_key_value_heads,
+        channels,
+        device=device,
     )
     value = torch.randn(
-        batch_size, 1, num_train, num_heads, channels, device=device
+        batch_size,
+        1,
+        num_train,
+        num_key_value_heads,
+        channels,
+        device=device,
     )
 
     out = module(query=query, key=key, value=value)
@@ -162,20 +206,23 @@ def test_sdpa(device: torch.device) -> None:
     )
     torch.testing.assert_close(out, expected)
 
-    # Reject invalid mask and sequence-length combinations.
-    query = torch.randn(1, 2, num_heads, channels, device=device)
-    key = torch.randn(1, 2, num_heads, channels, device=device)
-    value = torch.randn(1, 2, num_heads, channels, device=device)
-    attn_mask = torch.ones(1, 2, 2, dtype=torch.bool, device=device)
+
+def test_sdpa_errors() -> None:
+    channels = 3
+    num_heads = 2
+    module = SDPA(channels=channels, num_query_heads=num_heads)
+
+    query = torch.randn(1, 2, num_heads, channels)
+    key = torch.randn(1, 2, num_heads, channels)
+    value = torch.randn(1, 2, num_heads, channels)
+    attn_mask = torch.ones(1, 2, 2, dtype=torch.bool)
 
     with pytest.raises(ValueError, match="Cannot pass both"):
         module(
             query=query,
             key=key,
             value=value,
-            seqused_key_value=torch.tensor(
-                [1], dtype=torch.int32, device=device
-            ),
+            seqused_key_value=torch.tensor([1], dtype=torch.int32),
             attn_mask=attn_mask,
         )
 
@@ -187,9 +234,7 @@ def test_sdpa(device: torch.device) -> None:
             query=query,
             key=key,
             value=value,
-            seqused_key_value=torch.tensor(
-                [1], dtype=torch.int64, device=device
-            ),
+            seqused_key_value=torch.tensor([1], dtype=torch.int64),
         )
 
     with pytest.raises(
@@ -200,24 +245,46 @@ def test_sdpa(device: torch.device) -> None:
             query=query,
             key=key,
             value=value,
-            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32, device=device),
+            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
         )
+
+    with pytest.raises(ValueError, match="must be divisible"):
+        SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    "num_key_value_heads",
+    [
+        pytest.param(None, id="mha"),
+        pytest.param(1, id="mqa"),
+        pytest.param(2, id="gqa"),
+    ],
+)
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
-def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
-    channels = 6
-    num_heads = 3
+def test_attention(
+    device: torch.device,
+    num_key_value_heads: int | None,
+    qassmax: bool,
+    rope: bool,
+) -> None:
+    channels = 8
+    num_query_heads = 4
     dtype = torch.float32
-    module = MultiHeadAttention(
+    module = Attention(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
         qassmax=qassmax,
         device=device,
         dtype=dtype,
     )
+    if num_key_value_heads is None:
+        num_key_value_heads = num_query_heads
+    head_dim = channels // num_query_heads
+    expected_qkv = (num_query_heads + 2 * num_key_value_heads) * head_dim
+    assert module.qkv_lin.out_features == expected_qkv
 
     query = torch.randn(2, 4, channels, dtype=dtype, device=device)
     key_value = torch.randn(2, 5, channels, dtype=dtype, device=device)
@@ -226,7 +293,7 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
     rotary_embedding: RotaryEmbedding | None = None
     if rope:
         rotary_embedding = RotaryEmbedding(
-            channels=channels // num_heads,
+            channels=head_dim,
             device=device,
             dtype=dtype,
         )
@@ -258,9 +325,9 @@ def test_attention(device: torch.device, qassmax: bool, rope: bool) -> None:
 def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
     channels = 8
     num_heads = 2
-    module = MultiHeadAttention(
+    module = Attention(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         qassmax=qassmax,
     )
 
@@ -316,7 +383,7 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
 def test_attention_errors() -> None:
     channels = 6
     num_heads = 3
-    module = MultiHeadAttention(channels=channels, num_heads=num_heads)
+    module = Attention(channels=channels, num_query_heads=num_heads)
     query = torch.randn(2, 4, channels)
 
     with pytest.raises(ValueError, match="Cannot pass both"):
@@ -345,7 +412,7 @@ def test_attention_errors() -> None:
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
-        MultiHeadAttention(channels=5, num_heads=2)
+        Attention(channels=5, num_query_heads=2)
 
 
 @withCUDA
@@ -364,7 +431,7 @@ def test_transformer_block(
     feedforward_channels = 16
     module = TransformerBlock(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         feedforward_channels=feedforward_channels,
         qassmax=qassmax,
         device=device,
@@ -416,7 +483,14 @@ def test_transformer_block(
         attn_mask=attn_mask,
         rope=rotary_embedding,
     )
-    torch.testing.assert_close(out1, out2)
+    # Both paths reduce to the same boolean mask and SDPA kernel, but with
+    # `qassmax` the key lengths enter :class:`QASSMax` as differently-shaped
+    # tensors (`[..., 1]` from `seqused_key_value` vs `[..., Q]` from the
+    # mask), so its MLP GEMMs may round differently in float32.
+    if qassmax:
+        torch.testing.assert_close(out1, out2, atol=5e-4, rtol=5e-3)
+    else:
+        torch.testing.assert_close(out1, out2)
 
     # Test no padding leakage
     new_key_value = key_value.clone()
@@ -439,7 +513,7 @@ def test_transformer_block_kv_cache() -> None:
     num_heads = 2
     module = TransformerBlock(
         channels=channels,
-        num_heads=num_heads,
+        num_query_heads=num_heads,
         feedforward_channels=16,
     )
     with torch.no_grad():

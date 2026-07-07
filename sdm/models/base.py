@@ -65,9 +65,10 @@ class BaseModel(torch.nn.Module, ABC):
         """
         self.clear()
         x, y = self._preprocess(x, y)
-        self._cache = Cache({"y.dtype": y.dtype})
+        cache = Cache({"y.dtype": y.dtype})
         x = x[..., : y.size(-1), :]
-        self._forward(x, y, cache=self._cache)
+        self._forward(x, y, cache=cache)
+        self._cache = cache
         self._cache.freeze()
 
     def clear(self) -> None:
@@ -114,12 +115,13 @@ class BaseModel(torch.nn.Module, ABC):
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
     ) -> tuple[Tensor, Tensor]:
         if isinstance(x, TableTensor):
-            invalid_columns = x.size(-1) - x.numerical.size(-1)
+            invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
             if invalid_columns > 0:
                 invalid_stypes = [
                     stype.value
                     for stype, tensor in x.items()
-                    if tensor.size(-1) > 0 and stype not in (Stype.numerical,)
+                    if tensor.size(-1) > 0
+                    and stype not in (Stype.numerical, Stype.id)
                 ]
                 warnings.warn(
                     f"Expected 'x' to only hold numerical columns but also "
