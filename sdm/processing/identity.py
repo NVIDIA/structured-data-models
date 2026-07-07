@@ -11,7 +11,7 @@ class Identity(Processor, InvertibleMixin):
     supported_stypes = "all"
     requires_fit = False
 
-    def forward(self, input: TableTensor) -> TableTensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Return ``input`` unchanged."""
         self._check_supported_stypes(input)
         return input
