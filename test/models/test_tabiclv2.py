@@ -135,3 +135,24 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     y_swapped = 5 * b + a
     out = row_embedding(x, y)
     torch.testing.assert_close(out, row_embedding(x, y_swapped))
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+def test_tabiclv2_compile(device: torch.device, dtype: torch.dtype) -> None:
+    torch._dynamo.reset()
+    model = TabICLv2(pretrained=False, device=device)
+
+    R, C, R_train = 8, 6, 5
+    x = torch.randn(R, C, device=device)
+    if dtype.is_floating_point:
+        y = torch.randn(R_train, device=device)
+    else:
+        y = torch.randint(0, 10, (R_train,), device=device)
+
+    expected = model(x, y)
+    # `fullgraph=True` raises on any graph break; the eager backend skips
+    # code generation, keeping the test fast while staying numerically
+    # identical to the uncompiled model.
+    compiled = torch.compile(model, fullgraph=True, backend="eager")
+    torch.testing.assert_close(compiled(x, y), expected)
