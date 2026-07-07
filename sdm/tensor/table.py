@@ -428,7 +428,21 @@ class TableTensor(Tensor):
         datetime: Tensor | None = None,
         id: ColumnarTensor | None = None,
     ) -> SelfTableTensor:
-        r"""Return a table with one or more semantic blocks replaced."""
+        r"""Return a table with one or more semantic blocks replaced.
+
+        Provided blocks replace the corresponding semantic type while omitted
+        blocks are reused from this table. The returned table preserves the
+        current column schema and is validated by the ``TableTensor``
+        constructor.
+
+        Args:
+            numerical: Replacement numerical block with shape
+                ``[..., C_num]``.
+            categorical: Replacement categorical block with shape
+                ``[..., C_cat]``.
+            datetime: Replacement datetime block with shape ``[..., C_dt]``.
+            id: Replacement identifier block with shape ``[..., C_id]``.
+        """
         return self.__class__(
             columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
             numerical=self.numerical if numerical is None else numerical,

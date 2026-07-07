@@ -16,13 +16,11 @@ class Sequential(Processor, InvertibleMixin):
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
     def _fit(self, input: Tensor) -> None:
-        self.fit_transform(input)
+        out = input
+        for step in self.steps:
+            out = step.fit_transform(out)
 
-    def forward(self, input: Tensor) -> Tensor:  # noqa: D102
-        # TODO: Consolidate ``forward`` and ``transform`` in the base class.
-        return self.transform(input)
-
-    def transform(self, input: Tensor) -> Tensor:  # noqa: D102
+    def _transform(self, input: Tensor) -> Tensor:
         out = input
         for step in self.steps:
             out = step.transform(out)
