@@ -1,4 +1,4 @@
-"""In-context learning modules for structured tensor models."""
+# ruff: noqa: D101, D102
 
 from typing import Any
 
@@ -6,36 +6,11 @@ import torch
 from torch import Tensor
 from torch.nn import Embedding, LayerNorm, Linear, ModuleList
 
+from sdm.cache import Cache
 from sdm.nn import TransformerBlock
 
 
 class ICLBlock(torch.nn.Module):
-    r"""In-context learning block for classification and regression.
-
-    Training-row label embeddings are injected into the row hidden states,
-    after which a stack of cross-attention :class:`TransformerBlock` layers
-    lets every row attend over the in-context training rows. A shared MLP
-    followed by a task-specific linear head maps the test-row states to
-    predictions: class logits for classification, or quantile predictions for
-    regression.
-
-    The design follows the in-context learning setup of the `"TabICLv2: A
-    better, faster, scalable, and open tabular foundation model"
-    <https://arxiv.org/abs/2602.11139>`_ paper.
-
-    Args:
-        channels: The number of hidden channels.
-        out_channels: The number of output channels.
-        num_classes: The number of supported classes for classification.
-            Set to ``0`` for regression.
-        num_layers: The number of layers.
-        num_heads: The number of attention heads per layer.
-        norm_bias: Whether :class:`~torch.nn.LayerNorm` layers use a learnable
-            bias.
-        device: The device.
-        dtype: The dtype.
-    """
-
     def __init__(
         self,
         num_classes: int,
@@ -60,7 +35,7 @@ class ICLBlock(torch.nn.Module):
         for _ in range(num_layers):
             layer = TransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=True,
                 norm_bias=norm_bias,
@@ -72,34 +47,35 @@ class ICLBlock(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,  # [B, R, D]
-        y: Tensor,  # [B, R_train]
-    ) -> Tensor:  # [B, R_test, out_channels]
-        r"""The forward pass.
-
-        Args:
-            x: The row embeddings with shape ``[B, R, D]``.
-                The first ``R_train`` rows along ``R`` refer to the in-context
-                examples.
-            y: The targets with shape ``[B, R_train]``.
-
-        Returns:
-            Tensor with shape ``[B, R_test, D]``.
-        """
+        x: Tensor,  # [..., R, D]
+        y: Tensor,  # [..., R_train]
+        *,
+        cache: Cache | None = None,
+    ) -> Tensor:  # [..., R_test, D]
         R_train = y.size(-1)
 
-        if self.y_emb is not None:
-            y_emb = self.y_emb(y)  # [B, R_train, D]
-        else:
-            assert self.y_lin is not None
-            y_emb = self.y_lin(y.unsqueeze(-1))  # [B, R_train, D]
+        if y.numel() > 0:
+            if self.y_emb is not None:
+                y_emb = self.y_emb(y)  # [..., R_train, D]
+            else:
+                assert self.y_lin is not None
+                y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
 
-        x[:, :R_train] += y_emb.to(x.dtype)
+            x[..., :R_train, :] += y_emb.to(x.dtype)
 
         for i, layer in enumerate(self.layers):
-            x = layer(
-                query=x[:, R_train:] if i == len(self.layers) - 1 else x,
-                key_value=x[:, :R_train],
+            key = f"icl_block.layer{i}"
+            result = layer(
+                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
+                key_value=cache[key]
+                if cache is not None and cache.is_replaying
+                else x[..., :R_train, :],  # [..., R_train, D]
+                return_key_value=cache is not None and cache.is_recording,
             )
 
-        return self.norm(x)  # [B, R_test, D]
+            if cache is not None and cache.is_recording:
+                x, cache[key] = result
+            else:
+                x = result
+
+        return self.norm(x)  # [..., R_test, D]

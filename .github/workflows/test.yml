@@ -28,11 +28,12 @@ jobs:
 
       - name: Install package
         run: |
+          # `-e` for coverage report.
           uv pip install --torch-backend=cpu -e '.[test]'
 
       - name: Run tests
         run: |
-          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing
+          pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
 
       # TODO: Uncomment when we make the repo public.
       # - name: Upload coverage

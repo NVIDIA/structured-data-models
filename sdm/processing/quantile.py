@@ -3,6 +3,7 @@ from typing import Literal
 import torch
 from torch import Tensor
 
+from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 
 BOUNDS_THRESH = 1e-7
@@ -75,9 +76,9 @@ class Quantile(Processor, InvertibleMixin):
     """Map feature columns through their empirical quantiles.
 
     Args:
-        n_quantiles: The number of quantiles to compute.
-        subsample: The number of samples to use for quantile computation.
-        output_distribution: The distribution to map the data to.
+        n_quantiles: Maximum number of quantiles to compute.
+        subsample: Maximum number of rows to use for quantile computation.
+        output_distribution: Distribution to map the empirical quantiles to.
         random_state: Seed for deterministic subsampling. If ``None``, use the
             global PyTorch generator.
     """
@@ -120,6 +121,7 @@ class Quantile(Processor, InvertibleMixin):
         )[: self.subsample]
 
     def _fit(self, input: Tensor) -> None:
+        input = _as_float(input)
         n_samples = input.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
@@ -147,7 +149,10 @@ class Quantile(Processor, InvertibleMixin):
             dim=0,
         )
 
-    def _transform(self, input: Tensor, *, inverse: bool = False) -> Tensor:
+    def _transform_impl(
+        self, input: Tensor, *, inverse: bool = False
+    ) -> Tensor:
+        input = _as_float(input)
         quantiles = self.quantiles
         output = input.clone()
         zero = output.new_zeros(())
@@ -204,9 +209,9 @@ class Quantile(Processor, InvertibleMixin):
 
         return output
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Transform ``input`` into the configured output distribution."""
-        return self._transform(input, inverse=False)
+        return self._transform_impl(input, inverse=False)
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
-        return self._transform(input, inverse=True)
+        return self._transform_impl(input, inverse=True)

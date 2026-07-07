@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 
+from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 
 
@@ -8,7 +9,8 @@ class Clip(Processor, InvertibleMixin):
     """Clamp feature columns to fitted quantile bounds.
 
     This transform is not reconstructive; ``inverse_transform`` intentionally
-    returns its input unchanged.
+    returns its input unchanged. Quantile bounds are fitted independently for
+    each feature column.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
@@ -33,14 +35,18 @@ class Clip(Processor, InvertibleMixin):
         self.register_buffer("upper_bound", torch.empty(0))
 
     def _fit(self, input: Tensor) -> None:
+        input = _as_float(input)
         quantiles = input.new_tensor([self.q_low, self.q_high])
         q_low, q_high = torch.quantile(input, quantiles, dim=0)
         self.lower_bound = q_low
         self.upper_bound = q_high
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Clamp ``input`` to the fitted lower and upper bounds."""
-        return input.clamp(min=self.lower_bound, max=self.upper_bound)
+        return _as_float(input).clamp(
+            min=self.lower_bound,
+            max=self.upper_bound,
+        )
 
     def _inverse_transform(self, input: Tensor) -> Tensor:
         return input

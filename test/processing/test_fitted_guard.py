@@ -24,6 +24,8 @@ def test_processor_requires_fit_for_transform(
 
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform(input)
+    with pytest.raises(RuntimeError, match="not fitted"):
+        processor(input)
 
 
 @pytest.mark.parametrize(
@@ -83,7 +85,7 @@ def test_processor_transform_accepts_different_batch_size_after_fit(
 class StatelessProcessor(Processor):
     requires_fit = False
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def _transform(self, input: torch.Tensor) -> torch.Tensor:
         return input + 1
 
 

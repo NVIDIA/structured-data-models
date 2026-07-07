@@ -2,22 +2,46 @@
 
 Python package for structured data models.
 
-## Development
+```python
+import torch
+from sklearn.datasets import load_breast_cancer
 
-Create or update the local development environment:
+from sdm import TableTensor, infer_stypes
+from sdm.models import TabICLv2
+from sdm.processing import Recipe
 
-```bash
-uv sync
-```
+df = load_breast_cancer(as_frame=True).frame
 
-Run commands inside the project environment:
+# A lossless, fully tensorized representation of the raw data on GPU:
+table = TableTensor.from_pandas(
+    df=df,
+    stypes=infer_stypes(df),
+    device=device,
+)
 
-```bash
-uv run python -c "import sdm; print(sdm.__version__)"
-```
+# Access to a variety of pre-trained structured data models:
+model = TabICLv2(device=device)
 
-Build source and wheel distributions:
+# Unified and custom recipes for pre- and post-processing:
+recipe = Recipe(
+    features=[
+        ShuffleColumns(),
+        ImputeMissing(),
+        StandardScale(),
+        SigmaClip(threshold=4.0),
 
-```bash
-uv build
+    ],
+    target=[
+        ShuffleClasses(),
+    ],
+)
+
+# Common execution interface:
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
+    model(
+        x=table.drop_columns("target"),
+        y=table[:300, "target"],
+        recipe=recipe,
+        num_estimators=8,
+    )
 ```

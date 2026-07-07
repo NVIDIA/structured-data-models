@@ -1,0 +1,60 @@
+import torch
+from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm.processing import Recipe, Sequential, StandardScale
+
+
+def _table(numerical: torch.Tensor | None = None) -> TableTensor:
+    if numerical is None:
+        numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    n_rows = numerical.shape[0]
+    categorical = CategoricalTensor(
+        data=(torch.arange(n_rows) % 2).unsqueeze(1),
+        categories=(StringTensor.from_list(["a", "b"]),),
+    )
+    return TableTensor(
+        columns={
+            "numerical": ("x0", "x1"),
+            "categorical": ("kind",),
+        },
+        numerical=numerical,
+        categorical=categorical,
+    )
+
+
+def test_recipe_normalizes_empty_roles_and_repr() -> None:
+    recipe = Recipe(features=[StandardScale()], target=None, output=[])
+
+    assert isinstance(recipe.features, Sequential)
+    assert isinstance(recipe.target, Sequential)
+    assert isinstance(recipe.output, Sequential)
+    assert len(recipe.features.steps) == 1
+    assert len(recipe.target.steps) == 0
+    assert len(recipe.output.steps) == 0
+    assert "features=Sequential" in repr(recipe)
+    assert "target=Sequential()" in repr(recipe)
+
+
+def test_target_forward_then_inverse_round_trips() -> None:
+    recipe = Recipe(target=[StandardScale()])
+    table = _table()
+
+    assert isinstance(recipe.target, Sequential)
+    transformed = recipe.target.fit_transform(table.numerical)
+    restored = recipe.target.inverse_transform(transformed)
+
+    assert not torch.equal(transformed, table.numerical)
+    assert torch.allclose(restored, table.numerical, atol=1e-6)
+
+
+def test_recipe_roles_fit_transform_features_and_target() -> None:
+    recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
+    features = _table()
+    target = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
+
+    out_features = recipe.features.fit_transform(features.numerical)
+    out_target = recipe.target.fit_transform(target.numerical)
+
+    assert isinstance(out_features, torch.Tensor)
+    assert isinstance(out_target, torch.Tensor)
+    assert torch.allclose(out_features.mean(dim=0), torch.zeros(2), atol=1e-6)
+    assert torch.allclose(out_target.mean(dim=0), torch.zeros(2), atol=1e-6)

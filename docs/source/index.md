@@ -8,6 +8,13 @@ install
 ```
 
 ```{toctree}
+:caption: Guides
+:maxdepth: 1
+
+recipe
+```
+
+```{toctree}
 :caption: API
 :maxdepth: 1
 

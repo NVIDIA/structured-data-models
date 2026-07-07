@@ -3,6 +3,7 @@ import math
 import torch
 from torch import Tensor
 
+from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 
 
@@ -12,18 +13,19 @@ class SoftmaxTemperature(Processor):
     Args:
         temperature: Positive divisor applied to logits before softmax;
             higher values produce a softer distribution.
-        dim: Dimension along which softmax is computed.
     """
 
     requires_fit = False
 
-    def __init__(self, *, temperature: float = 1.0, dim: int = -1) -> None:
+    def __init__(self, *, temperature: float = 1.0) -> None:
         super().__init__()
         if not math.isfinite(temperature) or temperature <= 0:
             raise ValueError("temperature must be finite and positive.")
         self.temperature = temperature
-        self.dim = dim
 
-    def forward(self, input: Tensor) -> Tensor:
-        """Return ``softmax(input / temperature)`` along ``dim``."""
-        return torch.softmax(input / self.temperature, dim=self.dim)
+    def _transform(self, input: Tensor) -> Tensor:
+        """Return ``softmax(input / temperature)`` over the last dimension."""
+        return torch.softmax(
+            _as_float(input) / self.temperature,
+            dim=-1,
+        )
