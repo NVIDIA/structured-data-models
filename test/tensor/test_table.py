@@ -166,7 +166,7 @@ def test_replace_blocks_validates_replacement_shape() -> None:
         tensor.replace_blocks(numerical=torch.ones(2, 3))
 
 
-def test_select_stype() -> None:
+def test_select_stypes() -> None:
     tensor = TableTensor(
         columns={
             "numerical": ["age", "income"],
@@ -183,7 +183,7 @@ def test_select_stype() -> None:
         id=ColumnarTensor((torch.tensor([100, 200]),)),
     )
 
-    numerical = tensor.select_stype(Stype.numerical)
+    numerical = tensor.select_stypes(Stype.numerical)
     assert isinstance(numerical, TableTensor)
     assert numerical.columns == {
         Stype.numerical: ("age", "income"),
@@ -196,7 +196,7 @@ def test_select_stype() -> None:
     assert numerical.datetime.size() == (2, 0)
     assert numerical.id.size() == (2, 0)
 
-    categorical = tensor.select_stype("categorical")
+    categorical = tensor.select_stypes("categorical")
     assert categorical.columns == {
         Stype.numerical: (),
         Stype.categorical: ("country",),
@@ -205,8 +205,20 @@ def test_select_stype() -> None:
     }
     assert categorical.categorical is tensor.categorical
 
+    mixed = tensor.select_stypes(["numerical", Stype.categorical])
+    assert mixed.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: ("country",),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+    assert mixed.numerical is tensor.numerical
+    assert mixed.categorical is tensor.categorical
+    assert mixed.datetime.size() == (2, 0)
+    assert mixed.id.size() == (2, 0)
 
-def test_select_stype_recombines_with_cat() -> None:
+
+def test_select_stypes_recombines_with_cat() -> None:
     tensor = TableTensor(
         columns={
             "numerical": ["age", "income"],
@@ -223,8 +235,8 @@ def test_select_stype_recombines_with_cat() -> None:
         TableTensor,
         torch.cat(
             (
-                tensor.select_stype(Stype.numerical),
-                tensor.select_stype(Stype.categorical),
+                tensor.select_stypes(Stype.numerical),
+                tensor.select_stypes(Stype.categorical),
             ),
             dim=-1,
         ),
