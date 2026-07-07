@@ -457,16 +457,10 @@ class TableTensor(Tensor):
             Mapping[StypeLike, Sequence[str]],
             {stype: self._columns[stype]},
         )
-        if stype == Stype.numerical:
-            return self.__class__(columns=columns, numerical=self.numerical)
-        if stype == Stype.categorical:
-            return self.__class__(
-                columns=columns,
-                categorical=self.categorical,
-            )
-        if stype == Stype.datetime:
-            return self.__class__(columns=columns, datetime=self.datetime)
-        return self.__class__(columns=columns, id=self.id)
+        return self.__class__(
+            columns=columns,
+            **{stype.value: getattr(self, stype.value)},
+        )
 
     def select_columns(self, columns: str | Iterable[str]) -> "TableTensor":
         r"""Return a table containing only ``columns``.
