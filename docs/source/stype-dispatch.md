@@ -55,7 +55,7 @@ The design depends on the current TableTensor and processing stack:
   `TableTensor.replace_blocks`, which is the table-native way for processors to
   return changed blocks without manually rebuilding unrelated stypes.
 - [#194](https://github.com/NVIDIA/structured-data-models/pull/194) adds
-  `TableTensor.select_stype`, which `StypeDispatch` should use to pass a
+  `TableTensor.select_stypes`, which `StypeDispatch` should use to pass a
   stype-only `TableTensor` to each route.
 - [#197](https://github.com/NVIDIA/structured-data-models/pull/197) changes
   processing pipelines to accept and return `TableTensor`s, which is the public
@@ -85,7 +85,7 @@ This design follows the repository guidance in `AGENTS.md`:
   mandatory config-first APIs.
 - Keep model-facing processing table-in/table-out on `TableTensor`.
 - Prefer existing local abstractions, especially `Processor`, `Sequential`,
-  `Recipe`, `TableTensor.select_stype`, `TableTensor.replace_blocks`, and
+  `Recipe`, `TableTensor.select_stypes`, `TableTensor.replace_blocks`, and
   column-wise `torch.cat`.
 - Allow list-style route values for user ergonomics, but keep normalization
   local to `StypeDispatch.__init__` for now. A shared helper can be added later
@@ -177,7 +177,7 @@ processor only sees the stype-specific slice it owns:
 
 ```python
 for stype, processor in self.processors.items():
-    processor.fit(input.select_stype(stype))
+    processor.fit(input.select_stypes(stype))
 ```
 
 During `fit_transform`, each processor should use its own `fit_transform` so
@@ -187,7 +187,7 @@ transformed route output:
 ```python
 outputs = []
 for stype, processor in self.processors.items():
-    outputs.append(processor.fit_transform(input.select_stype(stype)))
+    outputs.append(processor.fit_transform(input.select_stypes(stype)))
 outputs.extend(self._remainder_outputs(input))
 return torch.cat(outputs, dim=-1)
 ```
@@ -200,20 +200,21 @@ path.
 
 ## Required TableTensor Helpers
 
-`StypeDispatch` should depend on the `TableTensor.select_stype` helper from
+`StypeDispatch` should depend on the `TableTensor.select_stypes` helper from
 PR #194 and on column-wise `torch.cat` for recombining route outputs:
 
 ```python
-table.select_stype(stype) -> TableTensor
+table.select_stypes(stypes) -> TableTensor
 torch.cat([table_a, table_b], dim=-1) -> TableTensor
 ```
 
-`select_stype` returns a `TableTensor` with the requested stype populated and
-unselected stypes represented as empty blocks. PR #194 implements this with a
+`select_stypes` returns a `TableTensor` with the requested stype or stypes
+populated and unselected stypes represented as empty blocks. PR #194
+implements this with a
 direct block path that reuses the selected block without copying and relies on
 the `TableTensor` constructor for schema validation. Its local benchmark found
 that path faster than a `select_columns` wrapper for the measured cases, so
-`StypeDispatch` should treat `select_stype` as the public dependency and not
+`StypeDispatch` should treat `select_stypes` as the public dependency and not
 reimplement stype slicing itself.
 
 ## Edge Cases
@@ -253,7 +254,7 @@ class StypeDispatch(Processor):
 
     def fit(self, input):
         for stype, processor in self._processors_by_stype():
-            route_input = input.select_stype(stype)
+            route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             processor.fit(route_input)
@@ -263,7 +264,7 @@ class StypeDispatch(Processor):
     def fit_transform(self, input):
         outputs = []
         for stype, processor in self._processors_by_stype():
-            route_input = input.select_stype(stype)
+            route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             outputs.append(processor.fit_transform(route_input))
