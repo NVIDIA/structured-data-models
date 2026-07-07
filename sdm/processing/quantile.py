@@ -174,7 +174,7 @@ class Quantile(Processor, InvertibleMixin):
 
         return input_col
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Transform ``input`` into the configured output distribution."""
         input = _as_float(input)
         transformed = torch.empty_like(input)

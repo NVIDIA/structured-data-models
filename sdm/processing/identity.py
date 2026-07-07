@@ -11,7 +11,7 @@ class Identity(Processor, InvertibleMixin):
 
     requires_fit = False
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Return ``input`` unchanged."""
         return input
 

@@ -65,7 +65,7 @@ class StandardScale(Processor, InvertibleMixin):
         else:
             self.scale = input.new_ones(input.shape[1])
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Transform ``input`` using the fitted mean and scale."""
         return (_as_float(input) - self.mean) / self.scale
 
