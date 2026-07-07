@@ -10,9 +10,9 @@ from sdm.tensor import TableTensor
 class Processor(torch.nn.Module, abc.ABC):
     """Fittable, table-in/table-out transform.
 
-    Subclass and implement ``forward`` (the transform). Override ``_fit`` to
-    learn state from a :class:`TableTensor` (the default is a no-op). For an
-    inverse, also mix in :class:`InvertibleMixin` and implement
+    Subclass and implement ``_transform`` (the transform operation). Override
+    ``_fit`` to learn state from a :class:`TableTensor` (the default is a
+    no-op). For an inverse, also mix in :class:`InvertibleMixin` and implement
     ``_inverse_transform``. Set ``requires_fit = False`` for stateless
     processors that can safely run without a prior ``fit`` call.
     """
@@ -34,11 +34,15 @@ class Processor(torch.nn.Module, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def forward(self, input: TableTensor) -> TableTensor:
-        """Transform ``input`` and return the result.
+    def _transform(self, input: TableTensor) -> TableTensor:
+        pass
 
-        Called through :class:`torch.nn.Module` as ``processor(input)`` or,
-        with a fitted-state check, via :meth:`transform`.
+    def forward(self, input: TableTensor) -> TableTensor:
+        """Alias of :meth:`~Processor.transform`.
+
+        This is the :class:`torch.nn.Module` entry point, so
+        ``processor(input)`` and ``processor.transform(input)`` share the same
+        fitted-state checks.
 
         Args:
             input: Table to transform.
@@ -46,6 +50,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             Transformed table.
         """
+        return self.transform(input)
 
     def fit(self, input: TableTensor) -> Self:
         """Fit the processor on ``input`` and return it.
@@ -71,7 +76,7 @@ class Processor(torch.nn.Module, abc.ABC):
             Transformed table.
         """
         self._check_is_fitted()
-        return self(input)
+        return self._transform(input)
 
     def fit_transform(self, input: TableTensor) -> TableTensor:
         """Fit on ``input`` and return the transformed result.

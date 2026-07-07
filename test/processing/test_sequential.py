@@ -55,10 +55,10 @@ def test_repr_lists_steps() -> None:
     )
 
 
-def test_pipeline_checks_step_fitted_state() -> None:
+def test_pipeline_checks_fitted_state() -> None:
     pipeline = Sequential(SoftmaxTemperature(), StandardScale())
 
-    with pytest.raises(RuntimeError, match="'StandardScale' is not fitted"):
+    with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
         pipeline.transform(_table())
 
 

@@ -21,6 +21,8 @@ def test_processor_requires_fit_for_transform(
 
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform(input)
+    with pytest.raises(RuntimeError, match="not fitted"):
+        processor(input)
 
 
 @pytest.mark.parametrize(
@@ -41,7 +43,7 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
 class StatelessProcessor(Processor):
     requires_fit = False
 
-    def forward(self, input: TableTensor) -> TableTensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         return input.replace_blocks(numerical=input.numerical + 1)
 
 

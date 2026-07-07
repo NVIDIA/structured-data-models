@@ -81,7 +81,7 @@ class SigmaClip(Processor):
             self._mean + self.threshold * self._std,
         )
 
-    def forward(self, input: TableTensor) -> TableTensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""
         numerical = _as_float(input.numerical)
         log_abs = numerical.abs().log1p()

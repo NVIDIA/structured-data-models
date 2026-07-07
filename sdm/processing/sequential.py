@@ -14,6 +14,11 @@ class Sequential(Processor, InvertibleMixin):
         self.steps: tuple[Processor, ...] = args
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
+    def _fit(self, input: TableTensor) -> None:
+        out = input
+        for step in self.steps:
+            out = step.fit_transform(out)
+
     def fit(self, input: TableTensor) -> "Sequential":  # noqa: D102
         out = input
         for step in self.steps:
@@ -22,10 +27,7 @@ class Sequential(Processor, InvertibleMixin):
             self._fitted = True
         return self
 
-    def forward(self, input: TableTensor) -> TableTensor:  # noqa: D102
-        return self.transform(input)
-
-    def transform(self, input: TableTensor) -> TableTensor:  # noqa: D102
+    def _transform(self, input: TableTensor) -> TableTensor:
         out = input
         for step in self.steps:
             out = step.transform(out)

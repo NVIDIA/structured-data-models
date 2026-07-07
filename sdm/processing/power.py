@@ -232,7 +232,7 @@ class Power(Processor, InvertibleMixin):
             )
         return inverse
 
-    def forward(self, input: TableTensor) -> TableTensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""
         numerical = _as_float(input.numerical)
         transformed = self._yeojohnson_transform(numerical)
