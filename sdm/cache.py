@@ -84,7 +84,20 @@ class Cache(MutableMapping[str, object]):
         return self._mode == Cache.Mode.replay
 
     def freeze(self) -> None:
-        r"""Freeze the cache to replay mode."""
+        r"""Freeze the cache and nested caches to replay mode."""
+
+        def _freeze(value: object) -> None:
+            if isinstance(value, Cache):
+                value.freeze()
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    _freeze(item)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    _freeze(item)
+
+        for value in self.values():
+            _freeze(value)
         self._mode = Cache.Mode.replay
 
     def __setitem__(self, key: str, value: object) -> None:
@@ -138,7 +151,9 @@ class Cache(MutableMapping[str, object]):
                 }
             return value
 
-        return self.__class__({k: _to(v, device) for k, v in self.items()})
+        cache = self.__class__({k: _to(v, device) for k, v in self.items()})
+        cache._mode = self._mode
+        return cache
 
     def cpu(self) -> "Cache":
         r"""Copy :class:`Cache` data in CPU memory."""
