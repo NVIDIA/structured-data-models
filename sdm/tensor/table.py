@@ -445,6 +445,10 @@ class TableTensor(Tensor):
     ) -> SelfTableTensor:
         r"""Return a table containing only semantic type ``stype`` columns.
 
+        The returned table preserves the row/batch dimensions and keeps
+        unselected semantic types as empty blocks. The selected block is reused
+        without copying.
+
         Args:
             stype: The semantic type to select.
         """
