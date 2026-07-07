@@ -1,6 +1,8 @@
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from math import prod
+from typing import Literal, NamedTuple, overload
 
 import pyarrow as pa
 import torch
@@ -23,14 +25,13 @@ class Relationship:
         left_table: Name of the left related table, or ``None`` for the task
             table.
         left_columns: Column names from the left table.
-        right_table: Name of the right related table, or ``None`` for the task
-            table.
+        right_table: Name of the right related table.
         right_columns: Column names from the right table.
     """
 
     left_table: str | None
     left_columns: Sequence[str]
-    right_table: str | None
+    right_table: str
     right_columns: Sequence[str]
 
     def __post_init__(self) -> None:
@@ -46,12 +47,6 @@ class Relationship:
                 "Expected 'left_columns' and 'right_columns' to be non-empty"
             )
 
-        if self.left_table is None and self.right_table is None:
-            raise ValueError(
-                "Expected either 'left_table' or 'right_table' to refer to a "
-                "related table"
-            )
-
         for column in (*self.left_columns, *self.right_columns):
             for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
@@ -59,6 +54,24 @@ class Relationship:
                         f"Column name '{column}' is reserved for internal "
                         f"row indexing"
                     )
+
+
+class HomogeneousGraph(NamedTuple):
+    r"""Materialized homogeneous graph.
+
+    Args:
+        num_rows: The number of rows in the homogeneous graph.
+        node_offsets: Global node offsets keyed by related table name.
+        edge_index: Edge index with shape ``[2, num_edges]`` over the
+            concatenated rows of all related tables.
+        task_edge_indices: Task-to-related-table edge indices keyed by
+            relationship index.
+    """
+
+    num_rows: int
+    node_offsets: dict[str, int]
+    edge_index: Tensor
+    task_edge_indices: dict[int, Tensor]
 
 
 @dataclass(frozen=True, init=False)
@@ -119,8 +132,8 @@ class RelatedTables:
                 assert left_columns is not None
                 if isinstance(left_columns, str):
                     left_columns = (left_columns,)
-                right_table = relationship.get("right_table")
-                assert right_table is None or isinstance(right_table, str)
+                right_table = relationship["right_table"]
+                assert isinstance(right_table, str)
                 if "right_column" in relationship:
                     right_columns = relationship["right_column"]
                 else:
@@ -230,3 +243,143 @@ class RelatedTables:
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
+
+    def homogeneous_graph(
+        self,
+        task_table: TableTensor,
+        *,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+    ) -> HomogeneousGraph:
+        r"""Materialize homogeneous graph edges for table relationships.
+
+        Args:
+            task_table: The task table referenced by relationships whose
+                ``left_table`` or ``right_table`` is ``None``.
+            dtype: The dtype.
+            device: The device.
+
+        Returns:
+            A materialized related-table graph.
+        """
+        offset = 0
+        offsets: dict[str, int] = {}
+        for name, table in self.tables.items():
+            offsets[name] = offset
+            offset += prod(table.size()[:-1])
+
+        edge_indices: list[Tensor] = []
+        task_edge_indices: dict[int, Tensor] = {}
+        for i, (relationship, edge_index) in enumerate(
+            zip(
+                self.relationships,
+                self.edge_indices(task_table, dtype=dtype, device=device),
+            )
+        ):
+            if relationship.left_table is None:
+                task_edge_indices[i] = edge_index
+                continue
+
+            edge_offset = edge_index.new_tensor(
+                [
+                    [offsets[relationship.left_table]],
+                    [offsets[relationship.right_table]],
+                ],
+            )
+            edge_index = edge_index + edge_offset
+            edge_indices.append(edge_index)
+            edge_indices.append(edge_index.flip(0))
+
+        if len(edge_indices) == 0:
+            dtype = torch.int64 if dtype is None else dtype
+            edge_index = torch.empty((2, 0), dtype=dtype, device=device)
+        elif len(edge_indices) == 1:
+            edge_index = edge_indices[0]
+        else:
+            edge_index = torch.cat(edge_indices, dim=1)
+
+        return HomogeneousGraph(
+            num_rows=offset,
+            node_offsets=offsets,
+            edge_index=edge_index,
+            task_edge_indices=task_edge_indices,
+        )
+
+    @overload
+    def row_batch(
+        self,
+        graph: HomogeneousGraph,
+        *,
+        return_num_hops: Literal[False] = False,
+    ) -> Tensor: ...
+
+    @overload
+    def row_batch(
+        self,
+        graph: HomogeneousGraph,
+        *,
+        return_num_hops: Literal[True],
+    ) -> tuple[Tensor, int]: ...
+
+    @overload
+    def row_batch(
+        self,
+        graph: HomogeneousGraph,
+        *,
+        return_num_hops: bool,
+    ) -> Tensor | tuple[Tensor, int]: ...
+
+    def row_batch(
+        self,
+        graph: HomogeneousGraph,
+        *,
+        return_num_hops: bool = False,
+    ) -> Tensor | tuple[Tensor, int]:
+        r"""Return the task-row assignment for each related table row.
+
+        .. note::
+
+            Related table neighborhoods are assumed to be disjoint: Each
+            reachable table row should belong to at most one task-table row.
+
+        Args:
+            graph: The homogeneous graph.
+            return_num_hops: Whether to also return the number of propagation
+            hops needed to assign reachable rows.
+
+        Returns:
+            A row-batch vector with shape ``[R]`` where ``R`` is the
+            total number of rows across all related tables, which assigns each
+            row to its task row, or ``-1`` otherwise.
+            If ``return_num_hops`` is ``True``, also returns the number of
+            propagation hops used.
+        """
+        row_batch = graph.edge_index.new_full((graph.num_rows,), fill_value=-1)
+        frontier = torch.zeros_like(row_batch, dtype=torch.bool)
+
+        for i, task_edge_index in graph.task_edge_indices.items():
+            rel = self.relationships[i]
+            dst = task_edge_index[1] + graph.node_offsets[rel.right_table]
+
+            row_batch[dst] = task_edge_index[0]
+            frontier[dst] = True
+
+        num_hops = 0
+        while True:
+            src, dst = graph.edge_index
+            mask = frontier[src] & (row_batch[dst] < 0)
+
+            src = src[mask]
+            if src.numel() == 0:
+                break
+            dst = dst[mask]
+
+            row_batch[dst] = row_batch[src]
+            frontier.fill_(False)
+            frontier[dst] = True
+            num_hops += 1
+
+        if return_num_hops:
+            return row_batch, num_hops
+
+        return row_batch

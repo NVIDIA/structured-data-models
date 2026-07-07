@@ -109,6 +109,20 @@ def test_edge_indices(data: tuple[TableTensor, RelatedTables]) -> None:
     )
 
 
+def test_homogeneous_graph(data: tuple[TableTensor, RelatedTables]) -> None:
+    task_table, related_tables = data
+    graph = related_tables.homogeneous_graph(task_table)
+
+    assert graph.num_rows == 15
+    assert graph.node_offsets == {"users": 0, "orders": 4, "items": 10}
+    assert graph.edge_index.size() == (2, 24)
+    assert graph.edge_index.dtype == torch.int64
+    assert set(graph.task_edge_indices) == {0}
+    assert graph.task_edge_indices[0].equal(
+        torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
+    )
+
+
 def test_singular_column_keys(data: tuple[TableTensor, RelatedTables]) -> None:
     task_table, related_tables = data
     users = related_tables.tables["users"]
@@ -127,3 +141,14 @@ def test_singular_column_keys(data: tuple[TableTensor, RelatedTables]) -> None:
     edge_indices = related_tables.edge_indices(task_table)
 
     assert edge_indices[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
+
+
+def test_row_batch(data: tuple[TableTensor, RelatedTables]) -> None:
+    task_table, related_tables = data
+    graph = related_tables.homogeneous_graph(task_table)
+
+    row_batch, num_rows = related_tables.row_batch(graph, return_num_hops=True)
+    assert row_batch.equal(
+        torch.tensor([0, 1, 2, 3, 0, 0, 1, 3, 3, 3, 0, 0, 1, 3, 3])
+    )
+    assert num_rows == 2
