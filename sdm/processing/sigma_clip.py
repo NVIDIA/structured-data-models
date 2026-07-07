@@ -76,7 +76,7 @@ class SigmaClip(Processor):
             self._mean + self.threshold * self._std,
         )
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""
         input = _as_float(input)
         log_abs = torch.log1p(input.abs())

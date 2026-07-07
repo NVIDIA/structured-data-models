@@ -227,7 +227,7 @@ class Power(Processor, InvertibleMixin):
             )
         return inverse
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""
         input = _as_float(input)
         transformed = self._yeojohnson_transform(input)
