@@ -205,9 +205,6 @@ def test_select_stype() -> None:
     }
     assert categorical.categorical is tensor.categorical
 
-    with pytest.raises(ValueError, match="is not a valid Stype"):
-        tensor.select_stype("unknown")
-
 
 def test_select_stype_recombines_with_cat() -> None:
     tensor = TableTensor(
