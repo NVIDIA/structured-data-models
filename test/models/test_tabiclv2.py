@@ -151,12 +151,13 @@ def test_tabiclv2_compile(device: torch.device, dtype: torch.dtype) -> None:
     else:
         y = torch.randint(0, 10, (R_train,), device=device)
 
-    expected = model(x, y)
-    # `fullgraph=True` raises on any graph break. Unlike `backend="eager"`,
-    # `aot_eager` also runs AOTAutograd and functionalization (still without
-    # code generation), catching failures past the dynamo stage such as
-    # tracing through `torch.inference_mode`. Compiled callers enter
-    # inference mode around the call; the model skips it while compiling.
-    compiled = torch.compile(model, fullgraph=True, backend="aot_eager")
+    eager = model(x, y)
+    # `fullgraph=True` raises on any graph break, while the default `inductor`
+    # backend exercises the complete compilation pipeline including code
+    # generation. Compiled callers enter inference mode around the call; the
+    # model skips it while compiling.
+    compiled = torch.compile(model, fullgraph=True)
     with torch.inference_mode():
-        torch.testing.assert_close(compiled(x, y), expected)
+        actual = compiled(x, y)
+
+    torch.testing.assert_close(actual, eager)
