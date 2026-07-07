@@ -8,7 +8,7 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables
+from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
@@ -98,6 +98,68 @@ class TabICLv2(BaseModel):
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         return default_regression_recipe()
+
+    @torch.inference_mode()
+    def predict(
+        self,
+        x: Tensor | TableTensor,  # [..., R_test, C]
+        related_tables: RelatedTables | None = None,
+        *,
+        batch_size_limit: int | None = None,
+        test_row_size_limit: int | None = None,
+    ) -> Tensor:  # [..., R_test, *]
+        r"""Predict unseen test rows using the fitted training context.
+
+        Args:
+            x: The feature tensor with shape ``[..., R_test, C]``.
+            related_tables: Additional related context provided to the model.
+            batch_size_limit: Maximum number of broadcasted batch elements
+                processed by each attention block. ``None`` disables
+                attention-block batch tiling.
+            test_row_size_limit: Maximum number of test rows processed through
+                the model at once. Every chunk reuses the same complete fitted
+                cache. Only active during eager evaluation; ``None`` disables
+                test-row chunking.
+
+        Returns:
+            The prediction for ``[..., R_test]`` test rows.
+        """
+        if test_row_size_limit is not None and test_row_size_limit <= 0:
+            raise ValueError(
+                f"`test_row_size_limit` ({test_row_size_limit}) must be "
+                f"positive"
+            )
+
+        predict = super().predict
+        if (
+            test_row_size_limit is None
+            or self._caches is None
+            or self.training
+            or torch.compiler.is_compiling()
+            or x.size(-2) <= test_row_size_limit
+        ):
+            return predict(
+                x,
+                related_tables,
+                batch_size_limit=batch_size_limit,
+            )
+
+        out: Tensor | None = None
+        for start in range(0, x.size(-2), test_row_size_limit):
+            end = min(start + test_row_size_limit, x.size(-2))
+            out_chunk = predict(
+                x[..., start:end, :],
+                related_tables,
+                batch_size_limit=batch_size_limit,
+            )
+            if out is None:
+                out = out_chunk.new_empty(
+                    (*out_chunk.shape[:-2], x.size(-2), out_chunk.size(-1))
+                )
+            out[..., start:end, :].copy_(out_chunk)
+
+        assert out is not None
+        return out
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device

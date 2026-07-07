@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
@@ -93,6 +95,94 @@ def test_tabiclv2_batch_size_limit() -> None:
         batch_size_limit=batch_size_limit,
     )
     torch.testing.assert_close(predicted, expected)
+
+
+def test_tabiclv2_predict_test_row_size_limit() -> None:
+    model = TabICLv2(pretrained=False)
+    batch_shape = (2,)
+    num_train = 3
+    num_test = 7
+    num_columns = 4
+    batch_size_limit = 3
+    test_row_size_limit = 3
+    x_train = torch.randn(*batch_shape, num_train, num_columns)
+    x_test = torch.randn(*batch_shape, num_test, num_columns)
+    y = torch.randint(0, 10, (*batch_shape, num_train))
+
+    model.fit(x_train, y, num_estimators=2)
+    expected = model.predict(x_test)
+    caches = model._caches
+    assert caches is not None
+
+    with mock.patch.object(
+        model.cls_model,
+        "forward",
+        wraps=model.cls_model.forward,
+    ) as forward_spy:
+        actual = model.predict(
+            x_test,
+            batch_size_limit=batch_size_limit,
+            test_row_size_limit=test_row_size_limit,
+        )
+
+    calls = forward_spy.call_args_list
+    assert [call.kwargs["x"].size(-2) for call in calls] == [
+        3,
+        3,
+        3,
+        3,
+        1,
+        1,
+    ]
+    for index, call in enumerate(calls):
+        assert call.kwargs["y"].size(-1) == 0
+        assert call.kwargs["cache"] is caches[index % len(caches)]
+        assert call.kwargs["batch_size_limit"] == batch_size_limit
+    assert model._caches is caches
+    torch.testing.assert_close(actual, expected)
+
+    with (
+        mock.patch.object(
+            torch.compiler,
+            "is_compiling",
+            return_value=True,
+        ),
+        mock.patch.object(
+            model.cls_model,
+            "forward",
+            wraps=model.cls_model.forward,
+        ) as forward_spy,
+    ):
+        compiled = model.predict(
+            x_test,
+            test_row_size_limit=test_row_size_limit,
+        )
+    assert [
+        call.kwargs["x"].size(-2) for call in forward_spy.call_args_list
+    ] == [
+        num_test,
+        num_test,
+    ]
+    torch.testing.assert_close(compiled, expected)
+
+    model.train()
+    with mock.patch.object(
+        model.cls_model,
+        "forward",
+        wraps=model.cls_model.forward,
+    ) as forward_spy:
+        model.predict(x_test, test_row_size_limit=test_row_size_limit)
+    model.eval()
+    assert [
+        call.kwargs["x"].size(-2) for call in forward_spy.call_args_list
+    ] == [
+        num_test,
+        num_test,
+    ]
+
+    for invalid_limit in [0, -1]:
+        with pytest.raises(ValueError, match="test_row_size_limit"):
+            model.predict(x_test, test_row_size_limit=invalid_limit)
 
 
 def test_default_recipe_regression_roundtrip() -> None:
