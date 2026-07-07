@@ -81,12 +81,54 @@ class RowEmbedding(torch.nn.Module):
         *,
         train_mask: Tensor | None = None,  # [R],
         cache: Cache | None = None,
+        max_train: int | None = None,
+        generator: torch.Generator | None = None,
+        fallback_to_all: bool = False,
     ) -> Tensor:  # [..., R, K * D]
+        if max_train is not None:
+            if isinstance(max_train, bool) or not isinstance(max_train, int):
+                raise TypeError("`max_train` must be an integer or None")
+            if max_train < 1:
+                raise ValueError("`max_train` must be positive or None")
+
         *B, R, C = x.size()
         R_train = y.size(-1)
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
-        train_mask: Any = slice(R_train) if train_mask is None else train_mask
+        train_index: Any = slice(R_train)
+        if train_mask is not None:
+            if not isinstance(train_mask, Tensor):
+                raise TypeError("`train_mask` must be a tensor")
+            if train_mask.dtype != torch.bool:
+                raise TypeError("`train_mask` must have boolean dtype")
+            if train_mask.dim() != 1 or train_mask.size(0) != R:
+                raise ValueError(
+                    f"`train_mask` must be a 1D tensor with length {R}"
+                )
+            if train_mask.device != x.device:
+                raise ValueError(
+                    "`train_mask` must be on the same device as `x`"
+                )
+            if train_mask.count_nonzero() != R_train:
+                raise ValueError(
+                    f"`train_mask` must select exactly {R_train} rows to "
+                    "match `y`"
+                )
+            train_index = train_mask
+
+        if self.y_emb is not None:
+            if y.is_floating_point() or y.is_complex():
+                raise TypeError(
+                    "Classification targets must have an integral or "
+                    "boolean dtype"
+                )
+            y = y.long()
+        else:
+            if not y.is_floating_point():
+                raise TypeError(
+                    "Regression targets must have a floating-point dtype"
+                )
+            y = y.to(dtype=x.dtype)
 
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
@@ -102,17 +144,47 @@ class RowEmbedding(torch.nn.Module):
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).view(*B, R_train, 1, D)
 
-            x[..., train_mask, :, :] += y_emb.to(x.dtype)
+            x[..., train_index, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis):
         x = x.transpose(-2, -3)  # [..., C, R, D]
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
+            if cache is not None and cache.is_replaying:
+                key_value = cache[key]
+            else:
+                key_value = x[..., train_index, :]
+                if key_value.size(-2) == 0:
+                    if not fallback_to_all:
+                        raise ValueError(
+                            "Column-attention context is empty; pass "
+                            "`fallback_to_all=True` to use all local rows"
+                        )
+                    if cache is not None and cache.is_recording:
+                        raise ValueError(
+                            "Cannot record a cache from all-row fallback "
+                            "context"
+                        )
+                    key_value = x
+                if max_train is not None and key_value.size(-2) > max_train:
+                    if (
+                        generator is not None
+                        and generator.device != key_value.device
+                    ):
+                        raise ValueError(
+                            "`generator` must be on the same device as the "
+                            "column-attention context"
+                        )
+                    index = torch.randperm(
+                        key_value.size(-2),
+                        device=key_value.device,
+                        generator=generator,
+                    )[:max_train]
+                    key_value = key_value.index_select(-2, index)
+
             result = col_layer(
                 query=x,  # [..., C, R, D]
-                key_value=cache[key]
-                if cache is not None and cache.is_replaying
-                else x[..., train_mask, :],  # [..., C, R_train, D],
+                key_value=key_value,  # [..., C, R_context, D]
                 return_key_value=cache is not None and cache.is_recording,
             )  # [..., C, R, D]
 
