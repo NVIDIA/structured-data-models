@@ -3,7 +3,9 @@ from sdm import TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from sklearn.datasets import load_breast_cancer
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# NOTE An explicit device index: `TableTensor` validates block devices
+# against the requested device without normalizing bare "cuda".
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # NVIDIA inference recipe (measured on GB200; see
 # examples/benchmark_tabiclv2.py for the full ablation). This exact

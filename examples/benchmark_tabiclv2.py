@@ -160,7 +160,11 @@ def make_table(
 def apply_precision(model: TabICLv2, precision: str) -> None:
     """Apply the requested precision mode to globals and the model."""
     if precision == "fp32":
-        torch.backends.cuda.matmul.fp32_precision = "ieee"
+        matmul = torch.backends.cuda.matmul
+        if hasattr(matmul, "fp32_precision"):  # torch>=2.9
+            matmul.fp32_precision = "ieee"
+        else:
+            matmul.allow_tf32 = False
     elif precision in ("tf32", "bf16-autocast"):
         torch.set_float32_matmul_precision("high")
     elif precision == "bf16-full":
@@ -634,6 +638,11 @@ def format_record(record: dict[str, Any]) -> str:
             record["route"],
         )
     accuracy = record.get("accuracy", {})
+    # Stream errors record `None` for the per-table time; keep the driver
+    # printing instead of crashing on the multiplication below.
+    stream_s = record.get("table_stream_per_table_s")
+    if stream_s is None:
+        stream_s = float("nan")
     return (
         "{:<22} {:<8} {:<4} {:<10} p50={:>8.2f}ms stream={:>8.2f}ms "
         "cold={:>6.1f}s mem={:>7.0f}MB pass={}".format(
@@ -642,7 +651,7 @@ def format_record(record: dict[str, Any]) -> str:
             record["task"],
             record["route"],
             1000 * record.get("p50_s", float("nan")),
-            1000 * record.get("table_stream_per_table_s", float("nan")),
+            1000 * stream_s,
             record.get("cold_first_call_s", float("nan")),
             record.get("peak_mem_mb", float("nan")),
             accuracy.get("pass"),
