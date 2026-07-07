@@ -30,10 +30,14 @@ def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
 class Quantile(Processor, InvertibleMixin):
     """Map feature columns through their empirical quantiles.
 
+    Quantile grids are capped by the number of fitted rows and, when
+    ``subsample`` is set, by ``20%`` of the subsample size to keep dense grids
+    tractable.
+
     Args:
-        n_quantiles: The number of quantiles to compute.
-        subsample: The number of samples to use for quantile computation.
-        output_distribution: The distribution to map the data to.
+        n_quantiles: Maximum number of quantiles to compute.
+        subsample: Maximum number of rows to use for quantile computation.
+        output_distribution: Distribution to map the empirical quantiles to.
         random_state: Seed for deterministic subsampling. If ``None``, use the
             global PyTorch generator.
     """
@@ -170,7 +174,7 @@ class Quantile(Processor, InvertibleMixin):
 
         return input_col
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Transform ``input`` into the configured output distribution."""
         input = _as_float(input)
         transformed = torch.empty_like(input)

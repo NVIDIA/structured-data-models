@@ -39,7 +39,7 @@ class RowEmbedding(torch.nn.Module):
         self.col_layers = ModuleList(
             InducedTransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 num_inducing_points=num_inducing_points,
                 qassmax=True,
@@ -57,7 +57,7 @@ class RowEmbedding(torch.nn.Module):
         self.row_layers = ModuleList(
             TransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=False,
                 norm_bias=norm_bias,
@@ -108,21 +108,18 @@ class RowEmbedding(torch.nn.Module):
         x = x.transpose(-2, -3)  # [..., C, R, D]
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
-            if cache is not None and y.numel() == 0:
-                key_value = cache[key]
-            else:
-                key_value = x[..., train_mask, :]
-
             result = col_layer(
                 query=x,  # [..., C, R, D]
-                key_value=key_value,  # [..., C, R_train, D],
-                return_key_value=cache is not None and y.numel() > 0,
+                key_value=cache[key]
+                if cache is not None and cache.is_replaying
+                else x[..., train_mask, :],  # [..., C, R_train, D],
+                return_key_value=cache is not None and cache.is_recording,
             )  # [..., C, R, D]
 
-            if isinstance(result, Tensor):
-                x = result
-            else:
+            if cache is not None and cache.is_recording:
                 x, cache[key] = result
+            else:
+                x = result
 
         x = torch.cat(  # Prepend readout tokens before row-wise attention.
             [

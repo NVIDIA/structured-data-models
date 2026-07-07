@@ -35,7 +35,7 @@ class ICLBlock(torch.nn.Module):
         for _ in range(num_layers):
             layer = TransformerBlock(
                 channels=channels,
-                num_heads=num_heads,
+                num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=True,
                 norm_bias=norm_bias,
@@ -65,20 +65,17 @@ class ICLBlock(torch.nn.Module):
 
         for i, layer in enumerate(self.layers):
             key = f"icl_block.layer{i}"
-            if cache is not None and y.numel() == 0:
-                key_value = cache[key]
-            else:
-                key_value = x[..., :R_train, :]
-
             result = layer(
                 query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
-                key_value=key_value,  # [..., R_train, D]
-                return_key_value=cache is not None and y.numel() > 0,
+                key_value=cache[key]
+                if cache is not None and cache.is_replaying
+                else x[..., :R_train, :],  # [..., R_train, D]
+                return_key_value=cache is not None and cache.is_recording,
             )
 
-            if isinstance(result, Tensor):
-                x = result
-            else:
+            if cache is not None and cache.is_recording:
                 x, cache[key] = result
+            else:
+                x = result
 
         return self.norm(x)  # [..., R_test, D]

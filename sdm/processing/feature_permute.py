@@ -59,7 +59,7 @@ class FeaturePermute(Processor, InvertibleMixin):
             _estimator=estimator,
         )
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: Tensor) -> Tensor:
         """Permute table feature columns within each semantic block."""
         return self._apply_permutation(input, inverse=False)
 

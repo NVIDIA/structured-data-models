@@ -1,13 +1,16 @@
-"""Foundation models and tensor containers for structured data."""
+"""Structured data modeling primitives."""
 
 from importlib.metadata import PackageNotFoundError, version
 
-from sdm.stype import Stype, StypeLike
+from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
-    CategoricalTensor,
-    StringTensor,
-    TableTensor,
     VarLenTensor,
+    StringTensor,
+    CategoricalTensor,
+    ColumnarTensor,
+    TableTensor,
+    Relationship,
+    RelatedTables,
 )
 
 try:
@@ -18,9 +21,13 @@ except PackageNotFoundError:
 __all__ = [
     "Stype",
     "StypeLike",
+    "infer_stypes",
     "VarLenTensor",
     "StringTensor",
     "CategoricalTensor",
+    "ColumnarTensor",
     "TableTensor",
+    "Relationship",
+    "RelatedTables",
     "__version__",
 ]

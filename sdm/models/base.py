@@ -7,6 +7,7 @@ from torch import Tensor
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.cache import Cache
+from sdm.processing import Recipe
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -63,10 +64,12 @@ class BaseModel(torch.nn.Module, ABC):
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
         """
         self.clear()
-        self._cache = Cache({"y.dtype": y.dtype})
         x, y = self._preprocess(x, y)
+        cache = Cache({"y.dtype": y.dtype})
         x = x[..., : y.size(-1), :]
-        self._forward(x, y, cache=self._cache)
+        self._forward(x, y, cache=cache)
+        self._cache = cache
+        self._cache.freeze()
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
@@ -96,9 +99,10 @@ class BaseModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        y = x.new_empty(
+        y = torch.empty(
             (*x.size()[:-2], 0),
             dtype=cast(torch.dtype, self._cache["y.dtype"]),
+            device=x.device,
         )
         x, y = self._preprocess(x, y)
         return self._forward(x, y, cache=self._cache)
@@ -111,12 +115,13 @@ class BaseModel(torch.nn.Module, ABC):
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
     ) -> tuple[Tensor, Tensor]:
         if isinstance(x, TableTensor):
-            invalid_columns = x.size(-1) - x.numerical.size(-1)
+            invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
             if invalid_columns > 0:
                 invalid_stypes = [
                     stype.value
                     for stype, tensor in x.items()
-                    if tensor.size(-1) > 0 and stype not in (Stype.numerical,)
+                    if tensor.size(-1) > 0
+                    and stype not in (Stype.numerical, Stype.id)
                 ]
                 warnings.warn(
                     f"Expected 'x' to only hold numerical columns but also "
@@ -165,3 +170,15 @@ class BaseModel(torch.nn.Module, ABC):
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         pass
+
+    @abstractmethod
+    def default_recipe(self) -> Recipe:
+        r"""Return the default processing recipe for this model.
+
+        Model subclasses must override this method to expose the model-specific
+        preprocessing and postprocessing recipe.
+
+        Returns:
+            The :class:`~sdm.processing.Recipe` applied during pre- and
+            postprocessing by default.
+        """

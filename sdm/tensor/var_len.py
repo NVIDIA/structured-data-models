@@ -8,24 +8,10 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import override
 
+from sdm.tensor.io import ARROW_TORCH_DTYPES, to_arrow
+
 aten = torch.ops.aten
 
-ARROW_TORCH_DTYPES = {
-    # TODO Support boolean dtype.
-    # TODO Support bfloat16 dtype.
-    pa.uint8(): torch.uint8,
-    pa.uint16(): torch.uint16,
-    pa.uint32(): torch.uint32,
-    pa.uint64(): torch.uint64,
-    pa.int8(): torch.int8,
-    pa.int16(): torch.int16,
-    pa.int32(): torch.int32,
-    pa.int64(): torch.int64,
-    pa.float16(): torch.float16,
-    pa.float32(): torch.float32,
-    pa.float64(): torch.float64,
-}
-TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
@@ -233,7 +219,7 @@ class VarLenTensor(Tensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> SelfVarLenTensor:
-        r"""Create tensor from a ``pyarrow`` list array.
+        r"""Create tensor from a list :class:`~pyarrow.Array`.
 
         .. code-block:: python
 
@@ -244,7 +230,8 @@ class VarLenTensor(Tensor):
             tensor = VarLenTensor.from_arrow(array)
 
         Args:
-            array: The ``pyarrow`` list array.
+            array: The list :class:`pyarrow.Array` or
+                :class:`pyarrow.ChunkedArray`.
             size: The shape of the tensor.
             device: The device.
         """
@@ -253,13 +240,6 @@ class VarLenTensor(Tensor):
                 array = array.chunk(0)
             else:
                 array = array.combine_chunks()
-
-        if not isinstance(array, pa.Array):
-            raise TypeError(
-                f"Expected 'array' in '{cls.__name__}.from_arrow' to be a "
-                f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
-                f"(got '{type(array).__name__}')"
-            )
 
         if size is None:
             size = (len(array),)
@@ -287,13 +267,13 @@ class VarLenTensor(Tensor):
 
         buffer = array.values.buffers()[1]
         if buffer is not None and buffer.size > 0:
-            data = torch.frombuffer(buffer, dtype=dtype).to(device)
+            data = torch.frombuffer(buffer, dtype=dtype)
+            start = array.values.offset
+            data = data[start : start + len(array.values)].to(device)
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
         offset = torch.frombuffer(array.buffers()[1], dtype=offset_dtype)
-        if array.values.offset != 0:
-            offset = offset + array.values.offset
         offset = offset.to(device)
 
         return cls(
@@ -304,37 +284,18 @@ class VarLenTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Array:
-        r"""Convert this tensor to flat ``pyarrow`` list array."""
-        if self.device.type != "cpu":
-            raise TypeError(
-                f"Can't convert {self.device} device type tensor to arrow. "
-                f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
-            )
-        if self.requires_grad:
-            raise RuntimeError(
-                "Can't call 'to_arrow()' on Tensor that requires grad. "
-                "Use 'Tensor.detach().to_arrow()' instead."
-            )
-
-        data, offset = cast(VarLenTensor, self.contiguous()).data_offset
-
-        value_type = TORCH_ARROW_DTYPES.get(data.dtype)
-        if value_type is None:
-            raise TypeError(f"Unsupported data type '{data.dtype}'")
-
-        values = pa.Array.from_buffers(
-            value_type,
-            length=data.numel(),
-            buffers=[None, pa.py_buffer(data.numpy())],
-        )
+        r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
+        tensor = cast(VarLenTensor, self.detach().contiguous().cpu())
+        array = to_arrow(tensor._data)
 
         return pa.Array.from_buffers(
-            pa.list_(value_type)
-            if offset.dtype == torch.int32
-            else pa.large_list(value_type),
-            length=self.numel(),
-            buffers=[None, pa.py_buffer(offset.numpy())],
-            children=[values],
+            pa.list_(array.type)
+            if tensor._offset.dtype == torch.int32
+            else pa.large_list(array.type),
+            length=tensor.numel(),
+            buffers=[None, pa.py_buffer(tensor._offset.numpy())],
+            children=[array],
+            offset=int(tensor.storage_offset()),
         )
 
     @classmethod
@@ -424,6 +385,8 @@ class VarLenTensor(Tensor):
         start = int(self.storage_offset())
         offset = self._offset[start : start + self.numel() + 1]
         data = self._data[offset[0] : offset[-1]]
+        if offset.is_cpu and int(offset[0]) == 0:
+            return data, offset
         return data, offset - offset[0]
 
     # Decorators ##############################################################
@@ -433,7 +396,11 @@ class VarLenTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        r"""Register a ``__torch_dispatch__`` implementation."""
+        r"""Register a ``__torch_dispatch__`` implementation.
+
+        See PyTorch's
+        :ref:`calling convention <torch-dispatch-calling-convention>`.
+        """
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -560,7 +527,7 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
             out += f", grad_fn=<{type(self._data.grad_fn).__name__}>"
