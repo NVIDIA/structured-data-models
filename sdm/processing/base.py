@@ -37,11 +37,11 @@ class Processor(torch.nn.Module, abc.ABC):
         pass
 
     def forward(self, input: Tensor) -> Tensor:
-        """Transform ``input`` using the fitted processor.
+        """Alias of :meth:`~Processor.transform`.
 
-        This is the :class:`torch.nn.Module` entry point and delegates to
-        :meth:`transform`, so ``processor(input)`` and
-        ``processor.transform(input)`` share the same fitted-state checks.
+        This is the :class:`torch.nn.Module` entry point, so
+        ``processor(input)`` and ``processor.transform(input)`` share the same
+        fitted-state checks.
 
         Args:
             input: Tensor to transform. Concrete processors document the
