@@ -125,21 +125,19 @@ def test_homogeneous_graph(data: tuple[TableTensor, RelatedTables]) -> None:
 
 def test_singular_column_keys(data: tuple[TableTensor, RelatedTables]) -> None:
     task_table, related_tables = data
-    users = related_tables.tables["users"]
     related_tables = RelatedTables(
-        tables={"users": users},
+        tables={"users": related_tables.tables["users"]},
         relationships=[
             {
                 "left_table": None,
-                "left_column": "instance_id",
+                "left_column": "user_id",
                 "right_table": "users",
-                "right_column": "instance_id",
+                "right_column": "user_id",
             }
         ],
     )
 
     edge_indices = related_tables.edge_indices(task_table)
-
     assert edge_indices[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
 
 
