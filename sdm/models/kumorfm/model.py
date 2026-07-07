@@ -8,6 +8,7 @@ from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 from torch.utils.checkpoint import checkpoint
 
+from sdm.cache import Cache
 from sdm.models.kumorfm.table_hop_encoder import TableHopEncoder
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -15,10 +16,14 @@ from sdm.nn import InvariantGNN
 from sdm.tensor.related_tables import HomogeneousGraph
 
 _LINK_PREDICTION_CHUNK_SIZE = 1000
+_ENTITY_CACHE_KEY = "kumorfm.entity"
 
 
 class KumoRFM(torch.nn.Module):
     r"""Predict entity or link targets from processed related-table tensors.
+
+    Callers must invalidate entity caches when model state, context, graph
+    structure, or execution dtype changes.
 
     Args:
         num_classes: Classification output width, or zero for regression.
@@ -120,6 +125,7 @@ class KumoRFM(torch.nn.Module):
         entity_relationship: int,
         max_train: int | None = 20_000,
         generator: torch.Generator | None = None,
+        cache: Cache | None = None,
     ) -> Tensor:
         r"""Predict non-context entities in ascending task-ID order."""
         root_index = _validate_forward_inputs(
@@ -128,6 +134,42 @@ class KumoRFM(torch.nn.Module):
             entity_relationship=entity_relationship,
             num_classes=self.num_classes,
         )
+        if cache is not None:
+            if self.training or torch.is_grad_enabled():
+                raise RuntimeError(
+                    "KumoRFM caching requires evaluation without gradients"
+                )
+            if cache.is_recording:
+                if cache:
+                    raise ValueError("KumoRFM cache must be empty")
+                if not isinstance(generator, torch.Generator):
+                    raise TypeError("Cache recording requires a generator")
+                if generator.device != graph.node_batch.device:
+                    raise ValueError("Generator must be on the graph device")
+                cache[_ENTITY_CACHE_KEY] = (
+                    generator.device.type,
+                    generator.get_state().clone(),
+                )
+            else:
+                if generator is not None:
+                    raise ValueError(
+                        "Cache replay does not accept a generator"
+                    )
+                entry = cache.get(_ENTITY_CACHE_KEY)
+                if not isinstance(entry, tuple) or len(entry) != 2:
+                    raise ValueError("Cache was not recorded for entities")
+                backend, state = entry
+                if backend != graph.node_batch.device.type:
+                    raise ValueError("Cache backend does not match the graph")
+                if not isinstance(state, Tensor):
+                    raise ValueError("Cache generator state is invalid")
+                generator = torch.Generator(device=graph.node_batch.device)
+                try:
+                    generator.set_state(state.cpu())
+                except (RuntimeError, ValueError) as error:
+                    raise ValueError(
+                        "Cache generator state is invalid"
+                    ) from error
         node_x, active_node = self._encode_graph(
             table_hops,
             y,
@@ -138,7 +180,9 @@ class KumoRFM(torch.nn.Module):
         if not bool(active_node[root_index].all()):
             raise ValueError("All selected entity roots must be active")
         entity_x = node_x.index_select(0, root_index)
-        return self._predict(entity_x, y)
+        if cache is not None and cache.is_replaying:
+            entity_x, y = entity_x[y.numel() :], y[:0]
+        return self._predict(entity_x, y, cache=cache)
 
     def forward_link_prediction(
         self,
@@ -245,8 +289,10 @@ class KumoRFM(torch.nn.Module):
         node_x = node_x.masked_fill(~active_node.unsqueeze(-1), 0.0)
         return node_x, active_node
 
-    def _predict(self, x: Tensor, y: Tensor) -> Tensor:
-        return self.head(self.icl_block(x, y))
+    def _predict(
+        self, x: Tensor, y: Tensor, *, cache: Cache | None = None
+    ) -> Tensor:
+        return self.head(self.icl_block(x, y, cache=cache))
 
 
 def _validate_forward_inputs(

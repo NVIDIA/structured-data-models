@@ -1,15 +1,19 @@
 import inspect
+from typing import cast
 
 import pytest
 import torch
+from sdm.cache import Cache, KVCacheEntry
 from sdm.models import KumoRFM
 from sdm.models import kumorfm as kumorfm_package
 from sdm.models.kumorfm import TableHopEncoder
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.nn import InvariantGNN
+from sdm.nn import Attention, InvariantGNN
 from sdm.tensor.related_tables import HomogeneousGraph
 from torch import Tensor
+
+_ENTITY_CACHE_KEY = "kumorfm.entity"
 
 
 def _model(num_classes: int = 3, num_quantiles: int = 0) -> KumoRFM:
@@ -33,8 +37,8 @@ def _graph() -> HomogeneousGraph:
         num_rows=6,
         num_task_rows=4,
         node_offsets={"entities": 0, "facts": 4},
-        edge_index=torch.tensor([[4, 0, 5, 1], [0, 4, 1, 5]]),
-        edge_type=torch.tensor([0, 1, 0, 1]),
+        edge_index=torch.tensor([[4, 0, 5, 1, 2, 3], [0, 4, 1, 5, 2, 3]]),
+        edge_type=torch.tensor([0, 1, 0, 1, 0, 1]),
         num_edge_types=2,
         task_edge_indices={7: torch.tensor([[2, 0, 3, 1], [2, 0, 3, 1]])},
         node_batch=torch.tensor([0, 1, 2, 3, 0, 1]),
@@ -63,7 +67,7 @@ def _table_hops(
 def test_architecture_reuses_generic_components_and_owns_state_once() -> None:
     parameters = inspect.signature(KumoRFM.forward).parameters
     expected = (
-        "self table_hops y graph entity_relationship max_train generator"
+        "self table_hops y graph entity_relationship max_train generator cache"
     )
     assert " ".join(parameters) == expected
     assert parameters["graph"].kind is inspect.Parameter.KEYWORD_ONLY
@@ -209,6 +213,123 @@ def test_generator_is_deterministic() -> None:
     with torch.inference_mode():
         first, repeated = run(), run()
     torch.testing.assert_close(repeated, first)
+
+
+@pytest.mark.parametrize(
+    ("num_classes", "num_quantiles", "y"),
+    [
+        (3, 0, torch.tensor([0, 2])),
+        (0, 3, torch.tensor([0.25, -0.5])),
+    ],
+)
+def test_entity_cache_replays_icl_with_entry_rng(
+    num_classes: int,
+    num_quantiles: int,
+    y: Tensor,
+) -> None:
+    torch.manual_seed(37)
+    table_hops, _, _ = _table_hops()
+    graph = _graph()
+    model = _model(num_classes, num_quantiles).eval()
+    with torch.no_grad():
+        for module in model.modules():
+            if isinstance(module, Attention):
+                module.out_lin.weight.normal_(std=0.1)
+
+    def run(rng: torch.Generator | None, cache: Cache | None = None) -> Tensor:
+        return model(
+            table_hops,
+            y,
+            graph=graph,
+            entity_relationship=7,
+            max_train=1,
+            generator=rng,
+            cache=cache,
+        )
+
+    with torch.inference_mode():
+        uncached = run(torch.Generator().manual_seed(41))
+        cache = Cache()
+        rng = torch.Generator().manual_seed(41)
+        entry_state = rng.get_state().clone()
+        recorded = run(rng, cache)
+        backend, state = cast(tuple[str, Tensor], cache[_ENTITY_CACHE_KEY])
+        assert backend == graph.node_batch.device.type
+        torch.testing.assert_close(state, entry_state)
+        assert not torch.equal(rng.get_state(), entry_state)
+        assert set(cache) == {_ENTITY_CACHE_KEY, "icl_block.layer0"}
+        assert isinstance(cache["icl_block.layer0"], KVCacheEntry)
+
+        cache.freeze()
+        cache = cache.cpu()
+        icl_y: list[Tensor] = []
+        handle = model.icl_block.register_forward_pre_hook(
+            lambda _module, args: icl_y.append(args[1])
+        )
+        replayed = run(None, cache)
+        handle.remove()
+        table_hops["entities"][1] = table_hops["entities"][1] + 1
+        changed = run(torch.Generator().manual_seed(41))
+        changed_replayed = run(None, cache)
+
+    torch.testing.assert_close(recorded, uncached)
+    torch.testing.assert_close(replayed, uncached)
+    torch.testing.assert_close(changed_replayed, changed)
+    assert len(icl_y) == 1
+    assert torch.equal(icl_y[0], y[:0])
+
+
+def test_entity_cache_rejects_invalid_use_before_model_work() -> None:
+    table_hops, _, _ = _table_hops()
+    graph = _graph()
+    model = _model().eval()
+    rng = torch.Generator().manual_seed(47)
+    state = rng.get_state().clone()
+    entry = ("cpu", state)
+    bad_state = ("cpu", torch.empty(0))
+
+    def frozen(key: str, value: object) -> Cache:
+        cache = Cache({key: value})
+        cache.freeze()
+        return cache
+
+    def run(cache: Cache, rng: torch.Generator | None) -> Tensor:
+        return model(
+            table_hops,
+            torch.tensor([0, 1]),
+            graph=graph,
+            entity_relationship=7,
+            max_train=1,
+            generator=rng,
+            cache=cache,
+        )
+
+    handle = model.table_hop_encoder.register_forward_pre_hook(
+        lambda *_args: pytest.fail("model work started")
+    )
+    model.train()
+    with (
+        torch.inference_mode(),
+        pytest.raises(RuntimeError, match="evaluation"),
+    ):
+        run(Cache(), rng)
+    model.eval()
+    with torch.enable_grad(), pytest.raises(RuntimeError, match="gradients"):
+        run(Cache(), rng)
+    with torch.inference_mode():
+        cases = [
+            (Cache(existing=None), rng, "empty"),
+            (Cache(), None, "requires a generator"),
+            (frozen(_ENTITY_CACHE_KEY, entry), rng, "does not accept"),
+            (frozen("kumorfm.link", entry), None, "entities"),
+            (frozen(_ENTITY_CACHE_KEY, bad_state), None, "state"),
+            (frozen(_ENTITY_CACHE_KEY, ("cuda", state)), None, "backend"),
+        ]
+        for cache, supplied_rng, match in cases:
+            with pytest.raises((TypeError, ValueError), match=match):
+                run(cache, supplied_rng)
+    handle.remove()
+    torch.testing.assert_close(rng.get_state(), state)
 
 
 def _validation_graph() -> HomogeneousGraph:
