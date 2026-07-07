@@ -6,14 +6,18 @@ Python package for structured data models.
 import torch
 from sklearn.datasets import load_breast_cancer
 
-from sdm import TableTensor
+from sdm import TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from sdm.processing import Recipe
 
 df = load_breast_cancer(as_frame=True).frame
 
 # A lossless, fully tensorized representation of the raw data on GPU:
-table = TableTensor.from_pandas(df, device)
+table = TableTensor.from_pandas(
+    df=df,
+    stypes=infer_stypes(df),
+    device=device,
+)
 
 # Access to a variety of pre-trained structured data models:
 model = TabICLv2(device=device)
