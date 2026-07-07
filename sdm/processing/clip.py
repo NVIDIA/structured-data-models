@@ -9,7 +9,8 @@ class Clip(Processor, InvertibleMixin):
     """Clamp feature columns to fitted quantile bounds.
 
     This transform is not reconstructive; ``inverse_transform`` intentionally
-    returns its input unchanged.
+    returns its input unchanged. Quantile bounds are fitted independently for
+    each feature column.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
