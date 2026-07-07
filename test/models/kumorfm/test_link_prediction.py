@@ -1,13 +1,18 @@
-from typing import Any
+import inspect
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
 import torch
+from sdm.cache import Cache, KVCacheEntry
 from sdm.models.kumorfm import KumoRFM
 from sdm.models.kumorfm import model as model_module
+from sdm.nn import Attention, TransformerBlock
 from sdm.tensor.related_tables import HomogeneousGraph
 from sdm.testing import onlyCUDA
 from torch import Tensor
+
+_LINK_CACHE_KEY = "kumorfm.link"
 
 
 def _model(num_classes: int = 4) -> KumoRFM:
@@ -71,6 +76,7 @@ def _forward(
     max_lp_context_size: int | None = None,
     max_train: int | None = None,
     generator: torch.Generator | None = None,
+    cache: Cache | None = None,
 ) -> Tensor:
     context = torch.tensor([7, 5]) if context is None else context
     candidates = (
@@ -87,7 +93,220 @@ def _forward(
         max_lp_context_size=max_lp_context_size,
         max_train=max_train,
         generator=generator,
+        cache=cache,
     )
+
+
+def test_link_cache_api_is_keyword_only() -> None:
+    method = KumoRFM.forward_link_prediction
+    parameters = inspect.signature(method).parameters
+    assert tuple(parameters)[-1] == "cache"
+    assert parameters["cache"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters["cache"].default is None
+
+
+def test_link_cache_replays_entry_rng_and_live_candidate_features() -> None:
+    torch.manual_seed(37)
+    model = _model().eval()
+    table_hops, _ = _table_hops()
+    graph = _graph()
+    with torch.no_grad():
+        for module in model.modules():
+            if isinstance(module, Attention):
+                module.out_lin.weight.normal_(std=0.1)
+
+    def run(
+        hops: dict[str, list[Tensor]],
+        rng: torch.Generator | None,
+        cache: Cache | None = None,
+    ) -> Tensor:
+        return _forward(
+            model,
+            hops,
+            graph=graph,
+            generator=rng,
+            cache=cache,
+        )
+
+    with torch.inference_mode():
+        uncached = run(table_hops, torch.Generator().manual_seed(41))
+        cache = Cache()
+        rng = torch.Generator().manual_seed(41)
+        entry_state = rng.get_state().clone()
+        recorded = run(table_hops, rng, cache)
+        backend, state = cast(tuple[str, Tensor], cache[_LINK_CACHE_KEY])
+        assert backend == graph.node_batch.device.type
+        torch.testing.assert_close(state, entry_state)
+        assert set(cache) == {_LINK_CACHE_KEY, "icl_block.layer0"}
+
+        cache.freeze()
+        cache = cache.cpu()
+        changed = {
+            table: [part.clone() for part in parts]
+            for table, parts in table_hops.items()
+        }
+        changed["readout"][0][0, 0] += 100
+        expected = run(changed, torch.Generator().manual_seed(41))
+        different_rng = run(changed, torch.Generator().manual_seed(42))
+        encoded: list[tuple[Tensor, Tensor]] = []
+        handle = model.table_hop_encoder.register_forward_pre_hook(
+            lambda _module, args, kwargs: encoded.append(
+                (args[1].clone(), kwargs["node_y"].clone())
+            ),
+            with_kwargs=True,
+        )
+        global_state = torch.random.get_rng_state().clone()
+        replayed = run(changed, None, cache)
+        repeated = run(changed, None, cache)
+        handle.remove()
+
+    torch.testing.assert_close(recorded, uncached)
+    torch.testing.assert_close(replayed, expected)
+    torch.testing.assert_close(repeated, expected)
+    torch.testing.assert_close(torch.random.get_rng_state(), global_state)
+    assert not torch.allclose(recorded, expected)
+    assert not torch.allclose(different_rng, expected)
+    expected_node_y = torch.tensor([1, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0])
+    assert len(encoded) == 2
+    assert all(torch.equal(item[0], torch.tensor([2, 1])) for item in encoded)
+    assert all(torch.equal(item[1], expected_node_y) for item in encoded)
+
+
+def test_recording_projects_context_once_and_queries_candidate_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(model_module, "_LINK_PREDICTION_CHUNK_SIZE", 1)
+    checkpoint_spy = Mock(side_effect=AssertionError())
+    monkeypatch.setattr(model_module, "checkpoint", checkpoint_spy)
+    model = _model().eval()
+    table_hops, _ = _table_hops()
+    layer = cast(TransformerBlock, model.icl_block.layers[0])
+    projected: list[Tensor] = []
+    calls: list[tuple[int, Tensor]] = []
+    project_handle = layer.kv_norm.register_forward_pre_hook(
+        lambda _module, args: projected.append(args[0].clone())
+    )
+    call_handle = model.icl_block.register_forward_pre_hook(
+        lambda _module, args: calls.append((args[0].size(0), args[1].clone()))
+    )
+    cache = Cache()
+    with torch.inference_mode():
+        output = _forward(
+            model,
+            table_hops,
+            generator=torch.Generator().manual_seed(43),
+            cache=cache,
+        )
+    project_handle.remove()
+    call_handle.remove()
+
+    assert output.size() == (4, 2)
+    assert cache.is_recording
+    assert len(projected) == 1
+    assert projected[0].size(-2) == 2
+    assert [size for size, _ in calls] == [2, 1, 1, 1, 1]
+    assert calls[0][1].tolist() == [1, 0]
+    assert all(labels.numel() == 0 for _, labels in calls[1:])
+
+
+def test_cache_context_cap_and_empty_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = _model().eval()
+    table_hops, _ = _table_hops()
+    with torch.inference_mode():
+        expected = _forward(
+            model,
+            table_hops,
+            max_lp_context_size=1,
+            generator=torch.Generator().manual_seed(47),
+        )
+        cache = Cache()
+        recorded = _forward(
+            model,
+            table_hops,
+            max_lp_context_size=1,
+            generator=torch.Generator().manual_seed(47),
+            cache=cache,
+        )
+        entry = cast(KVCacheEntry, cache["icl_block.layer0"])
+        assert entry.key.size(-3) == entry.value.size(-3) == 1
+        cache.freeze()
+        monkeypatch.setattr(
+            model_module.torch,
+            "randperm",
+            Mock(side_effect=AssertionError("replay resampled context")),
+        )
+        replayed = _forward(
+            model,
+            table_hops,
+            max_lp_context_size=1,
+            cache=cache,
+        )
+
+        empty = torch.empty(0, dtype=torch.long)
+        empty_cache = Cache()
+        empty_recorded = _forward(
+            model,
+            table_hops,
+            candidates=empty,
+            generator=torch.Generator().manual_seed(53),
+            cache=empty_cache,
+        )
+        assert "icl_block.layer0" in empty_cache
+        empty_cache.freeze()
+        empty_replayed = _forward(
+            model, table_hops, candidates=empty, cache=empty_cache
+        )
+
+    torch.testing.assert_close(recorded, expected)
+    torch.testing.assert_close(replayed, expected)
+    assert empty_recorded.size() == empty_replayed.size() == (0, 2)
+
+
+def test_link_cache_rejects_invalid_lifecycle_before_model_work() -> None:
+    model = _model().eval()
+    table_hops, _ = _table_hops()
+    graph = _graph()
+    rng = torch.Generator().manual_seed(59)
+    state = rng.get_state().clone()
+
+    def frozen(key: str) -> Cache:
+        cache = Cache({key: (graph.node_batch.device.type, state)})
+        cache.freeze()
+        return cache
+
+    handle = model.table_hop_encoder.register_forward_pre_hook(
+        lambda *_args: pytest.fail("model work started")
+    )
+    model.train()
+    with (
+        torch.inference_mode(),
+        pytest.raises(RuntimeError, match="evaluation"),
+    ):
+        _forward(model, table_hops, graph=graph, generator=rng, cache=Cache())
+    model.eval()
+    with torch.enable_grad(), pytest.raises(RuntimeError, match="gradients"):
+        _forward(model, table_hops, graph=graph, generator=rng, cache=Cache())
+    with torch.inference_mode():
+        cases = [
+            (Cache(existing=None), rng, "empty"),
+            (Cache(), None, "requires a generator"),
+            (frozen(_LINK_CACHE_KEY), rng, "does not accept"),
+            (frozen(_LINK_CACHE_KEY), None, "links"),
+            (frozen("kumorfm.entity"), None, "links"),
+        ]
+        for cache, supplied_rng, match in cases:
+            with pytest.raises((TypeError, ValueError), match=match):
+                _forward(
+                    model,
+                    table_hops,
+                    graph=graph,
+                    generator=supplied_rng,
+                    cache=cache,
+                )
+    handle.remove()
+    torch.testing.assert_close(rng.get_state(), state)
 
 
 def test_api_injection_shared_graph_path_gradients_and_no_mutation() -> None:

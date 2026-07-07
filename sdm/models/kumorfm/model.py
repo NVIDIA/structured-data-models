@@ -17,12 +17,13 @@ from sdm.tensor.related_tables import HomogeneousGraph
 
 _LINK_PREDICTION_CHUNK_SIZE = 1000
 _ENTITY_CACHE_KEY = "kumorfm.entity"
+_LINK_CACHE_KEY = "kumorfm.link"
 
 
 class KumoRFM(torch.nn.Module):
     r"""Predict entity or link targets from processed related-table tensors.
 
-    Callers must invalidate entity caches when model state, context, graph
+    Callers must invalidate caches when model state, context, graph
     structure, or execution dtype changes.
 
     Args:
@@ -134,42 +135,13 @@ class KumoRFM(torch.nn.Module):
             entity_relationship=entity_relationship,
             num_classes=self.num_classes,
         )
-        if cache is not None:
-            if self.training or torch.is_grad_enabled():
-                raise RuntimeError(
-                    "KumoRFM caching requires evaluation without gradients"
-                )
-            if cache.is_recording:
-                if cache:
-                    raise ValueError("KumoRFM cache must be empty")
-                if not isinstance(generator, torch.Generator):
-                    raise TypeError("Cache recording requires a generator")
-                if generator.device != graph.node_batch.device:
-                    raise ValueError("Generator must be on the graph device")
-                cache[_ENTITY_CACHE_KEY] = (
-                    generator.device.type,
-                    generator.get_state().clone(),
-                )
-            else:
-                if generator is not None:
-                    raise ValueError(
-                        "Cache replay does not accept a generator"
-                    )
-                entry = cache.get(_ENTITY_CACHE_KEY)
-                if not isinstance(entry, tuple) or len(entry) != 2:
-                    raise ValueError("Cache was not recorded for entities")
-                backend, state = entry
-                if backend != graph.node_batch.device.type:
-                    raise ValueError("Cache backend does not match the graph")
-                if not isinstance(state, Tensor):
-                    raise ValueError("Cache generator state is invalid")
-                generator = torch.Generator(device=graph.node_batch.device)
-                try:
-                    generator.set_state(state.cpu())
-                except (RuntimeError, ValueError) as error:
-                    raise ValueError(
-                        "Cache generator state is invalid"
-                    ) from error
+        generator = self._cache_generator(
+            cache,
+            generator,
+            graph=graph,
+            cache_key=_ENTITY_CACHE_KEY,
+            target="entities",
+        )
         node_x, active_node = self._encode_graph(
             table_hops,
             y,
@@ -197,6 +169,7 @@ class KumoRFM(torch.nn.Module):
         max_lp_context_size: int | None = None,
         max_train: int | None = 20_000,
         generator: torch.Generator | None = None,
+        cache: Cache | None = None,
     ) -> Tensor:
         r"""Predict binary links for explicit global candidate node IDs."""
         context_node_index, y_lp = _validate_link_prediction_inputs(
@@ -210,6 +183,13 @@ class KumoRFM(torch.nn.Module):
             max_lp_context_size,
             max_train,
             generator,
+        )
+        generator = self._cache_generator(
+            cache,
+            generator,
+            graph=graph,
+            cache_key=_LINK_CACHE_KEY,
+            target="links",
         )
 
         node_batch = graph.node_batch
@@ -229,7 +209,8 @@ class KumoRFM(torch.nn.Module):
         context_x = node_x.index_select(0, context_node_index)
         candidate_x = node_x.index_select(0, candidate_node_index)
         if (
-            max_lp_context_size is not None
+            (cache is None or cache.is_recording)
+            and max_lp_context_size is not None
             and context_x.size(0) > max_lp_context_size
         ):
             index = torch.randperm(
@@ -239,6 +220,21 @@ class KumoRFM(torch.nn.Module):
             )[:max_lp_context_size]
             context_x = context_x.index_select(0, index)
             y_lp = y_lp.index_select(0, index)
+
+        if cache is not None:
+            prediction_cache = cache
+            if cache.is_recording:
+                self._predict(context_x, y_lp, cache=cache)
+                prediction_cache = Cache(cache)
+                prediction_cache.freeze()
+            empty_y = y_lp[:0]
+            outputs = [
+                self._predict(chunk, empty_y, cache=prediction_cache)[..., :2]
+                for chunk in candidate_x.split(_LINK_PREDICTION_CHUNK_SIZE)
+            ]
+            return (
+                torch.cat(outputs, dim=0) if len(outputs) > 1 else outputs[0]
+            )
 
         if candidate_x.size(0) == 0:
             prediction_x = torch.cat((context_x, candidate_x))
@@ -293,6 +289,55 @@ class KumoRFM(torch.nn.Module):
         self, x: Tensor, y: Tensor, *, cache: Cache | None = None
     ) -> Tensor:
         return self.head(self.icl_block(x, y, cache=cache))
+
+    def _cache_generator(
+        self,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        *,
+        graph: HomogeneousGraph,
+        cache_key: str,
+        target: str,
+    ) -> torch.Generator | None:
+        if cache is None:
+            return generator
+        if self.training or torch.is_grad_enabled():
+            raise RuntimeError(
+                "KumoRFM caching requires evaluation without gradients"
+            )
+        if cache.is_recording:
+            if cache:
+                raise ValueError("KumoRFM cache must be empty")
+            if not isinstance(generator, torch.Generator):
+                raise TypeError("Cache recording requires a generator")
+            if generator.device != graph.node_batch.device:
+                raise ValueError("Generator must be on the graph device")
+            cache[cache_key] = (
+                generator.device.type,
+                generator.get_state().clone(),
+            )
+            return generator
+        if generator is not None:
+            raise ValueError("Cache replay does not accept a generator")
+        entry = cache.get(cache_key)
+        if not isinstance(entry, tuple) or len(entry) != 2:
+            raise ValueError(f"Cache was not recorded for {target}")
+        backend, state = entry
+        if backend != graph.node_batch.device.type:
+            raise ValueError("Cache backend does not match the graph")
+        if not isinstance(state, Tensor):
+            raise ValueError("Cache generator state is invalid")
+        generator = torch.Generator(device=graph.node_batch.device)
+        try:
+            generator.set_state(state.cpu())
+        except (RuntimeError, ValueError) as error:
+            raise ValueError("Cache generator state is invalid") from error
+        expected_keys = {cache_key} | {
+            f"icl_block.layer{i}" for i in range(len(self.icl_block.layers))
+        }
+        if set(cache) != expected_keys:
+            raise ValueError(f"Cache was not recorded for {target}")
+        return generator
 
 
 def _validate_forward_inputs(
