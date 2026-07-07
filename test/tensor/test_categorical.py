@@ -1,10 +1,11 @@
 import warnings
-from typing import cast
+from typing import Any, cast
 
 import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor
+from sdm.testing import withCUDA
 
 
 def test_to_copy() -> None:
@@ -134,6 +135,99 @@ def test_to_arrow() -> None:
         "0": ["US", None, "CA", "US"],
         "1": [20, 10, None, 20],
     }
+
+
+def _import_cudf() -> Any:
+    pytest.importorskip("cupy")
+    cudf = pytest.importorskip("cudf")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available")
+    return cudf
+
+
+@withCUDA
+def test_from_cudf_string_values(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series(["b", "a", None, "b"]),
+        device=device,
+    )
+
+    assert tensor.as_tensor().device == device
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32))
+    )
+    assert tensor.categories[0].device == device
+    assert tensor.categories[0].tolist() == ["b", "a"]
+
+
+@withCUDA
+def test_from_cudf_numeric_values(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series([10, 20, None, 10], dtype="int32"),
+        device=device,
+    )
+
+    assert tensor.as_tensor().device == device
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32))
+    )
+    assert tensor.categories[0].device == device
+    assert (
+        tensor.categories[0]
+        .cpu()
+        .equal(torch.tensor([10, 20], dtype=torch.int32))
+    )
+
+
+@withCUDA
+def test_from_cudf_all_missing_values(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series([None, None], dtype="int32"),
+        device=device,
+    )
+
+    assert tensor.as_tensor().device == device
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[-1], [-1]], dtype=torch.int32))
+    )
+    assert tensor.categories[0].device == device
+    assert tensor.categories[0].numel() == 0
+
+
+@withCUDA
+def test_from_cudf_dtype(device: torch.device) -> None:
+    cudf = _import_cudf()
+    tensor = CategoricalTensor.from_cudf(
+        cudf.Series(["b", "a", None]),
+        dtype=torch.int64,
+        device=device,
+    )
+
+    assert tensor.as_tensor().device == device
+    assert tensor.as_tensor().dtype == torch.int64
+    assert (
+        tensor.as_tensor()
+        .cpu()
+        .equal(torch.tensor([[0], [1], [-1]], dtype=torch.int64))
+    )
+
+
+def test_from_cudf_errors() -> None:
+    cudf = _import_cudf()
+    with pytest.raises(ValueError, match="dtype"):
+        CategoricalTensor.from_cudf(
+            cudf.Series(["a", "b"]),
+            dtype=torch.float32,
+        )
 
 
 def test_view_ops() -> None:
