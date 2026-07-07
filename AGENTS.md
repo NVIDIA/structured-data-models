@@ -1,6 +1,6 @@
 # Overview
 
-This repository is an open-source model zoo for structured data models (e.g., TabICLv2, KumoRFM-2, etc).
+This repository is an open-source model zoo for structured data models (e.g., TabICLv2, KumoRFM, etc).
 
 The repository provides reusable model architectures, tensor containers, preprocessing and postprocessing blocks, attention modules, key/value cache building blocks, ensembling utilities, benchmark examples, and NIM-compatible runtime foundations.
 It should stay generic, modular, and lightweight.
