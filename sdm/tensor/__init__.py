@@ -5,7 +5,7 @@ from sdm.tensor.string import StringTensor
 from sdm.tensor.categorical import CategoricalTensor
 from sdm.tensor.columnar import ColumnarTensor
 from sdm.tensor.table import TableTensor
-from sdm.tensor.related_tables import Relationship, RelatedTables
+from sdm.tensor.related_tables import Relationship, RelationalContext
 
 __all__ = [
     "VarLenTensor",
@@ -14,5 +14,5 @@ __all__ = [
     "ColumnarTensor",
     "TableTensor",
     "Relationship",
-    "RelatedTables",
+    "RelationalContext",
 ]

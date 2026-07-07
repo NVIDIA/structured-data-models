@@ -2,7 +2,7 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from math import prod
-from typing import Literal, NamedTuple, overload
+from typing import NamedTuple
 
 import pyarrow as pa
 import torch
@@ -22,14 +22,13 @@ class Relationship:
     r"""Join relationship between two tables.
 
     Args:
-        left_table: Name of the left related table, or ``None`` for the task
-            table.
+        left_table: Name of the left table.
         left_columns: Column names from the left table.
-        right_table: Name of the right related table.
+        right_table: Name of the right table.
         right_columns: Column names from the right table.
     """
 
-    left_table: str | None
+    left_table: str
     left_columns: Sequence[str]
     right_table: str
     right_columns: Sequence[str]
@@ -60,38 +59,30 @@ class HomogeneousGraph(NamedTuple):
     r"""Materialized homogeneous graph.
 
     Args:
-        num_rows: The number of rows in the homogeneous graph.
-        node_offsets: Global node offsets keyed by related table name.
+        node_offsets: Global node offsets keyed by table name.
         edge_index: Edge index with shape ``[2, num_edges]`` over the
-            concatenated rows of all related tables.
-        task_edge_indices: Task-to-related-table edge indices keyed by
-            relationship index.
+            concatenated rows of all tables.
     """
 
-    num_rows: int
-    node_offsets: dict[str, int]
     edge_index: Tensor
-    task_edge_indices: dict[int, Tensor]
+    node_offsets: dict[str, int]
 
 
 @dataclass(frozen=True, init=False)
-class RelatedTables:
-    r"""Related table context for relational data models.
+class RelationalContext:
+    r"""Collection of named tables and join relationships.
 
     .. code-block:: python
 
-        from sdm import RelatedTables
+        from sdm import RelationalContext, TableTensor
 
-        related_tables = RelatedTables(
+        context = RelationalContext(
             tables={
-                "users": ...,
-                "orders": ...,
-                "items": ...,
+                "users": TableTensor.from_pandas(...),
+                "orders": TableTensor.from_pandas(...),
+                "items": TableTensor.from_pandas(...),
             },
             relationships=[
-                # Foreign key from the task table to the entity table:
-                dict(left_table=None, left_column="user_id",
-                     right_table="users", right_column="user_id"),
                 # Foreign key from orders to users:
                 dict(left_table="orders", left_column="user_id",
                      right_table="users", right_column="user_id"),
@@ -102,9 +93,8 @@ class RelatedTables:
         )
 
     Args:
-        tables: Related tables keyed by table name.
-        relationships: Join relationships among related tables and the
-            implicit task table.
+        tables: Tables keyed by table name.
+        relationships: Join relationships among tables.
     """
 
     tables: Mapping[str, TableTensor]
@@ -114,31 +104,29 @@ class RelatedTables:
         self,
         tables: Mapping[str, TableTensor],
         relationships: Collection[
-            Relationship | Mapping[str, str | Sequence[str] | None]
+            Relationship | Mapping[str, str | Sequence[str]]
         ],
-    ):
-
+    ) -> None:
         parsed_relationships = []
         for relationship in relationships:
             if isinstance(relationship, Relationship):
                 parsed_relationships.append(relationship)
             else:
-                left_table = relationship.get("left_table")
-                assert left_table is None or isinstance(left_table, str)
+                left_table = relationship["left_table"]
+                assert isinstance(left_table, str)
                 if "left_column" in relationship:
                     left_columns = relationship["left_column"]
                 else:
                     left_columns = relationship["left_columns"]
-                assert left_columns is not None
                 if isinstance(left_columns, str):
                     left_columns = (left_columns,)
+
                 right_table = relationship["right_table"]
                 assert isinstance(right_table, str)
                 if "right_column" in relationship:
                     right_columns = relationship["right_column"]
                 else:
                     right_columns = relationship["right_columns"]
-                assert right_columns is not None
                 if isinstance(right_columns, str):
                     right_columns = (right_columns,)
 
@@ -155,22 +143,11 @@ class RelatedTables:
         self.__post_init__()
 
     def __post_init__(self) -> None:
-        if not any(
-            relationship.left_table is None or relationship.right_table is None
-            for relationship in self.relationships
-        ):
-            raise ValueError(
-                "Expected at least one relationship to refer to the task table"
-            )
-
         for relationship in self.relationships:
             for table, columns in (
                 (relationship.left_table, relationship.left_columns),
                 (relationship.right_table, relationship.right_columns),
             ):
-                if table is None:
-                    continue
-
                 if table not in self.tables:
                     raise ValueError(
                         f"Expected '{table}' to be registered as a table"
@@ -185,16 +162,12 @@ class RelatedTables:
 
     def edge_indices(
         self,
-        task_table: TableTensor,
-        *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> tuple[Tensor, ...]:
         r"""Materialize graph edges for table relationships.
 
         Args:
-            task_table: The task table referenced by relationships whose
-            ``left_table`` or ``right_table`` is ``None``.
             dtype: The dtype.
             device: The device.
 
@@ -203,7 +176,7 @@ class RelatedTables:
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
         """
-        columns: dict[str | None, list[str]] = defaultdict(list)
+        columns: dict[str, list[str]] = defaultdict(list)
         for rel in self.relationships:
             columns[rel.left_table].extend(rel.left_columns)
             columns[rel.right_table].extend(rel.right_columns)
@@ -212,7 +185,7 @@ class RelatedTables:
             name: table[..., columns[name]].to_arrow()
             for name, table in self.tables.items()
             if name in columns
-        } | {None: task_table[..., columns[None]].to_arrow()}
+        }
 
         tables = {
             name: table.append_column(
@@ -246,44 +219,30 @@ class RelatedTables:
 
     def homogeneous_graph(
         self,
-        task_table: TableTensor,
-        *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> HomogeneousGraph:
         r"""Materialize homogeneous graph edges for table relationships.
 
         Args:
-            task_table: The task table referenced by relationships whose
-                ``left_table`` or ``right_table`` is ``None``.
             dtype: The dtype.
             device: The device.
-
-        Returns:
-            A materialized related-table graph.
         """
         offset = 0
-        offsets: dict[str, int] = {}
+        node_offsets: dict[str, int] = {}
         for name, table in self.tables.items():
-            offsets[name] = offset
+            node_offsets[name] = offset
             offset += prod(table.size()[:-1])
 
-        edge_indices: list[Tensor] = []
-        task_edge_indices: dict[int, Tensor] = {}
-        for i, (relationship, edge_index) in enumerate(
-            zip(
-                self.relationships,
-                self.edge_indices(task_table, dtype=dtype, device=device),
-            )
+        edge_indices = []
+        for relationship, edge_index in zip(
+            self.relationships,
+            self.edge_indices(dtype=dtype, device=device),
         ):
-            if relationship.left_table is None:
-                task_edge_indices[i] = edge_index
-                continue
-
             edge_index += edge_index.new_tensor(
                 [
-                    [offsets[relationship.left_table]],
-                    [offsets[relationship.right_table]],
+                    [node_offsets[relationship.left_table]],
+                    [node_offsets[relationship.right_table]],
                 ],
             )
             edge_indices.append(edge_index)
@@ -292,93 +251,69 @@ class RelatedTables:
         if len(edge_indices) == 0:
             dtype = torch.int64 if dtype is None else dtype
             edge_index = torch.empty((2, 0), dtype=dtype, device=device)
-        elif len(edge_indices) == 1:
-            edge_index = edge_indices[0]
         else:
             edge_index = torch.cat(edge_indices, dim=1)
 
         return HomogeneousGraph(
-            num_rows=offset,
-            node_offsets=offsets,
             edge_index=edge_index,
-            task_edge_indices=task_edge_indices,
+            node_offsets=node_offsets,
         )
 
-    @overload
-    def row_batch(
+    def sampler(
         self,
-        graph: HomogeneousGraph,
-        *,
-        return_num_hops: Literal[False] = False,
-    ) -> Tensor: ...
+        time_columns: Mapping[str, str] | None = None,
+    ) -> "RelationalSampler":
+        r"""Create a subgraph sampler over the relational context.
 
-    @overload
-    def row_batch(
-        self,
-        graph: HomogeneousGraph,
-        *,
-        return_num_hops: Literal[True],
-    ) -> tuple[Tensor, int]: ...
+        .. code-block:: python
 
-    @overload
-    def row_batch(
-        self,
-        graph: HomogeneousGraph,
-        *,
-        return_num_hops: bool,
-    ) -> Tensor | tuple[Tensor, int]: ...
+            from sdm import RelationalContext, TableTensor
 
-    def row_batch(
-        self,
-        graph: HomogeneousGraph,
-        *,
-        return_num_hops: bool = False,
-    ) -> Tensor | tuple[Tensor, int]:
-        r"""Return the task-row assignment for each related table row.
+            context = RelationalContext(
+                tables={
+                    "users": TableTensor.from_pandas(...),
+                    "orders": TableTensor.from_pandas(...),
+                    "items": TableTensor.from_pandas(...),
+                },
+                relationships=[
+                    # Foreign key from orders to users:
+                    dict(left_table="orders", left_column="user_id",
+                         right_table="users", right_column="user_id"),
+                    # Foreign key from orders to items:
+                    dict(left_table="orders", left_column="item_id",
+                         right_table="items", right_column="item_id"),
+                ],
+            )
 
-        .. note::
-
-            Related table neighborhoods are assumed to be disjoint: Each
-            reachable table row should belong to at most one task-table row.
+            sampler = context.sampler(
+                time_columns={"orders": "order_date"},
+            )
 
         Args:
-            graph: The homogeneous graph.
-            return_num_hops: Whether to also return the number of propagation
-            hops needed to assign reachable rows.
-
-        Returns:
-            A row-batch vector with shape ``[R]`` where ``R`` is the
-            total number of rows across all related tables, which assigns each
-            row to its task row, or ``-1`` otherwise.
-            If ``return_num_hops`` is ``True``, also returns the number of
-            propagation hops used.
+            time_columns: Mapping from table name to the datetime column used
+                for temporal sampling. A row in a time-aware table can only be
+                sampled if its timestamp does not exceed the query timestamp.
         """
-        row_batch = graph.edge_index.new_full((graph.num_rows,), fill_value=-1)
-        frontier = torch.zeros_like(row_batch, dtype=torch.bool)
+        return RelationalSampler(
+            relational_context=self,
+            time_columns=time_columns,
+        )
 
-        for i, task_edge_index in graph.task_edge_indices.items():
-            rel = self.relationships[i]
-            dst = task_edge_index[1] + graph.node_offsets[rel.right_table]
 
-            row_batch[dst] = task_edge_index[0]
-            frontier[dst] = True
+class RelationalSampler:
+    r"""Subgraph sampler over a relational context.
 
-        num_hops = 0
-        while True:
-            src, dst = graph.edge_index
-            mask = frontier[src] & (row_batch[dst] < 0)
+    Args:
+        relational_context: The collection of named tables and their
+            relationships.
+        time_columns: Mapping from table name to the datetime column used for
+            temporal sampling. A row in a time-aware table can only be sampled
+            if its timestamp does not exceed the query timestamp.
+    """
 
-            src = src[mask]
-            if src.numel() == 0:
-                break
-            dst = dst[mask]
-
-            row_batch[dst] = row_batch[src]
-            frontier.fill_(False)
-            frontier[dst] = True
-            num_hops += 1
-
-        if return_num_hops:
-            return row_batch, num_hops
-
-        return row_batch
+    def __init__(
+        self,
+        relational_context: RelationalContext,
+        time_columns: Mapping[str, str] | None = None,
+    ) -> None:
+        pass

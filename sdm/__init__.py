@@ -10,7 +10,7 @@ from sdm.tensor import (
     ColumnarTensor,
     TableTensor,
     Relationship,
-    RelatedTables,
+    RelationalContext,
 )
 
 try:
@@ -28,6 +28,6 @@ __all__ = [
     "ColumnarTensor",
     "TableTensor",
     "Relationship",
-    "RelatedTables",
+    "RelationalContext",
     "__version__",
 ]
