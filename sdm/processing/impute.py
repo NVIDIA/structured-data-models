@@ -29,6 +29,7 @@ class MeanImpute(Processor):
 
     def forward(self, input: TableTensor) -> TableTensor:
         """Replace NaNs with the fitted per-column means."""
+        self._check_supported_stypes(input)
         numerical = _as_float(input.numerical)
         numerical = torch.where(numerical.isnan(), self._mean, numerical)
         return input.replace_blocks(numerical=numerical)

@@ -1,24 +1,12 @@
 import torch
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import TableTensor
 from sdm.processing import Recipe, Sequential, StandardScale
 
 
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     if numerical is None:
         numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    n_rows = numerical.shape[0]
-    categorical = CategoricalTensor(
-        data=(torch.arange(n_rows) % 2).unsqueeze(1),
-        categories=(StringTensor.from_list(["a", "b"]),),
-    )
-    return TableTensor(
-        columns={
-            "numerical": ("x0", "x1"),
-            "categorical": ("kind",),
-        },
-        numerical=numerical,
-        categorical=categorical,
-    )
+    return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
 
 
 def test_recipe_normalizes_empty_roles_and_repr() -> None:

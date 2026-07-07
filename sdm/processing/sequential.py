@@ -9,6 +9,8 @@ class Sequential(Processor, InvertibleMixin):
         args: Sequence of :class:`Processor` instances.
     """
 
+    supported_stypes = "all"
+
     def __init__(self, *args: Processor) -> None:
         super().__init__()
         self.steps: tuple[Processor, ...] = args

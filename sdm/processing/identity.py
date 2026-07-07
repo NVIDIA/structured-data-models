@@ -8,10 +8,12 @@ class Identity(Processor, InvertibleMixin):
     This stateless processor is useful as an explicit no-op in recipe phases.
     """
 
+    supported_stypes = "all"
     requires_fit = False
 
     def forward(self, input: TableTensor) -> TableTensor:
         """Return ``input`` unchanged."""
+        self._check_supported_stypes(input)
         return input
 
     def _inverse_transform(self, input: TableTensor) -> TableTensor:

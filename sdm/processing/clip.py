@@ -43,6 +43,7 @@ class Clip(Processor, InvertibleMixin):
 
     def forward(self, input: TableTensor) -> TableTensor:
         """Clamp ``input`` to the fitted lower and upper bounds."""
+        self._check_supported_stypes(input)
         numerical = _as_float(input.numerical).clamp(
             min=self.lower_bound,
             max=self.upper_bound,
