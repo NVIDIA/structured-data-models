@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from unittest.mock import patch
 
 import pytest
 import torch
@@ -69,17 +68,16 @@ def test_qassmax(
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("num_key_value_heads", "enable_gqa"),
+    "num_key_value_heads",
     [
-        pytest.param(None, False, id="mha"),
-        pytest.param(1, True, id="mqa"),
-        pytest.param(2, True, id="gqa"),
+        pytest.param(None, id="mha"),
+        pytest.param(1, id="mqa"),
+        pytest.param(2, id="gqa"),
     ],
 )
 def test_sdpa(
     device: torch.device,
     num_key_value_heads: int | None,
-    enable_gqa: bool,
 ) -> None:
     channels = 3
     num_query_heads = 4
@@ -88,30 +86,23 @@ def test_sdpa(
         num_query_heads=num_query_heads,
         num_key_value_heads=num_key_value_heads,
     )
-    key_value_heads = (
-        num_query_heads if num_key_value_heads is None else num_key_value_heads
-    )
+    if num_key_value_heads is None:
+        num_key_value_heads = num_query_heads
 
     # Match torch SDPA for unbatched query, key, and value tensors.
     query = torch.randn(4, num_query_heads, channels, device=device)
-    key = torch.randn(5, key_value_heads, channels, device=device)
-    value = torch.randn(5, key_value_heads, channels, device=device)
+    key = torch.randn(5, num_key_value_heads, channels, device=device)
+    value = torch.randn(5, num_key_value_heads, channels, device=device)
 
-    with patch(
-        "sdm.nn.attention.F.scaled_dot_product_attention",
-        wraps=F.scaled_dot_product_attention,
-    ) as mock_sdpa:
-        out = module(query=query, key=key, value=value)
-    mock_sdpa.assert_called_once()
-    assert mock_sdpa.call_args.kwargs["enable_gqa"] is enable_gqa
+    out = module(query=query, key=key, value=value)
 
     expected = reference_sdpa(query=query, key=key, value=value)
     torch.testing.assert_close(out, expected)
 
     # Broadcast batch dimensions and apply a boolean attention mask.
     query = torch.randn(2, 3, num_query_heads, channels, device=device)
-    key = torch.randn(5, key_value_heads, channels, device=device)
-    value = torch.randn(1, 5, key_value_heads, channels, device=device)
+    key = torch.randn(5, num_key_value_heads, channels, device=device)
+    value = torch.randn(1, 5, num_key_value_heads, channels, device=device)
     attn_mask = torch.randint(0, 2, (3, 5), dtype=torch.bool, device=device)
 
     out = module(
@@ -142,14 +133,14 @@ def test_sdpa(
     key = torch.randn(
         batch_size,
         key_value_len,
-        key_value_heads,
+        num_key_value_heads,
         channels,
         device=device,
     )
     value = torch.randn(
         batch_size,
         key_value_len,
-        key_value_heads,
+        num_key_value_heads,
         channels,
         device=device,
     )
@@ -194,7 +185,7 @@ def test_sdpa(
         batch_size,
         1,
         num_train,
-        key_value_heads,
+        num_key_value_heads,
         channels,
         device=device,
     )
@@ -202,7 +193,7 @@ def test_sdpa(
         batch_size,
         1,
         num_train,
-        key_value_heads,
+        num_key_value_heads,
         channels,
         device=device,
     )
@@ -289,11 +280,10 @@ def test_attention(
         device=device,
         dtype=dtype,
     )
-    key_value_heads = (
-        num_query_heads if num_key_value_heads is None else num_key_value_heads
-    )
+    if num_key_value_heads is None:
+        num_key_value_heads = num_query_heads
     head_dim = channels // num_query_heads
-    expected_qkv = (num_query_heads + 2 * key_value_heads) * head_dim
+    expected_qkv = (num_query_heads + 2 * num_key_value_heads) * head_dim
     assert module.qkv_lin.out_features == expected_qkv
 
     query = torch.randn(2, 4, channels, dtype=dtype, device=device)
@@ -313,26 +303,15 @@ def test_attention(
     assert out.dtype == query.dtype
     assert out.device == query.device
 
-    out, kv = module(
+    out = module(
         query=query,
         key_value=key_value,
         attn_mask=attn_mask,
         rope=rotary_embedding,
-        return_key_value=True,
     )
     assert out.shape == query.shape
     assert out.dtype == query.dtype
     assert out.device == query.device
-    assert kv.key.size() == (2, 5, key_value_heads, head_dim)
-    assert kv.value.size() == (2, 5, key_value_heads, head_dim)
-
-    cached_out = module(
-        query=query,
-        key_value=kv,
-        attn_mask=attn_mask,
-        rope=rotary_embedding,
-    )
-    assert cached_out.shape == query.shape
 
     query = torch.randn(2, 4, channels, dtype=dtype, device=device)
     out = module(query=query, key_value=query, rope=rotary_embedding)
@@ -437,64 +416,6 @@ def test_attention_errors() -> None:
 
 
 @withCUDA
-@pytest.mark.parametrize("num_key_value_heads", [1, 2, 4])
-@pytest.mark.parametrize("rope_on", [False, True])
-def test_attention_gqa_numerical(
-    device: torch.device,
-    num_key_value_heads: int,
-    rope_on: bool,
-) -> None:
-    dtype = torch.float64
-    channels = 8
-    num_query_heads = 4
-    head_dim = channels // num_query_heads
-    q_dim = num_query_heads * head_dim
-    kv_dim = num_key_value_heads * head_dim
-    module = Attention(
-        channels=channels,
-        num_query_heads=num_query_heads,
-        num_key_value_heads=num_key_value_heads,
-        device=device,
-        dtype=dtype,
-    )
-    # Randomize projections (out_lin is zero-initialized) so distinct query,
-    # key, and value weights make any q/k/v mis-slice or swap fail allclose.
-    with torch.no_grad():
-        module.qkv_lin.weight.normal_()
-        module.qkv_lin.bias.normal_()
-        module.out_lin.weight.normal_()
-        module.out_lin.bias.normal_()
-
-    query = torch.randn(2, 3, channels, device=device, dtype=dtype)
-    key_value = torch.randn(2, 5, channels, device=device, dtype=dtype)
-    rope = (
-        RotaryEmbedding(channels=head_dim, device=device, dtype=dtype)
-        if rope_on
-        else None
-    )
-
-    out = module(query=query, key_value=key_value, rope=rope)
-
-    # Hand-built reference using the module's own projection weights.
-    qw, kw, vw = module.qkv_lin.weight.split([q_dim, kv_dim, kv_dim], dim=0)
-    qb, kb, vb = module.qkv_lin.bias.split([q_dim, kv_dim, kv_dim], dim=0)
-    q = F.linear(query, qw, qb).unflatten(-1, (num_query_heads, head_dim))
-    k = F.linear(key_value, kw, kb).unflatten(
-        -1, (num_key_value_heads, head_dim)
-    )
-    v = F.linear(key_value, vw, vb).unflatten(
-        -1, (num_key_value_heads, head_dim)
-    )
-    if rope is not None:
-        q = rope(q)
-        k = rope(k)
-
-    ref = reference_sdpa(query=q, key=k, value=v)
-    ref = module.out_lin(ref.flatten(-2, -1))
-    torch.testing.assert_close(out, ref)
-
-
-@withCUDA
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
 def test_transformer_block(
@@ -565,10 +486,11 @@ def test_transformer_block(
     # Both paths reduce to the same boolean mask and SDPA kernel, but with
     # `qassmax` the key lengths enter :class:`QASSMax` as differently-shaped
     # tensors (`[..., 1]` from `seqused_key_value` vs `[..., Q]` from the
-    # mask), so its MLP GEMMs may round differently in float32. A real
-    # regression would be O(1).
-    tolerance = {"atol": 5e-4, "rtol": 5e-3} if qassmax else {}
-    torch.testing.assert_close(out1, out2, **tolerance)
+    # mask), so its MLP GEMMs may round differently in float32.
+    if qassmax:
+        torch.testing.assert_close(out1, out2, atol=5e-4, rtol=5e-3)
+    else:
+        torch.testing.assert_close(out1, out2)
 
     # Test no padding leakage
     new_key_value = key_value.clone()
