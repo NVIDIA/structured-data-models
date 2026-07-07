@@ -9,9 +9,8 @@ from sdm.tensor import (
     CategoricalTensor,
     ColumnarTensor,
     TableTensor,
-    Relationship,
-    RelationalContext,
 )
+from sdm.relational import Relationship, RelationalData
 
 try:
     __version__ = version("structured-data-models")
@@ -28,6 +27,6 @@ __all__ = [
     "ColumnarTensor",
     "TableTensor",
     "Relationship",
-    "RelationalContext",
+    "RelationalData",
     "__version__",
 ]

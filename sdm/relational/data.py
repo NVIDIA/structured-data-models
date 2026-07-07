@@ -2,19 +2,21 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from math import prod
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 
-from sdm import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
 
 PREFIX = "sdm_internal"
 ROW_ID = f"__{PREFIX}_row_id__"
 LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
+
+if TYPE_CHECKING:
+    from sdm.relational import RelationalSampler
 
 
 @dataclass(frozen=True)
@@ -69,14 +71,14 @@ class HomogeneousGraph(NamedTuple):
 
 
 @dataclass(frozen=True, init=False)
-class RelationalContext:
+class RelationalData:
     r"""Collection of named tables and join relationships.
 
     .. code-block:: python
 
-        from sdm import RelationalContext, TableTensor
+        from sdm import RelationalData, TableTensor
 
-        context = RelationalContext(
+        data = RelationalData(
             tables={
                 "users": TableTensor.from_pandas(...),
                 "orders": TableTensor.from_pandas(...),
@@ -165,7 +167,7 @@ class RelationalContext:
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> tuple[Tensor, ...]:
-        r"""Materialize graph edges for table relationships.
+        r"""Materialize heterogeneous graph edges for table relationships.
 
         Args:
             dtype: The dtype.
@@ -263,13 +265,13 @@ class RelationalContext:
         self,
         time_columns: Mapping[str, str] | None = None,
     ) -> "RelationalSampler":
-        r"""Create a subgraph sampler over the relational context.
+        r"""Create a subgraph sampler over this relational data.
 
         .. code-block:: python
 
-            from sdm import RelationalContext, TableTensor
+            from sdm import RelationalData, TableTensor
 
-            context = RelationalContext(
+            data = RelationalData(
                 tables={
                     "users": TableTensor.from_pandas(...),
                     "orders": TableTensor.from_pandas(...),
@@ -285,7 +287,7 @@ class RelationalContext:
                 ],
             )
 
-            sampler = context.sampler(
+            sampler = data.sampler(
                 time_columns={"orders": "order_date"},
             )
 
@@ -294,26 +296,9 @@ class RelationalContext:
                 for temporal sampling. A row in a time-aware table can only be
                 sampled if its timestamp does not exceed the query timestamp.
         """
+        from sdm.relational import RelationalSampler
+
         return RelationalSampler(
-            relational_context=self,
+            data=self,
             time_columns=time_columns,
         )
-
-
-class RelationalSampler:
-    r"""Subgraph sampler over a relational context.
-
-    Args:
-        relational_context: The collection of named tables and their
-            relationships.
-        time_columns: Mapping from table name to the datetime column used for
-            temporal sampling. A row in a time-aware table can only be sampled
-            if its timestamp does not exceed the query timestamp.
-    """
-
-    def __init__(
-        self,
-        relational_context: RelationalContext,
-        time_columns: Mapping[str, str] | None = None,
-    ) -> None:
-        pass
