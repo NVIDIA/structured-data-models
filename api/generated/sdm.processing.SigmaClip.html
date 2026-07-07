@@ -169,6 +169,9 @@ data-aria-dark="Switch to auto color mode">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">SigmaClip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.SigmaClip" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
 <p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p>
+<p>The first pass masks values outside the initial z-score bounds, then the
+second pass refits bounds on the remaining values. The transform applies
+logarithmic soft clipping instead of hard truncation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Positive z-score multiplier setting how many standard
@@ -217,7 +220,7 @@ deviations from the mean mark the soft clipping bounds.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=902d0848"></script>
+      <script src="../../_static/documentation_options.js?v=b7292b42"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

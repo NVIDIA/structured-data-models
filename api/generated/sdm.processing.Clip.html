@@ -170,7 +170,8 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
 <p>Clamp feature columns to fitted quantile bounds.</p>
 <p>This transform is not reconstructive; <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code> intentionally
-returns its input unchanged.</p>
+returns its input unchanged. Quantile bounds are fitted independently for
+each feature column.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -222,7 +223,7 @@ bound. Must satisfy <code class="docutils literal notranslate"><span class="pre"
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=902d0848"></script>
+      <script src="../../_static/documentation_options.js?v=b7292b42"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

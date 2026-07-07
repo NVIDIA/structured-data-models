@@ -182,10 +182,15 @@ data-aria-dark="Switch to auto color mode">
 <dd><p>Fit on <code class="docutils literal notranslate"><span class="pre">input</span></code> and return the transformed result.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>)</p>
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Feature tensor to fit on and transform. Concrete
+processors document the accepted shape.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Transformed tensor with the shape documented by the concrete
+processor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -198,10 +203,15 @@ data-aria-dark="Switch to auto color mode">
 with a fitted-state check, via <a class="reference internal" href="#sdm.processing.Sequential.transform" title="sdm.processing.Sequential.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>)</p>
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Tensor to transform. Concrete processors document the
+accepted shape.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tensor with the same shape as <code class="docutils literal notranslate"><span class="pre">input</span></code> unless the concrete
+processor documents otherwise.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -212,10 +222,15 @@ with a fitted-state check, via <a class="reference internal" href="#sdm.processi
 <dd><p>Transform <code class="docutils literal notranslate"><span class="pre">input</span></code> using the fitted processor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>)</p>
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Tensor to transform. Concrete processors document the
+accepted shape.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Transformed tensor with the shape documented by the concrete
+processor.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -248,7 +263,7 @@ with a fitted-state check, via <a class="reference internal" href="#sdm.processi
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=902d0848"></script>
+      <script src="../../_static/documentation_options.js?v=b7292b42"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

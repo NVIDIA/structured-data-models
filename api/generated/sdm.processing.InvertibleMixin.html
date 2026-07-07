@@ -177,10 +177,14 @@ e.g. <code class="docutils literal notranslate"><span class="pre">class</span> <
 <dd><p>Invert the transform of <code class="docutils literal notranslate"><span class="pre">input</span></code> using the fitted processor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>)</p>
+<dd class="field-odd"><p><strong>input</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a>) – Tensor in transformed space. Concrete processors
+document the accepted shape.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tensor mapped back to the original processor space.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -213,7 +217,7 @@ e.g. <code class="docutils literal notranslate"><span class="pre">class</span> <
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=902d0848"></script>
+      <script src="../../_static/documentation_options.js?v=b7292b42"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
