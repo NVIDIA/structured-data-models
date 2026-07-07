@@ -28,6 +28,7 @@ jobs:
 
       - name: Install package
         run: |
+          # `-e` for coverage report.
           uv pip install --torch-backend=cpu -e '.[test]'
 
       - name: Run tests

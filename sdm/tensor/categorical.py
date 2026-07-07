@@ -9,6 +9,7 @@ from torch.utils import _pytree as pytree
 from typing_extensions import override
 
 from sdm.tensor import StringTensor
+from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
 
@@ -85,6 +86,12 @@ class CategoricalTensor(Tensor):
                 f"the number of category vectors (got {data.size(-1)} and "
                 f"{len(categories)})"
             )
+        for i, category in enumerate(categories):
+            if category.dim() != 1:
+                raise ValueError(
+                    f"Expected category {i} in '{cls.__name__}' to be "
+                    f"one-dimensional (got {category.dim()}D)"
+                )
 
         out = Tensor._make_wrapper_subclass(
             cls,
@@ -109,7 +116,7 @@ class CategoricalTensor(Tensor):
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
-        r"""Create tensor from a ``pyarrow`` array.
+        r"""Create tensor from a :class:`~pyarrow.Array`.
 
         .. code-block:: python
 
@@ -127,7 +134,8 @@ class CategoricalTensor(Tensor):
             >>> ['foo', 'bar']
 
         Args:
-            array: The ``pyarrow`` array.
+            array: The :class:`pyarrow.Array` or
+                :class:`pyarrow.ChunkedArray`.
             dtype: The dtype.
             device: The device.
         """
@@ -169,26 +177,44 @@ class CategoricalTensor(Tensor):
 
         return cls(data=data, categories=(category,))
 
-    @classmethod
-    def from_pandas(
-        cls: type[SelfCategoricalTensor],
-        series: Any,
-        *,
-        dtype: torch.dtype | None = torch.int32,
-        device: torch.device | str | None = None,
-    ) -> SelfCategoricalTensor:
-        r"""Create tensor from a ``pandas`` series.
+    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
+        r"""Convert this tensor to a flat :class:`pyarrow.Table`.
 
         Args:
-            series: The ``pandas.Series``.
-            dtype: The dtype.
-            device: The device.
+            columns: Column names.
         """
-        return cls.from_arrow(
-            pa.array(series),
-            dtype=dtype,
-            device=device,
-        )
+        if columns is None:
+            columns = tuple(str(i) for i in range(self.size(-1)))
+        elif len(columns) != self.size(-1):
+            raise ValueError(
+                f"Expected 'columns' to contain {self.size(-1)} entries "
+                f"(got {len(columns)})"
+            )
+
+        data_t = self._data.movedim(-1, 0).contiguous()
+
+        arrays = []
+        for data, category, na_mask in zip(
+            data_t.cpu().unbind(0),
+            self.categories,
+            (data_t < 0).cpu().unbind(0),
+        ):
+            if na_mask.any().item():
+                indices = pa.array(
+                    data.clamp(min=0).view(-1).numpy(),
+                    mask=na_mask.view(-1).numpy(),
+                )
+            else:
+                indices = to_arrow(data.view(-1))
+
+            arrays.append(
+                pa.DictionaryArray.from_arrays(
+                    indices=indices,
+                    dictionary=to_arrow(category),
+                )
+            )
+
+        return pa.Table.from_arrays(arrays, names=columns)
 
     # Properties ##############################################################
 
@@ -208,7 +234,11 @@ class CategoricalTensor(Tensor):
         cls,
         torch_function: Callable[..., Any],
     ) -> Callable[..., Any]:
-        r"""Register a ``__torch_dispatch__`` implementation."""
+        r"""Register a ``__torch_dispatch__`` implementation.
+
+        See PyTorch's
+        :ref:`calling convention <torch-dispatch-calling-convention>`.
+        """
         if "HANDLED_FUNCTIONS" not in cls.__dict__:
             cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
 
@@ -250,6 +280,43 @@ class CategoricalTensor(Tensor):
     def share_memory_(self) -> "CategoricalTensor":
         self._data.share_memory_()
         return self
+
+    @override
+    def tolist(self) -> Any:
+        def apply_na_mask(values: Any, na_mask: Any) -> Any:
+            if isinstance(na_mask, bool):
+                return None if na_mask else values
+
+            return [
+                apply_na_mask(value, isna)
+                for value, isna in zip(values, na_mask)
+            ]
+
+        def decode_column(data: Tensor, category: Tensor) -> Any:
+            na_mask = data < 0
+            out = category[data.clamp(min=0)]
+            return apply_na_mask(out.tolist(), na_mask.tolist())
+
+        def columns_to_rows(
+            columns: Sequence[Any],
+            size: tuple[int, ...],
+        ) -> Any:
+            if len(size) == 0:
+                return list(columns)
+
+            return [
+                columns_to_rows(
+                    columns=[column[i] for column in columns],
+                    size=size[1:],
+                )
+                for i in range(size[0])
+            ]
+
+        columns = [
+            decode_column(self._data[..., i], category)
+            for i, category in enumerate(self._categories)
+        ]
+        return columns_to_rows(columns, tuple(self.size()[:-1]))
 
 
 @CategoricalTensor.implements(aten.isnan.default)

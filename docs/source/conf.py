@@ -35,8 +35,15 @@ html_theme_options = {
 autosummary_generate = True
 autodoc_typehints = "both"
 intersphinx_mapping = {
+    "numpy": ("https://numpy.org/doc/stable", None),
+    "pandas": ("https://pandas.pydata.org/docs", None),
+    "pyarrow": ("https://arrow.apache.org/docs", None),
     "python": ("https://docs.python.org/3", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
+    "typing_extensions": (
+        "https://typing-extensions.readthedocs.io/en/latest",
+        None,
+    ),
 }
 
 

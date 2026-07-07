@@ -32,7 +32,7 @@ class StringTensor(VarLenTensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
-        r"""Create tensor from a ``pyarrow`` string array.
+        r"""Create tensor from a string :class:`~pyarrow.Array`.
 
         .. code-block:: python
 
@@ -43,7 +43,8 @@ class StringTensor(VarLenTensor):
             tensor = StringTensor.from_arrow(array, size=(2, 2))
 
         Args:
-            array: The ``pyarrow`` string array.
+            array: The string :class:`pyarrow.Array` or
+                :class:`pyarrow.ChunkedArray`.
             size: The shape of the tensor.
             device: The device.
         """
@@ -52,13 +53,6 @@ class StringTensor(VarLenTensor):
                 array = array.chunk(0)
             else:
                 array = array.combine_chunks()
-
-        if not isinstance(array, pa.Array):
-            raise TypeError(
-                f"Expected 'array' in '{cls.__name__}.from_arrow' to be a "
-                f"'pyarrow.Array' or 'pyarrow.ChunkedArray' "
-                f"(got '{type(array).__name__}')"
-            )
 
         if size is None:
             size = (len(array),)
@@ -95,28 +89,20 @@ class StringTensor(VarLenTensor):
 
     @override
     def to_arrow(self) -> pa.Array:
-        r"""Convert this tensor to flat ``pyarrow`` string array."""
-        if self.device.type != "cpu":
-            raise TypeError(
-                f"Can't convert {self.device} device type tensor to arrow. "
-                f"Use 'Tensor.cpu()' to copy the tensor to host memory first."
-            )
-        if self.requires_grad:
-            raise RuntimeError(
-                "Can't call 'to_arrow()' on Tensor that requires grad. "
-                "Use 'Tensor.detach().to_arrow()' instead."
-            )
-
-        data, offset = cast(StringTensor, self.contiguous()).data_offset
+        r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
+        tensor = cast(StringTensor, self.contiguous().cpu())
 
         return pa.Array.from_buffers(
-            pa.string() if offset.dtype == torch.int32 else pa.large_string(),
-            length=self.numel(),
+            pa.string()
+            if tensor._offset.dtype == torch.int32
+            else pa.large_string(),
+            length=tensor.numel(),
             buffers=[
                 None,
-                pa.py_buffer(offset.numpy()),
-                pa.py_buffer(data.numpy()),
+                pa.py_buffer(tensor._offset.numpy()),
+                pa.py_buffer(tensor._data.numpy()),
             ],
+            offset=int(tensor.storage_offset()),
         )
 
     @classmethod
@@ -212,11 +198,7 @@ class StringTensor(VarLenTensor):
         # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
-        if self.device.type != "cpu":
+        if not self.is_cpu:
             out += f", device={self.device}"
-        if self._data.grad_fn is not None:
-            out += f", grad_fn=<{type(self._data.grad_fn).__name__}>"
-        elif self.requires_grad:
-            out += ", requires_grad=True>"
         out += ")"
         return out

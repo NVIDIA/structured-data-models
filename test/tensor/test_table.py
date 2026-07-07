@@ -1,11 +1,17 @@
 import io
+from datetime import datetime
 from typing import cast
 
 import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 
 
 def test_init() -> None:
@@ -26,6 +32,8 @@ def test_init() -> None:
         "  blocks={\n"
         "    numerical (2): ['age', 'income'],\n"
         "    categorical (2): ['country', 'segment'],\n"
+        "    datetime (0): [],\n"
+        "    id (0): [],\n"
         "  },\n"
         ")"
     )
@@ -38,6 +46,8 @@ def test_init() -> None:
     assert tensor.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.datetime: (),
+        Stype.id: (),
     }
     assert tensor._column_to_loc == {
         "age": (Stype.numerical, 0),
@@ -45,6 +55,12 @@ def test_init() -> None:
         "country": (Stype.categorical, 0),
         "segment": (Stype.categorical, 1),
     }
+
+    with pytest.raises(ValueError, match=r"datetime.*dtype"):
+        TableTensor(
+            columns={"datetime": ["created_at"]},
+            datetime=torch.zeros(2, 1),
+        )
 
 
 def test_empty() -> None:
@@ -60,6 +76,8 @@ def test_empty() -> None:
     assert tensor.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
     }
     assert tensor._column_to_loc == {}
 
@@ -85,6 +103,8 @@ def test_from_tensor() -> None:
     assert tensor.columns == {
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
     }
 
 
@@ -93,12 +113,14 @@ def test_save_load() -> None:
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country"],
+            "datetime": ["created_at"],
         },
         numerical=torch.randn(3, 2),
         categorical=CategoricalTensor(
             data=torch.arange(3).view(3, 1),
             categories=(StringTensor.from_list(["USA, GER, FRA"]),),
         ),
+        datetime=torch.tensor([[1], [2], [3]], dtype=torch.int64),
     )
 
     buffer = io.BytesIO()
@@ -110,6 +132,7 @@ def test_save_load() -> None:
     assert out.size() == tensor.size()
     assert out.numerical.equal(tensor.numerical)
     assert out.categorical.equal(tensor.categorical)
+    assert out.datetime.equal(tensor.datetime)
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
     for category1, category2 in zip(
@@ -124,12 +147,14 @@ def test_to_copy() -> None:
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country", "segment"],
+            "datetime": ["created_at"],
         },
         numerical=torch.randn(2, 2),
         categorical=CategoricalTensor(
             data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
             categories=(torch.arange(2), torch.arange(2)),
         ),
+        datetime=torch.tensor([[1], [2]], dtype=torch.int64),
     )
 
     out = tensor.to(torch.float64)
@@ -138,6 +163,8 @@ def test_to_copy() -> None:
     assert out.dtype == torch.float64
     assert out.numerical.dtype == torch.float64
     assert out.categorical.dtype == torch.int32
+    assert out.datetime.equal(tensor.datetime)
+    assert out.datetime.dtype == torch.int64
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
 
@@ -289,6 +316,8 @@ def test_unbind_split() -> None:
     assert out[0].columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
     }
 
     with pytest.raises(RuntimeError, match="split size 1"):
@@ -356,6 +385,8 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
     }
 
     out = cast(TableTensor, tensor.view(-1, 3))[:, "age"]
@@ -372,6 +403,8 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: ("country",),
+        Stype.datetime: (),
+        Stype.id: (),
     }
 
     out = tensor[..., "country"]
@@ -461,6 +494,8 @@ def test_cat_stack() -> None:
     assert out.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.datetime: (),
+        Stype.id: (),
     }
 
     out = torch.stack([tensor1, tensor1], dim=0)
@@ -499,31 +534,81 @@ def test_share_memory() -> None:
         pass
 
 
-def test_from_arrow() -> None:
-    table = pa.table(
-        {
-            "age": pa.array([10, 20], type=pa.int64()),
-            "income": pa.array([1.0, 2.5], type=pa.float64()),
-            "country": pa.array(["US", "CA"]),
-            "segment": pa.array(["a", "b"]),
-        }
-    )
+def test_arrow() -> None:
+    data = {
+        "age": [0.0, 1.0, 2.0, 3.0],
+        "income": [10.0, 11.0, 12.0, 13.0],
+        "country": ["US", "CA", "", "US"],
+        "time": [
+            datetime(2024, 1, 1, 0, 0),
+            None,
+            datetime(2024, 1, 2, 0, 0),
+            datetime(2024, 1, 3, 0, 0),
+        ],
+        "user_id": [0, 1, 2, 3],
+        "item_id": ["a", "b", "c", "d"],
+    }
 
     tensor = TableTensor.from_arrow(
-        table=table,
+        pa.table(data),
         stypes={
             "age": "numerical",
             "income": "numerical",
             "country": "categorical",
-            "segment": "categorical",
+            "time": "datetime",
+            "user_id": "id",
+            "item_id": "id",
         },
     )
 
-    assert tensor.size() == (2, 4)
-    assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
-    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
-    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
-    assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+    assert tensor.size() == (4, 6)
+    assert tensor.numerical.equal(
+        torch.tensor(
+            [
+                [0.0, 10.0],
+                [1.0, 11.0],
+                [2.0, 12.0],
+                [3.0, 13.0],
+            ]
+        )
+    )
+    assert tensor.categorical.equal(torch.tensor([[0], [1], [2], [0]]))
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
+    assert tensor.datetime.equal(
+        torch.tensor(
+            [
+                [1704067200000000],
+                [-9223372036854775808],
+                [1704153600000000],
+                [1704240000000000],
+            ]
+        )
+    )
+    assert tensor.id[:, 0].equal(torch.tensor([0, 1, 2, 3]))
+    assert tensor.id[:, 1].equal(StringTensor.from_list(["a", "b", "c", "d"]))
+
+    assert tensor.to_arrow().to_pydict() == data
+
+
+def test_arrow_empty() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "age": pa.array([], type=pa.float32()),
+                "country": pa.array([], type=pa.string()),
+            }
+        ),
+        stypes={
+            "age": "numerical",
+            "country": "categorical",
+        },
+    )
+
+    table = tensor.to_arrow()
+
+    assert table.num_rows == 0
+    assert table.column_names == ["age", "country"]
+    assert table.to_pydict() == {"age": [], "country": []}
 
 
 def test_from_pandas() -> None:
