@@ -29,7 +29,6 @@ class SoftmaxTemperature(Processor):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Return ``softmax(input / temperature)`` over the last dimension."""
-        self._check_supported_stypes(input)
         numerical = torch.softmax(
             _as_float(input.numerical) / self.temperature,
             dim=-1,

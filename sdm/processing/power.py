@@ -234,7 +234,6 @@ class Power(Processor, InvertibleMixin):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` with fitted Yeo-Johnson parameters."""
-        self._check_supported_stypes(input)
         numerical = _as_float(input.numerical)
         transformed = self._yeojohnson_transform(numerical)
         numerical = (transformed - self.mean) / self.scale

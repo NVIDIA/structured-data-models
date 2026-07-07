@@ -13,7 +13,6 @@ class Identity(Processor, InvertibleMixin):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Return ``input`` unchanged."""
-        self._check_supported_stypes(input)
         return input
 
     def _inverse_transform(self, input: TableTensor) -> TableTensor:

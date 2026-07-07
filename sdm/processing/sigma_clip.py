@@ -83,7 +83,6 @@ class SigmaClip(Processor):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""
-        self._check_supported_stypes(input)
         numerical = _as_float(input.numerical)
         log_abs = numerical.abs().log1p()
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)

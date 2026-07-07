@@ -177,7 +177,6 @@ class Quantile(Processor, InvertibleMixin):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` into the configured output distribution."""
-        self._check_supported_stypes(input)
         numerical = _as_float(input.numerical)
         transformed = torch.empty_like(numerical)
         for i in range(numerical.shape[1]):
