@@ -5,7 +5,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_to_copy() -> None:
@@ -145,9 +145,10 @@ def _import_cudf() -> Any:
     return cudf
 
 
-@withCUDA
-def test_from_cudf_string_values(device: torch.device) -> None:
-    cudf = _import_cudf()
+@onlyCUDA
+def test_from_cudf_string_values() -> None:
+    cudf = pytest.importorskip("cudf")
+
     tensor = CategoricalTensor.from_cudf(
         cudf.Series(["b", "a", None, "b"]),
         device=device,

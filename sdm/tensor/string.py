@@ -153,7 +153,6 @@ class StringTensor(VarLenTensor):
                 size=size,
             )
 
-        # cuDF string columns store UTF-8 bytes plus one int32 offset child.
         return cls(
             data=torch.from_dlpack(cp.asarray(column.data)).to(device),
             offset=torch.from_dlpack(cp.asarray(column.children[0])).to(
