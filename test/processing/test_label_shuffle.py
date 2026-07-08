@@ -8,17 +8,18 @@ def _labels(values: torch.Tensor) -> TableTensor:
     return TableTensor.from_tensor(values)
 
 
-def test_label_shuffle_default_single_estimator_is_identity() -> None:
+def test_label_shuffle_none_is_identity() -> None:
     labels = _labels(torch.tensor([[0], [1], [2]]))
 
-    output = LabelShuffle().fit_transform(labels)
+    output = LabelShuffle(method="none").fit_transform(labels)
 
     assert output is labels
 
 
-def test_label_shuffle_resolved_shift_maps_labels() -> None:
+def test_label_shuffle_shift_maps_labels() -> None:
     labels = _labels(torch.tensor([[0], [1], [2], [-1]]))
-    processor = LabelShuffle(n_classes=3).resolve(estimator=1)
+    torch.manual_seed(0)  # draws a cyclic offset of 1 for three classes
+    processor = LabelShuffle(n_classes=3)
 
     output = processor.transform(labels)
 
@@ -27,7 +28,7 @@ def test_label_shuffle_resolved_shift_maps_labels() -> None:
 
 def test_label_shuffle_inverse_restores_shifted_labels() -> None:
     labels = _labels(torch.tensor([[0], [1], [2]]))
-    processor = LabelShuffle(n_classes=3).resolve(estimator=1)
+    processor = LabelShuffle(n_classes=3)
 
     transformed = processor.transform(labels)
     restored = processor.inverse_transform(transformed)
@@ -37,7 +38,8 @@ def test_label_shuffle_inverse_restores_shifted_labels() -> None:
 
 def test_label_shuffle_correct_output_uses_forward_permutation() -> None:
     scores = torch.tensor([[0.1, 0.2, 0.7]])
-    processor = LabelShuffle(n_classes=3).resolve(estimator=1)
+    torch.manual_seed(0)  # draws a cyclic offset of 1 for three classes
+    processor = LabelShuffle(n_classes=3)
 
     corrected = processor.correct_output(scores)
 
@@ -46,7 +48,8 @@ def test_label_shuffle_correct_output_uses_forward_permutation() -> None:
 
 def test_label_shuffle_learns_classes_in_recipe_target_pipeline() -> None:
     target = TableTensor.from_tensor(torch.tensor([[0], [1], [2]]))
-    recipe = Recipe(target=[LabelShuffle().resolve(estimator=1)])
+    torch.manual_seed(0)  # draws a cyclic offset of 1 for three classes
+    recipe = Recipe(target=[LabelShuffle()])
 
     assert isinstance(recipe.target, Sequential)
     transformed = recipe.target.fit_transform(target)
@@ -58,14 +61,20 @@ def test_label_shuffle_learns_classes_in_recipe_target_pipeline() -> None:
     assert torch.equal(restored.numerical, target.numerical)
 
 
-def test_label_shuffle_random_is_deterministic() -> None:
+def test_label_shuffle_same_global_seed_draws_same_view() -> None:
     labels = _labels(torch.tensor([[0], [1], [2], [3]]))
-    generator = torch.Generator().manual_seed(123)
-    processor = LabelShuffle(
-        method="random",
-        n_classes=4,
-        generator=generator,
-    ).resolve(estimator=2)
+
+    torch.manual_seed(123)
+    first = LabelShuffle(method="random", n_classes=4).transform(labels)
+    torch.manual_seed(123)
+    second = LabelShuffle(method="random", n_classes=4).transform(labels)
+
+    assert torch.equal(first.numerical, second.numerical)
+
+
+def test_label_shuffle_transform_is_deterministic_per_instance() -> None:
+    labels = _labels(torch.tensor([[0], [1], [2], [3]]))
+    processor = LabelShuffle(method="random", n_classes=4)
 
     first = processor.transform(labels)
     second = processor.transform(labels)
@@ -85,22 +94,15 @@ def test_label_shuffle_rejects_invalid_method() -> None:
         LabelShuffle(method="bad")  # ty: ignore[invalid-argument-type]
 
 
-def test_label_shuffle_identity_still_validates_label_bounds() -> None:
+def test_label_shuffle_validates_label_bounds() -> None:
     processor = LabelShuffle(n_classes=3)
 
     with pytest.raises(ValueError, match="less than n_classes"):
         processor.transform(_labels(torch.tensor([[4]])))
 
 
-def test_label_shuffle_identity_still_validates_output_shape() -> None:
+def test_label_shuffle_validates_output_shape() -> None:
     processor = LabelShuffle(n_classes=3)
-
-    with pytest.raises(ValueError, match="output class dimension"):
-        processor.correct_output(torch.ones(2, 2))
-
-
-def test_label_shuffle_rejects_output_shape_mismatch() -> None:
-    processor = LabelShuffle(n_classes=3).resolve(estimator=1)
 
     with pytest.raises(ValueError, match="output class dimension"):
         processor.correct_output(torch.ones(2, 2))

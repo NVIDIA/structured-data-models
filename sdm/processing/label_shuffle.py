@@ -13,21 +13,21 @@ LabelShuffleMethod = Literal["shift", "random", "none"]
 class LabelShuffle(Processor, InvertibleMixin):
     """Apply the `"TabICL" <https://arxiv.org/abs/2502.05564>`_ label view.
 
-    The unresolved processor represents the single-estimator view and is an
-    identity transform. Use :meth:`resolve` with ``estimator > 0`` to obtain a
-    concrete non-identity view.
+    The view is drawn once, at construction, and consumes a single draw
+    from the global CPU generator; seed with :func:`torch.manual_seed` to
+    make the view reproducible. Constructing the same recipe repeatedly
+    therefore yields ensemble members with independently drawn label
+    mappings, mirroring :class:`~sdm.processing.FeaturePermute`.
 
     Only numerical target columns are supported.
     Negative labels and NaN values are preserved unchanged.
 
     Args:
         method: Permutation strategy. ``"none"`` disables permutation,
-            ``"shift"`` uses deterministic cyclic shifts, and ``"random"``
-            uses a deterministic seed from ``generator``.
+            ``"shift"`` cyclically shifts the labels by a drawn offset, and
+            ``"random"`` remaps the labels with a drawn permutation.
         n_classes: Optional number of target classes. If omitted, ``fit``
             learns it from the non-negative labels in the input.
-        generator: Optional torch generator whose initial seed drives
-            ``"random"`` permutations without advancing generator state.
     """
 
     supported_stypes = frozenset({Stype.numerical})
@@ -37,8 +37,6 @@ class LabelShuffle(Processor, InvertibleMixin):
         method: LabelShuffleMethod = "shift",
         *,
         n_classes: int | None = None,
-        generator: torch.Generator | None = None,
-        _estimator: int = 0,
     ) -> None:
         super().__init__()
         if method not in {"shift", "random", "none"}:
@@ -47,12 +45,9 @@ class LabelShuffle(Processor, InvertibleMixin):
             )
         if n_classes is not None and n_classes < 0:
             raise ValueError("n_classes must be non-negative")
-        if _estimator < 0:
-            raise ValueError("estimator must be non-negative")
         self.method = method
         self.n_classes = n_classes
-        self.generator = generator
-        self._estimator = _estimator
+        self._draw = int(torch.randint(2**63 - 1, (1,)).item())
         self._fitted = n_classes is not None
 
     def _fit(self, input: TableTensor) -> None:
@@ -71,30 +66,8 @@ class LabelShuffle(Processor, InvertibleMixin):
 
         self.n_classes = inferred
 
-    def resolve(
-        self,
-        *,
-        estimator: int = 0,
-        generator: torch.Generator | None = None,
-    ) -> "LabelShuffle":
-        """Return a concrete label permutation for one estimator view.
-
-        Args:
-            estimator: Zero-based estimator index.
-            generator: Optional generator that overrides the configured one.
-
-        Returns:
-            The resolved label permutation.
-        """
-        return self.__class__(
-            method=self.method,
-            n_classes=self.n_classes,
-            generator=self.generator if generator is None else generator,
-            _estimator=estimator,
-        )
-
     def _transform(self, input: TableTensor) -> TableTensor:
-        """Map original label ids into the estimator-specific label space."""
+        """Map original label ids into the drawn label space."""
         numerical = self._map_labels(input.numerical, inverse=False)
         if numerical is input.numerical:
             return input
@@ -156,26 +129,23 @@ class LabelShuffle(Processor, InvertibleMixin):
 
     def _permutation(self, device: torch.device) -> Tensor:
         n_classes = 0 if self.n_classes is None else self.n_classes
-        if n_classes <= 1 or self._estimator == 0 or self.method == "none":
+        if n_classes <= 1 or self.method == "none":
             return torch.arange(n_classes, device=device)
 
         if self.method == "shift":
-            offset = self._estimator % n_classes
+            offset = self._draw % n_classes
             return (
                 torch.arange(n_classes, device=device) - offset
             ) % n_classes
 
-        # A CPU generator makes seeded views identical across CPU and CUDA.
+        # A CPU generator makes drawn views identical across CPU and CUDA.
         generator = torch.Generator(device="cpu")
-        generator.manual_seed(self._random_seed(n_classes))
+        generator.manual_seed(self._draw)
         return torch.randperm(n_classes, generator=generator).to(device=device)
 
-    def _random_seed(self, n_classes: int) -> int:
-        base_seed = (
-            0 if self.generator is None else self.generator.initial_seed()
-        )
-        return (base_seed + self._estimator * 1_000_003 + n_classes) % (
-            2**63 - 1
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}(method={self.method!r})"
         )
 
 
