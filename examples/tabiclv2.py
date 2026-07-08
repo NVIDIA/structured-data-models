@@ -13,7 +13,7 @@ table = TableTensor.from_pandas(
 )
 model = TabICLv2(device=device)
 
-# Default in-context learning forward pass
+# Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
         x=table.drop_columns("target"),
