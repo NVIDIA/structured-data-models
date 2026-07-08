@@ -106,23 +106,6 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         return self.fit(input).transform(input)
 
-    def resolve(
-        self,
-        *,
-        estimator: int = 0,
-        generator: torch.Generator | None = None,
-    ) -> Self:
-        """Return the concrete processor for a processing context.
-
-        Args:
-            estimator: Zero-based estimator index.
-            generator: Optional generator for stochastic processor resolution.
-
-        Returns:
-            The resolved processor.
-        """
-        return self
-
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"
 

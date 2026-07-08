@@ -37,19 +37,22 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
-{py:meth}`~sdm.processing.Processor.resolve` returns the concrete processor
-for a processing context. Plain processors return themselves; processors that
-depend on a view or estimator can override it. For example,
-{py:class}`~sdm.processing.FeaturePermute` preserves the single-estimator
-behavior when used directly and becomes a concrete non-identity view after
-`resolve(estimator=...)`. It accepts numerical-only tables; place
-{py:class}`~sdm.processing.ToNumerical` before it when features include
-categorical columns:
+Processors that vary per ensemble member draw their view once, at
+construction, from the global CPU generator -- the same principle as
+the planned `Choice` processor. Seed with `torch.manual_seed` to make
+the views reproducible; a recipe factory constructs one recipe per member,
+so every member draws an independent view.
+{py:class}`~sdm.processing.FeaturePermute` accepts numerical-only tables;
+place {py:class}`~sdm.processing.ToNumerical` before it when features
+include categorical columns:
 
 ```python
+import torch
+
 from sdm.processing import FeaturePermute
 
-feature_view = FeaturePermute(method="shift").resolve(estimator=1)
+torch.manual_seed(42)
+feature_view = FeaturePermute(method="shift")
 ```
 
 Fit the recipe pipelines on your labeled data and transform them in one call

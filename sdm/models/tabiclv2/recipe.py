@@ -55,7 +55,7 @@ def default_regression_recipe() -> Recipe:
             # (likely subsumed by SigmaClip); revisit after benchmarking.
             # Clip(min_value=-100.0, max_value=100.0),
             SigmaClip(threshold=4.0),
-            # FeaturePermute(method="latin"),
+            # FeaturePermute(method="shift"),
         ],
         target=[
             StandardScale(),
@@ -83,7 +83,7 @@ def default_regression_recipe() -> Recipe:
 #             # norm options: none, power, quantile, quantile_rtdl, robust
 #             Choice([Identity(), Quantile(output_distribution="normal")]),
 #             SigmaClip(threshold=4.0),
-#             FeaturePermute(method="latin"),
+#             FeaturePermute(method="shift"),
 #         ],
 #         target=[
 #             TaskDispatch({

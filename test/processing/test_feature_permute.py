@@ -35,17 +35,18 @@ def _mixed_table() -> TableTensor:
     )
 
 
-def test_feature_permute_default_single_estimator_is_identity() -> None:
+def test_feature_permute_none_is_identity() -> None:
     table = _table()
 
-    output = FeaturePermute().transform(table)
+    output = FeaturePermute(method="none").transform(table)
 
     assert output is table
 
 
-def test_feature_permute_resolved_shift_permutes_numerical_block() -> None:
+def test_feature_permute_shift_rotates_numerical_block() -> None:
     table = _table()
-    processor = FeaturePermute(method="shift").resolve(estimator=1)
+    torch.manual_seed(0)  # draws a cyclic offset of 1 for three columns
+    processor = FeaturePermute(method="shift")
 
     output = processor.transform(table)
 
@@ -57,9 +58,34 @@ def test_feature_permute_resolved_shift_permutes_numerical_block() -> None:
     )
 
 
-def test_feature_permute_inverse_restores_numerical_block() -> None:
+def test_feature_permute_same_global_seed_draws_same_view() -> None:
     table = _table()
-    pipeline = Sequential(FeaturePermute(method="shift").resolve(estimator=1))
+
+    torch.manual_seed(123)
+    first = FeaturePermute(method="random").transform(table)
+    torch.manual_seed(123)
+    second = FeaturePermute(method="random").transform(table)
+
+    assert isinstance(first, TableTensor)
+    assert isinstance(second, TableTensor)
+    assert first.columns == second.columns
+    assert torch.equal(first.numerical, second.numerical)
+
+
+def test_feature_permute_transform_is_deterministic_per_instance() -> None:
+    table = _table()
+    processor = FeaturePermute(method="random")
+
+    first = processor.transform(table)
+    second = processor.transform(table)
+
+    assert first.columns == second.columns
+    assert torch.equal(first.numerical, second.numerical)
+
+
+def test_feature_permute_shift_inverse_restores_numerical_block() -> None:
+    table = _table()
+    pipeline = Sequential(FeaturePermute(method="shift"))
 
     transformed = pipeline.transform(table)
     restored = pipeline.inverse_transform(transformed)
@@ -69,30 +95,9 @@ def test_feature_permute_inverse_restores_numerical_block() -> None:
     assert torch.equal(restored.numerical, table.numerical)
 
 
-def test_feature_permute_random_is_deterministic() -> None:
-    table = _table()
-    generator = torch.Generator().manual_seed(123)
-    processor = FeaturePermute(method="random", generator=generator).resolve(
-        estimator=1
-    )
-
-    first = processor.transform(table)
-    second = processor.transform(table)
-
-    assert isinstance(first, TableTensor)
-    assert isinstance(second, TableTensor)
-    assert first.columns == second.columns
-    assert torch.equal(first.numerical, second.numerical)
-
-
 def test_feature_permute_random_inverse_round_trips() -> None:
     table = _table()
-    generator = torch.Generator().manual_seed(123)
-    pipeline = Sequential(
-        FeaturePermute(method="random", generator=generator).resolve(
-            estimator=1
-        )
-    )
+    pipeline = Sequential(FeaturePermute(method="random"))
 
     transformed = pipeline.transform(table)
     restored = pipeline.inverse_transform(transformed)
@@ -109,7 +114,8 @@ def test_feature_permute_rejects_non_numerical_columns() -> None:
 
 def test_feature_permute_composes_after_to_numerical() -> None:
     table = _mixed_table()
-    processor = FeaturePermute(method="shift").resolve(estimator=1)
+    torch.manual_seed(0)  # draws a cyclic offset of 1 for five columns
+    processor = FeaturePermute(method="shift")
 
     output = Sequential(ToNumerical(), processor).transform(table)
     converted = ToNumerical().transform(table)
