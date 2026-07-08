@@ -22,10 +22,10 @@ class BaseModel(torch.nn.Module, ABC):
     def __init__(self) -> None:
         super().__init__()
 
-        # One cache per ensemble member.
-        self._caches: list[Cache] | None = None
-        # Fitted recipe reused across 'predict()' calls.
-        self._recipe: Recipe | None = None
+        # Fitted state reused across 'predict()' calls, holding shared
+        # metadata, the fitted recipe, and one key/value sub-cache per
+        # ensemble member.
+        self._cache: Cache | None = None
 
     @torch.inference_mode()
     def forward(
@@ -112,21 +112,25 @@ class BaseModel(torch.nn.Module, ABC):
         x, y = self._fit_recipe(x, y, recipe)
         x, y = self._preprocess(x, y)
         x = x[..., : y.size(-1), :]
-        caches: list[Cache] = []
+        members: list[Cache] = []
         for _ in range(num_estimators):
-            # TODO: Don't store y.dtype in every cache once we introduce a
-            # nested cache.
-            cache = Cache({"y.dtype": y.dtype})
-            self._forward(x, y, cache=cache)
-            cache.freeze()
-            caches.append(cache)
-        self._caches = caches
-        self._recipe = recipe
+            member = Cache()
+            self._forward(x, y, cache=member)
+            member.freeze()
+            members.append(member)
+        cache = Cache(
+            {
+                "y.dtype": y.dtype,
+                "recipe": recipe,
+                "members": tuple(members),
+            }
+        )
+        cache.freeze()
+        self._cache = cache
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
-        self._caches = None
-        self._recipe = None
+        self._cache = None
 
     @torch.inference_mode()
     def predict(
@@ -149,13 +153,14 @@ class BaseModel(torch.nn.Module, ABC):
             The prediction for ``[..., R_test]`` test rows, averaged across
             ensemble members when fitted with ``num_estimators > 1``.
         """
-        if self._caches is None:
+        if self._cache is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        if self._recipe is not None:
+        recipe = cast(Recipe | None, self._cache["recipe"])
+        if recipe is not None:
             if not isinstance(x, TableTensor):
                 raise ValueError(
                     f"Expected 'x' to be a 'TableTensor' when fitted with a "
@@ -164,18 +169,18 @@ class BaseModel(torch.nn.Module, ABC):
             # Recipe steps run in normal mode since 'TableTensor' does not
             # support structural ops on inference tensors:
             with torch.inference_mode(False):
-                x = self._recipe.features.transform(x)
+                x = recipe.features.transform(x)
 
         y = torch.empty(
             (*x.size()[:-2], 0),
-            dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
+            dtype=cast(torch.dtype, self._cache["y.dtype"]),
             device=x.device,
         )
         x, y = self._preprocess(x, y)
         outs: list[Tensor] = []
-        for cache in self._caches:
-            outs.append(self._forward(x, y, cache=cache))
-        return self._postprocess(torch.stack(outs).mean(dim=0), self._recipe)
+        for member in cast(tuple[Cache, ...], self._cache["members"]):
+            outs.append(self._forward(x, y, cache=member))
+        return self._postprocess(torch.stack(outs).mean(dim=0), recipe)
 
     # Helpers #################################################################
 
