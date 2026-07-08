@@ -37,12 +37,6 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
-{py:class}`~sdm.processing.ConstantFilter` learns which numerical,
-categorical, and datetime columns have too few unique values and removes them
-while keeping table blocks and column metadata aligned. Put it early in the
-features pipeline, before transforms that should fit the filtered feature
-space.
-
 {py:meth}`~sdm.processing.Processor.resolve` returns the concrete processor
 for a processing context. Plain processors return themselves; processors that
 depend on a view or estimator can override it. For example,
