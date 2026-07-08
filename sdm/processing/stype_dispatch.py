@@ -3,7 +3,6 @@ from typing import Literal, cast
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import Stype, StypeLike
 from sdm.processing.base import Processor
@@ -101,15 +100,14 @@ class StypeDispatch(Processor):
             torch.cat(cast(list[Tensor], outputs), dim=-1),
         )
 
-    def fit(self, input: TableTensor) -> Self:  # noqa: D102
+    def _fit(self, input: TableTensor) -> None:
+        # TODO: Move this input-aware check to pipeline validation.
         self._check_remainder(self._remainder_stypes(input))
         for stype, processor in self._processors_by_stype():
             route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             processor.fit(route_input)
-        self._fitted = True
-        return self
 
     def _transform(self, input: TableTensor) -> TableTensor:
         remainder_outputs = self._remainder_outputs(input)
