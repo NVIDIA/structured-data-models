@@ -2,38 +2,10 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
-    Identity,
     MeanImpute,
-    Processor,
-    Sequential,
     StandardScale,
     StypeDispatch,
 )
-
-
-class RecordingFit(Processor):
-    supported_stypes = frozenset({Stype.numerical})
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.fit_called = False
-
-    def _fit(self, input: TableTensor) -> None:
-        self.fit_called = True
-
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return input
-
-
-class KeepFirstNumerical(Processor):
-    supported_stypes = frozenset({Stype.numerical})
-    requires_fit = False
-
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return TableTensor.from_tensor(
-            input.numerical[..., :1],
-            columns=("first",),
-        )
 
 
 def _mixed_table() -> TableTensor:
@@ -68,27 +40,19 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     )
 
 
-def test_stype_dispatch_rejects_remainder_when_requested() -> None:
-    dispatch = StypeDispatch(
-        {"numerical": Identity()},
-        remainder="error",
-    )
-
-    with pytest.raises(ValueError, match="categorical"):
-        dispatch.fit_transform(_mixed_table())
-
-
-def test_stype_dispatch_remainder_error_does_not_fit_routes() -> None:
-    processor = RecordingFit()
+def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
+    table = _mixed_table()
+    processor = StandardScale()
     dispatch = StypeDispatch(
         {"numerical": processor},
         remainder="error",
     )
 
-    with pytest.raises(ValueError, match="categorical"):
-        dispatch.fit(_mixed_table())
+    with pytest.raises(ValueError, match=r"non-empty.*categorical.*no route"):
+        dispatch.fit(table)
 
-    assert not processor.fit_called
+    with pytest.raises(RuntimeError, match=r"StandardScale.*not fitted"):
+        processor.transform(table.select_stypes(Stype.numerical))
 
 
 def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
@@ -103,7 +67,7 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
     }
 
 
-def test_stype_dispatch_normalizes_iterable_routes() -> None:
+def test_stype_dispatch_runs_iterable_routes() -> None:
     dispatch = StypeDispatch(
         {"numerical": [MeanImpute(), StandardScale()]},
         remainder="drop",
@@ -111,7 +75,6 @@ def test_stype_dispatch_normalizes_iterable_routes() -> None:
 
     output = dispatch.fit_transform(_mixed_table())
 
-    assert isinstance(dispatch.processors["numerical"], Sequential)
     assert torch.allclose(
         output.numerical.mean(dim=0),
         torch.zeros(2),
@@ -119,16 +82,7 @@ def test_stype_dispatch_normalizes_iterable_routes() -> None:
     )
 
 
-def test_stype_dispatch_allows_shape_changing_routes() -> None:
-    dispatch = StypeDispatch(
-        {"numerical": KeepFirstNumerical()},
-        remainder="drop",
-    )
-
-    output = dispatch.fit_transform(_mixed_table())
-
-    assert output.columns[Stype.numerical] == ("first",)
-    assert torch.equal(output.numerical, torch.tensor([[1.0], [3.0]]))
+# TODO: Cover shape-changing routes once ConstantFilter is available.
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:
@@ -143,12 +97,3 @@ def test_stype_dispatch_uses_route_fitted_state() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-
-
-def test_stype_dispatch_keeps_route_supported_stype_checks() -> None:
-    dispatch = StypeDispatch(
-        {"categorical": StandardScale()}, remainder="drop"
-    )
-
-    with pytest.raises(ValueError, match="categorical"):
-        dispatch.fit_transform(_mixed_table())

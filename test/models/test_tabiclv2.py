@@ -1,6 +1,6 @@
 import pytest
 import torch
-from sdm import TableTensor
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.models import TabICLv2
 from sdm.processing import Sequential
 from sdm.testing import withCUDA
@@ -49,8 +49,16 @@ def test_tabiclv2(
 def test_default_recipe_regression_roundtrip() -> None:
     recipe = TabICLv2(pretrained=False).default_recipe()
 
-    features = TableTensor.from_tensor(
-        torch.randn(16, 4), columns=["a", "b", "c", "d"]
+    features = TableTensor(
+        columns={
+            "numerical": ("a", "b", "c", "d"),
+            "categorical": ("kind",),
+        },
+        numerical=torch.randn(16, 4),
+        categorical=CategoricalTensor(
+            data=(torch.arange(16, dtype=torch.int32) % 2).unsqueeze(-1),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
     )
     target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
 
@@ -59,6 +67,7 @@ def test_default_recipe_regression_roundtrip() -> None:
 
     assert model_features.size() == features.size()
     assert model_target.size() == target.size()
+    assert model_features.categorical.size(-1) == 0
 
     assert isinstance(recipe.target, Sequential)
     restored = recipe.target.inverse_transform(model_target)
