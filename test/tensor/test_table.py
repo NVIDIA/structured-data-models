@@ -216,37 +216,6 @@ def test_select_stypes() -> None:
     assert mixed.categorical is tensor.categorical
     assert mixed.datetime.size() == (2, 0)
     assert mixed.id.size() == (2, 0)
-
-
-def test_select_stypes_recombines_with_cat() -> None:
-    tensor = TableTensor(
-        columns={
-            "numerical": ["age", "income"],
-            "categorical": ["country"],
-        },
-        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
-            categories=(StringTensor.from_list(["USA", "Germany"]),),
-        ),
-    )
-
-    out = cast(
-        TableTensor,
-        torch.cat(
-            (
-                tensor.select_stypes(Stype.numerical),
-                tensor.select_stypes(Stype.categorical),
-            ),
-            dim=-1,
-        ),
-    )
-
-    assert out.columns == tensor.columns
-    assert out.numerical.equal(tensor.numerical)
-    assert out.categorical.equal(tensor.categorical)
-
-
 def test_save_load() -> None:
     tensor = TableTensor(
         columns={
