@@ -384,6 +384,32 @@ def test_sdpa_batch_size_limit_bypass(
     assert sdpa.call_args.kwargs["query"].size(0) == 5
 
 
+def test_batch_size_limit_nested_bypass() -> None:
+    query = torch.nested.nested_tensor_from_jagged(
+        values=torch.randn(5, 8),
+        offsets=torch.tensor([0, 2, 5]),
+    )
+    attention = Attention(channels=8, num_query_heads=2).eval()
+    block = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+    ).eval()
+
+    with torch.no_grad():
+        expected_attention = attention(query=query)
+        expected_block = block(query=query)
+        actual_attention = attention(query=query, batch_size_limit=1)
+        actual_block = block(query=query, batch_size_limit=1)
+
+    assert actual_attention.is_nested
+    assert actual_block.is_nested
+    torch.testing.assert_close(
+        actual_attention.values(), expected_attention.values()
+    )
+    torch.testing.assert_close(actual_block.values(), expected_block.values())
+
+
 @withCUDA
 @pytest.mark.parametrize(
     "num_key_value_heads",

@@ -18,6 +18,20 @@ def _validate_batch_size_limit(batch_size_limit: int | None) -> None:
         raise ValueError("`batch_size_limit` must be positive")
 
 
+def _is_nested(*tensors: Tensor | None) -> bool:
+    return any(tensor is not None and tensor.is_nested for tensor in tensors)
+
+
+def _attention_is_nested(
+    query: Tensor,
+    key_value: Tensor | KVCacheEntry | None,
+    attn_mask: Tensor | None,
+) -> bool:
+    if isinstance(key_value, KVCacheEntry):
+        return _is_nested(query, key_value.key, key_value.value, attn_mask)
+    return _is_nested(query, key_value, attn_mask)
+
+
 def _batch_chunk(
     tensor: Tensor,
     batch_shape: torch.Size,
@@ -360,7 +374,8 @@ class SDPA(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             batch_size_limit: Maximum number of broadcast batch elements
                 processed at once during non-compiled evaluation. ``None``
-                disables batch chunking.
+                disables batch chunking. Nested tensor inputs execute
+                unchunked.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
@@ -392,6 +407,7 @@ class SDPA(torch.nn.Module):
 
         if (
             batch_size_limit is not None
+            and not _is_nested(query, key, value, attn_mask)
             and not self.training
             and not torch.compiler.is_compiling()
         ):
@@ -599,7 +615,8 @@ class Attention(torch.nn.Module):
                 during non-compiled evaluation. ``None`` disables batch
                 chunking. Cache-producing calls are chunked only when the
                 key/value batch shape already matches the broadcast batch
-                shape, preserving the cache shape.
+                shape, preserving the cache shape. Nested tensor inputs
+                execute unchunked.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -610,6 +627,7 @@ class Attention(torch.nn.Module):
         _validate_batch_size_limit(batch_size_limit)
         if (
             batch_size_limit is not None
+            and not _attention_is_nested(query, key_value, attn_mask)
             and not self.training
             and not torch.compiler.is_compiling()
         ):
@@ -797,7 +815,8 @@ class TransformerBlock(torch.nn.Module):
                 during non-compiled evaluation. ``None`` disables batch
                 chunking. Cache-producing calls are chunked only when the
                 key/value batch shape already matches the broadcast batch
-                shape, preserving the cache shape.
+                shape, preserving the cache shape. Nested tensor inputs
+                execute unchunked.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -808,6 +827,7 @@ class TransformerBlock(torch.nn.Module):
         _validate_batch_size_limit(batch_size_limit)
         if (
             batch_size_limit is not None
+            and not _attention_is_nested(query, key_value, attn_mask)
             and not self.training
             and not torch.compiler.is_compiling()
         ):
