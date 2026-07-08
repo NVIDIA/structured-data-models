@@ -116,10 +116,10 @@ class StringTensor(VarLenTensor):
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
     ) -> "StringTensor":
-        r"""Create tensor from a string ``cudf`` series or index.
+        r"""Create tensor from a string :class:`cudf.Series` or index.
 
         Args:
-            values: The string ``cudf`` series or index.
+            values: The string :class:`cudf.Series` or :class:`cudf.Index`.
             size: The shape of the tensor.
             device: The device.
         """
