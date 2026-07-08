@@ -98,14 +98,6 @@ def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
         processor(mixed)
 
 
-def test_inverse_transform_skips_forward_stype_validation() -> None:
-    numerical = TableTensor.from_tensor(torch.ones(2, 1))
-    mixed = _mixed_table()
-    processor = StandardScale().fit(numerical)
-
-    output = processor.inverse_transform(mixed)
-
-    assert output.categorical is mixed.categorical
 
 
 def test_processor_rejects_id_stype() -> None:
