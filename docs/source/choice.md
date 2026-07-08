@@ -456,6 +456,42 @@ Resolution is device-independent and happens before fitting. The concrete
 processor follows normal `torch.nn.Module.to(...)` behavior. No table or model
 tensor is moved to CPU for selection.
 
+## Shipped First Version
+
+This draft ships an interim `Choice` ahead of the recipe-resolution phase.
+The shipped processor selects one option uniformly at random **at
+construction** and keeps only the selected option as a registered submodule.
+Unselected options are discarded immediately, so they are never fitted,
+moved between devices, or checkpointed:
+
+```python
+def make_member() -> Recipe:
+    return Recipe(
+        features=[
+            MeanImpute(),
+            Choice([Identity(), Quantile(output_distribution="normal")]),
+            StandardScale(epsilon=1e-6),
+        ],
+    )
+
+torch.manual_seed(123)
+members = [make_member() for _ in range(8)]
+```
+
+The recipe factory is the template: constructing the recipe again draws a
+new selection, so ensemble members are independent by construction and no
+copying or resolution step is required. Selection draws from the global
+CPU generator and `torch.manual_seed` makes it reproducible. Copying a
+built recipe (for example with `copy.deepcopy`) duplicates the
+already-made selection; copies are for reuse, not for diversity.
+
+The construction-time draw is interim behavior, and two extensions are
+planned. First, a keyword-only `generator` argument can be added without
+breaking callers, isolating selection from unrelated global RNG use.
+Second, once recipe resolution lands, `Choice` becomes the unresolved
+template described above: construction stops consuming RNG and
+`Recipe.resolve` performs the draw instead.
+
 ## Implementation Plan
 
 1. Add recursive fit-consumption tracking and change `Sequential.steps` to a
