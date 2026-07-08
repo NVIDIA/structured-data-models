@@ -17,16 +17,11 @@ class BaseModel(torch.nn.Module, ABC):
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
-
-    Args:
-        recipe: The pre- and postprocessing recipe of the model.
-            If ``None``, defaults to :meth:`default_recipe`.
     """
 
-    def __init__(self, recipe: Recipe | None = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
-        self.recipe = recipe if recipe is not None else self.default_recipe()
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
 
@@ -36,6 +31,7 @@ class BaseModel(torch.nn.Module, ABC):
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
         *,
+        recipe: Recipe | None = None,
         num_estimators: int = 1,
     ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
@@ -47,6 +43,9 @@ class BaseModel(torch.nn.Module, ABC):
                 examples.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            recipe: The pre- and postprocessing recipe applied around the
+                model. If ``None``, no recipe is applied.
+                Recipe application is not implemented yet.
             num_estimators: The number of ensemble members ``E``.
                 The forward pass runs once per member, and predictions are
                 averaged across members.
@@ -60,6 +59,7 @@ class BaseModel(torch.nn.Module, ABC):
                 f"(got {num_estimators})"
             )
 
+        # TODO Apply 'recipe' to pre- and postprocess data around the model.
         x, y = self._preprocess(x, y)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
@@ -74,6 +74,7 @@ class BaseModel(torch.nn.Module, ABC):
         x: Tensor | TableTensor,  # [..., R_train, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
         *,
+        recipe: Recipe | None = None,
         num_estimators: int = 1,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -86,6 +87,9 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            recipe: The pre- and postprocessing recipe applied around the
+                model. If ``None``, no recipe is applied.
+                Recipe application is not implemented yet.
             num_estimators: The number of ensemble members ``E``.
                 In-context examples are fitted once per member, and subsequent
                 :meth:`predict` calls average predictions across members.
@@ -97,6 +101,7 @@ class BaseModel(torch.nn.Module, ABC):
             )
 
         self.clear()
+        # TODO Apply 'recipe' to pre- and postprocess data around the model.
         x, y = self._preprocess(x, y)
         x = x[..., : y.size(-1), :]
         caches: list[Cache] = []

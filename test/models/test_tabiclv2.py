@@ -77,11 +77,18 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
 def test_tabiclv2_recipe() -> None:
     model = TabICLv2(pretrained=False)
-    assert repr(model.recipe) == repr(model.default_recipe())
+
+    R, C, R_train = 8, 6, 5
+    x = torch.randn(R, C)
+    y = torch.randint(0, 10, (R_train,))
 
     recipe = Recipe()
-    model = TabICLv2(pretrained=False, recipe=recipe)
-    assert model.recipe is recipe
+    out = model(x, y, recipe=recipe)
+    assert out.size() == (R - R_train, 10)
+
+    model.fit(x[:R_train], y, recipe=recipe)
+    torch.testing.assert_close(model.predict(x[R_train:]), out)
+    model.clear()
 
 
 def test_default_recipe_regression_roundtrip() -> None:
