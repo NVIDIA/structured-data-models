@@ -63,14 +63,17 @@ class TabICLv2(BaseModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        recipe: The pre- and postprocessing recipe of the model.
+            If ``None``, defaults to :meth:`default_recipe`.
     """
 
     def __init__(
         self,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        recipe: Recipe | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(recipe=recipe)
 
         self.cls_model = _TabICLv2(
             num_classes=10,

@@ -17,11 +17,16 @@ class BaseModel(torch.nn.Module, ABC):
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
+
+    Args:
+        recipe: The pre- and postprocessing recipe of the model.
+            If ``None``, defaults to :meth:`default_recipe`.
     """
 
-    def __init__(self):
+    def __init__(self, recipe: Recipe | None = None) -> None:
         super().__init__()
 
+        self.recipe = recipe if recipe is not None else self.default_recipe()
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
 

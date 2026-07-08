@@ -4,7 +4,7 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Sequential
+from sdm.processing import Recipe, Sequential
 from sdm.testing import withCUDA
 
 
@@ -73,6 +73,15 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
     with pytest.raises(ValueError, match="num_estimators"):
         model.fit(x[..., :R_train, :], y, num_estimators=0)
+
+
+def test_tabiclv2_recipe() -> None:
+    model = TabICLv2(pretrained=False)
+    assert repr(model.recipe) == repr(model.default_recipe())
+
+    recipe = Recipe()
+    model = TabICLv2(pretrained=False, recipe=recipe)
+    assert model.recipe is recipe
 
 
 def test_default_recipe_regression_roundtrip() -> None:
