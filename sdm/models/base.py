@@ -42,16 +42,23 @@ class BaseModel(torch.nn.Module, ABC):
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
             num_estimators: The number of ensemble members ``E``.
-                Inputs are expanded along a new leading ensemble dimension of
-                size ``E``, and predictions are averaged across members.
+                The forward pass runs once per member, and predictions are
+                averaged across members.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
+        if num_estimators < 1:
+            raise ValueError(
+                f"Expected 'num_estimators' to be a positive integer "
+                f"(got {num_estimators})"
+            )
+
         x, y = self._preprocess(x, y)
-        x, y = self._expand_estimators(x, y, num_estimators)
-        out = self._forward(x, y, cache=None)
-        return out.mean(dim=0) if num_estimators > 1 else out
+        # TODO Create an ensemble dimension to process across ensemble
+        # members for better efficiency.
+        outs = [self._forward(x, y, cache=None) for _ in range(num_estimators)]
+        return torch.stack(outs).mean(dim=0)
 
     @torch.inference_mode()
     def fit(
@@ -76,6 +83,12 @@ class BaseModel(torch.nn.Module, ABC):
                 dimension of size ``E``, and subsequent :meth:`predict` calls
                 average predictions across members.
         """
+        if num_estimators < 1:
+            raise ValueError(
+                f"Expected 'num_estimators' to be a positive integer "
+                f"(got {num_estimators})"
+            )
+
         self.clear()
         x, y = self._preprocess(x, y)
         cache = Cache(
@@ -188,12 +201,6 @@ class BaseModel(torch.nn.Module, ABC):
         y: Tensor,  # [..., R_train]
         num_estimators: int,
     ) -> tuple[Tensor, Tensor]:  # [E, ..., R, C], [E, ..., R_train]
-        if num_estimators < 1:
-            raise ValueError(
-                f"Expected 'num_estimators' to be a positive integer "
-                f"(got {num_estimators})"
-            )
-
         if num_estimators == 1:
             return x, y
 
