@@ -71,6 +71,10 @@ def test_edge_indices(data: RelationalData) -> None:
     )
 
 
+def test_relationships_are_stored_as_tuple(data: RelationalData) -> None:
+    assert isinstance(data.relationships, tuple)
+
+
 def test_homogeneous_graph(data: RelationalData) -> None:
     graph = data.homogeneous_graph()
 
