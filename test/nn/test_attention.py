@@ -19,6 +19,7 @@ def reference_sdpa(
     key: Tensor,
     value: Tensor,
     attn_mask: Tensor | None = None,
+    scale: float | None = None,
 ) -> Tensor:
     # Expand KV for MQA and GQA
     groups = query.size(-2) // key.size(-2)
@@ -29,6 +30,7 @@ def reference_sdpa(
         key=key.transpose(-3, -2),
         value=value.transpose(-3, -2),
         attn_mask=attn_mask.unsqueeze(-3) if attn_mask is not None else None,
+        scale=scale,
     ).transpose(-3, -2)
 
 
@@ -97,6 +99,31 @@ def test_sdpa(
     out = module(query=query, key=key, value=value)
 
     expected = reference_sdpa(query=query, key=key, value=value)
+    torch.testing.assert_close(out, expected)
+
+    # Apply an explicit scale and additive attention mask.
+    scale = 1.0
+    scaled_module = SDPA(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+        scale=scale,
+    )
+    additive_mask = torch.zeros(4, 5, device=device)
+    additive_mask[:, -1] = float("-inf")
+    out = scaled_module(
+        query=query,
+        key=key,
+        value=value,
+        attn_mask=additive_mask,
+    )
+    expected = reference_sdpa(
+        query=query,
+        key=key,
+        value=value,
+        attn_mask=additive_mask,
+        scale=scale,
+    )
     torch.testing.assert_close(out, expected)
 
     # Broadcast batch dimensions and apply a boolean attention mask.
@@ -239,17 +266,50 @@ def test_sdpa_errors() -> None:
 
     with pytest.raises(
         ValueError,
-        match=r"`attn_mask` must have dtype torch\.bool",
+        match="must have boolean or floating-point dtype",
     ):
         module(
             query=query,
             key=key,
             value=value,
-            attn_mask=torch.ones(1, 2, 2, dtype=torch.float32),
+            attn_mask=torch.ones(1, 2, 2, dtype=torch.int64),
         )
 
     with pytest.raises(ValueError, match="must be divisible"):
         SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
+
+    with pytest.raises(ValueError, match="finite and positive"):
+        SDPA(channels=4, num_query_heads=4, scale=0.0)
+
+
+def test_sdpa_qassmax_additive_mask_matches_boolean_mask() -> None:
+    module = SDPA(
+        channels=3,
+        num_query_heads=2,
+        qassmax=True,
+        scale=1.0,
+    )
+    query = torch.randn(2, 4, 2, 3)
+    key = torch.randn(2, 5, 2, 3)
+    value = torch.randn(2, 5, 2, 3)
+    boolean_mask = torch.rand(2, 4, 5) > 0.25
+    additive_mask = torch.zeros_like(boolean_mask, dtype=query.dtype)
+    additive_mask = additive_mask.masked_fill(~boolean_mask, float("-inf"))
+
+    boolean_output = module(
+        query=query,
+        key=key,
+        value=value,
+        attn_mask=boolean_mask,
+    )
+    additive_output = module(
+        query=query,
+        key=key,
+        value=value,
+        attn_mask=additive_mask,
+    )
+
+    torch.testing.assert_close(additive_output, boolean_output)
 
 
 @withCUDA
@@ -404,11 +464,11 @@ def test_attention_errors() -> None:
 
     with pytest.raises(
         ValueError,
-        match=r"`attn_mask` must have dtype torch\.bool",
+        match="must have boolean or floating-point dtype",
     ):
         module(
             query=query,
-            attn_mask=torch.ones(2, 4, 4, dtype=torch.float32),
+            attn_mask=torch.ones(2, 4, 4, dtype=torch.int64),
         )
 
     with pytest.raises(ValueError, match="must be divisible"):

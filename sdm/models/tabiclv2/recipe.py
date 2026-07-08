@@ -22,6 +22,7 @@ commented placeholders.
 """
 
 from sdm.processing import (
+    Clamp,
     Identity,
     MeanImpute,
     Recipe,
@@ -51,9 +52,7 @@ def default_regression_recipe() -> Recipe:
             MeanImpute(),
             # ConstantFilter(),
             StandardScale(epsilon=1e-6),
-            # TabICL also clips z-scores to [-100, 100] here; left out for now
-            # (likely subsumed by SigmaClip); revisit after benchmarking.
-            # Clip(min_value=-100.0, max_value=100.0),
+            Clamp(min_value=-100.0, max_value=100.0),
             SigmaClip(threshold=4.0),
             # FeaturePermute(method="latin"),
         ],

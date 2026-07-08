@@ -1,7 +1,73 @@
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from torch import Tensor
+
+
+def apply_rotary_embedding(
+    input: Tensor,
+    frequencies: Tensor,
+    *,
+    layout: Literal["split_half", "interleaved"] = "split_half",
+) -> Tensor:
+    """Apply rotary position embeddings along the sequence dimension.
+
+    Args:
+        input: Query or key tensor with shape ``[..., S, H, C]``. ``S`` is
+            sequence length, ``H`` is the number of heads, and ``C`` is the
+            number of channels per head.
+        frequencies: Inverse frequencies with shape ``[C // 2]``.
+        layout: Channel-pairing convention. ``"split_half"`` pairs the first
+            and second channel halves; ``"interleaved"`` pairs adjacent even
+            and odd channels.
+
+    Returns:
+        Tensor with shape ``[..., S, H, C]`` and the input dtype.
+    """
+    if input.size(-1) != 2 * frequencies.numel():
+        raise ValueError(
+            f"Expected {2 * frequencies.numel()} channels, "
+            f"got {input.size(-1)}"
+        )
+    if layout not in ("split_half", "interleaved"):
+        raise ValueError(f"Unsupported rotary layout: {layout!r}")
+
+    sequence_length = input.size(-3)
+    positions = torch.arange(
+        sequence_length,
+        device=input.device,
+        dtype=torch.float32,
+    )
+    angles = torch.outer(positions, frequencies.float())
+    sin = angles.sin().to(input.dtype)
+    cos = angles.cos().to(input.dtype)
+
+    if layout == "interleaved":
+        sin = sin.repeat_interleave(2, dim=-1)
+        cos = cos.repeat_interleave(2, dim=-1)
+        broadcast_shape = (1,) * (input.dim() - 3) + (
+            sequence_length,
+            1,
+            input.size(-1),
+        )
+        sin = sin.view(broadcast_shape)
+        cos = cos.view(broadcast_shape)
+        even, odd = input[..., 0::2], input[..., 1::2]
+        rotated = torch.stack((-odd, even), dim=-1).reshape_as(input)
+        return input * cos + rotated * sin
+
+    broadcast_shape = (1,) * (input.dim() - 3) + (
+        sequence_length,
+        1,
+        frequencies.numel(),
+    )
+    sin = sin.view(broadcast_shape)
+    cos = cos.view(broadcast_shape)
+    first, second = input.chunk(2, dim=-1)
+    return torch.cat(
+        [first * cos - second * sin, second * cos + first * sin],
+        dim=-1,
+    )
 
 
 class RotaryEmbedding(torch.nn.Module):
@@ -53,21 +119,8 @@ class RotaryEmbedding(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., S, H, C]``.
         """
-        if x.size(-1) != 2 * self.inv_freq.size(-1):
-            raise ValueError(
-                f"Expected {2 * self.inv_freq.size(-1)} channels, "
-                f"got {x.size(-1)}",
-            )
-
-        seq = torch.arange(x.size(-3), device=x.device, dtype=torch.float32)
-        freq = seq.view(-1, 1) * self.inv_freq.view(1, -1)  # [S, C // 2]
-        sin = freq.sin()[:, None, :].to(x.dtype)  # [S, 1, C // 2]
-        cos = freq.cos()[:, None, :].to(x.dtype)  # [S, 1, C // 2]
-
-        return torch.cat(
-            [
-                x[..., : cos.size(-1)] * cos - x[..., sin.size(-1) :] * sin,
-                x[..., cos.size(-1) :] * cos + x[..., : sin.size(-1)] * sin,
-            ],
-            dim=-1,
+        return apply_rotary_embedding(
+            x,
+            self.inv_freq,
+            layout="split_half",
         )

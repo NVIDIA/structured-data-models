@@ -38,6 +38,7 @@ dependencies = [
     "numpy",
     "pyarrow",
     "huggingface_hub",
+    "safetensors",
     "typing_extensions",
 ]
 

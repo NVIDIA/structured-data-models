@@ -1,5 +1,6 @@
 """Attention modules for structured tensor models."""
 
+import math
 from typing import Any, Literal, cast, overload
 
 import torch
@@ -8,7 +9,7 @@ from torch import Tensor
 from torch.nn import GELU, LayerNorm, Linear, Sequential
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import RotaryEmbedding
+from sdm.nn.rope import RotaryEmbedding
 
 
 class QASSMax(torch.nn.Module):
@@ -121,6 +122,8 @@ class SDPA(torch.nn.Module):
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries via :class:`QASSMax`.
+        scale: Optional explicit scale applied to query-key logits. The
+            default uses PyTorch's ``1 / sqrt(channels)`` scaling.
         device: The device.
         dtype: The dtype.
     """
@@ -131,6 +134,7 @@ class SDPA(torch.nn.Module):
         num_query_heads: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -142,11 +146,14 @@ class SDPA(torch.nn.Module):
                 f"`num_query_heads` ({num_query_heads}) must be divisible by "
                 f"`num_key_value_heads` ({num_key_value_heads})"
             )
+        if scale is not None and (not math.isfinite(scale) or scale <= 0):
+            raise ValueError("`scale` must be finite and positive")
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_query_heads = num_query_heads
         self.num_key_value_heads = num_key_value_heads
+        self.scale = scale
         self.qassmax: QASSMax | None = None
         if qassmax:
             self.qassmax = QASSMax(
@@ -176,8 +183,9 @@ class SDPA(torch.nn.Module):
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Boolean or additive attention mask with shape
+                ``[..., Q, KV]``. Boolean entries set to ``True`` participate
+                in attention.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
@@ -195,14 +203,24 @@ class SDPA(torch.nn.Module):
             and seqused_key_value.dtype != torch.int32
         ):
             raise ValueError("`seqused_key_value` must have dtype torch.int32")
-        if attn_mask is not None and attn_mask.dtype != torch.bool:
-            raise ValueError("`attn_mask` must have dtype torch.bool")
+        if (
+            attn_mask is not None
+            and attn_mask.dtype != torch.bool
+            and not attn_mask.is_floating_point()
+        ):
+            raise ValueError(
+                "`attn_mask` must have boolean or floating-point dtype"
+            )
 
         if self.qassmax is not None:
             if seqused_key_value is not None:
                 key_len = seqused_key_value.unsqueeze(-1)
             elif attn_mask is not None and attn_mask.size(-1) > 1:
-                key_len = attn_mask.sum(dim=-1)
+                key_len = (
+                    attn_mask.sum(dim=-1)
+                    if attn_mask.dtype == torch.bool
+                    else attn_mask.isfinite().sum(dim=-1)
+                )
             else:
                 key_len = key.size(-3)
             query = self.qassmax(query, key_len=key_len)
@@ -241,6 +259,7 @@ class SDPA(torch.nn.Module):
             if attn_mask is not None
             else None,
             enable_gqa=self.num_query_heads != self.num_key_value_heads,
+            scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
@@ -367,8 +386,9 @@ class Attention(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Boolean or additive attention mask with shape
+                ``[..., Q, KV]``. Boolean entries set to ``True`` participate
+                in attention.
             rope: Rotary Positional Embedding applied after query/key
                 projection.
             return_key_value: Whether to return the computed key and value
@@ -535,8 +555,9 @@ class TransformerBlock(torch.nn.Module):
                 If omitted, ``query`` is used for self-attention.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
-            attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
-                Entries set to ``True`` participate in attention.
+            attn_mask: Boolean or additive attention mask with shape
+                ``[..., Q, KV]``. Boolean entries set to ``True`` participate
+                in attention.
             rope: Rotary Positional Embedding applied after query/key
                 projection.
             return_key_value: Whether to return the computed key and value
