@@ -463,7 +463,7 @@ class VarLenTensor(Tensor):
         return self._data.is_shared() and self._offset.is_shared()
 
     @override
-    def share_memory_(self) -> VarLenTensor:
+    def share_memory_(self) -> Self:
         self._data.share_memory_()
         self._offset.share_memory_()
         return self
@@ -483,12 +483,12 @@ class VarLenTensor(Tensor):
         self._data.requires_grad_(requires_grad)
 
     @override
-    def requires_grad_(self, mode: bool = True) -> VarLenTensor:
+    def requires_grad_(self, mode: bool = True) -> Self:
         self._data.requires_grad_(mode)
         return self
 
     @override
-    def detach_(self) -> VarLenTensor:
+    def detach_(self) -> Self:
         raise RuntimeError(
             f"Can't detach a '{self.__class__.__name__} in-place. Use "
             f"'detach() instead."
