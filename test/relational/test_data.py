@@ -71,6 +71,16 @@ def test_edge_indices(data: RelationalData) -> None:
     )
 
 
+def test_relationships_cannot_be_modified(data: RelationalData) -> None:
+    num_relationships = len(data.relationships)
+    relationships = data.relationships
+
+    # A list alias is mutated in place, while a tuple alias is rebound.
+    relationships += data.relationships[:1]
+
+    assert len(data.relationships) == num_relationships
+
+
 def test_homogeneous_graph(data: RelationalData) -> None:
     graph = data.homogeneous_graph()
 
