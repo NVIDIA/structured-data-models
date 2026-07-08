@@ -15,17 +15,19 @@ Planned, staged towards one task-aware recipe:
   dispatching the target and output roles per task with ``TaskDispatch``.
   The end-state is sketched (commented) at the bottom of this module.
 
-Steps that need processors not implemented yet (``Identity``,
-``ConstantFilter``, ``FeaturePermute``, ``LabelShuffle``, ``Choice``,
-``TaskDispatch``) are kept as commented placeholders.
+Steps that need processors not implemented yet (``ConstantFilter``,
+``FeaturePermute``, ``LabelShuffle``, ``Choice``, ``TaskDispatch``) are kept as
+commented placeholders.
 
 """
 
 from sdm.processing import (
+    Identity,
     MeanImpute,
     Recipe,
     SigmaClip,
     StandardScale,
+    StypeDispatch,
     ToNumerical,
 )
 
@@ -33,17 +35,19 @@ from sdm.processing import (
 def default_regression_recipe() -> Recipe:
     """Return the default single-estimator regression recipe.
 
-    Mirrors the original TabICLv2 regressor: categorical columns are first
-    folded into the numerical block (:class:`~sdm.processing.ToNumerical`),
-    followed by mean imputation (``SimpleImputer``), standard scaling
-    (``CustomStandardScaler``), and two-stage 4-sigma outlier clipping
-    (``OutlierRemover``) on the features; the target is standard-scaled and its
-    inverse maps predictions back to the original space. Commented lines mark
-    processors not implemented yet.
+    Mirrors the original TabICLv2 regressor: categorical columns are routed
+    through :class:`~sdm.processing.ToNumerical`, followed by mean imputation
+    (``SimpleImputer``), standard scaling (``CustomStandardScaler``), and
+    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the features.
+    The target is standard-scaled and its inverse maps predictions back to the
+    original space. Commented lines mark processors not implemented yet.
     """
     return Recipe(
         features=[
-            ToNumerical(),
+            StypeDispatch(
+                numerical=Identity(),
+                categorical=ToNumerical(),
+            ),
             MeanImpute(),
             # ConstantFilter(),
             StandardScale(epsilon=1e-6),
@@ -51,7 +55,7 @@ def default_regression_recipe() -> Recipe:
             # (likely subsumed by SigmaClip); revisit after benchmarking.
             # Clip(min_value=-100.0, max_value=100.0),
             SigmaClip(threshold=4.0),
-            # FeaturePermute(method="latin"),
+            # FeaturePermute(method="shift"),
         ],
         target=[
             StandardScale(),
@@ -79,7 +83,7 @@ def default_regression_recipe() -> Recipe:
 #             # norm options: none, power, quantile, quantile_rtdl, robust
 #             Choice([Identity(), Quantile(output_distribution="normal")]),
 #             SigmaClip(threshold=4.0),
-#             FeaturePermute(method="latin"),
+#             FeaturePermute(method="shift"),
 #         ],
 #         target=[
 #             TaskDispatch({
