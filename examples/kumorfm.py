@@ -1,0 +1,68 @@
+import argparse
+from collections.abc import Sequence
+from typing import cast
+
+import relbench
+import torch
+from relbench.datasets import get_dataset
+from relbench.tasks import get_task
+from sdm import RelationalData, TableTensor, infer_stypes
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--dataset", type=str, required=True)
+parser.add_argument("--task", type=str, required=True)
+parser.add_argument("--context_size", type=int, default=1000)
+args = parser.parse_args()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Collect Relational Data #####################################################
+db = get_dataset(args.dataset, download=True).get_db(upto_test_timestamp=False)
+data = RelationalData(
+    tables={
+        name: TableTensor.from_pandas(
+            df=table.df,
+            stypes=infer_stypes(table.df),
+        )
+        for name, table in db.table_dict.items()
+    },
+    relationships=[
+        {
+            "left_table": left_table,
+            "left_column": left_column,
+            "right_table": right_table,
+            "right_column": cast(str, db.table_dict[right_table].pkey_col),
+        }
+        for left_table, table in db.table_dict.items()
+        for left_column, right_table in table.fkey_col_to_pkey_table.items()
+    ],
+)
+sampler = data.sampler(
+    time_columns={
+        name: table.time_col
+        for name, table in db.table_dict.items()
+        if table.time_col is not None
+    },
+)
+
+# Collect Task Table ##########################################################
+task_tables: Sequence[TableTensor] = []
+task = get_task(args.dataset, args.task, download=True)
+for split in ["train", "val", "test"]:
+    task_table = TableTensor.from_pandas(
+        df=task.get_table(split, mask_input_cols=False).df,
+        stypes={
+            task.entity_col: "id",  # type: ignore
+            task.time_col: "datetime",  # type: ignore
+            task.target_col: "numerical"  # type: ignore
+            if task.task_type == relbench.base.TaskType.REGRESSION
+            else "categorical",
+        },
+    )
+    task_tables.append(task_table)
+
+train_table = torch.cat(task_tables[:2], dim=0)
+train_table = train_table[
+    torch.randperm(len(train_table))[: args.context_size]
+]
+test_table = task_tables[-1]
