@@ -23,7 +23,7 @@ class BaseModel(torch.nn.Module, ABC):
         super().__init__()
 
         # One cache per ensemble member.
-        self._caches: list[Cache] | None = None  # TODO Single context for now.
+        self._caches: list[Cache] | None = None
 
     @torch.inference_mode()
     def forward(
@@ -58,7 +58,9 @@ class BaseModel(torch.nn.Module, ABC):
         x, y = self._preprocess(x, y)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
-        outs = [self._forward(x, y, cache=None) for _ in range(num_estimators)]
+        outs: list[Tensor] = []
+        for _ in range(num_estimators):
+            outs.append(self._forward(x, y, cache=None))
         return torch.stack(outs).mean(dim=0)
 
     @torch.inference_mode()
@@ -135,7 +137,9 @@ class BaseModel(torch.nn.Module, ABC):
             device=x.device,
         )
         x, y = self._preprocess(x, y)
-        outs = [self._forward(x, y, cache=cache) for cache in self._caches]
+        outs: list[Tensor] = []
+        for cache in self._caches:
+            outs.append(self._forward(x, y, cache=cache))
         return torch.stack(outs).mean(dim=0)
 
     # Helpers #################################################################
