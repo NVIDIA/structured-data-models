@@ -7,14 +7,6 @@ def _labels(values: torch.Tensor) -> TableTensor:
     return TableTensor.from_tensor(values)
 
 
-def test_class_shuffle_none_is_identity() -> None:
-    labels = _labels(torch.tensor([[0], [1], [2]]))
-
-    output = ClassShuffle(method="none").fit_transform(labels)
-
-    assert output is labels
-
-
 def test_class_shuffle_shift_maps_labels() -> None:
     labels = _labels(torch.tensor([[0], [1], [2], [-1]]))
     torch.manual_seed(3)  # draws a cyclic offset of 1 for three classes

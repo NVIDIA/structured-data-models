@@ -18,16 +18,16 @@ class ClassShuffle(Processor, InvertibleMixin):
     unchanged.
 
     Args:
-        method: Permutation strategy. ``"none"`` disables permutation,
-            ``"shift"`` cyclically shifts the labels by a drawn offset, and
-            ``"random"`` remaps the labels with a drawn permutation.
+        method: Permutation strategy. ``"shift"`` cyclically shifts the
+            labels by a drawn offset, and ``"random"`` remaps the labels
+            with a drawn permutation.
     """
 
     supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
-        method: Literal["shift", "random", "none"] = "shift",
+        method: Literal["shift", "random"] = "shift",
     ) -> None:
         super().__init__()
         self.method = method
@@ -39,9 +39,8 @@ class ClassShuffle(Processor, InvertibleMixin):
     def _fit(self, input: TableTensor) -> None:
         labels = _valid_labels(input.numerical)
         device = input.numerical.device
-        # The class count is Python metadata, so one sync is required.
         n_classes = 0 if labels.numel() == 0 else int(labels.max().item()) + 1
-        if self.method == "none" or n_classes <= 1:
+        if n_classes <= 1:
             self.permutation = torch.arange(n_classes, device=device)
         elif self.method == "shift":
             offset = int(torch.randint(n_classes, (1,)).item())
@@ -49,21 +48,15 @@ class ClassShuffle(Processor, InvertibleMixin):
                 torch.arange(n_classes, device=device) - offset
             ) % n_classes
         else:
-            # The global CPU generator makes drawn permutations identical
-            # across CPU and CUDA.
             self.permutation = torch.randperm(n_classes).to(device=device)
 
     def _transform(self, input: TableTensor) -> TableTensor:
-        if self.method == "none":
-            return input
         numerical = self._map_labels(input.numerical, self.permutation)
         if numerical is input.numerical:
             return input
         return input.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        if self.method == "none":
-            return input
         numerical = self._map_labels(
             input.numerical,
             self.permutation.argsort(),
