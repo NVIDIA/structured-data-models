@@ -34,7 +34,7 @@ def default_regression_recipe() -> Recipe:
     """Return the default single-estimator regression recipe.
 
     Mirrors the original TabICLv2 regressor: categorical columns are first
-    folded into the numerical block (``ToNumerical``), followed by mean
+    folded into the numerical block (:class:`~sdm.processing.ToNumerical`), followed by mean
     imputation (``SimpleImputer``), standard scaling
     (``CustomStandardScaler``), and two-stage 4-sigma outlier clipping
     (``OutlierRemover``) on the features; the target is standard-scaled and its
