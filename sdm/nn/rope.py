@@ -9,9 +9,7 @@ def apply_rotary_embedding(
     inv_freq: Tensor,  # [C // 2]
     layout: Literal["split_half", "interleaved"] = "split_half",
 ) -> Tensor:  # [..., S, H, C]
-    """Apply Rotary Position Embedding from the `RoFormer`_ paper.
-
-    .. _RoFormer: https://arxiv.org/abs/2104.09864
+    """Apply `"RoFormer" <https://arxiv.org/abs/2104.09864>`_ rotation.
 
     Args:
         x: Input tensor with shape ``[..., S, H, C]``. ``S`` is the sequence
