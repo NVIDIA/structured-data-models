@@ -34,6 +34,7 @@ class SigmaClip(Processor):
     """
 
     supported_stypes = frozenset({Stype.numerical})
+    requires_fit = True
 
     def __init__(
         self,

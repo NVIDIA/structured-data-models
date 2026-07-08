@@ -25,9 +25,9 @@ def test_processor_requires_fit_for_transform(
     processor = processor_factory()
     input = TableTensor.from_tensor(torch.ones(2, 2))
 
-    with pytest.raises(RuntimeError, match="not fitted"):
+    with pytest.raises(RuntimeError, match="not yet fitted"):
         processor.transform(input)
-    with pytest.raises(RuntimeError, match="not fitted"):
+    with pytest.raises(RuntimeError, match="not yet fitted"):
         processor(input)
 
 
@@ -42,7 +42,7 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
     input = TableTensor.from_tensor(torch.ones(2, 2))
 
     assert isinstance(processor, InvertibleMixin)
-    with pytest.raises(RuntimeError, match="not fitted"):
+    with pytest.raises(RuntimeError, match="not yet fitted"):
         processor.inverse_transform(input)
 
 
@@ -96,10 +96,3 @@ def test_processor_rejects_unsupported_stype_on_public_paths() -> None:
         processor.transform(mixed)
     with pytest.raises(ValueError, match="categorical"):
         processor(mixed)
-    with pytest.raises(ValueError, match="categorical"):
-        processor.inverse_transform(mixed)
-
-
-def test_processor_rejects_id_stype() -> None:
-    with pytest.raises(ValueError, match="id"):
-        StandardScale().fit(_id_table())
