@@ -5,6 +5,7 @@ from torch import Tensor
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 BOUNDS_THRESH = 1e-7
@@ -42,6 +43,8 @@ class Quantile(Processor, InvertibleMixin):
         random_state: Seed for deterministic subsampling. If ``None``, use the
             global PyTorch generator.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -177,7 +180,6 @@ class Quantile(Processor, InvertibleMixin):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` into the configured output distribution."""
-        self._check_supported_stypes(input)
         numerical = _as_float(input.numerical)
         transformed = torch.empty_like(numerical)
         for i in range(numerical.shape[1]):

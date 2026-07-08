@@ -31,7 +31,7 @@ class StypeDispatch(Processor):
             and ``"drop"`` removes them.
     """
 
-    supported_stypes = "all"
+    supported_stypes = frozenset(Stype)
 
     def __init__(
         self,
@@ -63,10 +63,7 @@ class StypeDispatch(Processor):
             yield Stype(stype), cast(Processor, processor)
 
     def _select_stype(self, input: TableTensor, stype: Stype) -> TableTensor:
-        select_stypes = getattr(input, "select_stypes", None)
-        if callable(select_stypes):
-            return cast(TableTensor, select_stypes(stype))
-        return input.select_columns(input.columns[stype])
+        return input.select_stypes(stype)
 
     def _remainder_stypes(self, input: TableTensor) -> list[Stype]:
         configured = {stype for stype, _ in self._processors_by_stype()}

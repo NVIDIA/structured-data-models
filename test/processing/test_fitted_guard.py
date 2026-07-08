@@ -2,7 +2,13 @@ from collections.abc import Callable
 
 import pytest
 import torch
-from sdm import CategoricalTensor, ColumnarTensor, StringTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import Clip, Processor, StandardScale
 from sdm.processing.base import InvertibleMixin
 
@@ -41,6 +47,7 @@ def test_invertible_processor_requires_fit_for_inverse_transform(
 
 
 class StatelessProcessor(Processor):
+    supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def _transform(self, input: TableTensor) -> TableTensor:

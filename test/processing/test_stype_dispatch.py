@@ -11,6 +11,7 @@ from sdm.processing import (
 
 
 class AddOne(Processor):
+    supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def _transform(self, input: TableTensor) -> TableTensor:
@@ -29,6 +30,8 @@ class CategoricalToNumerical(Processor):
 
 
 class RecordingFit(Processor):
+    supported_stypes = frozenset({Stype.numerical})
+
     def __init__(self) -> None:
         super().__init__()
         self.fit_called = False
@@ -41,6 +44,7 @@ class RecordingFit(Processor):
 
 
 class KeepFirstNumerical(Processor):
+    supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def _transform(self, input: TableTensor) -> TableTensor:

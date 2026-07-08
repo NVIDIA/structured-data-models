@@ -3,6 +3,7 @@ from torch import Tensor
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
@@ -31,6 +32,8 @@ class SigmaClip(Processor):
         threshold: Positive z-score multiplier setting how many standard
             deviations from the mean mark the soft clipping bounds.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -83,7 +86,6 @@ class SigmaClip(Processor):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Clip ``input`` using the fitted soft lower and upper bounds."""
-        self._check_supported_stypes(input)
         numerical = _as_float(input.numerical)
         log_abs = numerical.abs().log1p()
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
