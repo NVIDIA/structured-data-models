@@ -1,5 +1,4 @@
 import torch
-from torch import Tensor
 
 from sdm import Stype
 from sdm.processing.base import Processor
@@ -33,21 +32,19 @@ class ToNumerical(Processor):
         ):
             return input
 
-        dtype = input.numerical.dtype
-        blocks: list[Tensor] = []
-        columns: list[str] = []
-        for stype, block in input.items():
-            if block.size(-1) == 0:
-                continue
-            # Casting to the (floating-point) numerical dtype also unwraps a
-            # CategoricalTensor to its raw ordinal ids as a plain tensor.
-            blocks.append(block.to(dtype))  # [..., C_stype]
-            columns.extend(input.columns[stype])
-
-        numerical = (  # [..., sum(C_stype)]
-            blocks[0] if len(blocks) == 1 else torch.cat(blocks, dim=-1)
+        # Casting to the (floating-point) numerical dtype also unwraps a
+        # CategoricalTensor to its raw ordinal ids as a plain tensor.
+        categorical = input.categorical.to(input.numerical.dtype)
+        columns = (
+            *input.columns[Stype.numerical],
+            *input.columns[Stype.categorical],
+        )
+        numerical = (
+            categorical
+            if input.numerical.size(-1) == 0
+            else torch.cat((input.numerical, categorical), dim=-1)
         )
         return input.__class__(
-            columns={Stype.numerical: tuple(columns)},
+            columns={Stype.numerical: columns},
             numerical=numerical,
         )
