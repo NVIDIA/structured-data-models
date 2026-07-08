@@ -100,7 +100,7 @@ class RowEmbedding(torch.nn.Module):
         num_digits = 1
         if y.numel() > 0:
             if self.y_emb is not None:
-                # TODO Cache `num_classes`
+                # TODO Cache `num_classes` to avoid device synchronization.
                 num_classes = int(y.max()) + 1
                 if num_classes > self.max_classes:
                     # TODO Support KV cache
