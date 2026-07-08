@@ -1,5 +1,3 @@
-from dataclasses import FrozenInstanceError
-
 import pandas as pd
 import pytest
 import torch
@@ -74,12 +72,8 @@ def test_edge_indices(data: RelationalData) -> None:
 
 
 def test_relationships_cannot_be_modified(data: RelationalData) -> None:
-    num_relationships = len(data.relationships)
-
-    with pytest.raises(FrozenInstanceError):
-        data.relationships += data.relationships[:1]  # type: ignore
-
-    assert len(data.relationships) == num_relationships
+    with pytest.raises(AttributeError):
+        data.relationships.append(data.relationships[0])  # type: ignore
 
 
 def test_homogeneous_graph(data: RelationalData) -> None:
