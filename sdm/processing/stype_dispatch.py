@@ -5,12 +5,12 @@ import torch
 from torch import Tensor
 
 from sdm import Stype
-from sdm.processing.base import Processor
+from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.sequential import Sequential
 from sdm.tensor import TableTensor
 
 
-class StypeDispatch(Processor):
+class StypeDispatch(Processor, InvertibleMixin):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
 
     For each configured route, the matching columns are selected into a
@@ -18,6 +18,14 @@ class StypeDispatch(Processor):
     column values, names, count, or order. Route outputs are concatenated in
     semantic type order. With the default passthrough behavior, unconfigured
     semantic types follow in input order.
+
+    Forward transformation records each route's output width per semantic type.
+    Inverse transform uses those widths to partition transformed blocks and
+    route each segment back to its processor. Column names are ignored, but
+    route segments and columns within each segment must remain in forward
+    output order. Every active route must be invertible and accept its
+    transformed semantic types. Passthrough columns are preserved.
+    ``remainder="drop"`` is not invertible.
 
     Args:
         numerical: Processor route for numerical columns. An iterable is
@@ -62,6 +70,7 @@ class StypeDispatch(Processor):
         self.requires_fit = any(
             processor.requires_fit for processor in self.processors.values()
         )
+        self._route_output_widths: dict[str, dict[Stype, int]] = {}
 
     def _check_remainder(self, remainder_stypes: list[Stype]) -> None:
         if self.remainder != "error" or len(remainder_stypes) == 0:
@@ -102,14 +111,81 @@ class StypeDispatch(Processor):
             processor = cast(Processor, processor)
             route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
+                self._route_output_widths[stype] = {}
                 continue
-            outputs.append(processor.transform(route_input))
+            route_output = processor.transform(route_input)
+            self._route_output_widths[stype] = {
+                output_stype: len(columns)
+                for output_stype, columns in route_output.columns.items()
+            }
+            outputs.append(route_output)
         if self.remainder == "passthrough":
             outputs.extend(
                 input.select_stypes(stype) for stype in remainder_stypes
             )
         if len(outputs) == 0:
             return input.select_columns(())
+        return cast(
+            TableTensor,
+            torch.cat(cast(list[Tensor], outputs), dim=-1),
+        )
+
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+        if self.remainder == "drop":
+            raise ValueError(
+                "'StypeDispatch' with remainder='drop' is not invertible"
+            )
+
+        input_columns = input.columns
+        offsets = dict.fromkeys(Stype, 0)
+        outputs: list[TableTensor] = []
+        for route_stype, processor in self.processors.items():
+            processor = cast(Processor, processor)
+            widths = self._route_output_widths.get(route_stype)
+            if widths is None:
+                stype = Stype(route_stype)
+                route_input = input.select_stypes(stype)
+                offsets[stype] = len(input_columns[stype])
+            else:
+                route_columns: list[str] = []
+                for stype, width in widths.items():
+                    start = offsets[stype]
+                    stop = start + width
+                    columns = input_columns[stype][start:stop]
+                    if len(columns) != width:
+                        raise ValueError(
+                            f"Route '{route_stype}' expected {width} "
+                            f"'{stype.value}' output columns, "
+                            f"got {len(columns)}"
+                        )
+                    route_columns.extend(columns)
+                    offsets[stype] = stop
+                route_input = input.select_columns(route_columns)
+
+            if route_input.size(-1) == 0:
+                continue
+            if not isinstance(processor, InvertibleMixin):
+                raise TypeError(
+                    f"Route '{route_stype}' uses non-invertible processor "
+                    f"'{processor.__class__.__name__}'"
+                )
+            outputs.append(processor.inverse_transform(route_input))
+
+        remainder_columns: list[str] = []
+        remainder_stypes: list[Stype] = []
+        for stype, columns in input_columns.items():
+            columns = columns[offsets[stype] :]
+            if len(columns) == 0:
+                continue
+            remainder_columns.extend(columns)
+            remainder_stypes.append(stype)
+
+        self._check_remainder(remainder_stypes)
+        if len(remainder_columns) > 0:
+            outputs.append(input.select_columns(remainder_columns))
+        if len(outputs) == 0:
+            return input.select_columns(())
+
         return cast(
             TableTensor,
             torch.cat(cast(list[Tensor], outputs), dim=-1),

@@ -12,6 +12,8 @@ install
 :maxdepth: 1
 
 recipe
+recipe-target-output
+stype-dispatch-inverse
 ```
 
 ```{toctree}
