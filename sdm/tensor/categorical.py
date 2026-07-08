@@ -220,7 +220,7 @@ class CategoricalTensor(Tensor):
     @classmethod
     def from_cudf(
         cls,
-        series: cudf.Series,
+        ser: cudf.Series,
         *,
         dtype: torch.dtype = torch.int32,
         device: torch.device | str | None = None,
@@ -228,13 +228,13 @@ class CategoricalTensor(Tensor):
         r"""Create tensor from a categorical :class:`cudf.Series`.
 
         Args:
-            series: The categorical :class:`cudf.Series`.
+            ser: The categorical :class:`cudf.Series`.
             dtype: The dtype.
             device: The device.
         """
         from cudf.api.types import is_string_dtype
 
-        codes, categories = series.factorize(
+        codes, categories = ser.factorize(
             sort=False,
             use_na_sentinel=True,
         )

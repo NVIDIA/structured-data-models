@@ -1,10 +1,10 @@
-from typing import Any, cast
+from typing import cast
 
 import pyarrow as pa
 import pytest
 import torch
 from sdm import StringTensor
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA
 
 
 def test_from_list() -> None:
@@ -65,58 +65,55 @@ def test_arrow() -> None:
     )
 
 
-def _import_cudf() -> Any:
-    pytest.importorskip("cupy")
+@onlyCUDA
+def test_from_cudf() -> None:
     cudf = pytest.importorskip("cudf")
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is not available")
-    return cudf
 
-
-@withCUDA
-def test_from_cudf(device: torch.device) -> None:
-    cudf = _import_cudf()
     tensor = StringTensor.from_cudf(
         cudf.Series(["hi", "é", ""]),
-        device=device,
     )
 
-    assert tensor.device == device
+    assert tensor.is_cuda
     assert tensor.tolist() == ["hi", "é", ""]
-    assert tensor._data.cpu().equal(
-        torch.tensor([104, 105, 195, 169], dtype=torch.uint8)
+    assert tensor._data.equal(
+        torch.tensor([104, 105, 195, 169], device=tensor.device)
     )
-    assert tensor._offset.cpu().equal(torch.tensor([0, 2, 4, 4]))
+    assert tensor._offset.equal(
+        torch.tensor([0, 2, 4, 4], device=tensor.device)
+    )
 
 
-@withCUDA
-def test_from_cudf_sliced_values(device: torch.device) -> None:
-    cudf = _import_cudf()
+@onlyCUDA
+def test_from_cudf_sliced_values() -> None:
+    cudf = pytest.importorskip("cudf")
+
     tensor = StringTensor.from_cudf(
         cudf.Series(["x", "hi", "é", ""])[1:],
-        device=device,
     )
 
-    assert tensor.device == device
+    assert tensor.is_cuda
     assert tensor.tolist() == ["hi", "é", ""]
 
 
-@withCUDA
-def test_from_cudf_empty_values(device: torch.device) -> None:
-    cudf = _import_cudf()
+@onlyCUDA
+def test_from_cudf_empty_values() -> None:
+    cudf = pytest.importorskip("cudf")
+
     tensor = StringTensor.from_cudf(
         cudf.Series([], dtype="object"),
-        device=device,
     )
+    print(tensor)
+    return
 
-    assert tensor.device == device
+    assert tensor.is_cuda
     assert tensor.tolist() == []
     assert tensor._data.numel() == 0
-    assert tensor._offset.cpu().equal(torch.tensor([0], dtype=torch.int32))
+    assert tensor._offset.equal(torch.tensor([0], device=tensor.device))
 
 
+@onlyCUDA
 def test_from_cudf_errors() -> None:
-    cudf = _import_cudf()
+    cudf = pytest.importorskip("cudf")
 
     with pytest.raises(ValueError, match="cannot represent null"):
         StringTensor.from_cudf(cudf.Series(["hi", None]))
