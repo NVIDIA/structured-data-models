@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+
+language: en-US
+
+tone_instructions: >-
+  Be concise and technical. Prioritize correctness, tensor semantics
+  (shape/device/dtype), API design, and leakage-sensitive preprocessing.
+  Skip style nitpicks already enforced by ruff and pre-commit.
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  sequence_diagrams: false
+
+  path_filters:
+    - '!uv.lock'
+    - '!build/**'
+    - '!**/*.egg-info/**'
+
+  path_instructions:
+    - path: 'sdm/**/*.py'
+      instructions: >-
+        Core library code. Enforce the project's PyTorch-centric style:
+        typed function and method boundaries; keyword arguments in
+        multi-line calls; no `else` after return/raise/break/continue;
+        prefer vectorized PyTorch tensor operations over NumPy or Python
+        loops; preserve tensor device and dtype, flagging accidental
+        transfers via `.cpu()`, `.numpy()`, `.item()`, Python scalars, or
+        newly-created CPU tensors; prefer tensor methods over functions
+        (e.g. `x.log()` over `torch.log(x)`); expect short shape comments
+        on complex tensor operations; avoid formulations that cause
+        avoidable `torch.compile` graph breaks. Treat preprocessing as
+        leakage-sensitive: transformations that learn state must be
+        scoped to the context/training portion unless explicitly designed
+        otherwise, and stochastic transformations must expose
+        seed/generator control. Keep model-family wrappers thin, avoid
+        config-first APIs, and keep core dependencies minimal (heavy
+        dependencies optional). In `__init__.py`, imports and `__all__`
+        are intentionally ordered by dependency, not alphabetically — do
+        not suggest alphabetical sorting there.
+    - path: 'test/**/*.py'
+      instructions: >-
+        Pytest-based tests. Check that behavior changes in sdm/ have
+        corresponding test coverage, randomness is controlled via fixed
+        seeds or generators, and parametrization covers relevant
+        dtype/device variants. Plain pytest functions are preferred over
+        unittest-style classes.
+    - path: 'examples/**'
+      instructions: >-
+        Runnable benchmark/usage examples. Prioritize readability and
+        end-to-end correctness over micro-optimization, but still flag
+        API misuse and data leakage between train/test portions.
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  pre_merge_checks:
+    title:
+      mode: warning
+    description:
+      mode: warning
+
+  tools:
+    # ruff picks up pyproject.toml and matches the pre-commit setup.
+    ruff:
+      enabled: true
+    # Already enforced by pre-commit in CI with repo-specific rules;
+    # CodeRabbit's defaults would conflict or duplicate.
+    yamllint:
+      enabled: false
+    markdownlint:
+      enabled: false
+    languagetool:
+      enabled: false
+    # Not covered by pre-commit — worth keeping.
+    actionlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    github-checks:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  learnings:
+    scope: local
+  pull_requests:
+    scope: local
+
+code_generation:
+  docstrings:
+    language: en-US
+    path_instructions:
+      - path: 'sdm/**/*.py'
+        instructions: >-
+          Follow Google-style docstrings (ruff pydocstyle
+          convention=google, line length 79). Start with a one-line
+          imperative summary. Document public constructor parameters in
+          an Args section. Use bracket shape notation for tensors, e.g.
+          `[batch_size, num_cols, dim]`. Cite the paper when the
+          implementation follows one. Do not add docstrings to magic
+          methods or `__init__` (D105/D107 are ignored).
+  unit_tests:
+    path_instructions:
+      - path: 'sdm/**/*.py'
+        instructions: >-
+          Place tests under test/ mirroring the sdm/ package layout. Use
+          plain pytest functions with `pytest.mark.parametrize` for
+          dtype/device variants, fixed seeds or explicit generators for
+          any randomness, and `sdm.testing` utilities where applicable.
