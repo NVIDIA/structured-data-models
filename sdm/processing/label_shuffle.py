@@ -3,7 +3,9 @@ from typing import Literal
 import torch
 from torch import Tensor
 
+from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.tensor import TableTensor
 
 LabelShuffleMethod = Literal["shift", "random", "none"]
 
@@ -15,6 +17,8 @@ class LabelShuffle(Processor, InvertibleMixin):
     identity transform. Use :meth:`resolve` with ``estimator > 0`` to obtain a
     concrete non-identity view.
 
+    Only numerical target columns are supported.
+
     Args:
         method: Permutation strategy. ``"none"`` disables permutation,
             ``"shift"`` uses deterministic cyclic shifts, and ``"random"``
@@ -24,6 +28,8 @@ class LabelShuffle(Processor, InvertibleMixin):
         generator: Optional torch generator whose initial seed drives
             ``"random"`` permutations without advancing generator state.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -48,8 +54,8 @@ class LabelShuffle(Processor, InvertibleMixin):
         self._estimator = _estimator
         self._fitted = n_classes is not None
 
-    def _fit(self, input: Tensor) -> None:
-        labels = _valid_labels(input)
+    def _fit(self, input: TableTensor) -> None:
+        labels = _valid_labels(input.numerical)
         inferred = 0 if labels.numel() == 0 else int(labels.max().item()) + 1
 
         if self.n_classes is not None:
@@ -69,7 +75,15 @@ class LabelShuffle(Processor, InvertibleMixin):
         estimator: int = 0,
         generator: torch.Generator | None = None,
     ) -> "LabelShuffle":
-        """Return a concrete label permutation for one estimator view."""
+        """Return a concrete label permutation for one estimator view.
+
+        Args:
+            estimator: Zero-based estimator index.
+            generator: Optional generator that overrides the configured one.
+
+        Returns:
+            The resolved label permutation.
+        """
         return self.__class__(
             method=self.method,
             n_classes=self.n_classes,
@@ -77,12 +91,18 @@ class LabelShuffle(Processor, InvertibleMixin):
             _estimator=estimator,
         )
 
-    def _transform(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Map original label ids into the estimator-specific label space."""
-        return self._map_labels(input, inverse=False)
+        numerical = self._map_labels(input.numerical, inverse=False)
+        if numerical is input.numerical:
+            return input
+        return input.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
-        return self._map_labels(input, inverse=True)
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+        numerical = self._map_labels(input.numerical, inverse=True)
+        if numerical is input.numerical:
+            return input
+        return input.replace_blocks(numerical=numerical)
 
     def correct_output(self, input: Tensor) -> Tensor:
         """Map class scores back to the original class order.
@@ -90,6 +110,12 @@ class LabelShuffle(Processor, InvertibleMixin):
         This mirrors TabICL's ensemble aggregation correction: labels are
         transformed with ``permutation[label]``, while class-score outputs are
         corrected with ``output[..., permutation]`` before averaging.
+
+        Args:
+            input: Class scores with classes in the last dimension.
+
+        Returns:
+            Class scores in the original class order.
         """
         self._check_is_fitted()
         permutation = self._permutation(input.device)

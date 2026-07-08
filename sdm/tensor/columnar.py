@@ -1,22 +1,19 @@
+from __future__ import annotations
+
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
-
-SelfColumnarTensor = TypeVar(
-    "SelfColumnarTensor",
-    bound="ColumnarTensor",
-)
 
 
 class ColumnarTensor(Tensor):
@@ -53,11 +50,11 @@ class ColumnarTensor(Tensor):
         pass
 
     def __new__(
-        cls: type[SelfColumnarTensor],
+        cls,
         columns: Sequence[Tensor],
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> SelfColumnarTensor:
+    ) -> Self:
         r"""Create a tensor wrapper."""
         from sdm.tensor import CategoricalTensor, TableTensor
 
@@ -111,12 +108,12 @@ class ColumnarTensor(Tensor):
 
     @classmethod
     def from_arrow(
-        cls: type[SelfColumnarTensor],
+        cls,
         array: pa.Array | pa.ChunkedArray,
         *,
         device: torch.device | str | None = None,
-    ) -> SelfColumnarTensor:
-        r"""Create tensor from a :class:`~pyarrow.Array`.
+    ) -> Self:
+        r"""Create tensor from a :class:`pyarrow.Array`.
 
         Args:
             array: The :class:`pyarrow.Array` or
@@ -214,7 +211,7 @@ class ColumnarTensor(Tensor):
         return all(column.is_shared() for column in self._columns)
 
     @override
-    def share_memory_(self) -> "ColumnarTensor":
+    def share_memory_(self) -> Self:
         for column in self._columns:
             column.share_memory_()
         return self
@@ -233,7 +230,7 @@ class ColumnarTensor(Tensor):
     def contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
-    ) -> "ColumnarTensor":
+    ) -> Self:
         if self.is_contiguous(memory_format=memory_format):
             return self
         return _contiguous(self, memory_format=memory_format)

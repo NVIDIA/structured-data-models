@@ -11,13 +11,18 @@ from sdm.tensor import CategoricalTensor, TableTensor
 class ConstantFilter(Processor):
     """Remove columns with too few unique values learned during fit.
 
+    Supports numerical, categorical, and datetime columns. Identifier
+    columns must be removed before this step.
+
     Args:
         threshold: Columns with at most this many unique values are removed.
             When the number of samples is less than or equal to ``threshold``,
             all columns are preserved.
     """
 
-    input_scope = "table"
+    supported_stypes = frozenset(
+        {Stype.numerical, Stype.categorical, Stype.datetime}
+    )
 
     def __init__(self, threshold: int = 1) -> None:
         super().__init__()
@@ -26,13 +31,7 @@ class ConstantFilter(Processor):
         self.threshold = threshold
         self.columns_to_keep: dict[Stype, tuple[str, ...]] = {}
 
-    def _fit(self, input: Tensor) -> None:
-        if not isinstance(input, TableTensor):
-            raise TypeError(
-                "Expected ConstantFilter input to be a TableTensor "
-                f"(got '{type(input).__name__}')"
-            )
-
+    def _fit(self, input: TableTensor) -> None:
         n_samples = math.prod(input.size()[:-1])
         columns_to_keep: dict[Stype, tuple[str, ...]] = {}
 
@@ -51,14 +50,8 @@ class ConstantFilter(Processor):
 
         self.columns_to_keep = columns_to_keep
 
-    def _transform(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Drop columns that were constant in the fitted data."""
-        if not isinstance(input, TableTensor):
-            raise TypeError(
-                "Expected ConstantFilter input to be a TableTensor "
-                f"(got '{type(input).__name__}')"
-            )
-
         columns = tuple(
             column
             for stype_columns in self.columns_to_keep.values()

@@ -16,7 +16,7 @@ class Recipe:
       after it (predictions back to the original space).
     - ``output``: shape-preserving cleanup of the model output.
 
-    Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
+    Each sequence exposes ``fit``/``transform``/``fit_transform`` and, when its
     steps are invertible, ``inverse_transform``. Call them directly, e.g.
     ``recipe.features.transform(table)`` or
     ``recipe.target.inverse_transform(prediction)``.

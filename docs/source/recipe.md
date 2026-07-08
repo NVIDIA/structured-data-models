@@ -7,23 +7,15 @@ both sides of the model.
 
 ## Concepts
 
-- A **step** is a {py:class}`~sdm.processing.Processor`. Most processors use
-  the default `input_scope = "block"` contract: they receive one tensor block
-  selected by the pipeline and return a tensor with the same leading shape. A
-  processor may instead declare `input_scope = "table"` when it needs the whole
-  {py:class}`~sdm.tensor.TableTensor`, for example to reorder or drop columns
-  while keeping column metadata and typed blocks consistent. This is routing
-  granularity, not a semantic-type capability declaration; future stype
-  dispatch can choose which stype block is passed to a block-scoped processor.
-  A *stateful* step learns parameters when you call `fit` (for example
+- A **step** is a {py:class}`~sdm.processing.Processor` that transforms a
+  {py:class}`~sdm.tensor.TableTensor` and returns a
+  {py:class}`~sdm.tensor.TableTensor`. A *stateful* step learns parameters
+  when you call `fit` (for example
   {py:class}`~sdm.processing.StandardScale` learns each column's mean and
   standard deviation); a stateless one does not (for example
   {py:class}`~sdm.processing.SoftmaxTemperature`).
 
 - A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
-  During `fit`, table-level steps are transformed before fitting later steps,
-  so later block-scoped processors learn from the same table state they will
-  see during `transform`.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
   attributes:
@@ -37,22 +29,26 @@ both sides of the model.
 ## Usage
 
 ```python
+import torch
+
+from sdm import TableTensor
 from sdm.processing import Recipe, StandardScale
 
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
-{py:class}`~sdm.processing.ConstantFilter` is a lossy, table-scoped
-feature cleanup step: it learns which columns have too few unique values and
-returns a table with matching data blocks and column metadata. Put it early in
-the features pipeline, before scaling or normalization steps that should see
-the filtered feature space.
+{py:class}`~sdm.processing.ConstantFilter` learns which numerical,
+categorical, and datetime columns have too few unique values and removes them
+while keeping table blocks and column metadata aligned. Put it early in the
+features pipeline, before transforms that should fit the filtered feature
+space.
 
 {py:meth}`~sdm.processing.Processor.resolve` returns the concrete processor
 for a processing context. Plain processors return themselves; processors that
-depend on a view or estimator can override it. Estimator-resolved view
-processors preserve single-estimator behavior when used directly and become
-concrete non-identity views after `resolve(estimator=...)`:
+depend on a view or estimator can override it. For example,
+{py:class}`~sdm.processing.FeaturePermute` preserves the single-estimator
+behavior when used directly and becomes a concrete non-identity view after
+`resolve(estimator=...)`:
 
 ```python
 from sdm.processing import FeaturePermute, LabelShuffle
@@ -61,25 +57,25 @@ feature_view = FeaturePermute(method="shift").resolve(estimator=1)
 target_view = LabelShuffle(method="shift").resolve(estimator=1)
 ```
 
-{py:class}`~sdm.processing.LabelShuffle` maps integer-encoded target labels in
-the target pipeline. Use {py:meth}`~sdm.processing.LabelShuffle.correct_output`
-to restore class-score outputs to the original class order before ensemble
-averaging; target-pipeline `inverse_transform` maps label ids, not class-score
-tensors.
+{py:class}`~sdm.processing.LabelShuffle` maps integer-encoded numerical target
+labels in the target pipeline. Use
+{py:meth}`~sdm.processing.LabelShuffle.correct_output` to restore class-score
+outputs to the original class order before ensemble averaging; target-pipeline
+`inverse_transform` maps label ids, not class-score tensors.
 
-Fit the {py:class}`~sdm.processing.Recipe` on your labeled data and transform it
-in one call with {py:meth}`~sdm.processing.Recipe.fit_transform`; transform
-later inputs with `recipe.features.transform` (no re-fit). All values are
+Fit the recipe pipelines on your labeled data and transform them in one call
+with `fit_transform`; transform later inputs with `recipe.features.transform`
+(no re-fit). Recipe pipelines accept and return
 {py:class}`~sdm.tensor.TableTensor`s.
 
 ```python
-model_features, model_target = recipe.fit_transform(labeled_features, labels)
+model_features = recipe.features.fit_transform(labeled_features)
+model_target = recipe.target.fit_transform(labels)
 model_input = recipe.features.transform(new_features)
 ```
 
-For regression or label-id outputs, the model returns a
-{py:class}`~sdm.tensor.TableTensor`; map its predictions back to the original
-space:
+The model returns a {py:class}`~sdm.tensor.TableTensor`; map its predictions
+back to the original space:
 
 ```python
 prediction = recipe.target.inverse_transform(model(model_input))

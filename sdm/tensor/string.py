@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pyarrow as pa
 import torch
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sdm.tensor import VarLenTensor
 
 if TYPE_CHECKING:
-    import cudf  # ty: ignore[unresolved-import]
+    import cudf
 
 
 class StringTensor(VarLenTensor):
@@ -34,8 +36,8 @@ class StringTensor(VarLenTensor):
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> "StringTensor":
-        r"""Create tensor from a string :class:`~pyarrow.Array`.
+    ) -> Self:
+        r"""Create tensor from a string :class:`pyarrow.Array`.
 
         .. code-block:: python
 
@@ -111,49 +113,47 @@ class StringTensor(VarLenTensor):
     @classmethod
     def from_cudf(
         cls,
-        values: "cudf.Series | cudf.Index",
+        ser: cudf.Series | cudf.Index,
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> "StringTensor":
-        r"""Create tensor from a string ``cudf`` series or index.
+    ) -> Self:
+        r"""Create tensor from a string :class:`cudf.Series`.
 
         Args:
-            values: The string ``cudf`` series or index.
+            ser: The string :class:`cudf.Series` or :class:`cudf.Index`.
             size: The shape of the tensor.
             device: The device.
         """
-        import cupy as cp  # ty: ignore[unresolved-import]
-        from cudf.api.types import (  # ty: ignore[unresolved-import]
-            is_string_dtype,
-        )
+        import cupy as cp
+        from cudf.api.types import is_string_dtype
 
         if size is None:
-            size = (len(values),)
-        elif math.prod(size) != len(values):
+            size = (len(ser),)
+        elif math.prod(size) != len(ser):
             raise ValueError(
                 f"Expected 'size' in '{cls.__name__}.from_cudf' to contain "
-                f"{len(values)} elements (got {math.prod(size)})"
+                f"{len(ser)} elements (got {math.prod(size)})"
             )
 
-        if not is_string_dtype(values.dtype):
+        if not is_string_dtype(ser.dtype):
             raise TypeError(
                 f"Expected 'values' in '{cls.__name__}.from_cudf' to have "
-                f"string type (got '{values.dtype}')"
+                f"string type (got '{ser.dtype}')"
             )
 
-        column = values._column
+        column = ser._column
         if column.null_count > 0:
             raise ValueError(f"'{cls.__name__}' cannot represent null values")
 
-        if len(values) == 0:
+        if len(ser) == 0:
+            data = torch.from_dlpack(cp.asarray(column.data)).to(device)
             return cls(
-                data=torch.empty(0, dtype=torch.uint8, device=device),
-                offset=torch.zeros(1, dtype=torch.int32, device=device),
+                data=data,
+                offset=torch.zeros(1, dtype=torch.int32, device=data.device),
                 size=size,
             )
 
-        # cuDF string columns store UTF-8 bytes plus one int32 offset child.
         return cls(
             data=torch.from_dlpack(cp.asarray(column.data)).to(device),
             offset=torch.from_dlpack(cp.asarray(column.children[0])).to(
@@ -172,7 +172,7 @@ class StringTensor(VarLenTensor):
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
-    ) -> "StringTensor":
+    ) -> Self:
         r"""Create tensor from a rectangular Python list of strings.
 
         .. code-block:: python

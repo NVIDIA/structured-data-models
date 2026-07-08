@@ -8,6 +8,7 @@ import pytest
 import torch
 from sdm import (
     CategoricalTensor,
+    ColumnarTensor,
     StringTensor,
     Stype,
     TableTensor,
@@ -106,6 +107,115 @@ def test_from_tensor() -> None:
         Stype.datetime: (),
         Stype.id: (),
     }
+
+
+def test_replace_blocks() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+            "datetime": ["created_at"],
+            "id": ["user_id"],
+        },
+        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["USA", "Germany"]),),
+        ),
+        datetime=torch.tensor([[10], [20]], dtype=torch.int64),
+        id=ColumnarTensor((torch.tensor([100, 200]),)),
+    )
+
+    numerical = torch.tensor([[5.0, 6.0], [7.0, 8.0]])
+    categorical = CategoricalTensor(
+        data=torch.tensor([[1], [0]], dtype=torch.int32),
+        categories=(StringTensor.from_list(["France", "Spain"]),),
+    )
+    datetime = torch.tensor([[30], [40]], dtype=torch.int64)
+    id = ColumnarTensor((torch.tensor([300, 400]),))
+
+    out = tensor.replace_blocks(
+        numerical=numerical,
+        categorical=categorical,
+        datetime=datetime,
+        id=id,
+    )
+
+    assert isinstance(out, TableTensor)
+    assert out is not tensor
+    assert out.columns == tensor.columns
+    assert out.numerical is numerical
+    assert out.categorical is categorical
+    assert out.datetime is datetime
+    assert out.id is id
+
+    numerical_only = tensor.replace_blocks(numerical=numerical)
+    assert numerical_only.numerical is numerical
+    assert numerical_only.categorical is tensor.categorical
+    assert numerical_only.datetime is tensor.datetime
+    assert numerical_only.id is tensor.id
+
+
+def test_replace_blocks_validates_replacement_shape() -> None:
+    tensor = TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        columns=["age", "income"],
+    )
+
+    with pytest.raises(ValueError, match="hold 2 columns"):
+        tensor.replace_blocks(numerical=torch.ones(2, 3))
+
+
+def test_select_stypes() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+            "datetime": ["created_at"],
+            "id": ["user_id"],
+        },
+        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["USA", "Germany"]),),
+        ),
+        datetime=torch.tensor([[10], [20]], dtype=torch.int64),
+        id=ColumnarTensor((torch.tensor([100, 200]),)),
+    )
+
+    numerical = tensor.select_stypes(Stype.numerical)
+    assert isinstance(numerical, TableTensor)
+    assert numerical.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+    assert numerical.numerical is tensor.numerical
+    assert numerical.categorical.size() == (2, 0)
+    assert numerical.datetime.size() == (2, 0)
+    assert numerical.id.size() == (2, 0)
+
+    categorical = tensor.select_stypes("categorical")
+    assert categorical.columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("country",),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+    assert categorical.categorical is tensor.categorical
+
+    mixed = tensor.select_stypes(["numerical", Stype.categorical])
+    assert mixed.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: ("country",),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+    assert mixed.numerical is tensor.numerical
+    assert mixed.categorical is tensor.categorical
+    assert mixed.datetime.size() == (2, 0)
+    assert mixed.id.size() == (2, 0)
 
 
 def test_save_load() -> None:
@@ -517,7 +627,12 @@ def test_pin_memory() -> None:
 
     assert not tensor.is_pinned()
     if torch.cuda.is_available():
-        assert tensor.pin_memory().is_pinned()
+        out = cast(TableTensor, tensor.pin_memory())
+        assert out.is_pinned()
+        assert out.numerical.is_pinned()
+        assert out.categorical is tensor.categorical
+        assert out.datetime is tensor.datetime
+        assert out.id is tensor.id
 
 
 def test_share_memory() -> None:

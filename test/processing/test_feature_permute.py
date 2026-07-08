@@ -1,6 +1,12 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import FeaturePermute, Sequential
 
 
@@ -104,11 +110,31 @@ def test_feature_permute_random_inverse_round_trips() -> None:
     )
 
 
+def test_feature_permute_preserves_all_stype_blocks() -> None:
+    table = TableTensor(
+        columns={
+            "datetime": ("created", "updated"),
+            "id": ("user_id", "item_id"),
+        },
+        datetime=torch.tensor([[1, 2], [3, 4]], dtype=torch.int64),
+        id=ColumnarTensor(
+            (
+                torch.tensor([10, 20]),
+                torch.tensor([30, 40]),
+            )
+        ),
+    )
+
+    output = (
+        FeaturePermute(method="shift").resolve(estimator=1).transform(table)
+    )
+
+    assert output.columns[Stype.datetime] == ("updated", "created")
+    assert output.columns[Stype.id] == ("item_id", "user_id")
+    assert torch.equal(output.datetime, table.datetime[:, [1, 0]])
+    assert output.id.tolist() == [[30, 10], [40, 20]]
+
+
 def test_feature_permute_rejects_invalid_method() -> None:
     with pytest.raises(ValueError, match="method must be"):
         FeaturePermute(method="bad")  # ty: ignore[invalid-argument-type]
-
-
-def test_feature_permute_requires_table_input() -> None:
-    with pytest.raises(TypeError, match="TableTensor"):
-        FeaturePermute().transform(torch.ones(2, 3))

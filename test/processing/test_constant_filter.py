@@ -1,7 +1,18 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ConstantFilter, Sequential, StandardScale
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
+from sdm.processing import (
+    ConstantFilter,
+    Sequential,
+    StandardScale,
+    ToNumerical,
+)
 
 
 def _table() -> TableTensor:
@@ -61,15 +72,34 @@ def test_constant_filter_noop_returns_input_table() -> None:
 def test_constant_filter_composes_before_block_processor() -> None:
     table = _table()
 
-    output = Sequential(ConstantFilter(), StandardScale()).fit_transform(table)
+    output = Sequential(
+        ConstantFilter(), ToNumerical(), StandardScale()
+    ).fit_transform(table)
 
     assert isinstance(output, TableTensor)
-    assert output.columns[Stype.numerical] == ("variable",)
-    assert torch.allclose(output.numerical.mean(dim=0), torch.zeros(1))
+    assert output.columns[Stype.numerical] == ("variable", "segment")
+    assert torch.allclose(
+        output.numerical.mean(dim=0), torch.zeros(2), atol=1e-6
+    )
 
 
-def test_constant_filter_rejects_non_table_input() -> None:
-    processor = ConstantFilter()
+def test_constant_filter_supports_datetime_columns() -> None:
+    table = TableTensor(
+        columns={"datetime": ("created", "updated")},
+        datetime=torch.tensor([[1, 1], [1, 2], [1, 3]]),
+    )
 
-    with pytest.raises(TypeError, match="Expected ConstantFilter input"):
-        processor.fit(torch.ones(2, 3))
+    output = ConstantFilter().fit_transform(table)
+
+    assert output.columns[Stype.datetime] == ("updated",)
+    assert torch.equal(output.datetime, table.datetime[:, [1]])
+
+
+def test_constant_filter_rejects_identifier_columns() -> None:
+    table = TableTensor(
+        columns={"id": ("row_id",)},
+        id=ColumnarTensor((torch.arange(3),)),
+    )
+
+    with pytest.raises(ValueError, match="id"):
+        ConstantFilter().fit(table)

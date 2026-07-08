@@ -1,24 +1,12 @@
 import torch
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import TableTensor
 from sdm.processing import Recipe, Sequential, StandardScale
 
 
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     if numerical is None:
         numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    n_rows = numerical.shape[0]
-    categorical = CategoricalTensor(
-        data=(torch.arange(n_rows) % 2).unsqueeze(1),
-        categories=(StringTensor.from_list(["a", "b"]),),
-    )
-    return TableTensor(
-        columns={
-            "numerical": ("x0", "x1"),
-            "categorical": ("kind",),
-        },
-        numerical=numerical,
-        categorical=categorical,
-    )
+    return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
 
 
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
@@ -39,11 +27,11 @@ def test_target_forward_then_inverse_round_trips() -> None:
     table = _table()
 
     assert isinstance(recipe.target, Sequential)
-    transformed = recipe.target.fit_transform(table.numerical)
+    transformed = recipe.target.fit_transform(table)
     restored = recipe.target.inverse_transform(transformed)
 
-    assert not torch.equal(transformed, table.numerical)
-    assert torch.allclose(restored, table.numerical, atol=1e-6)
+    assert not torch.equal(transformed.numerical, table.numerical)
+    assert torch.allclose(restored.numerical, table.numerical, atol=1e-6)
 
 
 def test_recipe_roles_fit_transform_features_and_target() -> None:
@@ -51,10 +39,31 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
     features = _table()
     target = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
 
-    out_features = recipe.features.fit_transform(features.numerical)
-    out_target = recipe.target.fit_transform(target.numerical)
+    out_features = recipe.features.fit_transform(features)
+    out_target = recipe.target.fit_transform(target)
 
-    assert isinstance(out_features, torch.Tensor)
-    assert isinstance(out_target, torch.Tensor)
-    assert torch.allclose(out_features.mean(dim=0), torch.zeros(2), atol=1e-6)
-    assert torch.allclose(out_target.mean(dim=0), torch.zeros(2), atol=1e-6)
+    assert torch.allclose(
+        out_features.numerical.mean(dim=0),
+        torch.zeros(2),
+        atol=1e-6,
+    )
+    assert torch.allclose(
+        out_target.numerical.mean(dim=0),
+        torch.zeros(2),
+        atol=1e-6,
+    )
+
+
+def test_recipe_role_fit_accepts_table() -> None:
+    recipe = Recipe(features=[StandardScale()])
+    features = _table()
+
+    fitted = recipe.features.fit(features)
+    transformed = recipe.features.transform(features)
+
+    assert fitted is recipe.features
+    assert torch.allclose(
+        transformed.numerical.mean(dim=0),
+        torch.zeros(2),
+        atol=1e-6,
+    )
