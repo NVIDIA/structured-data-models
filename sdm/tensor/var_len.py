@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, SupportsIndex, cast
@@ -420,7 +422,7 @@ class VarLenTensor(Tensor):
         ctx: tuple[Any, ...],
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
-    ) -> "VarLenTensor":
+    ) -> VarLenTensor:
         cls, storage_offset = ctx
         return cls(
             data=inner_tensors["_data"],
@@ -461,7 +463,7 @@ class VarLenTensor(Tensor):
         return self._data.is_shared() and self._offset.is_shared()
 
     @override
-    def share_memory_(self) -> "VarLenTensor":
+    def share_memory_(self) -> VarLenTensor:
         self._data.share_memory_()
         self._offset.share_memory_()
         return self
@@ -481,12 +483,12 @@ class VarLenTensor(Tensor):
         self._data.requires_grad_(requires_grad)
 
     @override
-    def requires_grad_(self, mode: bool = True) -> "VarLenTensor":
+    def requires_grad_(self, mode: bool = True) -> VarLenTensor:
         self._data.requires_grad_(mode)
         return self
 
     @override
-    def detach_(self) -> "VarLenTensor":
+    def detach_(self) -> VarLenTensor:
         raise RuntimeError(
             f"Can't detach a '{self.__class__.__name__} in-place. Use "
             f"'detach() instead."
@@ -945,7 +947,7 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
-def _layout_view(input: "VarLenTensor") -> Tensor:
+def _layout_view(input: VarLenTensor) -> Tensor:
     return torch.as_strided(
         input._offset,
         size=input.size(),
@@ -954,7 +956,7 @@ def _layout_view(input: "VarLenTensor") -> Tensor:
     )
 
 
-def _from_layout_view(input: "VarLenTensor", view: Tensor) -> "VarLenTensor":
+def _from_layout_view(input: VarLenTensor, view: Tensor) -> VarLenTensor:
     return input.__class__(
         data=input._data,
         offset=input._offset,

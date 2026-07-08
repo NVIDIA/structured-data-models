@@ -320,7 +320,7 @@ class CategoricalTensor(Tensor):
         return self._data.is_shared()
 
     @override
-    def share_memory_(self) -> CategoricalTensor:
+    def share_memory_(self) -> Self:
         self._data.share_memory_()
         return self
 

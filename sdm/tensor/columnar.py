@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
@@ -209,7 +211,7 @@ class ColumnarTensor(Tensor):
         return all(column.is_shared() for column in self._columns)
 
     @override
-    def share_memory_(self) -> "ColumnarTensor":
+    def share_memory_(self) -> ColumnarTensor:
         for column in self._columns:
             column.share_memory_()
         return self
@@ -228,7 +230,7 @@ class ColumnarTensor(Tensor):
     def contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
-    ) -> "ColumnarTensor":
+    ) -> ColumnarTensor:
         if self.is_contiguous(memory_format=memory_format):
             return self
         return _contiguous(self, memory_format=memory_format)
