@@ -1,10 +1,13 @@
 import abc
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
 import torch
 from typing_extensions import Self
 
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
+
+SupportedStypes: TypeAlias = frozenset[Stype]
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -14,14 +17,26 @@ class Processor(torch.nn.Module, abc.ABC):
     ``_fit`` to learn state from a :class:`TableTensor` (the default is a
     no-op). For an inverse, also mix in :class:`InvertibleMixin` and implement
     ``_inverse_transform``. Set ``requires_fit = False`` for stateless
-    processors that can safely run without a prior ``fit`` call.
+    processors that can safely run without a prior ``fit`` call. Set
+    ``supported_stypes`` for processors that support non-numerical columns.
     """
 
+    supported_stypes: ClassVar[SupportedStypes]
     requires_fit: bool = True
 
     def __init__(self) -> None:
         super().__init__()
         self._fitted = False
+
+    def _check_supported_stypes(self, input: TableTensor) -> None:
+        supported_stypes = self.supported_stypes
+        for stype, columns in input.columns.items():
+            if stype not in supported_stypes and len(columns) > 0:
+                # TODO: Include all invalid columns in the error message
+                raise ValueError(
+                    f"'{self.__class__.__name__}' does not support "
+                    f"'{stype.value}' columns."
+                )
 
     def _check_is_fitted(self) -> None:
         if self.requires_fit and not self._fitted:
@@ -61,6 +76,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             This processor.
         """
+        self._check_supported_stypes(input)
         if self.requires_fit:
             self._fit(input)
             self._fitted = True
@@ -75,6 +91,7 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             Transformed table.
         """
+        self._check_supported_stypes(input)
         self._check_is_fitted()
         return self._transform(input)
 
@@ -112,9 +129,11 @@ class InvertibleMixin(abc.ABC):
         Returns:
             Table mapped back to the original processor space.
         """
+        self._check_supported_stypes(input)
         self._check_is_fitted()
         return self._inverse_transform(input)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
+        def _check_supported_stypes(self, input: TableTensor) -> None: ...
         def _check_is_fitted(self) -> None: ...

@@ -10,7 +10,7 @@ from sdm.processing import (
 )
 
 
-def _table(numerical: torch.Tensor | None = None) -> TableTensor:
+def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:
     if numerical is None:
         numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
     n_rows = numerical.shape[0]
@@ -28,6 +28,12 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     )
 
 
+def _table(numerical: torch.Tensor | None = None) -> TableTensor:
+    if numerical is None:
+        numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
+
+
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
@@ -42,10 +48,6 @@ def test_pipeline_transforms_numerical() -> None:
     output = Sequential(StandardScale()).fit_transform(table)
 
     assert not torch.equal(output.numerical, table.numerical)
-    assert torch.equal(
-        output.categorical.as_tensor(),
-        table.categorical.as_tensor(),
-    )
 
 
 def test_repr_lists_steps() -> None:
@@ -60,6 +62,13 @@ def test_pipeline_checks_fitted_state() -> None:
 
     with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
         pipeline.transform(_table())
+
+
+def test_pipeline_rejects_unsupported_stype() -> None:
+    pipeline = Sequential(StandardScale())
+
+    with pytest.raises(ValueError, match="categorical"):
+        pipeline.fit_transform(_mixed_table())
 
 
 def test_inverse_transform_rejects_non_invertible_step() -> None:

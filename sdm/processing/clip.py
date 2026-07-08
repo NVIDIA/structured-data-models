@@ -2,6 +2,7 @@ import torch
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
@@ -17,6 +18,8 @@ class Clip(Processor, InvertibleMixin):
         q_high: Upper quantile in ``[0, 1]`` used as the per-column upper
             bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
