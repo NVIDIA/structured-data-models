@@ -220,7 +220,7 @@ class CategoricalTensor(Tensor):
     @classmethod
     def from_cudf(
         cls,
-        series: cudf.Series,
+        ser: cudf.Series,
         *,
         dtype: torch.dtype = torch.int32,
         device: torch.device | str | None = None,
@@ -228,35 +228,25 @@ class CategoricalTensor(Tensor):
         r"""Create tensor from a categorical :class:`cudf.Series`.
 
         Args:
-            series: The categorical :class:`cudf.Series`.
+            ser: The categorical :class:`cudf.Series`.
             dtype: The dtype.
             device: The device.
         """
         from cudf.api.types import is_string_dtype
 
-        codes, categories = series.factorize(
+        codes, categories = ser.factorize(
             sort=False,
             use_na_sentinel=True,
         )
-        code_dtype = "int32" if dtype == torch.int32 else "int64"
-        codes = codes.astype(code_dtype, copy=False)
-        data = torch.from_dlpack(codes).unsqueeze(-1).to(device)
+        data = torch.from_dlpack(codes).unsqueeze(-1).to(device, dtype)
 
-        category_device = device if device is not None else data.device
         if len(categories) == 0:
-            category = torch.empty(
-                0,
-                dtype=torch.int64,
-                device=category_device,
-            )
+            category = torch.empty(0, dtype=torch.int64, device=data.device)
         elif is_string_dtype(categories.dtype):
-            category = StringTensor.from_cudf(
-                categories,
-                device=category_device,
-            )
+            category = StringTensor.from_cudf(categories, device=device)
         else:
-            values = categories.to_cupy()
-            category = torch.from_dlpack(values).to(device)
+            category = torch.from_dlpack(categories.to_cupy()).to(device)
+
         return cls(data=data, categories=(category,))
 
     # Properties ##############################################################
