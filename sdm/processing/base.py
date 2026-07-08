@@ -1,48 +1,47 @@
 import abc
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING
 
 import torch
 from typing_extensions import Self
 
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
-
-SupportedStypes: TypeAlias = frozenset[Stype]
+from sdm import Stype, TableTensor
 
 
 class Processor(torch.nn.Module, abc.ABC):
-    """Fittable, table-in/table-out transform.
+    r"""Base processor for tensor-aware table transformations.
 
-    Subclass and implement ``_transform`` (the transform operation). Override
-    ``_fit`` to learn state from a :class:`TableTensor` (the default is a
-    no-op). For an inverse, also mix in :class:`InvertibleMixin` and implement
-    ``_inverse_transform``. Set ``requires_fit = False`` for stateless
-    processors that can safely run without a prior ``fit`` call. Set
-    ``supported_stypes`` for processors that support non-numerical columns.
+    A :class:`Processor` defines a reusable transformation on
+    :class:`~sdm.tensor.TableTensor` for feature preprocessing and target
+    processing.
+    A :class:`Processor` learns any required state via :meth:`fit`, and apply
+    the transformation via :meth:`transform`.
     """
 
-    supported_stypes: ClassVar[SupportedStypes]
-    requires_fit: bool = True
+    supported_stypes: frozenset[Stype]
+    requires_fit: bool
 
     def __init__(self) -> None:
         super().__init__()
         self._fitted = False
 
     def _check_supported_stypes(self, input: TableTensor) -> None:
-        supported_stypes = self.supported_stypes
-        for stype, columns in input.columns.items():
-            if stype not in supported_stypes and len(columns) > 0:
-                # TODO: Include all invalid columns in the error message
-                raise ValueError(
-                    f"'{self.__class__.__name__}' does not support "
-                    f"'{stype.value}' columns."
-                )
+        invalid_stypes: list[str] = []
+        for stype, block in input.items():
+            if stype == Stype.id or block.size(-1) == 0:
+                continue
+            if stype not in self.supported_stypes:
+                invalid_stypes.append(stype.value)
+
+        if len(invalid_stypes) > 0:
+            raise ValueError(
+                f"'{self.__class__.__name__}' received non-supported stypes "
+                f"{invalid_stypes}"
+            )
 
     def _check_is_fitted(self) -> None:
         if self.requires_fit and not self._fitted:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' is not fitted; "
-                "call 'fit()' before."
+                f"'{self.__class__.__name__}' is not yet fitted"
             )
 
     def _fit(self, input: TableTensor) -> None:
@@ -53,11 +52,7 @@ class Processor(torch.nn.Module, abc.ABC):
         pass
 
     def forward(self, input: TableTensor) -> TableTensor:
-        """Alias of :meth:`~Processor.transform`.
-
-        This is the :class:`torch.nn.Module` entry point, so
-        ``processor(input)`` and ``processor.transform(input)`` share the same
-        fitted-state checks.
+        r"""Alias of :meth:`~Processor.transform`.
 
         Args:
             input: Table to transform.
@@ -68,13 +63,10 @@ class Processor(torch.nn.Module, abc.ABC):
         return self.transform(input)
 
     def fit(self, input: TableTensor) -> Self:
-        """Fit the processor on ``input`` and return it.
+        r"""Fit the processor.
 
         Args:
-            input: Feature table used to compute the processor state.
-
-        Returns:
-            This processor.
+            input: Table used to compute the processor state.
         """
         self._check_supported_stypes(input)
         if self.requires_fit:
@@ -83,7 +75,7 @@ class Processor(torch.nn.Module, abc.ABC):
         return self
 
     def transform(self, input: TableTensor) -> TableTensor:
-        """Transform ``input`` using the fitted processor.
+        r"""Transform ``input``.
 
         Args:
             input: Table to transform.
@@ -96,10 +88,10 @@ class Processor(torch.nn.Module, abc.ABC):
         return self._transform(input)
 
     def fit_transform(self, input: TableTensor) -> TableTensor:
-        """Fit on ``input`` and return the transformed result.
+        r"""Fit the processor and transform ``input``.
 
         Args:
-            input: Feature table to fit on and transform.
+            input: Table to fit on and transform.
 
         Returns:
             Transformed table.
@@ -111,29 +103,23 @@ class Processor(torch.nn.Module, abc.ABC):
 
 
 class InvertibleMixin(abc.ABC):
-    """Adds ``inverse_transform`` to a :class:`Processor`.
-
-    Combine with :class:`Processor` and implement ``_inverse_transform``,
-    e.g. ``class StandardScale(Processor, InvertibleMixin): ...``.
-    """
+    r"""Extends a :class:`Processor` by an inverse transformation."""
 
     @abc.abstractmethod
     def _inverse_transform(self, input: TableTensor) -> TableTensor: ...
 
     def inverse_transform(self, input: TableTensor) -> TableTensor:
-        """Invert the transform of ``input`` using the fitted processor.
+        r"""Apply the inverse transformation to ``input``.
 
         Args:
-            input: Table in transformed space.
+            input: Table in transformed representation.
 
         Returns:
-            Table mapped back to the original processor space.
+            Table restored to the representation before :meth:`transform`.
         """
-        self._check_supported_stypes(input)
         self._check_is_fitted()
         return self._inverse_transform(input)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
-        def _check_supported_stypes(self, input: TableTensor) -> None: ...
         def _check_is_fitted(self) -> None: ...

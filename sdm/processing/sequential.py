@@ -1,34 +1,36 @@
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
 class Sequential(Processor, InvertibleMixin):
-    r"""Apply a number of :class:`Processor` instances in sequence.
+    r"""Apply a list of :class:`Processor` instances in sequence.
 
     Args:
         args: Sequence of :class:`Processor` instances.
     """
 
-    supported_stypes = frozenset(Stype)
+    #: The semantic types accepted by the first :class:`Processor` in the
+    #: sequence.
+    supported_stypes: frozenset[Stype]
+    #: Whether any :class:`Processor` in the sequence requires fitting.
+    requires_fit: bool
 
     def __init__(self, *args: Processor) -> None:
         super().__init__()
         self.steps: tuple[Processor, ...] = args
+        if len(self.steps) > 0:
+            self.supported_stypes = self.steps[0].supported_stypes
+        else:
+            self.supported_stypes = frozenset(Stype) - {Stype.id}
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
     def _fit(self, input: TableTensor) -> None:
         out = input
-        for step in self.steps:
+        for step in self.steps[:-1]:
             out = step.fit_transform(out)
-
-    def fit(self, input: TableTensor) -> "Sequential":  # noqa: D102
-        out = input
-        for step in self.steps:
-            out = step.fit_transform(out)
-        if self.requires_fit:
-            self._fitted = True
-        return self
+        if len(self.steps) > 0:
+            self.steps[-1].fit(out)
 
     def _transform(self, input: TableTensor) -> TableTensor:
         out = input
@@ -36,7 +38,11 @@ class Sequential(Processor, InvertibleMixin):
             out = step.transform(out)
         return out
 
-    def fit_transform(self, input: TableTensor) -> TableTensor:  # noqa: D102
+    def fit_transform(self, input: TableTensor) -> TableTensor:
+        r"""Fit the processor and transform ``input``.
+
+        :meta private:
+        """
         out = input
         for step in self.steps:
             out = step.fit_transform(out)

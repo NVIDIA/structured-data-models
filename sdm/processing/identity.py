@@ -1,19 +1,17 @@
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
 class Identity(Processor, InvertibleMixin):
-    """Return inputs unchanged.
+    r"""Return inputs unchanged."""
 
-    This stateless processor is useful as an explicit no-op in recipe phases.
-    """
-
-    supported_stypes = frozenset(Stype)
+    #:
+    supported_stypes = frozenset(Stype) - {Stype.id}
+    #:
     requires_fit = False
 
     def _transform(self, input: TableTensor) -> TableTensor:
-        """Return ``input`` unchanged."""
         return input
 
     def _inverse_transform(self, input: TableTensor) -> TableTensor:
