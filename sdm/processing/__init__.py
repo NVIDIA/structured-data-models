@@ -3,6 +3,7 @@
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.sequential import Sequential
 from sdm.processing.clip import Clip
+from sdm.processing.constant_filter import ConstantFilter
 from sdm.processing.identity import Identity
 from sdm.processing.impute import MeanImpute
 from sdm.processing.postprocess import SoftmaxTemperature
@@ -18,6 +19,7 @@ __all__ = [
     "InvertibleMixin",
     "Sequential",
     "Clip",
+    "ConstantFilter",
     "Identity",
     "MeanImpute",
     "Power",

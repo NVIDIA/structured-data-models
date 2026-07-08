@@ -37,6 +37,20 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
+{py:class}`~sdm.processing.ConstantFilter` is a task-fitted feature step: fit
+it only on the context/training rows, then reuse the learned column selection
+for later rows. Its default `method="unique"` matches TabICL by removing
+columns with at most `threshold` distinct values. NaN counts as one distinct
+category, so a column containing one finite value and NaN has two unique
+values and is retained when `threshold=1`; an all-NaN column has one and is
+removed.
+
+Use `method="variance", tolerance=1e-6` to reproduce the RFM/Kumo
+sample-standard-deviation rule. The variance method removes columns containing
+NaN because their standard deviation is NaN. `ConstantFilter` accepts
+numerical-only tables; use {py:class}`~sdm.processing.ToNumerical` first for
+categorical features.
+
 Fit the recipe pipelines on your labeled data and transform them in one call
 with `fit_transform`; transform later inputs with `recipe.features.transform`
 (no re-fit). Recipe pipelines accept and return
