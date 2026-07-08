@@ -64,8 +64,7 @@ class BaseModel(torch.nn.Module, ABC):
                 f"(got {num_estimators})"
             )
 
-        x, y = self._fit_recipe(x, y, recipe)
-        x, y = self._preprocess(x, y)
+        x, y = self._preprocess(x, y, recipe=recipe)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
         outs: list[Tensor] = []
@@ -109,8 +108,7 @@ class BaseModel(torch.nn.Module, ABC):
             )
 
         self.clear()
-        x, y = self._fit_recipe(x, y, recipe)
-        x, y = self._preprocess(x, y)
+        x, y = self._preprocess(x, y, recipe=recipe)
         x = x[..., : y.size(-1), :]
         members: list[Cache] = []
         for _ in range(num_estimators):
@@ -188,7 +186,27 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        recipe: Recipe | None = None,
     ) -> tuple[Tensor, Tensor]:
+        if recipe is not None:
+            if not isinstance(x, TableTensor) or not isinstance(
+                y, TableTensor
+            ):
+                raise ValueError(
+                    f"Expected 'x' and 'y' to be a 'TableTensor' when "
+                    f"'recipe' is given (got '{type(x).__name__}' and "
+                    f"'{type(y).__name__}')"
+                )
+
+            # Recipe steps run in normal mode since 'TableTensor' does not
+            # support structural ops on inference tensors:
+            with torch.inference_mode(False):
+                # Fit feature steps on the in-context rows only to avoid
+                # leakage:
+                recipe.features.fit(x[..., : y.size(-2), :])
+                x = recipe.features.transform(x)
+                y = recipe.target.fit_transform(y)
+
         if isinstance(x, TableTensor):
             invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
             if invalid_columns > 0:
@@ -232,31 +250,6 @@ class BaseModel(torch.nn.Module, ABC):
                 f"(got {tuple(x.size()[:-2])} and {tuple(y.size()[:-1])}"
             )
 
-        return x, y
-
-    def _fit_recipe(
-        self,
-        x: Tensor | TableTensor,  # [..., R, C]
-        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
-        recipe: Recipe | None,
-    ) -> tuple[Tensor | TableTensor, Tensor | TableTensor]:
-        if recipe is None:
-            return x, y
-
-        if not isinstance(x, TableTensor) or not isinstance(y, TableTensor):
-            raise ValueError(
-                f"Expected 'x' and 'y' to be a 'TableTensor' when 'recipe' "
-                f"is given (got '{type(x).__name__}' and "
-                f"'{type(y).__name__}')"
-            )
-
-        # Recipe steps run in normal mode since 'TableTensor' does not
-        # support structural ops on inference tensors:
-        with torch.inference_mode(False):
-            # Fit feature steps on the in-context rows only to avoid leakage:
-            recipe.features.fit(x[..., : y.size(-2), :])
-            x = recipe.features.transform(x)
-            y = recipe.target.fit_transform(y)
         return x, y
 
     def _postprocess(
