@@ -216,6 +216,8 @@ def test_select_stypes() -> None:
     assert mixed.categorical is tensor.categorical
     assert mixed.datetime.size() == (2, 0)
     assert mixed.id.size() == (2, 0)
+
+
 def test_save_load() -> None:
     tensor = TableTensor(
         columns={
