@@ -17,16 +17,16 @@ class FeaturePermute(Processor, InvertibleMixin):
     for example with :class:`~sdm.processing.ToNumerical`.
 
     Args:
-        method: Permutation strategy. ``"none"`` disables permutation,
-            ``"shift"`` cyclically shifts the columns by a drawn offset, and
-            ``"random"`` permutes the columns with a drawn permutation.
+        method: Permutation strategy. ``"shift"`` cyclically shifts the
+            columns by a drawn offset, and ``"random"`` permutes the columns
+            with a drawn permutation.
     """
 
     supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
-        method: Literal["shift", "random", "none"] = "shift",
+        method: Literal["shift", "random"] = "shift",
     ) -> None:
         super().__init__()
         self.method = method
@@ -38,7 +38,7 @@ class FeaturePermute(Processor, InvertibleMixin):
     def _fit(self, input: TableTensor) -> None:
         n_features = input.numerical.size(-1)
         device = input.numerical.device
-        if self.method == "none" or n_features <= 1:
+        if n_features <= 1:
             self.permutation = torch.arange(n_features, device=device)
         elif self.method == "shift":
             offset = int(torch.randint(n_features, (1,)).item())
@@ -46,19 +46,13 @@ class FeaturePermute(Processor, InvertibleMixin):
                 torch.arange(n_features, device=device) + offset
             ) % n_features
         else:
-            # The global CPU generator makes drawn permutations identical
-            # across CPU and CUDA.
             self.permutation = torch.randperm(n_features).to(device=device)
 
     def _transform(self, input: TableTensor) -> TableTensor:
         """Reorder the numerical block with the fitted permutation."""
-        if self.method == "none":
-            return input
         return self._permute(input, self.permutation)
 
     def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        if self.method == "none":
-            return input
         return self._permute(input, self.permutation.argsort())
 
     def _permute(
@@ -66,7 +60,6 @@ class FeaturePermute(Processor, InvertibleMixin):
         input: TableTensor,
         permutation: Tensor,
     ) -> TableTensor:
-        # Column names are Python metadata, so mapping them requires one sync.
         indices = permutation.tolist()
         return input.__class__(
             columns={
