@@ -516,7 +516,7 @@ class TableTensor(Tensor):
 
         return self.__class__(columns=columns_dict, **blocks)
 
-    def drop_columns(self, columns: str | Iterable[str]) -> TableTensor:
+    def drop_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table with ``columns`` removed.
 
         .. code-block:: python
