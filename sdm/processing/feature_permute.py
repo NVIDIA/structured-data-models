@@ -11,11 +11,14 @@ FeaturePermuteMethod = Literal["latin", "shift", "random", "none"]
 
 
 class FeaturePermute(Processor, InvertibleMixin):
-    """Permute feature columns for table-level ensemble diversity.
+    """Permute numerical feature columns for ensemble diversity.
 
     The unresolved processor represents the single-estimator view and is an
     identity transform. Use :meth:`resolve` with ``estimator > 0`` to obtain a
     concrete non-identity view.
+
+    Only numerical columns are supported. Convert other feature stypes before
+    this step, for example with :class:`~sdm.processing.ToNumerical`.
 
     Args:
         method: Permutation strategy. ``"none"`` disables permutation,
@@ -26,7 +29,7 @@ class FeaturePermute(Processor, InvertibleMixin):
     """
 
     requires_fit = False
-    supported_stypes = frozenset(Stype)
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -68,7 +71,7 @@ class FeaturePermute(Processor, InvertibleMixin):
         )
 
     def _transform(self, input: TableTensor) -> TableTensor:
-        """Permute table feature columns within each semantic block."""
+        """Permute the numerical feature block."""
         return self._apply_permutation(input, inverse=False)
 
     def _inverse_transform(self, input: TableTensor) -> TableTensor:
@@ -77,33 +80,21 @@ class FeaturePermute(Processor, InvertibleMixin):
     def _apply_permutation(
         self, input: TableTensor, *, inverse: bool
     ) -> TableTensor:
-        columns: dict[str, tuple[str, ...]] = {}
-        blocks: dict[Stype, Tensor] = {}
-        changed = False
-
-        for stype, block in input.items():
-            permutation = self._permutation(block.size(-1), block.device)
-            if inverse:
-                permutation = permutation.argsort()
-
-            old_columns = input.columns[stype]
-            if _is_identity(permutation):
-                columns[stype.value] = old_columns
-                blocks[stype] = block
-                continue
-
-            changed = True
-            blocks[stype] = block.index_select(-1, permutation)
-            columns[stype.value] = tuple(
-                old_columns[index] for index in permutation.tolist()
-            )
-
-        if not changed:
+        numerical = input.numerical
+        permutation = self._permutation(numerical.size(-1), numerical.device)
+        if inverse:
+            permutation = permutation.argsort()
+        if _is_identity(permutation):
             return input
 
         return input.__class__(
-            columns=columns,
-            **blocks,
+            columns={
+                Stype.numerical.value: tuple(
+                    input.columns[Stype.numerical][index]
+                    for index in permutation.tolist()
+                )
+            },
+            numerical=numerical.index_select(-1, permutation),
         )
 
     def _permutation(
