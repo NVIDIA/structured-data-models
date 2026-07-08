@@ -113,7 +113,7 @@ class RelatedTables:
     Args:
         tables: Related tables keyed by table name.
         relationships: Join relationships among ``tables``.
-        task_link: Link from task columns to related ``tables``.
+        task_links: Links from task columns to related ``tables``.
     """
 
     tables: Mapping[str, TableTensor]
