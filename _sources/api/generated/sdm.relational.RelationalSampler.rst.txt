@@ -1,0 +1,8 @@
+﻿RelationalSampler
+=================
+
+.. currentmodule:: sdm.relational
+
+.. autoclass:: RelationalSampler
+   :members:
+   :show-inheritance:

@@ -1,0 +1,8 @@
+﻿Relationship
+============
+
+.. currentmodule:: sdm.relational
+
+.. autoclass:: Relationship
+   :members:
+   :show-inheritance:

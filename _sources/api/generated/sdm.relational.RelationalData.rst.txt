@@ -1,0 +1,8 @@
+﻿RelationalData
+==============
+
+.. currentmodule:: sdm.relational
+
+.. autoclass:: RelationalData
+   :members:
+   :show-inheritance:
