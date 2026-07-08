@@ -54,8 +54,8 @@ def test_default_recipe_regression_roundtrip() -> None:
     )
     target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
 
-    model_features = recipe.features.fit_transform(features.numerical)
-    model_target = recipe.target.fit_transform(target.numerical)
+    model_features = recipe.features.fit_transform(features)
+    model_target = recipe.target.fit_transform(target)
 
     assert model_features.size() == features.size()
     assert model_target.size() == target.size()
@@ -63,5 +63,5 @@ def test_default_recipe_regression_roundtrip() -> None:
     assert isinstance(recipe.target, Sequential)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(
-        restored, target.numerical, atol=1e-4, rtol=1e-4
+        restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
     )

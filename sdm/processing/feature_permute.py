@@ -1,11 +1,11 @@
-from typing import Literal, cast
+from typing import Literal
 
 import torch
 from torch import Tensor
 
-from sdm import Stype, StypeLike
+from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.tensor import CategoricalTensor, TableTensor
+from sdm.tensor import TableTensor
 
 FeaturePermuteMethod = Literal["latin", "shift", "random", "none"]
 
@@ -26,7 +26,7 @@ class FeaturePermute(Processor, InvertibleMixin):
     """
 
     requires_fit = False
-    input_scope = "table"
+    supported_stypes = frozenset(Stype)
 
     def __init__(
         self,
@@ -52,28 +52,32 @@ class FeaturePermute(Processor, InvertibleMixin):
         estimator: int = 0,
         generator: torch.Generator | None = None,
     ) -> "FeaturePermute":
-        """Return a concrete permutation for one estimator view."""
+        """Return a concrete permutation for one estimator view.
+
+        Args:
+            estimator: Zero-based estimator index.
+            generator: Optional generator that overrides the configured one.
+
+        Returns:
+            The resolved feature permutation.
+        """
         return self.__class__(
             method=self.method,
             generator=self.generator if generator is None else generator,
             _estimator=estimator,
         )
 
-    def _transform(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Permute table feature columns within each semantic block."""
         return self._apply_permutation(input, inverse=False)
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
         return self._apply_permutation(input, inverse=True)
 
-    def _apply_permutation(self, input: Tensor, *, inverse: bool) -> Tensor:
-        if not isinstance(input, TableTensor):
-            raise TypeError(
-                "Expected FeaturePermute input to be a TableTensor "
-                f"(got '{type(input).__name__}')"
-            )
-
-        columns: dict[StypeLike, tuple[str, ...]] = {}
+    def _apply_permutation(
+        self, input: TableTensor, *, inverse: bool
+    ) -> TableTensor:
+        columns: dict[str, tuple[str, ...]] = {}
         blocks: dict[Stype, Tensor] = {}
         changed = False
 
@@ -84,23 +88,22 @@ class FeaturePermute(Processor, InvertibleMixin):
 
             old_columns = input.columns[stype]
             if _is_identity(permutation):
-                columns[stype] = old_columns
+                columns[stype.value] = old_columns
                 blocks[stype] = block
                 continue
 
             changed = True
             blocks[stype] = block.index_select(-1, permutation)
-            columns[stype] = tuple(
+            columns[stype.value] = tuple(
                 old_columns[index] for index in permutation.tolist()
             )
 
         if not changed:
             return input
 
-        return TableTensor(
+        return input.__class__(
             columns=columns,
-            numerical=blocks[Stype.numerical],
-            categorical=cast(CategoricalTensor, blocks[Stype.categorical]),
+            **blocks,
         )
 
     def _permutation(

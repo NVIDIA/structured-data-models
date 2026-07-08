@@ -7,23 +7,15 @@ both sides of the model.
 
 ## Concepts
 
-- A **step** is a {py:class}`~sdm.processing.Processor`. Most processors use
-  the default `input_scope = "block"` contract: they receive one tensor block
-  selected by the pipeline and return a tensor with the same leading shape. A
-  processor may instead declare `input_scope = "table"` when it needs the whole
-  {py:class}`~sdm.tensor.TableTensor`, for example to reorder or drop columns
-  while keeping column metadata and typed blocks consistent. This is routing
-  granularity, not a semantic-type capability declaration; future stype
-  dispatch can choose which stype block is passed to a block-scoped processor.
-  A *stateful* step learns parameters when you call `fit` (for example
+- A **step** is a {py:class}`~sdm.processing.Processor` that transforms a
+  {py:class}`~sdm.tensor.TableTensor` and returns a
+  {py:class}`~sdm.tensor.TableTensor`. A *stateful* step learns parameters
+  when you call `fit` (for example
   {py:class}`~sdm.processing.StandardScale` learns each column's mean and
   standard deviation); a stateless one does not (for example
   {py:class}`~sdm.processing.SoftmaxTemperature`).
 
 - A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
-  During `fit`, table-level steps are transformed before fitting later steps,
-  so later block-scoped processors learn from the same table state they will
-  see during `transform`.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
   attributes:
@@ -37,6 +29,9 @@ both sides of the model.
 ## Usage
 
 ```python
+import torch
+
+from sdm import TableTensor
 from sdm.processing import Recipe, StandardScale
 
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
@@ -44,8 +39,7 @@ recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 
 {py:meth}`~sdm.processing.Processor.resolve` returns the concrete processor
 for a processing context. Plain processors return themselves; processors that
-depend on a view or estimator can override it. Some table-level processors
-represent a model-view policy rather than a one-shot data cleanup. For example,
+depend on a view or estimator can override it. For example,
 {py:class}`~sdm.processing.FeaturePermute` preserves the single-estimator
 behavior when used directly and becomes a concrete non-identity view after
 `resolve(estimator=...)`:
@@ -56,13 +50,14 @@ from sdm.processing import FeaturePermute
 feature_view = FeaturePermute(method="shift").resolve(estimator=1)
 ```
 
-Fit the {py:class}`~sdm.processing.Recipe` on your labeled data and transform it
-in one call with {py:meth}`~sdm.processing.Recipe.fit_transform`; transform
-later inputs with `recipe.features.transform` (no re-fit). All values are
+Fit the recipe pipelines on your labeled data and transform them in one call
+with `fit_transform`; transform later inputs with `recipe.features.transform`
+(no re-fit). Recipe pipelines accept and return
 {py:class}`~sdm.tensor.TableTensor`s.
 
 ```python
-model_features, model_target = recipe.fit_transform(labeled_features, labels)
+model_features = recipe.features.fit_transform(labeled_features)
+model_target = recipe.target.fit_transform(labels)
 model_input = recipe.features.transform(new_features)
 ```
 

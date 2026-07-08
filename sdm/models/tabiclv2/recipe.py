@@ -26,20 +26,24 @@ from sdm.processing import (
     Recipe,
     SigmaClip,
     StandardScale,
+    ToNumerical,
 )
 
 
 def default_regression_recipe() -> Recipe:
     """Return the default single-estimator regression recipe.
 
-    Mirrors the original TabICLv2 regressor: mean imputation
-    (``SimpleImputer``), standard scaling (``CustomStandardScaler``), and
-    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the features;
-    the target is standard-scaled and its inverse maps predictions back to the
-    original space. Commented lines mark processors not implemented yet.
+    Mirrors the original TabICLv2 regressor: categorical columns are first
+    folded into the numerical block (:class:`~sdm.processing.ToNumerical`),
+    followed by mean imputation (``SimpleImputer``), standard scaling
+    (``CustomStandardScaler``), and two-stage 4-sigma outlier clipping
+    (``OutlierRemover``) on the features; the target is standard-scaled and its
+    inverse maps predictions back to the original space. Commented lines mark
+    processors not implemented yet.
     """
     return Recipe(
         features=[
+            ToNumerical(),
             MeanImpute(),
             # ConstantFilter(),
             StandardScale(epsilon=1e-6),
