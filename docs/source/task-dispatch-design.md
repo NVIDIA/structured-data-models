@@ -25,12 +25,7 @@ recipe = Recipe(
         MeanImpute(),
         StandardScale(epsilon=1e-6),
     ],
-    target=[
-        StypeDispatch(
-            numerical=StandardScale(),
-            categorical=Identity(),
-        ),
-    ],
+    target=[Identity()],
     output=[
         TaskDispatch(
             classification=SoftmaxTemperature(temperature=0.9),
@@ -41,8 +36,12 @@ recipe = Recipe(
 
 features, target = recipe.fit_transform(features, target)
 prediction = model(features, target)
+prediction = recipe.target.inverse_transform(prediction)
 output = recipe.output.transform(prediction)
 ```
+
+An invertible `StypeDispatch` could later apply different target transforms;
+that inverse behavior is tracked in #202.
 
 `Recipe.fit_transform(features, target)` is the task-resolution boundary. It:
 
