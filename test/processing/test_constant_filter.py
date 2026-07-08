@@ -95,6 +95,29 @@ def test_unique_threshold_zero_keeps_all_columns() -> None:
     assert ConstantFilter(threshold=0).fit_transform(table) is table
 
 
+def test_fit_rejects_batched_table() -> None:
+    table = TableTensor.from_tensor(torch.ones(2, 3, 4))
+
+    with pytest.raises(ValueError, match="two-dimensional"):
+        ConstantFilter().fit(table)
+
+
+def test_transform_accepts_batched_table() -> None:
+    train = TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0], [1.0, 3.0]]),
+        columns=("constant", "variable"),
+    )
+    batched = TableTensor.from_tensor(
+        torch.tensor([[[4.0, 5.0]], [[6.0, 7.0]]]),
+        columns=("constant", "variable"),
+    )
+
+    output = ConstantFilter().fit(train).transform(batched)
+
+    assert output.size() == (2, 1, 1)
+    assert output.columns[Stype.numerical] == ("variable",)
+
+
 @withCUDA
 def test_variance_uses_sample_standard_deviation(
     device: torch.device,
