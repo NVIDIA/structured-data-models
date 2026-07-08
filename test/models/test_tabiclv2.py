@@ -1,10 +1,12 @@
+from typing import cast
+
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Sequential
+from sdm.processing import InvertibleMixin
 from sdm.testing import withCUDA
 
 
@@ -75,7 +77,8 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
         model.fit(x[..., :R_train, :], y, num_estimators=0)
 
 
-def test_default_recipe_regression_roundtrip() -> None:
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_default_recipe(task: str) -> None:
     recipe = TabICLv2(pretrained=False).default_recipe()
 
     features = TableTensor(
@@ -89,7 +92,16 @@ def test_default_recipe_regression_roundtrip() -> None:
             categories=(StringTensor.from_list(["a", "b"]),),
         ),
     )
-    target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
+    if task == "classification":
+        target = TableTensor(
+            columns={"categorical": ("y",)},
+            categorical=CategoricalTensor(
+                data=(torch.arange(16, dtype=torch.int32) % 2).unsqueeze(-1),
+                categories=(StringTensor.from_list(["a", "b"]),),
+            ),
+        )
+    else:
+        target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
 
     model_features, model_target = recipe.fit_transform(features, target)
 
@@ -104,11 +116,23 @@ def test_default_recipe_regression_roundtrip() -> None:
         "kind",
     )
 
-    assert isinstance(recipe.target, Sequential)
-    restored = recipe.target.inverse_transform(model_target)
-    torch.testing.assert_close(
-        restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
+    restored = cast(InvertibleMixin, recipe.target).inverse_transform(
+        model_target
     )
+    assert restored is target
+
+    output = TableTensor.from_tensor(
+        torch.randn(16, 2),
+        columns=("y0", "y1"),
+    )
+    transformed = recipe.output.transform(output)
+    if task == "classification":
+        torch.testing.assert_close(
+            transformed.numerical,
+            (output.numerical / 0.9).softmax(dim=-1),
+        )
+    else:
+        assert transformed is output
 
 
 @withCUDA

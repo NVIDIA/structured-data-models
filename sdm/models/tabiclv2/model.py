@@ -11,7 +11,7 @@ from torch.nn import GELU, Linear, Sequential
 from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
-from sdm.models.tabiclv2.recipe import default_regression_recipe
+from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
@@ -91,13 +91,13 @@ class TabICLv2(BaseModel):
         self.eval()
 
     def default_recipe(self) -> Recipe:
-        r"""Return the default single-estimator regression recipe.
+        r"""Return the default task-aware recipe.
 
         Returns:
             The default :class:`~sdm.processing.Recipe` applied during pre- and
             postprocessing.
         """
-        return default_regression_recipe()
+        return default_recipe()
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device

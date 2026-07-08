@@ -1,20 +1,12 @@
-"""Default preprocessing recipes for the TabICLv2 model.
+"""Default preprocessing recipe for the TabICLv2 model.
 
-Each factory composes shared :mod:`sdm.processing` processors into the
+The factory composes shared :mod:`sdm.processing` processors into the
 deterministic ``TableTensor``-to-model-input path of the original TabICLv2
 model (``soda-inria/tabicl``).
 
-Supported now:
-
-- :func:`default_regression_recipe` -- single-estimator regression.
-
-Planned, staged towards one task-aware recipe:
-
-- per-member normalization via ``Choice`` plus ``n_estimators``.
-- a single recipe that serves both regression and classification,
-  routing target stypes with ``StypeDispatch`` and model outputs with
-  ``TaskDispatch``.
-  The end-state is sketched (commented) at the bottom of this module.
+The recipe serves regression and classification through a shared feature
+pipeline and task-dependent output processing. Per-member normalization via
+``Choice`` plus ``n_estimators`` remains planned.
 
 Steps that need processors not implemented yet (``ConstantFilter``,
 ``FeaturePermute``, ``LabelShuffle``, ``Choice``) are kept as commented
@@ -27,22 +19,22 @@ from sdm.processing import (
     MeanImpute,
     Recipe,
     SigmaClip,
+    SoftmaxTemperature,
     StandardScale,
     StypeDispatch,
+    TaskDispatch,
     ToNumerical,
 )
 
 
-def default_regression_recipe() -> Recipe:
-    """Return the default single-estimator regression recipe.
+def default_recipe() -> Recipe:
+    """Return the default regression and classification recipe.
 
-    Mirrors the original TabICLv2 regressor: categorical columns are routed
-    through :class:`~sdm.processing.ToNumerical`, followed by mean imputation
-    (``SimpleImputer``), standard scaling (``CustomStandardScaler``), and
-    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the features.
-    The target is standard-scaled and its inverse maps predictions back to the
-    original space. Use :meth:`~sdm.processing.Recipe.fit_transform` to fit
-    the feature and target roles together. Commented lines mark processors not
+    Categorical features are converted to numerical values before mean
+    imputation, standard scaling, and two-stage 4-sigma clipping. Targets
+    remain in their original space so the same invertible target pipeline
+    supports both tasks. Classification logits use temperature-scaled softmax;
+    regression outputs remain unchanged. Commented lines mark processors not
     implemented yet.
     """
     return Recipe(
@@ -61,43 +53,13 @@ def default_regression_recipe() -> Recipe:
             # FeaturePermute(method="latin"),
         ],
         target=[
-            StandardScale(),
+            # TODO: Restore numerical scaling with invertible dispatch (#202).
+            Identity(),
         ],
         output=[
-            # Identity(),
+            TaskDispatch(
+                classification=SoftmaxTemperature(temperature=0.9),
+                regression=Identity(),
+            ),
         ],
     )
-
-
-# End-state target, once the missing processors exist: a single
-# task-aware recipe that serves both regression and classification. It cycles
-# per-member normalization with ``Choice`` + ``n_estimators`` and
-# routes target stypes with ``StypeDispatch`` and model outputs by task with
-# ``TaskDispatch``. Inverting a dispatched categorical target depends on the
-# inverse design tracked in #202. Class-index-to-label decoding stays
-# driver-side (argmax + CategoricalTensor categories), not an output step.
-#
-# def default_recipe() -> Recipe:
-#     return Recipe(
-#         features=[
-#             MeanImpute(),
-#             # ConstantFilter(),
-#             StandardScale(epsilon=1e-6),
-#             # norm options: none, power, quantile, quantile_rtdl, robust
-#             Choice([Identity(), Quantile(output_distribution="normal")]),
-#             SigmaClip(threshold=4.0),
-#             FeaturePermute(method="latin"),
-#         ],
-#         target=[
-#             StypeDispatch(
-#                 numerical=StandardScale(),
-#                 categorical=Identity(),
-#             ),
-#         ],
-#         output=[
-#             TaskDispatch(
-#                 classification=SoftmaxTemperature(temperature=0.9),
-#                 regression=Identity(),
-#             ),
-#         ],
-#     )
