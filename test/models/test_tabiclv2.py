@@ -79,16 +79,34 @@ def test_tabiclv2_recipe() -> None:
     model = TabICLv2(pretrained=False)
 
     R, C, R_train = 8, 6, 5
-    x = torch.randn(R, C)
-    y = torch.randint(0, 10, (R_train,))
+    x = TableTensor.from_tensor(torch.randn(R, C))
+    y = TableTensor.from_tensor(torch.randn(R_train, 1))
 
-    recipe = Recipe()
-    out = model(x, y, recipe=recipe)
-    assert out.size() == (R - R_train, 10)
+    # An empty recipe matches the recipe-less forward pass:
+    torch.testing.assert_close(model(x, y, recipe=Recipe()), model(x, y))
 
-    model.fit(x[:R_train], y, recipe=recipe)
+    # The recipe matches its manual driver-side application:
+    out = model(x, y, recipe=model.default_recipe())
+    assert out.size() == (R - R_train, 999)
+    recipe = model.default_recipe()
+    recipe.features.fit(x[:R_train])
+    raw = model(
+        x=recipe.features.transform(x),
+        y=recipe.target.fit_transform(y),
+    )
+    assert isinstance(recipe.target, Sequential)
+    expected = recipe.target.inverse_transform(
+        TableTensor.from_tensor(raw.clone())
+    ).numerical
+    torch.testing.assert_close(out, expected)
+
+    # The fitted recipe state is reused across predict calls:
+    model.fit(x[:R_train], y, recipe=model.default_recipe())
     torch.testing.assert_close(model.predict(x[R_train:]), out)
     model.clear()
+
+    with pytest.raises(ValueError, match="TableTensor"):
+        model(torch.randn(R, C), torch.randn(R_train), recipe=Recipe())
 
 
 def test_default_recipe_regression_roundtrip() -> None:

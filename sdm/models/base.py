@@ -7,7 +7,7 @@ from torch import Tensor
 
 from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.processing import Recipe
+from sdm.processing import InvertibleMixin, Recipe
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -24,6 +24,8 @@ class BaseModel(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
+        # Fitted recipe reused across 'predict()' calls.
+        self._recipe: Recipe | None = None
 
     @torch.inference_mode()
     def forward(
@@ -44,8 +46,11 @@ class BaseModel(torch.nn.Module, ABC):
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
             recipe: The pre- and postprocessing recipe applied around the
-                model. If ``None``, no recipe is applied.
-                Recipe application is not implemented yet.
+                model. Feature steps are fitted on the in-context rows only
+                and applied to all rows, target steps are fitted on ``y`` and
+                inverted on predictions, and output steps are applied last.
+                Requires ``x`` and ``y`` to be :class:`~sdm.TableTensor`
+                inputs. If ``None``, no recipe is applied.
             num_estimators: The number of ensemble members ``E``.
                 The forward pass runs once per member, and predictions are
                 averaged across members.
@@ -59,14 +64,14 @@ class BaseModel(torch.nn.Module, ABC):
                 f"(got {num_estimators})"
             )
 
-        # TODO Apply 'recipe' to pre- and postprocess data around the model.
+        x, y = self._fit_recipe(x, y, recipe)
         x, y = self._preprocess(x, y)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
         outs: list[Tensor] = []
         for _ in range(num_estimators):
             outs.append(self._forward(x, y, cache=None))
-        return torch.stack(outs).mean(dim=0)
+        return self._postprocess(torch.stack(outs).mean(dim=0), recipe)
 
     @torch.inference_mode()
     def fit(
@@ -88,8 +93,11 @@ class BaseModel(torch.nn.Module, ABC):
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
             recipe: The pre- and postprocessing recipe applied around the
-                model. If ``None``, no recipe is applied.
-                Recipe application is not implemented yet.
+                model. Feature and target steps are fitted on the in-context
+                examples, and the fitted state is reused by subsequent
+                :meth:`predict` calls. Requires ``x`` and ``y`` to be
+                :class:`~sdm.TableTensor` inputs. If ``None``, no recipe is
+                applied.
             num_estimators: The number of ensemble members ``E``.
                 In-context examples are fitted once per member, and subsequent
                 :meth:`predict` calls average predictions across members.
@@ -101,7 +109,7 @@ class BaseModel(torch.nn.Module, ABC):
             )
 
         self.clear()
-        # TODO Apply 'recipe' to pre- and postprocess data around the model.
+        x, y = self._fit_recipe(x, y, recipe)
         x, y = self._preprocess(x, y)
         x = x[..., : y.size(-1), :]
         caches: list[Cache] = []
@@ -113,10 +121,12 @@ class BaseModel(torch.nn.Module, ABC):
             cache.freeze()
             caches.append(cache)
         self._caches = caches
+        self._recipe = recipe
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
         self._caches = None
+        self._recipe = None
 
     @torch.inference_mode()
     def predict(
@@ -128,6 +138,8 @@ class BaseModel(torch.nn.Module, ABC):
         .. note::
 
             This method requires a prior call to :meth:`fit`.
+            A recipe passed to :meth:`fit` is reused to transform ``x`` and
+            to postprocess predictions.
 
         Args:
             x: The feature tensor with shape ``[..., R_test, C]`` with
@@ -143,6 +155,17 @@ class BaseModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
+        if self._recipe is not None:
+            if not isinstance(x, TableTensor):
+                raise ValueError(
+                    f"Expected 'x' to be a 'TableTensor' when fitted with a "
+                    f"'recipe' (got '{type(x).__name__}')"
+                )
+            # Recipe steps run in normal mode since 'TableTensor' does not
+            # support structural ops on inference tensors:
+            with torch.inference_mode(False):
+                x = self._recipe.features.transform(x)
+
         y = torch.empty(
             (*x.size()[:-2], 0),
             dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
@@ -152,7 +175,7 @@ class BaseModel(torch.nn.Module, ABC):
         outs: list[Tensor] = []
         for cache in self._caches:
             outs.append(self._forward(x, y, cache=cache))
-        return torch.stack(outs).mean(dim=0)
+        return self._postprocess(torch.stack(outs).mean(dim=0), self._recipe)
 
     # Helpers #################################################################
 
@@ -205,6 +228,56 @@ class BaseModel(torch.nn.Module, ABC):
             )
 
         return x, y
+
+    def _fit_recipe(
+        self,
+        x: Tensor | TableTensor,  # [..., R, C]
+        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        recipe: Recipe | None,
+    ) -> tuple[Tensor | TableTensor, Tensor | TableTensor]:
+        if recipe is None:
+            return x, y
+
+        if not isinstance(x, TableTensor) or not isinstance(y, TableTensor):
+            raise ValueError(
+                f"Expected 'x' and 'y' to be a 'TableTensor' when 'recipe' "
+                f"is given (got '{type(x).__name__}' and "
+                f"'{type(y).__name__}')"
+            )
+
+        # Recipe steps run in normal mode since 'TableTensor' does not
+        # support structural ops on inference tensors:
+        with torch.inference_mode(False):
+            # Fit feature steps on the in-context rows only to avoid leakage:
+            recipe.features.fit(x[..., : y.size(-2), :])
+            x = recipe.features.transform(x)
+            y = recipe.target.fit_transform(y)
+        return x, y
+
+    def _postprocess(
+        self,
+        out: Tensor,  # [..., R_test, *]
+        recipe: Recipe | None,
+    ) -> Tensor:  # [..., R_test, *]
+        if recipe is None:
+            return out
+
+        if not isinstance(recipe.target, InvertibleMixin):
+            raise ValueError(
+                f"Expected the target steps of 'recipe' to support "
+                f"'inverse_transform' to map predictions back to the "
+                f"original target space "
+                f"(got '{recipe.target.__class__.__name__}')"
+            )
+
+        # Recipe steps run in normal mode since 'TableTensor' does not
+        # support structural ops on inference tensors. Cloning the prediction
+        # moves it out of inference mode:
+        with torch.inference_mode(False):
+            table = TableTensor.from_tensor(out.clone())
+            table = recipe.target.inverse_transform(table)
+            table = recipe.output.transform(table)
+            return table.numerical
 
     # Abstract Methods ########################################################
 
