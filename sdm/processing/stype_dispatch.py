@@ -76,8 +76,9 @@ class StypeDispatch(Processor):
 
         names = ", ".join(f"'{stype.value}'" for stype in remainder_stypes)
         raise ValueError(
-            f"'{self.__class__.__name__}' has no route for {names} "
-            "columns; configure a processor or set "
+            f"Found non-empty input columns for semantic types {names}, but "
+            f"'{self.__class__.__name__}' has no route for them. Configure "
+            "a processor for each semantic type or set "
             "remainder='passthrough' or remainder='drop'."
         )
 
