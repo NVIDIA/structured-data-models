@@ -1,6 +1,6 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.processing import Sequential
 from sdm.testing import withCUDA
@@ -68,6 +68,13 @@ def test_default_recipe_regression_roundtrip() -> None:
     assert model_features.size() == features.size()
     assert model_target.size() == target.size()
     assert model_features.categorical.size(-1) == 0
+    assert model_features.columns[Stype.numerical] == (
+        "a",
+        "b",
+        "c",
+        "d",
+        "kind",
+    )
 
     assert isinstance(recipe.target, Sequential)
     restored = recipe.target.inverse_transform(model_target)

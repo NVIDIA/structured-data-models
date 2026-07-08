@@ -22,6 +22,7 @@ commented placeholders.
 """
 
 from sdm.processing import (
+    Identity,
     MeanImpute,
     Recipe,
     SigmaClip,
@@ -43,7 +44,12 @@ def default_regression_recipe() -> Recipe:
     """
     return Recipe(
         features=[
-            StypeDispatch({"categorical": ToNumerical()}),
+            StypeDispatch(
+                {
+                    "numerical": Identity(),
+                    "categorical": ToNumerical(),
+                }
+            ),
             MeanImpute(),
             # ConstantFilter(),
             StandardScale(epsilon=1e-6),

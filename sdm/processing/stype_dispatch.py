@@ -120,18 +120,6 @@ class StypeDispatch(Processor):
         outputs.extend(remainder_outputs)
         return self._merge_outputs(input, outputs)
 
-    def fit_transform(self, input: TableTensor) -> TableTensor:  # noqa: D102
-        remainder_outputs = self._remainder_outputs(input)
-        outputs: list[TableTensor] = []
-        for stype, processor in self._processors_by_stype():
-            route_input = input.select_stypes(stype)
-            if route_input.size(-1) == 0:
-                continue
-            outputs.append(processor.fit_transform(route_input))
-        outputs.extend(remainder_outputs)
-        self._fitted = True
-        return self._merge_outputs(input, outputs)
-
     def __repr__(self, *, indent: int = 0) -> str:
         if len(self.processors) == 0:
             return super().__repr__(indent=indent)

@@ -12,7 +12,6 @@ install
 :maxdepth: 1
 
 recipe
-stype-dispatch
 ```
 
 ```{toctree}
