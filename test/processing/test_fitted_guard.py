@@ -98,8 +98,6 @@ def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
         processor(mixed)
 
 
-
-
 def test_processor_rejects_id_stype() -> None:
     with pytest.raises(ValueError, match="id"):
         StandardScale().fit(_id_table())
