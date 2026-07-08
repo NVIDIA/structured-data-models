@@ -21,8 +21,7 @@ class Choice(Processor, InvertibleMixin):
     members with independently selected processing routes.
 
     Args:
-        options: Non-empty sequence of candidate processors. Express a
-            multi-step option with :class:`~sdm.processing.Sequential`.
+        options: Non-empty sequence of candidate processors.
     """
 
     supported_stypes = frozenset(Stype)
@@ -31,12 +30,6 @@ class Choice(Processor, InvertibleMixin):
         super().__init__()
         if len(options) == 0:
             raise ValueError("options must be non-empty.")
-        for option in options:
-            if not isinstance(option, Processor):
-                raise TypeError(
-                    f"options must be 'Processor' instances "
-                    f"(got '{type(option).__name__}')."
-                )
         index = int(torch.randint(len(options), (1,)).item())
         self.selected: Processor = options[index]
         self.requires_fit = self.selected.requires_fit

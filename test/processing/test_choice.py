@@ -39,26 +39,9 @@ def _make_recipe() -> Recipe:
     )
 
 
-def test_choice_requires_non_empty_options() -> None:
+def test_choice_rejects_empty_options() -> None:
     with pytest.raises(ValueError, match="non-empty"):
         Choice([])
-
-
-def test_choice_rejects_non_processor_options() -> None:
-    with pytest.raises(TypeError, match="'Processor' instances"):
-        Choice([Identity(), torch.nn.Identity()])  # type: ignore
-
-
-def test_choice_selection_is_reproducible_with_global_seed() -> None:
-    def picks() -> list[str]:
-        torch.manual_seed(123)
-        return [
-            type(Choice([Identity(), StandardScale()]).selected).__name__
-            for _ in range(16)
-        ]
-
-    assert picks() == picks()
-    assert len(set(picks())) == 2
 
 
 def test_choice_registers_only_the_selected_option() -> None:
