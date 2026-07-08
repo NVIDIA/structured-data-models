@@ -1,8 +1,9 @@
 import math
+from typing import Any, cast
 
 import pytest
 import torch
-from sdm.nn import RotaryEmbedding
+from sdm.nn import RotaryEmbedding, apply_rotary_embedding
 from sdm.testing import withCUDA
 
 
@@ -33,3 +34,54 @@ def test_rope(device: torch.device) -> None:
 
     with pytest.raises(ValueError, match="`channels` must be even"):
         RotaryEmbedding(channels=3, device=device)
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_interleaved_rope(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    inv_freq = torch.tensor(
+        [math.pi / 2, 0],
+        device=device,
+        dtype=dtype,
+    )
+    x = torch.tensor(
+        [[[[1, 2, 3, 4]], [[1, 2, 3, 4]], [[1, 2, 3, 4]]]],
+        device=device,
+        dtype=dtype,
+    )
+
+    out = apply_rotary_embedding(
+        x=x,
+        inv_freq=inv_freq,
+        layout="interleaved",
+    )
+
+    expected = torch.tensor(
+        [[[[1, 2, 3, 4]], [[-2, 1, 3, 4]], [[-1, -2, 3, 4]]]],
+        device=device,
+        dtype=dtype,
+    )
+
+    torch.testing.assert_close(out, expected)
+    assert out.dtype == x.dtype
+    assert out.device == x.device
+
+
+def test_apply_rotary_embedding_errors() -> None:
+    x = torch.randn(2, 3, 1, 4)
+
+    with pytest.raises(ValueError, match="must be one-dimensional"):
+        apply_rotary_embedding(x=x, inv_freq=torch.ones(1, 2))
+
+    with pytest.raises(ValueError, match="Expected 2 channels, got 4"):
+        apply_rotary_embedding(x=x, inv_freq=torch.ones(1))
+
+    with pytest.raises(ValueError, match="Unsupported rotary layout"):
+        apply_rotary_embedding(
+            x=x,
+            inv_freq=torch.ones(2),
+            layout=cast(Any, "invalid"),
+        )
