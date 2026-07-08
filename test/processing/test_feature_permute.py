@@ -2,15 +2,21 @@ import pytest
 import torch
 from sdm import (
     CategoricalTensor,
-    ColumnarTensor,
     StringTensor,
     Stype,
     TableTensor,
 )
-from sdm.processing import FeaturePermute, Sequential
+from sdm.processing import FeaturePermute, Sequential, ToNumerical
 
 
 def _table() -> TableTensor:
+    return TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+        columns=("x0", "x1", "x2"),
+    )
+
+
+def _mixed_table() -> TableTensor:
     return TableTensor(
         columns={
             "numerical": ("x0", "x1", "x2"),
@@ -37,7 +43,7 @@ def test_feature_permute_default_single_estimator_is_identity() -> None:
     assert output is table
 
 
-def test_feature_permute_resolved_shift_permutes_table_blocks() -> None:
+def test_feature_permute_resolved_shift_permutes_numerical_block() -> None:
     table = _table()
     processor = FeaturePermute(method="shift").resolve(estimator=1)
 
@@ -45,18 +51,13 @@ def test_feature_permute_resolved_shift_permutes_table_blocks() -> None:
 
     assert isinstance(output, TableTensor)
     assert output.columns[Stype.numerical] == ("x1", "x2", "x0")
-    assert output.columns[Stype.categorical] == ("segment", "kind")
     assert torch.equal(
         output.numerical,
         table.numerical.index_select(-1, torch.tensor([1, 2, 0])),
     )
-    assert torch.equal(
-        output.categorical.as_tensor(),
-        table.categorical.as_tensor().index_select(-1, torch.tensor([1, 0])),
-    )
 
 
-def test_feature_permute_inverse_restores_permuted_blocks() -> None:
+def test_feature_permute_inverse_restores_numerical_block() -> None:
     table = _table()
     pipeline = Sequential(FeaturePermute(method="shift").resolve(estimator=1))
 
@@ -66,9 +67,6 @@ def test_feature_permute_inverse_restores_permuted_blocks() -> None:
     assert isinstance(restored, TableTensor)
     assert restored.columns == table.columns
     assert torch.equal(restored.numerical, table.numerical)
-    assert torch.equal(
-        restored.categorical.as_tensor(), table.categorical.as_tensor()
-    )
 
 
 def test_feature_permute_random_is_deterministic() -> None:
@@ -85,9 +83,6 @@ def test_feature_permute_random_is_deterministic() -> None:
     assert isinstance(second, TableTensor)
     assert first.columns == second.columns
     assert torch.equal(first.numerical, second.numerical)
-    assert torch.equal(
-        first.categorical.as_tensor(), second.categorical.as_tensor()
-    )
 
 
 def test_feature_permute_random_inverse_round_trips() -> None:
@@ -105,34 +100,32 @@ def test_feature_permute_random_inverse_round_trips() -> None:
     assert isinstance(restored, TableTensor)
     assert restored.columns == table.columns
     assert torch.equal(restored.numerical, table.numerical)
+
+
+def test_feature_permute_rejects_non_numerical_columns() -> None:
+    with pytest.raises(ValueError, match="categorical"):
+        FeaturePermute().transform(_mixed_table())
+
+
+def test_feature_permute_composes_after_to_numerical() -> None:
+    table = _mixed_table()
+    processor = FeaturePermute(method="shift").resolve(estimator=1)
+
+    output = Sequential(ToNumerical(), processor).transform(table)
+    converted = ToNumerical().transform(table)
+
+    assert output.columns[Stype.numerical] == (
+        "x1",
+        "x2",
+        "kind",
+        "segment",
+        "x0",
+    )
+    assert output.columns[Stype.categorical] == ()
     assert torch.equal(
-        restored.categorical.as_tensor(), table.categorical.as_tensor()
+        output.numerical,
+        converted.numerical.index_select(-1, torch.tensor([1, 2, 3, 4, 0])),
     )
-
-
-def test_feature_permute_preserves_all_stype_blocks() -> None:
-    table = TableTensor(
-        columns={
-            "datetime": ("created", "updated"),
-            "id": ("user_id", "item_id"),
-        },
-        datetime=torch.tensor([[1, 2], [3, 4]], dtype=torch.int64),
-        id=ColumnarTensor(
-            (
-                torch.tensor([10, 20]),
-                torch.tensor([30, 40]),
-            )
-        ),
-    )
-
-    output = (
-        FeaturePermute(method="shift").resolve(estimator=1).transform(table)
-    )
-
-    assert output.columns[Stype.datetime] == ("updated", "created")
-    assert output.columns[Stype.id] == ("item_id", "user_id")
-    assert torch.equal(output.datetime, table.datetime[:, [1, 0]])
-    assert output.id.tolist() == [[30, 10], [40, 20]]
 
 
 def test_feature_permute_rejects_invalid_method() -> None:

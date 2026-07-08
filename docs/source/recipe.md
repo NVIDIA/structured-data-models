@@ -42,7 +42,9 @@ for a processing context. Plain processors return themselves; processors that
 depend on a view or estimator can override it. For example,
 {py:class}`~sdm.processing.FeaturePermute` preserves the single-estimator
 behavior when used directly and becomes a concrete non-identity view after
-`resolve(estimator=...)`:
+`resolve(estimator=...)`. It accepts numerical-only tables; place
+{py:class}`~sdm.processing.ToNumerical` before it when features include
+categorical columns:
 
 ```python
 from sdm.processing import FeaturePermute
