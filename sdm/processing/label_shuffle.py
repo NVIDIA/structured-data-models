@@ -11,13 +11,14 @@ LabelShuffleMethod = Literal["shift", "random", "none"]
 
 
 class LabelShuffle(Processor, InvertibleMixin):
-    """Permute integer-encoded target labels for ensemble diversity.
+    """Apply the `"TabICL" <https://arxiv.org/abs/2502.05564>`_ label view.
 
     The unresolved processor represents the single-estimator view and is an
     identity transform. Use :meth:`resolve` with ``estimator > 0`` to obtain a
     concrete non-identity view.
 
     Only numerical target columns are supported.
+    Negative labels and NaN values are preserved unchanged.
 
     Args:
         method: Permutation strategy. ``"none"`` disables permutation,
@@ -56,6 +57,7 @@ class LabelShuffle(Processor, InvertibleMixin):
 
     def _fit(self, input: TableTensor) -> None:
         labels = _valid_labels(input.numerical)
+        # Class count is fitted Python metadata, so one sync is required.
         inferred = 0 if labels.numel() == 0 else int(labels.max().item()) + 1
 
         if self.n_classes is not None:
@@ -112,10 +114,11 @@ class LabelShuffle(Processor, InvertibleMixin):
         corrected with ``output[..., permutation]`` before averaging.
 
         Args:
-            input: Class scores with classes in the last dimension.
+            input: Class scores with shape ``[..., C]``, where ``C`` is the
+                number of classes.
 
         Returns:
-            Class scores in the original class order.
+            Class scores with shape ``[..., C]`` in the original class order.
         """
         self._check_is_fitted()
         permutation = self._permutation(input.device)
@@ -162,6 +165,7 @@ class LabelShuffle(Processor, InvertibleMixin):
                 torch.arange(n_classes, device=device) - offset
             ) % n_classes
 
+        # A CPU generator makes seeded views identical across CPU and CUDA.
         generator = torch.Generator(device="cpu")
         generator.manual_seed(self._random_seed(n_classes))
         return torch.randperm(n_classes, generator=generator).to(device=device)
@@ -177,24 +181,19 @@ class LabelShuffle(Processor, InvertibleMixin):
 
 def _valid_mask(input: Tensor) -> Tensor:
     valid = input >= 0
-    if torch.is_floating_point(input):
-        valid = valid & ~torch.isnan(input)
+    if input.is_floating_point():
+        valid = valid & ~input.isnan()
     return valid
 
 
 def _valid_labels(input: Tensor) -> Tensor:
     labels = input[_valid_mask(input)]
-    if torch.is_floating_point(labels) and not torch.equal(
-        labels, labels.round()
-    ):
+    if labels.is_floating_point() and not labels.equal(labels.round()):
         raise ValueError("Expected label indices to be integer-valued")
     return labels.to(torch.long)
 
 
 def _is_identity(permutation: Tensor) -> bool:
-    return bool(
-        torch.equal(
-            permutation,
-            torch.arange(permutation.numel(), device=permutation.device),
-        )
+    return permutation.equal(
+        torch.arange(permutation.numel(), device=permutation.device)
     )

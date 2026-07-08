@@ -4,9 +4,9 @@ from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.sequential import Sequential
 from sdm.processing.clip import Clip
 from sdm.processing.feature_permute import FeaturePermute
+from sdm.processing.label_shuffle import LabelShuffle
 from sdm.processing.identity import Identity
 from sdm.processing.impute import MeanImpute
-from sdm.processing.label_shuffle import LabelShuffle
 from sdm.processing.postprocess import SoftmaxTemperature
 from sdm.processing.power import Power
 from sdm.processing.quantile import Quantile
@@ -21,8 +21,8 @@ __all__ = [
     "Sequential",
     "Clip",
     "FeaturePermute",
-    "Identity",
     "LabelShuffle",
+    "Identity",
     "MeanImpute",
     "Power",
     "Quantile",
