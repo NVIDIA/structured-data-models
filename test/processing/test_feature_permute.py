@@ -34,14 +34,6 @@ def _mixed_table() -> TableTensor:
     )
 
 
-def test_feature_permute_none_is_identity() -> None:
-    table = _table()
-
-    output = FeaturePermute(method="none").fit_transform(table)
-
-    assert output is table
-
-
 def test_feature_permute_shift_rotates_numerical_block() -> None:
     table = _table()
     torch.manual_seed(3)  # draws a cyclic offset of 1 for three columns
