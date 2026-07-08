@@ -1,12 +1,14 @@
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ConstantFilter, Sequential, StandardScale
+from sdm.processing import ConstantFilter, Recipe, StandardScale
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_unique_matches_tabicl_reference(device: torch.device) -> None:
+def test_unique_removes_columns_with_one_distinct_value(
+    device: torch.device,
+) -> None:
     data = torch.tensor(
         [
             [1.0, 0.0, 3.0, 5.0, torch.nan],
@@ -27,14 +29,14 @@ def test_unique_matches_tabicl_reference(device: torch.device) -> None:
         ),
     )
 
-    output = ConstantFilter(method="unique", threshold=1).fit_transform(table)
+    output = ConstantFilter().fit_transform(table)
 
     assert output.columns[Stype.numerical] == (
         "variable",
         "two_values",
         "value_and_nan",
     )
-    assert torch.allclose(output.numerical, data[:, [1, 2, 3]], equal_nan=True)
+    assert output.numerical.allclose(data[:, [1, 2, 3]], equal_nan=True)
     assert output.device == device
 
 
@@ -94,7 +96,9 @@ def test_unique_threshold_zero_keeps_all_columns() -> None:
 
 
 @withCUDA
-def test_variance_matches_rfm_reference(device: torch.device) -> None:
+def test_variance_uses_sample_standard_deviation(
+    device: torch.device,
+) -> None:
     data = torch.tensor(
         [
             [1.0, 1.0, 1.0],
@@ -115,11 +119,11 @@ def test_variance_matches_rfm_reference(device: torch.device) -> None:
     )
 
     assert output.columns[Stype.numerical] == ("variable",)
-    assert torch.equal(output.numerical, data[:, reference_mask])
+    assert output.numerical.equal(data[:, reference_mask])
     assert output.device == device
 
 
-def test_variance_nan_behavior_matches_rfm_reference() -> None:
+def test_variance_removes_columns_containing_nan() -> None:
     data = torch.tensor([[torch.nan, 1.0], [2.0, 2.0], [3.0, 3.0]])
     table = TableTensor.from_tensor(data, columns=("has_nan", "variable"))
     reference_mask = data.std(dim=0) > 1e-6
@@ -127,7 +131,7 @@ def test_variance_nan_behavior_matches_rfm_reference() -> None:
     output = ConstantFilter(method="variance").fit_transform(table)
 
     assert output.columns[Stype.numerical] == ("variable",)
-    assert torch.equal(output.numerical, data[:, reference_mask])
+    assert output.numerical.equal(data[:, reference_mask])
 
 
 def test_fit_uses_context_columns_for_later_transforms() -> None:
@@ -144,7 +148,7 @@ def test_fit_uses_context_columns_for_later_transforms() -> None:
     output = processor.transform(test)
 
     assert output.columns[Stype.numerical] == ("variable",)
-    assert torch.equal(output.numerical, test.numerical[:, [1]])
+    assert output.numerical.equal(test.numerical[:, [1]])
 
 
 def test_noop_returns_input_table() -> None:
@@ -153,17 +157,18 @@ def test_noop_returns_input_table() -> None:
     assert ConstantFilter().fit_transform(table) is table
 
 
-def test_composes_before_numerical_processor() -> None:
+def test_composes_in_feature_recipe() -> None:
     table = TableTensor.from_tensor(
         torch.tensor([[1.0, 2.0], [1.0, 5.0], [1.0, 8.0]]),
         columns=("constant", "variable"),
     )
 
-    output = Sequential(ConstantFilter(), StandardScale()).fit_transform(table)
+    recipe = Recipe(features=[ConstantFilter(), StandardScale()])
+    output = recipe.features.fit_transform(table)
 
     assert output.columns[Stype.numerical] == ("variable",)
-    assert torch.allclose(
-        output.numerical.mean(dim=0), torch.zeros(1), atol=1e-6
+    assert output.numerical.mean(dim=0).allclose(
+        output.numerical.new_zeros((1,)), atol=1e-6
     )
 
 

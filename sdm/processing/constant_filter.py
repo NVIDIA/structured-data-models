@@ -14,24 +14,22 @@ ConstantFilterMethod = Literal["unique", "variance"]
 class ConstantFilter(Processor):
     """Remove non-informative numerical columns learned during fit.
 
-    ``method="unique"`` matches TabICL's unique-cardinality filter. NaN
-    values count as one distinct category: a column containing one finite
-    value and NaN has two unique values, while an all-NaN column has one.
-    When the number of samples is less than or equal to ``threshold``, all
-    columns are preserved.
+    With ``method="unique"``, NaN values count as one distinct category: a
+    column containing one finite value and NaN has two unique values, while an
+    all-NaN column has one. When the number of samples is less than or equal to
+    ``threshold``, all columns are preserved.
 
-    ``method="variance"`` matches the RFM/Kumo rule by retaining columns
-    whose sample standard deviation is greater than ``tolerance``. This method
-    requires floating-point input. Columns containing NaN have NaN standard
-    deviation and are removed, matching the reference expression.
+    With ``method="variance"``, columns are retained when their sample
+    standard deviation is greater than ``tolerance``. This method requires
+    floating-point input. Columns containing NaN have NaN standard deviation
+    and are removed.
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
 
     Args:
-        method: Filtering rule. ``"unique"`` uses TabICL-compatible unique
-            counts; ``"variance"`` uses the RFM-compatible standard-deviation
-            threshold.
+        method: Filtering rule. ``"unique"`` uses distinct-value counts;
+            ``"variance"`` uses sample standard deviation.
         threshold: With ``method="unique"``, columns with at most this many
             unique values are removed.
         tolerance: With ``method="variance"``, columns with sample standard
