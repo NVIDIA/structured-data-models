@@ -102,7 +102,6 @@ class StypeDispatch(Processor):
         )
 
     def _fit(self, input: TableTensor) -> None:
-        # TODO: Move this input-aware check to pipeline validation.
         self._check_remainder(self._remainder_stypes(input))
         for stype, processor in self._processors_by_stype():
             route_input = input.select_stypes(stype)
