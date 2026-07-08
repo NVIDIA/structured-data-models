@@ -37,24 +37,6 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
-Processors that vary per ensemble member draw their view once, at
-construction, from the global CPU generator -- the same principle as
-the planned `Choice` processor. Seed with `torch.manual_seed` to make
-the views reproducible; a recipe factory constructs one recipe per member,
-so every member draws an independent view.
-{py:class}`~sdm.processing.FeaturePermute` accepts numerical-only tables;
-place {py:class}`~sdm.processing.ToNumerical` before it when features
-include categorical columns:
-
-```python
-import torch
-
-from sdm.processing import FeaturePermute
-
-torch.manual_seed(42)
-feature_view = FeaturePermute(method="shift")
-```
-
 Fit the recipe pipelines on your labeled data and transform them in one call
 with `fit_transform`; transform later inputs with `recipe.features.transform`
 (no re-fit). Recipe pipelines accept and return

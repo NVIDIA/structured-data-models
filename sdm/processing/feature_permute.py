@@ -7,20 +7,14 @@ from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.tensor import TableTensor
 
-FeaturePermuteMethod = Literal["shift", "random", "none"]
-
 
 class FeaturePermute(Processor, InvertibleMixin):
-    """Apply the `"TabICL" <https://arxiv.org/abs/2502.05564>`_ feature view.
+    """Permute the numerical feature columns.
 
-    The view is drawn once, at construction, and consumes a single draw
-    from the global CPU generator; seed with :func:`torch.manual_seed` to
-    make the view reproducible. Constructing the same recipe repeatedly
-    therefore yields ensemble members with independently drawn feature
-    orders, mirroring the planned ``Choice`` processor.
-
-    Only numerical columns are supported. Convert other feature stypes before
-    this step, for example with :class:`~sdm.processing.ToNumerical`.
+    The permutation is drawn from the global CPU generator when the
+    processor is fitted; seed with :func:`torch.manual_seed` to make it
+    reproducible. Convert non-numerical feature stypes before this step,
+    for example with :class:`~sdm.processing.ToNumerical`.
 
     Args:
         method: Permutation strategy. ``"none"`` disables permutation,
@@ -28,35 +22,50 @@ class FeaturePermute(Processor, InvertibleMixin):
             ``"random"`` permutes the columns with a drawn permutation.
     """
 
-    requires_fit = False
     supported_stypes = frozenset({Stype.numerical})
 
-    def __init__(self, method: FeaturePermuteMethod = "shift") -> None:
+    def __init__(
+        self,
+        method: Literal["shift", "random", "none"] = "shift",
+    ) -> None:
         super().__init__()
-        if method not in {"shift", "random", "none"}:
-            raise ValueError(
-                "method must be one of 'shift', 'random', or 'none'"
-            )
         self.method = method
-        self._draw = int(torch.randint(2**63 - 1, (1,)).item())
+        self.register_buffer(
+            "permutation",
+            torch.empty(0, dtype=torch.long),
+        )
+
+    def _fit(self, input: TableTensor) -> None:
+        n_features = input.numerical.size(-1)
+        device = input.numerical.device
+        if self.method == "none" or n_features <= 1:
+            self.permutation = torch.arange(n_features, device=device)
+        elif self.method == "shift":
+            offset = int(torch.randint(n_features, (1,)).item())
+            self.permutation = (
+                torch.arange(n_features, device=device) + offset
+            ) % n_features
+        else:
+            # The global CPU generator makes drawn permutations identical
+            # across CPU and CUDA.
+            self.permutation = torch.randperm(n_features).to(device=device)
 
     def _transform(self, input: TableTensor) -> TableTensor:
-        """Permute the numerical feature block."""
-        return self._apply_permutation(input, inverse=False)
+        """Reorder the numerical block with the fitted permutation."""
+        if self.method == "none":
+            return input
+        return self._permute(input, self.permutation)
 
     def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        return self._apply_permutation(input, inverse=True)
-
-    def _apply_permutation(
-        self, input: TableTensor, *, inverse: bool
-    ) -> TableTensor:
-        numerical = input.numerical
-        permutation = self._permutation(numerical.size(-1), numerical.device)
-        if inverse:
-            permutation = permutation.argsort()
-        if _is_identity(permutation):
+        if self.method == "none":
             return input
+        return self._permute(input, self.permutation.argsort())
 
+    def _permute(
+        self,
+        input: TableTensor,
+        permutation: Tensor,
+    ) -> TableTensor:
         # Column names are Python metadata, so mapping them requires one sync.
         indices = permutation.tolist()
         return input.__class__(
@@ -65,37 +74,5 @@ class FeaturePermute(Processor, InvertibleMixin):
                     input.columns[Stype.numerical][index] for index in indices
                 )
             },
-            numerical=numerical.index_select(-1, permutation),
+            numerical=input.numerical.index_select(-1, permutation),
         )
-
-    def _permutation(
-        self,
-        n_features: int,
-        device: torch.device,
-    ) -> Tensor:
-        if n_features <= 1 or self.method == "none":
-            return torch.arange(n_features, device=device)
-
-        if self.method == "shift":
-            offset = self._draw % n_features
-            return (
-                torch.arange(n_features, device=device) + offset
-            ) % n_features
-
-        # A CPU generator makes drawn views identical across CPU and CUDA.
-        generator = torch.Generator(device="cpu")
-        generator.manual_seed(self._draw)
-        return torch.randperm(n_features, generator=generator).to(
-            device=device
-        )
-
-    def __repr__(self, *, indent: int = 0) -> str:
-        return (
-            f"{' ' * indent}{self.__class__.__name__}(method={self.method!r})"
-        )
-
-
-def _is_identity(permutation: Tensor) -> bool:
-    return permutation.equal(
-        torch.arange(permutation.numel(), device=permutation.device)
-    )
