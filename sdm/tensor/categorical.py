@@ -227,7 +227,7 @@ class CategoricalTensor(Tensor):
         dtype: torch.dtype = torch.int32,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
-        r"""Create tensor from a categorical :class:`~cudf.Series`.
+        r"""Create tensor from a categorical :class:`cudf.Series`.
 
         Args:
             series: The categorical :class:`cudf.Series`.
