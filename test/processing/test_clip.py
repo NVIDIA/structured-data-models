@@ -1,5 +1,6 @@
 import pytest
 import torch
+from sdm import TableTensor
 from sdm.processing import Clip
 from sdm.testing import withCUDA
 
@@ -16,7 +17,9 @@ def test_clip_quantile_bounds_and_transform(device: torch.device) -> None:
         device=device,
     )
 
-    processor = Clip(q_low=0.25, q_high=0.75).fit(input)
+    processor = Clip(q_low=0.25, q_high=0.75).fit(
+        TableTensor.from_tensor(input)
+    )
     expected_bounds = torch.quantile(
         input,
         torch.tensor([0.25, 0.75], device=device),
@@ -26,10 +29,15 @@ def test_clip_quantile_bounds_and_transform(device: torch.device) -> None:
 
     assert torch.allclose(processor.lower_bound, expected_bounds[0])
     assert torch.allclose(processor.upper_bound, expected_bounds[1])
-    transformed = processor.transform(input)
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
     assert torch.equal(transformed, expected)
     assert transformed.device == device
-    assert torch.equal(processor.inverse_transform(expected), expected)
+    assert torch.equal(
+        processor.inverse_transform(
+            TableTensor.from_tensor(expected)
+        ).numerical,
+        expected,
+    )
 
 
 @withCUDA
@@ -39,7 +47,7 @@ def test_clip_default_uses_min_max_bounds(device: torch.device) -> None:
         device=device,
     )
 
-    processor = Clip().fit(input)
+    processor = Clip().fit(TableTensor.from_tensor(input))
 
     assert torch.equal(
         processor.lower_bound,
@@ -49,7 +57,7 @@ def test_clip_default_uses_min_max_bounds(device: torch.device) -> None:
         processor.upper_bound,
         torch.tensor([4.0, 9.0], device=device),
     )
-    transformed = processor.transform(input)
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
     assert torch.equal(transformed, input)
     assert transformed.device == device
 
@@ -58,7 +66,9 @@ def test_clip_default_uses_min_max_bounds(device: torch.device) -> None:
 def test_clip_constant_columns_are_exact(device: torch.device) -> None:
     input = torch.full((4, 2), 3.0, device=device)
 
-    processor = Clip(q_low=0.02, q_high=0.98).fit(input)
+    processor = Clip(q_low=0.02, q_high=0.98).fit(
+        TableTensor.from_tensor(input)
+    )
 
     assert torch.equal(
         processor.lower_bound, torch.full((2,), 3.0, device=device)
@@ -66,7 +76,7 @@ def test_clip_constant_columns_are_exact(device: torch.device) -> None:
     assert torch.equal(
         processor.upper_bound, torch.full((2,), 3.0, device=device)
     )
-    transformed = processor.transform(input)
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
     assert torch.equal(transformed, input)
     assert transformed.device == device
 
@@ -82,8 +92,8 @@ def test_clip_nan_columns_follow_torch_quantile(device: torch.device) -> None:
         device=device,
     )
 
-    processor = Clip(q_low=0.0, q_high=1.0).fit(input)
-    transformed = processor.transform(input)
+    processor = Clip(q_low=0.0, q_high=1.0).fit(TableTensor.from_tensor(input))
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
 
     assert torch.isnan(processor.lower_bound[0])
     assert torch.isnan(processor.upper_bound[0])
