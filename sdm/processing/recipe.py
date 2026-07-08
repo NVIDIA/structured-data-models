@@ -1,7 +1,10 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from sdm.processing import Processor, Sequential
+from sdm.processing.base import Processor
+from sdm.processing.sequential import Sequential
+from sdm.processing.task_dispatch import TaskDispatch
+from sdm.tensor import TableTensor
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -16,8 +19,10 @@ class Recipe:
       after it (predictions back to the original space).
     - ``output``: shape-preserving cleanup of the model output.
 
-    Each sequence exposes ``fit``/``transform``/``fit_transform`` and, when its
-    steps are invertible, ``inverse_transform``. Call them directly, e.g.
+    Use :meth:`fit_transform` to fit and transform labeled feature and target
+    tables together. It transforms the target first so its semantic type can
+    resolve any :class:`~sdm.processing.TaskDispatch` in ``output``. Each role
+    also exposes its processor methods directly, e.g.
     ``recipe.features.transform(table)`` or
     ``recipe.target.inverse_transform(prediction)``.
 
@@ -54,9 +59,63 @@ class Recipe:
         elif not isinstance(output, Processor):
             output = Sequential(*output)
 
+        for role, processor in (
+            ("features", features),
+            ("target", target),
+        ):
+            if any(
+                isinstance(module, TaskDispatch)
+                for module in processor.modules()
+            ):
+                raise ValueError(
+                    f"'TaskDispatch' is only supported in 'Recipe.output' "
+                    f"(found in '{role}')."
+                )
+
         object.__setattr__(self, "features", features)
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "output", output)
+
+    def fit_transform(
+        self,
+        features: TableTensor,
+        target: TableTensor,
+    ) -> tuple[TableTensor, TableTensor]:
+        """Fit and transform labeled features and their target.
+
+        The target is transformed first and resolves task-dependent output
+        processors before the feature pipeline is fitted.
+
+        Args:
+            features: Feature table with shape ``[..., R, C]``, where ``R`` is
+                the number of labeled rows and ``C`` is the number of columns.
+            target: Target table with shape ``[..., R, T]``, where ``T`` is
+                the number of target columns. Task-dependent output processing
+                requires ``T = 1``.
+
+        Returns:
+            Transformed feature and target tables.
+        """
+        dispatchers = [
+            module
+            for module in self.output.modules()
+            if isinstance(module, TaskDispatch)
+        ]
+        for dispatcher in dispatchers:
+            dispatcher._reset()
+
+        succeeded = False
+        try:
+            target = self.target.fit_transform(target)
+            for dispatcher in dispatchers:
+                dispatcher._resolve(target)
+            features = self.features.fit_transform(features)
+            succeeded = True
+        finally:
+            if not succeeded:
+                for dispatcher in dispatchers:
+                    dispatcher._reset()
+        return features, target
 
     def __repr__(self) -> str:
         return (

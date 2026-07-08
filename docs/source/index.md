@@ -12,6 +12,7 @@ install
 :maxdepth: 1
 
 recipe
+task-dispatch-design
 ```
 
 ```{toctree}

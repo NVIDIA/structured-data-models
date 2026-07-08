@@ -1,6 +1,6 @@
 # TaskDispatch design
 
-Status: design only. This proposal does not change runtime behavior.
+Status: implemented by this change.
 
 ## Goal
 
@@ -53,6 +53,8 @@ output = recipe.output.transform(prediction)
 5. returns transformed features and target in that order.
 
 Calling it again refits the role processors and replaces the resolved task.
+If refitting fails, output dispatchers remain unresolved instead of retaining
+the route selected by an earlier fit.
 `TaskDispatch.transform` before resolution raises an actionable error that
 points to `Recipe.fit_transform`.
 
@@ -88,8 +90,8 @@ final numerical stype then resolves regression.
 
 ## Placement
 
-The first implementation supports `TaskDispatch` only in `Recipe.output`.
-`Recipe` should reject instances in feature or target processor trees with an
+The initial implementation supports `TaskDispatch` only in `Recipe.output`.
+`Recipe` rejects instances in feature or target processor trees with an
 actionable error. A direct check in `Recipe` is preferable to introducing a
 general processor-role declaration before another processor needs it.
 
@@ -143,23 +145,18 @@ public concepts. Steady-state dispatch added about 1.5 us around `Identity`,
 3.7-7.9 us around CPU softmax, and 4.2-7.2 us around CUDA softmax. Dispatch is
 not the material cost in a real output pipeline.
 
-## Persistence prerequisite
+## Persistence
 
-The resolved task belongs to `TaskDispatch` state and should survive
-`state_dict` using PyTorch extra state or an equivalent non-tensor state
-mechanism. The prototype verified standalone round-tripping.
+The resolved task belongs to `TaskDispatch` state and survives `state_dict`
+through PyTorch extra state. `Sequential` retains its immutable public `steps`
+tuple and also registers those processors as child modules. Consequently,
+ordinary `modules()`, `state_dict()`, and device movement include nested
+processors, and `Recipe` can use ordinary module traversal to validate
+placement and resolve nested output dispatchers.
 
-Nested persistence is not currently available: `Sequential.steps` is an
-ordinary tuple, so its processors are not registered PyTorch children. As a
-result, `Sequential.modules()`, `state_dict()`, and device movement do not see
-nested processors. TaskDispatch implementation must depend on proper
-`Sequential` module registration; that fix should be made separately rather
-than hidden in this feature.
-
-Once registered, `Recipe` can use ordinary module traversal to validate
-placement and resolve nested output dispatchers. Recipe-level serialization is
-not currently a public contract; the persistence guarantee applies to
-`TaskDispatch` and its registered owning processor tree.
+Recipe-level serialization is not currently a public contract; the
+persistence guarantee applies to `TaskDispatch` and its registered owning
+processor tree.
 
 ## Non-goals
 
@@ -172,16 +169,13 @@ not currently a public contract; the persistence guarantee applies to
 - Task-dependent features in the first implementation.
 - Inverse transformation through `TaskDispatch`.
 
-## Implementation sequence
+## Implementation scope
 
-1. Register `Sequential` steps as child modules in a separate change.
-2. Add target-first `Recipe.fit_transform` and strict one-column task
-   inference.
-3. Add stateless named `TaskDispatch` routes, unresolved/missing-route errors,
-   repr, and persisted task state.
-4. Validate output-only placement through registered processor traversal.
-5. Add classification, regression, fixed-task, refit, serialization, CPU, and
-   CUDA tests.
+The change registers `Sequential` steps as child modules, adds target-first
+`Recipe.fit_transform`, and implements stateless named `TaskDispatch` routes
+with strict one-column inference, output-only placement, actionable errors,
+representation, and persisted task state. Focused tests cover both task routes,
+refitting, persistence, invalid usage, and CPU/CUDA execution.
 
 Related work:
 

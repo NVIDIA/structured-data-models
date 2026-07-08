@@ -3,6 +3,7 @@
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.sequential import Sequential
 from sdm.processing.stype_dispatch import StypeDispatch
+from sdm.processing.task_dispatch import TaskDispatch
 from sdm.processing.clip import Clip
 from sdm.processing.identity import Identity
 from sdm.processing.impute import MeanImpute
@@ -19,6 +20,7 @@ __all__ = [
     "InvertibleMixin",
     "Sequential",
     "StypeDispatch",
+    "TaskDispatch",
     "Clip",
     "Identity",
     "MeanImpute",

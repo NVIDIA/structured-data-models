@@ -43,10 +43,15 @@ with `fit_transform`; transform later inputs with `recipe.features.transform`
 {py:class}`~sdm.tensor.TableTensor`s.
 
 ```python
-model_features = recipe.features.fit_transform(labeled_features)
-model_target = recipe.target.fit_transform(labels)
+model_features, model_target = recipe.fit_transform(
+    labeled_features,
+    labels,
+)
 model_input = recipe.features.transform(new_features)
 ```
+
+The target pipeline runs first so its final semantic type can select any
+task-dependent processor configured in `recipe.output`.
 
 The model returns a {py:class}`~sdm.tensor.TableTensor`; map its predictions
 back to the original space:
