@@ -11,7 +11,7 @@ FeaturePermuteMethod = Literal["latin", "shift", "random", "none"]
 
 
 class FeaturePermute(Processor, InvertibleMixin):
-    """Permute numerical feature columns for ensemble diversity.
+    """Apply the `"TabICL" <https://arxiv.org/abs/2502.05564>`_ feature view.
 
     The unresolved processor represents the single-estimator view and is an
     identity transform. Use :meth:`resolve` with ``estimator > 0`` to obtain a
@@ -87,11 +87,12 @@ class FeaturePermute(Processor, InvertibleMixin):
         if _is_identity(permutation):
             return input
 
+        # Column names are Python metadata, so mapping them requires one sync.
+        indices = permutation.tolist()
         return input.__class__(
             columns={
                 Stype.numerical.value: tuple(
-                    input.columns[Stype.numerical][index]
-                    for index in permutation.tolist()
+                    input.columns[Stype.numerical][index] for index in indices
                 )
             },
             numerical=numerical.index_select(-1, permutation),
@@ -111,6 +112,7 @@ class FeaturePermute(Processor, InvertibleMixin):
                 torch.arange(n_features, device=device) + offset
             ) % n_features
 
+        # A CPU generator makes seeded views identical across CPU and CUDA.
         generator = torch.Generator(device="cpu")
         generator.manual_seed(self._random_seed(n_features))
         return torch.randperm(n_features, generator=generator).to(
@@ -127,9 +129,6 @@ class FeaturePermute(Processor, InvertibleMixin):
 
 
 def _is_identity(permutation: Tensor) -> bool:
-    return bool(
-        torch.equal(
-            permutation,
-            torch.arange(permutation.numel(), device=permutation.device),
-        )
+    return permutation.equal(
+        torch.arange(permutation.numel(), device=permutation.device)
     )
