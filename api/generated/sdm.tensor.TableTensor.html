@@ -137,6 +137,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.id"><code class="docutils literal notranslate">id</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.items"><code class="docutils literal notranslate">items()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.numerical"><code class="docutils literal notranslate">numerical</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.replace_blocks"><code class="docutils literal notranslate">replace_blocks()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.select_columns"><code class="docutils literal notranslate">select_columns()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.stype"><code class="docutils literal notranslate">stype()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.stypes"><code class="docutils literal notranslate">stypes</span></code></a></li>
@@ -385,6 +386,32 @@ in <code class="docutils literal notranslate"><span class="pre">df</span></code>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.TableTensor.replace_blocks">
+<span class="sig-name descname"><span class="pre">replace_blocks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numerical</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">categorical</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.categorical.CategoricalTensor"><span class="pre">CategoricalTensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">datetime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.ColumnarTensor.html#sdm.tensor.ColumnarTensor" title="sdm.tensor.columnar.ColumnarTensor"><span class="pre">ColumnarTensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">SelfTableTensor</span></span></span><a class="headerlink" href="#sdm.tensor.TableTensor.replace_blocks" title="Link to this definition">¶</a></dt>
+<dd><p>Return a table with one or more semantic blocks replaced.</p>
+<p>Provided blocks replace the corresponding semantic type while omitted
+blocks are reused from this table. The returned table preserves the
+current column schema and is validated by the <code class="docutils literal notranslate"><span class="pre">TableTensor</span></code>
+constructor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>numerical</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a><em> | </em><em>None</em>) – Replacement numerical block with shape
+<code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C_num]</span></code>.</p></li>
+<li><p><strong>categorical</strong> (<a class="reference internal" href="sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.categorical.CategoricalTensor"><em>CategoricalTensor</em></a><em> | </em><em>None</em>) – Replacement categorical block with shape
+<code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C_cat]</span></code>.</p></li>
+<li><p><strong>datetime</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>Tensor</em></a><em> | </em><em>None</em>) – Replacement datetime block with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C_dt]</span></code>.</p></li>
+<li><p><strong>id</strong> (<a class="reference internal" href="sdm.tensor.ColumnarTensor.html#sdm.tensor.ColumnarTensor" title="sdm.tensor.columnar.ColumnarTensor"><em>ColumnarTensor</em></a><em> | </em><em>None</em>) – Replacement identifier block with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C_id]</span></code>.</p></li>
+<li><p><strong>self</strong> (<em>SelfTableTensor</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>SelfTableTensor</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.TableTensor.select_columns">
 <span class="sig-name descname"><span class="pre">select_columns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.tensor.TableTensor.select_columns" title="Link to this definition">¶</a></dt>
 <dd><p>Return a table containing only <code class="docutils literal notranslate"><span class="pre">columns</span></code>.</p>
@@ -473,7 +500,7 @@ in <code class="docutils literal notranslate"><span class="pre">df</span></code>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=d7f6684b"></script>
+      <script src="../../_static/documentation_options.js?v=a1fa29a8"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
