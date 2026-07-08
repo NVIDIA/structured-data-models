@@ -29,7 +29,9 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
-    ) -> Tensor:  # [..., R - R_test, *]
+        *,
+        num_estimators: int = 1,
+    ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
 
         Args:
@@ -39,18 +41,25 @@ class BaseModel(torch.nn.Module, ABC):
                 examples.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            num_estimators: The number of ensemble members ``E``.
+                Inputs are expanded along a new leading ensemble dimension of
+                size ``E``, and predictions are averaged across members.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
         x, y = self._preprocess(x, y)
-        return self._forward(x, y, cache=None)
+        x, y = self._expand_estimators(x, y, num_estimators)
+        out = self._forward(x, y, cache=None)
+        return out.mean(dim=0) if num_estimators > 1 else out
 
     @torch.inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R_train, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        *,
+        num_estimators: int = 1,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -62,11 +71,21 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            num_estimators: The number of ensemble members ``E``.
+                In-context examples are expanded along a new leading ensemble
+                dimension of size ``E``, and subsequent :meth:`predict` calls
+                average predictions across members.
         """
         self.clear()
         x, y = self._preprocess(x, y)
-        cache = Cache({"y.dtype": y.dtype})
+        cache = Cache(
+            {
+                "y.dtype": y.dtype,
+                "num_estimators": num_estimators,
+            }
+        )
         x = x[..., : y.size(-1), :]
+        x, y = self._expand_estimators(x, y, num_estimators)
         self._forward(x, y, cache=cache)
         self._cache = cache
         self._cache.freeze()
@@ -91,7 +110,8 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_test`` rows and ``C`` columns.
 
         Returns:
-            The prediction for ``[..., R_test]`` test rows.
+            The prediction for ``[..., R_test]`` test rows, averaged across
+            ensemble members when fitted with ``num_estimators > 1``.
         """
         if self._cache is None:
             raise RuntimeError(
@@ -99,13 +119,16 @@ class BaseModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
+        num_estimators = cast(int, self._cache["num_estimators"])
         y = torch.empty(
             (*x.size()[:-2], 0),
             dtype=cast(torch.dtype, self._cache["y.dtype"]),
             device=x.device,
         )
         x, y = self._preprocess(x, y)
-        return self._forward(x, y, cache=self._cache)
+        x, y = self._expand_estimators(x, y, num_estimators)
+        out = self._forward(x, y, cache=self._cache)
+        return out.mean(dim=0) if num_estimators > 1 else out
 
     # Helpers #################################################################
 
@@ -157,6 +180,25 @@ class BaseModel(torch.nn.Module, ABC):
                 f"(got {tuple(x.size()[:-2])} and {tuple(y.size()[:-1])}"
             )
 
+        return x, y
+
+    @staticmethod
+    def _expand_estimators(
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
+        num_estimators: int,
+    ) -> tuple[Tensor, Tensor]:  # [E, ..., R, C], [E, ..., R_train]
+        if num_estimators < 1:
+            raise ValueError(
+                f"Expected 'num_estimators' to be a positive integer "
+                f"(got {num_estimators})"
+            )
+
+        if num_estimators == 1:
+            return x, y
+
+        x = x.expand(num_estimators, *x.size())
+        y = y.expand(num_estimators, *y.size())
         return x, y
 
     # Abstract Methods ########################################################
