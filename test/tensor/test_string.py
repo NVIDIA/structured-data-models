@@ -102,8 +102,6 @@ def test_from_cudf_empty_values() -> None:
     tensor = StringTensor.from_cudf(
         cudf.Series([], dtype="object"),
     )
-    print(tensor)
-    return
 
     assert tensor.is_cuda
     assert tensor.tolist() == []
