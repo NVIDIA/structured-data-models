@@ -166,11 +166,12 @@ both sides of the model.</p>
 <section id="concepts">
 <h2>Concepts<a class="headerlink" href="#concepts" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>A <strong>step</strong> is a <a class="reference internal" href="api/generated/sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> that transforms the
-<strong>numerical block</strong> of a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>; categorical
-columns pass through unchanged. A <em>stateful</em> step learns parameters when you
-call <code class="docutils literal notranslate"><span class="pre">fit</span></code> (for example <a class="reference internal" href="api/generated/sdm.processing.StandardScale.html#sdm.processing.StandardScale" title="sdm.processing.StandardScale"><code class="xref py py-class docutils literal notranslate"><span class="pre">StandardScale</span></code></a> learns each
-column’s mean and standard deviation); a stateless one does not (for example
+<li><p>A <strong>step</strong> is a <a class="reference internal" href="api/generated/sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> that transforms a
+<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> and returns a
+<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>. A <em>stateful</em> step learns parameters
+when you call <code class="docutils literal notranslate"><span class="pre">fit</span></code> (for example
+<a class="reference internal" href="api/generated/sdm.processing.StandardScale.html#sdm.processing.StandardScale" title="sdm.processing.StandardScale"><code class="xref py py-class docutils literal notranslate"><span class="pre">StandardScale</span></code></a> learns each column’s mean and
+standard deviation); a stateless one does not (for example
 <a class="reference internal" href="api/generated/sdm.processing.SoftmaxTemperature.html#sdm.processing.SoftmaxTemperature" title="sdm.processing.SoftmaxTemperature"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoftmaxTemperature</span></code></a>).</p></li>
 <li><p>A <a class="reference internal" href="api/generated/sdm.processing.Sequential.html#sdm.processing.Sequential" title="sdm.processing.Sequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> is an ordered list of steps.</p></li>
 <li><p>A <a class="reference internal" href="api/generated/sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> bundles three pipelines, reached as
@@ -187,17 +188,21 @@ target inverse (for example turning logits into probabilities).</p></li>
 </section>
 <section id="usage">
 <h2>Usage<a class="headerlink" href="#usage" title="Link to this heading">¶</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Recipe</span><span class="p">,</span> <span class="n">StandardScale</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 </span><span data-line="2">
-</span><span data-line="3"><span class="n">recipe</span> <span class="o">=</span> <span class="n">Recipe</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()],</span> <span class="n">target</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()])</span>
+</span><span data-line="3"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">TableTensor</span>
+</span><span data-line="4"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Recipe</span><span class="p">,</span> <span class="n">StandardScale</span>
+</span><span data-line="5">
+</span><span data-line="6"><span class="n">recipe</span> <span class="o">=</span> <span class="n">Recipe</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()],</span> <span class="n">target</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()])</span>
 </span></pre></div>
 </div>
-<p>Fit the <a class="reference internal" href="api/generated/sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> on your labeled data and transform it
-in one call with <code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_transform()</span></code>; transform
-later inputs with <code class="docutils literal notranslate"><span class="pre">recipe.features.transform</span></code> (no re-fit). All values are
+<p>Fit the recipe pipelines on your labeled data and transform them in one call
+with <code class="docutils literal notranslate"><span class="pre">fit_transform</span></code>; transform later inputs with <code class="docutils literal notranslate"><span class="pre">recipe.features.transform</span></code>
+(no re-fit). Recipe pipelines accept and return
 <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>s.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model_features</span><span class="p">,</span> <span class="n">model_target</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">labeled_features</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
-</span><span data-line="2"><span class="n">model_input</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">new_features</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model_features</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">labeled_features</span><span class="p">)</span>
+</span><span data-line="2"><span class="n">model_target</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+</span><span data-line="3"><span class="n">model_input</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">new_features</span><span class="p">)</span>
 </span></pre></div>
 </div>
 <p>The model returns a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>; map its predictions
@@ -235,7 +240,7 @@ back to the original space:</p>
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=a1fa29a8"></script>
+      <script src="_static/documentation_options.js?v=d6377179"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>

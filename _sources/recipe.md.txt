@@ -7,11 +7,12 @@ both sides of the model.
 
 ## Concepts
 
-- A **step** is a {py:class}`~sdm.processing.Processor` that transforms the
-  **numerical block** of a {py:class}`~sdm.tensor.TableTensor`; categorical
-  columns pass through unchanged. A *stateful* step learns parameters when you
-  call `fit` (for example {py:class}`~sdm.processing.StandardScale` learns each
-  column's mean and standard deviation); a stateless one does not (for example
+- A **step** is a {py:class}`~sdm.processing.Processor` that transforms a
+  {py:class}`~sdm.tensor.TableTensor` and returns a
+  {py:class}`~sdm.tensor.TableTensor`. A *stateful* step learns parameters
+  when you call `fit` (for example
+  {py:class}`~sdm.processing.StandardScale` learns each column's mean and
+  standard deviation); a stateless one does not (for example
   {py:class}`~sdm.processing.SoftmaxTemperature`).
 
 - A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
@@ -28,18 +29,22 @@ both sides of the model.
 ## Usage
 
 ```python
+import torch
+
+from sdm import TableTensor
 from sdm.processing import Recipe, StandardScale
 
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
-Fit the {py:class}`~sdm.processing.Recipe` on your labeled data and transform it
-in one call with {py:meth}`~sdm.processing.Recipe.fit_transform`; transform
-later inputs with `recipe.features.transform` (no re-fit). All values are
+Fit the recipe pipelines on your labeled data and transform them in one call
+with `fit_transform`; transform later inputs with `recipe.features.transform`
+(no re-fit). Recipe pipelines accept and return
 {py:class}`~sdm.tensor.TableTensor`s.
 
 ```python
-model_features, model_target = recipe.fit_transform(labeled_features, labels)
+model_features = recipe.features.fit_transform(labeled_features)
+model_target = recipe.target.fit_transform(labels)
 model_input = recipe.features.transform(new_features)
 ```
 
