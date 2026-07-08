@@ -612,7 +612,7 @@ class TableTensor(Tensor):
         return all(tensor.is_shared() for _, tensor in self.items())
 
     @override
-    def share_memory_(self) -> TableTensor:
+    def share_memory_(self) -> Self:
         for _, tensor in self.items():
             tensor.share_memory_()
         return self
@@ -631,7 +631,7 @@ class TableTensor(Tensor):
     def contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
-    ) -> TableTensor:
+    ) -> Self:
         if self.is_contiguous(memory_format=memory_format):
             return self
         return _contiguous(self, memory_format=memory_format)
