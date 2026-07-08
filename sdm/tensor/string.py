@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -9,7 +11,7 @@ from typing_extensions import override
 from sdm.tensor import VarLenTensor
 
 if TYPE_CHECKING:
-    import cudf  # ty: ignore[unresolved-import]
+    import cudf
 
 
 class StringTensor(VarLenTensor):
@@ -34,8 +36,8 @@ class StringTensor(VarLenTensor):
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> "StringTensor":
-        r"""Create tensor from a string :class:`~pyarrow.Array`.
+    ) -> StringTensor:
+        r"""Create tensor from a string :class:`pyarrow.Array`.
 
         .. code-block:: python
 
@@ -111,22 +113,20 @@ class StringTensor(VarLenTensor):
     @classmethod
     def from_cudf(
         cls,
-        values: "cudf.Series | cudf.Index",
+        values: cudf.Series | cudf.Index,
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> "StringTensor":
-        r"""Create tensor from a string :class:`cudf.Series` or index.
+    ) -> StringTensor:
+        r"""Create tensor from a string :class:`cudf.Series`.
 
         Args:
             values: The string :class:`cudf.Series` or :class:`cudf.Index`.
             size: The shape of the tensor.
             device: The device.
         """
-        import cupy as cp  # ty: ignore[unresolved-import]
-        from cudf.api.types import (  # ty: ignore[unresolved-import]
-            is_string_dtype,
-        )
+        import cupy as cp
+        from cudf.api.types import is_string_dtype
 
         if size is None:
             size = (len(values),)
@@ -172,7 +172,7 @@ class StringTensor(VarLenTensor):
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
-    ) -> "StringTensor":
+    ) -> StringTensor:
         r"""Create tensor from a rectangular Python list of strings.
 
         .. code-block:: python

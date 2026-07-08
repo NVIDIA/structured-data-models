@@ -1,22 +1,17 @@
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
-
-SelfColumnarTensor = TypeVar(
-    "SelfColumnarTensor",
-    bound="ColumnarTensor",
-)
 
 
 class ColumnarTensor(Tensor):
@@ -53,11 +48,11 @@ class ColumnarTensor(Tensor):
         pass
 
     def __new__(
-        cls: type[SelfColumnarTensor],
+        cls,
         columns: Sequence[Tensor],
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> SelfColumnarTensor:
+    ) -> Self:
         r"""Create a tensor wrapper."""
         from sdm.tensor import CategoricalTensor, TableTensor
 
@@ -111,12 +106,12 @@ class ColumnarTensor(Tensor):
 
     @classmethod
     def from_arrow(
-        cls: type[SelfColumnarTensor],
+        cls,
         array: pa.Array | pa.ChunkedArray,
         *,
         device: torch.device | str | None = None,
-    ) -> SelfColumnarTensor:
-        r"""Create tensor from a :class:`~pyarrow.Array`.
+    ) -> Self:
+        r"""Create tensor from a :class:`pyarrow.Array`.
 
         Args:
             array: The :class:`pyarrow.Array` or
