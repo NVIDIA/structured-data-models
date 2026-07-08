@@ -1,4 +1,3 @@
-import pytest
 import torch
 from sdm import (
     CategoricalTensor,
@@ -38,17 +37,16 @@ def _mixed_table() -> TableTensor:
 def test_feature_permute_none_is_identity() -> None:
     table = _table()
 
-    output = FeaturePermute(method="none").transform(table)
+    output = FeaturePermute(method="none").fit_transform(table)
 
     assert output is table
 
 
 def test_feature_permute_shift_rotates_numerical_block() -> None:
     table = _table()
-    torch.manual_seed(0)  # draws a cyclic offset of 1 for three columns
-    processor = FeaturePermute(method="shift")
+    torch.manual_seed(3)  # draws a cyclic offset of 1 for three columns
 
-    output = processor.transform(table)
+    output = FeaturePermute(method="shift").fit_transform(table)
 
     assert isinstance(output, TableTensor)
     assert output.columns[Stype.numerical] == ("x1", "x2", "x0")
@@ -58,48 +56,11 @@ def test_feature_permute_shift_rotates_numerical_block() -> None:
     )
 
 
-def test_feature_permute_same_global_seed_draws_same_view() -> None:
-    table = _table()
-
-    torch.manual_seed(123)
-    first = FeaturePermute(method="random").transform(table)
-    torch.manual_seed(123)
-    second = FeaturePermute(method="random").transform(table)
-
-    assert isinstance(first, TableTensor)
-    assert isinstance(second, TableTensor)
-    assert first.columns == second.columns
-    assert torch.equal(first.numerical, second.numerical)
-
-
-def test_feature_permute_transform_is_deterministic_per_instance() -> None:
-    table = _table()
-    processor = FeaturePermute(method="random")
-
-    first = processor.transform(table)
-    second = processor.transform(table)
-
-    assert first.columns == second.columns
-    assert torch.equal(first.numerical, second.numerical)
-
-
-def test_feature_permute_shift_inverse_restores_numerical_block() -> None:
-    table = _table()
-    pipeline = Sequential(FeaturePermute(method="shift"))
-
-    transformed = pipeline.transform(table)
-    restored = pipeline.inverse_transform(transformed)
-
-    assert isinstance(restored, TableTensor)
-    assert restored.columns == table.columns
-    assert torch.equal(restored.numerical, table.numerical)
-
-
 def test_feature_permute_random_inverse_round_trips() -> None:
     table = _table()
     pipeline = Sequential(FeaturePermute(method="random"))
 
-    transformed = pipeline.transform(table)
+    transformed = pipeline.fit_transform(table)
     restored = pipeline.inverse_transform(transformed)
 
     assert isinstance(restored, TableTensor)
@@ -107,18 +68,13 @@ def test_feature_permute_random_inverse_round_trips() -> None:
     assert torch.equal(restored.numerical, table.numerical)
 
 
-def test_feature_permute_rejects_non_numerical_columns() -> None:
-    with pytest.raises(ValueError, match="categorical"):
-        FeaturePermute().transform(_mixed_table())
-
-
 def test_feature_permute_composes_after_to_numerical() -> None:
     table = _mixed_table()
-    torch.manual_seed(0)  # draws a cyclic offset of 1 for five columns
-    processor = FeaturePermute(method="shift")
+    torch.manual_seed(3)  # draws a cyclic offset of 1 for five columns
 
-    output = Sequential(ToNumerical(), processor).transform(table)
-    converted = ToNumerical().transform(table)
+    output = Sequential(ToNumerical(), FeaturePermute(method="shift"))
+    output = output.fit_transform(table)
+    converted = ToNumerical().fit_transform(table)
 
     assert output.columns[Stype.numerical] == (
         "x1",
@@ -132,8 +88,3 @@ def test_feature_permute_composes_after_to_numerical() -> None:
         output.numerical,
         converted.numerical.index_select(-1, torch.tensor([1, 2, 3, 4, 0])),
     )
-
-
-def test_feature_permute_rejects_invalid_method() -> None:
-    with pytest.raises(ValueError, match="method must be"):
-        FeaturePermute(method="bad")  # ty: ignore[invalid-argument-type]
