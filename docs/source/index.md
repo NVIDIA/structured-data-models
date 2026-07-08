@@ -15,13 +15,6 @@ recipe
 ```
 
 ```{toctree}
-:caption: Designs
-:maxdepth: 1
-
-choice
-```
-
-```{toctree}
 :caption: API
 :maxdepth: 1
 
