@@ -1,10 +1,10 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
-from sdm import Stype, StypeLike
+from sdm import Stype
 from sdm.processing.base import Processor
 from sdm.processing.sequential import Sequential
 from sdm.tensor import TableTensor
@@ -13,16 +13,21 @@ from sdm.tensor import TableTensor
 class StypeDispatch(Processor):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
 
-    For each ``processors`` entry, the matching columns are selected into a
+    For each configured route, the matching columns are selected into a
     :class:`TableTensor` and passed to that processor. A route may change
     column values, names, count, or order. Route outputs are concatenated in
-    mapping insertion order. With the default passthrough behavior,
-    unconfigured semantic types follow in input order.
+    semantic type order. With the default passthrough behavior, unconfigured
+    semantic types follow in input order.
 
     Args:
-        processors: Mapping from semantic type to a single processor or an
-            iterable of processors. Iterable routes are normalized to
-            :class:`~sdm.processing.Sequential`.
+        numerical: Processor route for numerical columns. An iterable is
+            normalized to :class:`~sdm.processing.Sequential`.
+        categorical: Processor route for categorical columns. An iterable is
+            normalized to :class:`~sdm.processing.Sequential`.
+        datetime: Processor route for datetime columns. An iterable is
+            normalized to :class:`~sdm.processing.Sequential`.
+        id: Processor route for identifier columns. An iterable is normalized
+            to :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
             route. ``"passthrough"`` keeps them unchanged and is the default,
             ``"drop"`` removes them, and ``"error"`` raises.
@@ -32,43 +37,31 @@ class StypeDispatch(Processor):
 
     def __init__(
         self,
-        processors: Mapping[
-            StypeLike,
-            Processor | Iterable[Processor],
-        ],
         *,
+        numerical: Processor | Iterable[Processor] | None = None,
+        categorical: Processor | Iterable[Processor] | None = None,
+        datetime: Processor | Iterable[Processor] | None = None,
+        id: Processor | Iterable[Processor] | None = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
-        if remainder not in ("passthrough", "drop", "error"):
-            raise ValueError(
-                "Expected 'remainder' to be one of "
-                "'passthrough', 'drop', or 'error' "
-                f"(got {remainder!r})"
-            )
-
         self.processors = torch.nn.ModuleDict()
-        for stype, processor in processors.items():
+        for stype, processor in (
+            (Stype.numerical, numerical),
+            (Stype.categorical, categorical),
+            (Stype.datetime, datetime),
+            (Stype.id, id),
+        ):
+            if processor is None:
+                continue
             if not isinstance(processor, Processor):
                 processor = Sequential(*processor)
-            self.processors[Stype(stype).value] = processor
+            self.processors[stype.value] = processor
 
         self.remainder = remainder
         self.requires_fit = any(
             processor.requires_fit for processor in self.processors.values()
         )
-
-    def _processors_by_stype(self) -> Iterable[tuple[Stype, Processor]]:
-        for stype, processor in self.processors.items():
-            yield Stype(stype), cast(Processor, processor)
-
-    def _remainder_stypes(self, input: TableTensor) -> list[Stype]:
-        configured = {stype for stype, _ in self._processors_by_stype()}
-        return [
-            stype
-            for stype, columns in input.columns.items()
-            if stype not in configured and len(columns) > 0
-        ]
 
     def _check_remainder(self, remainder_stypes: list[Stype]) -> None:
         if self.remainder != "error" or len(remainder_stypes) == 0:
@@ -82,43 +75,45 @@ class StypeDispatch(Processor):
             "remainder='passthrough' or remainder='drop'."
         )
 
-    def _remainder_outputs(self, input: TableTensor) -> list[TableTensor]:
-        remainder_stypes = self._remainder_stypes(input)
-        self._check_remainder(remainder_stypes)
-        if self.remainder == "passthrough":
-            return [input.select_stypes(stype) for stype in remainder_stypes]
-        return []
-
-    def _merge_outputs(
-        self,
-        input: TableTensor,
-        outputs: list[TableTensor],
-    ) -> TableTensor:
-        if len(outputs) == 0:
-            return input.select_columns(())
-        return cast(
-            TableTensor,
-            torch.cat(cast(list[Tensor], outputs), dim=-1),
-        )
-
     def _fit(self, input: TableTensor) -> None:
-        self._check_remainder(self._remainder_stypes(input))
-        for stype, processor in self._processors_by_stype():
+        remainder_stypes = [
+            stype
+            for stype, columns in input.columns.items()
+            if stype.value not in self.processors and len(columns) > 0
+        ]
+        self._check_remainder(remainder_stypes)
+        for stype, processor in self.processors.items():
+            processor = cast(Processor, processor)
             route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             processor.fit(route_input)
 
     def _transform(self, input: TableTensor) -> TableTensor:
-        remainder_outputs = self._remainder_outputs(input)
+        remainder_stypes = [
+            stype
+            for stype, columns in input.columns.items()
+            if stype.value not in self.processors and len(columns) > 0
+        ]
+        self._check_remainder(remainder_stypes)
+
         outputs: list[TableTensor] = []
-        for stype, processor in self._processors_by_stype():
+        for stype, processor in self.processors.items():
+            processor = cast(Processor, processor)
             route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             outputs.append(processor.transform(route_input))
-        outputs.extend(remainder_outputs)
-        return self._merge_outputs(input, outputs)
+        if self.remainder == "passthrough":
+            outputs.extend(
+                input.select_stypes(stype) for stype in remainder_stypes
+            )
+        if len(outputs) == 0:
+            return input.select_columns(())
+        return cast(
+            TableTensor,
+            torch.cat(cast(list[Tensor], outputs), dim=-1),
+        )
 
     def __repr__(self, *, indent: int = 0) -> str:
         if len(self.processors) == 0:

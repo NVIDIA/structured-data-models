@@ -24,7 +24,7 @@ def _mixed_table() -> TableTensor:
 
 def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch({"numerical": StandardScale()})
+    dispatch = StypeDispatch(numerical=StandardScale())
 
     output = dispatch.fit_transform(table)
 
@@ -44,7 +44,7 @@ def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     table = _mixed_table()
     processor = StandardScale()
     dispatch = StypeDispatch(
-        {"numerical": processor},
+        numerical=processor,
         remainder="error",
     )
 
@@ -56,7 +56,7 @@ def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
 
 
 def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
-    output = StypeDispatch({}, remainder="drop").fit_transform(_mixed_table())
+    output = StypeDispatch(remainder="drop").fit_transform(_mixed_table())
 
     assert output.size() == (2, 0)
     assert output.columns == {
@@ -69,7 +69,7 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
 
 def test_stype_dispatch_runs_iterable_routes() -> None:
     dispatch = StypeDispatch(
-        {"numerical": [MeanImpute(), StandardScale()]},
+        numerical=[MeanImpute(), StandardScale()],
         remainder="drop",
     )
 
@@ -86,7 +86,10 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:
-    dispatch = StypeDispatch({"numerical": StandardScale()}, remainder="drop")
+    dispatch = StypeDispatch(
+        numerical=StandardScale(),
+        remainder="drop",
+    )
 
     with pytest.raises(RuntimeError, match=r"StypeDispatch.*not fitted"):
         dispatch.transform(_mixed_table())

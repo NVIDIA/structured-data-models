@@ -56,8 +56,6 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.
 - Document public constructor parameters.
-- Keep code direct and use the narrowest practical scope. Introduce
-  abstractions only when they encapsulate behavior or invariants, define a
-  public interface, or serve established reuse.
+- Keep code direct and use the narrowest practical scope. Introduce abstractions only when they encapsulate behavior or invariants, define a public interface, or serve established reuse.
 - In `__init__.py`, order imports and `__all__` in *dependency order* (base
   classes/mixins first, then concrete), never alphabetically.

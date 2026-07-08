@@ -45,10 +45,8 @@ def default_regression_recipe() -> Recipe:
     return Recipe(
         features=[
             StypeDispatch(
-                {
-                    "numerical": Identity(),
-                    "categorical": ToNumerical(),
-                }
+                numerical=Identity(),
+                categorical=ToNumerical(),
             ),
             MeanImpute(),
             # ConstantFilter(),
