@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Mapping
-from typing import Literal, TypeAlias, cast
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
@@ -9,9 +9,6 @@ from sdm import Stype, StypeLike
 from sdm.processing.base import Processor
 from sdm.processing.sequential import Sequential
 from sdm.tensor import TableTensor
-
-Remainder: TypeAlias = Literal["passthrough", "drop", "error"]
-ProcessorRoute: TypeAlias = Processor | Iterable[Processor]
 
 
 class StypeDispatch(Processor):
@@ -35,9 +32,12 @@ class StypeDispatch(Processor):
 
     def __init__(
         self,
-        processors: Mapping[StypeLike, ProcessorRoute],
+        processors: Mapping[
+            StypeLike,
+            Processor | Iterable[Processor],
+        ],
         *,
-        remainder: Remainder = "error",
+        remainder: Literal["passthrough", "drop", "error"] = "error",
     ) -> None:
         super().__init__()
         if remainder not in ("passthrough", "drop", "error"):
