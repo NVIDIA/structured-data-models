@@ -1,5 +1,6 @@
 import pytest
 import torch
+from sdm import TableTensor
 from sdm.processing import MeanImpute
 from sdm.testing import withCUDA
 
@@ -18,8 +19,10 @@ def test_mean_impute(device: torch.device, dtype: torch.dtype | None) -> None:
     )
 
     fill_value = -5.0
-    processor = MeanImpute(fill_value=fill_value).fit(input)
-    transformed = processor.transform(input)
+    processor = MeanImpute(fill_value=fill_value).fit(
+        TableTensor.from_tensor(input)
+    )
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
 
     assert torch.allclose(
         processor._mean,

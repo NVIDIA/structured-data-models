@@ -1,26 +1,42 @@
 import abc
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
 import torch
-from torch import Tensor
 from typing_extensions import Self
+
+from sdm.stype import Stype
+from sdm.tensor import TableTensor
+
+SupportedStypes: TypeAlias = frozenset[Stype]
 
 
 class Processor(torch.nn.Module, abc.ABC):
-    """Fittable, tensor-in/tensor-out transform.
+    """Fittable, table-in/table-out transform.
 
     Subclass and implement ``_transform`` (the transform operation). Override
-    ``_fit`` to learn state from data (the default is a no-op). For an inverse,
-    also mix in :class:`InvertibleMixin` and implement ``_inverse_transform``.
-    Set ``requires_fit = False`` for stateless processors that can safely run
-    without a prior ``fit`` call.
+    ``_fit`` to learn state from a :class:`TableTensor` (the default is a
+    no-op). For an inverse, also mix in :class:`InvertibleMixin` and implement
+    ``_inverse_transform``. Set ``requires_fit = False`` for stateless
+    processors that can safely run without a prior ``fit`` call. Set
+    ``supported_stypes`` for processors that support non-numerical columns.
     """
 
+    supported_stypes: ClassVar[SupportedStypes]
     requires_fit: bool = True
 
     def __init__(self) -> None:
         super().__init__()
         self._fitted = False
+
+    def _check_supported_stypes(self, input: TableTensor) -> None:
+        supported_stypes = self.supported_stypes
+        for stype, columns in input.columns.items():
+            if stype not in supported_stypes and len(columns) > 0:
+                # TODO: Include all invalid columns in the error message
+                raise ValueError(
+                    f"'{self.__class__.__name__}' does not support "
+                    f"'{stype.value}' columns."
+                )
 
     def _check_is_fitted(self) -> None:
         if self.requires_fit and not self._fitted:
@@ -29,14 +45,14 @@ class Processor(torch.nn.Module, abc.ABC):
                 "call 'fit()' before."
             )
 
-    def _fit(self, input: Tensor) -> None:
+    def _fit(self, input: TableTensor) -> None:
         pass
 
     @abc.abstractmethod
-    def _transform(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         pass
 
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, input: TableTensor) -> TableTensor:
         """Alias of :meth:`~Processor.transform`.
 
         This is the :class:`torch.nn.Module` entry point, so
@@ -44,53 +60,49 @@ class Processor(torch.nn.Module, abc.ABC):
         fitted-state checks.
 
         Args:
-            input: Tensor to transform. Concrete processors document the
-                accepted shape.
+            input: Table to transform.
 
         Returns:
-            Tensor with the shape documented by the concrete processor.
+            Transformed table.
         """
         return self.transform(input)
 
-    def fit(self, input: Tensor) -> Self:
+    def fit(self, input: TableTensor) -> Self:
         """Fit the processor on ``input`` and return it.
 
         Args:
-            input: Feature tensor used to compute the processor state.
-                Concrete processors document the accepted shape.
+            input: Feature table used to compute the processor state.
 
         Returns:
             This processor.
         """
+        self._check_supported_stypes(input)
         if self.requires_fit:
             self._fit(input)
             self._fitted = True
         return self
 
-    def transform(self, input: Tensor) -> Tensor:
+    def transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` using the fitted processor.
 
         Args:
-            input: Tensor to transform. Concrete processors document the
-                accepted shape.
+            input: Table to transform.
 
         Returns:
-            Transformed tensor with the shape documented by the concrete
-            processor.
+            Transformed table.
         """
+        self._check_supported_stypes(input)
         self._check_is_fitted()
         return self._transform(input)
 
-    def fit_transform(self, input: Tensor) -> Tensor:
+    def fit_transform(self, input: TableTensor) -> TableTensor:
         """Fit on ``input`` and return the transformed result.
 
         Args:
-            input: Feature tensor to fit on and transform. Concrete
-                processors document the accepted shape.
+            input: Feature table to fit on and transform.
 
         Returns:
-            Transformed tensor with the shape documented by the concrete
-            processor.
+            Transformed table.
         """
         return self.fit(input).transform(input)
 
@@ -106,21 +118,22 @@ class InvertibleMixin(abc.ABC):
     """
 
     @abc.abstractmethod
-    def _inverse_transform(self, input: Tensor) -> Tensor: ...
+    def _inverse_transform(self, input: TableTensor) -> TableTensor: ...
 
-    def inverse_transform(self, input: Tensor) -> Tensor:
+    def inverse_transform(self, input: TableTensor) -> TableTensor:
         """Invert the transform of ``input`` using the fitted processor.
 
         Args:
-            input: Tensor in transformed space. Concrete processors
-                document the accepted shape.
+            input: Table in transformed space.
 
         Returns:
-            Tensor mapped back to the original processor space.
+            Table mapped back to the original processor space.
         """
+        self._check_supported_stypes(input)
         self._check_is_fitted()
         return self._inverse_transform(input)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
+        def _check_supported_stypes(self, input: TableTensor) -> None: ...
         def _check_is_fitted(self) -> None: ...
