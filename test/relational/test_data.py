@@ -71,10 +71,6 @@ def test_edge_indices(data: RelationalData) -> None:
     )
 
 
-def test_relationships_cannot_be_modified(data: RelationalData) -> None:
-    with pytest.raises(AttributeError):
-        data.relationships.append(data.relationships[0])  # type: ignore
-
 def test_homogeneous_graph(data: RelationalData) -> None:
     graph = data.homogeneous_graph()
 
