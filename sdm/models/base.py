@@ -22,7 +22,8 @@ class BaseModel(torch.nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
-        self._cache: Cache | None = None  # TODO Single cache for now.
+        # One cache per ensemble member.
+        self._caches: list[Cache] | None = None  # TODO Single context for now.
 
     @torch.inference_mode()
     def forward(
@@ -79,9 +80,8 @@ class BaseModel(torch.nn.Module, ABC):
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
             num_estimators: The number of ensemble members ``E``.
-                In-context examples are expanded along a new leading ensemble
-                dimension of size ``E``, and subsequent :meth:`predict` calls
-                average predictions across members.
+                In-context examples are fitted once per member, and subsequent
+                :meth:`predict` calls average predictions across members.
         """
         if num_estimators < 1:
             raise ValueError(
@@ -91,21 +91,18 @@ class BaseModel(torch.nn.Module, ABC):
 
         self.clear()
         x, y = self._preprocess(x, y)
-        cache = Cache(
-            {
-                "y.dtype": y.dtype,
-                "num_estimators": num_estimators,
-            }
-        )
         x = x[..., : y.size(-1), :]
-        x, y = self._expand_estimators(x, y, num_estimators)
-        self._forward(x, y, cache=cache)
-        self._cache = cache
-        self._cache.freeze()
+        caches: list[Cache] = []
+        for _ in range(num_estimators):
+            cache = Cache({"y.dtype": y.dtype})
+            self._forward(x, y, cache=cache)
+            cache.freeze()
+            caches.append(cache)
+        self._caches = caches
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
-        self._cache = None
+        self._caches = None
 
     @torch.inference_mode()
     def predict(
@@ -126,22 +123,20 @@ class BaseModel(torch.nn.Module, ABC):
             The prediction for ``[..., R_test]`` test rows, averaged across
             ensemble members when fitted with ``num_estimators > 1``.
         """
-        if self._cache is None:
+        if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        num_estimators = cast(int, self._cache["num_estimators"])
         y = torch.empty(
             (*x.size()[:-2], 0),
-            dtype=cast(torch.dtype, self._cache["y.dtype"]),
+            dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
             device=x.device,
         )
         x, y = self._preprocess(x, y)
-        x, y = self._expand_estimators(x, y, num_estimators)
-        out = self._forward(x, y, cache=self._cache)
-        return out.mean(dim=0) if num_estimators > 1 else out
+        outs = [self._forward(x, y, cache=cache) for cache in self._caches]
+        return torch.stack(outs).mean(dim=0)
 
     # Helpers #################################################################
 
@@ -193,19 +188,6 @@ class BaseModel(torch.nn.Module, ABC):
                 f"(got {tuple(x.size()[:-2])} and {tuple(y.size()[:-1])}"
             )
 
-        return x, y
-
-    @staticmethod
-    def _expand_estimators(
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
-        num_estimators: int,
-    ) -> tuple[Tensor, Tensor]:  # [E, ..., R, C], [E, ..., R_train]
-        if num_estimators == 1:
-            return x, y
-
-        x = x.expand(num_estimators, *x.size())
-        y = y.expand(num_estimators, *y.size())
         return x, y
 
     # Abstract Methods ########################################################

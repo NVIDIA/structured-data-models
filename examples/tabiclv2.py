@@ -13,13 +13,12 @@ table = TableTensor.from_pandas(
 )
 model = TabICLv2(device=device)
 
-# Default in-context learning forward pass, averaged across an ensemble of
-# four members:
+# Default in-context learning forward pass
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
         x=table.drop_columns("target"),
         y=table[:300, "target"],
-        num_estimators=4,
+        num_estimators=2,
     )
 
 # Fit + Predict forward pass via key/value caching for fast inference:
@@ -27,7 +26,7 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model.fit(
         x=table[:300].drop_columns("target"),
         y=table[:300, "target"],
-        num_estimators=4,
+        num_estimators=2,
     )
     model.predict(
         x=table[300:].drop_columns("target"),
