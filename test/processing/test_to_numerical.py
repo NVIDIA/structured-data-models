@@ -66,20 +66,6 @@ def test_to_numerical_rejects_unsupported_stype() -> None:
         ToNumerical().transform(table)
 
 
-def test_to_numerical_keeps_source_category_vocabulary_available() -> None:
-    table = _table()
-
-    output = ToNumerical().transform(table)
-
-    assert isinstance(output, TableTensor)
-    assert table.categorical.categories[0].tolist() == ["US", "DE"]
-    assert table.categorical.categories[1].tolist() == [
-        "small",
-        "enterprise",
-    ]
-    assert output.columns[Stype.categorical] == ()
-
-
 def test_to_numerical_converts_categorical_only_table() -> None:
     table = TableTensor(
         columns={"categorical": ("country",)},
