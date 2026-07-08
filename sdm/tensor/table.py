@@ -1,22 +1,25 @@
+from __future__ import annotations
+
 import math
 import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
 from sdm.tensor.io import to_arrow
 
-aten = torch.ops.aten
+if TYPE_CHECKING:
+    import pandas as pd
 
-SelfTableTensor = TypeVar("SelfTableTensor", bound="TableTensor")
+aten = torch.ops.aten
 
 
 class TableTensor(Tensor):
@@ -112,7 +115,7 @@ class TableTensor(Tensor):
         pass
 
     def __new__(
-        cls: type[SelfTableTensor],
+        cls,
         size: Sequence[int] | None = None,
         columns: Mapping[StypeLike, Sequence[str]] | None = None,
         numerical: Tensor | None = None,
@@ -120,7 +123,7 @@ class TableTensor(Tensor):
         datetime: Tensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
-    ) -> SelfTableTensor:
+    ) -> Self:
         r"""Create a tensor wrapper."""
         if size is not None and len(size) == 0:
             raise ValueError("Expected 'size' to be non-empty")
@@ -230,12 +233,12 @@ class TableTensor(Tensor):
 
     @classmethod
     def from_arrow(
-        cls: type[SelfTableTensor],
+        cls,
         table: pa.Table,
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
-    ) -> SelfTableTensor:
+    ) -> Self:
         r"""Create a tensor from a :class:`pyarrow.Table`.
 
         .. code-block:: python
@@ -324,12 +327,12 @@ class TableTensor(Tensor):
 
     @classmethod
     def from_pandas(
-        cls: type[SelfTableTensor],
-        df: Any,
+        cls,
+        df: pd.DataFrame,
         stypes: Mapping[str, StypeLike],
         *,
         device: torch.device | str | None = None,
-    ) -> SelfTableTensor:
+    ) -> Self:
         r"""Create a tensor from a :class:`pandas.DataFrame`.
 
         Args:
@@ -344,16 +347,16 @@ class TableTensor(Tensor):
             device=device,
         )
 
-    def to_pandas(self) -> Any:
+    def to_pandas(self) -> pd.DataFrame:
         r"""Convert this tensor to a :class:`pandas.DataFrame`."""
         return self.to_arrow().to_pandas()
 
     @classmethod
     def from_tensor(
-        cls: type[SelfTableTensor],
+        cls,
         tensor: Tensor,
         columns: Sequence[str] | None = None,
-    ) -> SelfTableTensor:
+    ) -> Self:
         r"""Create tensor from a numerical :class:`torch.Tensor`.
 
         Args:
@@ -420,7 +423,61 @@ class TableTensor(Tensor):
         r"""Return typed column blocks per semantic type."""
         return dict(self.items())
 
-    def select_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+    def replace_blocks(
+        self,
+        *,
+        numerical: Tensor | None = None,
+        categorical: CategoricalTensor | None = None,
+        datetime: Tensor | None = None,
+        id: ColumnarTensor | None = None,
+    ) -> Self:
+        r"""Return a table with one or more semantic blocks replaced.
+
+        Provided blocks replace the corresponding semantic type while omitted
+        blocks are reused from this table. The returned table preserves the
+        current column schema and is validated by the ``TableTensor``
+        constructor.
+
+        Args:
+            numerical: Replacement numerical block with shape
+                ``[..., C_num]``.
+            categorical: Replacement categorical block with shape
+                ``[..., C_cat]``.
+            datetime: Replacement datetime block with shape ``[..., C_dt]``.
+            id: Replacement identifier block with shape ``[..., C_id]``.
+        """
+        return self.__class__(
+            columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
+            numerical=self.numerical if numerical is None else numerical,
+            categorical=(
+                self.categorical if categorical is None else categorical
+            ),
+            datetime=self.datetime if datetime is None else datetime,
+            id=self.id if id is None else id,
+        )
+
+    def select_stypes(
+        self,
+        stypes: StypeLike | Iterable[StypeLike],
+    ) -> Self:
+        r"""Return a table containing only ``stypes`` columns.
+
+        Args:
+            stypes: The semantic type or semantic types to select.
+        """
+        if isinstance(stypes, (str, Stype)):
+            stypes = (stypes,)
+        stypes = tuple(Stype(stype) for stype in stypes)
+
+        return self.__class__(
+            columns=cast(
+                Mapping[StypeLike, Sequence[str]],
+                {stype: self._columns[stype] for stype in stypes},
+            ),
+            **{stype: getattr(self, stype) for stype in stypes},
+        )
+
+    def select_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table containing only ``columns``.
 
         .. code-block:: python
@@ -459,7 +516,7 @@ class TableTensor(Tensor):
 
         return self.__class__(columns=columns_dict, **blocks)
 
-    def drop_columns(self, columns: str | Iterable[str]) -> "TableTensor":
+    def drop_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table with ``columns`` removed.
 
         .. code-block:: python
@@ -529,7 +586,7 @@ class TableTensor(Tensor):
             f"'{func}' is not supported for '{cls.__name__}'"
         )
 
-    def __getitem__(self, indices: Any) -> "TableTensor":
+    def __getitem__(self, indices: Any) -> TableTensor:
         def is_column_index(index: Any) -> bool:
             return isinstance(index, str) or (
                 isinstance(index, list)
@@ -555,7 +612,7 @@ class TableTensor(Tensor):
         return all(tensor.is_shared() for _, tensor in self.items())
 
     @override
-    def share_memory_(self) -> "TableTensor":
+    def share_memory_(self) -> Self:
         for _, tensor in self.items():
             tensor.share_memory_()
         return self
@@ -574,7 +631,7 @@ class TableTensor(Tensor):
     def contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
-    ) -> "TableTensor":
+    ) -> Self:
         if self.is_contiguous(memory_format=memory_format):
             return self
         return _contiguous(self, memory_format=memory_format)
@@ -698,7 +755,10 @@ def _is_pinned(input: TableTensor) -> bool:
 
 @TableTensor.implements(aten._pin_memory.default)
 def _pin_memory(input: TableTensor) -> TableTensor:
-    blocks = {stype: tensor.pin_memory() for stype, tensor in input.items()}
+    blocks = {
+        stype: tensor.pin_memory() if tensor.numel() > 0 else tensor
+        for stype, tensor in input.items()
+    }
     return input.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], input._columns),
         **blocks,

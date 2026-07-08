@@ -1,6 +1,6 @@
-from torch import Tensor
-
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
+from sdm.tensor import TableTensor
 
 
 class Sequential(Processor, InvertibleMixin):
@@ -10,25 +10,33 @@ class Sequential(Processor, InvertibleMixin):
         args: Sequence of :class:`Processor` instances.
     """
 
+    supported_stypes = frozenset(Stype)
+
     def __init__(self, *args: Processor) -> None:
         super().__init__()
         self.steps: tuple[Processor, ...] = args
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
-    def _fit(self, input: Tensor) -> None:
-        self.fit_transform(input)
+    def _fit(self, input: TableTensor) -> None:
+        out = input
+        for step in self.steps:
+            out = step.fit_transform(out)
 
-    def forward(self, input: Tensor) -> Tensor:  # noqa: D102
-        # TODO: Consolidate ``forward`` and ``transform`` in the base class.
-        return self.transform(input)
+    def fit(self, input: TableTensor) -> "Sequential":  # noqa: D102
+        out = input
+        for step in self.steps:
+            out = step.fit_transform(out)
+        if self.requires_fit:
+            self._fitted = True
+        return self
 
-    def transform(self, input: Tensor) -> Tensor:  # noqa: D102
+    def _transform(self, input: TableTensor) -> TableTensor:
         out = input
         for step in self.steps:
             out = step.transform(out)
         return out
 
-    def fit_transform(self, input: Tensor) -> Tensor:  # noqa: D102
+    def fit_transform(self, input: TableTensor) -> TableTensor:  # noqa: D102
         out = input
         for step in self.steps:
             out = step.fit_transform(out)
@@ -36,7 +44,7 @@ class Sequential(Processor, InvertibleMixin):
             self._fitted = True
         return out
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
         out = input
         for step in self.steps[::-1]:
             fn = getattr(step, "inverse_transform", None)

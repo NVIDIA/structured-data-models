@@ -1,8 +1,9 @@
 import torch
-from torch import Tensor
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
+from sdm.stype import Stype
+from sdm.tensor import TableTensor
 
 
 class MeanImpute(Processor):
@@ -13,17 +14,24 @@ class MeanImpute(Processor):
             (e.g. all-NaN columns).
     """
 
-    def __init__(self, *, fill_value: float = 0.0) -> None:
+    supported_stypes = frozenset({Stype.numerical})
+
+    def __init__(
+        self,
+        *,
+        fill_value: float = 0.0,
+    ) -> None:
         super().__init__()
         self.fill_value = fill_value
         self.register_buffer("_mean", torch.empty(0))
 
-    def _fit(self, input: Tensor) -> None:
-        input = _as_float(input)
-        mean = torch.nanmean(input, dim=0)
+    def _fit(self, input: TableTensor) -> None:
+        numerical = _as_float(input.numerical)
+        mean = torch.nanmean(numerical, dim=0)
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Replace NaNs with the fitted per-column means."""
-        input = _as_float(input)
-        return torch.where(input.isnan(), self._mean, input)
+        numerical = _as_float(input.numerical)
+        numerical = torch.where(numerical.isnan(), self._mean, numerical)
+        return input.replace_blocks(numerical=numerical)

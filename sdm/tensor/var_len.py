@@ -1,19 +1,18 @@
+from __future__ import annotations
+
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, to_arrow
 
 aten = torch.ops.aten
-
-
-SelfVarLenTensor = TypeVar("SelfVarLenTensor", bound="VarLenTensor")
 
 
 class VarLenTensor(Tensor):
@@ -65,13 +64,13 @@ class VarLenTensor(Tensor):
         pass
 
     def __new__(
-        cls: type[SelfVarLenTensor],
+        cls,
         data: Tensor,
         offset: Tensor,
         size: Sequence[int],
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
-    ) -> SelfVarLenTensor:
+    ) -> Self:
         r"""Create a tensor wrapper."""
         size = tuple(size)
         if any(dim_size < -1 for dim_size in size):
@@ -178,11 +177,11 @@ class VarLenTensor(Tensor):
 
     @classmethod
     def from_tensor(
-        cls: type[SelfVarLenTensor],
+        cls,
         tensor: Tensor,
         *,
         offset_dtype: torch.dtype = torch.int64,
-    ) -> SelfVarLenTensor:
+    ) -> Self:
         r"""Wrap a dense tensor as fixed-size variable-length elements.
 
         Args:
@@ -213,13 +212,13 @@ class VarLenTensor(Tensor):
 
     @classmethod
     def from_arrow(
-        cls: type[SelfVarLenTensor],
+        cls,
         array: pa.Array | pa.ChunkedArray,
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> SelfVarLenTensor:
-        r"""Create tensor from a list :class:`~pyarrow.Array`.
+    ) -> Self:
+        r"""Create tensor from a list :class:`pyarrow.Array`.
 
         .. code-block:: python
 
@@ -300,13 +299,13 @@ class VarLenTensor(Tensor):
 
     @classmethod
     def from_list(
-        cls: type[SelfVarLenTensor],
+        cls,
         values: Sequence[Any],
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
-    ) -> SelfVarLenTensor:
+    ) -> Self:
         r"""Create tensor from a rectangular Python list.
 
         .. code-block:: python
@@ -423,7 +422,7 @@ class VarLenTensor(Tensor):
         ctx: tuple[Any, ...],
         outer_size: tuple[int, ...],
         outer_stride: tuple[int, ...],
-    ) -> "VarLenTensor":
+    ) -> VarLenTensor:
         cls, storage_offset = ctx
         return cls(
             data=inner_tensors["_data"],
@@ -464,7 +463,7 @@ class VarLenTensor(Tensor):
         return self._data.is_shared() and self._offset.is_shared()
 
     @override
-    def share_memory_(self) -> "VarLenTensor":
+    def share_memory_(self) -> Self:
         self._data.share_memory_()
         self._offset.share_memory_()
         return self
@@ -484,12 +483,12 @@ class VarLenTensor(Tensor):
         self._data.requires_grad_(requires_grad)
 
     @override
-    def requires_grad_(self, mode: bool = True) -> "VarLenTensor":
+    def requires_grad_(self, mode: bool = True) -> Self:
         self._data.requires_grad_(mode)
         return self
 
     @override
-    def detach_(self) -> "VarLenTensor":
+    def detach_(self) -> Self:
         raise RuntimeError(
             f"Can't detach a '{self.__class__.__name__} in-place. Use "
             f"'detach() instead."
@@ -948,7 +947,7 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
-def _layout_view(input: "VarLenTensor") -> Tensor:
+def _layout_view(input: VarLenTensor) -> Tensor:
     return torch.as_strided(
         input._offset,
         size=input.size(),
@@ -957,7 +956,7 @@ def _layout_view(input: "VarLenTensor") -> Tensor:
     )
 
 
-def _from_layout_view(input: "VarLenTensor", view: Tensor) -> "VarLenTensor":
+def _from_layout_view(input: VarLenTensor, view: Tensor) -> VarLenTensor:
     return input.__class__(
         data=input._data,
         offset=input._offset,

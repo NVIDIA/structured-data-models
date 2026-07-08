@@ -1,5 +1,6 @@
 import pytest
 import torch
+from sdm import TableTensor
 from sdm.processing import SigmaClip
 from sdm.testing import withCUDA
 
@@ -20,8 +21,8 @@ def test_sigma_clip_preserves_nan_positions_and_ignores_nan_in_fit(
         device=device,
     )
 
-    processor = SigmaClip().fit(input)
-    transformed = processor.transform(input)
+    processor = SigmaClip().fit(TableTensor.from_tensor(input))
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
 
     assert torch.allclose(
         processor._mean[:3],
@@ -62,8 +63,8 @@ def test_sigma_clip_two_stage_outlier_behavior(
         device=device,
     )
 
-    processor = SigmaClip(threshold=1.0).fit(input)
-    transformed = processor.transform(input)
+    processor = SigmaClip(threshold=1.0).fit(TableTensor.from_tensor(input))
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
 
     assert torch.allclose(
         processor._mean,
@@ -101,8 +102,8 @@ def test_sigma_clip_matches_tabicl_reference_values() -> None:
         dtype=dtype,
     )
 
-    processor = SigmaClip(threshold=1.5).fit(input)
-    transformed = processor.transform(input)
+    processor = SigmaClip(threshold=1.5).fit(TableTensor.from_tensor(input))
+    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
 
     assert torch.allclose(
         processor._mean,

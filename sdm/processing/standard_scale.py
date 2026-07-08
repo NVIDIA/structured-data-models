@@ -1,9 +1,10 @@
 import torch
-from torch import Tensor
 
 from sdm.processing._stats import _constant_feature_mask
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
+from sdm.tensor import TableTensor
 
 
 class StandardScale(Processor, InvertibleMixin):
@@ -19,6 +20,8 @@ class StandardScale(Processor, InvertibleMixin):
         epsilon: Value added to each fitted standard deviation. The default
             preserves exact constant-column handling.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -36,38 +39,40 @@ class StandardScale(Processor, InvertibleMixin):
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
-    def _fit(self, input: Tensor) -> None:
-        input = _as_float(input)
-        data_mean = input.mean(dim=0)
+    def _fit(self, input: TableTensor) -> None:
+        numerical = _as_float(input.numerical)
+        data_mean = numerical.mean(dim=0)
 
         if self.with_mean:
             self.mean = data_mean
         else:
-            self.mean = input.new_zeros(input.shape[1])
+            self.mean = numerical.new_zeros(numerical.shape[1])
 
         if self.with_std:
-            if input.size(0) > 1:
-                var = input.var(dim=0, correction=0)
+            if numerical.size(0) > 1:
+                var = numerical.var(dim=0, correction=0)
                 scale = var.sqrt()
                 if self.epsilon == 0:
                     scale[
                         _constant_feature_mask(
                             var,
                             data_mean,
-                            input.shape[0],
+                            numerical.shape[0],
                         )
                     ] = 1.0
             else:
-                scale = input.new_zeros(input.shape[1])
+                scale = numerical.new_zeros(numerical.shape[1])
                 if self.epsilon == 0:
                     scale.fill_(1.0)
             self.scale = scale + self.epsilon
         else:
-            self.scale = input.new_ones(input.shape[1])
+            self.scale = numerical.new_ones(numerical.shape[1])
 
-    def forward(self, input: Tensor) -> Tensor:
+    def _transform(self, input: TableTensor) -> TableTensor:
         """Transform ``input`` using the fitted mean and scale."""
-        return (_as_float(input) - self.mean) / self.scale
+        numerical = (_as_float(input.numerical) - self.mean) / self.scale
+        return input.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, input: Tensor) -> Tensor:
-        return _as_float(input) * self.scale + self.mean
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+        numerical = _as_float(input.numerical) * self.scale + self.mean
+        return input.replace_blocks(numerical=numerical)
