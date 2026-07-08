@@ -49,6 +49,32 @@ def test_tabiclv2(
     model.clear()
 
 
+@pytest.mark.parametrize("batch_shape", [(), (2,)])
+def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
+    model = TabICLv2(pretrained=False)
+
+    R, C, R_train = 8, 6, 5
+    x = torch.randn(*batch_shape, R, C)
+    y = torch.randint(0, 10, (*batch_shape, R_train))
+
+    out = model(x, y)
+
+    # Members are identical for now, so their average matches a single member:
+    ensembled = model(x, y, num_estimators=3)
+    assert ensembled.size() == out.size()
+    torch.testing.assert_close(ensembled, out)
+
+    model.fit(x[..., :R_train, :], y, num_estimators=3)
+    torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
+    model.clear()
+
+    with pytest.raises(ValueError, match="num_estimators"):
+        model(x, y, num_estimators=0)
+
+    with pytest.raises(ValueError, match="num_estimators"):
+        model.fit(x[..., :R_train, :], y, num_estimators=0)
+
+
 def test_default_recipe_regression_roundtrip() -> None:
     recipe = TabICLv2(pretrained=False).default_recipe()
 
