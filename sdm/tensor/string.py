@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pyarrow as pa
 import torch
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sdm.tensor import VarLenTensor
 
@@ -36,7 +36,7 @@ class StringTensor(VarLenTensor):
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> StringTensor:
+    ) -> Self:
         r"""Create tensor from a string :class:`pyarrow.Array`.
 
         .. code-block:: python
@@ -117,7 +117,7 @@ class StringTensor(VarLenTensor):
         *,
         size: Sequence[int] | None = None,
         device: torch.device | str | None = None,
-    ) -> StringTensor:
+    ) -> Self:
         r"""Create tensor from a string :class:`cudf.Series`.
 
         Args:
@@ -172,7 +172,7 @@ class StringTensor(VarLenTensor):
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
         offset_dtype: torch.dtype = torch.int64,
-    ) -> StringTensor:
+    ) -> Self:
         r"""Create tensor from a rectangular Python list of strings.
 
         .. code-block:: python
