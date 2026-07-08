@@ -12,20 +12,21 @@ from sdm.tensor import TableTensor
 
 
 class StypeDispatch(Processor):
-    r"""Apply processors to selected semantic types in a table.
+    r"""Apply separate processor pipelines to columns grouped by semantic type.
 
-    Each configured route receives a :class:`TableTensor` containing only that
-    semantic type. Route outputs are merged column-wise in route order,
-    followed by any passthrough remainder columns in the input semantic type
-    order.
+    For each ``processors`` entry, the matching columns are selected into a
+    :class:`TableTensor` and passed to that processor. A route may change
+    column values, names, count, or order. Route outputs are concatenated in
+    mapping insertion order. With the default passthrough behavior,
+    unconfigured semantic types follow in input order.
 
     Args:
         processors: Mapping from semantic type to a single processor or an
             iterable of processors. Iterable routes are normalized to
             :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
-            route. ``"error"`` raises, ``"passthrough"`` keeps them unchanged,
-            and ``"drop"`` removes them.
+            route. ``"passthrough"`` keeps them unchanged and is the default,
+            ``"drop"`` removes them, and ``"error"`` raises.
     """
 
     supported_stypes = frozenset(Stype)
@@ -37,7 +38,7 @@ class StypeDispatch(Processor):
             Processor | Iterable[Processor],
         ],
         *,
-        remainder: Literal["passthrough", "drop", "error"] = "error",
+        remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
         if remainder not in ("passthrough", "drop", "error"):
@@ -62,9 +63,6 @@ class StypeDispatch(Processor):
         for stype, processor in self.processors.items():
             yield Stype(stype), cast(Processor, processor)
 
-    def _select_stype(self, input: TableTensor, stype: Stype) -> TableTensor:
-        return input.select_stypes(stype)
-
     def _remainder_stypes(self, input: TableTensor) -> list[Stype]:
         configured = {stype for stype, _ in self._processors_by_stype()}
         return [
@@ -88,9 +86,7 @@ class StypeDispatch(Processor):
         remainder_stypes = self._remainder_stypes(input)
         self._check_remainder(remainder_stypes)
         if self.remainder == "passthrough":
-            return [
-                self._select_stype(input, stype) for stype in remainder_stypes
-            ]
+            return [input.select_stypes(stype) for stype in remainder_stypes]
         return []
 
     def _merge_outputs(
@@ -106,10 +102,9 @@ class StypeDispatch(Processor):
         )
 
     def fit(self, input: TableTensor) -> Self:  # noqa: D102
-        self._check_supported_stypes(input)
         self._check_remainder(self._remainder_stypes(input))
         for stype, processor in self._processors_by_stype():
-            route_input = self._select_stype(input, stype)
+            route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             processor.fit(route_input)
@@ -120,7 +115,7 @@ class StypeDispatch(Processor):
         remainder_outputs = self._remainder_outputs(input)
         outputs: list[TableTensor] = []
         for stype, processor in self._processors_by_stype():
-            route_input = self._select_stype(input, stype)
+            route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             outputs.append(processor.transform(route_input))
@@ -128,11 +123,10 @@ class StypeDispatch(Processor):
         return self._merge_outputs(input, outputs)
 
     def fit_transform(self, input: TableTensor) -> TableTensor:  # noqa: D102
-        self._check_supported_stypes(input)
         remainder_outputs = self._remainder_outputs(input)
         outputs: list[TableTensor] = []
         for stype, processor in self._processors_by_stype():
-            route_input = self._select_stype(input, stype)
+            route_input = input.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             outputs.append(processor.fit_transform(route_input))

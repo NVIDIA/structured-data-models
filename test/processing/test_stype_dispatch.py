@@ -3,30 +3,12 @@ import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
     Identity,
+    MeanImpute,
     Processor,
     Sequential,
     StandardScale,
     StypeDispatch,
 )
-
-
-class AddOne(Processor):
-    supported_stypes = frozenset({Stype.numerical})
-    requires_fit = False
-
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return input.replace_blocks(numerical=input.numerical + 1)
-
-
-class CategoricalToNumerical(Processor):
-    supported_stypes = frozenset({Stype.categorical})
-    requires_fit = False
-
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return TableTensor.from_tensor(
-            input.categorical.as_tensor().to(torch.get_default_dtype()),
-            columns=("kind_code",),
-        )
 
 
 class RecordingFit(Processor):
@@ -68,26 +50,29 @@ def _mixed_table() -> TableTensor:
     )
 
 
-def test_stype_dispatch_routes_and_passthrough_remainder() -> None:
-    dispatch = StypeDispatch(
-        {"categorical": CategoricalToNumerical()},
-        remainder="passthrough",
+def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
+    table = _mixed_table()
+    dispatch = StypeDispatch({"numerical": StandardScale()})
+
+    output = dispatch.fit_transform(table)
+
+    assert output.columns == table.columns
+    assert torch.allclose(
+        output.numerical.mean(dim=0),
+        torch.zeros(2),
+        atol=1e-6,
+    )
+    assert torch.equal(
+        output.categorical.as_tensor(),
+        table.categorical.as_tensor(),
     )
 
-    output = dispatch.fit_transform(_mixed_table())
 
-    assert output.columns == {
-        Stype.numerical: ("kind_code", "x0", "x1"),
-        Stype.categorical: (),
-        Stype.datetime: (),
-        Stype.id: (),
-    }
-    expected = torch.tensor([[0.0, 1.0, 2.0], [1.0, 3.0, 4.0]])
-    assert torch.equal(output.numerical, expected)
-
-
-def test_stype_dispatch_defaults_to_error_remainder() -> None:
-    dispatch = StypeDispatch({"numerical": Identity()})
+def test_stype_dispatch_rejects_remainder_when_requested() -> None:
+    dispatch = StypeDispatch(
+        {"numerical": Identity()},
+        remainder="error",
+    )
 
     with pytest.raises(ValueError, match="categorical"):
         dispatch.fit_transform(_mixed_table())
@@ -95,7 +80,10 @@ def test_stype_dispatch_defaults_to_error_remainder() -> None:
 
 def test_stype_dispatch_remainder_error_does_not_fit_routes() -> None:
     processor = RecordingFit()
-    dispatch = StypeDispatch({"numerical": processor})
+    dispatch = StypeDispatch(
+        {"numerical": processor},
+        remainder="error",
+    )
 
     with pytest.raises(ValueError, match="categorical"):
         dispatch.fit(_mixed_table())
@@ -117,16 +105,17 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
 
 def test_stype_dispatch_normalizes_iterable_routes() -> None:
     dispatch = StypeDispatch(
-        {"numerical": [AddOne(), AddOne()]},
+        {"numerical": [MeanImpute(), StandardScale()]},
         remainder="drop",
     )
 
     output = dispatch.fit_transform(_mixed_table())
 
     assert isinstance(dispatch.processors["numerical"], Sequential)
-    assert torch.equal(
-        output.numerical,
-        torch.tensor([[3.0, 4.0], [5.0, 6.0]]),
+    assert torch.allclose(
+        output.numerical.mean(dim=0),
+        torch.zeros(2),
+        atol=1e-6,
     )
 
 
