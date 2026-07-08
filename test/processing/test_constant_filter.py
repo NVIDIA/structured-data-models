@@ -58,13 +58,12 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
     assert output.columns[Stype.numerical] == ("three",)
 
 
-@pytest.mark.parametrize("threshold", [0, 2])
-def test_unique_filter_keeps_all_columns_at_boundaries(threshold: int) -> None:
+def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
     table = TableTensor.from_tensor(
         torch.tensor([[1.0, torch.nan], [1.0, torch.nan]])
     )
 
-    assert ConstantFilter(threshold=threshold).fit_transform(table) is table
+    assert ConstantFilter(threshold=2).fit_transform(table) is table
 
 
 def test_fit_is_2d_and_transform_supports_batches() -> None:
@@ -138,6 +137,6 @@ def test_rejects_invalid_parameters() -> None:
     with pytest.raises(ValueError, match="method must be"):
         ConstantFilter(method="bad")  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="threshold must be"):
-        ConstantFilter(threshold=-1)
+        ConstantFilter(threshold=0)
     with pytest.raises(ValueError, match="tolerance must be"):
         ConstantFilter(tolerance=-1.0)

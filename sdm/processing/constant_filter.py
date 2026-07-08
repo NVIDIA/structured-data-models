@@ -32,7 +32,7 @@ class ConstantFilter(Processor):
         method: Filtering rule. ``"unique"`` uses distinct-value counts;
             ``"variance"`` uses sample standard deviation.
         threshold: With ``method="unique"``, columns with at most this many
-            unique values are removed.
+            unique values are removed. Must be positive.
         tolerance: With ``method="variance"``, columns with sample standard
             deviation at most this value are removed.
     """
@@ -49,8 +49,8 @@ class ConstantFilter(Processor):
         super().__init__()
         if method not in {"unique", "variance"}:
             raise ValueError("method must be one of 'unique' or 'variance'")
-        if threshold < 0:
-            raise ValueError("threshold must be non-negative")
+        if threshold <= 0:
+            raise ValueError("threshold must be positive")
         if tolerance < 0:
             raise ValueError("tolerance must be non-negative")
         self.method = method
@@ -62,6 +62,7 @@ class ConstantFilter(Processor):
         data = input.numerical
         if data.dim() != 2:
             raise ValueError("Expected two-dimensional numerical data")
+        n_rows = data.size(0)
 
         if self.method == "variance":
             if not data.is_floating_point():
@@ -70,23 +71,23 @@ class ConstantFilter(Processor):
                     "method='variance'"
                 )
             keep = data.std(dim=0) > self.tolerance
-        elif data.size(0) <= self.threshold or self.threshold == 0:
+        # Preserve the schema when too few rows can exceed the threshold.
+        elif n_rows <= self.threshold:
             keep = data.new_ones((data.size(-1),), dtype=torch.bool)
         elif self.threshold == 1:
             first = data[:1]
-            same_as_first = data == first
+            different = data != first
             if data.is_floating_point():
-                same_as_first |= data.isnan() & first.isnan()
-            keep = (~same_as_first).any(dim=0)
+                different &= ~(data.isnan() & first.isnan())
+            keep = different.any(dim=0)
         else:
-            # [N, C] -> [N - 1, C] adjacent equality after column-wise sort.
+            # A sorted column with k unique values has k - 1 transitions.
             values = data.sort(dim=0).values
             left, right = values[1:], values[:-1]
-            adjacent_equal = left == right
+            changed = left != right
             if data.is_floating_point():
-                adjacent_equal |= left.isnan() & right.isnan()
-            unique_counts = (~adjacent_equal).sum(dim=0) + 1
-            keep = unique_counts > self.threshold
+                changed &= ~(left.isnan() & right.isnan())
+            keep = changed.sum(dim=0) >= self.threshold
 
         # Mapping a tensor mask back to schema names requires one device sync.
         indices = keep.nonzero().flatten().tolist()
