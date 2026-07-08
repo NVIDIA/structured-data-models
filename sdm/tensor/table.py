@@ -462,27 +462,22 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Return a table containing only ``stypes`` columns.
 
-        The returned table preserves the row/batch dimensions and keeps
-        unselected semantic types as empty blocks. Selected blocks are reused
-        without copying.
-
         Args:
             stypes: The semantic type or semantic types to select.
         """
         if isinstance(stypes, (str, Stype)):
             stypes = (stypes,)
-
         stypes = tuple(Stype(stype) for stype in stypes)
-        columns = cast(
-            Mapping[StypeLike, Sequence[str]],
-            {stype: self._columns[stype] for stype in stypes},
-        )
+
         return self.__class__(
-            columns=columns,
-            **{stype.value: getattr(self, stype.value) for stype in stypes},
+            columns=cast(
+                Mapping[StypeLike, Sequence[str]],
+                {stype: self._columns[stype] for stype in stypes},
+            ),
+            **{stype: getattr(self, stype) for stype in stypes},
         )
 
-    def select_columns(self, columns: str | Iterable[str]) -> TableTensor:
+    def select_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table containing only ``columns``.
 
         .. code-block:: python
