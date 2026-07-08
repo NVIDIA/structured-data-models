@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Relationship - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="RelationalData" href="sdm.relational.RelationalData.html" /><link rel="prev" title="sdm.relational" href="../relational.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ToNumerical - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Recipe" href="sdm.processing.Recipe.html" /><link rel="prev" title="StandardScale" href="sdm.processing.StandardScale.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -19,7 +19,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="Relationship"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="ToNumerical"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -82,13 +82,13 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.tensor.TableTensor.html">TableTensor</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="reference internal" href="../relational.html">sdm.relational</a><ul class="current">
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Relationship</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../relational.html">sdm.relational</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sdm.relational.Relationship.html">Relationship</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.relational.RelationalData.html">RelationalData</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.relational.RelationalSampler.html">RelationalSampler</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../processing.html">sdm.processing</a><ul>
+<li class="toctree-l1 current"><a class="reference internal" href="../processing.html">sdm.processing</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Sequential.html">Sequential</a></li>
@@ -100,7 +100,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SigmaClip.html">SigmaClip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Recipe.html">Recipe</a></li>
 </ul>
 </li>
@@ -130,7 +130,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.relational.Relationship"><code class="docutils literal notranslate"><span class="pre">Relationship</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.ToNumerical"><code class="docutils literal notranslate"><span class="pre">ToNumerical</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -148,11 +148,11 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="1" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <a itemprop="item" href="../relational.html"><span itemprop="name">sdm.relational</span></a>
+        <a itemprop="item" href="../processing.html"><span itemprop="name">sdm.processing</span></a>
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">Relationship</strong>
+        <strong itemprop="name">ToNumerical</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -165,22 +165,22 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="relationship">
-<h1>Relationship<a class="headerlink" href="#relationship" title="Link to this heading">¶</a></h1>
+          <section id="tonumerical">
+<h1>ToNumerical<a class="headerlink" href="#tonumerical" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.relational.Relationship">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.relational.</span></span><span class="sig-name descname"><span class="pre">Relationship</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">left_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">left_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">right_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">right_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.relational.Relationship" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
-<p>Join relationship between two tables.</p>
+<dt class="sig sig-object py" id="sdm.processing.ToNumerical">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">ToNumerical</span></span><a class="headerlink" href="#sdm.processing.ToNumerical" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
+<p>Move categorical columns into the numerical block.</p>
+<p>This is an stype conversion step:
+<a class="reference internal" href="sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.CategoricalTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalTensor</span></code></a> already stores ordinal category ids
+and the category vocabulary. <code class="docutils literal notranslate"><span class="pre">ToNumerical</span></code> reuses those existing ids,
+casts them to the numerical dtype, and clears the categorical block so
+numerical-only models can consume both original numerical and categorical
+features. Missing categorical values remain <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
+<p>Only <code class="docutils literal notranslate"><span class="pre">numerical</span></code> and <code class="docutils literal notranslate"><span class="pre">categorical</span></code> columns are supported. Any other
+semantic type raises an error; drop those columns before this step.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>left_table</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Name of the left table.</p></li>
-<li><p><strong>left_columns</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – Column names from the left table.</p></li>
-<li><p><strong>right_table</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Name of the right table.</p></li>
-<li><p><strong>right_columns</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – Column names from the right table.</p></li>
-</ul>
-</dd>
 </dl>
 </dd></dl>
 
@@ -192,16 +192,16 @@ data-aria-dark="Switch to auto color mode">
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="../relational.html">
+    <a href="sdm.processing.StandardScale.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">sdm.relational</div></div>
+        <span>Previous</span><div class="title">StandardScale</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.relational.RelationalData.html">
+    <a href="sdm.processing.Recipe.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">RelationalData</div>
+        <div class="title">Recipe</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
