@@ -3,4 +3,4 @@
 HomogeneousGraph
 ================
 
-.. autoclass:: sdm.tensor.related_tables.HomogeneousGraph
+.. autoclass:: sdm.relational.data.HomogeneousGraph

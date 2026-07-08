@@ -1,25 +1,23 @@
+from __future__ import annotations
+
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, TypeVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
-from typing_extensions import override
+from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
 
-SelfCategoricalTensor = TypeVar(
-    "SelfCategoricalTensor",
-    bound="CategoricalTensor",
-)
 
 if TYPE_CHECKING:
-    import cudf  # ty: ignore[unresolved-import]
+    import cudf
 
 
 class CategoricalTensor(Tensor):
@@ -69,10 +67,10 @@ class CategoricalTensor(Tensor):
         pass
 
     def __new__(
-        cls: type[SelfCategoricalTensor],
+        cls,
         data: Tensor,
         categories: Sequence[Tensor],
-    ) -> SelfCategoricalTensor:
+    ) -> Self:
         r"""Create a tensor wrapper."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
@@ -113,13 +111,13 @@ class CategoricalTensor(Tensor):
 
     @classmethod
     def from_arrow(
-        cls: type[SelfCategoricalTensor],
+        cls,
         array: pa.Array | pa.ChunkedArray,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
-    ) -> SelfCategoricalTensor:
-        r"""Create tensor from a :class:`~pyarrow.Array`.
+    ) -> Self:
+        r"""Create tensor from a :class:`pyarrow.Array`.
 
         .. code-block:: python
 
@@ -221,46 +219,34 @@ class CategoricalTensor(Tensor):
 
     @classmethod
     def from_cudf(
-        cls: type[SelfCategoricalTensor],
-        series: "cudf.Series",
+        cls,
+        ser: cudf.Series,
         *,
         dtype: torch.dtype = torch.int32,
         device: torch.device | str | None = None,
-    ) -> SelfCategoricalTensor:
-        r"""Build a categorical tensor from a cuDF categorical column."""
-        from cudf.api.types import (  # ty: ignore[unresolved-import]
-            is_string_dtype,
-        )
+    ) -> Self:
+        r"""Create tensor from a categorical :class:`cudf.Series`.
 
-        if dtype not in cls.ALLOWED_DTYPES:
-            raise ValueError(
-                f"Expected 'dtype' in '{cls.__name__}.from_cudf' to be "
-                f"one of '{cls.ALLOWED_DTYPES}' (got '{dtype}')"
-            )
+        Args:
+            ser: The categorical :class:`cudf.Series`.
+            dtype: The dtype.
+            device: The device.
+        """
+        from cudf.api.types import is_string_dtype
 
-        codes, categories = series.factorize(
+        codes, categories = ser.factorize(
             sort=False,
             use_na_sentinel=True,
         )
-        code_dtype = "int32" if dtype == torch.int32 else "int64"
-        codes = codes.astype(code_dtype, copy=False)
-        data = torch.from_dlpack(codes).unsqueeze(-1).to(device)
+        data = torch.from_dlpack(codes).unsqueeze(-1).to(device, dtype)
 
-        category_device = device if device is not None else data.device
         if len(categories) == 0:
-            category = torch.empty(
-                0,
-                dtype=torch.int64,
-                device=category_device,
-            )
+            category = torch.empty(0, dtype=torch.int64, device=data.device)
         elif is_string_dtype(categories.dtype):
-            category = StringTensor.from_cudf(
-                categories,
-                device=category_device,
-            )
+            category = StringTensor.from_cudf(categories, device=device)
         else:
-            values = categories.to_cupy()
-            category = torch.from_dlpack(values).to(device)
+            category = torch.from_dlpack(categories.to_cupy()).to(device)
+
         return cls(data=data, categories=(category,))
 
     # Properties ##############################################################
@@ -324,7 +310,7 @@ class CategoricalTensor(Tensor):
         return self._data.is_shared()
 
     @override
-    def share_memory_(self) -> "CategoricalTensor":
+    def share_memory_(self) -> Self:
         self._data.share_memory_()
         return self
 

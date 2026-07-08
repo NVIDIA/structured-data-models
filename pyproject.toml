@@ -157,3 +157,9 @@ convention = "google"
     "D104",  # Ignore "Missing docstring in public package"
     "D106",  # Ignore "Missing docstring in public nested class"
 ]
+
+[tool.ty.analysis]
+allowed-unresolved-imports = [
+    "cudf.**",
+    "cupy.**",
+]

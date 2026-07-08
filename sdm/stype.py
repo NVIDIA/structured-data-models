@@ -1,12 +1,17 @@
 """Semantic column types identifiers."""
 
+from __future__ import annotations
+
 import importlib.util
 import re
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 import pyarrow as pa
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class Stype(str, Enum):
@@ -39,7 +44,7 @@ _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 
 def infer_stypes(
-    table: Any,
+    table: pa.Table | pd.DataFrame,
     overrides: Mapping[str, StypeLike] | None = None,
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
