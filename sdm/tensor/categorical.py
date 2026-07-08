@@ -227,7 +227,13 @@ class CategoricalTensor(Tensor):
         dtype: torch.dtype = torch.int32,
         device: torch.device | str | None = None,
     ) -> SelfCategoricalTensor:
-        r"""Build a categorical tensor from a cuDF categorical column."""
+        r"""Create tensor from a categorical :class:`~cudf.Series`.
+
+        Args:
+            series: The categorical :class:`cudf.Series`.
+            dtype: The dtype.
+            device: The device.
+        """
         from cudf.api.types import (  # ty: ignore[unresolved-import]
             is_string_dtype,
         )
