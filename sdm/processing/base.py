@@ -32,6 +32,7 @@ class Processor(torch.nn.Module, abc.ABC):
         supported_stypes = self.supported_stypes
         for stype, columns in input.columns.items():
             if stype not in supported_stypes and len(columns) > 0:
+                # TODO: Include all invalid columns in the error message
                 raise ValueError(
                     f"'{self.__class__.__name__}' does not support "
                     f"'{stype.value}' columns."
