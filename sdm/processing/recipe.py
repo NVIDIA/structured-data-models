@@ -87,11 +87,9 @@ class Recipe:
         processors before the feature pipeline is fitted.
 
         Args:
-            features: Feature table with shape ``[..., R, C]``, where ``R`` is
+            features: Feature table with shape ``[R, C]``, where ``R`` is
                 the number of labeled rows and ``C`` is the number of columns.
-            target: Target table with shape ``[..., R, T]``, where ``T`` is
-                the number of target columns. Task-dependent output processing
-                requires ``T = 1``.
+            target: Single-column target table with shape ``[R, 1]``.
 
         Returns:
             Transformed feature and target tables.

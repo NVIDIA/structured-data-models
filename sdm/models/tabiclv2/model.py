@@ -91,7 +91,7 @@ class TabICLv2(BaseModel):
         self.eval()
 
     def default_recipe(self) -> Recipe:
-        r"""Return the default task-aware recipe.
+        r"""Return the default recipe.
 
         Returns:
             The default :class:`~sdm.processing.Recipe` applied during pre- and
