@@ -96,6 +96,8 @@ class BaseModel(torch.nn.Module, ABC):
         x = x[..., : y.size(-1), :]
         caches: list[Cache] = []
         for _ in range(num_estimators):
+            # TODO: Don't store y.dtype in every cache once we introduce a
+            # nested cache.
             cache = Cache({"y.dtype": y.dtype})
             self._forward(x, y, cache=cache)
             cache.freeze()
