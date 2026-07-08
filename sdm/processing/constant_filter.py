@@ -3,6 +3,7 @@ from typing import Literal
 import torch
 
 from sdm import Stype
+from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
@@ -18,9 +19,9 @@ class ConstantFilter(Processor):
     ``threshold``, all columns are preserved.
 
     With ``method="variance"``, columns are retained when their sample
-    standard deviation is greater than ``tolerance``. This method requires
-    floating-point input. Columns containing NaN have NaN standard deviation
-    and are removed.
+    standard deviation is greater than ``tolerance``. Non-floating input is
+    promoted to the default floating-point dtype for this calculation. Columns
+    containing NaN have NaN standard deviation and are removed.
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
@@ -47,8 +48,6 @@ class ConstantFilter(Processor):
         tolerance: float = 1e-6,
     ) -> None:
         super().__init__()
-        if method not in {"unique", "variance"}:
-            raise ValueError("method must be one of 'unique' or 'variance'")
         if threshold <= 0:
             raise ValueError("threshold must be positive")
         if tolerance < 0:
@@ -60,17 +59,10 @@ class ConstantFilter(Processor):
 
     def _fit(self, input: TableTensor) -> None:
         data = input.numerical
-        if data.dim() != 2:
-            raise ValueError("Expected two-dimensional numerical data")
         n_rows = data.size(0)
 
         if self.method == "variance":
-            if not data.is_floating_point():
-                raise TypeError(
-                    "Expected floating-point numerical data for "
-                    "method='variance'"
-                )
-            keep = data.std(dim=0) > self.tolerance
+            keep = _as_float(data).std(dim=0) > self.tolerance
         # Preserve the schema when too few rows can exceed the threshold.
         elif n_rows <= self.threshold:
             keep = data.new_ones((data.size(-1),), dtype=torch.bool)
@@ -89,7 +81,6 @@ class ConstantFilter(Processor):
                 changed &= ~(left.isnan() & right.isnan())
             keep = changed.sum(dim=0) >= self.threshold
 
-        # Mapping a tensor mask back to schema names requires one device sync.
         indices = keep.nonzero().flatten().tolist()
         columns = input.columns[Stype.numerical]
         self._columns_to_keep = tuple(columns[index] for index in indices)
