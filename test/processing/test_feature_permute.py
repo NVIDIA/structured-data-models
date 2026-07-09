@@ -5,7 +5,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import FeaturePermute, Sequential, ToNumerical
+from sdm.processing import FeaturePermute, Sequential
 
 
 def _table() -> TableTensor:
