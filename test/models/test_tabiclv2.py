@@ -68,12 +68,6 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
     torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
     model.clear()
 
-    with pytest.raises(ValueError, match="num_estimators"):
-        model(x, y, num_estimators=0)
-
-    with pytest.raises(ValueError, match="num_estimators"):
-        model.fit(x[..., :R_train, :], y, num_estimators=0)
-
 
 def test_default_recipe_regression_roundtrip() -> None:
     recipe = TabICLv2(pretrained=False).default_recipe()

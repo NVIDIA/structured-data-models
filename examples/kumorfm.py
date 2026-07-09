@@ -78,4 +78,3 @@ task_table, related_tables = sampler(
     },
     task_time_column=task.time_col,
 )
-print(task_table, related_tables)
