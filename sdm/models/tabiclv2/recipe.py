@@ -84,7 +84,7 @@ def default_regression_recipe() -> Recipe:
 #             # ConstantFilter(),
 #             StandardScale(epsilon=1e-6),
 #             # norm options: none, power, quantile, quantile_rtdl, robust
-#             Choice([Identity(), Quantile(output_distribution="normal")]),
+#             Choice(Identity(), Quantile(output_distribution="normal")),
 #             SigmaClip(threshold=4.0),
 #             FeaturePermute(method="shift"),
 #         ],

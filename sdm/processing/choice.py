@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from typing import cast
 
 import torch
@@ -16,16 +15,16 @@ class Choice(Processor, InvertibleMixin):
     reproducible. Only the drawn option is fitted; refitting draws again.
 
     Args:
-        options: Non-empty sequence of candidate processors.
+        args: Non-empty sequence of candidate processors.
     """
 
     supported_stypes = frozenset(Stype)
 
-    def __init__(self, options: Sequence[Processor]) -> None:
+    def __init__(self, *args: Processor) -> None:
         super().__init__()
-        if len(options) == 0:
+        if len(args) == 0:
             raise ValueError("options must be non-empty.")
-        self.options = torch.nn.ModuleList(options)
+        self.options = torch.nn.ModuleList(args)
         self._index: int | None = None
 
     @property
@@ -67,12 +66,9 @@ class Choice(Processor, InvertibleMixin):
         self._index = state
 
     def __repr__(self, *, indent: int = 0) -> str:
-        processors = (
-            list(self.options) if self._index is None else [self.selected]
-        )
         inner = ",\n".join(
-            cast(Processor, processor).__repr__(indent=indent + 2)
-            for processor in processors
+            cast(Processor, option).__repr__(indent=indent + 2)
+            for option in self.options
         )
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"
