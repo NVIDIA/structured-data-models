@@ -35,8 +35,7 @@ def _to_cudf_series(column: Tensor) -> cudf.Series:
 
     if isinstance(column, StringTensor):
         if not column.is_contiguous():
-            column = column.contiguous()
-            assert isinstance(column, StringTensor)
+            column = cast(StringTensor, column.contiguous())
 
         offset_column = plc.Column.from_array(  # ty: ignore[missing-argument]
             obj=column._offset
