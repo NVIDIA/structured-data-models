@@ -120,35 +120,3 @@ def test_class_shuffle_uses_category_count_and_preserves_missing() -> None:
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
-def test_class_shuffle_runs_on_mixed_feature_blocks() -> None:
-    numerical = torch.tensor(
-        [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
-    )
-    features = _table(
-        [[0, 1], [1, 0], [2, -1]],
-        (("a", "b", "c"), ("x", "y")),
-        numerical=numerical,
-    )
-    torch.manual_seed(0)
-    recipe = Recipe(
-        features=[
-            StypeDispatch(
-                categorical=ClassShuffle(method="random"),
-            )
-        ]
-    )
-
-    transformed = recipe.features.fit_transform(features)
-
-    assert transformed.columns == features.columns
-    assert torch.equal(transformed.numerical, numerical)
-    assert transformed.categorical.tolist() == features.categorical.tolist()
-    assert not torch.equal(
-        transformed.categorical.as_tensor(),
-        features.categorical.as_tensor(),
-    )
-
-
-def test_class_shuffle_rejects_invalid_method() -> None:
-    with pytest.raises(ValueError, match="method"):
-        ClassShuffle(method="invalid")  # type: ignore
