@@ -69,24 +69,24 @@ class RelationalSampler:
 
     def __call__(
         self,
-        num_neighbors: Sequence[int],
         task_table: TableTensor,
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
+        num_neighbors: Sequence[int],
         task_time_column: str | None = None,
     ) -> tuple[TableTensor, RelatedTables]:
         r"""Alias of :meth:`sample`."""
         return self.sample(
-            num_neighbors=num_neighbors,
             task_table=task_table,
             task_link=task_link,
+            num_neighbors=num_neighbors,
             task_time_column=task_time_column,
         )
 
     def sample(
         self,
-        num_neighbors: Sequence[int],
         task_table: TableTensor,
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
+        num_neighbors: Sequence[int],
         task_time_column: str | None = None,
     ) -> tuple[TableTensor, RelatedTables]:
         r"""Sample :class:`RelatedTables` for task rows.

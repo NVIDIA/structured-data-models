@@ -41,7 +41,10 @@ class KumoRFM(BaseModel):
         related_tables: RelatedTables | None,
         cache: Cache | None,
     ) -> Tensor:  # [..., R - R_train, *]
-        raise NotImplementedError
+        return torch.empty(
+            (*x.size()[:-2], x.size(-2) - y.size(-1), 10),
+            device=x.device,
+        )
 
     def default_recipe(self) -> Recipe:
         r""":meta private:"""  # noqa: D415
