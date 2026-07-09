@@ -118,5 +118,3 @@ def test_class_shuffle_uses_category_count_and_preserves_missing() -> None:
     assert output.categorical.categories[0].numel() == 4
     assert output.categorical.as_tensor()[-1].item() == -1
     assert output.categorical.tolist() == target.categorical.tolist()
-
-
