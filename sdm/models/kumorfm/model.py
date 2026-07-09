@@ -46,6 +46,7 @@ class KumoRFM(BaseModel):
             device=x.device,
         )
 
-    def default_recipe(self) -> Recipe:
+    @classmethod
+    def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         raise NotImplementedError
