@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TabICLv2 - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="prev" title="BaseModel" href="sdm.models.BaseModel.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TabICLv2 - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="KumoRFM" href="sdm.models.KumoRFM.html" /><link rel="prev" title="BaseModel" href="sdm.models.BaseModel.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -123,6 +123,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1 current"><a class="reference internal" href="../models.html">sdm.models</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="sdm.models.BaseModel.html">BaseModel</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">TabICLv2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.models.KumoRFM.html">KumoRFM</a></li>
 </ul>
 </li>
 </ul>
@@ -138,7 +139,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.TabICLv2"><code class="docutils literal notranslate"><span class="pre">TabICLv2</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.models.TabICLv2.default_recipe"><code class="docutils literal notranslate">default_recipe()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.TabICLv2.supports_related_tables"><code class="docutils literal notranslate">supports_related_tables</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -226,20 +227,10 @@ quantile predictions for regression.</p></li>
 </ul>
 </dd>
 </dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.models.TabICLv2.default_recipe">
-<span class="sig-name descname"><span class="pre">default_recipe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><span class="pre">Recipe</span></a></span></span><a class="headerlink" href="#sdm.models.TabICLv2.default_recipe" title="Link to this definition">¶</a></dt>
-<dd><p>Return the default single-estimator regression recipe.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The default <a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> applied during pre- and
-postprocessing.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.recipe.Recipe"><em>Recipe</em></a></p>
-</dd>
-</dl>
-</dd></dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.models.TabICLv2.supports_related_tables">
+<span class="sig-name descname"><span class="pre">supports_related_tables</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#sdm.models.TabICLv2.supports_related_tables" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
 
 </dd></dl>
 
@@ -256,12 +247,20 @@ postprocessing.</p>
       <div class="page-info">
         <span>Previous</span><div class="title">BaseModel</div></div>
     </a>
+  </div><div class="navigation-next">
+    <a href="sdm.models.KumoRFM.html">
+      <div class="page-info">
+        <span>Next</span>
+        <div class="title">KumoRFM</div>
+      </div>
+      <i class="i-lucide chevron-right"></i>
+    </a>
   </div></div></div>
     </div>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=eda8ee7a"></script>
+      <script src="../../_static/documentation_options.js?v=9f55da16"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

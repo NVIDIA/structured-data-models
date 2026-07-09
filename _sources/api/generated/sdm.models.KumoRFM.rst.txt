@@ -1,0 +1,8 @@
+﻿KumoRFM
+=======
+
+.. currentmodule:: sdm.models
+
+.. autoclass:: KumoRFM
+   :members:
+   :show-inheritance:
