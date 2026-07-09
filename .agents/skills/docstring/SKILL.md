@@ -54,15 +54,34 @@ class MyClass:
 
 ## Sphinx Cross-Referencing Reference
 
+The same roles resolve internal `sdm` targets and external ones. Prefer
+cross-reference roles over plain ``pandas.DataFrame``-style literals whenever
+the target lives in an intersphinx-mapped project (`python`, `torch`, `numpy`,
+`pandas`, `pyarrow`, `cudf`, `typing_extensions`; see `intersphinx_mapping`
+in `docs/source/conf.py`).
+
 ```python
 r"""
 - :mod:`sdm.nn`: Module reference.
-- :func:`~sdm.nn.Module.forward`: Function reference.
-- :class:`~sdm.nn.Module`: Class reference.
+- :class:`~sdm.nn.Module`: Class reference. External targets use the same
+  role: :class:`pandas.DataFrame`, :class:`torch.nn.Module`, :class:`dict`,
+  :class:`TypeError`, :class:`collections.abc.Mapping`.
+- :class:`~pyarrow.Array`: Leading ``~`` renders only ``Array``. Use it in
+  summary lines; keep the full path in ``Args:`` entries.
 - :meth:`~sdm.nn.Module.forward`: Method reference.
+- :func:`torch.nn.functional.scaled_dot_product_attention`: Function
+  reference. Use :func: for free functions and :meth: only for methods.
 - :attr:`attribute`: Attribute reference.
 - :math:`equation`: Inline math.
-- :ref:`label`: Internal reference.
+- :ref:`label`: Internal label reference.
+- :ref:`calling convention <torch-dispatch-calling-convention>`: External
+  label reference with custom link text, resolved through intersphinx.
+- :external+torch:ref:`torch.int32 <dtype-doc>`: Label reference pinned to a
+  specific project's inventory. Use for targets without their own API entry
+  (e.g., dtypes like ``torch.int32`` resolve to the ``dtype-doc`` label).
+  Never guess label names: search the linked documentation for a fitting
+  target by dumping the project's inventory, e.g.
+  ``uv run --extra doc python -m sphinx.ext.intersphinx https://docs.pytorch.org/docs/stable/objects.inv | grep -i dtype``.
 """
 ```
 
