@@ -18,4 +18,4 @@ class RelationalSampler:
         data: RelationalData,
         time_columns: Mapping[str, str] | None = None,
     ) -> None:
-        raise NotImplementedError
+        pass
