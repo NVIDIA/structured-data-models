@@ -147,8 +147,8 @@ class TabICLv2(BaseModel):
         Returns:
             Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
             and ``[..., R_test, 999]`` for floating-point ``y``.
-            Integer ``y`` return class logits only for the classes observed in
-            every context, including when fewer than ten classes are present.
+            Integer ``y`` return class logits for the ``y.max() + 1`` class
+            indices ``{0, ..., y.max()}``.
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
         """
@@ -237,18 +237,11 @@ class _TabICLv2(torch.nn.Module):
 
         y = y.long()
         num_classes = self._num_classes(y, cache=cache)
-        if self.max_classes < 2 and num_classes > self.max_classes:
-            raise ValueError(
-                "Hierarchical classification requires at least two native "
-                "classes"
-            )
         if cache is not None and num_classes > self.max_classes:
             raise NotImplementedError(
                 f"Key/value caching is not supported with more than "
                 f"{self.max_classes} classes (got {num_classes})"
             )
-        if cache is not None and cache.is_recording:
-            cache[_NUM_CLASSES_CACHE_KEY] = num_classes
 
         row_embeddings = self.row_embedding(x, y, cache=cache)
         if num_classes <= self.max_classes:
@@ -271,7 +264,11 @@ class _TabICLv2(torch.nn.Module):
         cache: Cache | None,
     ) -> int:
         if y.numel() > 0:
-            return _validate_classification_labels(y)
+            # TODO Cache `num_classes` to avoid device synchronization.
+            num_classes = int(y.max()) + 1
+            if cache is not None and cache.is_recording:
+                cache[_NUM_CLASSES_CACHE_KEY] = num_classes
+            return num_classes
         if cache is not None and cache.is_replaying:
             return cast(int, cache[_NUM_CLASSES_CACHE_KEY])
         raise ValueError(
@@ -290,35 +287,6 @@ class _TabICLv2(torch.nn.Module):
 
 
 # Helpers #####################################################################
-
-
-def _validate_classification_labels(y: Tensor) -> int:
-    if y.numel() == 0:
-        raise ValueError(
-            "Expected at least one in-context classification label"
-        )
-
-    flat_y = y.reshape(-1, y.size(-1))
-    num_classes = flat_y[0].unique().numel()
-    for table_idx, labels in enumerate(flat_y):
-        classes = labels.unique(sorted=True)
-        expected = torch.arange(
-            classes.numel(),
-            dtype=y.dtype,
-            device=y.device,
-        )
-        if not classes.equal(expected):
-            raise ValueError(
-                f"Expected table {table_idx}'s classification labels to "
-                "contain contiguous class indices beginning at zero"
-            )
-        if classes.numel() != num_classes:
-            raise ValueError(
-                "Expected every table in a batch to contain the same number "
-                f"of classes (got {num_classes} and {classes.numel()})"
-            )
-
-    return num_classes
 
 
 def _probabilities_to_logits(probabilities: Tensor) -> Tensor:

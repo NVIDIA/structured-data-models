@@ -2,11 +2,7 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.models.tabiclv2.model import (
-    _probabilities_to_logits,
-    _TabICLv2,
-    _validate_classification_labels,
-)
+from sdm.models.tabiclv2.model import _probabilities_to_logits, _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding, _mixed_radix_bases
 from sdm.nn import Attention, HierarchicalClassifier
 from sdm.processing import Sequential
@@ -232,29 +228,15 @@ def test_hierarchical_probability_to_logit_conversion() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "y",
-    [
-        torch.tensor([-1, 0, 1]),
-        torch.tensor([0, 2, 0]),
-        torch.tensor([1, 2, 1]),
-    ],
-)
-def test_validate_classification_labels(y: torch.Tensor) -> None:
-    with pytest.raises(ValueError, match="contiguous class indices"):
-        _validate_classification_labels(y)
+def test_tabiclv2_num_classes_from_max_label() -> None:
+    model = TabICLv2(pretrained=False)
+    x = torch.randn(5, 6)
+    y = torch.tensor([0, 2, 0, 2])  # Class 1 is absent from the context.
 
+    out = model(x, y)
 
-def test_validate_classification_labels_rejects_empty_context() -> None:
-    with pytest.raises(ValueError, match="at least one in-context"):
-        _validate_classification_labels(torch.empty(0, dtype=torch.long))
-
-
-def test_validate_classification_labels_rejects_mismatched_batch() -> None:
-    y = torch.tensor([[0, 1, 0], [0, 1, 2]])
-
-    with pytest.raises(ValueError, match="same number of classes"):
-        _validate_classification_labels(y)
+    assert out.size() == (1, 3)
+    assert torch.isfinite(out).all()
 
 
 def test_tabiclv2_many_classes_rejects_cache() -> None:

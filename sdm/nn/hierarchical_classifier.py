@@ -60,9 +60,9 @@ class HierarchicalClassifier(torch.nn.Module):
             row_embeddings: Row embeddings with shape ``[..., R, D]``. The
                 first ``R_train`` rows are the in-context training rows and the
                 remaining ``R_test`` rows are test rows.
-            y: Contiguous integer class indices with shape
-                ``[..., R_train]``. Every table must contain all
-                ``num_classes`` indices beginning at zero.
+            y: Integer class indices in ``[0, num_classes)`` with shape
+                ``[..., R_train]``. Classes absent from a table's context
+                receive zero probability.
             num_classes: Number of classes ``C`` in the global output space.
             predictor: Callable receiving node rows with shape
                 ``[R_node + R_test, D]`` and remapped node labels with shape
