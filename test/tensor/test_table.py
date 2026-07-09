@@ -1,6 +1,6 @@
 import io
 from datetime import datetime
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 import pyarrow as pa
@@ -13,6 +13,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.testing import withCUDA
 
 
 def test_init() -> None:
@@ -816,3 +817,269 @@ def test_from_pandas() -> None:
     assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+_CUDF_DATA = {
+    "age": [10, 20, None, 40],
+    "income": [1.0, 2.5, 3.5, None],
+    "country": ["US", "CA", None, "US"],
+    "segment": ["a", "b", "a", None],
+}
+_CUDF_STYPES = {
+    "age": Stype.numerical,
+    "income": Stype.numerical,
+    "country": Stype.categorical,
+    "segment": Stype.categorical,
+}
+_CUDF_EXPECTED_COLUMNS = {
+    Stype.numerical: ("age", "income"),
+    Stype.categorical: ("country", "segment"),
+    Stype.datetime: (),
+    Stype.id: (),
+}
+_CUDF_EXPECTED_CATEGORICAL = torch.tensor(
+    [
+        [0, 0],
+        [1, 1],
+        [-1, 0],
+        [0, -1],
+    ],
+    dtype=torch.int32,
+)
+
+
+def _import_cudf() -> Any:
+    cudf = pytest.importorskip("cudf")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available")
+    return cudf
+
+
+def _cudf_dataframe(data: dict[str, list[Any]] | None = None) -> Any:
+    cudf = _import_cudf()
+    return cudf.DataFrame(_CUDF_DATA if data is None else data)
+
+
+def _assert_cudf_table_tensor(
+    tensor: TableTensor,
+    device: torch.device,
+) -> None:
+    assert tensor.size() == (4, 4)
+    assert tensor.device == device
+    assert tensor.columns == _CUDF_EXPECTED_COLUMNS
+
+    assert tensor.numerical.dtype == torch.float32
+    assert tensor.numerical.device == device
+    assert torch.allclose(
+        tensor.numerical[:, 0],
+        torch.tensor([10.0, 20.0, float("nan"), 40.0], device=device),
+        equal_nan=True,
+    )
+    assert torch.allclose(
+        tensor.numerical[:, 1],
+        torch.tensor([1.0, 2.5, 3.5, float("nan")], device=device),
+        equal_nan=True,
+    )
+
+    assert tensor.categorical.as_tensor().device == device
+    assert tensor.categorical.as_tensor().equal(
+        _CUDF_EXPECTED_CATEGORICAL.to(device)
+    )
+    assert tensor.categorical.categories[0].device == device
+    assert tensor.categorical.categories[1].device == device
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
+    assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+@withCUDA
+def test_from_cudf(device: torch.device) -> None:
+    tensor = TableTensor.from_cudf(
+        df=_cudf_dataframe(),
+        stypes=_CUDF_STYPES,
+        device=device,
+    )
+
+    _assert_cudf_table_tensor(tensor, device)
+
+
+def test_from_cudf_defaults_to_cuda() -> None:
+    tensor = TableTensor.from_cudf(
+        df=_cudf_dataframe(),
+        stypes=_CUDF_STYPES,
+    )
+
+    assert tensor.device.type == "cuda"
+    _assert_cudf_table_tensor(tensor, tensor.device)
+
+
+@withCUDA
+def test_from_cudf_numerical_uses_cudf_dlpack(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cudf = _import_cudf()
+
+    def fail_to_cupy(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("numerical cuDF ingestion should not use CuPy")
+
+    monkeypatch.setattr(cudf.Series, "to_cupy", fail_to_cupy)
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(
+            {
+                "age": [10, None, 30],
+                "income": [1.5, None, 3.5],
+            }
+        ),
+        stypes={
+            "age": Stype.numerical,
+            "income": Stype.numerical,
+        },
+        device=device,
+    )
+
+    assert tensor.numerical.dtype == torch.float32
+    assert tensor.numerical.device == device
+    assert torch.allclose(
+        tensor.numerical,
+        torch.tensor(
+            [
+                [10.0, 1.5],
+                [float("nan"), float("nan")],
+                [30.0, 3.5],
+            ],
+            device=device,
+        ),
+        equal_nan=True,
+    )
+
+
+@withCUDA
+def test_from_cudf_datetime_stype(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cudf = _import_cudf()
+
+    def fail_to_cupy(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("datetime cuDF ingestion should not use CuPy")
+
+    monkeypatch.setattr(cudf.Series, "to_cupy", fail_to_cupy)
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(
+            {
+                "created_at": cudf.Series(
+                    ["2024-01-01", None, "2024-01-03"],
+                    dtype="datetime64[ns]",
+                ),
+            }
+        ),
+        stypes={
+            "created_at": Stype.datetime,
+        },
+        device=device,
+    )
+
+    assert tensor.size() == (3, 1)
+    assert tensor.device == device
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: ("created_at",),
+        Stype.id: (),
+    }
+    assert tensor.datetime.device == device
+    assert tensor.datetime.equal(
+        torch.tensor(
+            [
+                [1704067200000000],
+                [torch.iinfo(torch.int64).min],
+                [1704240000000000],
+            ],
+            device=device,
+        )
+    )
+
+
+@withCUDA
+def test_from_cudf_id_stype(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cudf = _import_cudf()
+
+    def fail_to_cupy(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("id cuDF ingestion should not use CuPy")
+
+    monkeypatch.setattr(cudf.Series, "to_cupy", fail_to_cupy)
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(
+            {
+                "user_id": cudf.Series([10, 20, 30], dtype="int64"),
+                "item_id": cudf.Series(["a", "bb", ""]),
+            }
+        ),
+        stypes={
+            "user_id": Stype.id,
+            "item_id": Stype.id,
+        },
+        device=device,
+    )
+
+    assert tensor.size() == (3, 2)
+    assert tensor.device == device
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: ("user_id", "item_id"),
+    }
+    assert tensor.id.device == device
+    assert tensor.id[:, 0].equal(torch.tensor([10, 20, 30], device=device))
+    assert tensor.id[:, 1].equal(
+        StringTensor.from_list(["a", "bb", ""], device=device)
+    )
+
+
+@withCUDA
+def test_from_cudf_rejects_null_integer_id(device: torch.device) -> None:
+    cudf = _import_cudf()
+
+    with pytest.raises(ValueError, match="cannot represent null integer"):
+        TableTensor.from_cudf(
+            df=cudf.DataFrame(
+                {
+                    "user_id": cudf.Series(
+                        [10, None, 30],
+                        dtype="int64",
+                    ),
+                }
+            ),
+            stypes={"user_id": Stype.id},
+            device=device,
+        )
+
+
+@withCUDA
+def test_from_cudf_empty_blocks_use_target_device(
+    device: torch.device,
+) -> None:
+    numerical = TableTensor.from_cudf(
+        df=_cudf_dataframe(),
+        stypes={"age": Stype.numerical},
+        device=device,
+    )
+    categorical = TableTensor.from_cudf(
+        df=_cudf_dataframe(),
+        stypes={"country": Stype.categorical},
+        device=device,
+    )
+
+    assert numerical.device == device
+    assert numerical.numerical.device == device
+    assert numerical.categorical.as_tensor().device == device
+    assert categorical.device == device
+    assert categorical.numerical.device == device
+    assert categorical.categorical.as_tensor().device == device

@@ -70,7 +70,7 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
 
 def test_default_recipe_regression_roundtrip() -> None:
-    recipe = TabICLv2(pretrained=False).default_recipe()
+    recipe = TabICLv2.default_recipe()
 
     features = TableTensor(
         columns={

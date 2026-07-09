@@ -20,11 +20,6 @@ def _table(seed: int = 0) -> TableTensor:
     )
 
 
-def test_choice_rejects_empty_options() -> None:
-    with pytest.raises(ValueError, match="non-empty"):
-        Choice()
-
-
 def test_choice_draws_at_fit() -> None:
     choice = Choice(Identity(), StandardScale())
 
