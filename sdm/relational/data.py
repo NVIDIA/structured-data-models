@@ -69,15 +69,10 @@ def _to_cudf(
             "CUDA-resident relational joins require cuDF"
         ) from exc
 
-    selected = table[..., columns]
+    # Pair IDs through Python metadata to avoid a CUDA index-to-host sync.
+    id_columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
     return cudf.DataFrame(
-        {
-            name: _to_cudf_series(column)
-            for name, column in zip(
-                selected.columns[Stype.id],
-                selected.id.unbind(-1),
-            )
-        }
+        {name: _to_cudf_series(id_columns[name]) for name in columns}
     )
 
 

@@ -65,12 +65,18 @@ def cuda_data() -> RelationalData:
     _import_cudf()
     frames = {
         "users": pd.DataFrame(USERS),
-        "orders": pd.DataFrame(ORDERS),
+        "orders": pd.DataFrame(ORDERS).assign(
+            unused_id=range(len(ORDERS["user_id"]))
+        ),
         "items": pd.DataFrame(ITEMS),
     }
     stypes = {
         "users": {"user_id": Stype.id},
-        "orders": {"user_id": Stype.id, "item_id": Stype.id},
+        "orders": {
+            "user_id": Stype.id,
+            "item_id": Stype.id,
+            "unused_id": Stype.id,
+        },
         "items": {"item_id": Stype.id},
     }
     return RelationalData(
