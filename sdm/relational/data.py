@@ -37,6 +37,8 @@ def _to_cudf_series(column: Tensor) -> cudf.Series:
         if not column.is_contiguous():
             column = cast(StringTensor, column.contiguous())
 
+        # StringTensor stores variable-width strings in separate UTF-8 data
+        # and offset buffers. Use pylibcudf to expose them without a host copy.
         offset_column = plc.Column.from_array(  # ty: ignore[missing-argument]
             obj=column._offset
         )
