@@ -1,5 +1,6 @@
 # ruff: noqa: D101, D102
 
+import math
 from typing import Any
 
 import torch
@@ -29,6 +30,7 @@ class RowEmbedding(torch.nn.Module):
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
 
+        self.max_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
         if num_classes > 0:
@@ -95,13 +97,30 @@ class RowEmbedding(torch.nn.Module):
         x = x[..., index]  # [..., R, C, G]
         x = self.lin(x)  # [..., R, C, D]
 
+        num_digits = 1
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y).view(*B, R_train, 1, D)
+                # TODO Cache `num_classes` to avoid device synchronization.
+                num_classes = int(y.max()) + 1
+                if num_classes > self.max_classes:
+                    # TODO Support KV cache
+                    if cache is not None:
+                        raise NotImplementedError(
+                            f"Key/value caching is not supported with more "
+                            f"than {self.max_classes} classes "
+                            f"(got {num_classes})"
+                        )
+
+                    bases = _mixed_radix_bases(num_classes, self.max_classes)
+                    num_digits = len(bases)
+                    y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
+                    x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
+                y_emb = self.y_emb(y).unsqueeze(-2)
             else:
                 assert self.y_lin is not None
-                y_emb = self.y_lin(y.unsqueeze(-1)).view(*B, R_train, 1, D)
+                y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
 
+            # y_emb has shape [F, ..., R_train, 1, D]:
             x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis):
@@ -120,6 +139,9 @@ class RowEmbedding(torch.nn.Module):
                 x, cache[key] = result
             else:
                 x = result
+
+        if num_digits > 1:  # Average over mixed-radix digits.
+            x = x.mean(dim=0)  # [F, ..., C, R, D] -> [..., C, R, D]
 
         x = torch.cat(  # Prepend readout tokens before row-wise attention.
             [
@@ -140,3 +162,30 @@ class RowEmbedding(torch.nn.Module):
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]
+
+
+def _mixed_radix_bases(num_classes: int, max_classes: int) -> list[int]:
+    num_digits = math.ceil(math.log(num_classes) / math.log(max_classes))
+    base = min(math.ceil(num_classes ** (1.0 / num_digits)), max_classes)
+    bases = [base] * num_digits
+    product = base**num_digits
+    for i in range(num_digits):
+        if product >= num_classes:
+            break
+        if bases[i] < max_classes:
+            product = product // bases[i] * (bases[i] + 1)
+            bases[i] += 1
+
+    return bases
+
+
+def _mixed_radix_digits(y: Tensor, bases: list[int]) -> Tensor:
+    F = len(bases)
+    divisors = [1] * F
+    for i in range(F - 2, -1, -1):
+        divisors[i] = divisors[i + 1] * bases[i + 1]
+
+    size = (-1,) + (1,) * y.dim()
+    divisor = torch.tensor(divisors, device=y.device).view(size)
+    base = torch.tensor(bases, device=y.device).view(size)
+    return (y.unsqueeze(0) // divisor) % base  # [F, ...]

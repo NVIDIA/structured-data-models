@@ -1,7 +1,9 @@
 import pytest
 import torch
-from sdm import TableTensor
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
+from sdm.models.tabiclv2.row_embedding import RowEmbedding
+from sdm.nn import Attention
 from sdm.processing import Sequential
 from sdm.testing import withCUDA
 
@@ -28,6 +30,7 @@ def test_tabiclv2(
         out = model(x, y)
         assert out.size() == (*batch_shape, R - R_train, 999)
     else:
+        # TODO Increase max value once TabICLv2 supports 10+ classes:
         y = torch.randint(0, 10, (*batch_shape, R_train), device=device)
         out = model(x, y)
         assert out.size() == (*batch_shape, R - R_train, 10)
@@ -46,11 +49,45 @@ def test_tabiclv2(
     model.clear()
 
 
+@pytest.mark.parametrize("batch_shape", [(), (2,)])
+def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
+    model = TabICLv2(pretrained=False)
+
+    R, C, R_train = 8, 6, 5
+    x = torch.randn(*batch_shape, R, C)
+    y = torch.randint(0, 10, (*batch_shape, R_train))
+
+    out = model(x, y)
+
+    # Members are identical for now, so their average matches a single member:
+    ensembled = model(x, y, num_estimators=3)
+    assert ensembled.size() == out.size()
+    torch.testing.assert_close(ensembled, out)
+
+    model.fit(x[..., :R_train, :], y, num_estimators=3)
+    torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
+    model.clear()
+
+    with pytest.raises(ValueError, match="num_estimators"):
+        model(x, y, num_estimators=0)
+
+    with pytest.raises(ValueError, match="num_estimators"):
+        model.fit(x[..., :R_train, :], y, num_estimators=0)
+
+
 def test_default_recipe_regression_roundtrip() -> None:
     recipe = TabICLv2(pretrained=False).default_recipe()
 
-    features = TableTensor.from_tensor(
-        torch.randn(16, 4), columns=["a", "b", "c", "d"]
+    features = TableTensor(
+        columns={
+            "numerical": ("a", "b", "c", "d"),
+            "categorical": ("kind",),
+        },
+        numerical=torch.randn(16, 4),
+        categorical=CategoricalTensor(
+            data=(torch.arange(16, dtype=torch.int32) % 2).unsqueeze(-1),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
     )
     target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
 
@@ -59,9 +96,48 @@ def test_default_recipe_regression_roundtrip() -> None:
 
     assert model_features.size() == features.size()
     assert model_target.size() == target.size()
+    assert model_features.categorical.size(-1) == 0
+    assert set(model_features.columns[Stype.numerical]) == {
+        "a",
+        "b",
+        "c",
+        "d",
+        "kind",
+    }
 
     assert isinstance(recipe.target, Sequential)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(
         restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
     )
+
+
+@withCUDA
+def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
+    row_embedding = RowEmbedding(
+        num_classes=10,
+        channels=8,
+        num_layers=2,
+        num_heads=2,
+        group_size=3,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+        device=device,
+    )
+    for module in row_embedding.modules():
+        # Randomly initialize to return non-zero output
+        if isinstance(module, Attention):
+            torch.nn.init.normal_(module.out_lin.weight, std=0.02)
+
+    x = torch.randn(8, 6, device=device)
+
+    # The labels 5 * a + b and 5 * b + a decompose into the digits (a, b) and
+    # (b, a) under bases [5, 5], so averaging over digits must be invariant
+    # to swapping them:
+    a = torch.tensor([4, 0, 1, 2, 3], device=device)
+    b = torch.tensor([4, 1, 2, 3, 0], device=device)
+    y = 5 * a + b
+    y_swapped = 5 * b + a
+    out = row_embedding(x, y)
+    torch.testing.assert_close(out, row_embedding(x, y_swapped))
