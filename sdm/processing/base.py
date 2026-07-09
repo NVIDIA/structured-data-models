@@ -129,11 +129,9 @@ class InvertibleMixin(abc.ABC):
         Returns:
             Table mapped back to the original processor space.
         """
-        self._check_supported_stypes(input)
         self._check_is_fitted()
         return self._inverse_transform(input)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
-        def _check_supported_stypes(self, input: TableTensor) -> None: ...
         def _check_is_fitted(self) -> None: ...

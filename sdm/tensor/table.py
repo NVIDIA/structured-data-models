@@ -17,6 +17,7 @@ from sdm.tensor import CategoricalTensor, ColumnarTensor
 from sdm.tensor.io import to_arrow
 
 if TYPE_CHECKING:
+    import cudf  # ty: ignore[unresolved-import]
     import pandas as pd
 
 aten = torch.ops.aten
@@ -371,6 +372,76 @@ class TableTensor(Tensor):
             numerical=tensor,
         )
 
+    @classmethod
+    def from_cudf(
+        cls,
+        df: cudf.DataFrame,
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create a tensor from a ``cudf.DataFrame``.
+
+        Args:
+            df: The dataframe.
+            stypes: The semantic type for each column. Columns that are present
+                in ``df`` but not included in ``stypes`` will be ignored.
+            device: The device. If ``None``, tensors stay on the cuDF columns'
+                CUDA device.
+        """
+        device = torch.device(device) if device is not None else None
+
+        columns: dict[Stype, list[str]] = defaultdict(list)
+        for column, stype in stypes.items():
+            columns[Stype(stype)].append(column)
+
+        blocks: dict[Stype, Tensor] = {}
+        for stype in columns:
+            tensors: list[Tensor] = []
+            for column in columns[stype]:
+                series = df[column]
+                if stype == Stype.numerical:
+                    values = series.astype("float32", copy=False)
+                    if values.null_count > 0:
+                        # DLPack cannot carry cuDF validity masks.
+                        values = values.fillna(float("nan"))
+                    tensor = torch.from_dlpack(values.to_dlpack()).unsqueeze(
+                        -1
+                    )
+                    tensor = tensor.to(device)
+                elif stype == Stype.categorical:
+                    tensor = CategoricalTensor.from_cudf(
+                        series,
+                        device=device,
+                    )
+                elif stype == Stype.datetime:
+                    values = series.astype(
+                        "datetime64[us]",
+                        copy=False,
+                    ).astype("int64", copy=False)
+                    if values.null_count > 0:
+                        # DLPack cannot carry cuDF validity masks.
+                        values = values.fillna(torch.iinfo(torch.int64).min)
+                    tensor = torch.from_dlpack(values.to_dlpack()).unsqueeze(
+                        -1
+                    )
+                    tensor = tensor.to(device)
+                elif stype == Stype.id:
+                    tensor = ColumnarTensor.from_cudf(
+                        series,
+                        device=device,
+                    )
+                else:
+                    raise NotImplementedError
+                tensors.append(tensor)
+
+            blocks[stype] = torch.cat(tensors, dim=-1)
+
+        return cls(
+            columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+            **blocks,
+        )
+
     # Properties ##############################################################
 
     @property
@@ -470,11 +541,36 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
-            columns=cast(
-                Mapping[StypeLike, Sequence[str]],
-                {stype: self._columns[stype] for stype in stypes},
-            ),
+            columns={stype: self._columns[stype] for stype in stypes},
             **{stype: getattr(self, stype) for stype in stypes},
+        )
+
+    def drop_stypes(
+        self,
+        stypes: StypeLike | Iterable[StypeLike],
+    ) -> Self:
+        r"""Return a table with ``stypes`` columns removed.
+
+        .. code-block:: python
+
+            assert table.columns[Stype.categorical] == ("country", "segment")
+            table = table.drop_stypes("categorical")
+            assert table.columns[Stype.categorical] == ()
+            assert table.columns[Stype.numerical] == ("age", "income")
+
+        Args:
+            stypes: The semantic type or semantic types to drop.
+        """
+        if isinstance(stypes, (str, Stype)):
+            stypes = (stypes,)
+        stypes = {Stype(stype) for stype in stypes}
+
+        keep = tuple(stype for stype in self._columns if stype not in stypes)
+        return self.__class__(
+            size=self.size()[:-1],
+            columns={stype: self._columns[stype] for stype in keep},
+            device=self.device,
+            **{stype: getattr(self, stype) for stype in keep},
         )
 
     def select_columns(self, columns: str | Iterable[str]) -> Self:
