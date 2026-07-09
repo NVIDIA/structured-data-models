@@ -470,10 +470,7 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
-            columns=cast(
-                Mapping[StypeLike, Sequence[str]],
-                {stype: self._columns[stype] for stype in stypes},
-            ),
+            columns={stype: self._columns[stype] for stype in stypes},
             **{stype: getattr(self, stype) for stype in stypes},
         )
 

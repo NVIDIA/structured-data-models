@@ -279,6 +279,9 @@ def test_drop_stypes() -> None:
         Stype.id: (),
     }
 
+    with pytest.raises(ValueError, match="not a valid Stype"):
+        tensor.drop_stypes("unknown")
+
 
 def test_save_load() -> None:
     tensor = TableTensor(
