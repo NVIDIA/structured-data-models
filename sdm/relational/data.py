@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -8,7 +10,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self
 
-from sdm import Stype, TableTensor
+from sdm import StringTensor, Stype, TableTensor
 from sdm.tensor.mixin import DeviceMixin
 
 PREFIX = "sdm_internal"
@@ -17,7 +19,67 @@ LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
 if TYPE_CHECKING:
+    import cudf
+
     from sdm.relational import RelationalSampler
+
+
+def _to_cudf_series(column: Tensor) -> cudf.Series:
+    try:
+        import cudf
+        import pylibcudf as plc
+    except ImportError as exc:
+        raise ImportError(
+            "CUDA-resident relational joins require cuDF"
+        ) from exc
+
+    if isinstance(column, StringTensor):
+        if not column.is_contiguous():
+            column = column.contiguous()
+            assert isinstance(column, StringTensor)
+
+        offset_column = plc.Column.from_array(  # ty: ignore[missing-argument]
+            obj=column._offset
+        )
+        plc_column = plc.Column(
+            data_type=plc.DataType(plc.TypeId.STRING),
+            size=column.numel(),
+            data=plc.gpumemoryview(column._data),
+            mask=None,
+            null_count=0,
+            offset=int(column.storage_offset()),
+            children=[offset_column],
+        )
+    else:
+        column = column.detach().contiguous().view(-1)
+        plc_column = plc.Column.from_array(  # ty: ignore[missing-argument]
+            obj=column
+        )
+
+    return cudf.Series.from_pylibcudf(plc_column)
+
+
+def _to_cudf(
+    table: TableTensor,
+    columns: Sequence[str],
+) -> cudf.DataFrame:
+    try:
+        import cudf
+    except ImportError as exc:
+        raise ImportError(
+            "CUDA-resident relational joins require cuDF"
+        ) from exc
+
+    selected = table[..., columns]
+    return cudf.DataFrame(
+        {
+            name: _to_cudf_series(column)
+            for name, column in zip(
+                selected.columns[Stype.id],
+                selected.id.unbind(-1),
+            )
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -200,20 +262,51 @@ class RelationalData(DeviceMixin):
         r"""Materialize heterogeneous graph edges for table relationships.
 
         Args:
-            dtype: The dtype.
-            device: The device.
+            dtype: The edge index dtype.
+            device: The output device. If ``None``, edges stay on the device
+                of the participating tables.
 
         Returns:
             The edge indices for each relationship in order.
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
+
+        Raises:
+            ValueError: If participating tables are not on the same device.
+            ImportError: If CUDA tables are used without cuDF installed.
         """
         device = self.device if device is None else device
 
         columns: dict[str, list[str]] = defaultdict(list)
         for rel in self.relationships:
-            columns[rel.left_table].extend(rel.left_columns)
-            columns[rel.right_table].extend(rel.right_columns)
+            for table, rel_columns in (
+                (rel.left_table, rel.left_columns),
+                (rel.right_table, rel.right_columns),
+            ):
+                for column in rel_columns:
+                    if column not in columns[table]:
+                        columns[table].append(column)
+
+        devices = {self.tables[name].device for name in columns}
+        if len(devices) > 1:
+            devices_repr = ", ".join(
+                str(device) for device in sorted(devices, key=str)
+            )
+            raise ValueError(
+                "Expected all tables participating in relationships to be "
+                f"on the same device (got {devices_repr})"
+            )
+        if len(devices) == 0:
+            return ()
+
+        execution_device = next(iter(devices))
+        if execution_device.type == "cuda":
+            with torch.cuda.device(execution_device):
+                return self._edge_indices_cudf(
+                    columns=columns,
+                    dtype=dtype,
+                    device=device,
+                )
 
         tables = {
             name: table[..., columns[name]].to_arrow()
@@ -251,10 +344,53 @@ class RelationalData(DeviceMixin):
 
         return tuple(edge_indices)
 
+    def _edge_indices_cudf(
+        self,
+        columns: Mapping[str, Sequence[str]],
+        dtype: torch.dtype | None,
+        device: torch.device | str | None,
+    ) -> tuple[Tensor, ...]:
+        tables = {
+            name: _to_cudf(table=table, columns=columns[name])
+            for name, table in self.tables.items()
+            if name in columns
+        }
+        for name, table in tables.items():
+            row_id = torch.arange(
+                len(table),
+                dtype=dtype,
+                device=self.tables[name].device,
+            )
+            table[ROW_ID] = _to_cudf_series(row_id)
+
+        edge_indices: list[Tensor] = []
+        for rel in self.relationships:
+            left = tables[rel.left_table][[*rel.left_columns, ROW_ID]].rename(
+                columns={ROW_ID: LEFT_ROW_ID}
+            )
+            right = tables[rel.right_table][
+                [*rel.right_columns, ROW_ID]
+            ].rename(columns={ROW_ID: RIGHT_ROW_ID})
+
+            joined = left.merge(
+                right,
+                left_on=list(rel.left_columns),
+                right_on=list(rel.right_columns),
+                how="inner",
+            )
+
+            src = torch.as_tensor(joined[LEFT_ROW_ID])
+            dst = torch.as_tensor(joined[RIGHT_ROW_ID])
+            edge_indices.append(
+                torch.stack([src, dst], dim=0).to(device=device)
+            )
+
+        return tuple(edge_indices)
+
     def sampler(
         self,
         time_columns: Mapping[str, str] | None = None,
-    ) -> "RelationalSampler":
+    ) -> RelationalSampler:
         r"""Create a subgraph sampler over this relational data.
 
         .. code-block:: python
