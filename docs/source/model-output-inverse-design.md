@@ -1,370 +1,410 @@
 # Model-output inverse processing design
 
-## Status
+## Status and decision
 
-This document proposes the contract for applying target processors in reverse
-to model outputs. It is a design, not an implementation.
+This document defines the smallest inverse-processing contract needed by
+TabICLv2. It is a design and an executable validation, not an implementation.
 
-The proposal complements the width-aware `StypeDispatch` inverse in
-[PR #202](https://github.com/NVIDIA/structured-data-models/pull/202). That PR
-partitions an already structured `TableTensor` using widths recorded during
-forward transformation. Model outputs need additional information because one
-transformed target column can produce a head with a different width, such as
-`C` class scores or `Q` regression quantiles.
+The MVP makes the following decisions:
 
-## Problem
+- keep `Recipe.target` as an ordinary `Processor` or `Sequential`; do not add
+  a `TargetPipeline`;
+- use the existing `inverse_transform` API for raw model outputs; do not add a
+  second `inverse_transform_output` API;
+- do not require an output specification such as `Quantiles(width=999)`;
+- apply `ClassShuffle.inverse_transform` to class scores, before softmax or
+  argmax; do not implement a hard-class-ID inverse for this path;
+- support the single-target output contract that TabICLv2 already exposes;
+- introduce typed model outputs only when a model needs multiple or ambiguous
+  heads.
 
-The current processing API describes `inverse_transform` as a
-`TableTensor -> TableTensor` mathematical inverse. Models currently return raw
-`torch.Tensor` values, and their output dimensions do not necessarily
-correspond one-to-one with transformed target columns:
+This is narrower than a universal model-output abstraction, but it covers the
+current TabICL regression and classification paths without speculative API.
 
-- one categorical target is represented by one integer during training but by
-  `C` logits during prediction;
-- one numerical target is represented by one scalar during training but
-  TabICLv2 returns `Q = 999` quantile values;
-- a multi-target model may return separate heads with different widths and
-  meanings.
+## Repository facts that define the MVP
 
-A raw tensor contains shapes and values, but not target ownership or the
-meaning of an axis. Forward output width, dtype, and column names cannot
-reconstruct that information reliably.
-
-`ClassShuffle` exposes the distinction most clearly. Inverting a transformed
-class index uses the inverse permutation. Inverting class scores uses the
-forward permutation to reorder the class axis. A processor cannot choose the
-correct operation from a raw tensor alone.
-
-## General rule
-
-Let a fitted target processor define a transform
-
-```text
-f: original target space Y -> model target space Z.
-```
-
-`inverse_transform` maps a prediction expressed in `Z` coordinates back to
-`Y` coordinates. The exact induced operation depends on the prediction
-representation:
-
-| Output representation                        | Induced inverse                             |
-| -------------------------------------------- | ------------------------------------------- |
-| Point value in `Z`                           | Apply `f^-1`                                |
-| Samples, quantiles, or support values in `Z` | Apply `f^-1` to every value                 |
-| Scores or probabilities over discrete `Z`    | Reindex the event axis into `Y` order       |
-| Opaque distribution parameters               | Require an explicit processor-specific rule |
-
-Processors only change axes and values owned by their fitted target columns.
-They preserve batch, row, estimator, and unrelated head dimensions.
-
-This is a pullback of a model prediction through the fitted target transform,
-not necessarily a call to the same tensor operation used for label values.
-
-## Typed model outputs
-
-Model-output semantics must be explicit. The illustrative types below are not
-final names or an implementation prescription:
-
-```python
-class OutputKind(Enum):
-    POINT = auto()
-    CLASS_SCORES = auto()
-    QUANTILES = auto()
-    SAMPLES = auto()
-
-
-@dataclass(frozen=True)
-class TargetRef:
-    index: int
-    name: str
-    stype: Stype
-
-
-@dataclass(frozen=True)
-class OutputHead:
-    values: Tensor
-    target: TargetRef
-    kind: OutputKind
-    event_axis: int | None = None
-
-
-@dataclass(frozen=True)
-class ModelOutput:
-    heads: tuple[OutputHead, ...]
-```
-
-The model, as producer of the output, owns `OutputKind`, head boundaries, and
-axis semantics. The target pipeline owns the fitted original and transformed
-target schemas and the processor route for each target. Neither side should
-infer these facts from generated column names.
-
-The initial contract assigns exactly one fitted target to each head. This
-avoids an implicit target axis and supports targets with different
-cardinalities. `TargetRef.index` is the stable identity; the name is diagnostic
-metadata. A future coupled multi-target head needs an explicit target-axis
-layout. A flattened representation can be an adapter that carries declared
-slices into the raw tensor.
-
-### Raw tensor compatibility
-
-A raw `torch.Tensor` may be accepted only through a model-supplied output
-specification. A single-target recipe can provide a convenient adapter because
-the entire tensor belongs to one known head. Ambiguous multi-target raw tensors
-must be rejected rather than partitioned heuristically.
-
-## Recipe ownership and public API
-
-`Recipe.target` should become a specialized target pipeline instead of a plain
-`Sequential`. It owns:
-
-- the target processors;
-- original and transformed fitted target schemas;
-- target-to-processor-route ancestry;
-- the model-output specification or adapter.
-
-The intended user flow remains:
+The existing API already assigns inverse processing to the target role:
 
 ```python
 model_target = recipe.target.fit_transform(target)
-model_output = model(model_features, model_target)
-prediction = recipe.target.inverse_transform(model_output)
-prediction = recipe.output.transform(prediction)
+raw_output = model(model_features, model_target)
+prediction = recipe.target.inverse_transform(raw_output)
 ```
 
-There is no public `ClassShuffle.correct_output` escape hatch and callers do
-not reach into `recipe.target.steps`.
+`Recipe.target` is currently a plain processor, normalized to `Sequential`
+when a list is provided. Therefore a new pipeline type is not necessary for
+composition or task dispatch.
 
-`recipe.output` processors must use the same head-aware container, or an
-explicit adapter must materialize their expected table representation.
-`SoftmaxTemperature`, for example, acts on a class-score head without removing
-its target ownership or class-axis metadata.
+TabICLv2 has a single target and returns a raw `torch.Tensor`:
 
-For backward compatibility, `inverse_transform(TableTensor)` can be adapted as
-`OutputKind.POINT` when its columns match the recorded transformed target
-schema. Models should produce a typed `ModelOutput` internally. Public model
-APIs may continue returning tensors while a model-owned adapter attaches the
-output specification before recipe processing.
+- integer targets select classification and produce a fixed-width head of 10
+  logits;
+- floating-point targets select regression and produce 999 quantiles;
+- the model does not return class IDs. IDs only appear later if a prediction
+  driver calls `argmax`.
 
-The inverse result retains output representation. Class scores remain scores,
-quantiles remain quantiles, and point outputs remain points. The result gains
-the original target ordering and metadata; decoding an argmax into category
-values is a separate terminal operation.
+The target processor is already fitted when the model is called. Its fitted
+state supplies the missing information required by the two supported inverse
+operations: the regression mean and scale, or the active class count and
+class permutation.
 
-## `ClassShuffle`
+## Minimal contract
 
-For one categorical target, let the fitted permutation `P` map an original
-class index to the shuffled index used for training:
-
-```text
-shuffled_label = P[original_label]
-```
-
-### Point predictions
-
-A hard prediction in shuffled coordinates is mapped with the inverse
-permutation:
+`inverse_transform` continues to mean: map an object expressed in transformed
+target coordinates back to original target coordinates. The accepted
+representation is broadened from only `TableTensor` to include a raw model
+output `Tensor`:
 
 ```python
-original_label = P.argsort()[shuffled_label]
+def inverse_transform(
+    self,
+    input: TableTensor | Tensor,
+) -> TableTensor | Tensor:
+    self._check_is_fitted()
+    return self._inverse_transform(input)
 ```
 
-Missing negative codes remain unchanged when point outputs use categorical
-code conventions.
+Existing `TableTensor` inverse behavior remains valid. When the input is a raw
+`Tensor`, the processor is being called in `Recipe.target` on a model output.
+The fitted processor and the single-target TabICL contract determine the
+operation; dtype, rank, and generated column names are not inspected.
 
-### Class-score predictions
+A `ClassShuffle` used on a categorical feature block still transforms every
+categorical feature independently. Feature preprocessing does not call its
+inverse on model predictions. In the MVP, the raw-output inverse is supported
+only when that instance was fitted on the single categorical target.
 
-Let `scores_z[..., j]` be the model score for shuffled class `j`. Scores in
-original order are:
+### Regression: `StandardScale`
+
+For a single numerical target with fitted mean `m` and scale `s`, every value
+emitted by the regression head is in the same transformed target coordinate
+system:
 
 ```python
-scores_y = scores_z.index_select(class_axis, P)
+restored = output * scale[0] + mean[0]
 ```
 
-For example, with `P = [2, 0, 1]`:
+The operation broadcasts over point predictions, samples, or any number of
+quantiles. It does not need to know whether the last dimension has width 1,
+17, or 999. Consequently this is sufficient:
+
+```python
+Recipe(target=StandardScale())
+```
+
+This is unnecessary duplication and is not part of the MVP:
+
+```python
+TargetPipeline(
+    StandardScale(),
+    output_spec=Quantiles(width=999),
+)
+```
+
+The value 999 is a TabICLv2 architecture contract and remains validated in
+the model tests. It is not target-recipe configuration.
+
+`StandardScale` keeps its existing `TableTensor` branch for data round trips
+and adds the raw-tensor branch using the same fitted buffers:
+
+```python
+def _inverse_transform(self, input: TableTensor | Tensor):
+    if isinstance(input, TableTensor):
+        numerical = _as_float(input.numerical) * self.scale + self.mean
+        return input.replace_blocks(numerical=numerical)
+    return input * self.scale[0] + self.mean[0]
+```
+
+The scalar indexing is intentional: TabICLv2 supports one target while its
+regression output has a value/support axis of arbitrary width.
+
+### Classification: `ClassShuffle`
+
+Let the fitted permutation `P` map original class codes to the shuffled codes
+shown to the model:
 
 ```text
-original class:       0      1      2
-shuffled class:       2      0      1
-scores in Z order:  [z0,    z1,    z2]
-scores in Y order:  [z2,    z0,    z1]
+shuffled_code = P[original_code]
 ```
 
-The operation applies equally to logits and probabilities. `ClassShuffle`
-does not apply softmax, argmax, or category decoding. It only aligns the class
-axis and restores the fitted original category metadata.
+The model returns scores in shuffled-code order. The score for original class
+`i` is therefore stored at position `P[i]`, so original class order is
+restored with:
 
-The implementation validates that the event-axis size equals the fitted class
-count. For multiple categorical targets, each target has its own head and its
-own slice of the flattened permutation buffer.
+```python
+scores_original = scores_shuffled.index_select(-1, P)
+```
 
-### Why point and score inverses differ
+TabICLv2 always emits 10 logits even when only `K < 10` classes are active.
+The fitted category count supplies `K`; the processor first selects the active
+head prefix and then restores the original class order:
 
-The point inverse answers, "which original class produced shuffled class
-`j`?" The score inverse answers, "where is the score for original class `i`
-stored?" The former indexes by `P^-1`; the latter gathers by `P`. A generic
-mathematical inverse over label tensors cannot silently double as a class-axis
-inverse.
+```python
+def _inverse_transform(self, output: Tensor) -> Tensor:
+    # MVP: exactly one fitted categorical target.
+    stop = self.offsets[1]
+    permutation = self.permutations[:stop]
+    return output[..., :stop].index_select(-1, permutation)
+```
 
-## Composition
+There is deliberately no equality check between fitted class count and model
+head width. A five-class target is valid for TabICL's ten-wide head. If the
+head is shorter than the required permutation, the tensor indexing operation
+fails rather than introducing a second, inconsistent width contract.
+
+This operation is the same for logits and probabilities, but for TabICL it
+must run on logits before output postprocessing. In particular, softmax over
+all ten logits would incorrectly include inactive classes. The intended flow
+is:
+
+```text
+10 raw logits
+  -> select K active logits
+  -> restore original class order
+  -> align/aggregate estimators
+  -> output processing such as temperature and softmax
+  -> optional argmax and category decoding
+```
+
+No class-ID case is implemented. Supporting an external model whose public
+`predict` method returns IDs would be a different model-output contract. It
+must not be guessed from the values or shape of a tensor.
+
+The original target's category vector remains the terminal decoding metadata.
+`ClassShuffle.inverse_transform` only aligns the score axis; it does not apply
+softmax, argmax, or decode category values.
+
+## Composition without `TargetPipeline`
 
 ### `Sequential`
 
-Target processors run in reverse order. Each step receives typed heads plus the
-fitted target context. A step must either support the head's `OutputKind` or
-raise a clear error.
+The existing reverse traversal is sufficient. Its annotations need to admit
+raw tensors, and every step in a target sequence must support the
+representation it receives:
 
-Numerical bijections such as `StandardScale`, `Power`, and `Quantile` apply
-their inverse to point, quantile, sample, or other support-value heads. They do
-not transform logits or unrelated distribution parameters merely because the
-payload is floating point.
-
-### `StypeDispatch`
-
-During target fitting, dispatch records which route owns each target and how
-the route changes the target schema. During inverse processing, it groups
-model-output heads by that recorded ownership and delegates whole heads to the
-route processor.
-
-Forward widths from PR #202 remain useful as a fallback layout for structured
-point outputs. They are not model-head boundaries. In particular:
-
-```text
-categorical target width:       1
-classification output width:    C
-
-numerical target width:         1
-TabICLv2 quantile output width:  999
+```python
+def _inverse_transform(self, output: TableTensor | Tensor):
+    for step in reversed(self.steps):
+        output = step.inverse_transform(output)
+    return output
 ```
 
-Slicing either model output with a recorded width of one would be incorrect.
-Explicit `OutputHead` boundaries solve this without relying on names or
-ordering conventions.
+### Task and choice dispatch
 
-### `Choice` and task dispatch
+Task dispatch records the branch selected while fitting the target and
+delegates `inverse_transform` to that same branch. It does not infer a task
+from a model-output tensor:
 
-`Choice` applies the inverse of the option selected during fit. Task dispatch
-applies the inverse for the selected task. The selected branch and fitted
-target schema belong to each estimator's processing state.
+```python
+target=TaskDispatch(
+    classification=ClassShuffle(),
+    regression=StandardScale(),
+)
+```
 
-## Fitted state and serialization
+`Choice` follows the same rule: inverse processing uses the choice selected
+during fit. This gives the intended task-dispatch flow without adding an
+output specification or specialized target container.
 
-Each estimator's target pipeline state includes processor parameters, original
-and transformed target schemas, route ancestry, and the selected task or choice
-branch. The model-output specification is model configuration; resolved head
-ownership is fitted recipe state.
-
-This design does not add a `ClassShuffle`-specific checkpoint workaround.
-Serializing dynamically sized fitted buffers, `_fitted`, schemas, and composite
-selection is a processor-wide concern and should be solved consistently for the
-whole processing package.
+For a single target, `StypeDispatch` can likewise delegate the entire raw
+output to the one fitted target route. The width-aware `TableTensor` inverse
+proposed in [PR #202](https://github.com/NVIDIA/structured-data-models/pull/202)
+remains useful for structured table inverses, but its recorded input widths
+must not slice TabICL's raw 10- or 999-wide model heads.
 
 ## Ensemble boundary
 
-Inverse target processing happens per estimator before ensemble aggregation:
+With the current recipe state, all estimators share one fitted target
+processor. Both MVP operations are affine/linear in the output, so applying
+the shared inverse immediately after the current averaged model output is
+equivalent to applying it to every member first.
 
-```text
-for each estimator:
-    transform that estimator's target
-    run the model
-    attach the model-output layout
-    inverse-transform the model output into original target coordinates
+If estimators later fit independent `ClassShuffle` permutations, each member
+must be aligned before averaging:
 
-aggregate aligned estimator outputs
-apply recipe.output postprocessing
+```python
+aligned = []
+for estimator, target_processor in estimators:
+    raw = estimator(...)
+    aligned.append(target_processor.inverse_transform(raw))
+prediction = torch.stack(aligned).mean(dim=0)
 ```
 
-This ordering is required when ensemble members draw different class
-permutations. Averaging unaligned class scores mixes different classes.
-Nonlinear numerical inverse transforms may also fail to commute with averaging.
+Averaging scores that use different class-coordinate systems mixes unrelated
+classes. This ordering requirement does not imply a `TargetPipeline`; it only
+requires the model/driver to call the already fitted processor at the correct
+boundary.
 
-The existing model loop averages raw estimator tensors. Recipe integration
-must move target inversion inside that loop or guarantee that every estimator
-shares identical target-processing state. The former is the general rule.
+## Executable evidence
 
-`recipe.output` remains post-inverse cleanup. Whether an ensemble averages
-logits or probabilities is a model-level decision and must be explicit; it is
-not inferred by processors.
+The proposal was exercised on CPU against repository commit `ec91baa` using
+the real `TabICLv2(pretrained=False)`, `ClassShuffle.fit`, and
+`StandardScale.fit` implementations. The controlled score tensors isolate
+coordinate correctness; this is not a model-quality benchmark.
 
-## Rejected alternatives
+The run used two independently fitted five-class permutations and 4,096 rows
+inside TabICL's fixed ten-wide classification head:
 
-### Public processor-specific output correction
+| Measurement                                       |            Result |
+| ------------------------------------------------- | ----------------: |
+| Actual TabICL classification output shape         |         `[2, 10]` |
+| Actual TabICL regression output shape             |        `[2, 999]` |
+| Permutation A                                     | `[4, 2, 0, 3, 1]` |
+| Permutation B                                     | `[0, 4, 2, 1, 3]` |
+| Maximum score error after per-member alignment    |             `0.0` |
+| Argmax mismatch after aligned aggregation         |            `0.0%` |
+| Argmax mismatch after naive unaligned aggregation |        `71.2891%` |
 
-A method such as `ClassShuffle.correct_output(tensor)` exposes pipeline
-internals, does not compose through `Sequential`, `Choice`, or dispatch, and
-forces callers to locate fitted steps. The output inverse belongs to the target
-pipeline.
+The naive mismatch is evidence for the ensemble boundary: the same class
+evidence becomes wrong when different shuffled axes are averaged without
+first gathering each axis by its own fitted permutation.
 
-### Infer heads from forward widths
+The regression experiment fitted `StandardScale` to 257 target values and
+round-tripped random raw outputs of three widths:
 
-Forward widths describe transformed target tables, not prediction heads. They
-cannot distinguish a one-column categorical target with `C` logits from a
-one-column numerical target with `Q` quantiles. Width inference is retained
-only as a point-output compatibility path.
+| Output width | Shape preserved | Maximum round-trip error |
+| -----------: | :-------------: | -----------------------: |
+|            1 |       yes       |                `1.49e-7` |
+|           17 |       yes       |                `3.58e-7` |
+|          999 |       yes       |                `4.77e-7` |
 
-### Infer semantics from dtype or rank
+This demonstrates that the same fitted scalar state handles 999 quantiles
+without a `Quantiles(width=999)` declaration.
 
-Floating tensors may be logits, probabilities, quantiles, samples, point
-regression values, or opaque distribution parameters. Tensor rank also varies
-with batch shape. Silent inference would apply valid operations to the wrong
-semantic object.
+The following script is self-contained when run from the repository with
+`uv run python`:
 
-### Require only a `TableTensor` model output
+```python
+import torch
 
-Column names and stypes still do not say whether a numerical block is a set of
-targets, class scores, or quantiles. A table can be the values payload, but it
-does not replace an explicit head kind and target reference.
+from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm.models import TabICLv2
+from sdm.processing import ClassShuffle, StandardScale
 
-## Validation and errors
+torch.manual_seed(20260709)
+model = TabICLv2(pretrained=False)
+x = torch.randn(6, 4)
+assert model(x, torch.tensor([0, 1, 2, 3])).shape == (2, 10)
+assert model(x, torch.tensor([1.0, 2.0, 4.0, 8.0])).shape == (2, 999)
 
-The target pipeline should reject:
+target = TableTensor(
+    columns={"categorical": ("target",)},
+    categorical=CategoricalTensor(
+        data=(torch.arange(256, dtype=torch.int32) % 5).unsqueeze(-1),
+        categories=(
+            StringTensor.from_list(["a", "b", "c", "d", "e"]),
+        ),
+    ),
+)
 
-- inverse processing before target fitting;
-- raw tensors without an unambiguous model-output specification;
-- missing, duplicated, or unknown target ownership;
-- unsupported output kinds for any processor in the reverse chain;
-- class heads whose event-axis size differs from fitted cardinality;
-- model-output layouts that omit or reorder targets without declaring it.
+def fit_shuffle(seed):
+    torch.manual_seed(seed)
+    return ClassShuffle(method="random").fit(target)
 
-It should allow arbitrary leading batch and row dimensions and preserve device
-and dtype. It must not compare prediction row count with the fitted target row
-count.
+shuffle_a, shuffle_b = fit_shuffle(17), fit_shuffle(29)
+p_a, p_b = shuffle_a.permutations, shuffle_b.permutations
+k = int(shuffle_a.offsets[1])
 
-## Proposed implementation sequence
+torch.manual_seed(1234)
+base = torch.randn(4096, k)
+original_a = base + 0.15 * torch.randn_like(base)
+original_b = base + 0.15 * torch.randn_like(base)
+raw_a, raw_b = torch.randn(4096, 10), torch.randn(4096, 10)
+raw_a[..., :k] = original_a.index_select(-1, p_a.argsort())
+raw_b[..., :k] = original_b.index_select(-1, p_b.argsort())
 
-1. Introduce `OutputKind`, `OutputHead`, `ModelOutput`, and fitted target-schema
-   records without changing model return types.
-2. Specialize `Recipe.target` into a target pipeline that adapts model outputs
-   and reverses processors.
-3. Implement head-aware inverses for existing numerical processors and
-   `ClassShuffle`.
-4. Extend `Sequential`, `Choice`, task dispatch, and `StypeDispatch` to route
-   typed heads by fitted target ancestry. Coordinate this step with PR #202.
-5. Move target inversion inside the per-estimator model loop, then aggregate
-   aligned outputs and run `recipe.output`.
-6. Add multi-target adapters only after model output layouts are explicit.
+aligned_a = raw_a[..., :k].index_select(-1, p_a)
+aligned_b = raw_b[..., :k].index_select(-1, p_b)
+aligned = torch.stack([aligned_a, aligned_b]).mean(0)
+expected = torch.stack([original_a, original_b]).mean(0)
+naive = torch.stack([raw_a[..., :k], raw_b[..., :k]]).mean(0)
+
+torch.testing.assert_close(
+    aligned,
+    expected,
+    rtol=0,
+    atol=0,
+)
+print((naive.argmax(-1) != expected.argmax(-1)).float().mean())
+print((aligned.argmax(-1) != expected.argmax(-1)).float().mean())
+
+torch.manual_seed(4321)
+values = 11.2 + 3.7 * torch.randn(257, 1)
+scale = StandardScale().fit(TableTensor.from_tensor(values))
+for width in (1, 17, 999):
+    raw = torch.randn(32, width)
+    restored = raw * scale.scale[0] + scale.mean[0]
+    round_trip = (restored - scale.mean[0]) / scale.scale[0]
+    assert restored.shape == raw.shape
+    print(width, (round_trip - raw).abs().max())
+```
+
+The first two printed values are:
+
+```text
+tensor(0.7129)
+tensor(0.)
+```
+
+The three maximum regression round-trip errors are:
+
+```text
+1   tensor(1.4901e-07)
+17  tensor(3.5763e-07)
+999 tensor(4.7684e-07)
+```
+
+## Minimal implementation sequence
+
+1. Broaden `InvertibleMixin` and `Sequential` inverse annotations to accept a
+   raw `Tensor` in addition to `TableTensor`.
+2. Add the width-agnostic single-target tensor branch to `StandardScale` while
+   preserving its existing table inverse.
+3. Make `ClassShuffle` invertible for a raw class-score tensor fitted on one
+   categorical target: select the active prefix and gather it by the fitted
+   permutation.
+4. Have task/choice dispatch delegate raw-output inverse processing to the
+   branch selected during target fitting.
+5. Call `recipe.target.inverse_transform(raw_output)` before output
+   postprocessing and argmax. Move this call inside estimator aggregation when
+   estimator-specific target states are introduced.
+6. Keep the fixed widths 10 and 999 in TabICLv2 model tests, not in recipes.
 
 ## Required tests
 
-- `ClassShuffle` hard predictions use `P^-1`.
-- `ClassShuffle` logits and probabilities gather the class axis with `P` on CPU
-  and CUDA while preserving arbitrary leading dimensions.
-- Two estimators with different permutations are aligned before averaging.
-- `StandardScale` inverses point and multi-quantile heads by broadcasting over
-  the value axis.
-- `Sequential` applies mixed target inverses in reverse order.
-- `StypeDispatch` routes a width-one categorical target to a width-`C` score
-  head and a width-one numerical target to a width-`Q` quantile head.
-- Ambiguous raw multi-target tensors and unsupported output kinds fail clearly.
-- Output postprocessing runs after inverse alignment and ensemble aggregation.
+- `StandardScale.inverse_transform(Tensor)` preserves shapes and broadcasts
+  the single fitted mean/scale over a 999-wide output.
+- Existing `StandardScale.inverse_transform(TableTensor)` round trips remain
+  unchanged.
+- `ClassShuffle.inverse_transform(Tensor)` accepts a ten-wide head with
+  `K < 10`, returns width `K`, and gathers the last axis by `P` while
+  preserving arbitrary leading dimensions, dtype, and device.
+- Classification inversion runs before softmax and argmax; there is no
+  class-ID inverse test in the MVP.
+- Two independently shuffled estimator outputs are aligned before aggregation
+  and reproduce aggregation in original class order.
+- `Sequential` applies raw-output inverses in reverse order.
+- Task dispatch uses its fitted classification or regression branch without
+  inspecting the raw output.
+- Existing multi-column categorical feature tests continue to prove that
+  `ClassShuffle.transform` works on feature blocks.
 
-## Open naming decisions
+## Deliberate limitations and generalization trigger
 
-- `ModelOutput` versus `Prediction` for the typed container.
-- `OutputKind` versus a protocol implemented by concrete output-head types.
-- Whether the raw-tensor adapter lives on the model, the target pipeline, or a
-  small object shared by both. The model must remain the source of output
-  semantics in every variant.
+The MVP rejects or defers:
 
-These naming choices do not change the core contract: model outputs carry head
-semantics, target processors implement the induced inverse for supported head
-kinds, and composition routes heads by fitted target ownership.
+- multiple target heads in one raw tensor;
+- coupled multi-target outputs;
+- distribution parameters whose inverse is not elementwise;
+- externally produced hard class IDs;
+- per-head axis declarations other than TabICL's last-axis convention;
+- reconstructing a feature `TableTensor` through `ClassShuffle`.
+
+When one of these becomes a concrete model requirement, a typed `ModelOutput`
+with explicit head ownership, output kind, and event axis becomes justified.
+That is the point at which a specialized target pipeline may add value. It is
+not required to make the current TabICL task-dispatch flow work.
+
+Serialization of fitted buffers, schemas, and selected composite branches
+remains a processing-package-wide issue. This design does not add a
+`ClassShuffle`-specific state-loading workaround.
