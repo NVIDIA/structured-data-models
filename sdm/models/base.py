@@ -42,19 +42,11 @@ class BaseModel(torch.nn.Module, ABC):
                 examples.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-            num_estimators: The number of ensemble members ``E``.
-                The forward pass runs once per member, and predictions are
-                averaged across members.
+            num_estimators: The number of estimators for ensembling.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
-        if num_estimators < 1:
-            raise ValueError(
-                f"Expected 'num_estimators' to be a positive integer "
-                f"(got {num_estimators})"
-            )
-
         x, y = self._preprocess(x, y)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
@@ -81,23 +73,14 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-            num_estimators: The number of ensemble members ``E``.
-                In-context examples are fitted once per member, and subsequent
-                :meth:`predict` calls average predictions across members.
+            num_estimators: The number of estimators for ensembling.
         """
-        if num_estimators < 1:
-            raise ValueError(
-                f"Expected 'num_estimators' to be a positive integer "
-                f"(got {num_estimators})"
-            )
-
         self.clear()
         x, y = self._preprocess(x, y)
         x = x[..., : y.size(-1), :]
         caches: list[Cache] = []
         for _ in range(num_estimators):
-            # TODO: Don't store y.dtype in every cache once we introduce a
-            # nested cache.
+            # TODO Don't store y.dtype for every estimator.
             cache = Cache({"y.dtype": y.dtype})
             self._forward(x, y, cache=cache)
             cache.freeze()
@@ -124,8 +107,7 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_test`` rows and ``C`` columns.
 
         Returns:
-            The prediction for ``[..., R_test]`` test rows, averaged across
-            ensemble members when fitted with ``num_estimators > 1``.
+            The prediction for ``[..., R_test]`` test rows.
         """
         if self._caches is None:
             raise RuntimeError(

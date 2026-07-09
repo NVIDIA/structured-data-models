@@ -144,6 +144,10 @@ class RelationalData:
         self.__post_init__()
 
     def __post_init__(self) -> None:
+        for table in self.tables.values():
+            if table.dim() != 2:
+                raise ValueError("Tables need to be two-dimensional")
+
         for relationship in self.relationships:
             for table, columns in (
                 (relationship.left_table, relationship.left_columns),
@@ -155,10 +159,12 @@ class RelationalData:
                     )
 
                 for column in columns:
-                    if self.tables[table].stype(column) != Stype.id:
+                    stype = self.tables[table].stype(column)
+                    if stype != Stype.id:
                         raise ValueError(
                             f"Expected column '{column}' in table '{table}' "
-                            f"to have semantic type '{Stype.id.value}'"
+                            f"to have semantic type '{Stype.id.value}' "
+                            f"(got '{stype.value}')"
                         )
 
     def edge_indices(
