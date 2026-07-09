@@ -75,16 +75,16 @@ Conceptually, recipe construction performs:
 target = Sequential(*target)
 output = Sequential(*output)
 
-dispatchers = tuple(
+task_dispatchers = tuple(
     module
     for module in output.modules()
     if isinstance(module, TaskDispatch)
 )
 
-if dispatchers:
+if task_dispatchers:
     target = _TaskResolver(
         processor=target,
-        dispatchers=dispatchers,
+        task_dispatchers=task_dispatchers,
     )
 ```
 
@@ -94,32 +94,23 @@ resolve every associated output dispatcher.
 
 ```python
 class _TaskResolver(Processor, InvertibleMixin):
-    def fit(self, input: TableTensor) -> Self:
-        self._fit_transform_and_resolve(input)
-        return self
-
-    def fit_transform(self, input: TableTensor) -> TableTensor:
-        return self._fit_transform_and_resolve(input)
-
-    def _fit_transform_and_resolve(
+    def _fit(
         self,
         input: TableTensor,
-    ) -> TableTensor:
-        for dispatcher in self._dispatchers:
-            dispatcher._reset()
+    ) -> None:
+        for task_dispatcher in self._task_dispatchers:
+            task_dispatcher._reset()
 
         succeeded = False
         try:
             output = self.processor.fit_transform(input)
-            for dispatcher in self._dispatchers:
-                dispatcher._resolve(output)
-            self._fitted = True
+            for task_dispatcher in self._task_dispatchers:
+                task_dispatcher._resolve(output)
             succeeded = True
-            return output
         finally:
             if not succeeded:
-                for dispatcher in self._dispatchers:
-                    dispatcher._reset()
+                for task_dispatcher in self._task_dispatchers:
+                    task_dispatcher._reset()
 
     def _transform(self, input: TableTensor) -> TableTensor:
         return self.processor.transform(input)
@@ -130,6 +121,16 @@ class _TaskResolver(Processor, InvertibleMixin):
 
 This is pseudocode. The implementation must retain the usual supported-stype
 and fitted-state checks.
+
+The wrapper only implements the standard protected hooks. The inherited
+`Processor.fit` marks the wrapper as fitted, and the inherited `fit_transform`
+then calls `_transform`. A specialized one-pass `fit_transform` would avoid
+that second target transformation, but should only be added if measurement
+shows that the extra pass matters.
+
+`_transform` is required because `_TaskResolver` replaces the target processor
+exposed as `recipe.target`. `_inverse_transform` preserves the existing target
+inverse API used to map model predictions back to the original target space.
 
 The wrapper always requires one fit before output dispatch, even when the
 wrapped target processor is stateless, because task resolution itself is
