@@ -15,8 +15,8 @@ Planned, staged towards one task-aware recipe:
   dispatching the target and output roles per task with ``TaskDispatch``.
   The end-state is sketched (commented) at the bottom of this module.
 
-``TaskDispatch`` and ``SoftmaxTemperature`` are not implemented yet, so the
-task-aware recipe remains a commented placeholder.
+Task-dependent target processing is not implemented yet, so the task-aware
+recipe remains a commented placeholder.
 
 """
 

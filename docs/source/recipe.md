@@ -37,20 +37,16 @@ from sdm.processing import Recipe, StandardScale
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
 ```
 
-Fit and transform labeled data in one pass with `recipe.fit_transform`. Use
-`recipe.preprocess` to transform validation or test data without refitting.
-Recipe pipelines accept and return {py:class}`~sdm.tensor.TableTensor`s.
+Fit the recipe pipelines on your labeled data and transform them in one call
+with `fit_transform`; transform later inputs with `recipe.features.transform`
+(no re-fit). Recipe pipelines accept and return
+{py:class}`~sdm.tensor.TableTensor`s.
 
 ```python
-model_features, model_target = recipe.fit_transform(
-    features=labeled_features,
-    target=labels,
-)
-model_input = recipe.preprocess(features=new_features)
+model_features = recipe.features.fit_transform(labeled_features)
+model_target = recipe.target.fit_transform(labels)
+model_input = recipe.features.transform(new_features)
 ```
-
-The target pipeline runs first so its final semantic type can select any
-task-dependent processor configured in `recipe.output`.
 
 The model returns a {py:class}`~sdm.tensor.TableTensor`; map its predictions
 back to the original space:

@@ -10,13 +10,14 @@ from sdm.tensor import TableTensor
 
 
 class TaskDispatch(Processor):
-    """Apply an output processor selected from the transformed target type.
+    """Route model output by the transformed target's semantic type.
 
-    The enclosing :class:`~sdm.processing.Recipe` resolves the route when its
-    target pipeline returns exactly one numerical or categorical column.
-    Numerical targets select regression and categorical targets select
-    classification. Routes must be stateless because output processing has no
-    fitting data of its own.
+    When used in :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
+    :attr:`Recipe.target <sdm.processing.Recipe.target>` resolves the route
+    from the final transformed target. One numerical column selects regression
+    and one categorical column selects classification. Routes must be stateless
+    because output processing has no fitting data of its own. Configure
+    ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
         classification: Output processor for categorical targets. An iterable
@@ -95,7 +96,7 @@ class TaskDispatch(Processor):
         if self._task is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' has no resolved task; call "
-                "'Recipe.fit()' before transforming model output."
+                "'recipe.target.fit()' before transforming model output."
             )
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(input)
