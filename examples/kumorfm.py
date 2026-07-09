@@ -64,11 +64,12 @@ for split in ["train", "val", "test"]:
     task_tables.append(task_table)
 
 train_table = torch.cat(task_tables[:2], dim=0)
-train_table = train_table[
-    torch.randperm(len(train_table))[: args.context_size]
-]
+perm = torch.randperm(len(train_table))[: args.context_size]
+train_table = cast(TableTensor, train_table[perm])
 
 # Execute Model ###############################################################
+model = KumoRFM(device=device)
+
 kwargs = {
     "task_link": {
         "task_column": task.entity_col,
@@ -78,18 +79,14 @@ kwargs = {
     "num_neighbors": [16, 16],
     "task_time_column": task.time_col,
 }
-train_table, related_tables = sampler(cast(TableTensor, train_table), **kwargs)
-model = KumoRFM(device=device)
+train_table, related_tables = sampler(train_table, **kwargs)
 model.fit(
     x=train_table.drop_columns(task.target_col),
     y=train_table[task.target_col],
     related_tables=related_tables,
 )
 
-for test_table in task_tables[-1].split(args.batch_size):
-    test_table, related_tables = sampler(test_table, **kwargs)
-    model.predict(
-        x=test_table.drop_columns(task.target_col),
-        related_tables=related_tables,
-    )
+test_table = task_tables[-1].drop_columns(task.target_col)
+for test_batch in test_table.split(args.batch_size):
+    model.predict(*sampler(test_batch, **kwargs))
 model.clear()
