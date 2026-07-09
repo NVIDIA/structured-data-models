@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Literal
 
 import torch
 from torch import Tensor
@@ -76,26 +76,9 @@ class ClassShuffle(Processor):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         offsets = self.offsets.tolist()
-        expected_columns = len(offsets) - 1
-        actual_columns = input.categorical.size(-1)
-        if actual_columns != expected_columns:
-            raise ValueError(
-                "Expected the categorical block to match the fitted column "
-                f"count (got {actual_columns} and {expected_columns})"
-            )
-
         data = input.categorical.as_tensor().clone()
         categories: list[Tensor] = []
         for index, category in enumerate(input.categorical.categories):
-            expected_classes = offsets[index + 1] - offsets[index]
-            if category.numel() != expected_classes:
-                column = input.columns[Stype.categorical][index]
-                raise ValueError(
-                    f"Expected categorical column '{column}' to match the "
-                    f"fitted category count (got {category.numel()} and "
-                    f"{expected_classes})"
-                )
-
             permutation = self.permutations[
                 offsets[index] : offsets[index + 1]
             ]
@@ -118,35 +101,3 @@ class ClassShuffle(Processor):
             categories=categories,
         )
         return input.replace_blocks(categorical=categorical)
-
-    def get_extra_state(self) -> bool:  # noqa: D102
-        return self._fitted
-
-    def set_extra_state(self, state: bool) -> None:  # noqa: D102
-        self._fitted = state
-
-    def _load_from_state_dict(
-        self,
-        state_dict: dict[str, Any],
-        prefix: str,
-        local_metadata: dict[str, Any],
-        strict: bool,
-        missing_keys: list[str],
-        unexpected_keys: list[str],
-        error_msgs: list[str],
-    ) -> None:
-        for name in ("permutations", "offsets"):
-            state = state_dict.get(f"{prefix}{name}")
-            if isinstance(state, Tensor):
-                buffer = getattr(self, name)
-                buffer.resize_(state.size())
-
-        super()._load_from_state_dict(
-            state_dict,
-            prefix,
-            local_metadata,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs,
-        )
