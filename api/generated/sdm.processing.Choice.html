@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>FeaturePermute - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Identity" href="sdm.processing.Identity.html" /><link rel="prev" title="ConstantFilter" href="sdm.processing.ConstantFilter.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Choice - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="StypeDispatch" href="sdm.processing.StypeDispatch.html" /><link rel="prev" title="Sequential" href="sdm.processing.Sequential.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -19,7 +19,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="FeaturePermute"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="Choice"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -94,11 +94,11 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Sequential.html">Sequential</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.Choice.html">Choice</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ConstantFilter.html">ConstantFilter</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">FeaturePermute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.FeaturePermute.html">FeaturePermute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.MeanImpute.html">MeanImpute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Power.html">Power</a></li>
@@ -136,7 +136,12 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.FeaturePermute"><code class="docutils literal notranslate"><span class="pre">FeaturePermute</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.Choice"><code class="docutils literal notranslate"><span class="pre">Choice</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.processing.Choice.get_extra_state"><code class="docutils literal notranslate">get_extra_state()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.Choice.selected"><code class="docutils literal notranslate">selected</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.Choice.set_extra_state"><code class="docutils literal notranslate">set_extra_state()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -158,7 +163,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">FeaturePermute</strong>
+        <strong itemprop="name">Choice</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -171,24 +176,66 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="featurepermute">
-<h1>FeaturePermute<a class="headerlink" href="#featurepermute" title="Link to this heading">¶</a></h1>
+          <section id="choice">
+<h1>Choice<a class="headerlink" href="#choice" title="Link to this heading">¶</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.FeaturePermute">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">FeaturePermute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'shift'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'random'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'shift'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.FeaturePermute" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="sdm.processing.Choice">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Choice</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.Choice" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
-<p>Permute the numerical feature columns.</p>
-<p>The permutation is drawn from the global CPU generator when the
-processor is fitted; seed with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.manual_seed()</span></code></a> to make it
-reproducible. Convert non-numerical feature stypes before this step,
-for example with <a class="reference internal" href="sdm.processing.ToNumerical.html#sdm.processing.ToNumerical" title="sdm.processing.ToNumerical"><code class="xref py py-class docutils literal notranslate"><span class="pre">ToNumerical</span></code></a>.</p>
+<p>Delegate to one option drawn uniformly at random.</p>
+<p>The option is drawn from the global CPU generator when the processor
+is fitted; seed with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.manual_seed()</span></code></a> to make it
+reproducible. Only the drawn option is fitted; refitting draws again.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'shift'</em><em>, </em><em>'random'</em><em>]</em>) – Permutation strategy. <code class="docutils literal notranslate"><span class="pre">&quot;shift&quot;</span></code> cyclically shifts the
-columns by a drawn offset, and <code class="docutils literal notranslate"><span class="pre">&quot;random&quot;</span></code> permutes the columns
-with a drawn permutation.</p>
+<dd class="field-odd"><p><strong>args</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Non-empty sequence of candidate processors.</p>
 </dd>
 </dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.processing.Choice.get_extra_state">
+<span class="sig-name descname"><span class="pre">get_extra_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#sdm.processing.Choice.get_extra_state" title="Link to this definition">¶</a></dt>
+<dd><p>Return any extra state to include in the module’s state_dict.</p>
+<p>Implement this and a corresponding <a class="reference internal" href="#sdm.processing.Choice.set_extra_state" title="sdm.processing.Choice.set_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_extra_state()</span></code></a> for your module
+if you need to store extra state. This function is called when building the
+module’s <cite>state_dict()</cite>.</p>
+<p>Note that extra state should be picklable to ensure working serialization
+of the state_dict. We only provide backwards compatibility guarantees
+for serializing Tensors; other objects may break backwards compatibility if
+their serialized pickled form changes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Any extra state to store in the module’s state_dict</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.processing.Choice.selected">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">selected</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a></em><a class="headerlink" href="#sdm.processing.Choice.selected" title="Link to this definition">¶</a></dt>
+<dd><p>The drawn option.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.processing.Choice.set_extra_state">
+<span class="sig-name descname"><span class="pre">set_extra_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#sdm.processing.Choice.set_extra_state" title="Link to this definition">¶</a></dt>
+<dd><p>Set extra state contained in the loaded <cite>state_dict</cite>.</p>
+<p>This function is called from <code class="xref py py-func docutils literal notranslate"><span class="pre">load_state_dict()</span></code> to handle any extra state
+found within the <cite>state_dict</cite>. Implement this function and a corresponding
+<a class="reference internal" href="#sdm.processing.Choice.get_extra_state" title="sdm.processing.Choice.get_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_extra_state()</span></code></a> for your module if you need to store extra state within its
+<cite>state_dict</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>state</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Extra state from the <cite>state_dict</cite></p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -199,16 +246,16 @@ with a drawn permutation.</p>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.ConstantFilter.html">
+    <a href="sdm.processing.Sequential.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">ConstantFilter</div></div>
+        <span>Previous</span><div class="title">Sequential</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.Identity.html">
+    <a href="sdm.processing.StypeDispatch.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Identity</div>
+        <div class="title">StypeDispatch</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
