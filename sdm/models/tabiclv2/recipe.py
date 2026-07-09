@@ -16,7 +16,7 @@ Planned, staged towards one task-aware recipe:
   The end-state is sketched (commented) at the bottom of this module.
 
 Steps that need processors not implemented yet (``ConstantFilter``,
-``LabelShuffle``, ``Choice``, ``TaskDispatch``) are kept as commented
+``ClassShuffle``, ``Choice``, ``TaskDispatch``) are kept as commented
 placeholders.
 
 """

@@ -6,6 +6,7 @@ from sdm.processing.choice import Choice
 from sdm.processing.stype_dispatch import StypeDispatch
 from sdm.processing.task_dispatch import TaskDispatch
 from sdm.processing.clip import Clip
+from sdm.processing.class_shuffle import ClassShuffle
 from sdm.processing.constant_filter import ConstantFilter
 from sdm.processing.feature_permute import FeaturePermute
 from sdm.processing.identity import Identity
@@ -26,6 +27,7 @@ __all__ = [
     "StypeDispatch",
     "TaskDispatch",
     "Clip",
+    "ClassShuffle",
     "ConstantFilter",
     "FeaturePermute",
     "Identity",
