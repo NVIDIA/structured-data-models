@@ -1,6 +1,8 @@
 from collections.abc import Mapping, Sequence
 
-from sdm import TableTensor
+from torch import Tensor
+
+from sdm import Stype, TableTensor
 from sdm.relational import RelatedTables, RelationalData, TaskLink
 
 
@@ -20,7 +22,32 @@ class RelationalSampler:
         time_columns: Mapping[str, str] | None = None,
     ) -> None:
         self.data = data
-        self.time_columns = time_columns  # TODO Check for existence.
+        self.time_columns = time_columns or {}
+
+        for table_name, column_name in self.time_columns.items():
+            stype = self.data.tables[table_name].stype(column_name)
+            if stype != Stype.datetime:
+                raise ValueError(
+                    f"Expected '{column_name}' in table '{table_name}' to "
+                    f"have semantic type '{Stype.datetime.value}' "
+                    f"(got '{stype.value})"
+                )
+
+        self._colptr_dict: dict[str, Tensor] = {}
+        self._row_dict: dict[str, Tensor] = {}
+        self._time_dict: dict[str, Tensor] = {}
+
+        for table_name, time_column in self.time_columns.items():
+            time = self.data.tables[table_name][time_column].squeeze(-1)
+            self._time_dict[table_name] = time.contiguous().cpu()
+
+        for relationship, edge_index in zip(
+            self.data.relationships,
+            self.data.edge_indices(),
+        ):
+            # Sort by time if available
+            # index2ptr
+            # Do the reverse connection as well.
 
     def __call__(
         self,
@@ -58,8 +85,27 @@ class RelationalSampler:
         if not isinstance(task_link, TaskLink):
             task_link = TaskLink.from_mapping(task_link)
 
-        # TODO Check for existence of time_column
-        # TODO Implement sampling:
+        if task_time_column is not None:
+            stype = task_table.stype(task_time_column)
+            if stype != Stype.datetime:
+                raise ValueError(
+                    f"Expected task time column to have semantic type "
+                    f"'{Stype.datetime.value}' (got '{stype.value})"
+                )
+
+        for table, columns in (
+            (task_table, task_link.task_columns),
+            (self.data.tables[task_link.table], task_link.table_columns),
+        ):
+            for column in columns:
+                stype = table.stype(column)
+                if stype != Stype.id:
+                    raise ValueError(
+                        f"Expected column '{column}' to have semantic type "
+                        f"'{Stype.id.value}' (got '{stype.value}')"
+                    )
+
+        # TODO Implement sampling.
 
         return RelatedTables(
             tables=self.data.tables,

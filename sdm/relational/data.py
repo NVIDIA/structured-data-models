@@ -155,10 +155,12 @@ class RelationalData:
                     )
 
                 for column in columns:
-                    if self.tables[table].stype(column) != Stype.id:
+                    stype = self.tables[table].stype(column)
+                    if stype != Stype.id:
                         raise ValueError(
                             f"Expected column '{column}' in table '{table}' "
-                            f"to have semantic type '{Stype.id.value}'"
+                            f"to have semantic type '{Stype.id.value}' "
+                            f"(got '{stype.value}')"
                         )
 
     def edge_indices(
