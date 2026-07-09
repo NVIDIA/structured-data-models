@@ -222,9 +222,4 @@ class BaseModel(torch.nn.Module, ABC):
     @classmethod
     @abstractmethod
     def default_recipe(cls) -> Recipe:
-        r"""Return the default processing recipe for this model.
-
-        Returns:
-            The :class:`~sdm.processing.Recipe` applied during pre- and
-            postprocessing by default.
-        """
+        r"""Return the default processing recipe for this model."""
