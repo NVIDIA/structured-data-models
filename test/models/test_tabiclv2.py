@@ -1,11 +1,8 @@
-from typing import cast
-
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import (
-    _class_permutations,
     _probabilities_to_logits,
     _TabICLv2,
     _validate_classification_labels,
@@ -84,7 +81,7 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
     R, C, R_train = 8, 6, 5
     x = torch.randn(*batch_shape, R, C)
-    y = torch.randint(0, 10, (*batch_shape, R_train))
+    y = (torch.arange(R_train) % 3).expand(*batch_shape, R_train)
 
     out = model(x, y)
 
@@ -280,44 +277,11 @@ def test_tabiclv2_many_classes_rejects_cache() -> None:
         model.predict(torch.randn(2, 6))
 
 
-def test_class_permutations() -> None:
-    shifts = _class_permutations(
-        num_classes=3,
-        n_estimators=3,
-        method="shift",
-        generator=None,
-        device=torch.device("cpu"),
-    )
-    torch.testing.assert_close(
-        shifts,
-        torch.tensor([[0, 1, 2], [2, 0, 1], [1, 2, 0]]),
-    )
-
-    first = _class_permutations(
-        num_classes=4,
-        n_estimators=8,
-        method="random",
-        generator=torch.Generator().manual_seed(123),
-        device=torch.device("cpu"),
-    )
-    second = _class_permutations(
-        num_classes=4,
-        n_estimators=8,
-        method="random",
-        generator=torch.Generator().manual_seed(123),
-        device=torch.device("cpu"),
-    )
-    torch.testing.assert_close(first, second)
-    assert first.unique(dim=0).size(0) == first.size(0)
-
-
 def test_classification_rejects_complex_targets() -> None:
     model = TabICLv2(pretrained=False)
     x = torch.randn(3, 2)
     y = torch.tensor([0 + 1j, 1 + 0j])
 
-    with pytest.raises(TypeError, match="integer targets"):
-        model.predict_proba(x, y)
     with pytest.raises(TypeError, match="real-valued targets"):
         model(x, y)
 
@@ -334,71 +298,18 @@ def test_tabiclv2_requires_two_native_classes() -> None:
         model(torch.randn(3, 6), torch.arange(2))
 
 
-def test_class_shuffled_logit_ensemble() -> None:
-    member_probabilities = torch.tensor(
-        [
-            [[0.6, 0.3, 0.1]],
-            [[0.2, 0.5, 0.3]],
-            [[0.1, 0.2, 0.7]],
-        ]
-    )
-
-    class Classifier(torch.nn.Module):
-        def __init__(self) -> None:
-            super().__init__()
-            self.targets: list[torch.Tensor] = []
-
-        def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-            member = len(self.targets)
-            permutation = y
-            self.targets.append(y.clone())
-            original_logits = 0.9 * member_probabilities[member].log()
-            return original_logits.index_select(-1, permutation.argsort())
-
-    model = TabICLv2(pretrained=False)
-    classifier = Classifier()
-    model.cls_model = cast(_TabICLv2, classifier)
-    probabilities = model.predict_proba(
-        torch.randn(4, 2),
-        torch.arange(3),
-        n_estimators=3,
-        class_shuffle_method="shift",
-    )
-
-    expected_targets = (
-        torch.tensor([0, 1, 2]),
-        torch.tensor([2, 0, 1]),
-        torch.tensor([1, 2, 0]),
-    )
-    assert len(classifier.targets) == len(expected_targets)
-    for actual, expected in zip(classifier.targets, expected_targets):
-        torch.testing.assert_close(actual, expected)
-
-    expected = member_probabilities.log().mean(dim=0).softmax(dim=-1)
-    torch.testing.assert_close(probabilities, expected)
-    assert not torch.allclose(
-        probabilities,
-        member_probabilities.mean(dim=0),
-    )
-
-
 @withCUDA
-def test_tabiclv2_many_classes_predict_proba(
-    device: torch.device,
-) -> None:
+def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
     model = TabICLv2(pretrained=False, device=device)
     num_classes, test_size = 11, 2
     x = torch.randn(num_classes + test_size, 6, device=device)
     y = torch.arange(num_classes, dtype=torch.int32, device=device)
 
-    probabilities = model.predict_proba(
-        x,
-        y,
-        n_estimators=2,
-    )
+    out = model(x, y)
 
-    assert probabilities.size() == (test_size, num_classes)
-    assert torch.isfinite(probabilities).all()
+    assert out.size() == (test_size, num_classes)
+    assert torch.isfinite(out).all()
+    probabilities = (out / 0.9).softmax(dim=-1)
     torch.testing.assert_close(
         probabilities.sum(dim=-1),
         torch.ones(test_size, device=device),

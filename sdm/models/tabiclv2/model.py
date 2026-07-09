@@ -1,7 +1,6 @@
 # ruff: noqa: D205
 
-from itertools import permutations
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -9,7 +8,6 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import TableTensor
 from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
@@ -20,7 +18,6 @@ from sdm.processing import Recipe
 
 _CLASSIFICATION_TEMPERATURE = 0.9
 _NUM_CLASSES_CACHE_KEY = "tabiclv2.num_classes"
-_ClassShuffleMethod = Literal["none", "random", "shift"]
 
 
 class TabICLv2(BaseModel):
@@ -71,8 +68,7 @@ class TabICLv2(BaseModel):
     embeddings followed by hierarchical classification over the cached row
     representations. Key/value caching through :meth:`fit` is unavailable for
     these contexts because each hierarchy node uses a different target and
-    training-row context. :meth:`predict_proba` additionally supports
-    class-shuffled logit ensembling for classification.
+    training-row context.
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
@@ -112,75 +108,6 @@ class TabICLv2(BaseModel):
             postprocessing.
         """
         return default_regression_recipe()
-
-    @torch.inference_mode()
-    def predict_proba(
-        self,
-        x: Tensor | TableTensor,  # [..., R, C]
-        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
-        *,
-        n_estimators: int = 8,
-        class_shuffle_method: _ClassShuffleMethod = "shift",
-        generator: torch.Generator | None = None,
-    ) -> Tensor:  # [..., R_test, num_classes]
-        r"""Predict classification probabilities with shuffled ensembling.
-
-        Each estimator permutes class labels before the complete model forward,
-        restores the resulting logit columns to the original class order, and
-        contributes to a logit-space average. Temperature softmax is applied
-        once after aggregation. This method always receives the full context
-        and does not use key/value state recorded by :meth:`fit`.
-
-        Args:
-            x: Feature tensor with shape ``[..., R, C]``. The first
-                ``R_train`` rows are in-context examples.
-            y: Integer-encoded targets with shape ``[..., R_train]`` or
-                ``[..., R_train, 1]``. Every table must contain contiguous
-                class indices beginning at zero, and batched tables must have
-                the same number of classes.
-            n_estimators: Maximum number of ensemble members. Shift ensembling
-                uses at most one member per distinct class permutation.
-            class_shuffle_method: Class permutation strategy. ``"shift"``
-                uses deterministic circular shifts, ``"random"`` samples
-                permutations, and ``"none"`` evaluates one identity member.
-            generator: Optional generator controlling random permutations.
-
-        Returns:
-            Class probabilities with shape ``[..., R_test, num_classes]``.
-        """
-        if n_estimators < 1:
-            raise ValueError("Expected 'n_estimators' to be positive")
-        if class_shuffle_method not in {"none", "random", "shift"}:
-            raise ValueError(
-                "Expected 'class_shuffle_method' to be one of "
-                "'none', 'random', or 'shift'"
-            )
-
-        x, y = self._preprocess(x, y)
-        if y.is_floating_point() or y.is_complex():
-            raise TypeError("Expected integer targets for 'predict_proba'")
-        y = y.long()
-        num_classes = _validate_classification_labels(y)
-
-        class_permutations = _class_permutations(
-            num_classes=num_classes,
-            n_estimators=n_estimators,
-            method=class_shuffle_method,
-            generator=generator,
-            device=y.device,
-        )
-        logits_sum: Tensor | None = None
-        for permutation in class_permutations:
-            shuffled_y = permutation[y]
-            logits = self.cls_model(x, shuffled_y)
-            corrected = logits.index_select(-1, permutation)
-            logits_sum = (
-                corrected if logits_sum is None else logits_sum + corrected
-            )
-
-        assert logits_sum is not None
-        logits = logits_sum / class_permutations.size(0)
-        return (logits / _CLASSIFICATION_TEMPERATURE).softmax(dim=-1)
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
@@ -306,11 +233,7 @@ class _TabICLv2(torch.nn.Module):
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
         if self.max_classes == 0:
             row_embeddings = self.row_embedding(x, y, cache=cache)
-            return self._predict_standard(
-                row_embeddings,
-                y,
-                cache=cache,
-            )
+            return self._predict_standard(row_embeddings, y, cache=cache)
 
         y = y.long()
         num_classes = self._num_classes(y, cache=cache)
@@ -329,11 +252,8 @@ class _TabICLv2(torch.nn.Module):
 
         row_embeddings = self.row_embedding(x, y, cache=cache)
         if num_classes <= self.max_classes:
-            return self._predict_standard(
-                row_embeddings,
-                y,
-                cache=cache,
-            )[..., :num_classes]
+            out = self._predict_standard(row_embeddings, y, cache=cache)
+            return out[..., :num_classes]
 
         assert self.hierarchical_classifier is not None
         probabilities = self.hierarchical_classifier(
@@ -403,49 +323,6 @@ def _validate_classification_labels(y: Tensor) -> int:
 
 def _probabilities_to_logits(probabilities: Tensor) -> Tensor:
     return (probabilities + 1e-6).log().mul(_CLASSIFICATION_TEMPERATURE)
-
-
-def _class_permutations(
-    *,
-    num_classes: int,
-    n_estimators: int,
-    method: _ClassShuffleMethod,
-    generator: torch.Generator | None,
-    device: torch.device,
-) -> Tensor:
-    indices = torch.arange(num_classes, device=device)
-    if n_estimators == 1 or method == "none" or num_classes <= 1:
-        return indices.unsqueeze(0)
-    if method == "shift":
-        offsets = torch.arange(
-            min(n_estimators, num_classes),
-            device=device,
-        ).unsqueeze(-1)
-        return indices.unsqueeze(0).sub(offsets).remainder(num_classes)
-
-    generator_device = device if generator is None else generator.device
-    if num_classes <= 5:
-        all_permutations = torch.tensor(
-            tuple(permutations(range(num_classes))),
-            device=device,
-        )
-        selection = torch.randperm(
-            all_permutations.size(0),
-            generator=generator,
-            device=generator_device,
-        )[:n_estimators]
-        return all_permutations.index_select(0, selection.to(device=device))
-
-    return torch.stack(
-        [
-            torch.randperm(
-                num_classes,
-                generator=generator,
-                device=generator_device,
-            )
-            for _ in range(n_estimators)
-        ]
-    ).to(device=device)
 
 
 def _remap_ckpt(
