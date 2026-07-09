@@ -56,12 +56,29 @@ class ICLBlock(torch.nn.Module):
 
         if y.numel() > 0:
             if self.y_emb is not None:
-                y_emb = self.y_emb(y)  # [..., R_train, D]
+                if y.is_floating_point() or y.is_complex():
+                    raise TypeError(
+                        "Classification targets must have an integral or "
+                        "boolean dtype"
+                    )
+                y_emb = self.y_emb(y.long())  # [..., R_train, D]
             else:
                 assert self.y_lin is not None
-                y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
+                if not y.is_floating_point():
+                    raise TypeError(
+                        "Regression targets must have a floating-point dtype"
+                    )
+                y_emb = self.y_lin(
+                    y.to(dtype=x.dtype).unsqueeze(-1)
+                )  # [..., R_train, D]
 
-            x[..., :R_train, :] += y_emb.to(x.dtype)
+            x = torch.cat(
+                (
+                    x[..., :R_train, :] + y_emb.to(x.dtype),
+                    x[..., R_train:, :],
+                ),
+                dim=-2,
+            )
 
         for i, layer in enumerate(self.layers):
             key = f"icl_block.layer{i}"
