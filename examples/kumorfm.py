@@ -52,9 +52,9 @@ for split in ["train", "val", "test"]:
     task_table = TableTensor.from_pandas(
         df=task.get_table(split, mask_input_cols=False).df,
         stypes={
-            task.entity_col: "id",  # type: ignore
-            task.time_col: "datetime",  # type: ignore
-            task.target_col: "numerical"  # type: ignore
+            task.entity_col: "id",
+            task.time_col: "datetime",
+            task.target_col: "numerical"
             if task.task_type == relbench.base.TaskType.REGRESSION
             else "categorical",
         },
@@ -66,3 +66,16 @@ train_table = train_table[
     torch.randperm(len(train_table))[: args.context_size]
 ]
 test_table = task_tables[-1]
+
+# Start Sampling
+task_table, related_tables = sampler(
+    num_neighbors=[16, 16],
+    task_table=test_table[:1],
+    task_link={
+        "task_column": task.entity_col,
+        "table": task.entity_table,
+        "table_column": cast(str, db.table_dict[task.entity_table].pkey_col),
+    },
+    task_time_column=task.time_col,
+)
+print(task_table, related_tables)

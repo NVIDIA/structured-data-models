@@ -146,3 +146,9 @@ class RelatedTables:
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", relationships)
         object.__setattr__(self, "task_links", task_links)
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        for table in self.tables.values():
+            if table.dim() != 2:
+                raise ValueError("Tables need to be two-dimensional")

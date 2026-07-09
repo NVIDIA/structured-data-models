@@ -1,9 +1,18 @@
 from collections.abc import Mapping, Sequence
+from typing import cast
 
+import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
-from sdm.relational import RelatedTables, RelationalData, TaskLink
+from sdm import ColumnarTensor, Stype, TableTensor
+from sdm.relational import (
+    RelatedTables,
+    RelationalData,
+    Relationship,
+    TaskLink,
+)
+
+EXAMPLE_ID = "__example__"
 
 
 class RelationalSampler:
@@ -33,21 +42,28 @@ class RelationalSampler:
                     f"(got '{stype.value})"
                 )
 
-        self._colptr_dict: dict[str, Tensor] = {}
-        self._row_dict: dict[str, Tensor] = {}
+        self._row_dict: dict[tuple[str, str, str], Tensor] = {}
+        self._colptr_dict: dict[tuple[str, str, str], Tensor] = {}
         self._time_dict: dict[str, Tensor] = {}
-
         for table_name, time_column in self.time_columns.items():
-            time = self.data.tables[table_name][time_column].squeeze(-1)
-            self._time_dict[table_name] = time.contiguous().cpu()
+            time = self.data.tables[table_name][time_column].datetime
+            self._time_dict[table_name] = time.squeeze(-1).contiguous().cpu()
 
-        for relationship, edge_index in zip(
-            self.data.relationships,
-            self.data.edge_indices(),
+        for i, (rel, edge_index) in enumerate(
+            zip(self.data.relationships, self.data.edge_indices())
         ):
-            # Sort by time if available
-            # index2ptr
-            # Do the reverse connection as well.
+            edge_type = (rel.left_table, str(2 * i), rel.right_table)
+            self._row_dict[edge_type], self._colptr_dict[edge_type] = _to_csc(
+                edge_index=edge_index,
+                num_dst_nodes=self.data.tables[rel.right_table].size(0),
+                src_time=self._time_dict.get(rel.left_table),
+            )
+            edge_type = (rel.right_table, str(2 * i + 1), rel.left_table)
+            self._row_dict[edge_type], self._colptr_dict[edge_type] = _to_csc(
+                edge_index=edge_index.flip(0),
+                num_dst_nodes=self.data.tables[rel.left_table].size(0),
+                src_time=self._time_dict.get(rel.right_table),
+            )
 
     def __call__(
         self,
@@ -55,7 +71,7 @@ class RelationalSampler:
         task_table: TableTensor,
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
         task_time_column: str | None = None,
-    ) -> RelatedTables:
+    ) -> tuple[TableTensor, RelatedTables]:
         r"""Alias of :meth:`sample`."""
         return self.sample(
             num_neighbors=num_neighbors,
@@ -70,7 +86,7 @@ class RelationalSampler:
         task_table: TableTensor,
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
         task_time_column: str | None = None,
-    ) -> RelatedTables:
+    ) -> tuple[TableTensor, RelatedTables]:
         r"""Sample :class:`RelatedTables` for task rows.
 
         Args:
@@ -105,10 +121,126 @@ class RelationalSampler:
                         f"'{Stype.id.value}' (got '{stype.value}')"
                     )
 
-        # TODO Implement sampling.
+        try:
+            import pyg_lib  # noqa
+        except ImportError as e:
+            torch_version = torch.__version__.split("+", maxsplit=1)[0]
+            if not any(part.isdigit() for part in torch_version.split(".")):
+                raise ImportError(
+                    "No module named 'pyg_lib'. Pre-built pyg-lib wheels are "
+                    "only published for stable PyTorch releases. Please "
+                    "install a stable PyTorch release or build pyg-lib "
+                    "from source (see 'https://github.com/pyg-team/pyg-lib' "
+                    "for more information)"
+                ) from e
+            if torch.version.cuda is None:
+                cuda_version = "cpu"
+            else:
+                cuda_version = f"cu{torch.version.cuda.replace('.', '')}"
+            raise ImportError(
+                f"No module named 'pyg_lib'. Please install it via "
+                f"'pip install pyg-lib -f https://data.pyg.org/whl/"
+                f"torch-{torch_version}+{cuda_version}.html' (see "
+                "'https://github.com/pyg-team/pyg-lib' for more information)"
+            ) from e
 
-        return RelatedTables(
-            tables=self.data.tables,
-            relationships=self.data.relationships,
+        _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
+            node_types=list(self.data.tables),
+            edge_types=list(self._colptr_dict),
+            rowptr_dict={
+                "__".join(edge_type): colptr
+                for edge_type, colptr in self._colptr_dict.items()
+            },
+            col_dict={
+                "__".join(edge_type): row
+                for edge_type, row in self._row_dict.items()
+            },
+            seed_dict={task_link.table: torch.arange(10)},
+            num_neighbors_dict={
+                "__".join(edge_type): list(num_neighbors)
+                for edge_type in self._row_dict
+            },
+            node_time_dict=self._time_dict,
+            edge_time_dict=None,
+            seed_time_dict={task_link.table: torch.arange(10)},
+            edge_weight_dict=None,
+            csc=True,
+            replace=False,
+            directed=True,
+            disjoint=True,
+            temporal_strategy="last",
+            return_edge_id=False,
+        )
+
+        tables: dict[str, Tensor] = {}
+        for table_name, node in node_dict.items():
+            if node.numel() == 0:
+                continue
+            example, index = node.t().contiguous()
+            tables[table_name] = torch.cat(
+                [
+                    self.data.tables[table_name][index],
+                    TableTensor(
+                        columns={"id": (EXAMPLE_ID,)},
+                        id=ColumnarTensor((example,)),
+                    ),
+                ],
+                dim=-1,
+            )
+
+        # Build composite keys for disjoint linkage across examples:
+        relationships = tuple(
+            Relationship(
+                left_table=rel.left_table,
+                left_columns=(EXAMPLE_ID, *rel.left_columns),
+                right_table=rel.right_table,
+                right_columns=(EXAMPLE_ID, *rel.right_columns),
+            )
+            for rel in self.data.relationships
+            if rel.left_table in tables and rel.right_table in tables
+        )
+
+        task_link = TaskLink(
+            task_columns=(EXAMPLE_ID, *task_link.task_columns),
+            table=task_link.table,
+            table_columns=(EXAMPLE_ID, *task_link.table_columns),
+        )
+
+        task_table: Tensor = torch.cat(
+            [
+                task_table,
+                TableTensor(
+                    columns={"id": (EXAMPLE_ID,)},
+                    id=ColumnarTensor((torch.arange(task_table.size(0)),)),
+                ),
+            ],
+            dim=-1,
+        )
+
+        return cast(TableTensor, task_table), RelatedTables(
+            tables=cast(dict[str, TableTensor], tables),
+            relationships=relationships,
             task_links=(task_link,),
         )
+
+
+def _to_csc(
+    edge_index: Tensor,
+    num_dst_nodes: int,
+    src_time: Tensor | None = None,
+) -> tuple[Tensor, Tensor]:
+
+    if src_time is None:  # Sort primarily by destination node:
+        perm = edge_index[1].argsort()
+    else:  # Sort secondarily by source timestamp:
+        perm = src_time[edge_index[0]].argsort()
+        edge_index = edge_index[:, perm]
+        perm = edge_index[1].argsort(stable=True)
+    edge_index = edge_index[:, perm]
+
+    row, col = edge_index
+    colptr = torch._convert_indices_from_coo_to_csr(
+        col, num_dst_nodes, out_int32=col.dtype != torch.int64
+    )
+
+    return row, colptr

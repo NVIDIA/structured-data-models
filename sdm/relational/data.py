@@ -144,6 +144,10 @@ class RelationalData:
         self.__post_init__()
 
     def __post_init__(self) -> None:
+        for table in self.tables.values():
+            if table.dim() != 2:
+                raise ValueError("Tables need to be two-dimensional")
+
         for relationship in self.relationships:
             for table, columns in (
                 (relationship.left_table, relationship.left_columns),
