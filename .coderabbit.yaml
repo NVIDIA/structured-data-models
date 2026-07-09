@@ -11,10 +11,14 @@ reviews:
   profile: chill
   request_changes_workflow: false
   high_level_summary: true
+  high_level_summary_in_walkthrough: true
   poem: false
-  review_status: true
+  review_status: false
   collapse_walkthrough: true
   sequence_diagrams: false
+  in_progress_fortune: false
+  suggested_labels: false
+  suggested_reviewers: false
 
   path_filters:
     - '!uv.lock'
@@ -56,8 +60,11 @@ reviews:
         API misuse and data leakage between train/test portions.
 
   auto_review:
-    enabled: true
+    enabled: false
     drafts: false
+
+  slop_detection:
+    enabled: true
 
   finishing_touches:
     docstrings:
@@ -72,18 +79,14 @@ reviews:
       mode: warning
 
   tools:
-    # ruff picks up pyproject.toml and matches the pre-commit setup.
     ruff:
       enabled: true
-    # Already enforced by pre-commit in CI with repo-specific rules;
-    # CodeRabbit's defaults would conflict or duplicate.
     yamllint:
       enabled: false
     markdownlint:
       enabled: false
     languagetool:
       enabled: false
-    # Not covered by pre-commit — worth keeping.
     actionlint:
       enabled: true
     gitleaks:
@@ -93,6 +96,8 @@ reviews:
 
 chat:
   auto_reply: true
+  art: false
+  allow_non_org_members: false
 
 knowledge_base:
   opt_out: false
