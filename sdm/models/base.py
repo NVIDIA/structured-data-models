@@ -1,11 +1,11 @@
 import warnings
 from abc import ABC, abstractmethod
-from typing import cast
+from typing import ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.processing import Recipe
 
@@ -19,17 +19,23 @@ class BaseModel(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
+    supports_related_tables: ClassVar[bool]
+
     def __init__(self):
         super().__init__()
 
-        self._cache: Cache | None = None  # TODO Single cache for now.
+        # One cache per ensemble member.
+        self._caches: list[Cache] | None = None
 
     @torch.inference_mode()
     def forward(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
-    ) -> Tensor:  # [..., R - R_test, *]
+        related_tables: RelatedTables | None = None,
+        *,
+        num_estimators: int = 1,
+    ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
 
         Args:
@@ -39,18 +45,35 @@ class BaseModel(torch.nn.Module, ABC):
                 examples.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            related_tables: Additional related context provided to the model.
+            num_estimators: The number of estimators for ensembling.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
+            )
+            related_tables = None
+
         x, y = self._preprocess(x, y)
-        return self._forward(x, y, cache=None)
+        # TODO Create an ensemble dimension to process across ensemble
+        # members for better efficiency.
+        outs: list[Tensor] = []
+        for _ in range(num_estimators):
+            outs.append(self._forward(x, y, related_tables, cache=None))
+        return torch.stack(outs).mean(dim=0)
 
     @torch.inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R_train, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        related_tables: RelatedTables | None = None,
+        *,
+        num_estimators: int = 1,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -62,23 +85,37 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            related_tables: Additional related context provided to the model.
+            num_estimators: The number of estimators for ensembling.
         """
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
+            )
+            related_tables = None
+
         self.clear()
         x, y = self._preprocess(x, y)
-        cache = Cache({"y.dtype": y.dtype})
         x = x[..., : y.size(-1), :]
-        self._forward(x, y, cache=cache)
-        self._cache = cache
-        self._cache.freeze()
+        caches: list[Cache] = []
+        for _ in range(num_estimators):
+            # TODO Don't store y.dtype for every estimator.
+            cache = Cache({"y.dtype": y.dtype})
+            self._forward(x, y, related_tables, cache)
+            cache.freeze()
+            caches.append(cache)
+        self._caches = caches
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
-        self._cache = None
+        self._caches = None
 
     @torch.inference_mode()
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R_test, C]
+        related_tables: RelatedTables | None = None,
     ) -> Tensor:  # [..., R_test, *]
         r"""Predict unseen test examples.
 
@@ -89,11 +126,19 @@ class BaseModel(torch.nn.Module, ABC):
         Args:
             x: The feature tensor with shape ``[..., R_test, C]`` with
                 ``R_test`` rows and ``C`` columns.
+            related_tables: Additional related context provided to the model.
 
         Returns:
             The prediction for ``[..., R_test]`` test rows.
         """
-        if self._cache is None:
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
+            )
+            related_tables = None
+
+        if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
@@ -101,11 +146,14 @@ class BaseModel(torch.nn.Module, ABC):
 
         y = torch.empty(
             (*x.size()[:-2], 0),
-            dtype=cast(torch.dtype, self._cache["y.dtype"]),
+            dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
             device=x.device,
         )
         x, y = self._preprocess(x, y)
-        return self._forward(x, y, cache=self._cache)
+        outs: list[Tensor] = []
+        for cache in self._caches:
+            outs.append(self._forward(x, y, related_tables, cache))
+        return torch.stack(outs).mean(dim=0)
 
     # Helpers #################################################################
 
@@ -166,8 +214,8 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
-        *,
-        cache: Cache | None = None,
+        related_tables: RelatedTables | None,
+        cache: Cache | None,
     ) -> Tensor:  # [..., R - R_train, *]
         pass
 
@@ -175,9 +223,6 @@ class BaseModel(torch.nn.Module, ABC):
     @abstractmethod
     def default_recipe(cls) -> Recipe:
         r"""Return the default processing recipe for this model.
-
-        Model subclasses must override this method to expose the model-specific
-        preprocessing and postprocessing recipe.
 
         Returns:
             The :class:`~sdm.processing.Recipe` applied during pre- and

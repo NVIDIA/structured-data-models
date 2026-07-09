@@ -1,6 +1,6 @@
 # ruff: noqa: D205
 
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -8,6 +8,7 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm import RelatedTables
 from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
@@ -64,6 +65,9 @@ class TabICLv2(BaseModel):
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
+
+    #:
+    supports_related_tables: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -130,8 +134,8 @@ class TabICLv2(BaseModel):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
-        *,
-        cache: Cache | None = None,
+        related_tables: RelatedTables | None,
+        cache: Cache | None,
     ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
 
@@ -142,6 +146,8 @@ class TabICLv2(BaseModel):
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
         """
+        assert related_tables is None
+
         if y.is_floating_point():
             return self.reg_model(x, y, cache=cache)
         return self.cls_model(x, y, cache=cache)

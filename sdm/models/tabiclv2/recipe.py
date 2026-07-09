@@ -15,13 +15,13 @@ Planned, staged towards one task-aware recipe:
   dispatching the target and output roles per task with ``TaskDispatch``.
   The end-state is sketched (commented) at the bottom of this module.
 
-Steps that need processors not implemented yet (``ConstantFilter``,
-``FeaturePermute``, ``LabelShuffle``, ``Choice``, ``TaskDispatch``) are kept as
-commented placeholders.
+``TaskDispatch`` and ``SoftmaxTemperature`` are not implemented yet, so the
+task-aware recipe remains a commented placeholder.
 
 """
 
 from sdm.processing import (
+    FeaturePermute,
     Identity,
     MeanImpute,
     Recipe,
@@ -38,9 +38,10 @@ def default_regression_recipe() -> Recipe:
     Mirrors the original TabICLv2 regressor: categorical columns are routed
     through :class:`~sdm.processing.ToNumerical`, followed by mean imputation
     (``SimpleImputer``), standard scaling (``CustomStandardScaler``), and
-    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the features.
-    The target is standard-scaled and its inverse maps predictions back to the
-    original space. Commented lines mark processors not implemented yet.
+    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the
+    features, ending in a drawn cyclic feature shift
+    (:class:`~sdm.processing.FeaturePermute`). The target is standard-scaled
+    and its inverse maps predictions back to the original space.
     """
     return Recipe(
         features=[
@@ -55,7 +56,7 @@ def default_regression_recipe() -> Recipe:
             # (likely subsumed by SigmaClip); revisit after benchmarking.
             # Clip(min_value=-100.0, max_value=100.0),
             SigmaClip(threshold=4.0),
-            # FeaturePermute(method="latin"),
+            FeaturePermute(method="shift"),
         ],
         target=[
             StandardScale(),
@@ -66,7 +67,7 @@ def default_regression_recipe() -> Recipe:
     )
 
 
-# End-state target, once the missing processors exist: a single
+# End-state target, once the remaining processors exist: a single
 # task-aware recipe that serves both regression and classification. It cycles
 # per-member normalization with ``Choice`` + ``n_estimators`` and
 # dispatches the target and output roles per task with ``TaskDispatch``.
@@ -81,9 +82,9 @@ def default_regression_recipe() -> Recipe:
 #             # ConstantFilter(),
 #             StandardScale(epsilon=1e-6),
 #             # norm options: none, power, quantile, quantile_rtdl, robust
-#             Choice([Identity(), Quantile(output_distribution="normal")]),
+#             Choice(Identity(), Quantile(output_distribution="normal")),
 #             SigmaClip(threshold=4.0),
-#             FeaturePermute(method="latin"),
+#             FeaturePermute(method="shift"),
 #         ],
 #         target=[
 #             TaskDispatch({
