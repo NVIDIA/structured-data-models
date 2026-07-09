@@ -1,3 +1,4 @@
+import contextlib
 import warnings
 from abc import ABC, abstractmethod
 from typing import ClassVar, cast
@@ -27,7 +28,6 @@ class BaseModel(torch.nn.Module, ABC):
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
 
-    @torch.inference_mode()
     def forward(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
@@ -51,20 +51,31 @@ class BaseModel(torch.nn.Module, ABC):
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
-        if not self.supports_related_tables and related_tables is not None:
-            warnings.warn(
-                f"'{self.__class__.__name__}' does not support related tables",
-                stacklevel=2,
-            )
-            related_tables = None
+        # `torch.inference_mode` cannot be traced by `torch.compile` (a
+        # decorated forward fails `fullgraph=True` compilation at the
+        # AOTAutograd stage), so compiled callers enter it around the
+        # compiled call instead.
+        context = (
+            contextlib.nullcontext()
+            if torch.compiler.is_compiling()
+            else torch.inference_mode()
+        )
+        with context:
+            if not self.supports_related_tables and related_tables is not None:
+                warnings.warn(
+                    f"'{self.__class__.__name__}' does not support "
+                    f"related tables",
+                    stacklevel=2,
+                )
+                related_tables = None
 
-        x, y = self._preprocess(x, y)
-        # TODO Create an ensemble dimension to process across ensemble
-        # members for better efficiency.
-        outs: list[Tensor] = []
-        for _ in range(num_estimators):
-            outs.append(self._forward(x, y, related_tables, cache=None))
-        return torch.stack(outs).mean(dim=0)
+            x, y = self._preprocess(x, y)
+            # TODO Create an ensemble dimension to process across ensemble
+            # members for better efficiency.
+            outs: list[Tensor] = []
+            for _ in range(num_estimators):
+                outs.append(self._forward(x, y, related_tables, cache=None))
+            return torch.stack(outs).mean(dim=0)
 
     @torch.inference_mode()
     def fit(
