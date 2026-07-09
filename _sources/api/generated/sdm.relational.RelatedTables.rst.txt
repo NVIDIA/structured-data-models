@@ -1,0 +1,8 @@
+﻿RelatedTables
+=============
+
+.. currentmodule:: sdm.relational
+
+.. autoclass:: RelatedTables
+   :members:
+   :show-inheritance:

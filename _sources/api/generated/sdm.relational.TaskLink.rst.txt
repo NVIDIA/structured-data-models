@@ -1,0 +1,8 @@
+﻿TaskLink
+========
+
+.. currentmodule:: sdm.relational
+
+.. autoclass:: TaskLink
+   :members:
+   :show-inheritance:
