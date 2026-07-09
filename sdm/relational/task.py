@@ -54,7 +54,7 @@ class TaskLink:
         if "task_column" in mapping:
             task_columns = mapping["task_column"]
         else:
-            task_columns = mapping["left_columns"]
+            task_columns = mapping["task_columns"]
         if isinstance(task_columns, str):
             task_columns = (task_columns,)
 

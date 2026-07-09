@@ -41,7 +41,7 @@ class RelationalSampler:
                 raise ValueError(
                     f"Expected '{column_name}' in table '{table_name}' to "
                     f"have semantic type '{Stype.datetime.value}' "
-                    f"(got '{stype.value})"
+                    f"(got '{stype.value}')"
                 )
 
         self._row_dict: dict[tuple[str, str, str], Tensor] = {}
@@ -120,14 +120,14 @@ class RelationalSampler:
             if stype != Stype.datetime:
                 raise ValueError(
                     f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value})"
+                    f"'{Stype.datetime.value}' (got '{stype.value}')"
                 )
 
         try:
             import pyg_lib  # noqa
         except ImportError as e:
             torch_version = torch.__version__.split("+", maxsplit=1)[0]
-            if not any(part.isdigit() for part in torch_version.split(".")):
+            if not all(part.isdigit() for part in torch_version.split(".")):
                 raise ImportError(
                     "No module named 'pyg_lib'. Pre-built pyg-lib wheels are "
                     "only published for stable PyTorch releases. Please "
@@ -177,7 +177,7 @@ class RelationalSampler:
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
         else:
-            fill_value = torch.iinfo(torch.int64).min
+            fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)
 
         # Perform subgraph sampling:
