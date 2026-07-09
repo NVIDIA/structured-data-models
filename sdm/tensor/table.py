@@ -483,6 +483,12 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Return a table with ``stypes`` columns removed.
 
+        .. code-block:: python
+
+            assert table.size() == (2, 4)
+            table = table.drop_stypes("categorical")
+            assert table.size() == (2, 2)
+
         Args:
             stypes: The semantic type or semantic types to drop.
         """
