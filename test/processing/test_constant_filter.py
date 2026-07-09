@@ -1,3 +1,4 @@
+import pytest
 import torch
 from sdm import Stype, TableTensor
 from sdm.processing import ConstantFilter
@@ -87,3 +88,16 @@ def test_variance_filter(device: torch.device) -> None:
     assert output.columns[Stype.numerical] == ("variable",)
     assert output.numerical.equal(data[:, [2]])
     assert output.device == device
+
+
+def test_constant_filter_rejects_invalid_arguments() -> None:
+    with pytest.raises(ValueError, match="method must be"):
+        ConstantFilter(method="invalid")  # type: ignore
+    with pytest.raises(ValueError, match="tolerance must be None"):
+        ConstantFilter(tolerance=1e-6)
+    with pytest.raises(ValueError, match="threshold must be None"):
+        ConstantFilter(method="variance", threshold=1)
+    with pytest.raises(ValueError, match="threshold must be positive"):
+        ConstantFilter(threshold=0)
+    with pytest.raises(ValueError, match="tolerance must be non-negative"):
+        ConstantFilter(method="variance", tolerance=-1.0)

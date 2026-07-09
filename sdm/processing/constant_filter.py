@@ -44,32 +44,47 @@ class ConstantFilter(Processor):
         self,
         method: ConstantFilterMethod = "unique",
         *,
-        threshold: int = 1,
-        tolerance: float = 1e-6,
+        threshold: int | None = None,
+        tolerance: float | None = None,
     ) -> None:
         super().__init__()
-        if threshold <= 0:
+        if method not in {"unique", "variance"}:
+            raise ValueError("method must be 'unique' or 'variance'")
+
+        if method == "unique" and tolerance is not None:
+            raise ValueError("tolerance must be None when method is 'unique'")
+
+        if method == "variance" and threshold is not None:
+            raise ValueError(
+                "threshold must be None when method is 'variance'"
+            )
+
+        if threshold is not None and threshold <= 0:
             raise ValueError("threshold must be positive")
-        if tolerance < 0:
+
+        if tolerance is not None and tolerance < 0:
             raise ValueError("tolerance must be non-negative")
+
         self.method = method
-        self.threshold = threshold
-        self.tolerance = tolerance
+        self.threshold = 1 if threshold is None else threshold
+        self.tolerance = 1e-6 if tolerance is None else tolerance
         self._columns_to_keep: tuple[str, ...] = ()
 
     def _fit(self, input: TableTensor) -> None:
         data = input.numerical
-        n_rows = data.size(0)
 
         if self.method == "variance":
             keep = _as_float(data).std(dim=0) > self.tolerance
         # Preserve the schema when too few rows can exceed the threshold.
-        elif n_rows <= self.threshold:
+        elif data.size(0) <= self.threshold:
             keep = data.new_ones((data.size(-1),), dtype=torch.bool)
         elif self.threshold == 1:
+            # Any mismatch with the first row proves a second unique value.
             first = data[:1]
             different = data != first
             if data.is_floating_point():
+                # `NaN == NaN` is false, so NaN pairs must not count as a
+                # mismatch.
                 different &= ~(data.isnan() & first.isnan())
             keep = different.any(dim=0)
         else:
@@ -78,6 +93,8 @@ class ConstantFilter(Processor):
             left, right = values[1:], values[:-1]
             changed = left != right
             if data.is_floating_point():
+                # `NaN == NaN` is false, so adjacent NaNs must not count as a
+                # transition.
                 changed &= ~(left.isnan() & right.isnan())
             keep = changed.sum(dim=0) >= self.threshold
 
