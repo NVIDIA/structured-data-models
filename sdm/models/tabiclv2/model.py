@@ -96,12 +96,7 @@ class TabICLv2(BaseModel):
 
     @classmethod
     def default_recipe(cls) -> Recipe:
-        r"""Return the default single-estimator regression recipe.
-
-        Returns:
-            The default :class:`~sdm.processing.Recipe` applied during pre- and
-            postprocessing.
-        """
+        r""":meta private:"""  # noqa: D415
         return default_regression_recipe()
 
     def _load_from_pretrained(self) -> "TabICLv2":
