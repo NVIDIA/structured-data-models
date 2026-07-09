@@ -11,7 +11,7 @@ from sdm.processing import Recipe
 
 
 class KumoRFM(BaseModel):
-    r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling "
+    r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
     Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
