@@ -248,7 +248,7 @@ def test_drop_stypes() -> None:
     assert no_numerical.datetime is tensor.datetime
     assert no_numerical.id is tensor.id
 
-    no_categorical = tensor.drop_stypes("categorical")
+    no_categorical = tensor.drop_stypes(Stype.categorical)
     assert no_categorical.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
@@ -258,7 +258,7 @@ def test_drop_stypes() -> None:
     assert no_categorical.numerical is tensor.numerical
     assert no_categorical.categorical.size() == (2, 0)
 
-    mixed = tensor.drop_stypes(["numerical", Stype.categorical])
+    mixed = tensor.drop_stypes([Stype.numerical, Stype.categorical])
     assert mixed.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
@@ -270,7 +270,7 @@ def test_drop_stypes() -> None:
     assert mixed.datetime is tensor.datetime
     assert mixed.id is tensor.id
 
-    empty = tensor.drop_stypes(["numerical", "categorical", "datetime", "id"])
+    empty = tensor.drop_stypes(list(Stype))
     assert empty.size() == (2, 0)
     assert empty.columns == {
         Stype.numerical: (),

@@ -485,9 +485,10 @@ class TableTensor(Tensor):
 
         .. code-block:: python
 
-            assert table.size() == (2, 4)
+            assert table.columns[Stype.categorical] == ("country", "segment")
             table = table.drop_stypes("categorical")
-            assert table.size() == (2, 2)
+            assert table.columns[Stype.categorical] == ()
+            assert table.columns[Stype.numerical] == ("age", "income")
 
         Args:
             stypes: The semantic type or semantic types to drop.
@@ -499,10 +500,7 @@ class TableTensor(Tensor):
         keep = tuple(stype for stype in self._columns if stype not in stypes)
         return self.__class__(
             size=self.size()[:-1],
-            columns=cast(
-                Mapping[StypeLike, Sequence[str]],
-                {stype: self._columns[stype] for stype in keep},
-            ),
+            columns={stype: self._columns[stype] for stype in keep},
             device=self.device,
             **{stype: getattr(self, stype) for stype in keep},
         )
