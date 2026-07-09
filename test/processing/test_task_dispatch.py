@@ -53,7 +53,11 @@ def test_recipe_resolves_refits_and_restores_task_dispatch(
         ],
     )
 
-    transformed_features, _ = recipe.fit_transform(
+    recipe.fit(
+        features,
+        _categorical_target(device),
+    )
+    transformed_features, _ = recipe.preprocess(
         features,
         _categorical_target(device),
     )
@@ -87,7 +91,7 @@ def test_recipe_resolves_refits_and_restores_task_dispatch(
         torch.arange(4, dtype=torch.float, device=device).unsqueeze(-1),
         columns=("target",),
     )
-    recipe.fit_transform(features, numerical_target)
+    recipe.fit(features, numerical_target)
 
     assert recipe.output.transform(output) is output
 
@@ -110,14 +114,14 @@ def test_task_dispatch_rejects_unresolved_or_invalid_tasks() -> None:
     )
     dispatch = TaskDispatch(regression=Identity())
 
-    with pytest.raises(RuntimeError, match=r"Recipe.fit_transform"):
+    with pytest.raises(RuntimeError, match=r"Recipe.fit"):
         dispatch.transform(output)
 
     recipe = Recipe(output=[dispatch])
-    recipe.fit_transform(output, output)
+    recipe.fit(output, output)
     with pytest.raises(ValueError, match="no 'classification' route"):
-        recipe.fit_transform(output, _categorical_target())
-    with pytest.raises(RuntimeError, match=r"Recipe.fit_transform"):
+        recipe.fit(output, _categorical_target())
+    with pytest.raises(RuntimeError, match=r"Recipe.fit"):
         recipe.output.transform(output)
 
     ambiguous_target = TableTensor.from_tensor(
@@ -133,4 +137,4 @@ def test_task_dispatch_rejects_unresolved_or_invalid_tasks() -> None:
         ],
     )
     with pytest.raises(ValueError, match=r"exactly one.*got 2"):
-        recipe.fit_transform(output, ambiguous_target)
+        recipe.fit(output, ambiguous_target)

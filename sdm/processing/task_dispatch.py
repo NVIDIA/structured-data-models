@@ -95,7 +95,7 @@ class TaskDispatch(Processor):
         if self._task is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' has no resolved task; call "
-                "'Recipe.fit_transform()' before transforming model output."
+                "'Recipe.fit()' before transforming model output."
             )
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(input)

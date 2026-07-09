@@ -1,6 +1,8 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from typing_extensions import Self
+
 from sdm.processing.base import Processor
 from sdm.processing.sequential import Sequential
 from sdm.processing.task_dispatch import TaskDispatch
@@ -19,10 +21,11 @@ class Recipe:
       after it (predictions back to the original space).
     - ``output``: shape-preserving cleanup of the model output.
 
-    Use :meth:`fit_transform` to fit and transform labeled feature and target
-    tables together. It transforms the target first so its semantic type can
-    resolve any :class:`~sdm.processing.TaskDispatch` in ``output``. Each role
-    also exposes its processor methods directly, e.g.
+    Call :meth:`fit` on labeled feature and target tables, then
+    :meth:`preprocess` to transform them. Fitting transforms the target first
+    so its semantic type can resolve any
+    :class:`~sdm.processing.TaskDispatch` in ``output``. Each role also exposes
+    its processor methods directly, e.g.
     ``recipe.features.transform(table)`` or
     ``recipe.target.inverse_transform(prediction)``.
 
@@ -76,15 +79,16 @@ class Recipe:
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "output", output)
 
-    def fit_transform(
+    def fit(
         self,
         features: TableTensor,
         target: TableTensor,
-    ) -> tuple[TableTensor, TableTensor]:
-        """Fit and transform labeled features and their target.
+    ) -> Self:
+        """Fit feature and target processors and resolve output task routes.
 
-        The target is transformed first and resolves task-dependent output
-        processors before the feature pipeline is fitted.
+        The target is fitted and transformed first so its final semantic type
+        can resolve task-dependent output processors. Features must contain
+        only the labeled rows used for fitting.
 
         Args:
             features: Feature table with shape ``[R, C]``, where ``R`` is
@@ -92,7 +96,7 @@ class Recipe:
             target: Single-column target table with shape ``[R, 1]``.
 
         Returns:
-            Transformed feature and target tables.
+            This recipe.
         """
         dispatchers = [
             module
@@ -107,13 +111,33 @@ class Recipe:
             target = self.target.fit_transform(target)
             for dispatcher in dispatchers:
                 dispatcher._resolve(target)
-            features = self.features.fit_transform(features)
+            self.features.fit(features)
             succeeded = True
         finally:
             if not succeeded:
                 for dispatcher in dispatchers:
                     dispatcher._reset()
-        return features, target
+        return self
+
+    def preprocess(
+        self,
+        features: TableTensor,
+        target: TableTensor,
+    ) -> tuple[TableTensor, TableTensor]:
+        """Transform features and their target without fitting.
+
+        Args:
+            features: Feature table with shape ``[R, C]``, where ``R`` is
+                the number of rows and ``C`` is the number of columns.
+            target: Single-column target table with shape ``[R, 1]``.
+
+        Returns:
+            Transformed feature and target tables.
+        """
+        return (
+            self.features.transform(features),
+            self.target.transform(target),
+        )
 
     def __repr__(self) -> str:
         return (
