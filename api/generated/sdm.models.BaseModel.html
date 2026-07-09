@@ -229,9 +229,7 @@ examples while only providing new test rows.</p>
 <code class="docutils literal notranslate"><span class="pre">R_train</span></code> rows and <code class="docutils literal notranslate"><span class="pre">C</span></code> columns.</p></li>
 <li><p><strong>y</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a><em> | </em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – The targets of in-context examples with shape
 <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_train]</span></code> or <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_train,</span> <span class="pre">1]</span></code>.</p></li>
-<li><p><strong>num_estimators</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of ensemble members <code class="docutils literal notranslate"><span class="pre">E</span></code>.
-In-context examples are fitted once per member, and subsequent
-<a class="reference internal" href="#sdm.models.BaseModel.predict" title="sdm.models.BaseModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> calls average predictions across members.</p></li>
+<li><p><strong>num_estimators</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of estimators for ensembling.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -253,9 +251,7 @@ The first <code class="docutils literal notranslate"><span class="pre">R_train</
 examples.</p></li>
 <li><p><strong>y</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a><em> | </em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – The targets of in-context examples with shape
 <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_train]</span></code> or <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_train,</span> <span class="pre">1]</span></code>.</p></li>
-<li><p><strong>num_estimators</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of ensemble members <code class="docutils literal notranslate"><span class="pre">E</span></code>.
-The forward pass runs once per member, and predictions are
-averaged across members.</p></li>
+<li><p><strong>num_estimators</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – The number of estimators for ensembling.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -281,8 +277,7 @@ averaged across members.</p></li>
 <code class="docutils literal notranslate"><span class="pre">R_test</span></code> rows and <code class="docutils literal notranslate"><span class="pre">C</span></code> columns.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The prediction for <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_test]</span></code> test rows, averaged across
-ensemble members when fitted with <code class="docutils literal notranslate"><span class="pre">num_estimators</span> <span class="pre">&gt;</span> <span class="pre">1</span></code>.</p>
+<dd class="field-even"><p>The prediction for <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_test]</span></code> test rows.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a></p>
@@ -318,7 +313,7 @@ ensemble members when fitted with <code class="docutils literal notranslate"><sp
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cd7bb4de"></script>
+      <script src="../../_static/documentation_options.js?v=43718b62"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
