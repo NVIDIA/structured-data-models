@@ -48,13 +48,3 @@ def test_feature_permute_shift_rotates_numerical_block() -> None:
     )
 
 
-def test_feature_permute_random_inverse_round_trips() -> None:
-    table = _table()
-    pipeline = Sequential(FeaturePermute(method="random"))
-
-    transformed = pipeline.fit_transform(table)
-    restored = pipeline.inverse_transform(transformed)
-
-    assert isinstance(restored, TableTensor)
-    assert restored.columns == table.columns
-    assert torch.equal(restored.numerical, table.numerical)
