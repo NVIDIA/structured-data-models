@@ -29,7 +29,7 @@ def default_recipe() -> Recipe:
         features=[
             StypeDispatch(
                 numerical=Identity(),
-                categorical=ToNumerical(),
+                categorical=[CategoricalImpute(), ToNumerical()],
             ),
             MeanImpute(),
             ConstantFilter(),
