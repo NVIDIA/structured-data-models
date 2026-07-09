@@ -53,13 +53,9 @@ def test_recipe_resolves_refits_and_restores_task_dispatch(
         ],
     )
 
-    recipe.fit(
-        features,
-        _categorical_target(device),
-    )
-    transformed_features, _ = recipe.preprocess(
-        features,
-        _categorical_target(device),
+    transformed_features, _ = recipe.fit_transform(
+        features=features,
+        target=_categorical_target(device),
     )
     classification_output = recipe.output.transform(output)
 

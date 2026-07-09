@@ -22,11 +22,12 @@ class Recipe:
       after it (predictions back to the original space).
     - ``output``: shape-preserving cleanup of the model output.
 
-    Call :meth:`fit` on labeled feature and target tables, then
-    :meth:`preprocess` to transform them. Fitting transforms the target first
-    so its semantic type can resolve any
-    :class:`~sdm.processing.TaskDispatch` in ``output``. Each role also exposes
-    its processor methods directly, e.g.
+    Call :meth:`fit_transform` on labeled feature and target tables to fit and
+    reuse their transformed outputs. Call :meth:`preprocess` to transform
+    fitted pipelines without changing their state. Fitting transforms the
+    target first so its semantic type can resolve any
+    :class:`~sdm.processing.TaskDispatch` in ``output``. Each role also
+    exposes its processor methods directly, e.g.
     ``recipe.features.transform(table)`` or
     ``recipe.target.inverse_transform(prediction)``.
 
@@ -99,6 +100,31 @@ class Recipe:
         Returns:
             This recipe.
         """
+        self.fit_transform(
+            features=features,
+            target=target,
+        )
+        return self
+
+    def fit_transform(
+        self,
+        features: TableTensor,
+        target: TableTensor,
+    ) -> tuple[TableTensor, TableTensor]:
+        """Fit and transform labeled features and their target.
+
+        The target is fitted and transformed first so its final semantic type
+        can resolve task-dependent output processors. Feature processors are
+        then fitted while producing the transformed labeled rows.
+
+        Args:
+            features: Feature table with shape ``[R, C]``, where ``R`` is
+                the number of labeled rows and ``C`` is the number of columns.
+            target: Single-column target table with shape ``[R, 1]``.
+
+        Returns:
+            Transformed feature and target tables.
+        """
         dispatchers = [
             module
             for module in self.output.modules()
@@ -112,13 +138,13 @@ class Recipe:
             target = self.target.fit_transform(target)
             for dispatcher in dispatchers:
                 dispatcher._resolve(target)
-            self.features.fit(features)
+            features = self.features.fit_transform(features)
             succeeded = True
         finally:
             if not succeeded:
                 for dispatcher in dispatchers:
                     dispatcher._reset()
-        return self
+        return features, target
 
     @overload
     def preprocess(
