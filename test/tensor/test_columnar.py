@@ -82,6 +82,19 @@ def test_from_cudf(device: torch.device) -> None:
     assert tensor[:, 0].equal(torch.tensor([1, 2, 3], device=device))
 
     tensor = ColumnarTensor.from_cudf(
+        cudf.Series([1.5, None, 3.5], dtype="float32"),
+        device=device,
+    )
+    assert tensor.size() == (3, 1)
+    assert tensor.device == device
+    assert tensor[:, 0].dtype == torch.float32
+    assert torch.allclose(
+        tensor[:, 0],
+        torch.tensor([1.5, float("nan"), 3.5], device=device),
+        equal_nan=True,
+    )
+
+    tensor = ColumnarTensor.from_cudf(
         cudf.Series(["a", "bb", ""]),
         device=device,
     )

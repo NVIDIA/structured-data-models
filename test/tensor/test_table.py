@@ -784,7 +784,6 @@ _CUDF_EXPECTED_CATEGORICAL = torch.tensor(
 
 
 def _import_cudf() -> Any:
-    pytest.importorskip("cupy")
     cudf = pytest.importorskip("cudf")
     if not torch.cuda.is_available():
         pytest.skip("CUDA is not available")
