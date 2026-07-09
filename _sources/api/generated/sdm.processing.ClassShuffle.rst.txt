@@ -1,0 +1,8 @@
+﻿ClassShuffle
+============
+
+.. currentmodule:: sdm.processing
+
+.. autoclass:: ClassShuffle
+   :members:
+   :show-inheritance:
