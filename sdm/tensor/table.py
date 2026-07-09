@@ -477,6 +477,30 @@ class TableTensor(Tensor):
             **{stype: getattr(self, stype) for stype in stypes},
         )
 
+    def drop_stypes(
+        self,
+        stypes: StypeLike | Iterable[StypeLike],
+    ) -> Self:
+        r"""Return a table with ``stypes`` columns removed.
+
+        Args:
+            stypes: The semantic type or semantic types to drop.
+        """
+        if isinstance(stypes, (str, Stype)):
+            stypes = (stypes,)
+        stypes = {Stype(stype) for stype in stypes}
+
+        keep = tuple(stype for stype in self._columns if stype not in stypes)
+        return self.__class__(
+            size=self.size()[:-1],
+            columns=cast(
+                Mapping[StypeLike, Sequence[str]],
+                {stype: self._columns[stype] for stype in keep},
+            ),
+            device=self.device,
+            **{stype: getattr(self, stype) for stype in keep},
+        )
+
     def select_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table containing only ``columns``.
 

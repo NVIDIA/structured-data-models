@@ -218,6 +218,68 @@ def test_select_stypes() -> None:
     assert mixed.id.size() == (2, 0)
 
 
+def test_drop_stypes() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+            "datetime": ["created_at"],
+            "id": ["user_id"],
+        },
+        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["USA", "Germany"]),),
+        ),
+        datetime=torch.tensor([[10], [20]], dtype=torch.int64),
+        id=ColumnarTensor((torch.tensor([100, 200]),)),
+    )
+
+    no_numerical = tensor.drop_stypes(Stype.numerical)
+    assert isinstance(no_numerical, TableTensor)
+    assert no_numerical.columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("country",),
+        Stype.datetime: ("created_at",),
+        Stype.id: ("user_id",),
+    }
+    assert no_numerical.numerical.size() == (2, 0)
+    assert no_numerical.categorical is tensor.categorical
+    assert no_numerical.datetime is tensor.datetime
+    assert no_numerical.id is tensor.id
+
+    no_categorical = tensor.drop_stypes("categorical")
+    assert no_categorical.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: (),
+        Stype.datetime: ("created_at",),
+        Stype.id: ("user_id",),
+    }
+    assert no_categorical.numerical is tensor.numerical
+    assert no_categorical.categorical.size() == (2, 0)
+
+    mixed = tensor.drop_stypes(["numerical", Stype.categorical])
+    assert mixed.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: ("created_at",),
+        Stype.id: ("user_id",),
+    }
+    assert mixed.numerical.size() == (2, 0)
+    assert mixed.categorical.size() == (2, 0)
+    assert mixed.datetime is tensor.datetime
+    assert mixed.id is tensor.id
+
+    empty = tensor.drop_stypes(["numerical", "categorical", "datetime", "id"])
+    assert empty.size() == (2, 0)
+    assert empty.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+
+
 def test_save_load() -> None:
     tensor = TableTensor(
         columns={
