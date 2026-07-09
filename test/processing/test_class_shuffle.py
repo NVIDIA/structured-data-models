@@ -3,55 +3,81 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import ClassShuffle, Recipe
 
 
-def _labels(
-    values: list[int],
-    categories: tuple[str, ...] = ("a", "b", "c"),
+def _table(
+    values: list[list[int]],
+    categories: tuple[tuple[str, ...], ...],
+    numerical: torch.Tensor | None = None,
 ) -> TableTensor:
+    columns: dict[str, tuple[str, ...]] = {
+        "categorical": tuple(f"cat{i}" for i in range(len(categories))),
+    }
+    if numerical is not None:
+        columns["numerical"] = tuple(
+            f"num{i}" for i in range(numerical.size(-1))
+        )
     return TableTensor(
-        columns={"categorical": ("target",)},
+        columns=columns,
+        numerical=numerical,
         categorical=CategoricalTensor(
-            data=torch.tensor(values, dtype=torch.int32).unsqueeze(-1),
-            categories=(StringTensor.from_list(categories),),
+            data=torch.tensor(values, dtype=torch.int32),
+            categories=tuple(
+                StringTensor.from_list(category) for category in categories
+            ),
         ),
     )
 
 
-def test_class_shuffle_shift_maps_labels() -> None:
-    labels = _labels([0, 1, 2, -1])
+def test_class_shuffle_shift_maps_single_target() -> None:
+    target = _table(
+        [[0], [1], [2], [-1]],
+        (("a", "b", "c"),),
+    )
     torch.manual_seed(3)  # draws a cyclic offset of 1 for three classes
 
-    output = ClassShuffle(method="shift").fit_transform(labels)
+    output = ClassShuffle(method="shift").fit_transform(target)
 
-    assert output.columns[Stype.categorical] == ("target",)
+    assert output.columns[Stype.categorical] == ("cat0",)
     assert torch.equal(
         output.categorical.as_tensor(),
         torch.tensor([[2], [0], [1], [-1]], dtype=torch.int32),
     )
     assert output.categorical.categories[0].tolist() == ["b", "c", "a"]
-    assert output.categorical.tolist() == labels.categorical.tolist()
+    assert output.categorical.tolist() == target.categorical.tolist()
 
 
-def test_class_shuffle_random_preserves_decoded_labels() -> None:
-    labels = _labels([0, 1, 2, 1])
+def test_class_shuffle_random_permutes_each_categorical_column() -> None:
+    features = _table(
+        [[0, 0], [1, 1], [2, -1], [1, 0]],
+        (("a", "b", "c"), ("x", "y")),
+    )
     processor = ClassShuffle(method="random")
 
-    transformed = processor.fit_transform(labels)
+    transformed = processor.fit_transform(features)
 
-    assert transformed.categorical.tolist() == labels.categorical.tolist()
+    assert processor.offsets.tolist() == [0, 3, 5]
+    assert processor.permutations.numel() == 5
+    assert transformed.categorical.tolist() == features.categorical.tolist()
+    assert transformed.categorical.as_tensor()[-2, 1].item() == -1
 
 
 def test_class_shuffle_uses_category_count_and_preserves_missing() -> None:
-    labels = _labels([0, 1, -1], categories=("a", "b", "c", "d"))
+    target = _table(
+        [[0], [1], [-1]],
+        (("a", "b", "c", "d"),),
+    )
 
-    output = ClassShuffle(method="random").fit_transform(labels)
+    output = ClassShuffle(method="random").fit_transform(target)
 
     assert output.categorical.categories[0].numel() == 4
     assert output.categorical.as_tensor()[-1].item() == -1
-    assert output.categorical.tolist() == labels.categorical.tolist()
+    assert output.categorical.tolist() == target.categorical.tolist()
 
 
-def test_class_shuffle_learns_classes_in_recipe_target_pipeline() -> None:
-    target = _labels([0, 1, 2])
+def test_class_shuffle_runs_in_recipe_target_pipeline() -> None:
+    target = _table(
+        [[0], [1], [2]],
+        (("a", "b", "c"),),
+    )
     torch.manual_seed(3)  # draws a cyclic offset of 1 for three classes
     recipe = Recipe(target=[ClassShuffle(method="shift")])
 
@@ -61,3 +87,26 @@ def test_class_shuffle_learns_classes_in_recipe_target_pipeline() -> None:
     assert transformed.categorical.size(-1) == 1
     assert transformed.numerical.size(-1) == 0
     assert transformed.categorical.tolist() == target.categorical.tolist()
+
+
+def test_class_shuffle_runs_on_mixed_feature_blocks() -> None:
+    numerical = torch.tensor(
+        [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+    )
+    features = _table(
+        [[0, 1], [1, 0], [2, -1]],
+        (("a", "b", "c"), ("x", "y")),
+        numerical=numerical,
+    )
+    torch.manual_seed(3)
+    recipe = Recipe(features=[ClassShuffle(method="random")])
+
+    transformed = recipe.features.fit_transform(features)
+
+    assert transformed.columns == features.columns
+    assert torch.equal(transformed.numerical, numerical)
+    assert transformed.categorical.tolist() == features.categorical.tolist()
+    assert not torch.equal(
+        transformed.categorical.as_tensor(),
+        features.categorical.as_tensor(),
+    )
