@@ -15,7 +15,7 @@ reviews:
   poem: false
   review_status: false
   collapse_walkthrough: true
-  sequence_diagrams: false
+  sequence_diagrams: true
   in_progress_fortune: false
   suggested_labels: false
   suggested_reviewers: false
