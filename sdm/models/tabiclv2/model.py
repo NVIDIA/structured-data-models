@@ -12,7 +12,7 @@ from sdm import RelatedTables
 from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
-from sdm.models.tabiclv2.recipe import default_regression_recipe
+from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
@@ -97,7 +97,7 @@ class TabICLv2(BaseModel):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_regression_recipe()
+        return default_recipe()
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
