@@ -15,9 +15,8 @@ Planned, staged towards one task-aware recipe:
   dispatching the target and output roles per task with ``TaskDispatch``.
   The end-state is sketched (commented) at the bottom of this module.
 
-Steps that need processors not implemented yet (``ConstantFilter``,
-``ClassShuffle``, ``Choice``, ``TaskDispatch``) are kept as commented
-placeholders.
+``TaskDispatch`` is not implemented yet, so the task-aware recipe remains a
+commented placeholder.
 
 """
 
