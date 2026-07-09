@@ -1,7 +1,6 @@
-import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ClassShuffle, Recipe, StypeDispatch
+from sdm.processing import ClassShuffle
 from sdm.testing import withCUDA
 
 
