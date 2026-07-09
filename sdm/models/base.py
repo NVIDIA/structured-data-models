@@ -24,6 +24,7 @@ class BaseModel(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
+        self._recipe: Recipe | None = None
 
     @torch.inference_mode()
     def forward(
@@ -110,17 +111,22 @@ class BaseModel(torch.nn.Module, ABC):
         x = x[..., : y.size(-1), :]
         caches: list[Cache] = []
         for _ in range(num_estimators):
-            # TODO: Don't store 'y.dtype' and 'recipe' in every cache once we
-            # introduce a nested cache.
-            cache = Cache({"y.dtype": y.dtype, "recipe": recipe})
+            # TODO: Don't store y.dtype in every cache once we introduce a
+            # nested cache.
+            cache = Cache({"y.dtype": y.dtype})
             self._forward(x, y, cache=cache)
             cache.freeze()
             caches.append(cache)
         self._caches = caches
+        # TODO: Once creating Recipes from a Recipe is supported, we should
+        # iterate over the recipes so that every predict call runs a consistent
+        # recipe per ensemble member.
+        self._recipe = recipe
 
     def clear(self) -> None:
-        r"""Clears cached in-context examples."""
+        r"""Clears cached in-context examples and the fitted recipe."""
         self._caches = None
+        self._recipe = None
 
     @torch.inference_mode()
     def predict(
@@ -149,7 +155,7 @@ class BaseModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        recipe = cast(Recipe | None, self._caches[0]["recipe"])
+        recipe = self._recipe
         if recipe is not None:
             if not isinstance(x, TableTensor):
                 raise ValueError(
