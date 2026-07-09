@@ -2,9 +2,9 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.models.tabiclv2.model import _probabilities_to_logits, _TabICLv2
-from sdm.models.tabiclv2.row_embedding import RowEmbedding, _mixed_radix_bases
-from sdm.nn import Attention, HierarchicalClassifier
+from sdm.models.tabiclv2.model import _TabICLv2
+from sdm.models.tabiclv2.row_embedding import RowEmbedding
+from sdm.nn import Attention
 from sdm.processing import Sequential
 from sdm.testing import withCUDA
 
@@ -51,11 +51,9 @@ def test_tabiclv2(
         out = model(x, y)
         assert out.size() == (*batch_shape, R - R_train, 999)
     else:
-        num_classes = 3
-        y = torch.arange(R_train, device=device) % num_classes
-        y = y.expand(*batch_shape, R_train)
+        y = torch.randint(0, 10, (*batch_shape, R_train), device=device)
         out = model(x, y)
-        assert out.size() == (*batch_shape, R - R_train, num_classes)
+        assert out.size() == (*batch_shape, R - R_train, 10)
 
     assert out.dtype == x.dtype
     assert out.device == x.device
@@ -77,7 +75,7 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
 
     R, C, R_train = 8, 6, 5
     x = torch.randn(*batch_shape, R, C)
-    y = (torch.arange(R_train) % 3).expand(*batch_shape, R_train)
+    y = torch.randint(0, 10, (*batch_shape, R_train))
 
     out = model(x, y)
 
@@ -172,7 +170,6 @@ def test_tabiclv2_many_classes(
     batch_shape: tuple[int, ...],
 ) -> None:
     model = _make_small_classifier(max_classes=3, device=device)
-    assert isinstance(model.hierarchical_classifier, HierarchicalClassifier)
     num_classes, test_size = 7, 2
     x = torch.randn(
         *batch_shape,
@@ -215,36 +212,12 @@ def test_tabiclv2_native_class_boundary(num_classes: int) -> None:
     assert out.size() == (test_size, num_classes)
 
 
-def test_hierarchical_probability_to_logit_conversion() -> None:
-    probabilities = torch.tensor([[0.2, 0.3, 0.5]])
-
-    logits = _probabilities_to_logits(probabilities)
-
-    expected = 0.9 * (probabilities + 1e-6).log()
-    torch.testing.assert_close(logits, expected)
-    torch.testing.assert_close(
-        (logits / 0.9).softmax(dim=-1),
-        (probabilities + 1e-6) / (probabilities + 1e-6).sum(dim=-1),
-    )
-
-
-def test_tabiclv2_num_classes_from_max_label() -> None:
-    model = TabICLv2(pretrained=False)
-    x = torch.randn(5, 6)
-    y = torch.tensor([0, 2, 0, 2])  # Class 1 is absent from the context.
-
-    out = model(x, y)
-
-    assert out.size() == (1, 3)
-    assert torch.isfinite(out).all()
-
-
 def test_tabiclv2_many_classes_rejects_cache() -> None:
     model = TabICLv2(pretrained=False)
     native_x = torch.randn(5, 6)
     native_y = torch.tensor([0, 1, 2, 0, 1])
     model.fit(native_x, native_y)
-    assert model.predict(torch.randn(1, 6)).size(-1) == 3
+    assert model.predict(torch.randn(1, 6)).size(-1) == 10
 
     x = torch.randn(11, 6)
     y = torch.arange(11)
@@ -257,27 +230,6 @@ def test_tabiclv2_many_classes_rejects_cache() -> None:
 
     with pytest.raises(RuntimeError, match="not yet fitted"):
         model.predict(torch.randn(2, 6))
-
-
-def test_classification_rejects_complex_targets() -> None:
-    model = TabICLv2(pretrained=False)
-    x = torch.randn(3, 2)
-    y = torch.tensor([0 + 1j, 1 + 0j])
-
-    with pytest.raises(TypeError, match="real-valued targets"):
-        model(x, y)
-
-
-def test_tabiclv2_requires_two_native_classes() -> None:
-    with pytest.raises(ValueError, match="at least two native classes"):
-        _mixed_radix_bases(num_classes=2, max_classes=1)
-
-    model = _make_small_classifier(
-        max_classes=1,
-        device=torch.device("cpu"),
-    )
-    with pytest.raises(ValueError, match="at least two native classes"):
-        model(torch.randn(3, 6), torch.arange(2))
 
 
 @withCUDA

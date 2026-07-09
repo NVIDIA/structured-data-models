@@ -1,6 +1,6 @@
 # ruff: noqa: D205
 
-from typing import Any, cast
+from typing import Any
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -17,7 +17,6 @@ from sdm.nn import HierarchicalClassifier
 from sdm.processing import Recipe
 
 _CLASSIFICATION_TEMPERATURE = 0.9
-_NUM_CLASSES_CACHE_KEY = "tabiclv2.num_classes"
 
 
 class TabICLv2(BaseModel):
@@ -147,13 +146,12 @@ class TabICLv2(BaseModel):
         Returns:
             Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
             and ``[..., R_test, 999]`` for floating-point ``y``.
-            Integer ``y`` return class logits for the ``y.max() + 1`` class
-            indices ``{0, ..., y.max()}``.
+            Integer ``y`` return class logits over ten classes, or over
+            ``y.max() + 1`` classes via hierarchical classification when the
+            context holds more than ten classes.
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
         """
-        if y.is_complex():
-            raise TypeError("Expected real-valued targets")
         if y.is_floating_point():
             return self.reg_model(x, y, cache=cache)
         return self.cls_model(x, y, cache=cache)
@@ -217,12 +215,6 @@ class _TabICLv2(torch.nn.Module):
             ),
         )
         self.max_classes = num_classes
-        self.hierarchical_classifier: HierarchicalClassifier | None = None
-        if num_classes > 0:
-            self.hierarchical_classifier = HierarchicalClassifier(
-                max_classes=num_classes,
-                temperature=_CLASSIFICATION_TEMPERATURE,
-            )
 
     def forward(
         self,
@@ -231,66 +223,39 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        if self.max_classes == 0:
-            row_embeddings = self.row_embedding(x, y, cache=cache)
-            return self._predict_standard(row_embeddings, y, cache=cache)
+        x = self.row_embedding(x, y, cache=cache)
 
-        y = y.long()
-        num_classes = self._num_classes(y, cache=cache)
-        if cache is not None and num_classes > self.max_classes:
-            raise NotImplementedError(
-                f"Key/value caching is not supported with more than "
-                f"{self.max_classes} classes (got {num_classes})"
-            )
+        num_classes = 0
+        if self.max_classes > 0 and y.numel() > 0:
+            # TODO Cache `num_classes` to avoid device synchronization.
+            num_classes = int(y.max()) + 1
 
-        row_embeddings = self.row_embedding(x, y, cache=cache)
         if num_classes <= self.max_classes:
-            out = self._predict_standard(row_embeddings, y, cache=cache)
-            return out[..., :num_classes]
+            x = self.icl_block(x, y, cache=cache)
+            return self.head(x)
 
-        assert self.hierarchical_classifier is not None
-        probabilities = self.hierarchical_classifier(
-            row_embeddings=row_embeddings,
+        classifier = HierarchicalClassifier(
+            max_classes=self.max_classes,
+            temperature=_CLASSIFICATION_TEMPERATURE,
+        )
+        probabilities = classifier(
+            row_embeddings=x,
             y=y,
             num_classes=num_classes,
             predictor=self._predict_standard,
         )
-        return _probabilities_to_logits(probabilities)
-
-    def _num_classes(
-        self,
-        y: Tensor,
-        *,
-        cache: Cache | None,
-    ) -> int:
-        if y.numel() > 0:
-            # TODO Cache `num_classes` to avoid device synchronization.
-            num_classes = int(y.max()) + 1
-            if cache is not None and cache.is_recording:
-                cache[_NUM_CLASSES_CACHE_KEY] = num_classes
-            return num_classes
-        if cache is not None and cache.is_replaying:
-            return cast(int, cache[_NUM_CLASSES_CACHE_KEY])
-        raise ValueError(
-            "Expected at least one in-context classification label"
-        )
+        # Convert to pseudo-logits compatible with temperature softmax:
+        return (probabilities + 1e-6).log().mul(_CLASSIFICATION_TEMPERATURE)
 
     def _predict_standard(
         self,
-        row_embeddings: Tensor,
-        y: Tensor,
-        *,
-        cache: Cache | None = None,
-    ) -> Tensor:
-        out = self.icl_block(row_embeddings, y, cache=cache)
-        return self.head(out)
+        row_embeddings: Tensor,  # [R_node + R_test, D]
+        y: Tensor,  # [R_node]
+    ) -> Tensor:  # [R_test, max_classes]
+        return self.head(self.icl_block(row_embeddings, y))
 
 
 # Helpers #####################################################################
-
-
-def _probabilities_to_logits(probabilities: Tensor) -> Tensor:
-    return (probabilities + 1e-6).log().mul(_CLASSIFICATION_TEMPERATURE)
 
 
 def _remap_ckpt(
