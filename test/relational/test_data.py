@@ -69,11 +69,3 @@ def test_edge_indices(data: RelationalData) -> None:
     assert edge_indices[1].equal(
         torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 2, 0, 1, 0]])
     )
-
-
-def test_homogeneous_graph(data: RelationalData) -> None:
-    graph = data.homogeneous_graph()
-
-    assert graph.edge_index.size() == (2, 24)
-    assert graph.edge_index.dtype == torch.int64
-    assert graph.node_offsets == {"users": 0, "orders": 4, "items": 10}

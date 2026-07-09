@@ -1,12 +1,12 @@
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from math import prod
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 import pyarrow as pa
 import torch
 from torch import Tensor
+from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 
@@ -56,18 +56,40 @@ class Relationship:
                         f"row indexing"
                     )
 
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, str | Sequence[str]]) -> Self:
+        r"""Create a :class:`Relationship` from a mapping.
 
-class HomogeneousGraph(NamedTuple):
-    r"""Materialized homogeneous graph.
+        Args:
+            mapping: The mapping with ``"left_table"``, ``"left_columns"``,
+                ``"right_table"``, ``"right_columns"`` entries.
+        """
+        left_table = mapping["left_table"]
+        assert isinstance(left_table, str)
 
-    Args:
-        node_offsets: Global node offsets keyed by table name.
-        edge_index: Edge index with shape ``[2, num_edges]`` over the
-            concatenated rows of all tables.
-    """
+        if "left_column" in mapping:
+            left_columns = mapping["left_column"]
+        else:
+            left_columns = mapping["left_columns"]
+        if isinstance(left_columns, str):
+            left_columns = (left_columns,)
 
-    edge_index: Tensor
-    node_offsets: dict[str, int]
+        right_table = mapping["right_table"]
+        assert isinstance(right_table, str)
+
+        if "right_column" in mapping:
+            right_columns = mapping["right_column"]
+        else:
+            right_columns = mapping["right_columns"]
+        if isinstance(right_columns, str):
+            right_columns = (right_columns,)
+
+        return cls(
+            left_table=left_table,
+            left_columns=left_columns,
+            right_table=right_table,
+            right_columns=right_columns,
+        )
 
 
 @dataclass(frozen=True, init=False)
@@ -96,7 +118,7 @@ class RelationalData:
 
     Args:
         tables: Tables keyed by table name.
-        relationships: Join relationships among tables.
+        relationships: Join relationships among ``tables``.
     """
 
     tables: Mapping[str, TableTensor]
@@ -109,42 +131,23 @@ class RelationalData:
             Relationship | Mapping[str, str | Sequence[str]]
         ],
     ) -> None:
-        parsed_relationships = []
-        for relationship in relationships:
-            if isinstance(relationship, Relationship):
-                parsed_relationships.append(relationship)
-            else:
-                left_table = relationship["left_table"]
-                assert isinstance(left_table, str)
-                if "left_column" in relationship:
-                    left_columns = relationship["left_column"]
-                else:
-                    left_columns = relationship["left_columns"]
-                if isinstance(left_columns, str):
-                    left_columns = (left_columns,)
 
-                right_table = relationship["right_table"]
-                assert isinstance(right_table, str)
-                if "right_column" in relationship:
-                    right_columns = relationship["right_column"]
-                else:
-                    right_columns = relationship["right_columns"]
-                if isinstance(right_columns, str):
-                    right_columns = (right_columns,)
-
-                relationship = Relationship(
-                    left_table=left_table,
-                    left_columns=left_columns,
-                    right_table=right_table,
-                    right_columns=right_columns,
-                )
-                parsed_relationships.append(relationship)
+        relationships = tuple(
+            relationship
+            if isinstance(relationship, Relationship)
+            else Relationship.from_mapping(relationship)
+            for relationship in relationships
+        )
 
         object.__setattr__(self, "tables", tables)
-        object.__setattr__(self, "relationships", tuple(parsed_relationships))
+        object.__setattr__(self, "relationships", relationships)
         self.__post_init__()
 
     def __post_init__(self) -> None:
+        for table in self.tables.values():
+            if table.dim() != 2:
+                raise ValueError("Tables need to be two-dimensional")
+
         for relationship in self.relationships:
             for table, columns in (
                 (relationship.left_table, relationship.left_columns),
@@ -156,10 +159,12 @@ class RelationalData:
                     )
 
                 for column in columns:
-                    if self.tables[table].stype(column) != Stype.id:
+                    stype = self.tables[table].stype(column)
+                    if stype != Stype.id:
                         raise ValueError(
                             f"Expected column '{column}' in table '{table}' "
-                            f"to have semantic type '{Stype.id.value}'"
+                            f"to have semantic type '{Stype.id.value}' "
+                            f"(got '{stype.value}')"
                         )
 
     def edge_indices(
@@ -218,48 +223,6 @@ class RelationalData:
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
-
-    def homogeneous_graph(
-        self,
-        dtype: torch.dtype | None = None,
-        device: torch.device | str | None = None,
-    ) -> HomogeneousGraph:
-        r"""Materialize homogeneous graph edges for table relationships.
-
-        Args:
-            dtype: The dtype.
-            device: The device.
-        """
-        offset = 0
-        node_offsets: dict[str, int] = {}
-        for name, table in self.tables.items():
-            node_offsets[name] = offset
-            offset += prod(table.size()[:-1])
-
-        edge_indices = []
-        for relationship, edge_index in zip(
-            self.relationships,
-            self.edge_indices(dtype=dtype, device=device),
-        ):
-            edge_index += edge_index.new_tensor(
-                [
-                    [node_offsets[relationship.left_table]],
-                    [node_offsets[relationship.right_table]],
-                ],
-            )
-            edge_indices.append(edge_index)
-            edge_indices.append(edge_index.flip(0))
-
-        if len(edge_indices) == 0:
-            dtype = torch.int64 if dtype is None else dtype
-            edge_index = torch.empty((2, 0), dtype=dtype, device=device)
-        else:
-            edge_index = torch.cat(edge_indices, dim=1)
-
-        return HomogeneousGraph(
-            edge_index=edge_index,
-            node_offsets=node_offsets,
-        )
 
     def sampler(
         self,
