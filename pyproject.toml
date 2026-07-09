@@ -81,6 +81,7 @@ addopts = [
 ]
 markers = [
     "cuda: tests that require a NVIDIA GPU",
+    "tabarena: tests that require the optional TabArena and AutoGluon environment",
 ]
 testpaths = ["test"]
 xfail_strict = true

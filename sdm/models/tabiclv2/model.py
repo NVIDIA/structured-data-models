@@ -1,5 +1,7 @@
 # ruff: noqa: D205
 
+import hashlib
+from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import torch
@@ -15,6 +17,12 @@ from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
+
+_CHECKPOINT_REPO_ID = "jingang/TabICL"
+_CHECKPOINT_FILENAMES = {
+    "classifier": "tabicl-classifier-v2-20260212.ckpt",
+    "regressor": "tabicl-regressor-v2-20260212.ckpt",
+}
 
 
 class TabICLv2(Model):
@@ -99,31 +107,92 @@ class TabICLv2(Model):
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 
-    def _load_from_pretrained(self) -> "TabICLv2":
-        device = next(self.parameters()).device
+    def load_regression_checkpoint(
+        self,
+        checkpoint_path: str | Path,
+        checkpoint_sha256: str,
+    ) -> "TabICLv2":
+        r"""Load and verify a local regression checkpoint.
 
-        for variant in ["classifier", "regressor"]:
+        Unlike ``pretrained=True``, this method never resolves an artifact
+        through Hugging Face. It is intended for reproducible benchmark runs
+        that pin the regression checkpoint and its SHA-256 digest.
+
+        Args:
+            checkpoint_path: Path to a local published regression checkpoint.
+            checkpoint_sha256: Expected SHA-256 digest of the checkpoint.
+
+        Returns:
+            This model with its regression network loaded.
+
+        Raises:
+            FileNotFoundError: If ``checkpoint_path`` does not name a file.
+            ValueError: If the digest is invalid or does not match the local
+                checkpoint.
+        """
+        path = Path(checkpoint_path)
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Checkpoint file does not exist: '{path}'."
+            )
+
+        expected_hash = _validate_sha256(checkpoint_sha256)
+        actual_hash = _sha256(path)
+        if actual_hash != expected_hash:
+            raise ValueError(
+                f"SHA-256 mismatch for checkpoint '{path}': expected "
+                f"{expected_hash}, got {actual_hash}."
+            )
+
+        self._load_checkpoint(path, is_classifier=False)
+        return self
+
+    def _load_from_pretrained(self) -> "TabICLv2":
+        for variant, is_classifier in [
+            ("classifier", True),
+            ("regressor", False),
+        ]:
             try:
                 path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
+                    repo_id=_CHECKPOINT_REPO_ID,
+                    filename=_CHECKPOINT_FILENAMES[variant],
                     local_files_only=True,
                 )
             except LocalEntryNotFoundError:
                 path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
+                    repo_id=_CHECKPOINT_REPO_ID,
+                    filename=_CHECKPOINT_FILENAMES[variant],
                 )
-            ckpt = torch.load(path, map_location=device)["state_dict"]
-
-            if variant == "classifier":
-                ckpt = _remap_ckpt(ckpt, is_classifier=True)
-                self.cls_model.load_state_dict(ckpt)
-            else:
-                ckpt = _remap_ckpt(ckpt, is_classifier=False)
-                self.reg_model.load_state_dict(ckpt)
+            self._load_checkpoint(path, is_classifier=is_classifier)
 
         return self
+
+    def _load_checkpoint(
+        self,
+        checkpoint_path: str | Path,
+        *,
+        is_classifier: bool,
+    ) -> None:
+        device = next(self.parameters()).device
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        try:
+            state_dict = checkpoint["state_dict"]
+        except (KeyError, TypeError) as error:
+            raise ValueError(
+                "Expected checkpoint to contain a 'state_dict' mapping."
+            ) from error
+
+        if not isinstance(state_dict, dict):
+            raise ValueError(
+                "Expected checkpoint 'state_dict' to be a dictionary."
+            )
+
+        state_dict = _remap_ckpt(
+            state_dict,
+            is_classifier=is_classifier,
+        )
+        model = self.cls_model if is_classifier else self.reg_model
+        model.load_state_dict(state_dict, strict=True)
 
     def _forward(  # TODO Add multi-class support.
         self,
@@ -245,6 +314,34 @@ class _TabICLv2(torch.nn.Module):
 
 
 # Helpers #####################################################################
+
+
+def _validate_sha256(checkpoint_sha256: str) -> str:
+    if not isinstance(checkpoint_sha256, str):
+        raise ValueError(
+            "Expected 'checkpoint_sha256' to be a SHA-256 string."
+        )
+
+    normalized = checkpoint_sha256.strip().lower()
+    if len(normalized) != 64 or any(
+        char not in "0123456789abcdef" for char in normalized
+    ):
+        raise ValueError(
+            "Expected 'checkpoint_sha256' to be a 64-character hexadecimal "
+            "SHA-256 digest."
+        )
+    return normalized
+
+
+def _sha256(path: Path) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"Checkpoint file does not exist: '{path}'.")
+
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        while chunk := file.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _remap_ckpt(
