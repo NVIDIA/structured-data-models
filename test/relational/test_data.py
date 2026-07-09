@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 import torch
 from sdm import RelationalData, StringTensor, Stype, TableTensor, infer_stypes
+from sdm.relational.data import _to_cudf_series
 
 USERS = {
     "user_id": [0, 1, 2, 3],
@@ -103,11 +104,11 @@ def _import_cudf() -> Any:
 def _composite_data(*, cuda: bool) -> RelationalData:
     left = {
         "account_id": [1, 1, 1, 2, 9],
-        "region_id": ["a", "a", "b", "a", "z"],
+        "region_id": ["é", "é", "東京", "", "🙂"],
     }
     right = {
         "owner_id": [1, 1, 1, 2],
-        "area_id": ["a", "a", "b", "a"],
+        "area_id": ["é", "é", "東京", ""],
     }
     if cuda:
         cudf = _import_cudf()
@@ -158,6 +159,49 @@ def _edge_pairs(edge_index: torch.Tensor) -> list[tuple[int, int]]:
     return sorted(tuple(pair) for pair in edge_index.cpu().t().tolist())
 
 
+@pytest.mark.parametrize(
+    "offset_dtype",
+    [torch.int32, torch.int64],
+    ids=["int32", "int64"],
+)
+def test_to_cudf_series_string(offset_dtype: torch.dtype) -> None:
+    _import_cudf()
+    values = ["é", "東京", "🙂", ""]
+    column = StringTensor.from_list(
+        values,
+        device="cuda",
+        offset_dtype=offset_dtype,
+    )
+
+    series = _to_cudf_series(column)
+
+    assert column._offset.dtype == offset_dtype
+    assert series.to_arrow().to_pylist() == values
+
+
+@pytest.mark.parametrize(
+    "offset_dtype",
+    [torch.int32, torch.int64],
+    ids=["int32", "int64"],
+)
+def test_to_cudf_series_empty_column(offset_dtype: torch.dtype) -> None:
+    cudf = _import_cudf()
+    column = StringTensor.from_list(
+        [],
+        device="cuda",
+        offset_dtype=offset_dtype,
+    )
+
+    series = _to_cudf_series(column)
+
+    assert column._data.numel() == 0
+    assert column._offset.equal(
+        torch.zeros(1, dtype=offset_dtype, device=column.device)
+    )
+    assert cudf.api.types.is_string_dtype(series.dtype)
+    assert series.to_arrow().to_pylist() == []
+
+
 def test_edge_indices_cpu(data: RelationalData) -> None:
     edge_indices = data.edge_indices()
 
@@ -192,12 +236,29 @@ def test_edge_indices_cuda(cuda_data: RelationalData) -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "noncontiguous",
+    [False, True],
+    ids=["contiguous", "noncontiguous"],
+)
 def test_edge_indices_cuda_does_not_export_to_host(
     cuda_data: RelationalData,
     monkeypatch: pytest.MonkeyPatch,
+    noncontiguous: bool,
 ) -> None:
     cudf = _import_cudf()
     tensor_to = torch.Tensor.to
+
+    relational_data = cuda_data
+    if noncontiguous:
+        relational_data = _composite_data(cuda=True)
+        relational_data = RelationalData(
+            tables={
+                name: table[::2]
+                for name, table in relational_data.tables.items()
+            },
+            relationships=relational_data.relationships,
+        )
 
     def fail(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("GPU edge materialization exported data to host")
@@ -233,7 +294,7 @@ def test_edge_indices_cuda_does_not_export_to_host(
         host_guard.setattr(torch.Tensor, "to", guard_to)
         host_guard.setattr(torch.Tensor, "tolist", fail)
 
-        edge_indices = cuda_data.edge_indices()
+        edge_indices = relational_data.edge_indices()
         torch.cuda.synchronize()
 
     assert all(edge_index.device.type == "cuda" for edge_index in edge_indices)
@@ -283,6 +344,26 @@ def test_edge_indices_cuda_sliced_string_keys() -> None:
     edge_index = relational_data.edge_indices()[0]
 
     assert _edge_pairs(edge_index) == [(0, 0), (1, 1), (2, 2)]
+
+
+def test_edge_indices_cuda_noncontiguous_string_keys() -> None:
+    relational_data = _composite_data(cuda=True)
+    left = relational_data.tables["left"][::2]
+    right = relational_data.tables["right"][::2]
+    region_id = left[..., ["region_id"]].id.unbind(-1)[0]
+    area_id = right[..., ["area_id"]].id.unbind(-1)[0]
+    assert isinstance(region_id, StringTensor)
+    assert isinstance(area_id, StringTensor)
+    assert not region_id.is_contiguous()
+    assert not area_id.is_contiguous()
+    relational_data = RelationalData(
+        tables={"left": left, "right": right},
+        relationships=relational_data.relationships,
+    )
+
+    edge_index = relational_data.edge_indices()[0]
+
+    assert _edge_pairs(edge_index) == [(0, 0), (1, 1)]
 
 
 @pytest.mark.skipif(
