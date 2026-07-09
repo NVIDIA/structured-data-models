@@ -5,7 +5,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import FeaturePermute, Sequential
+from sdm.processing import FeaturePermute
 
 
 def _table() -> TableTensor:
@@ -46,5 +46,3 @@ def test_feature_permute_shift_rotates_numerical_block() -> None:
         output.numerical,
         table.numerical.index_select(-1, torch.tensor([1, 2, 0])),
     )
-
-
