@@ -14,6 +14,7 @@ from sdm.relational import (
     Relationship,
     RelationalData,
     TaskLink,
+    SampledGraphMetadata,
     RelatedTables,
 )
 
@@ -34,6 +35,7 @@ __all__ = [
     "Relationship",
     "RelationalData",
     "TaskLink",
+    "SampledGraphMetadata",
     "RelatedTables",
     "__version__",
 ]
