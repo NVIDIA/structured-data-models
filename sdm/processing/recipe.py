@@ -1,6 +1,8 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from typing_extensions import Self
+
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.sequential import Sequential
 from sdm.processing.task_dispatch import TaskDispatch
@@ -9,6 +11,13 @@ from sdm.tensor import TableTensor
 
 
 class _TaskResolver(Processor, InvertibleMixin):
+    """Resolve linked output dispatchers while fitting a recipe target.
+
+    The wrapped target processor is a registered child module. Output
+    dispatchers stay in a plain tuple so they remain registered only under
+    ``Recipe.output``.
+    """
+
     supported_stypes = frozenset(Stype)
 
     def __init__(
@@ -18,13 +27,14 @@ class _TaskResolver(Processor, InvertibleMixin):
     ) -> None:
         super().__init__()
         self.processor = processor
-        # A tuple keeps these modules out of target's PyTorch module tree.
         self._task_dispatchers = task_dispatchers
 
-    def _fit(self, input: TableTensor) -> None:
-        self._fit_target(input)
+    def fit(self, input: TableTensor) -> Self:
+        self.fit_transform(input)
+        return self
 
-    def _fit_target(self, input: TableTensor) -> TableTensor:
+    def fit_transform(self, input: TableTensor) -> TableTensor:
+        self._check_supported_stypes(input)
         self._fitted = False
         for task_dispatcher in self._task_dispatchers:
             task_dispatcher._reset()
@@ -34,18 +44,13 @@ class _TaskResolver(Processor, InvertibleMixin):
             target = self.processor.fit_transform(input)
             for task_dispatcher in self._task_dispatchers:
                 task_dispatcher._resolve(target)
+            self._fitted = True
             succeeded = True
             return target
         finally:
             if not succeeded:
                 for task_dispatcher in self._task_dispatchers:
                     task_dispatcher._reset()
-
-    def fit_transform(self, input: TableTensor) -> TableTensor:
-        self._check_supported_stypes(input)
-        target = self._fit_target(input)
-        self._fitted = True
-        return target
 
     def _transform(self, input: TableTensor) -> TableTensor:
         return self.processor.transform(input)
@@ -72,8 +77,8 @@ class _TaskResolver(Processor, InvertibleMixin):
 class Recipe:
     """Processing contract around an external model boundary.
 
-    A recipe bundles three :class:`~sdm.processing.Processor` pipelines, one
-    per role the data plays relative to the model:
+    A recipe bundles three processing pipelines, one per role the data plays
+    relative to the model:
 
     - ``features``: model inputs, transformed before the model.
     - ``target``: labels, transformed forward before the model and inverted
@@ -123,6 +128,8 @@ class Recipe:
         elif not isinstance(output, Processor):
             output = Sequential(*output)
 
+        # TODO: Support TaskDispatch in features after defining task-aware
+        # feature fit ordering.
         for role, processor in (
             ("features", features),
             ("target", target),
@@ -136,6 +143,7 @@ class Recipe:
                     f"(found in '{role}')."
                 )
 
+        # modules() recursively visits every registered processor child.
         all_task_dispatchers = tuple(
             module
             for module in output.modules()

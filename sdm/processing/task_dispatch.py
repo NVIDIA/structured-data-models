@@ -121,8 +121,6 @@ class TaskDispatch(Processor):
             processor = cast(Processor, processor)
             processor_repr = processor.__repr__(indent=indent + 4)
             reprs.append(f"{' ' * (indent + 2)}{task}: {processor_repr}")
-        task = f"'{self._task}'" if self._task is not None else "None"
-        reprs.append(f"{' ' * (indent + 2)}task: {task}")
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"
             + ",\n".join(reprs)
