@@ -55,8 +55,15 @@ class MyClass:
 ## Sphinx Cross-Referencing Reference
 
 The same roles resolve internal `sdm` targets and external ones. Prefer
-cross-reference roles over plain ``pandas.DataFrame``-style literals whenever
-the target lives in an intersphinx-mapped project (`python`, `torch`, `numpy`,
+cross-reference roles over plain literals, e.g.,
+```python
+""":class:`pandas.DataFrame`"""
+```
+over
+```python
+"""``pandas.DataFrame``"""
+```
+whenever the target lives in an intersphinx-mapped project (`python`, `torch`, `numpy`,
 `pandas`, `pyarrow`, `cudf`, `typing_extensions`; see `intersphinx_mapping`
 in `docs/source/conf.py`).
 
