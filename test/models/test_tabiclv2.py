@@ -167,8 +167,8 @@ def test_default_recipe(task: str) -> None:
     )
     if task == "classification":
         assert torch.equal(
-            restored.categorical.as_tensor(),
-            target.categorical.as_tensor(),
+            restored.categorical,
+            target.categorical
         )
     else:
         torch.testing.assert_close(
