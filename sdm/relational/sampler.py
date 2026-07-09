@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
 from typing import cast
 
+import pyarrow as pa
 import torch
 from torch import Tensor
 
@@ -11,6 +12,7 @@ from sdm.relational import (
     Relationship,
     TaskLink,
 )
+from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID
 
 EXAMPLE_ID = "__example__"
 
@@ -101,14 +103,6 @@ class RelationalSampler:
         if not isinstance(task_link, TaskLink):
             task_link = TaskLink.from_mapping(task_link)
 
-        if task_time_column is not None:
-            stype = task_table.stype(task_time_column)
-            if stype != Stype.datetime:
-                raise ValueError(
-                    f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value})"
-                )
-
         for table, columns in (
             (task_table, task_link.task_columns),
             (self.data.tables[task_link.table], task_link.table_columns),
@@ -120,6 +114,14 @@ class RelationalSampler:
                         f"Expected column '{column}' to have semantic type "
                         f"'{Stype.id.value}' (got '{stype.value}')"
                     )
+
+        if task_time_column is not None:
+            stype = task_table.stype(task_time_column)
+            if stype != Stype.datetime:
+                raise ValueError(
+                    f"Expected task time column to have semantic type "
+                    f"'{Stype.datetime.value}' (got '{stype.value})"
+                )
 
         try:
             import pyg_lib  # noqa
@@ -144,6 +146,41 @@ class RelationalSampler:
                 "'https://github.com/pyg-team/pyg-lib' for more information)"
             ) from e
 
+        # Resolve entity table node indices:
+        left = task_table[task_link.task_columns].to_arrow()
+        left = left.append_column(
+            LEFT_ROW_ID,
+            pa.array(torch.arange(left.num_rows).numpy()),
+        )
+        right = self.data.tables[task_link.table][
+            task_link.table_columns
+        ].to_arrow()
+        right = right.append_column(
+            RIGHT_ROW_ID,
+            pa.array(torch.arange(right.num_rows).numpy()),
+        )
+        joined = left.join(
+            right,
+            keys=list(task_link.task_columns),
+            right_keys=list(task_link.table_columns),
+            join_type="left outer",
+        )
+        joined = joined.select([LEFT_ROW_ID, RIGHT_ROW_ID])
+        joined = joined.sort_by([(LEFT_ROW_ID, "ascending")])
+        if len(joined) != left.num_rows or joined[RIGHT_ROW_ID].null_count > 0:
+            raise ValueError(
+                f"Expected each task row to match exactly one row in "
+                f"'{task_link.table}'"
+            )
+
+        seed = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy())
+        if task_time_column is not None:
+            seed_time = task_table[task_time_column].datetime.squeeze(-1)
+        else:
+            fill_value = torch.iinfo(torch.int64).min
+            seed_time = torch.full_like(seed, fill_value)
+
+        # Perform subgraph sampling:
         _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
             node_types=list(self.data.tables),
             edge_types=list(self._colptr_dict),
@@ -155,14 +192,14 @@ class RelationalSampler:
                 "__".join(edge_type): row
                 for edge_type, row in self._row_dict.items()
             },
-            seed_dict={task_link.table: torch.arange(10)},
+            seed_dict={task_link.table: seed},
             num_neighbors_dict={
                 "__".join(edge_type): list(num_neighbors)
                 for edge_type in self._row_dict
             },
             node_time_dict=self._time_dict,
             edge_time_dict=None,
-            seed_time_dict={task_link.table: torch.arange(10)},
+            seed_time_dict={task_link.table: seed_time},
             edge_weight_dict=None,
             csc=True,
             replace=False,
