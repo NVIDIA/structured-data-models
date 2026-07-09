@@ -15,9 +15,8 @@ Planned, staged towards one task-aware recipe:
   dispatching the target and output roles per task with ``TaskDispatch``.
   The end-state is sketched (commented) at the bottom of this module.
 
-Steps that need processors not implemented yet (``ConstantFilter``,
-``LabelShuffle``, ``Choice``, ``TaskDispatch``) are kept as commented
-placeholders.
+``TaskDispatch`` and ``SoftmaxTemperature`` are not implemented yet, so the
+task-aware recipe remains a commented placeholder.
 
 """
 
@@ -42,8 +41,7 @@ def default_regression_recipe() -> Recipe:
     two-stage 4-sigma outlier clipping (``OutlierRemover``) on the
     features, ending in a drawn cyclic feature shift
     (:class:`~sdm.processing.FeaturePermute`). The target is standard-scaled
-    and its inverse maps predictions back to the original space. Commented
-    lines mark processors not implemented yet.
+    and its inverse maps predictions back to the original space.
     """
     return Recipe(
         features=[
@@ -69,7 +67,7 @@ def default_regression_recipe() -> Recipe:
     )
 
 
-# End-state target, once the missing processors exist: a single
+# End-state target, once the remaining processors exist: a single
 # task-aware recipe that serves both regression and classification. It cycles
 # per-member normalization with ``Choice`` + ``n_estimators`` and
 # dispatches the target and output roles per task with ``TaskDispatch``.
