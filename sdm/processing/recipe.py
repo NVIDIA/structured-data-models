@@ -134,13 +134,6 @@ class Recipe:
         target: TableTensor,
     ) -> tuple[TableTensor, TableTensor]: ...
 
-    @overload
-    def preprocess(
-        self,
-        features: TableTensor,
-        target: TableTensor | None,
-    ) -> TableTensor | tuple[TableTensor, TableTensor]: ...
-
     def preprocess(
         self,
         features: TableTensor,
