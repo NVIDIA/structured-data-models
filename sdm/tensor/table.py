@@ -17,6 +17,7 @@ from sdm.tensor import CategoricalTensor, ColumnarTensor
 from sdm.tensor.io import to_arrow
 
 if TYPE_CHECKING:
+    import cudf  # ty: ignore[unresolved-import]
     import pandas as pd
 
 aten = torch.ops.aten
@@ -369,6 +370,76 @@ class TableTensor(Tensor):
         return cls(
             columns={Stype.numerical: columns},
             numerical=tensor,
+        )
+
+    @classmethod
+    def from_cudf(
+        cls,
+        df: cudf.DataFrame,
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create a tensor from a ``cudf.DataFrame``.
+
+        Args:
+            df: The dataframe.
+            stypes: The semantic type for each column. Columns that are present
+                in ``df`` but not included in ``stypes`` will be ignored.
+            device: The device. If ``None``, tensors stay on the cuDF columns'
+                CUDA device.
+        """
+        device = torch.device(device) if device is not None else None
+
+        columns: dict[Stype, list[str]] = defaultdict(list)
+        for column, stype in stypes.items():
+            columns[Stype(stype)].append(column)
+
+        blocks: dict[Stype, Tensor] = {}
+        for stype in columns:
+            tensors: list[Tensor] = []
+            for column in columns[stype]:
+                series = df[column]
+                if stype == Stype.numerical:
+                    values = series.astype("float32", copy=False)
+                    if values.null_count > 0:
+                        # DLPack cannot carry cuDF validity masks.
+                        values = values.fillna(float("nan"))
+                    tensor = torch.from_dlpack(values.to_dlpack()).unsqueeze(
+                        -1
+                    )
+                    tensor = tensor.to(device)
+                elif stype == Stype.categorical:
+                    tensor = CategoricalTensor.from_cudf(
+                        series,
+                        device=device,
+                    )
+                elif stype == Stype.datetime:
+                    values = series.astype(
+                        "datetime64[us]",
+                        copy=False,
+                    ).astype("int64", copy=False)
+                    if values.null_count > 0:
+                        # DLPack cannot carry cuDF validity masks.
+                        values = values.fillna(torch.iinfo(torch.int64).min)
+                    tensor = torch.from_dlpack(values.to_dlpack()).unsqueeze(
+                        -1
+                    )
+                    tensor = tensor.to(device)
+                elif stype == Stype.id:
+                    tensor = ColumnarTensor.from_cudf(
+                        series,
+                        device=device,
+                    )
+                else:
+                    raise NotImplementedError
+                tensors.append(tensor)
+
+            blocks[stype] = torch.cat(tensors, dim=-1)
+
+        return cls(
+            columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+            **blocks,
         )
 
     # Properties ##############################################################
