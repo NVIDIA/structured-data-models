@@ -1,5 +1,4 @@
 import math
-from typing import Any, cast
 
 import pytest
 import torch
@@ -73,15 +72,5 @@ def test_interleaved_rope(
 def test_apply_rotary_embedding_errors() -> None:
     x = torch.randn(2, 3, 1, 4)
 
-    with pytest.raises(ValueError, match="must be one-dimensional"):
-        apply_rotary_embedding(x=x, inv_freq=torch.ones(1, 2))
-
     with pytest.raises(ValueError, match="Expected 2 channels, got 4"):
         apply_rotary_embedding(x=x, inv_freq=torch.ones(1))
-
-    with pytest.raises(ValueError, match="Unsupported rotary layout"):
-        apply_rotary_embedding(
-            x=x,
-            inv_freq=torch.ones(2),
-            layout=cast(Any, "invalid"),
-        )

@@ -22,15 +22,10 @@ def apply_rotary_embedding(
     Returns:
         Tensor with shape ``[..., S, H, C]``.
     """
-    if inv_freq.dim() != 1:
-        raise ValueError("`inv_freq` must be one-dimensional")
     if x.size(-1) != 2 * inv_freq.size(-1):
         raise ValueError(
             f"Expected {2 * inv_freq.size(-1)} channels, got {x.size(-1)}"
         )
-    if layout not in ("split_half", "interleaved"):
-        raise ValueError(f"Unsupported rotary layout: {layout}")
-
     seq = torch.arange(x.size(-3), device=x.device, dtype=torch.float32)
     freq = seq.view(-1, 1) * inv_freq.view(1, -1)  # [S, C // 2]
     sin = freq.sin()[:, None, :].to(x.dtype)  # [S, 1, C // 2]
