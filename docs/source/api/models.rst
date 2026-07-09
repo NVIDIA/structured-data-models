@@ -1,6 +1,21 @@
 sdm.models
 ==========
 
+.. list-table::
+   :header-rows: 1
+
+   * - Model
+     - Release
+     - Parameters
+     - Code License
+     - Weights License
+   * - `TabICLv2 <https://arxiv.org/abs/2602.11139>`__
+     - 2026-02-12
+     - | 27.55M (classification)
+       | 28.54M (regression)
+     - `BSD-3-Clause <https://github.com/soda-inria/tabicl/blob/main/LICENSE>`__
+     - `BSD-3-Clause <https://huggingface.co/jingang/TabICL>`__
+
 .. autosummary::
    :toctree: generated
    :nosignatures:
