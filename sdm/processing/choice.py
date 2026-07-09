@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import cast
 
 import torch
 
@@ -8,17 +9,11 @@ from sdm.tensor import TableTensor
 
 
 class Choice(Processor, InvertibleMixin):
-    """Select one option uniformly at random and delegate to it.
+    """Delegate to one option drawn uniformly at random.
 
-    The selection happens once, at construction, and consumes a single
-    draw from the global CPU generator; seed with
-    :func:`torch.manual_seed` to make the selection reproducible. Only
-    the selected option is kept and registered as a submodule;
-    unselected options are discarded, so they are never fitted, moved
-    between devices, or checkpointed.
-
-    Constructing the same recipe repeatedly therefore yields ensemble
-    members with independently selected processing routes.
+    The option is drawn from the global CPU generator when the processor
+    is fitted; seed with :func:`torch.manual_seed` to make it
+    reproducible. Only the drawn option is fitted; refitting draws again.
 
     Args:
         options: Non-empty sequence of candidate processors.
@@ -30,11 +25,21 @@ class Choice(Processor, InvertibleMixin):
         super().__init__()
         if len(options) == 0:
             raise ValueError("options must be non-empty.")
-        index = int(torch.randint(len(options), (1,)).item())
-        self.selected: Processor = options[index]
-        self.requires_fit = self.selected.requires_fit
+        self.options = torch.nn.ModuleList(options)
+        self._index: int | None = None
+
+    @property
+    def selected(self) -> Processor:
+        """The drawn option."""
+        if self._index is None:
+            raise RuntimeError(
+                f"'{self.__class__.__name__}' has no drawn option; "
+                "call 'fit()' before."
+            )
+        return cast(Processor, self.options[self._index])
 
     def _fit(self, input: TableTensor) -> None:
+        self._index = int(torch.randint(len(self.options), (1,)).item())
         self.selected.fit(input)
 
     def _transform(self, input: TableTensor) -> TableTensor:
@@ -49,9 +54,28 @@ class Choice(Processor, InvertibleMixin):
             )
         return fn(input)
 
+    def get_extra_state(self) -> int | None:  # noqa: D102
+        return self._index
+
+    def set_extra_state(self, state: int | None) -> None:  # noqa: D102
+        if state is not None and not 0 <= state < len(self.options):
+            raise ValueError(
+                f"Cannot restore drawn option {state} on "
+                f"'{self.__class__.__name__}' with {len(self.options)} "
+                "options."
+            )
+        self._index = state
+
     def __repr__(self, *, indent: int = 0) -> str:
+        processors = (
+            list(self.options) if self._index is None else [self.selected]
+        )
+        inner = ",\n".join(
+            cast(Processor, processor).__repr__(indent=indent + 2)
+            for processor in processors
+        )
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"
-            f"{self.selected.__repr__(indent=indent + 2)},\n"
+            f"{inner},\n"
             f"{' ' * indent})"
         )

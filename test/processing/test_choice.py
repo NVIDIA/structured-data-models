@@ -44,23 +44,27 @@ def test_choice_rejects_empty_options() -> None:
         Choice([])
 
 
-def test_choice_registers_only_the_selected_option() -> None:
+def test_choice_draws_at_fit() -> None:
     choice = Choice([Identity(), StandardScale()])
 
-    children = list(choice.children())
-
-    assert len(children) == 1
-    assert children[0] is choice.selected
-
-
-def test_choice_mirrors_requires_fit_of_selected() -> None:
-    stateless = Choice([Identity()])
-    stateful = Choice([StandardScale()])
-
-    assert stateless.requires_fit is False
-    assert stateful.requires_fit is True
     with pytest.raises(RuntimeError, match="not fitted"):
-        stateful.transform(_table())
+        choice.transform(_table())
+    with pytest.raises(RuntimeError, match="no drawn option"):
+        _ = choice.selected
+
+    choice.fit(_table())
+
+    assert choice.selected in list(choice.options)
+
+
+def test_choice_keeps_state_dict_keys_independent_of_the_draw() -> None:
+    table = _table()
+    torch.manual_seed(0)
+    first = Choice([Identity(), StandardScale()]).fit(table)
+    torch.manual_seed(1)
+    second = Choice([Identity(), StandardScale()]).fit(table)
+
+    assert set(first.state_dict()) == set(second.state_dict())
 
 
 def test_choice_delegates_fit_transform_and_inverse() -> None:
@@ -85,41 +89,50 @@ def test_choice_inverse_requires_invertible_selected() -> None:
         choice.inverse_transform(table)
 
 
-def test_choice_repr_shows_the_selected_option() -> None:
-    choice = Choice([StandardScale()])
+def test_choice_repr_shows_options_then_the_drawn_option() -> None:
+    choice = Choice([Identity(), StandardScale()])
 
-    assert "Choice(" in repr(choice)
+    assert "Identity" in repr(choice)
     assert "StandardScale" in repr(choice)
 
+    torch.manual_seed(0)
+    choice.fit(_table())
 
-def test_recipe_members_select_independent_options() -> None:
+    drawn = type(choice.selected).__name__
+    assert repr(choice).count("(") == 2
+    assert drawn in repr(choice)
+
+
+def test_recipe_members_draw_independent_options_at_fit() -> None:
+    template = _make_recipe()
+    members = [copy.deepcopy(template) for _ in range(8)]
+
     torch.manual_seed(123)
-    members = [_make_recipe() for _ in range(8)]
+    for member in members:
+        member.features.fit(_table())
 
     picks = {
         type(_choice_step(member).selected).__name__ for member in members
     }
-
     assert picks == {"Identity", "Quantile"}
-    for member in members:
-        member.features.fit_transform(_table())
 
 
 def test_fitting_one_member_leaves_others_unfitted() -> None:
-    torch.manual_seed(0)
     first = _make_recipe()
     second = _make_recipe()
 
+    torch.manual_seed(0)
     first.features.fit(_table())
 
     assert first.features._fitted
     assert not second.features._fitted
-    assert not _choice_step(second).selected._fitted
+    assert not any(option._fitted for option in _choice_step(second).options)
 
 
-def test_deepcopy_keeps_selection_but_not_identity() -> None:
-    torch.manual_seed(0)
+def test_deepcopy_of_fitted_member_keeps_the_draw() -> None:
     member = _make_recipe()
+    torch.manual_seed(0)
+    member.features.fit(_table())
 
     duplicate = copy.deepcopy(member)
 
