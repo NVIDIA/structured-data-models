@@ -3,12 +3,6 @@
 The factory composes shared :mod:`sdm.processing` processors into the
 ``TableTensor``-to-model-input path of the original TabICLv2 model
 (``soda-inria/tabicl``).
-
-The recipe serves regression and classification through a shared feature
-pipeline, a target pipeline dispatched by the target semantic type, and
-task-dependent output processing. Stochastic steps draw from the global
-CPU generator at fit time; seed with :func:`torch.manual_seed` to make a
-fitted recipe reproducible.
 """
 
 from sdm.processing import (
@@ -30,15 +24,7 @@ from sdm.processing import (
 
 
 def default_recipe() -> Recipe:
-    """Return the default regression and classification recipe.
-
-    Categorical features are converted to numerical values before mean
-    imputation, constant-feature filtering, standard scaling, a drawn
-    per-member normalization, two-stage 4-sigma outlier clipping, and a
-    drawn cyclic feature shift. Numerical targets are standard-scaled and
-    categorical targets are class-shuffled. Classification logits use
-    temperature-scaled softmax; regression outputs remain unchanged.
-    """
+    """Return the default regression and classification recipe."""
     return Recipe(
         features=[
             StypeDispatch(
