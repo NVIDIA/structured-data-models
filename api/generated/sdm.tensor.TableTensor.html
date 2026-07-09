@@ -137,6 +137,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.columns"><code class="docutils literal notranslate">columns</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.datetime"><code class="docutils literal notranslate">datetime</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.drop_columns"><code class="docutils literal notranslate">drop_columns()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.drop_stypes"><code class="docutils literal notranslate">drop_stypes()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.from_arrow"><code class="docutils literal notranslate">from_arrow()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.from_pandas"><code class="docutils literal notranslate">from_pandas()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.from_tensor"><code class="docutils literal notranslate">from_tensor()</span></code></a></li>
@@ -294,6 +295,26 @@ The last dimension represents named columns.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>columns</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – The columns to drop.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Self</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.TableTensor.drop_stypes">
+<span class="sig-name descname"><span class="pre">drop_stypes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stypes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.TableTensor.drop_stypes" title="Link to this definition">¶</a></dt>
+<dd><p>Return a table with <code class="docutils literal notranslate"><span class="pre">stypes</span></code> columns removed.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="n">Stype</span><span class="o">.</span><span class="n">categorical</span><span class="p">]</span> <span class="o">==</span> <span class="p">(</span><span class="s2">&quot;country&quot;</span><span class="p">,</span> <span class="s2">&quot;segment&quot;</span><span class="p">)</span>
+</span><span data-line="2"><span class="n">table</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">drop_stypes</span><span class="p">(</span><span class="s2">&quot;categorical&quot;</span><span class="p">)</span>
+</span><span data-line="3"><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="n">Stype</span><span class="o">.</span><span class="n">categorical</span><span class="p">]</span> <span class="o">==</span> <span class="p">()</span>
+</span><span data-line="4"><span class="k">assert</span> <span class="n">table</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="n">Stype</span><span class="o">.</span><span class="n">numerical</span><span class="p">]</span> <span class="o">==</span> <span class="p">(</span><span class="s2">&quot;age&quot;</span><span class="p">,</span> <span class="s2">&quot;income&quot;</span><span class="p">)</span>
+</span></pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stypes</strong> (<a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><em>Stype</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><em>Stype</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – The semantic type or semantic types to drop.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><em>Self</em></p>
@@ -520,7 +541,7 @@ constructor.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=cc3ac24f"></script>
+      <script src="../../_static/documentation_options.js?v=90957212"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
