@@ -470,11 +470,36 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
-            columns=cast(
-                Mapping[StypeLike, Sequence[str]],
-                {stype: self._columns[stype] for stype in stypes},
-            ),
+            columns={stype: self._columns[stype] for stype in stypes},
             **{stype: getattr(self, stype) for stype in stypes},
+        )
+
+    def drop_stypes(
+        self,
+        stypes: StypeLike | Iterable[StypeLike],
+    ) -> Self:
+        r"""Return a table with ``stypes`` columns removed.
+
+        .. code-block:: python
+
+            assert table.columns[Stype.categorical] == ("country", "segment")
+            table = table.drop_stypes("categorical")
+            assert table.columns[Stype.categorical] == ()
+            assert table.columns[Stype.numerical] == ("age", "income")
+
+        Args:
+            stypes: The semantic type or semantic types to drop.
+        """
+        if isinstance(stypes, (str, Stype)):
+            stypes = (stypes,)
+        stypes = {Stype(stype) for stype in stypes}
+
+        keep = tuple(stype for stype in self._columns if stype not in stypes)
+        return self.__class__(
+            size=self.size()[:-1],
+            columns={stype: self._columns[stype] for stype in keep},
+            device=self.device,
+            **{stype: getattr(self, stype) for stype in keep},
         )
 
     def select_columns(self, columns: str | Iterable[str]) -> Self:

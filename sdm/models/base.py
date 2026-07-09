@@ -22,14 +22,17 @@ class BaseModel(torch.nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
-        self._cache: Cache | None = None  # TODO Single cache for now.
+        # One cache per ensemble member.
+        self._caches: list[Cache] | None = None
 
     @torch.inference_mode()
     def forward(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
-    ) -> Tensor:  # [..., R - R_test, *]
+        *,
+        num_estimators: int = 1,
+    ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
 
         Args:
@@ -39,18 +42,34 @@ class BaseModel(torch.nn.Module, ABC):
                 examples.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            num_estimators: The number of ensemble members ``E``.
+                The forward pass runs once per member, and predictions are
+                averaged across members.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
+        if num_estimators < 1:
+            raise ValueError(
+                f"Expected 'num_estimators' to be a positive integer "
+                f"(got {num_estimators})"
+            )
+
         x, y = self._preprocess(x, y)
-        return self._forward(x, y, cache=None)
+        # TODO Create an ensemble dimension to process across ensemble
+        # members for better efficiency.
+        outs: list[Tensor] = []
+        for _ in range(num_estimators):
+            outs.append(self._forward(x, y, cache=None))
+        return torch.stack(outs).mean(dim=0)
 
     @torch.inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R_train, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        *,
+        num_estimators: int = 1,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -62,18 +81,32 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            num_estimators: The number of ensemble members ``E``.
+                In-context examples are fitted once per member, and subsequent
+                :meth:`predict` calls average predictions across members.
         """
+        if num_estimators < 1:
+            raise ValueError(
+                f"Expected 'num_estimators' to be a positive integer "
+                f"(got {num_estimators})"
+            )
+
         self.clear()
         x, y = self._preprocess(x, y)
-        cache = Cache({"y.dtype": y.dtype})
         x = x[..., : y.size(-1), :]
-        self._forward(x, y, cache=cache)
-        self._cache = cache
-        self._cache.freeze()
+        caches: list[Cache] = []
+        for _ in range(num_estimators):
+            # TODO: Don't store y.dtype in every cache once we introduce a
+            # nested cache.
+            cache = Cache({"y.dtype": y.dtype})
+            self._forward(x, y, cache=cache)
+            cache.freeze()
+            caches.append(cache)
+        self._caches = caches
 
     def clear(self) -> None:
         r"""Clears cached in-context examples."""
-        self._cache = None
+        self._caches = None
 
     @torch.inference_mode()
     def predict(
@@ -91,9 +124,10 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_test`` rows and ``C`` columns.
 
         Returns:
-            The prediction for ``[..., R_test]`` test rows.
+            The prediction for ``[..., R_test]`` test rows, averaged across
+            ensemble members when fitted with ``num_estimators > 1``.
         """
-        if self._cache is None:
+        if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
@@ -101,11 +135,14 @@ class BaseModel(torch.nn.Module, ABC):
 
         y = torch.empty(
             (*x.size()[:-2], 0),
-            dtype=cast(torch.dtype, self._cache["y.dtype"]),
+            dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
             device=x.device,
         )
         x, y = self._preprocess(x, y)
-        return self._forward(x, y, cache=self._cache)
+        outs: list[Tensor] = []
+        for cache in self._caches:
+            outs.append(self._forward(x, y, cache=cache))
+        return torch.stack(outs).mean(dim=0)
 
     # Helpers #################################################################
 
