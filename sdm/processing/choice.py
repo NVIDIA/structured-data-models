@@ -15,15 +15,13 @@ class Choice(Processor, InvertibleMixin):
     reproducible. Only the drawn option is fitted; refitting draws again.
 
     Args:
-        args: Non-empty sequence of candidate processors.
+        args: Sequence of candidate processors.
     """
 
     supported_stypes = frozenset(Stype)
 
     def __init__(self, *args: Processor) -> None:
         super().__init__()
-        if len(args) == 0:
-            raise ValueError("options must be non-empty.")
         self.options = torch.nn.ModuleList(args)
         self._index: int | None = None
 
