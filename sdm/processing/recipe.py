@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import overload
 
 from typing_extensions import Self
 
@@ -119,25 +120,48 @@ class Recipe:
                     dispatcher._reset()
         return self
 
+    @overload
+    def preprocess(
+        self,
+        features: TableTensor,
+        target: None = None,
+    ) -> TableTensor: ...
+
+    @overload
     def preprocess(
         self,
         features: TableTensor,
         target: TableTensor,
-    ) -> tuple[TableTensor, TableTensor]:
-        """Transform features and their target without fitting.
+    ) -> tuple[TableTensor, TableTensor]: ...
+
+    @overload
+    def preprocess(
+        self,
+        features: TableTensor,
+        target: TableTensor | None,
+    ) -> TableTensor | tuple[TableTensor, TableTensor]: ...
+
+    def preprocess(
+        self,
+        features: TableTensor,
+        target: TableTensor | None = None,
+    ) -> TableTensor | tuple[TableTensor, TableTensor]:
+        """Transform features and an optional target without fitting.
 
         Args:
             features: Feature table with shape ``[R, C]``, where ``R`` is
                 the number of rows and ``C`` is the number of columns.
-            target: Single-column target table with shape ``[R, 1]``.
+            target: Optional single-column target table with shape
+                ``[R, 1]``.
 
         Returns:
-            Transformed feature and target tables.
+            Transformed features, or transformed features and target when
+            ``target`` is provided.
         """
-        return (
-            self.features.transform(features),
-            self.target.transform(target),
-        )
+        features = self.features.transform(features)
+        if target is None:
+            return features
+        return features, self.target.transform(target)
 
     def __repr__(self) -> str:
         return (
