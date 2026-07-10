@@ -126,6 +126,7 @@ class StringTensor(VarLenTensor):
             device: The device.
         """
         import cupy as cp
+        import pylibcudf as plc
         from cudf.api.types import is_string_dtype
 
         if size is None:
@@ -154,11 +155,22 @@ class StringTensor(VarLenTensor):
                 size=size,
             )
 
+        # NOTE cudf 26.02+ removed 'Column.children', so access the offsets
+        # child via the underlying 'pylibcudf.Column' instead, which works on
+        # both cudf 25.x and 26.x. Its data buffer is untyped, so read the
+        # offset dtype from the pylibcudf column type.
+        offsets = column.plc_column.children()[0]
+        offset_dtype = (
+            torch.int32
+            if offsets.type().id() == plc.TypeId.INT32
+            else torch.int64
+        )
+
         return cls(
             data=torch.from_dlpack(cp.asarray(column.data)).to(device),
-            offset=torch.from_dlpack(cp.asarray(column.children[0])).to(
-                device
-            ),
+            offset=torch.from_dlpack(cp.asarray(offsets.data()))
+            .view(offset_dtype)
+            .to(device),
             size=size,
             storage_offset=column.offset,
         )
