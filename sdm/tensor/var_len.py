@@ -10,6 +10,7 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import Self, override
 
+from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import ARROW_TORCH_DTYPES, to_arrow
 
 aten = torch.ops.aten
@@ -451,7 +452,11 @@ class VarLenTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            with enable_reentrant_dispatch():  # Record autograd in `_data`.
+            # Reentrant dispatch records autograd in `_data`.
+            with (
+                _preserve_view_inference_mode(func, args[0]),
+                enable_reentrant_dispatch(),
+            ):
                 return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(

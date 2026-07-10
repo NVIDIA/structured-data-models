@@ -94,6 +94,7 @@ def test_tabiclv2_recipe() -> None:
     # The recipe matches its manual driver-side application:
     out = model(x, y, recipe=model.default_recipe())
     assert out.size() == (R - R_train, 999)
+    assert torch.is_inference(out)
     recipe = model.default_recipe()
     recipe.features.fit(x[:R_train])
     raw = model(

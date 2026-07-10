@@ -210,8 +210,6 @@ class BaseModel(torch.nn.Module, ABC):
 
     # Helpers #################################################################
 
-    # FIXME: Fix TableTensor to support inference mode.
-    @torch.inference_mode(False)
     def _preprocess(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
@@ -288,8 +286,6 @@ class BaseModel(torch.nn.Module, ABC):
 
         return x, y
 
-    # FIXME: Fix TableTensor to support inference mode.
-    @torch.inference_mode(False)
     def _postprocess(
         self,
         out: Tensor,  # [..., R_test, *]
@@ -311,8 +307,6 @@ class BaseModel(torch.nn.Module, ABC):
 
         return table.numerical
 
-    # FIXME: Fix TableTensor to support inference mode.
-    @torch.inference_mode(False)
     def _transform_output(
         self,
         out: Tensor,  # [..., R_test, *]
