@@ -8,10 +8,10 @@ The integration branch is `rbendias-tabicls-v2-recipe-parity`, based on SDM
 `da9bc41bc69a5f430a255e305e0795d4cedfc113`. The checkpoint files are fixed by
 content rather than a mutable Hub branch:
 
-| Variant | File | SHA-256 |
-| --- | --- | --- |
+| Variant        | File                                 | SHA-256                                                            |
+| -------------- | ------------------------------------ | ------------------------------------------------------------------ |
 | classification | `tabicl-classifier-v2-20260212.ckpt` | `bdc7dbd5e4ff21f8f0456fcf90c6b7cdf72dbea960f2d05b19bec19f9b3d4ed0` |
-| regression | `tabicl-regressor-v2-20260212.ckpt` | `0db9cb538f114e79026bf08f45f41ad8dd7ad2de2aaca9a5ca8cd3bd9748ae7a` |
+| regression     | `tabicl-regressor-v2-20260212.ckpt`  | `0db9cb538f114e79026bf08f45f41ad8dd7ad2de2aaca9a5ca8cd3bd9748ae7a` |
 
 ## Integrated PRs and conflict decisions
 
@@ -26,15 +26,15 @@ The dependency-aware integration order was:
 7. #230, TabICLv2 default recipe.
 8. #221, model recipe/cache/ensemble orchestration.
 
-| PR | Result | Conflict classification and resolution |
-| --- | --- | --- |
-| #202 | merge `28f5cc0` | Clean. Dependency for dispatch inversion. |
-| #236 | merge `19f2407` | Clean. Primitive is integrated but deliberately not used by the TabICLv2 default recipe. |
-| #244 | merge `4e77843` | Clean. Used before converting categorical codes to numbers. |
-| #220 | merge `9a682c4` | Syntactic export conflict in `sdm/processing/__init__.py`; resolved as the union of `CategoricalAlign`, `CategoricalImpute`, and `TaskDispatch`. No behavior was selected by the resolution. |
-| #245 | merge `b63e72f` | Clean. |
-| #235 | merge `acd137e` | Clean. Establishes score gather direction for class inversion. |
-| #230 | port `bb5548c` | The PR was based on a stale #220 version. Only its final recipe/model delta was ported. Stale tests that inverted a numerical score head through a categorical `StypeDispatch` route were not copied. This is a behavioral compatibility resolution, documented rather than hidden. |
+| PR   | Result                          | Conflict classification and resolution                                                                                                                                                                                                                                                                                                      |
+| ---- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #202 | merge `28f5cc0`                 | Clean. Dependency for dispatch inversion.                                                                                                                                                                                                                                                                                                   |
+| #236 | merge `19f2407`                 | Clean. Primitive is integrated but deliberately not used by the TabICLv2 default recipe.                                                                                                                                                                                                                                                    |
+| #244 | merge `4e77843`                 | Clean. Used before converting categorical codes to numbers.                                                                                                                                                                                                                                                                                 |
+| #220 | merge `9a682c4`                 | Syntactic export conflict in `sdm/processing/__init__.py`; resolved as the union of `CategoricalAlign`, `CategoricalImpute`, and `TaskDispatch`. No behavior was selected by the resolution.                                                                                                                                                |
+| #245 | merge `b63e72f`                 | Clean.                                                                                                                                                                                                                                                                                                                                      |
+| #235 | merge `acd137e`                 | Clean. Establishes score gather direction for class inversion.                                                                                                                                                                                                                                                                              |
+| #230 | port `bb5548c`                  | The PR was based on a stale #220 version. Only its final recipe/model delta was ported. Stale tests that inverted a numerical score head through a categorical `StypeDispatch` route were not copied. This is a behavioral compatibility resolution, documented rather than hidden.                                                         |
 | #221 | merge `72c907b`, then corrected | The original order was behaviorally wrong: it ran target inverse and nonlinear output processing per member before averaging. Analytic tests demonstrated the error. The corrected order is target inverse per member, aggregation in a canonical space, then final output processing once. Each cache now owns its matching fitted recipe. |
 
 ## Pipeline diagrams
@@ -102,20 +102,20 @@ discrete metadata. Discrete mappings, member order, permutations, and metadata
 use exact equality. Floating-point comparison starts at exact equality and
 uses a nonzero tolerance only where the measured source is documented below.
 
-| Observable stage | Shape and dtype | Mapping and fitted state |
-| --- | --- | --- |
-| raw feature input | `[N_train + N_test, C_raw]`; pandas may be mixed/object, SDM uses stype-specific blocks | No fit. Original values before either implementation's encoding. |
-| encoded numerical features | same row count; reference `float64`, SDM normally `torch.float32`; `C_encoded` may reorder/drop unsupported columns | Reference: fitted sklearn ordinal vocabulary, categorical block first. SDM: fitted `CategoricalAlign` vocabulary, numerical block first after `StypeDispatch`. Unknown SDM categories and missing codes remain `-1`. |
-| feature pipeline output | `[N_all, C_nonconstant]`; reference `float64`, SDM `float32` | Mean imputation, fitted constant selection, scaling, normalization choice, and outlier processing have completed. |
-| feature permutation | `[N_all, C_nonconstant]`, same dtype as preceding stage | Exact gather `output[..., j] = input[..., P[j]]`; columns move with values. |
-| target encoding | `[N_train]`; sklearn `int64` or `float64`, SDM categorical `int32/int64` or numerical `float32` | Classification maps labels to codes; regression remains in original target space at this semantic checkpoint. |
-| target transformation | `[N_train]` | Classification `new_code = P[old_code]`; regression `(y - mean) / scale`. |
-| final model input | features `[N_all, C_model]` in `float32`; target `[N_train]`, reference classification is passed as float and SDM as integer | Includes the injected feature/class member plan. Feature values are compared after both implementations cast to model dtype. |
-| raw model output per member | classification `[N_test, K_active]` in reference and `[N_test, 10]` before SDM truncation; regression `[N_test, 999]`; `float32` | Checkpoint output in member-local class/target space. Member index and output type are metadata. |
-| output after target inverse | classification `[N_test, K_active]`; regression preserves the requested output tail | Classification `canonical[..., old] = raw[..., P[old]]`; regression `raw * target_scale + target_mean`. |
-| aggregated output | same shape as canonical member output | Arithmetic mean. Space is exactly `canonical_logits` for classification and `original_target` for regression. |
-| final output postprocessing | classification probabilities; regression unchanged in the current SDM recipe | Classification applies `softmax(canonical_logits / 0.9)` once after averaging. |
-| user-facing prediction | SDM returns the final tensor | Classification currently returns probabilities rather than decoded labels. Regression currently returns 999 inverse-scaled quantile coordinates; the sklearn wrapper instead exposes mean/median/quantile output types. |
+| Observable stage            | Shape and dtype                                                                                                                  | Mapping and fitted state                                                                                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| raw feature input           | `[N_train + N_test, C_raw]`; pandas may be mixed/object, SDM uses stype-specific blocks                                          | No fit. Original values before either implementation's encoding.                                                                                                                                                        |
+| encoded numerical features  | same row count; reference `float64`, SDM normally `torch.float32`; `C_encoded` may reorder/drop unsupported columns              | Reference: fitted sklearn ordinal vocabulary, categorical block first. SDM: fitted `CategoricalAlign` vocabulary, numerical block first after `StypeDispatch`. Unknown SDM categories and missing codes remain `-1`.    |
+| feature pipeline output     | `[N_all, C_nonconstant]`; reference `float64`, SDM `float32`                                                                     | Mean imputation, fitted constant selection, scaling, normalization choice, and outlier processing have completed.                                                                                                       |
+| feature permutation         | `[N_all, C_nonconstant]`, same dtype as preceding stage                                                                          | Exact gather `output[..., j] = input[..., P[j]]`; columns move with values.                                                                                                                                             |
+| target encoding             | `[N_train]`; sklearn `int64` or `float64`, SDM categorical `int32/int64` or numerical `float32`                                  | Classification maps labels to codes; regression remains in original target space at this semantic checkpoint.                                                                                                           |
+| target transformation       | `[N_train]`                                                                                                                      | Classification `new_code = P[old_code]`; regression `(y - mean) / scale`.                                                                                                                                               |
+| final model input           | features `[N_all, C_model]` in `float32`; target `[N_train]`, reference classification is passed as float and SDM as integer     | Includes the injected feature/class member plan. Feature values are compared after both implementations cast to model dtype.                                                                                            |
+| raw model output per member | classification `[N_test, K_active]` in reference and `[N_test, 10]` before SDM truncation; regression `[N_test, 999]`; `float32` | Checkpoint output in member-local class/target space. Member index and output type are metadata.                                                                                                                        |
+| output after target inverse | classification `[N_test, K_active]`; regression preserves the requested output tail                                              | Classification `canonical[..., old] = raw[..., P[old]]`; regression `raw * target_scale + target_mean`.                                                                                                                 |
+| aggregated output           | same shape as canonical member output                                                                                            | Arithmetic mean. Space is exactly `canonical_logits` for classification and `original_target` for regression.                                                                                                           |
+| final output postprocessing | classification probabilities; regression unchanged in the current SDM recipe                                                     | Classification applies `softmax(canonical_logits / 0.9)` once after averaging.                                                                                                                                          |
+| user-facing prediction      | SDM returns the final tensor                                                                                                     | Classification currently returns probabilities rather than decoded labels. Regression currently returns 999 inverse-scaled quantile coordinates; the sklearn wrapper instead exposes mean/median/quantile output types. |
 
 ## Integrated processor contracts
 
@@ -123,24 +123,24 @@ uses a nonzero tolerance only where the measured source is documented below.
 classes. All fitting uses context/train rows only. Feature processors operate
 on the whole train+query table after fitting.
 
-| Processor | Input to output | Fitted state and random-state owner | Value/order/space change | Inverse and aggregation rule |
-| --- | --- | --- | --- | --- |
-| `StypeDispatch` | mixed `TableTensor [N,C]` to concatenated route outputs | Fits every non-empty configured route; no RNG | Concatenates route outputs in configured stype order, so it may change stype, count, and order | Generic inverse only for stype-preserving routes. The recipe's categorical-to-numerical route is not inverted. |
-| `CategoricalAlign` | categorical codes `int32/int64 [N,C_cat]` to aligned codes of the same shape/dtype | Stores context-observed category values in first-observation order; no RNG | Local category value maps to fitted vocabulary index; missing or unseen maps to `-1` | Not invertible; original query vocabulary is not retained. |
-| `ToNumerical` | numerical/categorical blocks to one floating numerical block | Stateless | Casts category codes to numerical dtype and appends them after existing numerical columns; `-1` is preserved | Not invertible; category metadata is discarded. |
-| `MeanImpute` | float-like `[N,C]` to same | Per-column context mean; all-NaN uses `0`; no RNG | NaN becomes fitted mean | Not invertible because missing positions are not retained. |
-| `ConstantFilter` | `[N,C]` to `[N,C_keep]` | Stores context column names with more than one unique value; no RNG | Drops and therefore reorders only through selection | Not invertible; dropped values are unavailable. |
-| feature `StandardScale(epsilon=1e-6)` | float `[N,C]` to same | Context mean and population std plus epsilon; no RNG | `(x - mean) / scale`; values and target space change | Algebraically invertible, but unused on the feature inverse path. Reference additionally hard-clips this stage to `[-100,100]`. |
-| `Choice` | delegates `[N,C]` to one option | Global PyTorch CPU RNG chooses one option during each member fit; selected option owns its own state | Current default is `Identity` or nonlinear `Quantile` | Inverse delegates only when the selected option is invertible. Feature-only; no output aggregation interaction. |
-| `Identity` | same shape/dtype/values | Stateless, no RNG | None | Exact inverse; commutes with every operation. |
-| `Quantile` | float `[N,C]` to same | Fitted quantiles; its subsampling generator owns `random_state=0` | Nonlinear marginal map, normally to a normal distribution | Nonlinear inverse; feature-only. It is not the reference default `PowerTransformer`. |
-| `SigmaClip(threshold=4)` | float `[N,C]` to same | Two-pass context mean/std and bounds; no RNG | Nonlinear logarithmic soft clipping | Not invertible. This semantically corresponds to reference `OutlierRemover`. |
-| `FeaturePermute(shift)` | numerical `[N,C]` to same | Global PyTorch CPU RNG owns the cyclic offset; stores `P` | `output[j] = input[P[j]]`; exact column-order change | Inverse gathers by `argsort(P)`. Feature-only. |
-| `TargetDispatch` | one raw target column to selected route | Fitted raw stype selects classification or regression and persists that task; no RNG itself | Owns the complete model-head inverse even though the head is numerical | Mandatory before aggregation. It prevents a classification score head from being misrouted as regression merely because logits are numerical. |
-| `CategoryShuffle(shift)` | categorical target `[N,1]` to same | Global PyTorch CPU RNG owns offset; stores forward permutation `P` and class count | Forward target mapping is `new=P[old]`; category metadata moves so decoded training labels remain stable | Model-score inverse is `canonical[old]=raw[P[old]]` and drops inactive trailing head entries. Linear gather commutes with averaging only if every member has the same `P`; therefore each member is canonicalized first. |
-| target `StandardScale()` | numerical target `[N,1]` to same | Context target mean and population scale; no RNG | Maps original target to standardized model space | `y=model_y*scale+mean`. Affine inverse mathematically commutes with a mean, but the generic contract always inverses per member; a nonlinear target inverse does not commute. |
-| `TaskDispatch` | numerical aggregated output to selected output route | Target fit resolves task; routes must be stateless; no RNG | Classification selects softmax, regression selects identity | No inverse. Runs exactly once after aggregation. |
-| `SoftmaxTemperature(0.9)` | logits `[...,K]` to probabilities, float | Stateless | Nonlinear `softmax(x/0.9)` | Not invertible and does not commute with averaging. Probability averaging and logit averaging are observably different. |
+| Processor                             | Input to output                                                                    | Fitted state and random-state owner                                                                  | Value/order/space change                                                                                     | Inverse and aggregation rule                                                                                                                                                                                             |
+| ------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `StypeDispatch`                       | mixed `TableTensor [N,C]` to concatenated route outputs                            | Fits every non-empty configured route; no RNG                                                        | Concatenates route outputs in configured stype order, so it may change stype, count, and order               | Generic inverse only for stype-preserving routes. The recipe's categorical-to-numerical route is not inverted.                                                                                                           |
+| `CategoricalAlign`                    | categorical codes `int32/int64 [N,C_cat]` to aligned codes of the same shape/dtype | Stores context-observed category values in first-observation order; no RNG                           | Local category value maps to fitted vocabulary index; missing or unseen maps to `-1`                         | Not invertible; original query vocabulary is not retained.                                                                                                                                                               |
+| `ToNumerical`                         | numerical/categorical blocks to one floating numerical block                       | Stateless                                                                                            | Casts category codes to numerical dtype and appends them after existing numerical columns; `-1` is preserved | Not invertible; category metadata is discarded.                                                                                                                                                                          |
+| `MeanImpute`                          | float-like `[N,C]` to same                                                         | Per-column context mean; all-NaN uses `0`; no RNG                                                    | NaN becomes fitted mean                                                                                      | Not invertible because missing positions are not retained.                                                                                                                                                               |
+| `ConstantFilter`                      | `[N,C]` to `[N,C_keep]`                                                            | Stores context column names with more than one unique value; no RNG                                  | Drops and therefore reorders only through selection                                                          | Not invertible; dropped values are unavailable.                                                                                                                                                                          |
+| feature `StandardScale(epsilon=1e-6)` | float `[N,C]` to same                                                              | Context mean and population std plus epsilon; no RNG                                                 | `(x - mean) / scale`; values and target space change                                                         | Algebraically invertible, but unused on the feature inverse path. Reference additionally hard-clips this stage to `[-100,100]`.                                                                                          |
+| `Choice`                              | delegates `[N,C]` to one option                                                    | Global PyTorch CPU RNG chooses one option during each member fit; selected option owns its own state | Current default is `Identity` or nonlinear `Quantile`                                                        | Inverse delegates only when the selected option is invertible. Feature-only; no output aggregation interaction.                                                                                                          |
+| `Identity`                            | same shape/dtype/values                                                            | Stateless, no RNG                                                                                    | None                                                                                                         | Exact inverse; commutes with every operation.                                                                                                                                                                            |
+| `Quantile`                            | float `[N,C]` to same                                                              | Fitted quantiles; its subsampling generator owns `random_state=0`                                    | Nonlinear marginal map, normally to a normal distribution                                                    | Nonlinear inverse; feature-only. It is not the reference default `PowerTransformer`.                                                                                                                                     |
+| `SigmaClip(threshold=4)`              | float `[N,C]` to same                                                              | Two-pass context mean/std and bounds; no RNG                                                         | Nonlinear logarithmic soft clipping                                                                          | Not invertible. This semantically corresponds to reference `OutlierRemover`.                                                                                                                                             |
+| `FeaturePermute(shift)`               | numerical `[N,C]` to same                                                          | Global PyTorch CPU RNG owns the cyclic offset; stores `P`                                            | `output[j] = input[P[j]]`; exact column-order change                                                         | Inverse gathers by `argsort(P)`. Feature-only.                                                                                                                                                                           |
+| `TargetDispatch`                      | one raw target column to selected route                                            | Fitted raw stype selects classification or regression and persists that task; no RNG itself          | Owns the complete model-head inverse even though the head is numerical                                       | Mandatory before aggregation. It prevents a classification score head from being misrouted as regression merely because logits are numerical.                                                                            |
+| `CategoryShuffle(shift)`              | categorical target `[N,1]` to same                                                 | Global PyTorch CPU RNG owns offset; stores forward permutation `P` and class count                   | Forward target mapping is `new=P[old]`; category metadata moves so decoded training labels remain stable     | Model-score inverse is `canonical[old]=raw[P[old]]` and drops inactive trailing head entries. Linear gather commutes with averaging only if every member has the same `P`; therefore each member is canonicalized first. |
+| target `StandardScale()`              | numerical target `[N,1]` to same                                                   | Context target mean and population scale; no RNG                                                     | Maps original target to standardized model space                                                             | `y=model_y*scale+mean`. Affine inverse mathematically commutes with a mean, but the generic contract always inverses per member; a nonlinear target inverse does not commute.                                            |
+| `TaskDispatch`                        | numerical aggregated output to selected output route                               | Target fit resolves task; routes must be stateless; no RNG                                           | Classification selects softmax, regression selects identity                                                  | No inverse. Runs exactly once after aggregation.                                                                                                                                                                         |
+| `SoftmaxTemperature(0.9)`             | logits `[...,K]` to probabilities, float                                           | Stateless                                                                                            | Nonlinear `softmax(x/0.9)`                                                                                   | Not invertible and does not commute with averaging. Probability averaging and logit averaging are observably different.                                                                                                  |
 
 The complete execution order implemented by `BaseModel` is:
 
@@ -165,13 +165,13 @@ different canonical member set when enough permutations exist.
 Reference plan generation may return fewer members than requested. With eight
 requested estimators, the measured counts are:
 
-| Task/configuration | Actual reference members |
-| --- | ---: |
-| binary classification, one feature | 4 |
-| three-class classification, one feature | 6 |
-| regression, one feature | 2 |
-| three-class classification, four features | 8 |
-| regression, four features | 8 |
+| Task/configuration                        | Actual reference members |
+| ----------------------------------------- | -----------------------: |
+| binary classification, one feature        |                        4 |
+| three-class classification, one feature   |                        6 |
+| regression, one feature                   |                        2 |
+| three-class classification, four features |                        8 |
+| regression, four features                 |                        8 |
 
 With one requested estimator, both reference tasks use `none`, identity
 feature order, and (for classification) identity class order. Reference config
@@ -253,15 +253,15 @@ identical inputs. The two implementations use different module layouts, so
 the comparable internal checkpoints are completed row representation,
 normalized ICL query representation, and decoder/head output.
 
-| Task/stage | Maximum absolute | Maximum relative |
-| --- | ---: | ---: |
-| classification row representation | `6.4373016357421875e-6` | `0.0060949851758778095` |
-| classification ICL query | `5.066394805908203e-7` | `0.00039811345050111413` |
-| classification 10-way head | `3.2186508178710938e-6` | `1.8825193137672613e-6` |
-| classification active raw logits | `2.1457672119140625e-6` | `5.61602860216226e-7` |
-| regression row representation | `8.702278137207031e-6` | `0.006907229777425528` |
-| regression ICL query | `3.337860107421875e-6` | `0.0016435239231213927` |
-| regression 999-way head | `4.291534423828125e-6` | `6.464823854912538e-6` |
+| Task/stage                        |        Maximum absolute |         Maximum relative |
+| --------------------------------- | ----------------------: | -----------------------: |
+| classification row representation | `6.4373016357421875e-6` |  `0.0060949851758778095` |
+| classification ICL query          |  `5.066394805908203e-7` | `0.00039811345050111413` |
+| classification 10-way head        | `3.2186508178710938e-6` |  `1.8825193137672613e-6` |
+| classification active raw logits  | `2.1457672119140625e-6` |    `5.61602860216226e-7` |
+| regression row representation     |  `8.702278137207031e-6` |   `0.006907229777425528` |
+| regression ICL query              |  `3.337860107421875e-6` |  `0.0016435239231213927` |
+| regression 999-way head           |  `4.291534423828125e-6` |   `6.464823854912538e-6` |
 
 Large relative errors occur only around values close to zero; absolute errors
 remain below `9e-6`. The first model-internal divergence is the row
@@ -313,12 +313,12 @@ These are deliberately not silently resolved:
 The already implemented generic corrections are the minimal set needed to fix
 the observed orchestration root cause:
 
-| Change | Classification | Regression | Category |
-| --- | --- | --- | --- |
-| one deep-copied fitted recipe per member/cache | fixes member-plan and cache-order failures | fixes member-specific target state | generic pipeline correctness |
-| target inverse per member before mean | fixes class direction/canonical-space failures | fixes nonlinear target inverse placement | generic pipeline correctness |
-| output processor once after mean | fixes logit-vs-probability averaging and nonlinear output placement | prevents future nonlinear output misplacement | generic pipeline correctness |
-| `TargetDispatch` owns full score-head inverse | fixes numerical-logit misrouting and truncation | retains numerical target route | generic task-aware adapter |
+| Change                                         | Classification                                                      | Regression                                    | Category                     |
+| ---------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------- | ---------------------------- |
+| one deep-copied fitted recipe per member/cache | fixes member-plan and cache-order failures                          | fixes member-specific target state            | generic pipeline correctness |
+| target inverse per member before mean          | fixes class direction/canonical-space failures                      | fixes nonlinear target inverse placement      | generic pipeline correctness |
+| output processor once after mean               | fixes logit-vs-probability averaging and nonlinear output placement | prevents future nonlinear output misplacement | generic pipeline correctness |
+| `TargetDispatch` owns full score-head inverse  | fixes numerical-logit misrouting and truncation                     | retains numerical target route                | generic task-aware adapter   |
 
 Remaining parity work, in dependency order, is:
 
