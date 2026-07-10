@@ -80,6 +80,8 @@ class BaseModel(torch.nn.Module, ABC):
             )
             related_tables = None
 
+        recipe = Recipe() if recipe is None else recipe
+
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
         outs: list[Tensor] = []
@@ -92,7 +94,8 @@ class BaseModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out = torch.stack(outs).mean(dim=0)
-        return self._transform_output(out, recipe)
+        table = TableTensor.from_tensor(out.clone())
+        return recipe.output.transform(table).numerical
 
     @torch.inference_mode()
     def fit(
@@ -127,6 +130,8 @@ class BaseModel(torch.nn.Module, ABC):
             related_tables = None
 
         self.clear()
+
+        recipe = Recipe() if recipe is None else recipe
         caches: list[Cache] = []
         for _ in range(num_estimators):
             # TODO Iterate over Recipes instead of using a single recipe once
@@ -183,6 +188,11 @@ class BaseModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
+        if self._recipe is None:
+            raise RuntimeError(
+                f"'{self.__class__.__name__}' not yet fitted. Make sure to "
+                f"'{self.__class__.__name__}.fit()' beforehand."
+            )
 
         recipe = self._recipe
         outs: list[Tensor] = []
@@ -206,7 +216,8 @@ class BaseModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out = torch.stack(outs).mean(dim=0)
-        return self._transform_output(out, recipe)
+        table = TableTensor.from_tensor(out.clone())
+        return recipe.output.transform(table).numerical
 
     # Helpers #################################################################
 
@@ -306,17 +317,6 @@ class BaseModel(torch.nn.Module, ABC):
         table = recipe.target.inverse_transform(table)
 
         return table.numerical
-
-    def _transform_output(
-        self,
-        out: Tensor,  # [..., R_test, *]
-        recipe: Recipe | None,
-    ) -> Tensor:  # [..., R_test, *]
-        if recipe is None:
-            return out
-
-        table = TableTensor.from_tensor(out.clone())
-        return recipe.output.transform(table).numerical
 
     # Abstract Methods ########################################################
 
