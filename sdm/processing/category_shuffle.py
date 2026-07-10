@@ -134,7 +134,7 @@ class CategoryShuffle(Processor, InvertibleMixin):
             )
 
         permutation = self.permutations
-        scores = input.numerical[..., : permutation.numel()].index_select(
+        scores = input.numerical.index_select(
             dim=-1,
             index=permutation,
         )
