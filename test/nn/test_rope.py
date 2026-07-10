@@ -50,7 +50,7 @@ def test_rope(
     out = module(x)
     torch.testing.assert_close(out, expected)
 
-    with pytest.raises(ValueError, match=r"Expected 4 channels"):
+    with pytest.raises(ValueError, match="Expected 4 channels"):
         module(torch.randn(2, 4, 3, 2, device=device))
 
     with pytest.raises(ValueError, match="'channels' must be even"):
