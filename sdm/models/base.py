@@ -71,16 +71,9 @@ class BaseModel(torch.nn.Module, ABC):
                 examples.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-            recipe: The pre- and postprocessing recipe applied around the
-                model. Feature steps are fitted on the in-context rows only
-                and applied to all rows, target steps are fitted on ``y`` and
-                inverted on predictions, and output steps are applied last.
-                Requires ``x`` and ``y`` to be :class:`~sdm.TableTensor`
-                inputs. If ``None``, no recipe is applied.
-            num_estimators: The number of ensemble members ``E``.
-                The forward pass runs once per member, and predictions are
-                averaged across members.
             related_tables: Additional related context provided to the model.
+            recipe: The recipe for pre- and post-processing. If ``None``, no
+                recipe is applied.
             num_estimators: The number of estimators for ensembling.
             batch_size_limit: Maximum number of broadcast attention batch
                 elements processed at once. ``None`` disables batch chunking.
@@ -110,7 +103,7 @@ class BaseModel(torch.nn.Module, ABC):
                     batch_size_limit=batch_size_limit,
                 )
             )
-        return self._postprocess(outs)
+        return self._postprocess(outs, recipe)
 
     @torch.inference_mode()
     def fit(
@@ -133,9 +126,9 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
+            related_tables: Additional related context provided to the model.
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
-            related_tables: Additional related context provided to the model.
             num_estimators: The number of estimators for ensembling.
             batch_size_limit: Maximum number of broadcast attention batch
                 elements processed at once. ``None`` disables batch chunking.
@@ -311,9 +304,11 @@ class BaseModel(torch.nn.Module, ABC):
 
     def _postprocess(
         self,
-        out: Tensor,  # [..., R_test, *]
+        outs: list[Tensor],  # E x [..., R_test, *]
         recipe: Recipe | None,
     ) -> Tensor:  # [..., R_test, *]
+        # Average predictions across ensemble members:
+        out = torch.stack(outs).mean(dim=0)
         if recipe is None:
             return out
 

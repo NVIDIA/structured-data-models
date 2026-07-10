@@ -16,7 +16,7 @@ from sdm.tensor.io import to_arrow
 aten = torch.ops.aten
 
 if TYPE_CHECKING:
-    import cudf  # ty: ignore[unresolved-import]
+    import cudf
 
 
 class ColumnarTensor(Tensor):
@@ -162,7 +162,7 @@ class ColumnarTensor(Tensor):
             device: The device. If ``None``, tensors stay on the cuDF values'
                 CUDA device.
         """
-        from cudf.api.types import (  # ty: ignore[unresolved-import]
+        from cudf.api.types import (
             is_integer_dtype,
             is_string_dtype,
         )
