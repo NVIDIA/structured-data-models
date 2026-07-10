@@ -21,7 +21,7 @@ class RotaryEmbedding(torch.nn.Module):
     def __init__(
         self,
         channels: int,
-        layout: Literal["split_half", "interleaved"] = "split_half",
+        layout: Literal["split_half", "interleaved"],
         theta: float = 100_000,
         requires_grad: bool = True,
         device: torch.device | str | None = None,

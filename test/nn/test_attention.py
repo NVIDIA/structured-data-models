@@ -294,6 +294,7 @@ def test_attention(
     if rope:
         rotary_embedding = RotaryEmbedding(
             channels=head_dim,
+            layout="split_half",
             device=device,
             dtype=dtype,
         )
@@ -348,7 +349,10 @@ def test_attention_kv_cache(qassmax: bool, rope: bool) -> None:
 
     rotary_embedding: RotaryEmbedding | None = None
     if rope:
-        rotary_embedding = RotaryEmbedding(channels=channels // num_heads)
+        rotary_embedding = RotaryEmbedding(
+            channels=channels // num_heads,
+            layout="split_half",
+        )
 
     direct_out = module(
         query=query,
@@ -449,6 +453,7 @@ def test_transformer_block(
     if rope:
         rotary_embedding = RotaryEmbedding(
             channels=channels // num_heads,
+            layout="split_half",
             device=device,
         )
 
