@@ -111,6 +111,7 @@ def test_task_resolver_uses_final_target_type_once(
 def test_task_resolver_clears_failures_and_validates_placement() -> None:
     output = _output()
     recipe = Recipe(output=[TaskDispatch(regression=Identity())])
+    assert "_TaskResolver" not in repr(recipe)
 
     recipe.target.fit(_numerical_target())
     assert recipe.output.transform(output) is output

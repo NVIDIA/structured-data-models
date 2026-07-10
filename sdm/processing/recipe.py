@@ -65,12 +65,7 @@ class _TaskResolver(Processor, InvertibleMixin):
         return fn(input)
 
     def __repr__(self, *, indent: int = 0) -> str:
-        processor = self.processor.__repr__(indent=indent + 2)
-        return (
-            f"{' ' * indent}{self.__class__.__name__}(\n"
-            f"{processor},\n"
-            f"{' ' * indent})"
-        )
+        return self.processor.__repr__(indent=indent)
 
 
 @dataclass(frozen=True, init=False, repr=False)
