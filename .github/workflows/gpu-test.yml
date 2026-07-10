@@ -49,6 +49,7 @@ jobs:
 
       - name: Run tests
         env:
-          FULL_TEST: '1'
+          # Slow tests only on merges to main, matching test.yml and kumo-ml.
+          FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
         run: |
           pytest -rs --durations=25
