@@ -1,7 +1,7 @@
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pyarrow as pa
 import torch
@@ -9,6 +9,7 @@ from torch import Tensor
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
+from sdm.tensor.mixin import DeviceMixin
 
 PREFIX = "sdm_internal"
 ROW_ID = f"__{PREFIX}_row_id__"
@@ -93,7 +94,7 @@ class Relationship:
 
 
 @dataclass(frozen=True, init=False)
-class RelationalData:
+class RelationalData(DeviceMixin):
     r"""Collection of named tables and join relationships.
 
     .. code-block:: python
@@ -166,6 +167,15 @@ class RelationalData:
                             f"to have semantic type '{Stype.id.value}' "
                             f"(got '{stype.value}')"
                         )
+
+    def to(self, device: torch.device | str | None) -> Self:
+        return self.__class__(
+            tables={
+                table_name: cast(TableTensor, table.to(device))
+                for table_name, table in self.tables.items()
+            },
+            relationships=self.relationships,
+        )
 
     def edge_indices(
         self,
