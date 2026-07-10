@@ -754,10 +754,12 @@ def test_return_key_value_positional_compatibility() -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize("rms_norm", [False, True])
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
 def test_transformer_block(
     device: torch.device,
+    rms_norm: bool,
     qassmax: bool,
     rope: bool,
 ) -> None:
@@ -772,6 +774,7 @@ def test_transformer_block(
         num_query_heads=num_heads,
         feedforward_channels=feedforward_channels,
         qassmax=qassmax,
+        rms_norm=rms_norm,
         device=device,
     )
     query = torch.randn(batch_size, query_len, channels, device=device)
@@ -853,7 +856,8 @@ def test_transformer_block(
     torch.testing.assert_close(out1, out3)
 
 
-def test_transformer_block_kv_cache() -> None:
+@pytest.mark.parametrize("rms_norm", [False, True])
+def test_transformer_block_kv_cache(rms_norm: bool) -> None:
     batch_size = 2
     query_len = 3
     key_value_len = 5
@@ -863,6 +867,7 @@ def test_transformer_block_kv_cache() -> None:
         channels=channels,
         num_query_heads=num_heads,
         feedforward_channels=16,
+        rms_norm=rms_norm,
     )
     with torch.no_grad():
         module.attn.out_lin.weight.copy_(torch.eye(channels))
@@ -891,3 +896,28 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+@pytest.mark.parametrize("rms_norm", [False, True])
+def test_transformer_block_norm(rms_norm: bool) -> None:
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        rms_norm=rms_norm,
+    )
+
+    norm_type = torch.nn.RMSNorm if rms_norm else torch.nn.LayerNorm
+    assert isinstance(module.q_norm, norm_type)
+    assert isinstance(module.kv_norm, norm_type)
+    assert isinstance(module.mlp[0], norm_type)
+
+    state_dict = module.state_dict()
+    for prefix in ("q_norm", "kv_norm", "mlp.0"):
+        assert f"{prefix}.weight" in state_dict
+        assert (f"{prefix}.bias" in state_dict) is not rms_norm
+
+    if rms_norm:
+        for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+            assert isinstance(norm, torch.nn.RMSNorm)
+            assert norm.eps == 1e-6

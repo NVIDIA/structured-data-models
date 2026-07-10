@@ -7,7 +7,7 @@ from typing import Any, Literal, cast, overload
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import GELU, LayerNorm, Linear, Sequential
+from torch.nn import GELU, LayerNorm, Linear, RMSNorm, Sequential
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
@@ -687,6 +687,9 @@ class TransformerBlock(torch.nn.Module):
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
         norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
+        rms_norm: Whether to use :class:`~torch.nn.RMSNorm` instead of
+            :class:`~torch.nn.LayerNorm`. RMS normalization uses an epsilon of
+            ``1e-6`` and does not have a learnable bias.
         device: The device.
         dtype: The dtype.
     """
@@ -699,14 +702,20 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
         norm_bias: bool = True,
+        rms_norm: bool = False,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.q_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
-        self.kv_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
+        def new_norm() -> LayerNorm | RMSNorm:
+            if rms_norm:
+                return RMSNorm(channels, eps=1e-6, **factory_kwargs)
+            return LayerNorm(channels, bias=norm_bias, **factory_kwargs)
+
+        self.q_norm = new_norm()
+        self.kv_norm = new_norm()
         self.attn = Attention(
             channels=channels,
             num_query_heads=num_query_heads,
@@ -715,7 +724,7 @@ class TransformerBlock(torch.nn.Module):
             **factory_kwargs,
         )
         self.mlp = Sequential(
-            LayerNorm(channels, bias=norm_bias, **factory_kwargs),
+            new_norm(),
             Linear(channels, feedforward_channels, **factory_kwargs),
             GELU(),
             Linear(feedforward_channels, channels, **factory_kwargs),
