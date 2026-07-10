@@ -51,9 +51,7 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Preserve tensor device and dtype.
   Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, Python scalars, or newly-created CPU tensors.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
-- Operate on tensor containers directly: non-registered operations fall back to the
-  underlying data tensor via `__torch_dispatch__`. Call `.as_tensor()` only when the raw
-  data tensor is explicitly required; rewrap results through the container constructor.
+- Operate on tensor containers directly; reserve `.as_tensor()` for when the raw data tensor is required.
 - Avoid creating unnecessary views right before broadcasts.
 - Add short tensor shape comments for complex tensor operations.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
