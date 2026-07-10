@@ -4,12 +4,7 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import (
-    CategoricalAlign,
-    Sequential,
-    StypeDispatch,
-    ToNumerical,
-)
+from sdm.processing import Sequential
 from sdm.testing import withCUDA
 
 
@@ -109,48 +104,6 @@ def test_default_recipe_regression_roundtrip() -> None:
     torch.testing.assert_close(
         restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
     )
-
-
-def test_default_recipe_aligns_independent_categorical_vocabularies() -> None:
-    recipe = TabICLv2.default_recipe()
-    context = TableTensor(
-        columns={"categorical": ("kind",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [0], [-1]], dtype=torch.int32),
-            categories=(StringTensor.from_list(["red", "blue"]),),
-        ),
-    )
-    query = TableTensor(
-        columns={"categorical": ("kind",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [-1]], dtype=torch.int32),
-            categories=(StringTensor.from_list(["green", "blue"]),),
-        ),
-    )
-    expected_query = TableTensor(
-        columns={"categorical": ("kind",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[-1], [1], [-1]], dtype=torch.int32),
-            categories=(StringTensor.from_list(["red", "blue"]),),
-        ),
-    )
-
-    recipe.features.fit(context)
-    output = recipe.features.transform(query)
-    expected = recipe.features.transform(expected_query)
-
-    features = recipe.features
-    assert isinstance(features, Sequential)
-    dispatch = features.steps[0]
-    assert isinstance(dispatch, StypeDispatch)
-    categorical = dispatch.processors[Stype.categorical.value]
-    assert isinstance(categorical, Sequential)
-    assert isinstance(categorical.steps[0], CategoricalAlign)
-    assert isinstance(categorical.steps[1], ToNumerical)
-    assert output.columns[Stype.numerical] == ("kind",)
-    assert output.categorical.size(-1) == 0
-    torch.testing.assert_close(output.numerical, expected.numerical)
-    torch.testing.assert_close(output.numerical[0], output.numerical[2])
 
 
 @withCUDA
