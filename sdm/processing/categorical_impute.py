@@ -32,6 +32,8 @@ class CategoricalImpute(Processor):
         strategy: Literal["most_frequent"] = "most_frequent",
     ) -> None:
         super().__init__()
+        # TODO: Add a strategy that encodes missing values as their own
+        # category instead of imputing an observed one.
         if strategy != "most_frequent":
             raise ValueError("strategy must be 'most_frequent'")
         self.strategy = strategy
@@ -43,7 +45,7 @@ class CategoricalImpute(Processor):
         )
 
     def _fit(self, input: TableTensor) -> None:
-        data = input.categorical.as_tensor()
+        data = input.categorical
         _check_categorical_codes(input)
         fill_values: list[torch.Tensor] = []
         columns = input.columns[Stype.categorical]
@@ -73,11 +75,10 @@ class CategoricalImpute(Processor):
     def _transform(self, input: TableTensor) -> TableTensor:
         self._check_schema(input)
         _check_categorical_codes(input)
-        data = input.categorical.as_tensor()
         data = torch.where(
-            data < 0,
-            self._fill_values.to(dtype=data.dtype),
-            data,
+            input.categorical < 0,
+            self._fill_values.to(dtype=input.categorical.dtype),
+            input.categorical,
         )
         categorical = CategoricalTensor(
             data=data,
