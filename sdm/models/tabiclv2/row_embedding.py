@@ -84,6 +84,7 @@ class RowEmbedding(torch.nn.Module):
         train_mask: Tensor | None = None,  # [R],
         max_keys: int | None = None,
         cache: Cache | None = None,
+        batch_size_limit: int | None = None,
         generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *B, R, C = x.size()
@@ -104,6 +105,9 @@ class RowEmbedding(torch.nn.Module):
             if self.y_emb is not None:
                 # TODO Cache `num_classes` to avoid device synchronization.
                 num_classes = int(y.max()) + 1
+                if torch.compiler.is_compiling():
+                    # FIXME Don't give up on hierarchical classification.
+                    torch._check(num_classes <= self.max_classes)
                 if num_classes > self.max_classes:
                     # TODO Support KV cache
                     if cache is not None:
@@ -145,6 +149,7 @@ class RowEmbedding(torch.nn.Module):
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
+                batch_size_limit=batch_size_limit,
             )  # [..., C, R, D]
 
             if cache is not None and cache.is_recording:
@@ -171,6 +176,7 @@ class RowEmbedding(torch.nn.Module):
                 query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
                 key_value=x,  # [..., R, K + C, D]
                 rope=self.rope,
+                batch_size_limit=batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]

@@ -11,7 +11,7 @@ from sdm.processing import Recipe
 
 
 class KumoRFM(BaseModel):
-    r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling "
+    r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
     Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
@@ -46,6 +46,7 @@ class KumoRFM(BaseModel):
             device=x.device,
         )
 
-    def default_recipe(self) -> Recipe:
+    @classmethod
+    def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
         raise NotImplementedError
