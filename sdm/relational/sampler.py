@@ -143,7 +143,7 @@ class RelationalSampler:
                 stype = table.stype(column)
                 if stype != Stype.id:
                     raise ValueError(
-                        f"Expected column '{column}' to have [118;1:3usemantic type "
+                        f"Expected column '{column}' to have semantic type "
                         f"'{Stype.id.value}' (got '{stype.value}')"
                     )
 
