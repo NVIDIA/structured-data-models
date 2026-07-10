@@ -1,13 +1,36 @@
+import contextlib
 import warnings
 from abc import ABC, abstractmethod
-from typing import cast
+from collections.abc import Iterator
+from typing import ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Recipe
+
+
+@contextlib.contextmanager
+def _maybe_inference_mode() -> Iterator[None]:
+    # `torch.inference_mode` is not supported inside a compiled region, so do
+    # not enter it when this function is already being compiled.
+    # https://github.com/pytorch/pytorch/issues/180823
+    # FIXME: Come up with a solution to use torch.compile under
+    # torch.inference_mode and remove this workaround.
+    if torch.compiler.is_compiling():
+        context_fn = contextlib.nullcontext
+    else:
+        context_fn = torch.inference_mode
+
+    with context_fn():
+        yield
+
+
+def _validate_batch_size_limit(batch_size_limit: int | None) -> None:
+    if batch_size_limit is not None and batch_size_limit <= 0:
+        raise ValueError("`batch_size_limit` must be positive")
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -19,6 +42,8 @@ class BaseModel(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
+    supports_related_tables: ClassVar[bool]
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -26,14 +51,16 @@ class BaseModel(torch.nn.Module, ABC):
         self._caches: list[Cache] | None = None
         self._recipe: Recipe | None = None
 
-    @torch.inference_mode()
+    @_maybe_inference_mode()
     def forward(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
 
@@ -53,32 +80,48 @@ class BaseModel(torch.nn.Module, ABC):
             num_estimators: The number of ensemble members ``E``.
                 The forward pass runs once per member, and predictions are
                 averaged across members.
+            related_tables: Additional related context provided to the model.
+            num_estimators: The number of estimators for ensembling.
+            batch_size_limit: Maximum number of broadcast attention batch
+                elements processed at once. ``None`` disables batch chunking.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
-        if num_estimators < 1:
-            raise ValueError(
-                f"Expected 'num_estimators' to be a positive integer "
-                f"(got {num_estimators})"
+        _validate_batch_size_limit(batch_size_limit)
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
             )
+            related_tables = None
 
         x, y = self._preprocess(x, y, recipe=recipe)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
         outs: list[Tensor] = []
         for _ in range(num_estimators):
-            outs.append(self._forward(x, y, cache=None))
-        return self._postprocess(torch.stack(outs).mean(dim=0), recipe)
+            outs.append(
+                self._forward(
+                    x,
+                    y,
+                    related_tables,
+                    cache=None,
+                    batch_size_limit=batch_size_limit,
+                )
+            )
+        return self._postprocess(outs)
 
     @torch.inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R_train, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        batch_size_limit: int | None = None,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -92,25 +135,33 @@ class BaseModel(torch.nn.Module, ABC):
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
-            num_estimators: The number of ensemble members ``E``.
-                In-context examples are fitted once per member, and subsequent
-                :meth:`predict` calls average predictions across members.
+            related_tables: Additional related context provided to the model.
+            num_estimators: The number of estimators for ensembling.
+            batch_size_limit: Maximum number of broadcast attention batch
+                elements processed at once. ``None`` disables batch chunking.
         """
-        if num_estimators < 1:
-            raise ValueError(
-                f"Expected 'num_estimators' to be a positive integer "
-                f"(got {num_estimators})"
+        _validate_batch_size_limit(batch_size_limit)
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
             )
+            related_tables = None
 
         self.clear()
         x, y = self._preprocess(x, y, recipe=recipe)
         x = x[..., : y.size(-1), :]
         caches: list[Cache] = []
         for _ in range(num_estimators):
-            # TODO: Don't store y.dtype in every cache once we introduce a
-            # nested cache.
+            # TODO Don't store y.dtype for every estimator.
             cache = Cache({"y.dtype": y.dtype})
-            self._forward(x, y, cache=cache)
+            self._forward(
+                x,
+                y,
+                related_tables,
+                cache,
+                batch_size_limit=batch_size_limit,
+            )
             cache.freeze()
             caches.append(cache)
         self._caches = caches
@@ -128,6 +179,9 @@ class BaseModel(torch.nn.Module, ABC):
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R_test, C]
+        related_tables: RelatedTables | None = None,
+        *,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, *]
         r"""Predict unseen test examples.
 
@@ -140,11 +194,21 @@ class BaseModel(torch.nn.Module, ABC):
         Args:
             x: The feature tensor with shape ``[..., R_test, C]`` with
                 ``R_test`` rows and ``C`` columns.
+            related_tables: Additional related context provided to the model.
+            batch_size_limit: Maximum number of broadcast attention batch
+                elements processed at once. ``None`` disables batch chunking.
 
         Returns:
-            The prediction for ``[..., R_test]`` test rows, averaged across
-            ensemble members when fitted with ``num_estimators > 1``.
+            The prediction for ``[..., R_test]`` test rows.
         """
+        _validate_batch_size_limit(batch_size_limit)
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
+            )
+            related_tables = None
+
         if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
@@ -160,8 +224,16 @@ class BaseModel(torch.nn.Module, ABC):
         x, y = self._preprocess(x, y, recipe=recipe, fit_recipe=False)
         outs: list[Tensor] = []
         for cache in self._caches:
-            outs.append(self._forward(x, y, cache=cache))
-        return self._postprocess(torch.stack(outs).mean(dim=0), recipe)
+            outs.append(
+                self._forward(
+                    x,
+                    y,
+                    related_tables,
+                    cache,
+                    batch_size_limit=batch_size_limit,
+                )
+            )
+        return self._postprocess(outs, recipe)
 
     # Helpers #################################################################
 
@@ -269,19 +341,14 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
+        related_tables: RelatedTables | None,
+        cache: Cache | None,
         *,
-        cache: Cache | None = None,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         pass
 
+    @classmethod
     @abstractmethod
-    def default_recipe(self) -> Recipe:
-        r"""Return the default processing recipe for this model.
-
-        Model subclasses must override this method to expose the model-specific
-        preprocessing and postprocessing recipe.
-
-        Returns:
-            The :class:`~sdm.processing.Recipe` applied during pre- and
-            postprocessing by default.
-        """
+    def default_recipe(cls) -> Recipe:
+        r"""Return the default processing recipe for this model."""
