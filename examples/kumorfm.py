@@ -68,7 +68,7 @@ perm = torch.randperm(len(train_table))[: args.context_size]
 train_table = cast(TableTensor, train_table[perm])
 
 # Execute Model ###############################################################
-model = KumoRFM(device=device)
+model = KumoRFM(pretrained=False, device=device)
 
 kwargs = {
     "task_link": {
@@ -79,14 +79,10 @@ kwargs = {
     "num_neighbors": [16, 16],
     "task_time_column": task.time_col,
 }
-train_table, related_tables = sampler(train_table, **kwargs).to(device)
-model.fit(
-    x=train_table.drop_columns(task.target_col),
-    y=train_table[task.target_col],
-    related_tables=related_tables,
-)
-
+train_x = train_table.drop_columns(task.target_col)
+train_y = train_table[task.target_col].to(device)
 test_table = task_tables[-1].drop_columns(task.target_col)
 for test_batch in test_table.split(args.batch_size):
-    model.predict(*sampler(test_batch, **kwargs).to(device))
-model.clear()
+    x = cast(TableTensor, torch.cat((train_x, test_batch), dim=0))
+    x, related_tables = sampler(x, **kwargs).to(device)
+    model(x=x, y=train_y, related_tables=related_tables)

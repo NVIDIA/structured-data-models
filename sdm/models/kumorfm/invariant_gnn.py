@@ -53,7 +53,7 @@ class InvariantGNN(torch.nn.Module):
         generator: torch.Generator | None = None,
     ) -> Tensor:  # [R, C]
 
-        if num_hops == 0 or len(edge_index_dict) == 0:
+        if num_hops == 0:
             return x_dict[readout_table]
 
         start = 0
@@ -79,9 +79,14 @@ class InvariantGNN(torch.nn.Module):
             rows.extend([row, col])
             cols.extend([col, row])
             edge_types.extend([edge_type, edge_type + 1])
-        row = torch.cat(rows, dim=0)
-        col = torch.cat(cols, dim=0)
-        edge_type = torch.cat(edge_types, dim=0)
+        if rows:
+            row = torch.cat(rows, dim=0)
+            col = torch.cat(cols, dim=0)
+            edge_type = torch.cat(edge_types, dim=0)
+        else:
+            row = torch.empty(0, dtype=torch.long, device=x.device)
+            col = torch.empty(0, dtype=torch.long, device=x.device)
+            edge_type = torch.empty(0, dtype=torch.long, device=x.device)
         del rows
         del cols
         del edge_types
