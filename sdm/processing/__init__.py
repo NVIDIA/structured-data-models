@@ -4,7 +4,6 @@ from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.sequential import Sequential
 from sdm.processing.choice import Choice
 from sdm.processing.stype_dispatch import StypeDispatch
-from sdm.processing.categorical_align import CategoricalAlign
 from sdm.processing.categorical_impute import CategoricalImpute
 from sdm.processing.clip import Clip
 from sdm.processing.class_shuffle import ClassShuffle
@@ -26,7 +25,6 @@ __all__ = [
     "Sequential",
     "Choice",
     "StypeDispatch",
-    "CategoricalAlign",
     "CategoricalImpute",
     "Clip",
     "ClassShuffle",

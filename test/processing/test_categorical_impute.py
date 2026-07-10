@@ -121,7 +121,7 @@ def test_categorical_impute_rejects_changed_vocabulary(
 
     with pytest.raises(
         ValueError,
-        match=r"vocabulary.*kind.*fitted values.*CategoricalAlign",
+        match=r"vocabulary.*kind.*fitted values",
     ):
         processor.transform(query)
 
