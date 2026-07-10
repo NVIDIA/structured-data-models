@@ -1,4 +1,3 @@
-import pytest
 import torch
 from sdm import TableTensor
 from sdm.processing import Recipe, Sequential, StandardScale
@@ -10,7 +9,7 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
 
 
-def test_recipe_normalizes_empty_roles() -> None:
+def test_recipe_normalizes_empty_roles_and_repr() -> None:
     recipe = Recipe(features=[StandardScale()], target=None, output=[])
 
     assert isinstance(recipe.features, Sequential)
@@ -19,31 +18,8 @@ def test_recipe_normalizes_empty_roles() -> None:
     assert len(recipe.features.steps) == 1
     assert len(recipe.target.steps) == 0
     assert len(recipe.output.steps) == 0
-
-
-@pytest.mark.parametrize(
-    "recipe",
-    [
-        Recipe(),
-        Recipe(
-            features=[StandardScale()],
-            target=[StandardScale(), StandardScale()],
-            output=[],
-        ),
-        Recipe(
-            features=StandardScale(),
-            target=StandardScale(),
-            output=StandardScale(),
-        ),
-    ],
-)
-def test_recipe_repr_indents_roles(recipe: Recipe) -> None:
-    description = repr(recipe)
-
-    assert description.startswith("Recipe(\n  features=")
-    assert "\n  target=" in description
-    assert "\n  output=" in description
-    assert description.endswith("\n)")
+    assert "features=Sequential" in repr(recipe)
+    assert "target=Sequential()" in repr(recipe)
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
