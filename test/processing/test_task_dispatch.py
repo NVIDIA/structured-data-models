@@ -37,6 +37,14 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     )
     output = _numerical_table(("a", "b"))
     description = repr(dispatch)
+    assert description == (
+        "TaskDispatch(\n"
+        "  classification: SoftmaxTemperature(),\n"
+        "  regression: Sequential(\n"
+        "      Identity(),\n"
+        "    ),\n"
+        ")"
+    )
 
     dispatch._resolve(_numerical_table())
     assert dispatch.transform(output) is output
