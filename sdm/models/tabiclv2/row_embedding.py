@@ -132,33 +132,18 @@ class RowEmbedding(torch.nn.Module):
             if cache is not None and cache.is_replaying:
                 key_value = cache[key]
             else:
-                key_value = x[..., train_index, :]
-                if key_value.size(-2) == 0:
-                    if not fallback_to_all:
-                        raise ValueError("Column-attention context is empty")
-                    if cache is not None and cache.is_recording:
-                        raise ValueError(
-                            "Cannot record a cache from fallback context"
-                        )
-                    key_value = x
-                if max_train is not None and key_value.size(-2) > max_train:
-                    if (
-                        generator is not None
-                        and generator.device != key_value.device
-                    ):
-                        raise ValueError(
-                            "`generator` must be on the context device"
-                        )
+                key_value = x[..., train_mask, :]
+                if max_keys is not None and key_value.size(-2) > may_keys:
                     index = torch.randperm(
                         key_value.size(-2),
                         device=key_value.device,
                         generator=generator,
-                    )[:max_train]
-                    key_value = key_value.index_select(-2, index)
+                    )[:max_keys]
+                    key_value = key_value[..., index, :]
 
             result = col_layer(
                 query=x,  # [..., C, R, D]
-                key_value=key_value,  # [..., C, R_context, D]
+                key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
             )  # [..., C, R, D]
 
