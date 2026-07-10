@@ -4,11 +4,11 @@ import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype
-from sdm.processing.base import Processor
+from sdm.processing.base import InvertibleMixin, Processor
 from sdm.tensor import TableTensor
 
 
-class ClassShuffle(Processor):
+class ClassShuffle(Processor, InvertibleMixin):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn from the global CPU
@@ -19,6 +19,12 @@ class ClassShuffle(Processor):
     preserved unchanged. Only categorical columns are supported; use
     :class:`~sdm.processing.StypeDispatch` to apply this processor to the
     categorical block of a mixed feature table.
+
+    When fitted on exactly one categorical target,
+    :meth:`~sdm.processing.InvertibleMixin.inverse_transform` interprets its
+    input as a numerical model-output table containing class scores in
+    shuffled-code order. It drops inactive trailing head entries and restores
+    the fitted original class order.
 
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
@@ -101,3 +107,35 @@ class ClassShuffle(Processor):
             categories=categories,
         )
         return input.replace_blocks(categorical=categorical)
+
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+        """Restore original class order in a model-output score table.
+
+        Args:
+            input: Numerical model output whose last dimension contains class
+                scores in shuffled-code order. Arbitrary leading dimensions
+                are preserved, and trailing entries beyond the fitted class
+                count are ignored.
+
+        Returns:
+            Numerical table with one score column per fitted category in
+            original class order.
+
+        Raises:
+            ValueError: If this processor was fitted on anything other than
+                exactly one categorical column.
+        """
+        n_columns = self.offsets.numel() - 1
+        if n_columns != 1:
+            raise ValueError(
+                f"Expected '{self.__class__.__name__}' to be fitted on "
+                f"exactly one categorical column for inverse model-output "
+                f"processing (got {n_columns} columns)"
+            )
+
+        permutation = self.permutations
+        scores = input.numerical.index_select(
+            dim=-1,
+            index=permutation,
+        )
+        return TableTensor.from_tensor(scores)
