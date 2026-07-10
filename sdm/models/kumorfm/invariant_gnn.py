@@ -103,6 +103,7 @@ class InvariantGNN(torch.nn.Module):
         )
         edge_type_emb = F.normalize(edge_type_emb, dim=-1)
         edge_type_emb = self.edge_type_lin(edge_type_emb)[edge_type]
+        del edge_type
 
         for i in range(num_hops):
             src_x = self.src_lin(x)[row] + edge_type_emb
