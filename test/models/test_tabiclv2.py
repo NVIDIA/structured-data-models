@@ -7,7 +7,7 @@ from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.processing import Sequential
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
 @withCUDA
@@ -39,6 +39,7 @@ def test_tabiclv2(
 
     assert out.dtype == x.dtype
     assert out.device == x.device
+    assert torch.is_inference(out)
 
     if len(batch_shape) > 0:
         looped = torch.stack(

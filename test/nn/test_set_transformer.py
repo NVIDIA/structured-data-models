@@ -80,6 +80,25 @@ def test_induced_transformer_block_kv_cache() -> None:
         return_key_value=True,
     )
     cached_out = module(query=query, key_value=kv)
+    module.eval()
+    chunked_out = module(
+        query=query,
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+        batch_size_limit=1,
+    )
+    chunked_cache_out, chunked_kv = module(
+        query=query,
+        key_value=key_value,
+        seqused_key_value=seqused_key_value,
+        return_key_value=True,
+        batch_size_limit=1,
+    )
+    chunked_cached_out = module(
+        query=query,
+        key_value=chunked_kv,
+        batch_size_limit=1,
+    )
     assert kv.key.size() == (
         batch_size,
         num_inducing_points,
@@ -89,6 +108,11 @@ def test_induced_transformer_block_kv_cache() -> None:
     assert kv.value.size() == kv.key.size()
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+    torch.testing.assert_close(chunked_out, direct_out)
+    torch.testing.assert_close(chunked_cache_out, direct_out)
+    torch.testing.assert_close(chunked_cached_out, direct_out)
+    torch.testing.assert_close(chunked_kv.key, kv.key)
+    torch.testing.assert_close(chunked_kv.value, kv.value)
 
     # The cache encodes only the context, so an unrelated query reuses it and
     # matches a full forward of that query over the same context.
