@@ -1,11 +1,14 @@
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from typing import cast
 
+import torch
 from typing_extensions import Self
 
 from sdm import TableTensor
 from sdm.relational import Relationship
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
+from sdm.tensor.mixin import DeviceMixin
 
 
 @dataclass(frozen=True)
@@ -76,7 +79,7 @@ class TaskLink:
 
 
 @dataclass(frozen=True, init=False)
-class RelatedTables:
+class RelatedTables(DeviceMixin):
     r"""Task-specific related tables attached to model inputs.
 
     :class:`RelatedTables` store the relational context provided to a model
@@ -152,3 +155,13 @@ class RelatedTables:
         for table in self.tables.values():
             if table.dim() != 2:
                 raise ValueError("Tables need to be two-dimensional")
+
+    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+        return self.__class__(
+            tables={
+                table_name: cast(TableTensor, table.to(device))
+                for table_name, table in self.tables.items()
+            },
+            relationships=self.relationships,
+            task_links=self.task_links,
+        )

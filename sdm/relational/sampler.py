@@ -1,9 +1,10 @@
 from collections.abc import Mapping, Sequence
-from typing import cast
+from typing import NamedTuple, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
+from typing_extensions import Self
 
 from sdm import ColumnarTensor, Stype, TableTensor
 from sdm.relational import (
@@ -13,8 +14,29 @@ from sdm.relational import (
     TaskLink,
 )
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID
+from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
+
+
+class _RelationalSamplerOutput(NamedTuple):
+    task_table: TableTensor
+    related_tables: RelatedTables
+
+
+class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
+    r"""Relational sampler output.
+
+    Args:
+        task_table: The task table.
+        related_tables: The related tables for the task table.
+    """
+
+    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+        return self.__class__(
+            task_table=cast(TableTensor, self.task_table.to(device)),
+            related_tables=self.related_tables.to(device),
+        )
 
 
 class RelationalSampler:
@@ -73,7 +95,7 @@ class RelationalSampler:
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
         num_neighbors: Sequence[int],
         task_time_column: str | None = None,
-    ) -> tuple[TableTensor, RelatedTables]:
+    ) -> RelationalSamplerOutput:
         r"""Alias of :meth:`sample`."""
         return self.sample(
             task_table=task_table,
@@ -88,7 +110,7 @@ class RelationalSampler:
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
         num_neighbors: Sequence[int],
         task_time_column: str | None = None,
-    ) -> tuple[TableTensor, RelatedTables]:
+    ) -> RelationalSamplerOutput:
         r"""Sample :class:`RelatedTables` for task rows.
 
         Args:
@@ -98,7 +120,6 @@ class RelationalSampler:
                 relational data.
             task_time_column: Datetime column in ``task_table`` used as the
                 query timestamp for temporal sampling.
-
         """
         if not isinstance(task_link, TaskLink):
             task_link = TaskLink.from_mapping(task_link)
@@ -254,10 +275,13 @@ class RelationalSampler:
             dim=-1,
         )
 
-        return cast(TableTensor, task_table), RelatedTables(
-            tables=cast(dict[str, TableTensor], tables),
-            relationships=relationships,
-            task_links=(task_link,),
+        return RelationalSamplerOutput(
+            task_table=cast(TableTensor, task_table),
+            related_tables=RelatedTables(
+                tables=cast(dict[str, TableTensor], tables),
+                relationships=relationships,
+                task_links=(task_link,),
+            ),
         )
 
 
