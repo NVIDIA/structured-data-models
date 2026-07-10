@@ -57,10 +57,7 @@ class CategoricalImpute(Processor):
                     f"column '{columns[index]}' has no observed values."
                 )
 
-            counts = torch.bincount(
-                observed,
-                minlength=category.numel(),
-            )
+            counts = observed.bincount(minlength=category.numel())
             fill_values.append(counts.argmax())
 
         self._fill_values = (
@@ -73,10 +70,9 @@ class CategoricalImpute(Processor):
     def _transform(self, input: TableTensor) -> TableTensor:
         self._check_categories(input)
         _check_categorical_codes(input)
-        data = torch.where(
-            input.categorical < 0,
+        data = input.categorical.where(
+            input.categorical >= 0,
             self._fill_values.to(dtype=input.categorical.dtype),
-            input.categorical,
         )
         categorical = CategoricalTensor(
             data=data,
@@ -86,11 +82,16 @@ class CategoricalImpute(Processor):
 
     def _check_categories(self, input: TableTensor) -> None:
         columns = input.columns[Stype.categorical]
+        if len(input.categorical.categories) != len(self._categories):
+            raise ValueError(
+                f"Expected {len(self._categories)} fitted categorical "
+                f"columns (got {len(columns)})."
+            )
         for index, (actual, expected) in enumerate(
-            zip(input.categorical.categories, self._categories, strict=True)
+            zip(input.categorical.categories, self._categories)
         ):
             expected = expected.to(device=actual.device)
-            if not torch.equal(actual, expected):
+            if not actual.equal(expected):
                 raise ValueError(
                     "Expected the category vocabulary for categorical column "
                     f"'{columns[index]}' to match the fitted values and "
