@@ -156,23 +156,12 @@ class BaseModel(torch.nn.Module, ABC):
             )
 
         recipe = self._recipe
-        if recipe is not None:
-            if not isinstance(x, TableTensor):
-                raise ValueError(
-                    f"Expected 'x' to be a 'TableTensor' when fitted with a "
-                    f"'recipe' (got '{type(x).__name__}')"
-                )
-            # Recipe steps run in normal mode since 'TableTensor' does not
-            # support structural ops on inference tensors:
-            with torch.inference_mode(False):
-                x = recipe.features.transform(x)
-
         y = torch.empty(
             (*x.size()[:-2], 0),
             dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
             device=x.device,
         )
-        x, y = self._preprocess(x, y)
+        x, y = self._preprocess(x, y, recipe=recipe, fit_recipe=False)
         outs: list[Tensor] = []
         for cache in self._caches:
             outs.append(self._forward(x, y, cache=cache))
@@ -180,30 +169,34 @@ class BaseModel(torch.nn.Module, ABC):
 
     # Helpers #################################################################
 
+    # FIXME: Fix TableTensor to support inference mode.
+    @torch.inference_mode(False)
     def _preprocess(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
         recipe: Recipe | None = None,
+        fit_recipe: bool = True,
     ) -> tuple[Tensor, Tensor]:
         if recipe is not None:
-            if not isinstance(x, TableTensor) or not isinstance(
-                y, TableTensor
-            ):
+            if not isinstance(x, TableTensor):
                 raise ValueError(
-                    f"Expected 'x' and 'y' to be a 'TableTensor' when "
-                    f"'recipe' is given (got '{type(x).__name__}' and "
-                    f"'{type(y).__name__}')"
+                    f"Expected 'x' to be a 'TableTensor' when 'recipe' is "
+                    f"given (got '{type(x).__name__}')"
+                )
+            if not isinstance(y, TableTensor):
+                raise ValueError(
+                    f"Expected 'y' to be a 'TableTensor' when "
+                    f"'recipe' is given (got '{type(y).__name__}')"
                 )
 
-            # Recipe steps run in normal mode since 'TableTensor' does not
-            # support structural ops on inference tensors:
-            with torch.inference_mode(False):
-                # Fit feature steps on the in-context rows only to avoid
-                # leakage:
-                recipe.features.fit(x[..., : y.size(-2), :])
-                x = recipe.features.transform(x)
+            if fit_recipe:
+                R_test = x.size(-2) - y.size(-1)
+                # Fit on the in-context rows only to avoid leakage:
+                recipe.features.fit(x[..., :R_test, :])
                 y = recipe.target.fit_transform(y)
+
+            x = recipe.features.transform(x)
 
         if isinstance(x, TableTensor):
             invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
