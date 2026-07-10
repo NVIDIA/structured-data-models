@@ -302,15 +302,16 @@ class BaseModel(torch.nn.Module, ABC):
 
         return x, y
 
+    # FIXME: Fix TableTensor to support inference mode.
+    @torch.inference_mode(False)
     def _postprocess(
         self,
         outs: list[Tensor],  # E x [..., R_test, *]
         recipe: Recipe | None,
     ) -> Tensor:  # [..., R_test, *]
-        # Average predictions across ensemble members:
-        out = torch.stack(outs).mean(dim=0)
+        out = torch.stack(outs)  # [E, ..., R_test, *]
         if recipe is None:
-            return out
+            return out.mean(dim=0)
 
         if not isinstance(recipe.target, InvertibleMixin):
             raise ValueError(
@@ -320,14 +321,11 @@ class BaseModel(torch.nn.Module, ABC):
                 f"(got '{recipe.target.__class__.__name__}')"
             )
 
-        # Recipe steps run in normal mode since 'TableTensor' does not
-        # support structural ops on inference tensors. Cloning the prediction
-        # moves it out of inference mode:
-        with torch.inference_mode(False):
-            table = TableTensor.from_tensor(out.clone())
-            table = recipe.target.inverse_transform(table)
-            table = recipe.output.transform(table)
-            return table.numerical
+        table = TableTensor.from_tensor(out.clone())
+        table = recipe.target.inverse_transform(table)
+        table = recipe.output.transform(table)
+        # Average across ensemble members only after the output steps:
+        return table.numerical.mean(dim=0)
 
     # Abstract Methods ########################################################
 
