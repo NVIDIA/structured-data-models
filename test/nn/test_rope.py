@@ -1,76 +1,57 @@
 import math
+from typing import Literal
 
 import pytest
 import torch
-from sdm.nn import RotaryEmbedding, apply_rotary_embedding
+from sdm.nn import RotaryEmbedding
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_rope(device: torch.device) -> None:
-    module = RotaryEmbedding(channels=2, device=device)
-    with torch.no_grad():
-        module.inv_freq.fill_(math.pi / 2)
+@pytest.mark.parametrize("layout", ["split_half", "interleaved"])
+def test_rope(
+    device: torch.device,
+    layout: Literal["split_half", "interleaved"],
+) -> None:
+    if layout == "split_half":
+        expected = torch.tensor(
+            [
+                [[1.0, 2.0, 3.0, 4.0]],
+                [[-3.0, 2.0, 1.0, 4.0]],
+                [[-1.0, 2.0, -3.0, 4.0]],
+            ],
+            device=device,
+        )
+    else:
+        expected = torch.tensor(
+            [
+                [[1.0, 2.0, 3.0, 4.0]],
+                [[-2.0, 1.0, 3.0, 4.0]],
+                [[-1.0, -2.0, 3.0, 4.0]],
+            ],
+            device=device,
+        )
 
-    x = torch.zeros(4, 1, 2, device=device)
-    x[..., 0] = 1
+    module = RotaryEmbedding(channels=4, layout=layout, device=device)
+
+    with torch.no_grad():
+        inv_freq = torch.tensor([math.pi / 2, 0], device=device)
+        module.inv_freq.copy_(inv_freq)
+
+    x = torch.tensor(
+        [
+            [[1.0, 2.0, 3.0, 4.0]],
+            [[1.0, 2.0, 3.0, 4.0]],
+            [[1.0, 2.0, 3.0, 4.0]],
+        ],
+        device=device,
+    )
 
     out = module(x)
-    expected = torch.tensor(
-        [
-            [[1, 0]],
-            [[0, 1]],
-            [[-1, 0]],
-            [[0, -1]],
-        ],
-        dtype=x.dtype,
-        device=device,
-    )
     torch.testing.assert_close(out, expected)
 
-    with pytest.raises(ValueError, match="Expected 2 channels, got 4"):
-        module(torch.randn(2, 4, 3, 4, device=device))
+    with pytest.raises(ValueError, match=r"Expected 4 channels"):
+        module(torch.randn(2, 4, 3, 2, device=device))
 
-    with pytest.raises(ValueError, match="`channels` must be even"):
-        RotaryEmbedding(channels=3, device=device)
-
-
-@withCUDA
-@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_interleaved_rope(
-    device: torch.device,
-    dtype: torch.dtype,
-) -> None:
-    inv_freq = torch.tensor(
-        [math.pi / 2, 0],
-        device=device,
-        dtype=dtype,
-    )
-    x = torch.tensor(
-        [[[[1, 2, 3, 4]], [[1, 2, 3, 4]], [[1, 2, 3, 4]]]],
-        device=device,
-        dtype=dtype,
-    )
-
-    out = apply_rotary_embedding(
-        x=x,
-        inv_freq=inv_freq,
-        layout="interleaved",
-    )
-
-    expected = torch.tensor(
-        [[[[1, 2, 3, 4]], [[-2, 1, 3, 4]], [[-1, -2, 3, 4]]]],
-        device=device,
-        dtype=dtype,
-    )
-
-    torch.testing.assert_close(out, expected)
-    assert out.dtype == x.dtype
-    assert out.device == x.device
-
-
-def test_apply_rotary_embedding_errors() -> None:
-    x = torch.randn(2, 3, 1, 4)
-
-    with pytest.raises(ValueError, match="Expected 2 channels, got 4"):
-        apply_rotary_embedding(x=x, inv_freq=torch.ones(1))
+    with pytest.raises(ValueError, match="'channels' must be even"):
+        RotaryEmbedding(channels=3, layout=layout, device=device)
