@@ -1208,19 +1208,31 @@ def _index(
 
 @TableTensor.implements(aten.cat.default)
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
+    if len(tensors) == 0:
+        raise ValueError("torch.cat(): expected a non-empty list of Tensors")
+
     if not all(isinstance(tensor, TableTensor) for tensor in tensors):
         raise TypeError(
             f"Expected all tensors to be '{TableTensor.__name__}' instances"
         )
-
     tensors = cast(Sequence[TableTensor], tensors)
-    blocks = {
-        stype: torch.cat([tensor.blocks[stype] for tensor in tensors], dim=dim)
-        for stype, _ in tensors[0].items()
-    }
 
-    if dim % tensors[0].dim() != tensors[0].dim() - 1:
+    blocks: dict[Stype, Tensor] = {}
+    for stype, _ in tensors[0].items():
+        block_list = [tensor.blocks[stype] for tensor in tensors]
+        block_list = [block for block in block_list if block.size(-1) > 0]
+        if len(block_list) == 1:
+            blocks[stype] = block_list[0]
+        elif len(block_list) > 1:
+            blocks[stype] = torch.cat(block_list, dim=dim)
+
+    size: Sequence[int] | None = None
+    if not _is_column_dim(tensors[0], dim):
         columns = tensors[0]._columns
+        if len(blocks) == 0:
+            size = list(tensors[0].size())
+            for tensor in tensors[1:]:
+                size[dim] += tensor.size(dim)
     else:
         columns = {
             stype: tuple(
@@ -1228,7 +1240,10 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             )
             for stype, _ in tensors[0].items()
         }
+        size = tensors[0].size()
+
     return tensors[0].__class__(
+        size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
         **blocks,
     )
