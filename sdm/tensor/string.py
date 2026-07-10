@@ -154,13 +154,17 @@ class StringTensor(VarLenTensor):
                 size=size,
             )
 
+        # NOTE Unlike Arrow, cudf's `data` and `children` accessors already
+        # rebase sliced columns: `column.data` is the character buffer
+        # starting at the slice's first character, and `column.children[0]`
+        # holds `size + 1` offsets starting at zero. `column.offset` refers
+        # to the base column layout and must not be applied on top of them.
         return cls(
             data=torch.from_dlpack(cp.asarray(column.data)).to(device),
             offset=torch.from_dlpack(cp.asarray(column.children[0])).to(
                 device
             ),
             size=size,
-            storage_offset=column.offset,
         )
 
     @classmethod
