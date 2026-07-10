@@ -112,7 +112,10 @@ def test_categorical_impute_rejects_changed_vocabulary(
     processor = CategoricalImpute().fit(_table([[0, 0], [0, 1]]))
     query = _table([[-1, -1]], categories=categories)
 
-    with pytest.raises(ValueError, match=r"vocabulary.*kind.*fitted values"):
+    with pytest.raises(
+        ValueError,
+        match=r"vocabulary.*kind.*fitted values.*CategoricalAlign",
+    ):
         processor.transform(query)
 
 

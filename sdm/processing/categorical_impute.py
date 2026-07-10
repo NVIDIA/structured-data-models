@@ -3,6 +3,7 @@ from typing import Literal
 import torch
 
 from sdm import CategoricalTensor, Stype
+from sdm.processing._categorical import _check_categorical_codes
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
@@ -15,7 +16,8 @@ class CategoricalImpute(Processor):
     changing its category vocabulary.
     Transform inputs must use the fitted categorical column names, order, and
     category vocabularies. The processor raises if the encoded schema does not
-    match.
+    match. Use :class:`~sdm.processing.CategoricalAlign` before this processor
+    when training and transform inputs were tensorized independently.
 
     Args:
         strategy: Imputation strategy. ``"most_frequent"`` selects the most
@@ -43,7 +45,7 @@ class CategoricalImpute(Processor):
 
     def _fit(self, input: TableTensor) -> None:
         data = input.categorical.as_tensor()
-        self._check_codes(input)
+        _check_categorical_codes(input)
         fill_values: list[torch.Tensor] = []
         columns = input.columns[Stype.categorical]
         for index, category in enumerate(input.categorical.categories):
@@ -71,7 +73,7 @@ class CategoricalImpute(Processor):
 
     def _transform(self, input: TableTensor) -> TableTensor:
         self._check_schema(input)
-        self._check_codes(input)
+        _check_categorical_codes(input)
         data = input.categorical.as_tensor()
         data = torch.where(
             data < 0,
@@ -100,16 +102,8 @@ class CategoricalImpute(Processor):
             if not torch.equal(actual, expected):
                 raise ValueError(
                     "Expected the category vocabulary for categorical column "
-                    f"'{columns[index]}' to match the fitted values and order."
-                )
-
-    @staticmethod
-    def _check_codes(input: TableTensor) -> None:
-        columns = input.columns[Stype.categorical]
-        for index, category in enumerate(input.categorical.categories):
-            codes = input.categorical.as_tensor()[..., index]
-            if (codes >= category.numel()).any():
-                raise ValueError(
-                    f"Categorical column '{columns[index]}' contains a code "
-                    "outside its category vocabulary."
+                    f"'{columns[index]}' to match the fitted values and "
+                    "order. "
+                    "Use 'CategoricalAlign' before this processor for "
+                    "independently tensorized inputs."
                 )
