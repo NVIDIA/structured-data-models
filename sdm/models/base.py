@@ -13,17 +13,18 @@ from sdm.processing import Recipe
 
 
 @contextlib.contextmanager
-def _inference_mode() -> Iterator[None]:
-    # `torch.inference_mode` cannot be traced by `torch.compile` (a
-    # decorated forward fails `fullgraph=True` compilation at the
-    # AOTAutograd stage), so compiled callers enter it around the
-    # compiled call instead.
-    context = (
-        contextlib.nullcontext()
-        if torch.compiler.is_compiling()
-        else torch.inference_mode()
-    )
-    with context:
+def _maybe_inference_mode() -> Iterator[None]:
+    # `torch.inference_mode` is not supported inside a compiled region, so do
+    # not enter it when this function is already being compiled.
+    # https://github.com/pytorch/pytorch/issues/180823
+    # FIXME: Come up with a solution to use torch.compile under
+    # torch.inference_mode and remove this workaround.
+    if torch.compiler.is_compiling():
+        context_fn = contextlib.nullcontext
+    else:
+        context_fn = torch.inference_mode
+
+    with context_fn():
         yield
 
 
@@ -49,7 +50,7 @@ class BaseModel(torch.nn.Module, ABC):
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
 
-    @_inference_mode()
+    @_maybe_inference_mode()
     def forward(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
@@ -100,7 +101,7 @@ class BaseModel(torch.nn.Module, ABC):
             )
         return torch.stack(outs).mean(dim=0)
 
-    @_inference_mode()
+    @torch.inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R_train, C]
@@ -155,7 +156,7 @@ class BaseModel(torch.nn.Module, ABC):
         r"""Clears cached in-context examples."""
         self._caches = None
 
-    @_inference_mode()
+    @torch.inference_mode()
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R_test, C]
