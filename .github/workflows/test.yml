@@ -32,6 +32,8 @@ jobs:
           uv pip install --torch-backend=cpu -e '.[test]'
 
       - name: Run tests
+        env:
+          FULL_TEST: ${{ github.event_name == 'push' && github.ref_name == 'main' && '1' || '0' }}
         run: |
           pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
 
