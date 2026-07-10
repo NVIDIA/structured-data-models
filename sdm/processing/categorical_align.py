@@ -41,24 +41,31 @@ class CategoricalAlign(Processor):
     def _fit(self, input: TableTensor) -> None:
         _check_categorical_codes(input)
         data = input.categorical
+        columns = input.columns[Stype.categorical]
         categories: list[Tensor] = []
         for index, category in enumerate(input.categorical.categories):
+            if category.is_complex():
+                raise ValueError(
+                    "CategoricalAlign does not support complex category "
+                    f"values for categorical column '{columns[index]}'."
+                )
             codes = data[..., index].reshape(-1)  # [num_rows]
             positions = torch.arange(
-                codes.numel(), device=data.device
+                end=codes.numel(),
+                device=data.device,
             )  # [num_rows]
             # [num_local_categories]
             first_positions = torch.full(
-                (category.numel(),),
-                codes.numel(),
+                size=(category.numel(),),
+                fill_value=codes.numel(),
                 dtype=torch.long,
                 device=data.device,
             )
             observed = codes >= 0
             first_positions.scatter_reduce_(
-                0,
-                codes[observed].to(torch.long),
-                positions[observed],
+                dim=0,
+                index=codes[observed].to(torch.long),
+                src=positions[observed],
                 reduce="amin",
                 include_self=True,
             )
@@ -108,7 +115,7 @@ class CategoricalAlign(Processor):
         if category.dtype in _HOST_MAPPED_DTYPES:
             values = category.tolist()
             return torch.tensor(
-                [values[i] for i in index.tolist()],
+                data=[values[i] for i in index.tolist()],
                 dtype=category.dtype,
                 device=category.device,
             )
@@ -122,9 +129,12 @@ class CategoricalAlign(Processor):
         column: str,
     ) -> Tensor:
         if expected.numel() == 0:
+            # An all-missing fit stores an empty vocabulary whose dtype is a
+            # placeholder, so value-type compatibility cannot be validated;
+            # every query value is unseen and maps to -1.
             return torch.full(
-                (actual.numel(),),
-                -1,
+                size=(actual.numel(),),
+                fill_value=-1,
                 dtype=torch.long,
                 device=device,
             )
@@ -146,7 +156,9 @@ class CategoricalAlign(Processor):
                 value: index for index, value in enumerate(expected.tolist())
             }
             return torch.tensor(
-                [expected_index.get(value, -1) for value in actual.tolist()],
+                data=[
+                    expected_index.get(value, -1) for value in actual.tolist()
+                ],
                 dtype=torch.long,
                 device=device,
             )
@@ -160,25 +172,22 @@ class CategoricalAlign(Processor):
                 f"(got {actual.dtype} and "
                 f"{expected.dtype})."
             )
-        if actual.is_complex():
-            raise ValueError(
-                "CategoricalAlign does not support complex category values "
-                f"for categorical column '{column}'."
-            )
         if actual.dtype in _HOST_MAPPED_DTYPES:
             expected_index = {
                 value: index for index, value in enumerate(expected.tolist())
             }
             return torch.tensor(
-                [expected_index.get(value, -1) for value in actual.tolist()],
+                data=[
+                    expected_index.get(value, -1) for value in actual.tolist()
+                ],
                 dtype=torch.long,
                 device=device,
             )
 
         # [num_actual_categories]
         mapping = torch.full(
-            (actual.numel(),),
-            -1,
+            size=(actual.numel(),),
+            fill_value=-1,
             dtype=torch.long,
             device=device,
         )
@@ -209,7 +218,8 @@ class CategoricalAlign(Processor):
         expected_values, permutation = expected[expected_indices].sort()
         actual_values = actual[actual_indices]  # [num_actual_non_nan]
         positions = torch.searchsorted(
-            expected_values, actual_values
+            sorted_sequence=expected_values,
+            input=actual_values,
         )  # [num_actual_non_nan]
         within_bounds = positions < expected_values.numel()
         candidates = positions.clamp(max=expected_values.numel() - 1)
