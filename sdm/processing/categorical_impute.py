@@ -14,9 +14,9 @@ class CategoricalImpute(Processor):
     Negative category codes are missing values. The fitted fill value is
     learned independently for every categorical column and applied without
     changing its category vocabulary.
-    Transform inputs must use the fitted categorical column names, order, and
-    category vocabularies. The processor raises if the encoded schema does not
-    match.
+    Transform inputs must use the fitted per-column category vocabularies.
+    The processor raises if they do not match. Column names are not
+    validated.
 
     Args:
         strategy: Imputation strategy. ``"most_frequent"`` selects the most
@@ -37,7 +37,6 @@ class CategoricalImpute(Processor):
         if strategy != "most_frequent":
             raise ValueError("strategy must be 'most_frequent'")
         self.strategy = strategy
-        self._columns: tuple[str, ...] = ()
         self._categories: tuple[torch.Tensor, ...] = ()
         self.register_buffer(
             "_fill_values",
@@ -69,11 +68,10 @@ class CategoricalImpute(Processor):
             if len(fill_values) > 0
             else torch.empty(0, dtype=torch.long, device=data.device)
         )
-        self._columns = columns
         self._categories = input.categorical.categories
 
     def _transform(self, input: TableTensor) -> TableTensor:
-        self._check_schema(input)
+        self._check_categories(input)
         _check_categorical_codes(input)
         data = torch.where(
             input.categorical < 0,
@@ -86,17 +84,10 @@ class CategoricalImpute(Processor):
         )
         return input.replace_blocks(categorical=categorical)
 
-    def _check_schema(self, input: TableTensor) -> None:
+    def _check_categories(self, input: TableTensor) -> None:
         columns = input.columns[Stype.categorical]
-        if columns != self._columns:
-            raise ValueError(
-                "Expected categorical columns to match the fitted names and "
-                f"order (got {columns} and {self._columns})."
-            )
-
-        categories = input.categorical.categories
         for index, (actual, expected) in enumerate(
-            zip(categories, self._categories)
+            zip(input.categorical.categories, self._categories, strict=True)
         ):
             expected = expected.to(device=actual.device)
             if not torch.equal(actual, expected):

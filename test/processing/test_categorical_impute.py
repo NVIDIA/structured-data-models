@@ -134,7 +134,10 @@ def test_categorical_impute_rejects_reordered_columns() -> None:
         categories=(("x", "y"), ("a", "b", "c")),
     )
 
-    with pytest.raises(ValueError, match=r"columns.*fitted names and order"):
+    with pytest.raises(
+        ValueError,
+        match=r"vocabulary.*segment.*fitted values",
+    ):
         processor.transform(query)
 
 
