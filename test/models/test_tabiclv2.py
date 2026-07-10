@@ -4,7 +4,7 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Recipe, Sequential
+from sdm.processing import InvertibleMixin, Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -92,7 +92,7 @@ def test_tabiclv2_recipe() -> None:
         x=recipe.features.transform(x),
         y=recipe.target.fit_transform(y),
     )
-    assert isinstance(recipe.target, Sequential)
+    assert isinstance(recipe.target, InvertibleMixin)
     expected = recipe.target.inverse_transform(
         TableTensor.from_tensor(raw.clone())
     ).numerical
@@ -102,7 +102,7 @@ def test_tabiclv2_recipe() -> None:
     model.fit(x[:R_train], y, recipe=model.default_recipe())
     torch.testing.assert_close(model.predict(x[R_train:]), out)
     model.clear()
-    assert model._recipe is None
+    assert model._recipes is None
 
 
 def test_default_recipe_regression_roundtrip() -> None:
@@ -135,7 +135,7 @@ def test_default_recipe_regression_roundtrip() -> None:
         "kind",
     }
 
-    assert isinstance(recipe.target, Sequential)
+    assert isinstance(recipe.target, InvertibleMixin)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(
         restored.numerical, target.numerical, atol=1e-4, rtol=1e-4

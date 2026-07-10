@@ -2,6 +2,7 @@ import contextlib
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from copy import deepcopy
 from typing import ClassVar, cast
 
 import torch
@@ -44,7 +45,7 @@ class BaseModel(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
-        self._recipe: Recipe | None = None
+        self._recipes: list[Recipe | None] | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -80,18 +81,18 @@ class BaseModel(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        # TODO Create an ensemble dimension to process across ensemble
-        # members for better efficiency.
+        recipes = self._create_member_recipes(
+            recipe=recipe,
+            num_estimators=num_estimators,
+        )
         outs: list[Tensor] = []
-        for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, recipe=recipe)
+        for member_recipe in recipes:
+            x_i, y_i = self._preprocess(x, y, recipe=member_recipe)
             out = self._forward(x_i, y_i, related_tables, cache=None)
-            out = self._postprocess(out, recipe)
-            outs.append(out)
+            outs.append(self._canonicalize_output(out, member_recipe))
 
-        return torch.stack(outs).mean(dim=0)
+        out = torch.stack(outs).mean(dim=0)
+        return self._finalize_output(out, recipes[0])
 
     @torch.inference_mode()
     def fit(
@@ -126,11 +127,13 @@ class BaseModel(torch.nn.Module, ABC):
             related_tables = None
 
         self.clear()
+        recipes = self._create_member_recipes(
+            recipe=recipe,
+            num_estimators=num_estimators,
+        )
         caches: list[Cache] = []
-        for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, recipe=recipe)
+        for member_recipe in recipes:
+            x_i, y_i = self._preprocess(x, y, recipe=member_recipe)
             x_i = x_i[..., : y_i.size(-1), :]
 
             # TODO Don't store y.dtype for every estimator.
@@ -140,15 +143,12 @@ class BaseModel(torch.nn.Module, ABC):
             caches.append(cache)
 
         self._caches = caches
-        # TODO: Once creating Recipes from a Recipe is supported, we should
-        # iterate over the recipes so that every predict call runs a consistent
-        # recipe per ensemble member.
-        self._recipe = recipe
+        self._recipes = recipes
 
     def clear(self) -> None:
-        r"""Clears cached in-context examples and the fitted recipe."""
+        r"""Clear cached examples and fitted member recipes."""
         self._caches = None
-        self._recipe = None
+        self._recipes = None
 
     @torch.inference_mode()
     def predict(
@@ -177,33 +177,34 @@ class BaseModel(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        if self._caches is None:
+        if self._caches is None or self._recipes is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        recipe = self._recipe
         outs: list[Tensor] = []
-        for cache in self._caches:
+        for cache, member_recipe in zip(
+            self._caches,
+            self._recipes,
+            strict=True,
+        ):
             y_i = torch.empty(
                 (*x.size()[:-2], 0),
-                dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
+                dtype=cast(torch.dtype, cache["y.dtype"]),
                 device=x.device,
             )
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
             x_i, y_i = self._preprocess(
                 x,
                 y_i,
-                recipe=recipe,
+                recipe=member_recipe,
                 fit_recipe=False,
             )
             out = self._forward(x_i, y_i, related_tables, cache)
-            out = self._postprocess(out, recipe)
-            outs.append(out)
+            outs.append(self._canonicalize_output(out, member_recipe))
 
-        return torch.stack(outs).mean(dim=0)
+        out = torch.stack(outs).mean(dim=0)
+        return self._finalize_output(out, self._recipes[0])
 
     # Helpers #################################################################
 
@@ -281,7 +282,7 @@ class BaseModel(torch.nn.Module, ABC):
 
     # FIXME: Fix TableTensor to support inference mode.
     @torch.inference_mode(False)
-    def _postprocess(
+    def _canonicalize_output(
         self,
         out: Tensor,  # [..., R_test, *]
         recipe: Recipe | None,
@@ -299,9 +300,32 @@ class BaseModel(torch.nn.Module, ABC):
 
         table = TableTensor.from_tensor(out.clone())
         table = recipe.target.inverse_transform(table)
-        table = recipe.output.transform(table)
-
         return table.numerical
+
+    # FIXME: Fix TableTensor to support inference mode.
+    @torch.inference_mode(False)
+    def _finalize_output(
+        self,
+        out: Tensor,  # [..., R_test, *]
+        recipe: Recipe | None,
+    ) -> Tensor:  # [..., R_test, *]
+        if recipe is None:
+            return out
+
+        table = TableTensor.from_tensor(out.clone())
+        return recipe.output.transform(table).numerical
+
+    @staticmethod
+    def _create_member_recipes(
+        recipe: Recipe | None,
+        num_estimators: int,
+    ) -> list[Recipe | None]:
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+        return [
+            None if recipe is None else deepcopy(recipe)
+            for _ in range(num_estimators)
+        ]
 
     # Abstract Methods ########################################################
 

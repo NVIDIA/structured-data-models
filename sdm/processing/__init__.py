@@ -6,6 +6,7 @@ from sdm.processing.choice import Choice
 from sdm.processing.stype_dispatch import StypeDispatch
 from sdm.processing.categorical_align import CategoricalAlign
 from sdm.processing.categorical_impute import CategoricalImpute
+from sdm.processing.target_dispatch import TargetDispatch
 from sdm.processing.task_dispatch import TaskDispatch
 from sdm.processing.clip import Clip
 from sdm.processing.category_shuffle import CategoryShuffle
@@ -29,6 +30,7 @@ __all__ = [
     "StypeDispatch",
     "CategoricalAlign",
     "CategoricalImpute",
+    "TargetDispatch",
     "TaskDispatch",
     "Clip",
     "CategoryShuffle",

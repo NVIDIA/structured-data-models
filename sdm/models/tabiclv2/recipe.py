@@ -7,8 +7,8 @@ The factory composes shared :mod:`sdm.processing` processors into the
 
 from sdm.processing import (
     CategoricalAlign,
-    Choice,
     CategoryShuffle,
+    Choice,
     ConstantFilter,
     FeaturePermute,
     Identity,
@@ -19,6 +19,7 @@ from sdm.processing import (
     SoftmaxTemperature,
     StandardScale,
     StypeDispatch,
+    TargetDispatch,
     TaskDispatch,
     ToNumerical,
 )
@@ -50,15 +51,10 @@ def default_recipe() -> Recipe:
             SigmaClip(threshold=4.0),
             FeaturePermute(method="shift"),
         ],
-        # TODO: Replace this with fitted target dispatch before model
-        # integration. The selected route must receive the complete numerical
-        # head (10 class logits or 999 regression quantiles) during inverse.
-        target=[
-            StypeDispatch(
-                numerical=StandardScale(),
-                categorical=CategoryShuffle(method="shift"),
-            ),
-        ],
+        target=TargetDispatch(
+            classification=CategoryShuffle(method="shift"),
+            regression=StandardScale(),
+        ),
         output=[
             TaskDispatch(
                 classification=SoftmaxTemperature(temperature=0.9),
