@@ -1,6 +1,6 @@
 # ruff: noqa: D205
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
@@ -71,6 +71,26 @@ class KumoRFM(Model):
         if num_estimators != 1:
             raise ValueError("KumoRFM currently supports one estimator")
         return super().forward(
+            x=x,
+            y=y,
+            related_tables=related_tables,
+            recipe=recipe,
+            num_estimators=num_estimators,
+        )
+
+    def fit(
+        self,
+        x: Tensor | TableTensor,
+        y: Tensor | TableTensor,
+        related_tables: RelatedTables | None = None,
+        *,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+    ) -> None:
+        r"""Fit and cache a single KumoRFM estimator."""
+        if num_estimators != 1:
+            raise ValueError("KumoRFM currently supports one estimator")
+        super().fit(
             x=x,
             y=y,
             related_tables=related_tables,
@@ -179,20 +199,26 @@ class _KumoRFM(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:
-        if cache is not None:
-            raise NotImplementedError(
-                "KumoRFM fit/predict caching is not available yet"
-            )
         if related_tables is None:
             raise ValueError("KumoRFM requires related tables")
         if len(related_tables.task_links) != 1:
             raise ValueError(
                 "KumoRFM entity prediction requires exactly one task link"
             )
-        if y.numel() == 0:
+        if y.numel() == 0 and (cache is None or not cache.is_replaying):
             raise ValueError("KumoRFM requires at least one context target")
 
         parameter = self.gnn.src_lin.weight
+        _cache_contract(
+            cache,
+            "model contract",
+            (
+                str(parameter.device),
+                parameter.dtype,
+                self.num_classes,
+                self.num_quantiles,
+            ),
+        )
         x = x.to(device=parameter.device, dtype=parameter.dtype)
         if self.num_classes:
             integer_dtypes = {
@@ -215,14 +241,22 @@ class _KumoRFM(torch.nn.Module):
                 raise TypeError("Regression targets must be floating point")
             y = y.to(device=parameter.device, dtype=parameter.dtype)
         generator = torch.Generator(device=parameter.device).manual_seed(42)
+        table_hop_cache = _cache_child(cache, "table_hop_encoder")
+        icl_cache = _cache_child(cache, "icl_block")
+        if cache is not None and cache.is_replaying:
+            generator.set_state(cast(Tensor, cache["gnn_generator_state"]))
 
         encoded = self.table_hop_encoder(
             x=x,
             y=y,
             related_tables=related_tables,
+            cache=table_hop_cache,
             max_keys=20_000,
             generator=generator,
         )
+        if cache is not None and cache.is_recording:
+            cache["gnn_generator_state"] = generator.get_state()
+
         entity_table = related_tables.task_links[0].table
         x = self.gnn(
             x_dict=encoded.x_dict,
@@ -232,5 +266,26 @@ class _KumoRFM(torch.nn.Module):
             generator=generator,
         )
         x = x.index_select(0, encoded.root_index)
-        x = self.icl_block(x=x, y=y)
+        x = self.icl_block(x=x, y=y, cache=icl_cache)
         return self.head(x)
+
+
+def _cache_child(cache: Cache | None, key: str) -> Cache | None:
+    if cache is None:
+        return None
+    if cache.is_replaying:
+        return cast(Cache, cache[key])
+
+    child = Cache()
+    cache[key] = child
+    return child
+
+
+def _cache_contract(cache: Cache | None, key: str, value: object) -> None:
+    if cache is None:
+        return
+    if cache.is_replaying:
+        if cache[key] != value:
+            raise ValueError(f"Cached KumoRFM {key} is incompatible")
+        return
+    cache[key] = value

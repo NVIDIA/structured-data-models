@@ -207,6 +207,8 @@ def test_multiple_estimators_are_explicitly_deferred() -> None:
 
     with pytest.raises(ValueError, match="one estimator"):
         model(_x(), torch.tensor([0, 1]), num_estimators=2)
+    with pytest.raises(ValueError, match="one estimator"):
+        model.fit(_x(), torch.tensor([0, 1]), num_estimators=2)
 
 
 @pytest.mark.parametrize(
@@ -329,16 +331,6 @@ def test_roots_are_selected_after_gnn_in_task_order() -> None:
         gnn_outputs[0].index_select(0, encodings[0].root_index),
     )
     assert out.size() == (2, 3)
-
-
-def test_cache_is_explicitly_deferred() -> None:
-    with pytest.raises(NotImplementedError, match="caching"):
-        _core(num_classes=3, num_quantiles=0)(
-            _x(),
-            torch.tensor([0, 1]),
-            _related_tables(),
-            cache=Cache(),
-        )
 
 
 @pytest.mark.parametrize(
