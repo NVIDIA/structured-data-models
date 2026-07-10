@@ -86,7 +86,7 @@ class BaseModel(torch.nn.Module, ABC):
         for _ in range(num_estimators):
             # TODO Iterate over Recipes instead of using a single recipe once
             # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, recipe=recipe)
+            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
             out = self._forward(x_i, y_i, related_tables, cache=None)
             out = self._postprocess(out, recipe)
             outs.append(out)
@@ -130,7 +130,7 @@ class BaseModel(torch.nn.Module, ABC):
         for _ in range(num_estimators):
             # TODO Iterate over Recipes instead of using a single recipe once
             # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, recipe=recipe)
+            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
             x_i = x_i[..., : y_i.size(-1), :]
 
             # TODO Don't store y.dtype for every estimator.
@@ -196,6 +196,7 @@ class BaseModel(torch.nn.Module, ABC):
             x_i, y_i = self._preprocess(
                 x,
                 y_i,
+                related_tables,
                 recipe=recipe,
                 fit_recipe=False,
             )
@@ -213,9 +214,15 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        related_tables: RelatedTables | None,
+        *,
         recipe: Recipe | None = None,
         fit_recipe: bool = True,
     ) -> tuple[Tensor, Tensor]:
+        if related_tables is not None:
+            # TODO Support preprocessing related tables.
+            related_tables = None
+
         if recipe is not None:
             if not isinstance(x, TableTensor):
                 raise ValueError(
