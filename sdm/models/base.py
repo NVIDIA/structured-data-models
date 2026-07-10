@@ -91,7 +91,8 @@ class BaseModel(torch.nn.Module, ABC):
             out = self._postprocess(out, recipe)
             outs.append(out)
 
-        return self.recipe.output.transform(torch.stack(outs).mean(dim=0))
+        out = torch.stack(outs).mean(dim=0)
+        return self._transform_output(out, recipe)
 
     @torch.inference_mode()
     def fit(
@@ -204,7 +205,8 @@ class BaseModel(torch.nn.Module, ABC):
             out = self._postprocess(out, recipe)
             outs.append(out)
 
-        return self.recipe.output.transform(torch.stack(outs).mean(dim=0))
+        out = torch.stack(outs).mean(dim=0)
+        return self._transform_output(out, recipe)
 
     # Helpers #################################################################
 
@@ -308,6 +310,19 @@ class BaseModel(torch.nn.Module, ABC):
         table = recipe.target.inverse_transform(table)
 
         return table.numerical
+
+    # FIXME: Fix TableTensor to support inference mode.
+    @torch.inference_mode(False)
+    def _transform_output(
+        self,
+        out: Tensor,  # [..., R_test, *]
+        recipe: Recipe | None,
+    ) -> Tensor:  # [..., R_test, *]
+        if recipe is None:
+            return out
+
+        table = TableTensor.from_tensor(out.clone())
+        return recipe.output.transform(table).numerical
 
     # Abstract Methods ########################################################
 

@@ -4,7 +4,7 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Recipe, Sequential
+from sdm.processing import Recipe, Sequential, SoftmaxTemperature
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -82,6 +82,14 @@ def test_tabiclv2_recipe() -> None:
         model(x, y, recipe=Recipe()),
         model(x, y),
     )
+
+    # Output steps run after the model and ensembling:
+    raw = model(x, y)
+    output_recipe = Recipe(output=[SoftmaxTemperature()])
+    out = model(x, y, recipe=output_recipe)
+    torch.testing.assert_close(out, raw.softmax(dim=-1))
+    model.fit(x[:R_train], y, recipe=output_recipe)
+    torch.testing.assert_close(model.predict(x[R_train:]), out)
 
     # The recipe matches its manual driver-side application:
     out = model(x, y, recipe=model.default_recipe())
