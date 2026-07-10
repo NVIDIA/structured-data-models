@@ -155,7 +155,7 @@ class StringTensor(VarLenTensor):
                 size=size,
             )
 
-        # NOTE cudf 26.02+ removed 'Column.children', so access the offsets
+        # NOTE cudf 26.04+ removed 'Column.children', so access the offsets
         # child via the underlying 'pylibcudf.Column' instead, which works on
         # both cudf 25.x and 26.x. Its data buffer is untyped, so read the
         # offset dtype from the pylibcudf column type.
