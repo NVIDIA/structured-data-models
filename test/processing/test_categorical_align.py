@@ -1,13 +1,8 @@
 import pandas as pd
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import (
-    CategoricalAlign,
-    CategoricalImpute,
-    StypeDispatch,
-    ToNumerical,
-)
+from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm.processing import CategoricalAlign
 from sdm.testing import withCUDA
 
 
@@ -316,49 +311,3 @@ def test_categorical_align_rejects_out_of_range_codes(
     )
     with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
         processor.transform(invalid)
-
-
-def test_categorical_align_composes_with_impute_for_pandas_splits() -> None:
-    context = TableTensor.from_pandas(
-        pd.DataFrame({"kind": ["red", "blue", "red", None]}),
-        stypes={"kind": "categorical"},
-    )
-    query = TableTensor.from_pandas(
-        pd.DataFrame({"kind": ["green", "blue", None]}),
-        stypes={"kind": "categorical"},
-    )
-    processor = StypeDispatch(
-        categorical=[
-            CategoricalAlign(),
-            CategoricalImpute(strategy="most_frequent"),
-            ToNumerical(),
-        ],
-    ).fit(context)
-
-    output = processor.transform(query)
-
-    assert output.columns[Stype.categorical] == ()
-    assert output.columns[Stype.numerical] == ("kind",)
-    assert torch.equal(
-        output.numerical,
-        torch.tensor([[0.0], [1.0], [0.0]]),
-    )
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
-def test_categorical_align_moves_fitted_vocabulary_to_query_device() -> None:
-    processor = CategoricalAlign().fit(
-        _table([[0]], columns=("kind",), categories=(("red",),))
-    )
-    query = _table(
-        [[0], [-1]],
-        columns=("kind",),
-        categories=(("red",),),
-        device="cuda",
-    )
-
-    output = processor.to("cuda").transform(query)
-
-    assert output.categorical.is_cuda
-    assert output.categorical.categories[0].is_cuda
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [0, -1]

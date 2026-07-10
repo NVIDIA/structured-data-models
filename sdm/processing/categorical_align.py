@@ -41,7 +41,7 @@ class CategoricalAlign(Processor):
 
     def _fit(self, input: TableTensor) -> None:
         _check_categorical_codes(input)
-        data = input.categorical.as_tensor()
+        data = input.categorical
         categories: list[Tensor] = []
         for index, category in enumerate(input.categorical.categories):
             codes = data[..., index].reshape(-1)  # [num_rows]
@@ -75,14 +75,13 @@ class CategoricalAlign(Processor):
         self._check_columns(input)
         _check_categorical_codes(input)
 
-        input_data = input.categorical.as_tensor()
         # Start from all-missing output codes; the per-column loop below only
         # overwrites observed positions, so missing and unseen values stay -1.
-        data = torch.full_like(input_data, -1)
+        data = torch.full_like(input.categorical, -1)
         for index, (actual, expected) in enumerate(
             zip(input.categorical.categories, self._categories)
         ):
-            codes = input_data[..., index]
+            codes = input.categorical[..., index]
             observed = codes >= 0
             if not observed.any():
                 continue
