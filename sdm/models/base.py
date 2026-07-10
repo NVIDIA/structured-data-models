@@ -161,8 +161,6 @@ class BaseModel(torch.nn.Module, ABC):
         .. note::
 
             This method requires a prior call to :meth:`fit`.
-            A recipe passed to :meth:`fit` is reused to transform ``x`` and
-            to postprocess predictions.
 
         Args:
             x: The feature tensor with shape ``[..., R_test, C]`` with
