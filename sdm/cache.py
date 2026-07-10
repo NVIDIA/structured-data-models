@@ -81,8 +81,29 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         return self._mode == Cache.Mode.replay
 
     def freeze(self) -> None:
-        r"""Freeze the cache to replay mode."""
-        self._mode = Cache.Mode.replay
+        r"""Freeze the cache and nested caches to replay mode."""
+        caches: list[Cache] = []
+        visited: set[int] = set()
+
+        def _collect(value: object) -> None:
+            if id(value) in visited:
+                return
+            visited.add(id(value))
+
+            if isinstance(value, Cache):
+                caches.append(value)
+                for item in value.values():
+                    _collect(item)
+            elif isinstance(value, list | tuple):
+                for item in value:
+                    _collect(item)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    _collect(item)
+
+        _collect(self)
+        for cache in caches:
+            cache._mode = Cache.Mode.replay
 
     def __setitem__(self, key: str, value: object) -> None:
         if not self.is_recording:
