@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up proxy cache
-        uses: nv-gha-runners/setup-proxy-cache@14229018fe157c83e03c008f27d183d8e99bc67c  # main
+        uses: nv-gha-runners/setup-proxy-cache@main  # NVIDIA-internal action; @main per the platform's own convention
         # The proxy is a download cache, not a security boundary; fall back
         # to direct downloads rather than failing CI on a proxy outage.
         continue-on-error: true
