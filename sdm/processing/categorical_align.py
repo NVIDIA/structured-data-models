@@ -36,7 +36,6 @@ class CategoricalAlign(Processor):
 
     def __init__(self) -> None:
         super().__init__()
-        self._columns: tuple[str, ...] = ()
         self._categories: tuple[Tensor, ...] = ()
 
     def _fit(self, input: TableTensor) -> None:
@@ -68,18 +67,17 @@ class CategoricalAlign(Processor):
             observed = observed[first_positions[observed].argsort()]
             categories.append(self._select_categories(category, observed))
 
-        self._columns = input.columns[Stype.categorical]
         self._categories = tuple(categories)
 
     def _transform(self, input: TableTensor) -> TableTensor:
-        self._check_columns(input)
         _check_categorical_codes(input)
 
+        columns = input.columns[Stype.categorical]
         # Start from all-missing output codes; the per-column loop below only
         # overwrites observed positions, so missing and unseen values stay -1.
         data = torch.full_like(input.categorical, -1)
         for index, (actual, expected) in enumerate(
-            zip(input.categorical.categories, self._categories)
+            zip(input.categorical.categories, self._categories, strict=True)
         ):
             codes = input.categorical[..., index]
             observed = codes >= 0
@@ -90,7 +88,7 @@ class CategoricalAlign(Processor):
                 actual=actual,
                 expected=expected,
                 device=data.device,
-                column=self._columns[index],
+                column=columns[index],
             )
             data[..., index][observed] = mapping[
                 codes[observed].to(torch.long)
@@ -104,14 +102,6 @@ class CategoricalAlign(Processor):
             ),
         )
         return input.replace_blocks(categorical=categorical)
-
-    def _check_columns(self, input: TableTensor) -> None:
-        columns = input.columns[Stype.categorical]
-        if columns != self._columns:
-            raise ValueError(
-                "Expected categorical columns to match the fitted names and "
-                f"order (got {columns} and {self._columns})."
-            )
 
     @staticmethod
     def _select_categories(category: Tensor, index: Tensor) -> Tensor:
