@@ -10,7 +10,6 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
-    Sequential,
     SoftmaxTemperature,
     StandardScale,
     TaskDispatch,
@@ -126,13 +125,10 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
         Recipe(target=[TaskDispatch(regression=Identity())])
 
-    nested = Choice(
-        Identity(),
-        Sequential(TaskDispatch(regression=Identity())),
-    )
-    assert any(isinstance(module, TaskDispatch) for module in nested.modules())
-    with pytest.raises(ValueError, match=r"direct step.*Recipe.output"):
-        Recipe(output=nested)
+    shared = TaskDispatch(regression=Identity())
+    nested = Choice(Identity(), shared)
+    with pytest.raises(ValueError, match=r"direct step.*1\.options\.1"):
+        Recipe(output=[shared, nested])
 
 
 def test_task_resolver_copies_recipes_independently() -> None:

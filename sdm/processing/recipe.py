@@ -143,26 +143,39 @@ class Recipe:
                     f"(found in '{role}')."
                 )
 
-        # modules() recursively visits every registered processor child.
-        all_task_dispatchers = tuple(
-            module
-            for module in output.modules()
+        task_dispatcher_entries = tuple(
+            (path, module)
+            for path, module in output.named_modules(remove_duplicate=False)
             if isinstance(module, TaskDispatch)
         )
         if isinstance(output, TaskDispatch):
-            task_dispatchers = (output,)
+            direct_paths = {""}
         elif isinstance(output, Sequential):
-            task_dispatchers = tuple(
-                step for step in output.steps if isinstance(step, TaskDispatch)
-            )
+            direct_paths = {
+                str(index)
+                for index, step in enumerate(output.steps)
+                if isinstance(step, TaskDispatch)
+            }
         else:
-            task_dispatchers = ()
+            direct_paths = set()
 
-        if set(all_task_dispatchers) != set(task_dispatchers):
+        nested_paths = tuple(
+            path
+            for path, _ in task_dispatcher_entries
+            if path not in direct_paths
+        )
+        if len(nested_paths) > 0:
+            locations = ", ".join(repr(path) for path in nested_paths)
             raise ValueError(
                 "'TaskDispatch' must be a direct step in 'Recipe.output'; "
-                "nested task dispatch is not supported."
+                f"nested task dispatch was found at {locations}."
             )
+
+        task_dispatchers = tuple(
+            module
+            for path, module in task_dispatcher_entries
+            if path in direct_paths
+        )
 
         if len(task_dispatchers) > 0:
             target = _TaskResolver(
