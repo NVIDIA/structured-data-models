@@ -87,18 +87,13 @@ class RelationalSampler:
         for i, (rel, edge_index) in enumerate(
             zip(self.data.relationships, self.data.edge_indices())
         ):
-            relation = f"relationship_{i}"
-            edge_type = (rel.left_table, relation, rel.right_table)
+            edge_type = (rel.left_table, str(2 * i), rel.right_table)
             self._row_dict[edge_type], self._colptr_dict[edge_type] = _to_csc(
                 edge_index=edge_index,
                 num_dst_nodes=self.data.tables[rel.right_table].size(0),
                 src_time=self._time_dict.get(rel.left_table),
             )
-            edge_type = (
-                rel.right_table,
-                f"rev_{relation}",
-                rel.left_table,
-            )
+            edge_type = (rel.right_table, str(2 * i + 1), rel.left_table)
             self._row_dict[edge_type], self._colptr_dict[edge_type] = _to_csc(
                 edge_index=edge_index.flip(0),
                 num_dst_nodes=self.data.tables[rel.left_table].size(0),
@@ -148,7 +143,7 @@ class RelationalSampler:
                 stype = table.stype(column)
                 if stype != Stype.id:
                     raise ValueError(
-                        f"Expected column '{column}' to have semantic type "
+                        f"Expected column '{column}' to have [118;1:3usemantic type "
                         f"'{Stype.id.value}' (got '{stype.value}')"
                     )
 
@@ -224,30 +219,21 @@ class RelationalSampler:
             )
 
         # Perform subgraph sampling:
-        edge_type_by_key = {
-            "__".join(edge_type): edge_type for edge_type in self._row_dict
-        }
-        (
-            row_dict,
-            col_dict,
-            node_dict,
-            _,
-            num_sampled_nodes_dict,
-            num_sampled_edges_dict,
-        ) = torch.ops.pyg.hetero_neighbor_sample(
+        _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
             node_types=list(self.data.tables),
             edge_types=list(self._colptr_dict),
             rowptr_dict={
-                key: self._colptr_dict[edge_type]
-                for key, edge_type in edge_type_by_key.items()
+                "__".join(edge_type): colptr
+                for edge_type, colptr in self._colptr_dict.items()
             },
             col_dict={
-                key: self._row_dict[edge_type]
-                for key, edge_type in edge_type_by_key.items()
+                "__".join(edge_type): row
+                for edge_type, row in self._row_dict.items()
             },
             seed_dict={task_link.table: seed},
             num_neighbors_dict={
-                key: list(num_neighbors) for key in edge_type_by_key
+                "__".join(edge_type): list(num_neighbors)
+                for edge_type in self._row_dict
             },
             node_time_dict=self._time_dict,
             edge_time_dict=None,
@@ -260,26 +246,18 @@ class RelationalSampler:
             temporal_strategy="last",
             return_edge_id=False,
         )
-        node_index_dict, metadata = _convert_hetero_sample(
-            row_dict=row_dict,
-            col_dict=col_dict,
-            node_dict=node_dict,
-            num_sampled_nodes_dict=num_sampled_nodes_dict,
-            num_sampled_edges_dict=num_sampled_edges_dict,
-            edge_type_by_key=edge_type_by_key,
-            seed_time=seed_time,
-        )
 
         tables: dict[str, Tensor] = {}
-        for table_name, index in node_index_dict.items():
-            if index.numel() == 0:
+        for table_name, node in node_dict.items():
+            if node.numel() == 0:
                 continue
+            example, index = node.t().contiguous()
             tables[table_name] = torch.cat(
                 [
                     self.data.tables[table_name][index],
                     TableTensor(
                         columns={"id": (EXAMPLE_ID,)},
-                        id=ColumnarTensor((metadata.batch_dict[table_name],)),
+                        id=ColumnarTensor((example,)),
                     ),
                 ],
                 dim=-1,
@@ -322,46 +300,6 @@ class RelationalSampler:
                 task_links=(task_link,),
             ),
         )
-
-
-def _convert_hetero_sample(
-    *,
-    row_dict: Mapping[str, Tensor],
-    col_dict: Mapping[str, Tensor],
-    node_dict: Mapping[str, Tensor],
-    num_sampled_nodes_dict: Mapping[str, Sequence[int]],
-    num_sampled_edges_dict: Mapping[str, Sequence[int]],
-    edge_type_by_key: Mapping[str, tuple[str, str, str]],
-    seed_time: Tensor,
-) -> tuple[dict[str, Tensor], SampledGraphMetadata]:
-    node_index_dict: dict[str, Tensor] = {}
-    batch_dict: dict[str, Tensor] = {}
-    for node_type, node in node_dict.items():
-        if node.numel() == 0:
-            batch_dict[node_type] = node.new_empty(0)
-            node_index_dict[node_type] = node.new_empty(0)
-            continue
-
-        batch, node_index = node.t().contiguous()
-        batch_dict[node_type] = batch
-        node_index_dict[node_type] = node_index
-
-    edge_index_dict = {
-        edge_type_by_key[key]: torch.stack((row, col_dict[key]))
-        for key, row in row_dict.items()
-    }
-    typed_num_sampled_edges_dict = {
-        edge_type_by_key[key]: counts
-        for key, counts in num_sampled_edges_dict.items()
-    }
-    metadata = SampledGraphMetadata(
-        edge_index_dict=edge_index_dict,
-        batch_dict=batch_dict,
-        num_sampled_nodes_dict=num_sampled_nodes_dict,
-        num_sampled_edges_dict=typed_num_sampled_edges_dict,
-        seed_time=seed_time,
-    )
-    return node_index_dict, metadata
 
 
 def _to_csc(
