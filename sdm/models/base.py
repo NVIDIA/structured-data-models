@@ -193,6 +193,8 @@ class BaseModel(torch.nn.Module, ABC):
                 dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
                 device=x.device,
             )
+            # TODO Iterate over Recipes instead of using a single recipe once
+            # Recipe adds support for multiple recipes.
             x_i, y_i = self._preprocess(
                 x,
                 y_i,
