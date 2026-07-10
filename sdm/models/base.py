@@ -130,7 +130,6 @@ class BaseModel(torch.nn.Module, ABC):
             related_tables = None
 
         self.clear()
-
         caches: list[Cache] = []
         for _ in range(num_estimators):
             # TODO Iterate over Recipes instead of using a single recipe once
