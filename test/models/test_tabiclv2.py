@@ -5,7 +5,7 @@ from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.processing import Sequential
-from sdm.testing import withCUDA
+from sdm.testing import onlyFullTest, withCUDA
 
 
 @withCUDA
@@ -164,6 +164,7 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     torch.testing.assert_close(out, row_embedding(x, y_swapped))
 
 
+@onlyFullTest
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 def test_tabiclv2_compile(device: torch.device, dtype: torch.dtype) -> None:
@@ -177,13 +178,15 @@ def test_tabiclv2_compile(device: torch.device, dtype: torch.dtype) -> None:
     else:
         y = torch.randint(0, 10, (R_train,), device=device)
 
-    eager = model(x, y)
-    # `fullgraph=True` raises on any graph break, while the default `inductor`
-    # backend exercises the complete compilation pipeline including code
-    # generation. Compiled callers enter inference mode around the call; the
-    # model skips it while compiling.
-    compiled = torch.compile(model, fullgraph=True)
-    with torch.inference_mode():
-        actual = compiled(x, y)
+    expected = model(x, y)
+    submodel = model.reg_model if dtype.is_floating_point else model.cls_model
+    submodel.compile(fullgraph=True)
 
-    torch.testing.assert_close(actual, eager)
+    actual = model(x, y)
+    torch.testing.assert_close(actual, expected)
+    assert torch.is_inference(actual)
+
+    model.fit(x[:R_train], y)
+    predicted = model.predict(x[R_train:])
+    torch.testing.assert_close(predicted, expected)
+    assert torch.is_inference(predicted)
