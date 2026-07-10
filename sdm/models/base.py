@@ -184,16 +184,14 @@ class BaseModel(torch.nn.Module, ABC):
                     f"Expected 'x' to be a 'TableTensor' when 'recipe' is "
                     f"given (got '{type(x).__name__}')"
                 )
-            if not isinstance(y, TableTensor):
-                raise ValueError(
-                    f"Expected 'y' to be a 'TableTensor' when "
-                    f"'recipe' is given (got '{type(y).__name__}')"
-                )
-
             if fit_recipe:
-                R_test = x.size(-2) - y.size(-1)
+                if not isinstance(y, TableTensor):
+                    raise ValueError(
+                        f"Expected 'y' to be a 'TableTensor' when "
+                        f"'recipe' is given (got '{type(y).__name__}')"
+                    )
                 # Fit on the in-context rows only to avoid leakage:
-                recipe.features.fit(x[..., :R_test, :])
+                recipe.features.fit(x[..., : y.size(-2), :])
                 y = recipe.target.fit_transform(y)
 
             x = recipe.features.transform(x)
