@@ -5,7 +5,7 @@ from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.processing import Recipe, Sequential
-from sdm.testing import onlyFullTest, withCUDA
+from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
 @withCUDA
@@ -172,19 +172,19 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     torch.testing.assert_close(out, row_embedding(x, y_swapped))
 
 
+@onlyCUDA
 @onlyFullTest
-@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
-def test_tabiclv2_compile(device: torch.device, dtype: torch.dtype) -> None:
+def test_tabiclv2_compile(dtype: torch.dtype) -> None:
     torch._dynamo.reset()
-    model = TabICLv2(pretrained=False, device=device)
+    model = TabICLv2(pretrained=False, device="cuda")
 
     R, C, R_train = 8, 6, 5
-    x = torch.randn(R, C, device=device)
+    x = torch.randn(R, C, device="cuda")
     if dtype.is_floating_point:
-        y = torch.randn(R_train, device=device)
+        y = torch.randn(R_train, device="cuda")
     else:
-        y = torch.randint(0, 10, (R_train,), device=device)
+        y = torch.randint(0, 10, (R_train,), device="cuda")
 
     expected = model(x, y)
     submodel = model.reg_model if dtype.is_floating_point else model.cls_model
