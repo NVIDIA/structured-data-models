@@ -87,16 +87,11 @@ class BaseModel(torch.nn.Module, ABC):
             # TODO Iterate over Recipes instead of using a single recipe once
             # Recipe adds support for multiple recipes.
             x_i, y_i = self._preprocess(x, y, recipe=recipe)
+            out = self._forward(x_i, y_i, related_tables, cache=None)
+            out = self._postprocess(out, recipe)
+            outs.append(out)
 
-            outs.append(
-                self._forward(
-                    x_i,
-                    y_i,
-                    related_tables,
-                    cache=None,
-                )
-            )
-        return self._postprocess(outs, recipe)
+        return torch.stack(outs).mean(dim=0)
 
     @torch.inference_mode()
     def fit(
@@ -140,14 +135,10 @@ class BaseModel(torch.nn.Module, ABC):
 
             # TODO Don't store y.dtype for every estimator.
             cache = Cache({"y.dtype": y.dtype})
-            self._forward(
-                x_i,
-                y_i,
-                related_tables,
-                cache,
-            )
+            self._forward(x_i, y_i, related_tables, cache)
             cache.freeze()
             caches.append(cache)
+
         self._caches = caches
         # TODO: Once creating Recipes from a Recipe is supported, we should
         # iterate over the recipes so that every predict call runs a consistent
@@ -195,23 +186,24 @@ class BaseModel(torch.nn.Module, ABC):
             )
 
         recipe = self._recipe
-        y = torch.empty(
-            (*x.size()[:-2], 0),
-            dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
-            device=x.device,
-        )
-        x, y = self._preprocess(x, y, recipe=recipe, fit_recipe=False)
         outs: list[Tensor] = []
         for cache in self._caches:
-            outs.append(
-                self._forward(
-                    x,
-                    y,
-                    related_tables,
-                    cache,
-                )
+            y_i = torch.empty(
+                (*x.size()[:-2], 0),
+                dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
+                device=x.device,
             )
-        return self._postprocess(outs, recipe)
+            x_i, y_i = self._preprocess(
+                x,
+                y_i,
+                recipe=recipe,
+                fit_recipe=False,
+            )
+            out = self._forward(x_i, y_i, related_tables, cache)
+            out = self._postprocess(out, recipe)
+            outs.append(out)
+
+        return torch.stack(outs).mean(dim=0)
 
     # Helpers #################################################################
 
@@ -291,12 +283,11 @@ class BaseModel(torch.nn.Module, ABC):
     @torch.inference_mode(False)
     def _postprocess(
         self,
-        outs: list[Tensor],  # E x [..., R_test, *]
+        out: Tensor,  # [..., R_test, *]
         recipe: Recipe | None,
     ) -> Tensor:  # [..., R_test, *]
-        out = torch.stack(outs)  # [E, ..., R_test, *]
         if recipe is None:
-            return out.mean(dim=0)
+            return out
 
         if not isinstance(recipe.target, InvertibleMixin):
             raise ValueError(
@@ -309,8 +300,8 @@ class BaseModel(torch.nn.Module, ABC):
         table = TableTensor.from_tensor(out.clone())
         table = recipe.target.inverse_transform(table)
         table = recipe.output.transform(table)
-        # Average across ensemble members only after the output steps:
-        return table.numerical.mean(dim=0)
+
+        return table.numerical
 
     # Abstract Methods ########################################################
 
