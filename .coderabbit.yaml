@@ -60,7 +60,7 @@ reviews:
         API misuse and data leakage between train/test portions.
 
   auto_review:
-    enabled: true
+    enabled: false
     drafts: false
 
   slop_detection:

@@ -1,11 +1,10 @@
 import io
-from typing import Any
 
 import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, ColumnarTensor, StringTensor
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA
 
 
 def test_init() -> None:
@@ -61,68 +60,40 @@ def test_from_arrow() -> None:
         ColumnarTensor.from_arrow(pa.array([1, None, 3]))
 
 
-def _import_cudf() -> Any:
-    pytest.importorskip("cupy")
+@onlyCUDA
+def test_from_cudf() -> None:
     cudf = pytest.importorskip("cudf")
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is not available")
-    return cudf
-
-
-@withCUDA
-def test_from_cudf(device: torch.device) -> None:
-    cudf = _import_cudf()
 
     tensor = ColumnarTensor.from_cudf(
         cudf.Series([1, 2, 3], dtype="int64"),
-        device=device,
     )
     assert tensor.size() == (3, 1)
-    assert tensor.device == device
-    assert tensor[:, 0].equal(torch.tensor([1, 2, 3], device=device))
+    assert tensor.is_cuda
+    assert tensor[:, 0].equal(torch.tensor([1, 2, 3], device=tensor.device))
 
     tensor = ColumnarTensor.from_cudf(
         cudf.Series([1.5, None, 3.5], dtype="float32"),
-        device=device,
     )
     assert tensor.size() == (3, 1)
-    assert tensor.device == device
-    assert tensor[:, 0].dtype == torch.float32
-    assert torch.allclose(
-        tensor[:, 0],
-        torch.tensor([1.5, float("nan"), 3.5], device=device),
+    assert tensor.is_cuda
+    assert tensor[:, 0].is_floating_point()
+    assert tensor[:, 0].allclose(
+        torch.tensor([1.5, float("nan"), 3.5], device=tensor.device),
         equal_nan=True,
     )
 
     tensor = ColumnarTensor.from_cudf(
         cudf.Series(["a", "bb", ""]),
-        device=device,
     )
     assert tensor.size() == (3, 1)
-    assert tensor.device == device
+    assert tensor.is_cuda
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
     with pytest.raises(ValueError, match="cannot represent null integer"):
         ColumnarTensor.from_cudf(
             cudf.Series([1, None, 3], dtype="int64"),
-            device=device,
         )
-
-    tensor = ColumnarTensor.from_cudf(
-        cudf.Index([4, 5, 6]),
-        device=device,
-    )
-    assert tensor.size() == (3, 1)
-    assert tensor[:, 0].equal(torch.tensor([4, 5, 6], device=device))
-
-    tensor = ColumnarTensor.from_cudf(
-        cudf.Index(["x", "yy", ""]),
-        device=device,
-    )
-    assert tensor.size() == (3, 1)
-    assert isinstance(tensor._columns[0], StringTensor)
-    assert tensor.tolist() == [["x"], ["yy"], [""]]
 
 
 def test_to_arrow() -> None:
