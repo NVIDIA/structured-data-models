@@ -104,8 +104,7 @@ class RowEmbedding(torch.nn.Module):
                 # TODO Cache `num_classes` to avoid device synchronization.
                 num_classes = int(y.max()) + 1
                 if torch.compiler.is_compiling():
-                    # FIXME: Don't give up on mixed-radix encoding when
-                    # compiling.
+                    # FIXME Don't give up on hierarchical classification.
                     torch._check(num_classes <= self.max_classes)
                 if num_classes > self.max_classes:
                     # TODO Support KV cache
