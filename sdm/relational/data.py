@@ -209,7 +209,6 @@ class RelationalData(DeviceMixin):
             indices in the first row and right table indices in the second row.
         """
         device = self.device if device is None else device
-        print("EDGE INDEX DEVICE", device)
 
         columns: dict[str, list[str]] = defaultdict(list)
         for rel in self.relationships:

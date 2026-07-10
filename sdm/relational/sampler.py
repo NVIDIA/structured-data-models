@@ -87,7 +87,6 @@ class RelationalSampler:
         for i, (rel, edge_index) in enumerate(
             zip(self.data.relationships, self.data.edge_indices())
         ):
-            print(edge_index.device)
             edge_type = (rel.left_table, str(2 * i), rel.right_table)
             self._row_dict[edge_type], self._colptr_dict[edge_type] = _to_csc(
                 edge_index=edge_index,
@@ -100,8 +99,6 @@ class RelationalSampler:
                 num_dst_nodes=self.data.tables[rel.left_table].size(0),
                 src_time=self._time_dict.get(rel.right_table),
             )
-
-        print("DRIN!")
 
     def __call__(
         self,
@@ -135,7 +132,6 @@ class RelationalSampler:
             task_time_column: Datetime column in ``task_table`` used as the
                 query timestamp for temporal sampling.
         """
-        print("SAMPLE1")
         if not isinstance(task_link, TaskLink):
             task_link = TaskLink.from_mapping(task_link)
 
@@ -158,8 +154,6 @@ class RelationalSampler:
                     f"Expected task time column to have semantic type "
                     f"'{Stype.datetime.value}' (got '{stype.value}')"
                 )
-
-        print("SAMPLE2")
 
         try:
             import pyg_lib  # noqa
@@ -211,8 +205,6 @@ class RelationalSampler:
                 f"'{task_link.table}'"
             )
 
-        print("SAMPLE3")
-
         seed = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy())
         seed = seed.to(task_table.device)
         if task_time_column is not None:
@@ -254,8 +246,6 @@ class RelationalSampler:
             temporal_strategy="last",
             return_edge_id=False,
         )
-
-        print("SAMPLE5")
 
         tables: dict[str, Tensor] = {}
         for table_name, node in node_dict.items():
