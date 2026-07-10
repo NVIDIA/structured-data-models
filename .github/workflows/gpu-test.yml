@@ -39,7 +39,10 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install --torch-backend=auto '.[test]' cudf-cu12
+          # cu128 keeps torch aligned with cudf-cu12/cupy-cuda12x; `auto` picks
+          # cu130 wheels whose nvrtc runtime is incomplete (missing
+          # libnvrtc-builtins.so.13.0), breaking JIT-compiled ops and cudf.
+          uv pip install --torch-backend=cu128 '.[test]' cudf-cu12
 
       - name: GPU sanity check
         run: |
