@@ -86,19 +86,28 @@ def test_categorical_align_joint_vocabulary_uses_context_order() -> None:
     assert query.categorical.as_tensor().squeeze(-1).tolist() == [1]
 
 
-def test_categorical_align_numeric_values() -> None:
+@withCUDA
+def test_categorical_align_numeric_values(device: torch.device) -> None:
     context = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [0]], dtype=torch.int32),
-            categories=(torch.tensor([20, 10, 30]),),
+            data=torch.tensor(
+                [[0], [1], [0]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(torch.tensor([20, 10, 30], device=device),),
         ),
     )
     query = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [2], [-1]], dtype=torch.int32),
-            categories=(torch.tensor([10, 40, 20]),),
+            data=torch.tensor(
+                [[0], [1], [2], [-1]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(torch.tensor([10, 40, 20], device=device),),
         ),
     )
 
@@ -106,27 +115,38 @@ def test_categorical_align_numeric_values() -> None:
 
     assert torch.equal(
         output.categorical.as_tensor(),
-        torch.tensor([[1], [-1], [0], [-1]], dtype=torch.int32),
+        torch.tensor(
+            [[1], [-1], [0], [-1]],
+            dtype=torch.int32,
+            device=device,
+        ),
     )
     assert torch.equal(
         output.categorical.categories[0],
-        torch.tensor([20, 10]),
+        torch.tensor([20, 10], device=device),
     )
 
 
-def test_categorical_align_matches_nan_category_values() -> None:
+@withCUDA
+def test_categorical_align_matches_nan_category_values(
+    device: torch.device,
+) -> None:
     context = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
-            categories=(torch.tensor([torch.nan, 1.0]),),
+            data=torch.tensor([[0], [1]], dtype=torch.int32, device=device),
+            categories=(torch.tensor([torch.nan, 1.0], device=device),),
         ),
     )
     query = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [2]], dtype=torch.int32),
-            categories=(torch.tensor([torch.nan, 2.0, 1.0]),),
+            data=torch.tensor(
+                [[0], [1], [2]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(torch.tensor([torch.nan, 2.0, 1.0], device=device),),
         ),
     )
 
