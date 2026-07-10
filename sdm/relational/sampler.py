@@ -43,8 +43,8 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
         devices = list({self.task_table.device, self.related_tables.device})
         if len(devices) > 1:
             raise RuntimeError(
-                f"Expected 'task_table' and 'related_table' to be on the same "
-                f"device (got '{self.task_table.device}' and "
+                f"Expected 'task_table' and 'related_tables' to be on the "
+                f"same device (got '{self.task_table.device}' and "
                 f"'{self.related_tables.device}')"
             )
         return next(iter(devices))
