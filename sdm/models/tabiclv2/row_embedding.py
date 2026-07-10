@@ -83,6 +83,7 @@ class RowEmbedding(torch.nn.Module):
         *,
         train_mask: Tensor | None = None,  # [R],
         cache: Cache | None = None,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *B, R, C = x.size()
         R_train = y.size(-1)
@@ -133,6 +134,7 @@ class RowEmbedding(torch.nn.Module):
                 if cache is not None and cache.is_replaying
                 else x[..., train_mask, :],  # [..., C, R_train, D],
                 return_key_value=cache is not None and cache.is_recording,
+                batch_size_limit=batch_size_limit,
             )  # [..., C, R, D]
 
             if cache is not None and cache.is_recording:
@@ -159,6 +161,7 @@ class RowEmbedding(torch.nn.Module):
                 query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
                 key_value=x,  # [..., R, K + C, D]
                 rope=self.rope,
+                batch_size_limit=batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]

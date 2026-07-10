@@ -70,6 +70,32 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
     model.clear()
 
 
+def test_tabiclv2_batch_size_limit() -> None:
+    model = TabICLv2(pretrained=False)
+    batch_shape = (2,)
+    num_rows = 5
+    num_columns = 4
+    num_train = 3
+    batch_size_limit = 3
+    x = torch.randn(*batch_shape, num_rows, num_columns)
+    y = torch.randint(0, 10, (*batch_shape, num_train))
+
+    expected = model(x, y)
+    chunked = model(x, y, batch_size_limit=batch_size_limit)
+    torch.testing.assert_close(chunked, expected)
+
+    model.fit(
+        x[..., :num_train, :],
+        y,
+        batch_size_limit=batch_size_limit,
+    )
+    predicted = model.predict(
+        x[..., num_train:, :],
+        batch_size_limit=batch_size_limit,
+    )
+    torch.testing.assert_close(predicted, expected)
+
+
 def test_default_recipe_regression_roundtrip() -> None:
     recipe = TabICLv2.default_recipe()
 
