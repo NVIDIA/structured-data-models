@@ -26,3 +26,18 @@ class DeviceMixin(abc.ABC):
         if isinstance(device, int):
             return self.to(torch.device("cuda", device))
         return self.to(device)
+
+    @property
+    @abc.abstractmethod
+    def device(self) -> torch.device:
+        r"""The :class:`torch.device` where the data is."""
+
+    @property
+    def is_cpu(self) -> bool:
+        r"""Whether the data is stored on the CPU."""
+        return self.device.type == "cpu"
+
+    @property
+    def is_cuda(self) -> bool:
+        r"""Whether the data is stored on the GPU."""
+        return self.device.type == "cuda"

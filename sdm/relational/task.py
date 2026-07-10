@@ -165,3 +165,18 @@ class RelatedTables(DeviceMixin):
             relationships=self.relationships,
             task_links=self.task_links,
         )
+
+    @property
+    def device(self) -> torch.device:  # noqa: D102
+        devices = {table.device for table in self.tables.values()}
+        if len(devices) == 0:
+            raise RuntimeError(
+                f"Could not determine 'device' of empty "
+                f"'{self.__class__.__name__}'"
+            )
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected tables in '{self.__class__.__name__}' to be on "
+                f"the same device (got {list(devices)})"
+            )
+        return next(iter(devices))

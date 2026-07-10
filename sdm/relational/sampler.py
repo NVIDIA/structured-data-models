@@ -38,6 +38,17 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
             related_tables=self.related_tables.to(device),
         )
 
+    @property
+    def device(self) -> torch.device:  # noqa: D102
+        devices = list({self.task_table.device, self.related_tables.device})
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected 'task_table' and 'related_tables' to be on the "
+                f"same device (got '{self.task_table.device}' and "
+                f"'{self.related_tables.device}')"
+            )
+        return next(iter(devices))
+
 
 class RelationalSampler:
     r"""Subgraph sampler over relational data.
@@ -71,7 +82,7 @@ class RelationalSampler:
         self._time_dict: dict[str, Tensor] = {}
         for table_name, time_column in self.time_columns.items():
             time = self.data.tables[table_name][time_column].datetime
-            self._time_dict[table_name] = time.squeeze(-1).contiguous().cpu()
+            self._time_dict[table_name] = time.squeeze(-1).contiguous()
 
         for i, (rel, edge_index) in enumerate(
             zip(self.data.relationships, self.data.edge_indices())
@@ -195,11 +206,17 @@ class RelationalSampler:
             )
 
         seed = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy())
+        seed = seed.to(task_table.device)
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
         else:
             fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)
+
+        if not seed.is_cpu or not self.data.is_cpu:
+            raise NotImplementedError(
+                f"'{self.__class__.__name__}' requires input data on CPU"
+            )
 
         # Perform subgraph sampling:
         _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
