@@ -9,7 +9,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import ClassShuffle, Clip, Processor, StandardScale
+from sdm.processing import CategoryShuffle, Clip, Processor, StandardScale
 from sdm.processing.base import InvertibleMixin
 
 ProcessorFactory = Callable[[], Processor]
@@ -33,7 +33,7 @@ def test_processor_requires_fit_for_transform(
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [ClassShuffle, Clip, StandardScale],
+    [CategoryShuffle, Clip, StandardScale],
 )
 def test_invertible_processor_requires_fit_for_inverse_transform(
     processor_factory: ProcessorFactory,
