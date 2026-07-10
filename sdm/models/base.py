@@ -183,12 +183,7 @@ class BaseModel(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        if self._caches is None:
-            raise RuntimeError(
-                f"'{self.__class__.__name__}' not yet fitted. Make sure to "
-                f"'{self.__class__.__name__}.fit()' beforehand."
-            )
-        if self._recipe is None:
+        if self._caches is None or self._recipe is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
