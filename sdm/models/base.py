@@ -90,12 +90,8 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-            recipe: The pre- and postprocessing recipe applied around the
-                model. Feature and target steps are fitted on the in-context
-                examples, and the fitted state is reused by subsequent
-                :meth:`predict` calls. Requires ``x`` and ``y`` to be
-                :class:`~sdm.TableTensor` inputs. If ``None``, no recipe is
-                applied.
+            recipe: The recipe for pre- and post-processing. If ``None``, no
+                recipe is applied.
             num_estimators: The number of ensemble members ``E``.
                 In-context examples are fitted once per member, and subsequent
                 :meth:`predict` calls average predictions across members.
