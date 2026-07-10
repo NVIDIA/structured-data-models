@@ -156,7 +156,7 @@ class RelatedTables(DeviceMixin):
             if table.dim() != 2:
                 raise ValueError("Tables need to be two-dimensional")
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))

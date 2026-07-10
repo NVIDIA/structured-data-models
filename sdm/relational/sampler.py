@@ -32,7 +32,7 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
         related_tables: The related tables for the task table.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
         return self.__class__(
             task_table=cast(TableTensor, self.task_table.to(device)),
             related_tables=self.related_tables.to(device),

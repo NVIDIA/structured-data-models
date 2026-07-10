@@ -168,7 +168,7 @@ class RelationalData(DeviceMixin):
                             f"(got '{stype.value}')"
                         )
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
