@@ -14,7 +14,7 @@ from sdm.nn import (
 from sdm.testing import withCUDA
 from torch import Tensor
 
-# Skip all tests in this tes tfile if it is not a full test run (FULL_TEST=1).
+# Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
 pytestmark = pytest.mark.skipif(
     os.getenv("FULL_TEST", "0") != "1",
     reason="Fast test run",
@@ -63,7 +63,7 @@ def test_qassmax_compile(
 
 @withCUDA
 def test_rotary_embedding_compile(device: torch.device) -> None:
-    module = RotaryEmbedding(channels=4, device=device)
+    module = RotaryEmbedding(channels=4, layout="split_half", device=device)
     x = torch.randn(2, 5, 3, 4, device=device)
 
     expected = module(x)
@@ -154,7 +154,9 @@ def test_attention_compile(
         device=device,
     )
     rotary_embedding = (
-        RotaryEmbedding(channels=2, device=device) if rope else None
+        RotaryEmbedding(channels=2, layout="split_half", device=device)
+        if rope
+        else None
     )
     query = torch.randn(2, 3, channels, device=device)
     key_value = (
@@ -215,7 +217,9 @@ def test_transformer_block_compile(
         device=device,
     )
     rotary_embedding = (
-        RotaryEmbedding(channels=4, device=device) if rope else None
+        RotaryEmbedding(channels=4, layout="split_half", device=device)
+        if rope
+        else None
     )
     query = torch.randn(2, 3, channels, device=device)
     key_value = torch.randn(2, 5, channels, device=device)

@@ -70,6 +70,7 @@ class RowEmbedding(torch.nn.Module):
 
         self.rope = RotaryEmbedding(
             channels=channels // num_heads,
+            layout="split_half",
             theta=100_000,
             **factory_kwargs,
         )
