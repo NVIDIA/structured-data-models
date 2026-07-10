@@ -137,7 +137,7 @@ class RowEmbedding(torch.nn.Module):
                 key_value = cache[key]
             else:
                 key_value = x[..., train_mask, :]
-                if max_keys is not None and key_value.size(-2) > may_keys:
+                if max_keys is not None and key_value.size(-2) > max_keys:
                     index = torch.randperm(
                         key_value.size(-2),
                         device=key_value.device,
