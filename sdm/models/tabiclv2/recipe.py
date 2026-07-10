@@ -21,6 +21,7 @@ task-aware recipe remains a commented placeholder.
 """
 
 from sdm.processing import (
+    CategoricalAlign,
     FeaturePermute,
     Identity,
     MeanImpute,
@@ -35,19 +36,25 @@ from sdm.processing import (
 def default_regression_recipe() -> Recipe:
     """Return the default single-estimator regression recipe.
 
-    Mirrors the original TabICLv2 regressor: categorical columns are routed
-    through :class:`~sdm.processing.ToNumerical`, followed by mean imputation
-    (``SimpleImputer``), standard scaling (``CustomStandardScaler``), and
-    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the
-    features, ending in a drawn cyclic feature shift
-    (:class:`~sdm.processing.FeaturePermute`). The target is standard-scaled
-    and its inverse maps predictions back to the original space.
+    Mirrors the original TabICLv2 regressor: categorical columns are aligned
+    to vocabularies fitted on training rows, then routed through
+    :class:`~sdm.processing.ToNumerical`. Missing and unseen category values
+    remain encoded as ``-1``. Numerical NaNs are mean-imputed
+    (``SimpleImputer``), followed by standard scaling
+    (``CustomStandardScaler``) and two-stage 4-sigma outlier clipping
+    (``OutlierRemover``) on the features, ending in a drawn cyclic feature
+    shift (:class:`~sdm.processing.FeaturePermute`). The target is
+    standard-scaled and its inverse maps predictions back to the original
+    space.
     """
     return Recipe(
         features=[
             StypeDispatch(
                 numerical=Identity(),
-                categorical=ToNumerical(),
+                categorical=[
+                    CategoricalAlign(),
+                    ToNumerical(),
+                ],
             ),
             MeanImpute(),
             # ConstantFilter(),
