@@ -38,7 +38,7 @@ data = RelationalData(
         for left_table, table in db.table_dict.items()
         for left_column, right_table in table.fkey_col_to_pkey_table.items()
     ],
-)
+).to(device)
 sampler = data.sampler(
     time_columns={
         name: table.time_col
@@ -65,7 +65,7 @@ for split in ["train", "val", "test"]:
 
 train_table = torch.cat(task_tables[:2], dim=0)
 perm = torch.randperm(len(train_table))[: args.context_size]
-train_table = cast(TableTensor, train_table[perm])
+train_table = cast(TableTensor, train_table[perm].to(device))
 
 # Execute Model ###############################################################
 model = KumoRFM(device=device)
@@ -88,5 +88,5 @@ model.fit(
 
 test_table = task_tables[-1].drop_columns(task.target_col)
 for test_batch in test_table.split(args.batch_size):
-    model.predict(*sampler(test_batch, **kwargs).to(device))
+    model.predict(*sampler(test_batch.to(device), **kwargs).to(device))
 model.clear()

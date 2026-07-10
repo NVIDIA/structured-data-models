@@ -30,6 +30,10 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
             value=self.value.to(device),
         )
 
+    @property
+    def device(self) -> torch.device:
+        return self.key.device
+
 
 class Cache(MutableMapping[str, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
