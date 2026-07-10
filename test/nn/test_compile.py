@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable, Iterator
 
 import pytest
@@ -12,6 +13,12 @@ from sdm.nn import (
 )
 from sdm.testing import withCUDA
 from torch import Tensor
+
+# Skip all tests in this tes tfile if it is not a full test run (FULL_TEST=1).
+pytestmark = pytest.mark.skipif(
+    os.getenv("FULL_TEST", "0") != "1",
+    reason="Fast test run",
+)
 
 
 @pytest.fixture(autouse=True)
