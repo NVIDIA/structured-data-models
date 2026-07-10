@@ -6,6 +6,7 @@ The factory composes shared :mod:`sdm.processing` processors into the
 """
 
 from sdm.processing import (
+    CategoricalAlign,
     Choice,
     ClassShuffle,
     ConstantFilter,
@@ -24,12 +25,20 @@ from sdm.processing import (
 
 
 def default_recipe() -> Recipe:
-    """Return the default regression and classification recipe."""
+    """Return the default regression and classification recipe.
+
+    Categorical features are aligned to vocabularies fitted on context rows
+    before numerical conversion. Missing and unseen category values remain
+    encoded as ``-1``; they are not categorically imputed.
+    """
     return Recipe(
         features=[
             StypeDispatch(
                 numerical=Identity(),
-                categorical=[CategoricalAlign(), CategoricalImpute(), ToNumerical()],
+                categorical=[
+                    CategoricalAlign(),
+                    ToNumerical(),
+                ],
             ),
             MeanImpute(),
             ConstantFilter(),
