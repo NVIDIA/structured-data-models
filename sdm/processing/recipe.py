@@ -143,6 +143,8 @@ class Recipe:
                     f"(found in '{role}')."
                 )
 
+        # Common output steps can remain adjacent; nesting would require
+        # defining whether dispatchers in inactive branches are resolved.
         task_dispatcher_entries = tuple(
             (path, module)
             for path, module in output.named_modules(remove_duplicate=False)
