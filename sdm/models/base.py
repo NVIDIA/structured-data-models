@@ -80,8 +80,6 @@ class BaseModel(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        recipe = Recipe() if recipe is None else recipe
-
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
         outs: list[Tensor] = []
@@ -95,6 +93,8 @@ class BaseModel(torch.nn.Module, ABC):
 
         out = torch.stack(outs).mean(dim=0)
         table = TableTensor.from_tensor(out.clone())
+        if recipe is None:
+            return table.numerical
         return recipe.output.transform(table).numerical
 
     @torch.inference_mode()
@@ -131,7 +131,6 @@ class BaseModel(torch.nn.Module, ABC):
 
         self.clear()
 
-        recipe = Recipe() if recipe is None else recipe
         caches: list[Cache] = []
         for _ in range(num_estimators):
             # TODO Iterate over Recipes instead of using a single recipe once
@@ -183,7 +182,7 @@ class BaseModel(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        if self._caches is None or self._recipe is None:
+        if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
@@ -212,6 +211,8 @@ class BaseModel(torch.nn.Module, ABC):
 
         out = torch.stack(outs).mean(dim=0)
         table = TableTensor.from_tensor(out.clone())
+        if recipe is None:
+            return table.numerical
         return recipe.output.transform(table).numerical
 
     # Helpers #################################################################
