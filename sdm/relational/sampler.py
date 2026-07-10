@@ -10,7 +10,6 @@ from sdm.relational import (
     RelatedTables,
     RelationalData,
     Relationship,
-    SampledGraphMetadata,
     TaskLink,
 )
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID

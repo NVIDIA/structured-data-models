@@ -1,7 +1,6 @@
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
-from torch import Tensor
 from typing_extensions import Self
 
 from sdm import TableTensor
@@ -76,25 +75,6 @@ class TaskLink:
         )
 
 
-@dataclass(frozen=True)
-class SampledGraphMetadata:
-    r"""Graph metadata produced by relational neighbor sampling.
-
-    Args:
-        edge_index_dict: Sampled relation edges with table-local indices.
-        batch_dict: Task-example index for each sampled table row.
-        num_sampled_nodes_dict: Number of sampled nodes per table and hop.
-        num_sampled_edges_dict: Number of sampled edges per relation and hop.
-        seed_time: Query timestamp for each task row.
-    """
-
-    edge_index_dict: Mapping[tuple[str, str, str], Tensor]
-    batch_dict: Mapping[str, Tensor]
-    num_sampled_nodes_dict: Mapping[str, Sequence[int]]
-    num_sampled_edges_dict: Mapping[tuple[str, str, str], Sequence[int]]
-    seed_time: Tensor
-
-
 @dataclass(frozen=True, init=False)
 class RelatedTables:
     r"""Task-specific related tables attached to model inputs.
@@ -134,13 +114,11 @@ class RelatedTables:
         tables: Related tables keyed by table name.
         relationships: Join relationships among ``tables``.
         task_links: Links from task columns to related ``tables``.
-        metadata: Optional graph metadata produced by relational sampling.
     """
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
     task_links: tuple[TaskLink, ...]
-    metadata: SampledGraphMetadata | None
 
     def __init__(
         self,
@@ -149,7 +127,6 @@ class RelatedTables:
             Relationship | Mapping[str, str | Sequence[str]]
         ],
         task_links: Collection[TaskLink | Mapping[str, str | Sequence[str]]],
-        metadata: SampledGraphMetadata | None = None,
     ) -> None:
 
         relationships = tuple(
@@ -169,7 +146,6 @@ class RelatedTables:
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", relationships)
         object.__setattr__(self, "task_links", task_links)
-        object.__setattr__(self, "metadata", metadata)
         self.__post_init__()
 
     def __post_init__(self) -> None:
