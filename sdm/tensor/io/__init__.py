@@ -5,9 +5,11 @@ from sdm.tensor.io.arrow import (
     TORCH_ARROW_DTYPES,
     to_arrow,
 )
+from sdm.tensor.io.cudf import to_cudf
 
 __all__ = [
     "ARROW_TORCH_DTYPES",
     "TORCH_ARROW_DTYPES",
     "to_arrow",
+    "to_cudf",
 ]

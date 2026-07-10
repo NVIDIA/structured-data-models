@@ -110,6 +110,49 @@ class StringTensor(VarLenTensor):
             offset=int(tensor.storage_offset()),
         )
 
+    def to_cudf(self) -> cudf.Series:
+        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`.
+
+        Raises:
+            ValueError: If this tensor is not CUDA-resident.
+            ImportError: If cuDF is not installed.
+        """
+        if not self.is_cuda:
+            raise ValueError(
+                f"Expected '{self.__class__.__name__}' in 'to_cudf' to be "
+                f"CUDA-resident (got '{self.device}')"
+            )
+
+        with torch.cuda.device(self.device):
+            try:
+                import cudf
+                import pylibcudf as plc
+            except ImportError as exc:
+                raise ImportError(
+                    "Converting tensors to cuDF requires cuDF"
+                ) from exc
+
+            tensor = self
+            if not tensor.is_contiguous():
+                tensor = cast(StringTensor, tensor.contiguous())
+
+            # StringTensor stores variable-width strings in separate UTF-8
+            # data and offset buffers. Use pylibcudf to expose them without a
+            # host copy.
+            offset_column = plc.Column.from_array(  # ty: ignore[missing-argument]
+                obj=tensor._offset
+            )
+            plc_column = plc.Column(
+                data_type=plc.DataType(plc.TypeId.STRING),
+                size=tensor.numel(),
+                data=plc.gpumemoryview(tensor._data),
+                mask=None,
+                null_count=0,
+                offset=int(tensor.storage_offset()),
+                children=[offset_column],
+            )
+            return cudf.Series.from_pylibcudf(plc_column)
+
     @classmethod
     def from_cudf(
         cls,

@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 import torch
 from sdm import RelationalData, StringTensor, Stype, TableTensor, infer_stypes
-from sdm.relational.data import _to_cudf_series
 
 USERS = {
     "user_id": [0, 1, 2, 3],
@@ -157,49 +156,6 @@ def _composite_data(*, cuda: bool) -> RelationalData:
 
 def _edge_pairs(edge_index: torch.Tensor) -> list[tuple[int, int]]:
     return sorted(tuple(pair) for pair in edge_index.cpu().t().tolist())
-
-
-@pytest.mark.parametrize(
-    "offset_dtype",
-    [torch.int32, torch.int64],
-    ids=["int32", "int64"],
-)
-def test_to_cudf_series_string(offset_dtype: torch.dtype) -> None:
-    _import_cudf()
-    values = ["é", "東京", "🙂", ""]
-    column = StringTensor.from_list(
-        values,
-        device="cuda",
-        offset_dtype=offset_dtype,
-    )
-
-    series = _to_cudf_series(column)
-
-    assert column._offset.dtype == offset_dtype
-    assert series.to_arrow().to_pylist() == values
-
-
-@pytest.mark.parametrize(
-    "offset_dtype",
-    [torch.int32, torch.int64],
-    ids=["int32", "int64"],
-)
-def test_to_cudf_series_empty_column(offset_dtype: torch.dtype) -> None:
-    cudf = _import_cudf()
-    column = StringTensor.from_list(
-        [],
-        device="cuda",
-        offset_dtype=offset_dtype,
-    )
-
-    series = _to_cudf_series(column)
-
-    assert column._data.numel() == 0
-    assert column._offset.equal(
-        torch.zeros(1, dtype=offset_dtype, device=column.device)
-    )
-    assert cudf.api.types.is_string_dtype(series.dtype)
-    assert series.to_arrow().to_pylist() == []
 
 
 def test_edge_indices_cpu(data: RelationalData) -> None:
@@ -400,7 +356,7 @@ def test_edge_indices_rejects_mixed_table_devices(
         relationships=RELATIONSHIPS,
     )
 
-    with pytest.raises(ValueError, match="same device"):
+    with pytest.raises(RuntimeError, match="same device"):
         relational_data.edge_indices()
 
 

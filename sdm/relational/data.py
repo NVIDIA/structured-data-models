@@ -10,7 +10,8 @@ import torch
 from torch import Tensor
 from typing_extensions import Self
 
-from sdm import StringTensor, Stype, TableTensor
+from sdm import Stype, TableTensor
+from sdm.tensor.io import to_cudf
 from sdm.tensor.mixin import DeviceMixin
 
 PREFIX = "sdm_internal"
@@ -22,42 +23,6 @@ if TYPE_CHECKING:
     import cudf
 
     from sdm.relational import RelationalSampler
-
-
-def _to_cudf_series(column: Tensor) -> cudf.Series:
-    try:
-        import cudf
-        import pylibcudf as plc
-    except ImportError as exc:
-        raise ImportError(
-            "CUDA-resident relational joins require cuDF"
-        ) from exc
-
-    if isinstance(column, StringTensor):
-        if not column.is_contiguous():
-            column = cast(StringTensor, column.contiguous())
-
-        # StringTensor stores variable-width strings in separate UTF-8 data
-        # and offset buffers. Use pylibcudf to expose them without a host copy.
-        offset_column = plc.Column.from_array(  # ty: ignore[missing-argument]
-            obj=column._offset
-        )
-        plc_column = plc.Column(
-            data_type=plc.DataType(plc.TypeId.STRING),
-            size=column.numel(),
-            data=plc.gpumemoryview(column._data),
-            mask=None,
-            null_count=0,
-            offset=int(column.storage_offset()),
-            children=[offset_column],
-        )
-    else:
-        column = column.detach().contiguous().view(-1)
-        plc_column = plc.Column.from_array(  # ty: ignore[missing-argument]
-            obj=column
-        )
-
-    return cudf.Series.from_pylibcudf(plc_column)
 
 
 def _to_cudf(
@@ -74,7 +39,7 @@ def _to_cudf(
     # Pair IDs through Python metadata to avoid a CUDA index-to-host sync.
     id_columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
     return cudf.DataFrame(
-        {name: _to_cudf_series(id_columns[name]) for name in columns}
+        {name: to_cudf(id_columns[name]) for name in columns}
     )
 
 
@@ -268,10 +233,11 @@ class RelationalData(DeviceMixin):
             indices in the first row and right table indices in the second row.
 
         Raises:
-            ValueError: If participating tables are not on the same device.
+            RuntimeError: If registered tables are not on the same device.
             ImportError: If CUDA tables are used without cuDF installed.
         """
-        device = self.device if device is None else device
+        execution_device = self.device
+        device = execution_device if device is None else device
 
         columns: dict[str, list[str]] = defaultdict(list)
         for rel in self.relationships:
@@ -283,19 +249,9 @@ class RelationalData(DeviceMixin):
                     if column not in columns[table]:
                         columns[table].append(column)
 
-        devices = {self.tables[name].device for name in columns}
-        if len(devices) > 1:
-            devices_repr = ", ".join(
-                str(device) for device in sorted(devices, key=str)
-            )
-            raise ValueError(
-                "Expected all tables participating in relationships to be "
-                f"on the same device (got {devices_repr})"
-            )
-        if len(devices) == 0:
+        if len(columns) == 0:
             return ()
 
-        execution_device = next(iter(devices))
         if execution_device.type == "cuda":
             with torch.cuda.device(execution_device):
                 return self._edge_indices_cudf(
@@ -357,7 +313,7 @@ class RelationalData(DeviceMixin):
                 dtype=dtype,
                 device=self.tables[name].device,
             )
-            table[ROW_ID] = _to_cudf_series(row_id)
+            table[ROW_ID] = to_cudf(row_id)
 
         edge_indices: list[Tensor] = []
         for rel in self.relationships:
