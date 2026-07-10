@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 
 import torch
@@ -33,3 +34,13 @@ def withCUDA(func: Callable) -> Callable:
     ]
 
     return pytest.mark.parametrize("device", devices)(func)
+
+
+def onlyFullTest(func: Callable) -> Callable:
+    r"""Skip the test if it is not a full test run."""
+    import pytest
+
+    return pytest.mark.skipif(
+        os.getenv("FULL_TEST", "0") != "1",
+        reason="Fast test run",
+    )(func)
