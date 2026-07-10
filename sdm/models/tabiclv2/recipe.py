@@ -41,6 +41,9 @@ def default_recipe() -> Recipe:
             SigmaClip(threshold=4.0),
             FeaturePermute(method="shift"),
         ],
+        # TODO: Replace this with fitted target dispatch before model
+        # integration. The selected route must receive the complete numerical
+        # head (10 class logits or 999 regression quantiles) during inverse.
         target=[
             StypeDispatch(
                 numerical=StandardScale(),
