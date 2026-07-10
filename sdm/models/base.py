@@ -1,5 +1,7 @@
+import contextlib
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from typing import ClassVar, cast
 
 import torch
@@ -8,6 +10,22 @@ from torch import Tensor
 from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.processing import Recipe
+
+
+@contextlib.contextmanager
+def _maybe_inference_mode() -> Iterator[None]:
+    # `torch.inference_mode` is not supported inside a compiled region, so do
+    # not enter it when this function is already being compiled.
+    # https://github.com/pytorch/pytorch/issues/180823
+    # FIXME: Come up with a solution to use torch.compile under
+    # torch.inference_mode and remove this workaround.
+    if torch.compiler.is_compiling():
+        context_fn = contextlib.nullcontext
+    else:
+        context_fn = torch.inference_mode
+
+    with context_fn():
+        yield
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -27,7 +45,7 @@ class BaseModel(torch.nn.Module, ABC):
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
 
-    @torch.inference_mode()
+    @_maybe_inference_mode()
     def forward(
         self,
         x: Tensor | TableTensor,  # [..., R, C]

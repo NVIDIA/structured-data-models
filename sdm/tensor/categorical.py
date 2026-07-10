@@ -387,7 +387,15 @@ def _to_copy(
         return data
 
     categories = tuple(
-        category.to(device=device, non_blocking=non_blocking, copy=True)
+        aten._to_copy.default(
+            category,
+            device=device,
+            dtype=None,
+            layout=None,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            memory_format=None,
+        )
         for category in input._categories
     )
     return input.__class__(data, categories)
