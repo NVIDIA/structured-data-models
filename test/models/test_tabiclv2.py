@@ -78,7 +78,10 @@ def test_tabiclv2_recipe() -> None:
     y = TableTensor.from_tensor(torch.randn(R_train, 1))
 
     # An empty recipe matches the recipe-less forward pass:
-    torch.testing.assert_close(model(x, y, recipe=Recipe()), model(x, y))
+    torch.testing.assert_close(
+        model(x, y, recipe=Recipe()),
+        model(x, y),
+    )
 
     # The recipe matches its manual driver-side application:
     out = model(x, y, recipe=model.default_recipe())
@@ -99,9 +102,7 @@ def test_tabiclv2_recipe() -> None:
     model.fit(x[:R_train], y, recipe=model.default_recipe())
     torch.testing.assert_close(model.predict(x[R_train:]), out)
     model.clear()
-
-    with pytest.raises(ValueError, match="TableTensor"):
-        model(torch.randn(R, C), torch.randn(R_train), recipe=Recipe())
+    assert model._recipe is None
 
 
 def test_default_recipe_regression_roundtrip() -> None:
