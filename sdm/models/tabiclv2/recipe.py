@@ -7,8 +7,8 @@ The factory composes shared :mod:`sdm.processing` processors into the
 
 from sdm.processing import (
     CategoricalAlign,
+    CategoryShuffle,
     Choice,
-    ClassShuffle,
     ConstantFilter,
     FeaturePermute,
     Identity,
@@ -56,7 +56,7 @@ def default_recipe() -> Recipe:
         target=[
             StypeDispatch(
                 numerical=StandardScale(),
-                categorical=ClassShuffle(method="shift"),
+                categorical=CategoryShuffle(method="shift"),
             ),
         ],
         output=[

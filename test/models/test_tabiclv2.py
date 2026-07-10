@@ -166,10 +166,7 @@ def test_default_recipe(task: str) -> None:
         model_target
     )
     if task == "classification":
-        assert torch.equal(
-            restored.categorical,
-            target.categorical
-        )
+        assert torch.equal(restored.categorical, target.categorical)
     else:
         torch.testing.assert_close(
             restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
