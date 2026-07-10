@@ -40,8 +40,6 @@ class KumoRFM(BaseModel):
         y: Tensor,  # [..., R_train]
         related_tables: RelatedTables | None,
         cache: Cache | None,
-        *,
-        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         return torch.empty(
             (*x.size()[:-2], x.size(-2) - y.size(-1), 10),
