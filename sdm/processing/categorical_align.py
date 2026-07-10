@@ -22,6 +22,11 @@ class CategoricalAlign(Processor):
     sliced training context from a jointly inferred vocabulary. Only
     categorical columns are supported; use
     :class:`~sdm.processing.StypeDispatch` for mixed feature tables.
+
+    String and unsigned integer vocabularies are matched through host metadata
+    because their required tensor operations are unavailable on every device.
+    This path performs linear Python work in the vocabulary size; a vectorized
+    implementation may be preferable if these category types need to scale.
     """
 
     supported_stypes = frozenset({Stype.categorical})
@@ -36,8 +41,11 @@ class CategoricalAlign(Processor):
         data = input.categorical.as_tensor()
         categories: list[Tensor] = []
         for index, category in enumerate(input.categorical.categories):
-            codes = data[..., index].reshape(-1)
-            positions = torch.arange(codes.numel(), device=data.device)
+            codes = data[..., index].reshape(-1)  # [num_rows]
+            positions = torch.arange(
+                codes.numel(), device=data.device
+            )  # [num_rows]
+            # [num_local_categories]
             first_positions = torch.full(
                 (category.numel(),),
                 codes.numel(),
@@ -52,6 +60,7 @@ class CategoricalAlign(Processor):
                 reduce="amin",
                 include_self=True,
             )
+            # [num_observed_categories]
             observed = (first_positions < codes.numel()).nonzero().view(-1)
             observed = observed[first_positions[observed].argsort()]
             categories.append(self._select_categories(category, observed))
@@ -171,6 +180,7 @@ class CategoricalAlign(Processor):
                 device=device,
             )
 
+        # [num_actual_categories]
         mapping = torch.full(
             (actual.numel(),),
             -1,
@@ -184,7 +194,9 @@ class CategoricalAlign(Processor):
         expected = expected.to(dtype=dtype)
 
         if dtype.is_floating_point:
+            # [num_actual_categories]
             actual_nan = actual.isnan()
+            # [num_fitted_categories]
             expected_nan = expected.isnan()
             if actual_nan.any() and expected_nan.any():
                 mapping[actual_nan] = expected_nan.to(torch.int64).argmax()
@@ -192,14 +204,18 @@ class CategoricalAlign(Processor):
             actual_nan = torch.zeros_like(actual, dtype=torch.bool)
             expected_nan = torch.zeros_like(expected, dtype=torch.bool)
 
+        # [num_actual_non_nan] and [num_fitted_non_nan]
         actual_indices = (~actual_nan).nonzero().view(-1)
         expected_indices = (~expected_nan).nonzero().view(-1)
         if actual_indices.numel() == 0 or expected_indices.numel() == 0:
             return mapping
 
+        # [num_fitted_non_nan]
         expected_values, permutation = expected[expected_indices].sort()
-        actual_values = actual[actual_indices]
-        positions = torch.searchsorted(expected_values, actual_values)
+        actual_values = actual[actual_indices]  # [num_actual_non_nan]
+        positions = torch.searchsorted(
+            expected_values, actual_values
+        )  # [num_actual_non_nan]
         within_bounds = positions < expected_values.numel()
         candidates = positions.clamp(max=expected_values.numel() - 1)
         known = within_bounds & (expected_values[candidates] == actual_values)

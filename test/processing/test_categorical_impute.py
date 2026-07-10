@@ -76,14 +76,21 @@ def test_categorical_impute_moves_fitted_processor_to_cuda() -> None:
     )
 
 
-def test_categorical_impute_tie_uses_lowest_code() -> None:
-    table = _table([[1, 0], [0, 1], [-1, -1]])
+@withCUDA
+def test_categorical_impute_tie_uses_lowest_code(
+    device: torch.device,
+) -> None:
+    table = _table([[1, 0], [0, 1], [-1, -1]], device=device)
 
     output = CategoricalImpute().fit_transform(table)
 
     assert torch.equal(
         output.categorical.as_tensor(),
-        torch.tensor([[1, 0], [0, 1], [0, 0]], dtype=torch.int32),
+        torch.tensor(
+            [[1, 0], [0, 1], [0, 0]],
+            dtype=torch.int32,
+            device=device,
+        ),
     )
 
 
