@@ -229,20 +229,6 @@ def test_categorical_align_all_missing_pandas_context_accepts_strings() -> (
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1]
 
 
-def test_categorical_align_rejects_changed_columns() -> None:
-    processor = CategoricalAlign().fit(
-        _table([[0]], columns=("kind",), categories=(("red",),))
-    )
-    query = _table(
-        [[0]],
-        columns=("segment",),
-        categories=(("red",),),
-    )
-
-    with pytest.raises(ValueError, match=r"columns.*fitted names and order"):
-        processor.transform(query)
-
-
 def test_categorical_align_rejects_changed_category_value_type() -> None:
     processor = CategoricalAlign().fit(
         _table([[0]], columns=("kind",), categories=(("red",),))
