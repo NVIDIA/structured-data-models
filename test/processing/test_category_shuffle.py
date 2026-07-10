@@ -1,6 +1,7 @@
+import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ClassShuffle
+from sdm.processing import CategoryShuffle
 from sdm.testing import withCUDA
 
 
@@ -31,13 +32,13 @@ def _table(
     )
 
 
-def test_class_shuffle_shift_maps_single_target() -> None:
+def test_category_shuffle_shift_maps_single_target() -> None:
     target = _table(
         [[0], [1], [2], [-1]],
         (("a", "b", "c"),),
     )
     torch.manual_seed(3)  # draws a cyclic offset of 1 for three classes
-    processor = ClassShuffle(method="shift")
+    processor = CategoryShuffle(method="shift")
 
     output = processor.fit_transform(target)
 
@@ -58,7 +59,7 @@ def test_class_shuffle_shift_maps_single_target() -> None:
 
 
 @withCUDA
-def test_class_shuffle_random_permutes_each_categorical_column(
+def test_category_shuffle_random_permutes_each_categorical_column(
     device: torch.device,
 ) -> None:
     features = _table(
@@ -67,7 +68,7 @@ def test_class_shuffle_random_permutes_each_categorical_column(
         device=device,
     )
     torch.manual_seed(0)
-    processor = ClassShuffle(method="random")
+    processor = CategoryShuffle(method="random")
 
     transformed = processor.fit_transform(features)
 
@@ -103,13 +104,13 @@ def test_class_shuffle_random_permutes_each_categorical_column(
     assert transformed.categorical.tolist() == features.categorical.tolist()
 
 
-def test_class_shuffle_uses_category_count_and_preserves_missing() -> None:
+def test_category_shuffle_uses_category_count_and_preserves_missing() -> None:
     target = _table(
         [[0], [1], [-1]],
         (("a", "b", "c", "d"),),
     )
 
-    processor = ClassShuffle(method="random")
+    processor = CategoryShuffle(method="random")
     output = processor.fit_transform(target)
 
     assert processor.offsets.tolist() == [0, 4]
@@ -117,3 +118,58 @@ def test_class_shuffle_uses_category_count_and_preserves_missing() -> None:
     assert output.categorical.categories[0].numel() == 4
     assert output.categorical.as_tensor()[-1].item() == -1
     assert output.categorical.tolist() == target.categorical.tolist()
+
+
+@withCUDA
+def test_category_shuffle_inverse_restores_class_scores(
+    device: torch.device,
+) -> None:
+    target = _table(
+        [[0], [1], [2], [3]],
+        (("a", "b", "c", "d"),),
+        device=device,
+    )
+    torch.manual_seed(1)
+    processor = CategoryShuffle(method="random").fit(target)
+    permutation = processor.permutations
+    assert not torch.equal(permutation, permutation.argsort())
+
+    original = torch.arange(
+        2 * 3 * 4,
+        dtype=torch.float64,
+        device=device,
+    ).reshape(2, 3, 4)
+    model_output = torch.full(
+        (2, 3, 10),
+        -100.0,
+        dtype=original.dtype,
+        device=device,
+    )
+    model_output[..., permutation] = original
+
+    restored = processor.inverse_transform(
+        TableTensor.from_tensor(model_output)
+    )
+
+    assert restored.size() == original.size()
+    assert restored.numerical.dtype == original.dtype
+    assert restored.device == device
+    assert restored.categorical.size(-1) == 0
+    torch.testing.assert_close(
+        restored.numerical,
+        original,
+        rtol=0,
+        atol=0,
+    )
+
+
+def test_category_shuffle_inverse_requires_single_categorical_target() -> None:
+    features = _table(
+        [[0, 0], [1, 1]],
+        (("a", "b"), ("x", "y")),
+    )
+    processor = CategoryShuffle(method="random").fit(features)
+    model_output = TableTensor.from_tensor(torch.randn(2, 10))
+
+    with pytest.raises(ValueError, match="exactly one categorical column"):
+        processor.inverse_transform(model_output)
