@@ -177,6 +177,21 @@ class RelationalData(DeviceMixin):
             relationships=self.relationships,
         )
 
+    @property
+    def device(self) -> torch.device:  # noqa: D102
+        devices = {table.device for table in self.tables.values()}
+        if len(devices) == 0:
+            raise RuntimeError(
+                f"Could not determine 'device' of empty "
+                f"'{self.__class__.__name__}'"
+            )
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected tables in '{self.__class__.__name__}' to be on "
+                f"the same device (got {list(devices)})"
+            )
+        return next(iter(devices))
+
     def edge_indices(
         self,
         dtype: torch.dtype | None = None,
@@ -193,6 +208,9 @@ class RelationalData(DeviceMixin):
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
         """
+        device = self.device if device is None else device
+        print("EDGE INDEX DEVICE", device)
+
         columns: dict[str, list[str]] = defaultdict(list)
         for rel in self.relationships:
             columns[rel.left_table].extend(rel.left_columns)

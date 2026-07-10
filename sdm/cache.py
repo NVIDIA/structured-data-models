@@ -31,8 +31,14 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:
-        return self.key.device
+    def device(self) -> torch.device:  # noqa: D102
+        devices = {self.key.device, self.value.device}
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected key and value cache tensors to be on the same "
+                f"device (got '{self.key.device}' and '{self.value.device}')"
+            )
+        return next(iter(devices))
 
 
 class Cache(MutableMapping[str, object], DeviceMixin):
@@ -124,3 +130,33 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         out = self.__class__({k: _to(v, device) for k, v in self.items()})
         out._mode = self._mode
         return out
+
+    @property
+    def device(self) -> torch.device:  # noqa: D102
+        def _devices(value: object) -> set[torch.device]:
+            if isinstance(value, Tensor | KVCacheEntry | Cache):
+                return {value.device}
+            if isinstance(value, list | tuple):
+                return {device for item in value for device in _devices(item)}
+            if isinstance(value, dict):
+                return {
+                    device
+                    for item in value.values()
+                    for device in _devices(item)
+                }
+            return set()
+
+        devices = {
+            device for item in self.values() for device in _devices(item)
+        }
+        if len(devices) == 0:
+            raise RuntimeError(
+                f"Could not determine 'device' of empty "
+                f"'{self.__class__.__name__}'"
+            )
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected tensors in '{self.__class__.__name__}' to be on "
+                f"the same device (got {list(devices)})"
+            )
+        return next(iter(devices))
