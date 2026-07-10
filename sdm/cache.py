@@ -24,7 +24,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
         return self.__class__(
             key=self.key.to(device),
             value=self.value.to(device),
@@ -108,7 +108,7 @@ class Cache(MutableMapping[str, object], DeviceMixin):
     def __repr__(self) -> str:
         return repr(self._items)
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
         def _to(value: object, device: torch.device | str | None) -> object:
             if isinstance(value, Tensor):
                 return value.to(device)
