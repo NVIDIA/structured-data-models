@@ -24,8 +24,7 @@ class ClassShuffle(Processor, InvertibleMixin):
     :meth:`~sdm.processing.InvertibleMixin.inverse_transform` interprets its
     input as a numerical model-output table containing class scores in
     shuffled-code order. It drops inactive trailing head entries and restores
-    the fitted original class order. It does not apply softmax, argmax, or
-    category decoding.
+    the fitted original class order.
 
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
