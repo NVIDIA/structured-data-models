@@ -17,6 +17,7 @@ from sdm.tensor import CategoricalTensor, ColumnarTensor
 from sdm.tensor.io import to_arrow
 
 if TYPE_CHECKING:
+    import cudf
     import pandas as pd
 
 aten = torch.ops.aten
@@ -297,7 +298,6 @@ class TableTensor(Tensor):
 
         return cls(
             columns=cast(Mapping[StypeLike, Sequence[str]], columns),
-            device=device,
             **blocks,
         )
 
@@ -369,6 +369,59 @@ class TableTensor(Tensor):
         return cls(
             columns={Stype.numerical: columns},
             numerical=tensor,
+        )
+
+    @classmethod
+    def from_cudf(
+        cls,
+        df: cudf.DataFrame,
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create a tensor from a :class:`cudf.DataFrame`.
+
+        Args:
+            df: The dataframe.
+            stypes: The semantic type for each column. Columns that are present
+                in ``df`` but not included in ``stypes`` will be ignored.
+            device: The device.
+        """
+        columns: dict[Stype, list[str]] = defaultdict(list)
+        for column, stype in stypes.items():
+            columns[Stype(stype)].append(column)
+
+        blocks: dict[Stype, Tensor] = {}
+        for stype in columns:
+            tensors: list[Tensor] = []
+            for column in columns[stype]:
+                ser = df[column]
+                if stype == Stype.numerical:
+                    ser = ser.astype("float32", copy=False)
+                    if ser.null_count > 0:
+                        ser = ser.fillna(float("nan"))
+                    tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
+                    tensor = tensor.to(device)
+                elif stype == Stype.categorical:
+                    tensor = CategoricalTensor.from_cudf(ser, device=device)
+                elif stype == Stype.datetime:
+                    ser = ser.astype("datetime64[us]", copy=False)
+                    ser = ser.astype("int64", copy=False)
+                    if ser.null_count > 0:
+                        ser = ser.fillna(torch.iinfo(torch.int64).min)
+                    tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
+                    tensor = tensor.to(device)
+                elif stype == Stype.id:
+                    tensor = ColumnarTensor.from_cudf(ser, device=device)
+                else:
+                    raise NotImplementedError
+                tensors.append(tensor)
+
+            blocks[stype] = torch.cat(tensors, dim=-1)
+
+        return cls(
+            columns=cast(Mapping[StypeLike, Sequence[str]], columns),
+            **blocks,
         )
 
     # Properties ##############################################################
@@ -470,11 +523,36 @@ class TableTensor(Tensor):
         stypes = tuple(Stype(stype) for stype in stypes)
 
         return self.__class__(
-            columns=cast(
-                Mapping[StypeLike, Sequence[str]],
-                {stype: self._columns[stype] for stype in stypes},
-            ),
+            columns={stype: self._columns[stype] for stype in stypes},
             **{stype: getattr(self, stype) for stype in stypes},
+        )
+
+    def drop_stypes(
+        self,
+        stypes: StypeLike | Iterable[StypeLike],
+    ) -> Self:
+        r"""Return a table with ``stypes`` columns removed.
+
+        .. code-block:: python
+
+            assert table.columns[Stype.categorical] == ("country", "segment")
+            table = table.drop_stypes("categorical")
+            assert table.columns[Stype.categorical] == ()
+            assert table.columns[Stype.numerical] == ("age", "income")
+
+        Args:
+            stypes: The semantic type or semantic types to drop.
+        """
+        if isinstance(stypes, (str, Stype)):
+            stypes = (stypes,)
+        stypes = {Stype(stype) for stype in stypes}
+
+        keep = tuple(stype for stype in self._columns if stype not in stypes)
+        return self.__class__(
+            size=self.size()[:-1],
+            columns={stype: self._columns[stype] for stype in keep},
+            device=self.device,
+            **{stype: getattr(self, stype) for stype in keep},
         )
 
     def select_columns(self, columns: str | Iterable[str]) -> Self:
@@ -1130,19 +1208,31 @@ def _index(
 
 @TableTensor.implements(aten.cat.default)
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
+    if len(tensors) == 0:
+        raise ValueError("torch.cat(): expected a non-empty list of Tensors")
+
     if not all(isinstance(tensor, TableTensor) for tensor in tensors):
         raise TypeError(
             f"Expected all tensors to be '{TableTensor.__name__}' instances"
         )
-
     tensors = cast(Sequence[TableTensor], tensors)
-    blocks = {
-        stype: torch.cat([tensor.blocks[stype] for tensor in tensors], dim=dim)
-        for stype, _ in tensors[0].items()
-    }
 
-    if dim % tensors[0].dim() != tensors[0].dim() - 1:
+    blocks: dict[Stype, Tensor] = {}
+    for stype, _ in tensors[0].items():
+        block_list = [tensor.blocks[stype] for tensor in tensors]
+        block_list = [block for block in block_list if block.size(-1) > 0]
+        if len(block_list) == 1:
+            blocks[stype] = block_list[0]
+        elif len(block_list) > 1:
+            blocks[stype] = torch.cat(block_list, dim=dim)
+
+    size: Sequence[int] | None = None
+    if not _is_column_dim(tensors[0], dim):
         columns = tensors[0]._columns
+        if len(blocks) == 0:
+            size = list(tensors[0].size())
+            for tensor in tensors[1:]:
+                size[dim] += tensor.size(dim)
     else:
         columns = {
             stype: tuple(
@@ -1150,7 +1240,10 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             )
             for stype, _ in tensors[0].items()
         }
+        size = tensors[0].size()
+
     return tensors[0].__class__(
+        size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
         **blocks,
     )

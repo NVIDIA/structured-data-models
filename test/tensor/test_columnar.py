@@ -4,6 +4,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm.testing import onlyCUDA
 
 
 def test_init() -> None:
@@ -57,6 +58,42 @@ def test_from_arrow() -> None:
 
     with pytest.raises(ValueError, match="cannot represent null integer"):
         ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+
+
+@onlyCUDA
+def test_from_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = ColumnarTensor.from_cudf(
+        cudf.Series([1, 2, 3], dtype="int64"),
+    )
+    assert tensor.size() == (3, 1)
+    assert tensor.is_cuda
+    assert tensor[:, 0].equal(torch.tensor([1, 2, 3], device=tensor.device))
+
+    tensor = ColumnarTensor.from_cudf(
+        cudf.Series([1.5, None, 3.5], dtype="float32"),
+    )
+    assert tensor.size() == (3, 1)
+    assert tensor.is_cuda
+    assert tensor[:, 0].is_floating_point()
+    assert tensor[:, 0].allclose(
+        torch.tensor([1.5, float("nan"), 3.5], device=tensor.device),
+        equal_nan=True,
+    )
+
+    tensor = ColumnarTensor.from_cudf(
+        cudf.Series(["a", "bb", ""]),
+    )
+    assert tensor.size() == (3, 1)
+    assert tensor.is_cuda
+    assert isinstance(tensor._columns[0], StringTensor)
+    assert tensor.tolist() == [["a"], ["bb"], [""]]
+
+    with pytest.raises(ValueError, match="cannot represent null integer"):
+        ColumnarTensor.from_cudf(
+            cudf.Series([1, None, 3], dtype="int64"),
+        )
 
 
 def test_to_arrow() -> None:

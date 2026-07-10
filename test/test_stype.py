@@ -2,7 +2,9 @@ from decimal import Decimal
 
 import pandas as pd
 import pyarrow as pa
+import pytest
 from sdm import Stype, infer_stypes
+from sdm.testing import onlyCUDA
 
 
 def test_from_pandas() -> None:
@@ -51,6 +53,41 @@ def test_from_arrow() -> None:
         "note": Stype.categorical,
         "active": Stype.categorical,
         "code": Stype.categorical,
+        "created_at": Stype.datetime,
+    }
+
+
+@onlyCUDA
+def test_from_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    df = cudf.DataFrame(
+        {
+            "id": cudf.Series([1, 2], dtype="int64"),
+            "age": cudf.Series([25, 31], dtype="int32"),
+            "income": cudf.Series([1.0, 2.5], dtype="float64"),
+            "amount": cudf.Series(
+                [Decimal("1.25"), Decimal("2.50")],
+                dtype=cudf.Decimal64Dtype(8, 2),
+            ),
+            "name": cudf.Series(["a", "b"]),
+            "segment": cudf.Series(["x", "y"], dtype="category"),
+            "active": cudf.Series([True, False], dtype="bool"),
+            "created_at": cudf.Series(
+                ["2026-01-01", "2026-01-02"],
+                dtype="datetime64[ns]",
+            ),
+        }
+    )
+
+    assert infer_stypes(df) == {
+        "id": Stype.id,
+        "age": Stype.numerical,
+        "income": Stype.numerical,
+        "amount": Stype.numerical,
+        "name": Stype.categorical,
+        "segment": Stype.categorical,
+        "active": Stype.categorical,
         "created_at": Stype.datetime,
     }
 

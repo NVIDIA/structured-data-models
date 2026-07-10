@@ -13,6 +13,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.testing import onlyCUDA
 
 
 def test_init() -> None:
@@ -216,6 +217,71 @@ def test_select_stypes() -> None:
     assert mixed.categorical is tensor.categorical
     assert mixed.datetime.size() == (2, 0)
     assert mixed.id.size() == (2, 0)
+
+
+def test_drop_stypes() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+            "datetime": ["created_at"],
+            "id": ["user_id"],
+        },
+        numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["USA", "Germany"]),),
+        ),
+        datetime=torch.tensor([[10], [20]], dtype=torch.int64),
+        id=ColumnarTensor((torch.tensor([100, 200]),)),
+    )
+
+    no_numerical = tensor.drop_stypes(Stype.numerical)
+    assert isinstance(no_numerical, TableTensor)
+    assert no_numerical.columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("country",),
+        Stype.datetime: ("created_at",),
+        Stype.id: ("user_id",),
+    }
+    assert no_numerical.numerical.size() == (2, 0)
+    assert no_numerical.categorical is tensor.categorical
+    assert no_numerical.datetime is tensor.datetime
+    assert no_numerical.id is tensor.id
+
+    no_categorical = tensor.drop_stypes(Stype.categorical)
+    assert no_categorical.columns == {
+        Stype.numerical: ("age", "income"),
+        Stype.categorical: (),
+        Stype.datetime: ("created_at",),
+        Stype.id: ("user_id",),
+    }
+    assert no_categorical.numerical is tensor.numerical
+    assert no_categorical.categorical.size() == (2, 0)
+
+    mixed = tensor.drop_stypes([Stype.numerical, Stype.categorical])
+    assert mixed.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: ("created_at",),
+        Stype.id: ("user_id",),
+    }
+    assert mixed.numerical.size() == (2, 0)
+    assert mixed.categorical.size() == (2, 0)
+    assert mixed.datetime is tensor.datetime
+    assert mixed.id is tensor.id
+
+    empty = tensor.drop_stypes(list(Stype))
+    assert empty.size() == (2, 0)
+    assert empty.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+
+    with pytest.raises(ValueError, match="not a valid Stype"):
+        tensor.drop_stypes("unknown")
 
 
 def test_save_load() -> None:
@@ -719,6 +785,8 @@ def test_arrow_empty() -> None:
         },
     )
 
+    assert tensor.size() == (0, 2)
+
     table = tensor.to_arrow()
 
     assert table.num_rows == 0
@@ -751,3 +819,94 @@ def test_from_pandas() -> None:
     assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+@onlyCUDA
+def test_from_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    data = {
+        "age": [0.0, 1.0, 2.0, 3.0],
+        "income": [10.0, 11.0, 12.0, 13.0],
+        "country": ["US", "CA", "", "US"],
+        "time": [
+            datetime(2024, 1, 1, 0, 0),
+            None,
+            datetime(2024, 1, 2, 0, 0),
+            datetime(2024, 1, 3, 0, 0),
+        ],
+        "user_id": [0, 1, 2, 3],
+        "item_id": ["a", "b", "c", "d"],
+    }
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(data),
+        stypes={
+            "age": "numerical",
+            "income": "numerical",
+            "country": "categorical",
+            "time": "datetime",
+            "user_id": "id",
+            "item_id": "id",
+        },
+    )
+
+    assert tensor.size() == (4, 6)
+    assert tensor.numerical.equal(
+        torch.tensor(
+            [
+                [0.0, 10.0],
+                [1.0, 11.0],
+                [2.0, 12.0],
+                [3.0, 13.0],
+            ],
+            device=tensor.device,
+        )
+    )
+    assert tensor.categorical.equal(
+        torch.tensor([[0], [1], [2], [0]], device=tensor.device)
+    )
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
+    assert tensor.datetime.equal(
+        torch.tensor(
+            [
+                [1704067200000000],
+                [-9223372036854775808],
+                [1704153600000000],
+                [1704240000000000],
+            ],
+            device=tensor.device,
+        )
+    )
+    assert tensor.id[:, 0].equal(
+        torch.tensor([0, 1, 2, 3], device=tensor.device)
+    )
+    assert tensor.id[:, 1].equal(
+        StringTensor.from_list(["a", "b", "c", "d"], device=tensor.device)
+    )
+
+
+@onlyCUDA
+def test_from_cudf_empty() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(
+            {
+                "age": [],
+                "country": [],
+            }
+        ),
+        stypes={
+            "age": "numerical",
+            "country": "categorical",
+        },
+    )
+
+    assert tensor.size() == (0, 2)
+    assert tensor.is_cuda
+
+    table = tensor.to_arrow()
+    assert table.num_rows == 0
+    assert table.column_names == ["age", "country"]
+    assert table.to_pydict() == {"age": [], "country": []}

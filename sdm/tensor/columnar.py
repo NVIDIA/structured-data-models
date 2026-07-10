@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
@@ -14,6 +14,9 @@ from sdm.tensor import StringTensor
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
+
+if TYPE_CHECKING:
+    import cudf
 
 
 class ColumnarTensor(Tensor):
@@ -142,6 +145,34 @@ class ColumnarTensor(Tensor):
                 writable=device.type == "cpu",
             )
             column = torch.as_tensor(values, device=device)
+
+        return cls(columns=(column,), device=device)
+
+    @classmethod
+    def from_cudf(
+        cls,
+        ser: cudf.Series | cudf.Index,
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create tensor from a :class:`cudf.Series`.
+
+        Args:
+            ser: The :class:`cudf.Series` or :class:`cudf.Index`.
+            device: The device.
+        """
+        from cudf.api.types import is_integer_dtype, is_string_dtype
+
+        if is_string_dtype(ser.dtype):
+            column = StringTensor.from_cudf(ser, device=device)
+        else:
+            if ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
+                raise ValueError(
+                    f"'{cls.__name__}' cannot represent null integer values"
+                )
+            if ser._column.null_count > 0 and ser.dtype.kind == "f":
+                ser = ser.fillna(float("nan"))
+            column = torch.from_dlpack(ser.to_dlpack()).to(device)
 
         return cls(columns=(column,), device=device)
 
