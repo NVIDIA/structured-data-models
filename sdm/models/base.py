@@ -10,6 +10,11 @@ from sdm.cache import Cache
 from sdm.processing import Recipe
 
 
+def _validate_batch_size_limit(batch_size_limit: int | None) -> None:
+    if batch_size_limit is not None and batch_size_limit <= 0:
+        raise ValueError("`batch_size_limit` must be positive")
+
+
 class BaseModel(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
@@ -35,6 +40,7 @@ class BaseModel(torch.nn.Module, ABC):
         related_tables: RelatedTables | None = None,
         *,
         num_estimators: int = 1,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
 
@@ -47,10 +53,13 @@ class BaseModel(torch.nn.Module, ABC):
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
             related_tables: Additional related context provided to the model.
             num_estimators: The number of estimators for ensembling.
+            batch_size_limit: Maximum number of broadcast attention batch
+                elements processed at once. ``None`` disables batch chunking.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
+        _validate_batch_size_limit(batch_size_limit)
         if not self.supports_related_tables and related_tables is not None:
             warnings.warn(
                 f"'{self.__class__.__name__}' does not support related tables",
@@ -63,7 +72,15 @@ class BaseModel(torch.nn.Module, ABC):
         # members for better efficiency.
         outs: list[Tensor] = []
         for _ in range(num_estimators):
-            outs.append(self._forward(x, y, related_tables, cache=None))
+            outs.append(
+                self._forward(
+                    x,
+                    y,
+                    related_tables,
+                    cache=None,
+                    batch_size_limit=batch_size_limit,
+                )
+            )
         return torch.stack(outs).mean(dim=0)
 
     @torch.inference_mode()
@@ -74,6 +91,7 @@ class BaseModel(torch.nn.Module, ABC):
         related_tables: RelatedTables | None = None,
         *,
         num_estimators: int = 1,
+        batch_size_limit: int | None = None,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -87,7 +105,10 @@ class BaseModel(torch.nn.Module, ABC):
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
             related_tables: Additional related context provided to the model.
             num_estimators: The number of estimators for ensembling.
+            batch_size_limit: Maximum number of broadcast attention batch
+                elements processed at once. ``None`` disables batch chunking.
         """
+        _validate_batch_size_limit(batch_size_limit)
         if not self.supports_related_tables and related_tables is not None:
             warnings.warn(
                 f"'{self.__class__.__name__}' does not support related tables",
@@ -102,7 +123,13 @@ class BaseModel(torch.nn.Module, ABC):
         for _ in range(num_estimators):
             # TODO Don't store y.dtype for every estimator.
             cache = Cache({"y.dtype": y.dtype})
-            self._forward(x, y, related_tables, cache)
+            self._forward(
+                x,
+                y,
+                related_tables,
+                cache,
+                batch_size_limit=batch_size_limit,
+            )
             cache.freeze()
             caches.append(cache)
         self._caches = caches
@@ -116,6 +143,8 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R_test, C]
         related_tables: RelatedTables | None = None,
+        *,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, *]
         r"""Predict unseen test examples.
 
@@ -127,10 +156,13 @@ class BaseModel(torch.nn.Module, ABC):
             x: The feature tensor with shape ``[..., R_test, C]`` with
                 ``R_test`` rows and ``C`` columns.
             related_tables: Additional related context provided to the model.
+            batch_size_limit: Maximum number of broadcast attention batch
+                elements processed at once. ``None`` disables batch chunking.
 
         Returns:
             The prediction for ``[..., R_test]`` test rows.
         """
+        _validate_batch_size_limit(batch_size_limit)
         if not self.supports_related_tables and related_tables is not None:
             warnings.warn(
                 f"'{self.__class__.__name__}' does not support related tables",
@@ -152,7 +184,15 @@ class BaseModel(torch.nn.Module, ABC):
         x, y = self._preprocess(x, y)
         outs: list[Tensor] = []
         for cache in self._caches:
-            outs.append(self._forward(x, y, related_tables, cache))
+            outs.append(
+                self._forward(
+                    x,
+                    y,
+                    related_tables,
+                    cache,
+                    batch_size_limit=batch_size_limit,
+                )
+            )
         return torch.stack(outs).mean(dim=0)
 
     # Helpers #################################################################
@@ -216,6 +256,8 @@ class BaseModel(torch.nn.Module, ABC):
         y: Tensor,  # [..., R_train]
         related_tables: RelatedTables | None,
         cache: Cache | None,
+        *,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         pass
 
