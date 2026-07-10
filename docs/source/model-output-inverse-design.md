@@ -3,7 +3,8 @@
 ## Status and MVP decision
 
 This document defines the smallest model-output inverse contract needed by
-TabICLv2. It is a design and an executable validation, not an implementation.
+TabICLv2. It combines the implemented `ClassShuffle` target inverse with the
+proposed model/ensemble integration needed to apply it.
 
 The MVP makes the following decisions:
 
@@ -27,6 +28,12 @@ While terminal decoding is deferred, the recipe-integrated model may preserve
 the existing `Tensor` return API by returning the numerical block after output
 processing. The intermediate target inverse still uses `TableTensor` and is
 fully compositional with existing processors.
+
+This change implements and tests
+`ClassShuffle.inverse_transform(TableTensor)`. Creating and storing one
+fitted recipe per ensemble member, invoking target inverse inside the model
+loop, and applying user output after aggregation remain follow-up integration
+work.
 
 ## Current model-output contracts
 
@@ -265,8 +272,9 @@ to the fitted target route.
 ## Executable evidence
 
 The design was exercised on CPU against `ec91baa` using the real
-`TabICLv2(pretrained=False)`, `ClassShuffle.fit`,
-`StandardScale.fit`, and existing `TableTensor` operations.
+`TabICLv2(pretrained=False)`, the implemented `ClassShuffle` target
+inverse, `StandardScale.inverse_transform`, and existing `TableTensor`
+operations.
 
 The controlled classification experiment used two independently fitted
 five-class permutations and 4,096 rows:
@@ -303,23 +311,11 @@ without any output-width declaration.
 The essential reproducible checks are:
 
 ```python
-# Proposed ClassShuffle model-output inverse on a TableTensor.
-def inverse_class_scores(table, permutation, num_classes):
-    scores = table.numerical[..., :num_classes].index_select(
-        -1,
-        permutation,
-    )
-    return TableTensor.from_tensor(scores)
-
-table_a = inverse_class_scores(
-    TableTensor.from_tensor(raw_a),
-    permutation_a,
-    num_classes,
+table_a = class_shuffle_a.inverse_transform(
+    TableTensor.from_tensor(raw_a)
 )
-table_b = inverse_class_scores(
-    TableTensor.from_tensor(raw_b),
-    permutation_b,
-    num_classes,
+table_b = class_shuffle_b.inverse_transform(
+    TableTensor.from_tensor(raw_b)
 )
 mean_table = TableTensor.from_tensor(
     torch.stack([table_a.numerical, table_b.numerical]).mean(0)
@@ -333,14 +329,14 @@ round_trip = standard_scale.transform(restored)
 torch.testing.assert_close(round_trip.numerical, raw.numerical)
 ```
 
-## Minimal implementation sequence
+## Remaining model integration sequence
 
 1. Create one deep-copied and independently fitted recipe per ensemble member.
 2. Pair every cached estimator state with its fitted recipe.
 3. Wrap each raw member output as a transient numerical `TableTensor` before
    target inversion.
-4. Make `ClassShuffle` implement `InvertibleMixin` for the single-target
-   class-score table. `StandardScale` needs no new inverse formula.
+4. Call the fitted target inverse for each member. `ClassShuffle` and
+   `StandardScale` provide the required single-target operations.
 5. Validate compatible aligned numerical shapes and average their values.
 6. Run the resolved user output pipeline once after averaging.
 7. Preserve the current numerical `Tensor` return while decoding and final
