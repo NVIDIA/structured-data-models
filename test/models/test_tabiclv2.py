@@ -185,3 +185,54 @@ def test_row_embedding() -> None:
         max_keys=1,
     )
     assert out.size() == (6, 16)
+
+
+@onlyFullTest
+@withCUDA
+def test_tabiclv2_fit_predict_compile(device: torch.device) -> None:
+    torch.manual_seed(0)
+    torch._dynamo.reset()
+    model = TabICLv2(pretrained=False, device=device)
+
+    R, C, R_train = 8, 6, 5
+    x = torch.randn(R, C, device=device)
+    y = torch.randint(0, 10, (R_train,), device=device)
+
+    expected = model(x, y)
+    model.fit(x[:R_train], y)
+    expected_pred = model.predict(x[R_train:])
+    model.clear()
+
+    # The cache-record and cache-replay routes must also compile without
+    # graph breaks (each takes its own branch and builds a separate graph).
+    model.cls_model.compile(fullgraph=True, backend="eager")
+    model.reg_model.compile(fullgraph=True, backend="eager")
+    torch.testing.assert_close(model(x, y), expected)
+    model.fit(x[:R_train], y)
+    torch.testing.assert_close(model.predict(x[R_train:]), expected_pred)
+
+
+@onlyFullTest
+@withCUDA
+def test_tabiclv2_autocast_compile(device: torch.device) -> None:
+    torch.manual_seed(0)
+    torch._dynamo.reset()
+    model = TabICLv2(pretrained=False, device=device)
+
+    R, C, R_train = 8, 6, 5
+    x = torch.randn(R, C, device=device)
+    y = torch.randint(0, 10, (R_train,), device=device)
+
+    with torch.amp.autocast(device.type, torch.bfloat16):
+        expected = model(x, y)
+        model.fit(x[:R_train], y)
+        expected_pred = model.predict(x[R_train:])
+        model.clear()
+
+    # The recipe shipped in examples/tabiclv2.py: autocast around compiled
+    # submodels, including the cache record/replay routes.
+    model.cls_model.compile(fullgraph=True, backend="eager")
+    with torch.amp.autocast(device.type, torch.bfloat16):
+        torch.testing.assert_close(model(x, y), expected)
+        model.fit(x[:R_train], y)
+        torch.testing.assert_close(model.predict(x[R_train:]), expected_pred)

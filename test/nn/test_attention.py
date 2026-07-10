@@ -891,3 +891,36 @@ def test_transformer_block_kv_cache() -> None:
 
     torch.testing.assert_close(cache_out, direct_out)
     torch.testing.assert_close(cached_out, direct_out)
+
+
+def test_attention_key_value_cache_dtype_mismatch() -> None:
+    torch.manual_seed(0)
+    from sdm.cache import KVCacheEntry
+
+    module = Attention(channels=8, num_query_heads=2)
+    query = torch.randn(2, 3, 8)
+    cached = KVCacheEntry(
+        key=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
+        value=torch.randn(2, 5, 2, 4, dtype=torch.bfloat16),
+    )
+    with pytest.raises(ValueError, match="Re-run the caching step"):
+        module(query=query, key_value=cached)
+
+
+@withCUDA
+def test_attention_key_value_cache_autocast(device: torch.device) -> None:
+    torch.manual_seed(0)
+    if device.type != "cuda":
+        pytest.skip("autocast('cuda') requires a GPU")
+    module = Attention(channels=8, num_query_heads=2, device=device)
+    query = torch.randn(2, 3, 8, device=device)
+    key_value = torch.randn(2, 5, 8, device=device)
+
+    # Caching and replaying under the same autocast context is valid even
+    # though the pre-projection query stays float32.
+    with torch.amp.autocast("cuda", torch.bfloat16):
+        out, cached = module(
+            query=query, key_value=key_value, return_key_value=True
+        )
+        replayed = module(query=query, key_value=cached)
+    torch.testing.assert_close(replayed, out)
