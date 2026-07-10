@@ -89,15 +89,18 @@ class BaseModel(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        x, y = self._preprocess(x, y, recipe=recipe)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
         outs: list[Tensor] = []
         for _ in range(num_estimators):
+            # TODO Iterate over Recipes instead of using a single recipe once
+            # Recipe adds support for multiple recipes.
+            x_i, y_i = self._preprocess(x, y, recipe=recipe)
+
             outs.append(
                 self._forward(
-                    x,
-                    y,
+                    x_i,
+                    y_i,
                     related_tables,
                     cache=None,
                     batch_size_limit=batch_size_limit,
@@ -142,15 +145,18 @@ class BaseModel(torch.nn.Module, ABC):
             related_tables = None
 
         self.clear()
-        x, y = self._preprocess(x, y, recipe=recipe)
-        x = x[..., : y.size(-1), :]
         caches: list[Cache] = []
         for _ in range(num_estimators):
+            # TODO Iterate over Recipes instead of using a single recipe once
+            # Recipe adds support for multiple recipes.
+            x_i, y_i = self._preprocess(x, y, recipe=recipe)
+            x_i = x_i[..., : y_i.size(-1), :]
+
             # TODO Don't store y.dtype for every estimator.
             cache = Cache({"y.dtype": y.dtype})
             self._forward(
-                x,
-                y,
+                x_i,
+                y_i,
                 related_tables,
                 cache,
                 batch_size_limit=batch_size_limit,
