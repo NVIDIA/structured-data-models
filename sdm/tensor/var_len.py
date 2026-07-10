@@ -452,9 +452,9 @@ class VarLenTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            # Reentrant dispatch records autograd in `_data`.
             with (
                 _preserve_view_inference_mode(func, args[0]),
+                # Reentrant dispatch records autograd in `_data`.
                 enable_reentrant_dispatch(),
             ):
                 return handler(*args, **(kwargs or {}))
