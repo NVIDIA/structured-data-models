@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from sdm.relational import RelationalSampler
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class Relationship:
     r"""Join relationship between two tables.
 
