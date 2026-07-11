@@ -756,6 +756,33 @@ class TableTensor(Tensor):
         out += f"{' ' * indent})"
         return out
 
+    def _repr_html_(self) -> str:
+        import pandas as pd
+
+        max_columns = 10
+        rows = [
+            [column, stype.value]
+            for stype, columns in self._columns.items()
+            for column in columns
+        ]
+        if len(rows) > max_columns + 1:
+            rows = [
+                *rows[: max_columns // 2],
+                ["...", "..."],
+                *rows[-max_columns // 2 :],
+            ]
+        df = pd.DataFrame(
+            data=rows,
+            columns=pd.Index(["Column", "Stype"]),
+        )
+
+        size = f"{self.size(-2)} rows x {self.size(-1)} columns"
+        if self.dim() > 2:
+            examples = " x ".join(str(dim) for dim in self.size()[:-2])
+            size = f"{examples} examples x {size}"
+
+        return df.to_html(index=False, escape=True) + f"<p>{size}</p>"
+
 
 @TableTensor.implements(aten.alias.default)
 def _alias(input: TableTensor) -> TableTensor:

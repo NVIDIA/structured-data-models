@@ -92,19 +92,18 @@ class Relationship:
             right_columns=right_columns,
         )
 
-    def __repr__(self) -> str:
+    def _left_columns_repr(self) -> str:
         if len(self.left_columns) == 1:
-            left_columns = self.left_columns[0]
-            right_columns = self.right_columns[0]
-        else:
-            left_columns = "[" + ", ".join(self.left_columns) + "]"
-            right_columns = "[" + ", ".join(self.right_columns) + "]"
+            return f"{self.left_table}.{self.left_columns[0]}"
+        return f"{self.left_table}.[{', '.join(self.left_columns)}]"
 
-        return (
-            f"{self.left_table}.{left_columns}"
-            "<>"
-            f"{self.right_table}.{right_columns}"
-        )
+    def _right_columns_repr(self) -> str:
+        if len(self.right_columns) == 1:
+            return f"{self.right_table}.{self.right_columns[0]}"
+        return f"{self.right_table}.[{', '.join(self.right_columns)}]"
+
+    def __repr__(self) -> str:
+        return f"{self._left_columns_repr()}<>{self._right_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -326,3 +325,37 @@ class RelationalData(DeviceMixin):
             out += "  relationships=[],\n"
         out += ")"
         return out
+
+    def _repr_html_(self) -> str:
+        from html import escape
+
+        import pandas as pd
+
+        rows = [
+            [
+                name,
+                table.size(-2),
+                table.size(-1),
+                ", ".join(
+                    stype.value
+                    for stype, tensor in table.items()
+                    if tensor.size(-1) > 0
+                ),
+            ]
+            for name, table in self.tables.items()
+        ]
+        df = pd.DataFrame(
+            rows,
+            columns=pd.Index(["Table", "Rows", "Columns", "Stypes"]),
+        )
+
+        ul = "".join(
+            f"<li>"
+            f"<code>{escape(rel._left_columns_repr())}</code>"
+            f" ↔️ "
+            f"<code>{escape(rel._right_columns_repr())}</code>"
+            f"</li>"
+            for rel in self.relationships
+        )
+
+        return df.to_html(index=False, escape=True) + f"<ul>{ul}</ul>"

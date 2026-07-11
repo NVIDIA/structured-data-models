@@ -77,15 +77,18 @@ class TaskLink:
             table_columns=table_columns,
         )
 
-    def __repr__(self) -> str:
+    def _task_columns_repr(self) -> str:
         if len(self.task_columns) == 1:
-            task_columns = self.task_columns[0]
-            table_columns = self.table_columns[0]
-        else:
-            task_columns = "[" + ", ".join(self.task_columns) + "]"
-            table_columns = "[" + ", ".join(self.table_columns) + "]"
+            return self.task_columns[0]
+        return f"[{', '.join(self.task_columns)}]"
 
-        return f"{task_columns}->{self.table}.{table_columns}"
+    def _table_columns_repr(self) -> str:
+        if len(self.table_columns) == 1:
+            return f"{self.table}.{self.table_columns[0]}"
+        return f"{self.table}.[{', '.join(self.table_columns)}]"
+
+    def __repr__(self) -> str:
+        return f"{self._task_columns_repr()}->{self._table_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -216,3 +219,45 @@ class RelatedTables(DeviceMixin):
             out += "  task_links=[],\n"
         out += ")"
         return out
+
+    def _repr_html_(self) -> str:
+        from html import escape
+
+        import pandas as pd
+
+        rows = [
+            [
+                name,
+                table.size(-2),
+                table.size(-1),
+                ", ".join(
+                    stype.value
+                    for stype, tensor in table.items()
+                    if tensor.size(-1) > 0
+                ),
+            ]
+            for name, table in self.tables.items()
+        ]
+        df = pd.DataFrame(
+            rows,
+            columns=pd.Index(["Table", "Rows", "Columns", "Stypes"]),
+        )
+
+        ul = "".join(
+            f"<li>"
+            f"<code>{escape(link._task_columns_repr())}</code>"
+            f" ➡️ "
+            f"<code>{escape(link._table_columns_repr())}</code>"
+            f"</li>"
+            for link in self.task_links
+        )
+        ul += "".join(
+            f"<li>"
+            f"<code>{escape(rel._left_columns_repr())}</code>"
+            f" ↔️ "
+            f"<code>{escape(rel._right_columns_repr())}</code>"
+            f"</li>"
+            for rel in self.relationships
+        )
+
+        return df.to_html(index=False, escape=True) + f"<ul>{ul}</ul>"
