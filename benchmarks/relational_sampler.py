@@ -13,6 +13,7 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import os
 import platform
 import random
 import statistics
@@ -37,6 +38,13 @@ DEFAULT_DATASET = "rel-arxiv"
 DEFAULT_TASK = "paper-citation"
 DEFAULT_BATCH_SIZES = (1, 128, 1024)
 DEFAULT_FANOUTS = ((16,), (16, 16))
+PHASE_ORDER = (
+    "task_to_seed_join_ms",
+    "neighbor_sampling_ms",
+    "temporal_top_k_ms",
+    "output_assembly_ms",
+    "synchronization_other_ms",
+)
 T = TypeVar("T")
 
 
@@ -197,16 +205,29 @@ def _table_contract(
     database: Any,
     identity_columns: Mapping[str, Sequence[str]],
 ) -> list[dict[str, Any]]:
-    return [
-        {
-            "name": name,
-            "rows": len(table.df),
-            "columns": list(table.df.columns),
-            "identity_columns": list(identity_columns[name]),
-            "time_column": table.time_col,
-        }
-        for name, table in database.table_dict.items()
-    ]
+    contract = []
+    for name, table in database.table_dict.items():
+        sampling_columns = list(identity_columns[name])
+        if (
+            table.time_col is not None
+            and table.time_col not in sampling_columns
+        ):
+            sampling_columns.append(table.time_col)
+        sampling_table = pa.Table.from_pandas(
+            table.df[sampling_columns],
+            preserve_index=False,
+        )
+        contract.append(
+            {
+                "name": name,
+                "rows": len(table.df),
+                "columns": list(table.df.columns),
+                "identity_columns": list(identity_columns[name]),
+                "time_column": table.time_col,
+                "sampling_data_sha256": _hash_arrow(sampling_table),
+            }
+        )
+    return contract
 
 
 def build_relbench_workload(
@@ -267,6 +288,10 @@ def build_relbench_workload(
         "time_columns": time_columns,
         "task_link": task_link,
         "task_time_column": task.time_col,
+        "task_rows": task_table.size(0),
+        "task_sampling_data_sha256": _hash_arrow(
+            task_table.to_arrow().select((task.entity_col, task.time_col))
+        ),
     }
     return Workload(
         data=data,
@@ -307,6 +332,7 @@ def task_selection_summary(positions: Sequence[int]) -> dict[str, Any]:
 
 
 def _hash_arrow(table: pa.Table) -> str:
+    table = table.replace_schema_metadata(None)
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
         writer.write_table(table)
@@ -505,6 +531,25 @@ def sample_cuda_with_phases(
     return output, phases, total_ms
 
 
+def _sample_cuda_once(
+    sampler: CuGraphRelationalSampler,
+    task_table: TableTensor,
+    task_link: Mapping[str, str],
+    fanout: Sequence[int],
+    task_time_column: str,
+) -> tuple[RelationalSamplerOutput, float]:
+    torch.cuda.synchronize(task_table.device)
+    started = time.perf_counter_ns()
+    output = sampler(
+        task_table=task_table,
+        task_link=task_link,
+        num_neighbors=fanout,
+        task_time_column=task_time_column,
+    )
+    torch.cuda.synchronize(task_table.device)
+    return output, (time.perf_counter_ns() - started) / 1_000_000
+
+
 def _sample_cpu_once(
     sampler: RelationalSampler,
     task_table: TableTensor,
@@ -550,6 +595,37 @@ def _initialize_sampler(
     )
     torch.cuda.synchronize(device)
     return sampler, (time.perf_counter_ns() - started) / 1_000_000, transfer_ms
+
+
+def _cpu_environment() -> dict[str, Any]:
+    fields: dict[str, str] = {}
+    try:
+        output = subprocess.check_output(
+            ["lscpu", "--json"],
+            text=True,
+        )
+        entries = json.loads(output)["lscpu"]
+        fields = {
+            entry["field"].rstrip(":"): entry["data"] for entry in entries
+        }
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        json.JSONDecodeError,
+        KeyError,
+    ):
+        pass
+
+    return {
+        "model": fields.get("Model name", platform.processor() or "unknown"),
+        "architecture": fields.get("Architecture", platform.machine()),
+        "logical_cpu_count": os.cpu_count(),
+        "sockets": fields.get("Socket(s)"),
+        "cores_per_socket": fields.get("Core(s) per socket"),
+        "threads_per_core": fields.get("Thread(s) per core"),
+        "torch_num_threads": torch.get_num_threads(),
+        "torch_num_interop_threads": torch.get_num_interop_threads(),
+    }
 
 
 def _environment() -> dict[str, Any]:
@@ -600,7 +676,12 @@ def _environment() -> dict[str, Any]:
         ).strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
         driver = "unavailable"
-    return {"versions": versions, "gpu": gpu, "nvidia_driver": driver}
+    return {
+        "versions": versions,
+        "cpu": _cpu_environment(),
+        "gpu": gpu,
+        "nvidia_driver": driver,
+    }
 
 
 def _run_variant(
@@ -618,8 +699,15 @@ def _run_variant(
         batch_size=batch_size,
         seed=selection_seed,
     )
+    task_to_device_ms: float | None = None
     if mode == "cuda":
+        torch.cuda.synchronize()
+        transfer_started = time.perf_counter_ns()
         task_table = cast(TableTensor, task_table.to("cuda"))
+        torch.cuda.synchronize(task_table.device)
+        task_to_device_ms = (
+            time.perf_counter_ns() - transfer_started
+        ) / 1_000_000
 
     for _ in range(warmups):
         if mode == "cpu":
@@ -633,7 +721,7 @@ def _run_variant(
             )
         else:
             assert isinstance(sampler, CuGraphRelationalSampler)
-            sample_cuda_with_phases(
+            _sample_cuda_once(
                 sampler,
                 task_table,
                 workload.task_link,
@@ -642,9 +730,6 @@ def _run_variant(
             )
 
     latencies: list[float] = []
-    sampled_rows: list[float] = []
-    phase_samples: dict[str, list[float]] = {}
-    invariant: dict[str, Any] | None = None
     for _ in range(repetitions):
         if mode == "cpu":
             assert isinstance(sampler, RelationalSampler)
@@ -655,10 +740,34 @@ def _run_variant(
                 fanout,
                 workload.task_time_column,
             )
-            phases: dict[str, float] = {}
         else:
             assert isinstance(sampler, CuGraphRelationalSampler)
-            output, phases, latency = sample_cuda_with_phases(
+            output, latency = _sample_cuda_once(
+                sampler,
+                task_table,
+                workload.task_link,
+                fanout,
+                workload.task_time_column,
+            )
+        del output
+        latencies.append(latency)
+
+    sampled_rows: list[float] = []
+    output_digests: list[str] = []
+    invariant: dict[str, Any] | None = None
+    for _ in range(repetitions):
+        if mode == "cpu":
+            assert isinstance(sampler, RelationalSampler)
+            output, _ = _sample_cpu_once(
+                sampler,
+                task_table,
+                workload.task_link,
+                fanout,
+                workload.task_time_column,
+            )
+        else:
+            assert isinstance(sampler, CuGraphRelationalSampler)
+            output, _ = _sample_cuda_once(
                 sampler,
                 task_table,
                 workload.task_link,
@@ -670,13 +779,37 @@ def _run_variant(
             raise RuntimeError(
                 f"Sampled-output invariant failed: {invariant['errors']}"
             )
-        latencies.append(latency)
         sampled_rows.append(float(invariant["sampled_rows"]))
-        for name, value in phases.items():
-            phase_samples.setdefault(name, []).append(value)
+        output_digests.append(invariant["canonical_output_sha256"])
+
+    profiled_latencies: list[float] = []
+    phase_samples: dict[str, list[float]] = {}
+    profiled_invariant: dict[str, Any] | None = None
+    if mode == "cuda":
+        assert isinstance(sampler, CuGraphRelationalSampler)
+        for _ in range(repetitions):
+            profiled_output, phases, profiled_latency = (
+                sample_cuda_with_phases(
+                    sampler,
+                    task_table,
+                    workload.task_link,
+                    fanout,
+                    workload.task_time_column,
+                )
+            )
+            profiled_latencies.append(profiled_latency)
+            for name, value in phases.items():
+                phase_samples.setdefault(name, []).append(value)
+
+        profiled_invariant = output_invariants(profiled_output, workload)
+        if not profiled_invariant["valid"]:
+            raise RuntimeError(
+                "Profiled sampled-output invariant failed: "
+                f"{profiled_invariant['errors']}"
+            )
 
     latency = summarize(latencies)
-    return {
+    result = {
         "kind": workload_kind(fanout),
         "fanout": list(fanout),
         "batch_size": batch_size,
@@ -690,13 +823,29 @@ def _run_variant(
             * 1_000
             / float(latency["median"]),
         },
+        "task_to_device_ms_excluded": task_to_device_ms,
         "sampled_rows": summarize(sampled_rows),
         "invariants": invariant,
         "phases_ms": {
             name: summarize(values)
             for name, values in sorted(phase_samples.items())
         },
+        "raw_samples": {
+            "latency_ms": latencies,
+            "sampled_rows": sampled_rows,
+            "output_sha256": output_digests,
+        },
     }
+    if profiled_latencies:
+        result["profiled_latency_ms"] = summarize(profiled_latencies)
+        result["profiled_invariants"] = profiled_invariant
+        result["raw_samples"].update(
+            {
+                "profiled_latency_ms": profiled_latencies,
+                "phases_ms": phase_samples,
+            }
+        )
+    return result
 
 
 def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
@@ -748,6 +897,20 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         "environment": _environment(),
         "workload": workload.contract,
         "random_state": args.seed,
+        "measurement": {
+            "latency_ms": (
+                "Synchronized public sampler call with task input already "
+                "resident on the sampler device; validation runs in a "
+                "separate untimed pass"
+            ),
+            "task_to_device_ms_excluded": (
+                "One observed task-table transfer, excluded from latency_ms"
+            ),
+            "profiled_latency_ms": (
+                "Separate CUDA pass with event instrumentation; "
+                "phases are independent medians"
+            ),
+        },
         "initialization": {
             "sampler_topology_build_ms": initialization_ms,
             "data_to_cuda_ms_excluded_from_init": transfer_ms,
@@ -787,8 +950,17 @@ def compare_results(
         cuda_run = cuda_runs[key]
         if cpu_run["task_selection"] != cuda_run["task_selection"]:
             raise ValueError(f"CPU and CUDA task selections differ for {key}")
+        if (
+            cpu_run["warmups"] != cuda_run["warmups"]
+            or cpu_run["repetitions"] != cuda_run["repetitions"]
+        ):
+            raise ValueError(
+                f"CPU and CUDA measurement counts differ for {key}"
+            )
         cpu_latency = float(cpu_run["latency_ms"]["median"])
         cuda_latency = float(cuda_run["latency_ms"]["median"])
+        cpu_rows = float(cpu_run["sampled_rows"]["median"])
+        cuda_rows = float(cuda_run["sampled_rows"]["median"])
         entry = {
             "kind": key[0],
             "fanout": list(key[1]),
@@ -796,9 +968,22 @@ def compare_results(
             "cpu_median_ms": cpu_latency,
             "cuda_median_ms": cuda_latency,
             "cuda_speedup": cpu_latency / cuda_latency,
-            "cpu_sampled_rows_median": cpu_run["sampled_rows"]["median"],
-            "cuda_sampled_rows_median": cuda_run["sampled_rows"]["median"],
+            "cpu_sampled_rows_median": cpu_rows,
+            "cuda_sampled_rows_median": cuda_rows,
+            "equal_sampled_row_count": cpu_rows == cuda_rows,
+            "cpu_sampled_rows_per_second": cpu_rows * 1_000 / cpu_latency,
+            "cuda_sampled_rows_per_second": cuda_rows * 1_000 / cuda_latency,
+            "cuda_sampled_row_throughput_ratio": (
+                (cuda_rows / cuda_latency) / (cpu_rows / cpu_latency)
+            ),
+            "cuda_task_to_device_ms_excluded": cuda_run.get(
+                "task_to_device_ms_excluded"
+            ),
         }
+        if "profiled_latency_ms" in cuda_run:
+            profiled = float(cuda_run["profiled_latency_ms"]["median"])
+            entry["cuda_profiled_median_ms"] = profiled
+            entry["cuda_profiled_minus_public_ms"] = profiled - cuda_latency
         if key[0] == "exhaustive_parity":
             parity_checked = True
             equal = (
@@ -834,16 +1019,29 @@ def compare_results(
 def _timeline_payload(result: Mapping[str, Any]) -> dict[str, Any]:
     runs = []
     for run in result["runs"]:
-        phases = {
+        medians = {
             name: values["median"] for name, values in run["phases_ms"].items()
         }
+        phases = {
+            name: medians[name] for name in PHASE_ORDER if name in medians
+        }
+        phases.update(
+            {
+                name: medians[name]
+                for name in sorted(medians.keys() - phases.keys())
+            }
+        )
         if phases:
             runs.append(
                 {
                     "label": (
                         f"fanout={run['fanout']}, batch={run['batch_size']}"
                     ),
-                    "latency_ms": run["latency_ms"]["median"],
+                    "public_latency_ms": run["latency_ms"]["median"],
+                    "profiled_latency_ms": run.get(
+                        "profiled_latency_ms",
+                        run["latency_ms"],
+                    )["median"],
                     "phases_ms": phases,
                 }
             )
@@ -855,7 +1053,7 @@ def write_timeline_artifacts(
     html_path: Path,
     trace_path: Path,
 ) -> None:
-    """Write a compact raw trace and a self-contained CUDA phase timeline."""
+    """Write a trace-compatible aggregate and an HTML phase profile."""
     payload = _timeline_payload(result)
     trace_events: list[dict[str, Any]] = []
     for process, run in enumerate(payload["runs"]):
@@ -869,7 +1067,10 @@ def write_timeline_artifacts(
                     "tid": 0,
                     "ts": offset_us,
                     "dur": duration_ms * 1_000,
-                    "args": {"request": run["label"]},
+                    "args": {
+                        "request": run["label"],
+                        "aggregation": "independent phase median",
+                    },
                 }
             )
             offset_us += duration_ms * 1_000
@@ -877,7 +1078,10 @@ def write_timeline_artifacts(
         "traceEvents": trace_events,
         "displayTimeUnit": "ms",
         "metadata": {
-            "source": "CUDA event spans plus synchronized wall-clock residual",
+            "source": (
+                "Synthetic aggregate of independent phase medians in "
+                "data-flow order; not one request execution timeline"
+            ),
             "payload": payload,
         },
     }
@@ -887,7 +1091,7 @@ def write_timeline_artifacts(
     escaped_payload = json.dumps(payload).replace("</", "<\\/")
     html = f"""<!doctype html>
 <html lang="en"><meta charset="utf-8">
-<title>Relational sampler timeline</title>
+<title>Relational sampler aggregate phase profile</title>
 <style>
 body {{ font-family: Arial, sans-serif; margin: 24px; color: #18202a; }}
 .run {{ margin: 20px 0 30px; }} .bar {{ display: flex; height: 34px; }}
@@ -896,19 +1100,23 @@ body {{ font-family: Arial, sans-serif; margin: 24px; color: #18202a; }}
 .legend {{ display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }}
 .swatch {{ display: inline-block; width: 12px; height: 12px;
   margin-right: 4px; }}
-</style><body><h1>CUDA relational sampler phase timeline</h1>
-<p>Median device spans from CUDA events. The final segment is synchronized
-wall-clock residual (host work, stream synchronization, and uninstrumented
-overhead), not an unsynchronized estimate.</p><div id="root"></div>
+</style><body><h1>CUDA relational sampler aggregate phase profile</h1>
+<p>Each segment is an independently computed median, arranged in data-flow
+order. This is a flamegraph-like latency breakdown, not a single-request
+execution timeline. Synchronization/other is the synchronized wall-clock
+residual from the profiled call.</p><div id="root"></div>
 <script>const payload = {escaped_payload};
 const colors = ['#1677b8','#24a37b','#df8b27','#9a5fb4','#607d8b'];
 const root = document.getElementById('root');
 payload.runs.forEach((run) => {{
   const total = Object.values(run.phases_ms).reduce((a, b) => a + b, 0);
   const item = document.createElement('section'); item.className = 'run';
-  const latency = run.latency_ms.toFixed(3);
+  const publicLatency = run.public_latency_ms.toFixed(3);
+  const profiledLatency = run.profiled_latency_ms.toFixed(3);
   item.innerHTML = `<h2>${{run.label}}</h2>`
-    + `<p>Median end-to-end latency: ${{latency}} ms</p>`;
+    + `<p>Public sampler median: ${{publicLatency}} ms; `
+    + `profiled-call median: ${{profiledLatency}} ms; `
+    + `sum of phase medians: ${{total.toFixed(3)}} ms</p>`;
   const bar = document.createElement('div'); bar.className = 'bar';
   const legend = document.createElement('div'); legend.className = 'legend';
   Object.entries(run.phases_ms).forEach(([name, ms], index) => {{

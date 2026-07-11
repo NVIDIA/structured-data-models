@@ -1,0 +1,3060 @@
+{
+  "command": [
+    "benchmarks/relational_sampler.py",
+    "run",
+    "--mode",
+    "cuda",
+    "--dataset",
+    "rel-arxiv",
+    "--task",
+    "paper-citation",
+    "--split",
+    "test",
+    "--batch-size",
+    "1,128,1024,4096,8192",
+    "--fanout",
+    "16",
+    "--fanout",
+    "16,16",
+    "--include-exhaustive",
+    "--parity-batch-size",
+    "8",
+    "--warmups",
+    "3",
+    "--repetitions",
+    "10",
+    "--seed",
+    "20260711",
+    "--output",
+    "/results/rel_arxiv_cuda_cugraph_t4_final.json",
+    "--timeline-html",
+    "/results/rel_arxiv_cuda_cugraph_t4_final_profile.html",
+    "--timeline-trace",
+    "/results/rel_arxiv_cuda_cugraph_t4_final_profile_trace.json"
+  ],
+  "created_at_utc": "2026-07-11T01:58:13.524595+00:00",
+  "environment": {
+    "cpu": {
+      "architecture": "x86_64",
+      "cores_per_socket": "16",
+      "logical_cpu_count": 32,
+      "model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
+      "sockets": "1",
+      "threads_per_core": "2",
+      "torch_num_interop_threads": 16,
+      "torch_num_threads": 16
+    },
+    "gpu": {
+      "capability": [
+        7,
+        5
+      ],
+      "name": "Tesla T4",
+      "total_memory_bytes": 15636037632
+    },
+    "nvidia_driver": "580.159.03",
+    "versions": {
+      "cudf": "26.08.00a882",
+      "cupy": "14.1.1",
+      "numpy": "2.4.6",
+      "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.39",
+      "pyarrow": "24.0.0",
+      "pyg_lib": "not_installed",
+      "pylibcugraph": "26.08.00a39",
+      "python": "3.11.15",
+      "relbench": "2.1.2",
+      "torch": "2.14.0.dev20260710+cu130",
+      "torch_cuda": "13.0"
+    }
+  },
+  "initialization": {
+    "data_to_cuda_ms_excluded_from_init": 86.829421,
+    "sampler_topology_build_ms": 867.425806
+  },
+  "measurement": {
+    "latency_ms": "Synchronized public sampler call with task input already resident on the sampler device; validation runs in a separate untimed pass",
+    "profiled_latency_ms": "Separate CUDA pass with event instrumentation; phases are independent medians",
+    "task_to_device_ms_excluded": "One observed task-table transfer, excluded from latency_ms"
+  },
+  "mode": "cuda",
+  "random_state": 20260711,
+  "runs": [
+    {
+      "batch_size": 1,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 2,
+          "papers": 1
+        },
+        "sampled_rows": 3,
+        "table_hashes": {
+          "citations": "f560915af55babbf85540d5b11ce9e4086f7f45e651e4a7f394d828cf9e1f493",
+          "papers": "44d6712c79e197b92e5e3fa4e3248aa85df7b12245ec4cc3d26268d143e88038"
+        },
+        "task_rows": 1,
+        "temporal_rows_checked": 3,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 14.857011,
+        "mean": 14.7375188,
+        "median": 14.724972,
+        "min": 14.641594,
+        "p95": 14.84699715,
+        "stdev": 0.07369391621022742
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 13.691999793052673,
+          "mean": 12.732387197017669,
+          "median": 12.647696405649185,
+          "min": 12.481184244155884,
+          "p95": 13.295452651381492,
+          "stdev": 0.35069917970699577
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 1.1184959411621094,
+          "mean": 1.0515520095825195,
+          "median": 1.042896032333374,
+          "min": 1.0144319534301758,
+          "p95": 1.1067023754119873,
+          "stdev": 0.031078643739514515
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.4687702481250753,
+          "mean": 0.3234106941223141,
+          "median": 0.3039910556621548,
+          "min": 0.29412272732543876,
+          "p95": 0.41168361669921805,
+          "stdev": 0.05278539151839635
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.4182719886302948,
+          "mean": 0.2944479942321777,
+          "median": 0.2783679962158203,
+          "min": 0.2682879865169525,
+          "p95": 0.36896638870239246,
+          "stdev": 0.045274380289141054
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 0.7425600290298462,
+          "mean": 0.6948896050453186,
+          "median": 0.6913920044898987,
+          "min": 0.67740797996521,
+          "p95": 0.7261152178049087,
+          "stdev": 0.019731713151416246
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 2,
+          "papers": 1
+        },
+        "sampled_rows": 3,
+        "table_hashes": {
+          "citations": "f560915af55babbf85540d5b11ce9e4086f7f45e651e4a7f394d828cf9e1f493",
+          "papers": "44d6712c79e197b92e5e3fa4e3248aa85df7b12245ec4cc3d26268d143e88038"
+        },
+        "task_rows": 1,
+        "temporal_rows_checked": 3,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 16.440098,
+        "mean": 15.0966875,
+        "median": 14.977655500000001,
+        "min": 14.760167,
+        "p95": 15.908920249999998,
+        "stdev": 0.49299541527803936
+      },
+      "raw_samples": {
+        "latency_ms": [
+          14.857011,
+          14.834758,
+          14.75647,
+          14.725487,
+          14.800426,
+          14.675676,
+          14.724457,
+          14.641594,
+          14.659795,
+          14.699514
+        ],
+        "output_sha256": [
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            13.691999793052673,
+            12.810783922672272,
+            12.68153578042984,
+            12.662432372570038,
+            12.623807728290558,
+            12.632960438728333,
+            12.584864437580109,
+            12.483103573322296,
+            12.481184244155884,
+            12.671199679374695
+          ],
+          "output_assembly_ms": [
+            1.1184959411621094,
+            1.0922880172729492,
+            1.0464320182800293,
+            1.0553920269012451,
+            1.0338239669799805,
+            1.0393600463867188,
+            1.0144319534301758,
+            1.0338560342788696,
+            1.0485440492630005,
+            1.0328960418701172
+          ],
+          "synchronization_other_ms": [
+            0.4687702481250753,
+            0.3419110671787262,
+            0.31312218976020745,
+            0.30405961002922055,
+            0.30100629997444095,
+            0.303922501295089,
+            0.30226061532020587,
+            0.2969674143238059,
+            0.29412272732543876,
+            0.3079642678909309
+          ],
+          "task_to_seed_join_ms": [
+            0.4182719886302948,
+            0.3087039887905121,
+            0.2802560031414032,
+            0.2764799892902374,
+            0.27158400416374207,
+            0.28838399052619934,
+            0.27033600211143494,
+            0.2682879865169525,
+            0.2709439992904663,
+            0.29123198986053467
+          ],
+          "temporal_top_k_ms": [
+            0.7425600290298462,
+            0.7060160040855408,
+            0.6919040083885193,
+            0.696832001209259,
+            0.6908800005912781,
+            0.7036160230636597,
+            0.677951991558075,
+            0.677951991558075,
+            0.67740797996521,
+            0.6837760210037231
+          ]
+        },
+        "profiled_latency_ms": [
+          16.440098,
+          15.259703,
+          15.01325,
+          14.995196,
+          14.921102,
+          14.968243,
+          14.849845,
+          14.760167,
+          14.772203,
+          14.987068
+        ],
+        "sampled_rows": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 3.0,
+        "mean": 3.0,
+        "median": 3.0,
+        "min": 3.0,
+        "p95": 3.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1,
+        "position_prefix": [
+          177909
+        ],
+        "positions_sha256": "a708276649043e2f39bd76f82e8cab41378499fce3cbe3b9fae11abe38beaeca"
+      },
+      "task_to_device_ms_excluded": 0.381316,
+      "throughput": {
+        "requests_per_second": 67.91184390707161,
+        "task_rows_per_second": 67.91184390707161
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 128,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 1232,
+          "paperAuthors": 227,
+          "paperCategories": 75,
+          "papers": 128
+        },
+        "sampled_rows": 1662,
+        "table_hashes": {
+          "citations": "c9c3984df37bb7fc4c81f87bd07be4a18e83487a39706a5f945cc6cf0cbe5043",
+          "paperAuthors": "270e5f7684bb221cb2f9b354da453d6e420feddff4ccd54e38c8a046d24614af",
+          "paperCategories": "919094f060fafce8f18dfe143c67c412aeb9a40acc2b695417dc6aee284c998a",
+          "papers": "1d41abaa250e001ecdc19361088536d809019030df07faec8b4a12dede96a7c0"
+        },
+        "task_rows": 128,
+        "temporal_rows_checked": 1662,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 16.208576,
+        "mean": 16.1068249,
+        "median": 16.1331685,
+        "min": 15.965104,
+        "p95": 16.19919935,
+        "stdev": 0.08258962014475896
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 14.278464317321777,
+          "mean": 13.321734410524368,
+          "median": 13.216448187828064,
+          "min": 13.124831974506378,
+          "p95": 13.88992327451706,
+          "stdev": 0.3471307605107456
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 1.8383680582046509,
+          "mean": 1.741536021232605,
+          "median": 1.7234400510787964,
+          "min": 1.683135986328125,
+          "p95": 1.8196480095386507,
+          "stdev": 0.04915839480639201
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.40736362826347516,
+          "mean": 0.3115985717805863,
+          "median": 0.29519492987537355,
+          "min": 0.28881322880363314,
+          "p95": 0.3765425013329513,
+          "stdev": 0.03689474412132735
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.4310080111026764,
+          "mean": 0.2902976006269455,
+          "median": 0.27427199482917786,
+          "min": 0.26310399174690247,
+          "p95": 0.3679216101765631,
+          "stdev": 0.050120435880358166
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 0.7084159851074219,
+          "mean": 0.676556795835495,
+          "median": 0.6759519875049591,
+          "min": 0.6595199704170227,
+          "p95": 0.698033583164215,
+          "stdev": 0.014420330184367225
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 1232,
+          "paperAuthors": 227,
+          "paperCategories": 75,
+          "papers": 128
+        },
+        "sampled_rows": 1662,
+        "table_hashes": {
+          "citations": "c9c3984df37bb7fc4c81f87bd07be4a18e83487a39706a5f945cc6cf0cbe5043",
+          "paperAuthors": "270e5f7684bb221cb2f9b354da453d6e420feddff4ccd54e38c8a046d24614af",
+          "paperCategories": "919094f060fafce8f18dfe143c67c412aeb9a40acc2b695417dc6aee284c998a",
+          "papers": "1d41abaa250e001ecdc19361088536d809019030df07faec8b4a12dede96a7c0"
+        },
+        "task_rows": 128,
+        "temporal_rows_checked": 1662,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 17.66362,
+        "mean": 16.3417234,
+        "median": 16.1957235,
+        "min": 16.05937,
+        "p95": 17.1236002,
+        "stdev": 0.47931997866542425
+      },
+      "raw_samples": {
+        "latency_ms": [
+          16.172684,
+          16.117512,
+          16.018883,
+          16.017447,
+          15.965104,
+          16.081773,
+          16.208576,
+          16.149706,
+          16.187739,
+          16.148825
+        ],
+        "output_sha256": [
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1",
+          "8919ee3763840c88798a028911b92b63edca2c632c428be850b24a0c778dcff1"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            14.278464317321777,
+            13.415039777755737,
+            13.228160083293915,
+            13.158911764621735,
+            13.124831974506378,
+            13.125663697719574,
+            13.159775853157043,
+            13.24281632900238,
+            13.27894401550293,
+            13.204736292362213
+          ],
+          "output_assembly_ms": [
+            1.8383680582046509,
+            1.7502080202102661,
+            1.7773120403289795,
+            1.7174400091171265,
+            1.7136000394821167,
+            1.691648006439209,
+            1.7183680534362793,
+            1.7967679500579834,
+            1.7285120487213135,
+            1.683135986328125
+          ],
+          "synchronization_other_ms": [
+            0.40736362826347516,
+            0.33887223508453346,
+            0.29679590246200505,
+            0.28881322880363314,
+            0.3107340123500819,
+            0.2898022719573987,
+            0.30595609522056577,
+            0.2920597009620671,
+            0.29359395728874205,
+            0.2919946854133606
+          ],
+          "task_to_seed_join_ms": [
+            0.4310080111026764,
+            0.2741119861602783,
+            0.2744320034980774,
+            0.26582399010658264,
+            0.26310399174690247,
+            0.2826240062713623,
+            0.2805120050907135,
+            0.27024000883102417,
+            0.27030399441719055,
+            0.2908160090446472
+          ],
+          "temporal_top_k_ms": [
+            0.7084159851074219,
+            0.6853439807891846,
+            0.6595199704170227,
+            0.6633920073509216,
+            0.6776639819145203,
+            0.6696320176124573,
+            0.674239993095398,
+            0.6629120111465454,
+            0.6799039840698242,
+            0.684544026851654
+          ]
+        },
+        "profiled_latency_ms": [
+          17.66362,
+          16.463576,
+          16.23622,
+          16.094381,
+          16.089934,
+          16.05937,
+          16.138852,
+          16.264796,
+          16.251258,
+          16.155227
+        ],
+        "sampled_rows": [
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 1662.0,
+        "mean": 1662.0,
+        "median": 1662.0,
+        "min": 1662.0,
+        "p95": 1662.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 128,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5b6644c00d9094fc6f9885ec365ac36284e7a7bac1055678af74778913d3dce3"
+      },
+      "task_to_device_ms_excluded": 0.3762,
+      "throughput": {
+        "requests_per_second": 61.98410436238858,
+        "task_rows_per_second": 7933.965358385738
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 1024,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 10285,
+          "paperAuthors": 2082,
+          "paperCategories": 658,
+          "papers": 1024
+        },
+        "sampled_rows": 14049,
+        "table_hashes": {
+          "citations": "cf243ef338411f52c68a1dd2e6c6a99e7894d29c29f11dad2612d7f4f286cd1d",
+          "paperAuthors": "63792d404fb877bf9e7a76f74ba2b3cff531829e03eea262cabcd33467cd8f7b",
+          "paperCategories": "a0ca31edab3f96117233516bd38e6ee3fad89b7bdb1403679a4ef70e4d502c1c",
+          "papers": "f101dab7750b5de9a5dc4d5f023267fb09ca55140d5fd478571f834e28627352"
+        },
+        "task_rows": 1024,
+        "temporal_rows_checked": 14049,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 18.44727,
+        "mean": 18.269773700000002,
+        "median": 18.247204500000002,
+        "min": 18.155926,
+        "p95": 18.41708805,
+        "stdev": 0.08975622740147039
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 17.895936846733093,
+          "mean": 16.679481428861617,
+          "median": 16.635328203439713,
+          "min": 15.573695123195648,
+          "p95": 17.812344247102736,
+          "stdev": 0.94010134385821
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 2.455552101135254,
+          "mean": 2.122601592540741,
+          "median": 2.167472004890442,
+          "min": 1.7655999660491943,
+          "p95": 2.452600061893463,
+          "stdev": 0.310084829152508
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.44253952473258806,
+          "mean": 0.3698406907199864,
+          "median": 0.3729040851717009,
+          "min": 0.3032388734836573,
+          "p95": 0.4337842342086789,
+          "stdev": 0.0517133488942319
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.4548160135746002,
+          "mean": 0.32448959946632383,
+          "median": 0.319472000002861,
+          "min": 0.2720640003681183,
+          "p95": 0.41173120737075797,
+          "stdev": 0.054105814198945494
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 1.172287940979004,
+          "mean": 1.0346815884113312,
+          "median": 1.0784319639205933,
+          "min": 0.8887680172920227,
+          "p95": 1.1553823530673981,
+          "stdev": 0.11563425954623764
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 10285,
+          "paperAuthors": 2082,
+          "paperCategories": 658,
+          "papers": 1024
+        },
+        "sampled_rows": 14049,
+        "table_hashes": {
+          "citations": "cf243ef338411f52c68a1dd2e6c6a99e7894d29c29f11dad2612d7f4f286cd1d",
+          "paperAuthors": "63792d404fb877bf9e7a76f74ba2b3cff531829e03eea262cabcd33467cd8f7b",
+          "paperCategories": "a0ca31edab3f96117233516bd38e6ee3fad89b7bdb1403679a4ef70e4d502c1c",
+          "papers": "f101dab7750b5de9a5dc4d5f023267fb09ca55140d5fd478571f834e28627352"
+        },
+        "task_rows": 1024,
+        "temporal_rows_checked": 14049,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 22.163756,
+        "mean": 20.5310949,
+        "median": 20.585156,
+        "min": 18.844102,
+        "p95": 22.135790749999998,
+        "stdev": 1.3600719979306197
+      },
+      "raw_samples": {
+        "latency_ms": [
+          18.44727,
+          18.380199,
+          18.320933,
+          18.233936,
+          18.249141,
+          18.256511,
+          18.155926,
+          18.171397,
+          18.245268,
+          18.237156
+        ],
+        "output_sha256": [
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0",
+          "acc115250a3848305208c64ca153fbba32b18e288b896e19ffc6d2c88a2290e0"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            17.00614470243454,
+            15.948927521705627,
+            15.686175107955933,
+            15.573695123195648,
+            15.684159457683563,
+            16.264511704444885,
+            17.43728017807007,
+            17.895936846733093,
+            17.58780813217163,
+            17.71017551422119
+          ],
+          "output_assembly_ms": [
+            1.8717119693756104,
+            1.7655999660491943,
+            1.77183997631073,
+            1.7661759853363037,
+            2.021343946456909,
+            2.4230399131774902,
+            2.455552101135254,
+            2.388159990310669,
+            2.3136000633239746,
+            2.4489920139312744
+          ],
+          "synchronization_other_ms": [
+            0.42308332356834555,
+            0.3061865041179672,
+            0.3220829396610263,
+            0.3032388734836573,
+            0.33644557819938825,
+            0.35177239214706546,
+            0.41117078683280894,
+            0.4078512062606805,
+            0.3940357781963364,
+            0.44253952473258806
+          ],
+          "task_to_seed_join_ms": [
+            0.4548160135746002,
+            0.28220799565315247,
+            0.2759999930858612,
+            0.29443201422691345,
+            0.2720640003681183,
+            0.3113279938697815,
+            0.33027198910713196,
+            0.3370879888534546,
+            0.3590719997882843,
+            0.32761600613594055
+          ],
+          "temporal_top_k_ms": [
+            0.9322879910469055,
+            0.8979200124740601,
+            1.0398399829864502,
+            0.9065600037574768,
+            0.8887680172920227,
+            1.1316159963607788,
+            1.1170239448547363,
+            1.134719967842102,
+            1.1257920265197754,
+            1.172287940979004
+          ]
+        },
+        "profiled_latency_ms": [
+          20.688044,
+          19.200842,
+          19.095938,
+          18.844102,
+          19.202781,
+          20.482268,
+          21.751299,
+          22.163756,
+          21.780308,
+          22.101611
+        ],
+        "sampled_rows": [
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 14049.0,
+        "mean": 14049.0,
+        "median": 14049.0,
+        "min": 14049.0,
+        "p95": 14049.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1024,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "9c600c7fdf0fe776e01d48a0a2327fe336f04ca9be586f678279a4275738e657"
+      },
+      "task_to_device_ms_excluded": 0.393871,
+      "throughput": {
+        "requests_per_second": 54.80291515338691,
+        "task_rows_per_second": 56118.1851170682
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 4096,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 38901,
+          "paperAuthors": 8055,
+          "paperCategories": 2800,
+          "papers": 4096
+        },
+        "sampled_rows": 53852,
+        "table_hashes": {
+          "citations": "89b4f6a8c312e54acca4153a6e158a5c1086a90e855053021fd828bfbfdfbb0e",
+          "paperAuthors": "943aafcbf3244df68a3e28767ec1f2d7a92b1d4f84671581250a33a7e1cd66d1",
+          "paperCategories": "4bd9e07de91cb1cf2277135b898095084e7bc801bcc777fbf7b9f6e5c499b0a2",
+          "papers": "5bd0fcbdf7e9f2f54b429b8493af2afe0a27fc682c7ce1560b496897eeaa796a"
+        },
+        "task_rows": 4096,
+        "temporal_rows_checked": 53852,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 22.597011,
+        "mean": 21.6688299,
+        "median": 21.603437999999997,
+        "min": 21.111502,
+        "p95": 22.480867349999997,
+        "stdev": 0.491856009590532
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 20.36614418029785,
+          "mean": 19.141775834560395,
+          "median": 19.083983421325684,
+          "min": 18.010528087615967,
+          "p95": 20.35975006222725,
+          "stdev": 1.0929555260219943
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 2.4289278984069824,
+          "mean": 2.0734303832054137,
+          "median": 2.0728800296783447,
+          "min": 1.748703956604004,
+          "p95": 2.4126847624778747,
+          "stdev": 0.32190719391891665
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.4822547830677024,
+          "mean": 0.36793598641395525,
+          "median": 0.36862582755374973,
+          "min": 0.30099096686363325,
+          "p95": 0.4500994090442645,
+          "stdev": 0.05937652797068142
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.472351998090744,
+          "mean": 0.33677759766578674,
+          "median": 0.33164799213409424,
+          "min": 0.2742080092430115,
+          "p95": 0.4266031950712203,
+          "stdev": 0.05967485261347579
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 1.4744319915771484,
+          "mean": 1.2025951981544494,
+          "median": 1.1202239990234375,
+          "min": 1.060863971710205,
+          "p95": 1.4136639714241026,
+          "stdev": 0.14858404756960503
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 38901,
+          "paperAuthors": 8055,
+          "paperCategories": 2800,
+          "papers": 4096
+        },
+        "sampled_rows": 53852,
+        "table_hashes": {
+          "citations": "89b4f6a8c312e54acca4153a6e158a5c1086a90e855053021fd828bfbfdfbb0e",
+          "paperAuthors": "943aafcbf3244df68a3e28767ec1f2d7a92b1d4f84671581250a33a7e1cd66d1",
+          "paperCategories": "4bd9e07de91cb1cf2277135b898095084e7bc801bcc777fbf7b9f6e5c499b0a2",
+          "papers": "5bd0fcbdf7e9f2f54b429b8493af2afe0a27fc682c7ce1560b496897eeaa796a"
+        },
+        "task_rows": 4096,
+        "temporal_rows_checked": 53852,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 24.963304,
+        "mean": 23.122515,
+        "median": 23.1096165,
+        "min": 21.425695,
+        "p95": 24.9109321,
+        "stdev": 1.6345650242065424
+      },
+      "raw_samples": {
+        "latency_ms": [
+          22.338914,
+          21.719006,
+          21.231964,
+          21.163764,
+          21.111502,
+          22.597011,
+          21.647699,
+          21.441625,
+          21.559177,
+          21.877637
+        ],
+        "output_sha256": [
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd",
+          "737405da73fc15c870e9a5babe5f295dfe3f3b8b175eb560806208b360a33fdd"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            19.82937526702881,
+            20.351935029029846,
+            20.36614418029785,
+            20.14857590198517,
+            20.13465666770935,
+            18.33859157562256,
+            18.076863646507263,
+            18.010528087615967,
+            18.12448024749756,
+            18.03660774230957
+          ],
+          "output_assembly_ms": [
+            2.4289278984069824,
+            2.392832040786743,
+            2.345344066619873,
+            2.367487907409668,
+            2.3544960021972656,
+            1.748703956604004,
+            1.7734719514846802,
+            1.7579519748687744,
+            1.8004159927368164,
+            1.764672040939331
+          ],
+          "synchronization_other_ms": [
+            0.4822547830677024,
+            0.40205888921928334,
+            0.40669577012443625,
+            0.3838882166938795,
+            0.41079839634895166,
+            0.35336343841361995,
+            0.30209443780708156,
+            0.30099096686363325,
+            0.31669680588149873,
+            0.32051815971946596
+          ],
+          "task_to_seed_join_ms": [
+            0.472351998090744,
+            0.36480000615119934,
+            0.37068799138069153,
+            0.35814398527145386,
+            0.328031986951828,
+            0.3352639973163605,
+            0.2913599908351898,
+            0.2953599989414215,
+            0.2742080092430115,
+            0.2775680124759674
+          ],
+          "temporal_top_k_ms": [
+            1.1440000534057617,
+            1.3352960348129272,
+            1.4744319915771484,
+            1.3165119886398315,
+            1.3393919467926025,
+            1.086400032043457,
+            1.0953279733657837,
+            1.060863971710205,
+            1.0964479446411133,
+            1.077280044555664
+          ]
+        },
+        "profiled_latency_ms": [
+          24.35691,
+          24.846922,
+          24.963304,
+          24.574608,
+          24.567375,
+          21.862323,
+          21.539118,
+          21.425695,
+          21.612249,
+          21.476646
+        ],
+        "sampled_rows": [
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 53852.0,
+        "mean": 53852.0,
+        "median": 53852.0,
+        "min": 53852.0,
+        "p95": 53852.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 4096,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5caa508b1b77307288244b26fc14c27623c395bfe67481a4a01844baa8d3551e"
+      },
+      "task_to_device_ms_excluded": 0.478876,
+      "throughput": {
+        "requests_per_second": 46.28892864182081,
+        "task_rows_per_second": 189599.45171689804
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 8192,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 77774,
+          "paperAuthors": 16024,
+          "paperCategories": 5652,
+          "papers": 8192
+        },
+        "sampled_rows": 107642,
+        "table_hashes": {
+          "citations": "805335d0e672d755b0e2cbf6c2940eae6bc7450078c844be0928444dc7387a32",
+          "paperAuthors": "ef9bf1f2ea9771dc70ff43e9358a9255db9a103dd942440d65af43cb478801d1",
+          "paperCategories": "baeba8857ec604689f8356299cf2b6c4c64369ffa01ea07dc197003ddd0b999a",
+          "papers": "d04c1f1ba22477d722f7200794e69d60185dcfff564ab1f63165b755e5abdb8d"
+        },
+        "task_rows": 8192,
+        "temporal_rows_checked": 107642,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 26.73996,
+        "mean": 26.2696145,
+        "median": 26.188493,
+        "min": 26.067567,
+        "p95": 26.633383799999997,
+        "stdev": 0.2074279484229266
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 25.418208241462708,
+          "mean": 24.073062586784364,
+          "median": 23.767568588256836,
+          "min": 23.007007598876953,
+          "p95": 25.385981124639514,
+          "stdev": 1.0283373157061364
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 2.451456069946289,
+          "mean": 2.0866016149520874,
+          "median": 1.96971195936203,
+          "min": 1.8328640460968018,
+          "p95": 2.423678469657898,
+          "stdev": 0.24939680835667255
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.45793459171676787,
+          "mean": 0.3710427917823793,
+          "median": 0.36397724348259075,
+          "min": 0.31810196414947356,
+          "p95": 0.43502841076460036,
+          "stdev": 0.04593195906595585
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.5133439898490906,
+          "mean": 0.3407807946205139,
+          "median": 0.31281599402427673,
+          "min": 0.2921600043773651,
+          "p95": 0.4493647888302802,
+          "stdev": 0.0664718753637285
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 1.6609280109405518,
+          "mean": 1.5531232118606568,
+          "median": 1.5545920133590698,
+          "min": 1.4750080108642578,
+          "p95": 1.6425968289375303,
+          "stdev": 0.06569290272935026
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 77774,
+          "paperAuthors": 16024,
+          "paperCategories": 5652,
+          "papers": 8192
+        },
+        "sampled_rows": 107642,
+        "table_hashes": {
+          "citations": "805335d0e672d755b0e2cbf6c2940eae6bc7450078c844be0928444dc7387a32",
+          "paperAuthors": "ef9bf1f2ea9771dc70ff43e9358a9255db9a103dd942440d65af43cb478801d1",
+          "paperCategories": "baeba8857ec604689f8356299cf2b6c4c64369ffa01ea07dc197003ddd0b999a",
+          "papers": "d04c1f1ba22477d722f7200794e69d60185dcfff564ab1f63165b755e5abdb8d"
+        },
+        "task_rows": 8192,
+        "temporal_rows_checked": 107642,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 30.044382,
+        "mean": 28.424611,
+        "median": 28.013916000000002,
+        "min": 27.014028,
+        "p95": 30.041858400000002,
+        "stdev": 1.3442139296804247
+      },
+      "raw_samples": {
+        "latency_ms": [
+          26.503124,
+          26.188489,
+          26.333575,
+          26.159112,
+          26.261178,
+          26.145119,
+          26.067567,
+          26.109524,
+          26.188497,
+          26.73996
+        ],
+        "output_sha256": [
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2",
+          "2d58028982fb925beecc7c375ccc708053f5c6105de3e65d03d89bbbcb3469d2"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            24.23417639732361,
+            23.300960779190063,
+            23.05443263053894,
+            24.664191722869873,
+            25.34659242630005,
+            25.28064000606537,
+            25.418208241462708,
+            23.007007598876953,
+            23.21401596069336,
+            23.210400104522705
+          ],
+          "output_assembly_ms": [
+            1.911903977394104,
+            1.8328640460968018,
+            1.882912039756775,
+            2.451456069946289,
+            2.347007989883423,
+            2.38972806930542,
+            2.2751359939575195,
+            1.8952959775924683,
+            1.8521920442581177,
+            2.027519941329956
+          ],
+          "synchronization_other_ms": [
+            0.45793459171676787,
+            0.31843617142105174,
+            0.354025332588197,
+            0.3739291543769845,
+            0.3969816132297517,
+            0.407031967378618,
+            0.4060777962512958,
+            0.3264124265937802,
+            0.31810196414947356,
+            0.3514969001178727
+          ],
+          "task_to_seed_join_ms": [
+            0.5133439898490906,
+            0.2967039942741394,
+            0.3112959861755371,
+            0.31433600187301636,
+            0.37116798758506775,
+            0.35756799578666687,
+            0.3444800078868866,
+            0.3103039860725403,
+            0.2964479923248291,
+            0.2921600043773651
+          ],
+          "temporal_top_k_ms": [
+            1.5321600437164307,
+            1.4757440090179443,
+            1.6609280109405518,
+            1.620192050933838,
+            1.577023983001709,
+            1.5918079614639282,
+            1.6004799604415894,
+            1.4750080108642578,
+            1.5011520385742188,
+            1.4967360496520996
+          ]
+        },
+        "profiled_latency_ms": [
+          28.649519,
+          27.224709,
+          27.263594,
+          29.424105,
+          30.038774,
+          30.026776,
+          30.044382,
+          27.014028,
+          27.18191,
+          27.378313
+        ],
+        "sampled_rows": [
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 107642.0,
+        "mean": 107642.0,
+        "median": 107642.0,
+        "min": 107642.0,
+        "p95": 107642.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 8192,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "37853f3305263fceaa1eb4560f9e0954466e5f6bbadb68e6bb06ac863a23bea2"
+      },
+      "task_to_device_ms_excluded": 0.497963,
+      "throughput": {
+        "requests_per_second": 38.184709597455644,
+        "task_rows_per_second": 312809.14102235663
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 1,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 2,
+          "papers": 3
+        },
+        "sampled_rows": 5,
+        "table_hashes": {
+          "citations": "f560915af55babbf85540d5b11ce9e4086f7f45e651e4a7f394d828cf9e1f493",
+          "papers": "b414376fdabc4ef19bcd5fbefaab1bc13c781e3e631114c7ce5f7a22d4131d44"
+        },
+        "task_rows": 1,
+        "temporal_rows_checked": 5,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 27.421372,
+        "mean": 27.206407,
+        "median": 27.235341,
+        "min": 26.956552,
+        "p95": 27.3915244,
+        "stdev": 0.16332407269937657
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 26.019391775131226,
+          "mean": 24.388377463817598,
+          "median": 24.184927344322205,
+          "min": 24.059616208076477,
+          "p95": 25.346883225440976,
+          "stdev": 0.5878809710311806
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 1.1279360055923462,
+          "mean": 1.0819519996643066,
+          "median": 1.0827839970588684,
+          "min": 1.0444799661636353,
+          "p95": 1.117683207988739,
+          "stdev": 0.02381803597678905
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.47382716901206834,
+          "mean": 0.3258799337530135,
+          "median": 0.30733736995220085,
+          "min": 0.30204477661132856,
+          "p95": 0.40769515614948204,
+          "stdev": 0.05259995190654649
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.41359999775886536,
+          "mean": 0.3022143989801407,
+          "median": 0.29227200150489807,
+          "min": 0.2744320034980774,
+          "p95": 0.3665263980627059,
+          "stdev": 0.041097561487675564
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 1.4501440525054932,
+          "mean": 1.3734912037849427,
+          "median": 1.3669599890708923,
+          "min": 1.3333439826965332,
+          "p95": 1.4316400289535522,
+          "stdev": 0.03696876430142148
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 2,
+          "papers": 3
+        },
+        "sampled_rows": 5,
+        "table_hashes": {
+          "citations": "f560915af55babbf85540d5b11ce9e4086f7f45e651e4a7f394d828cf9e1f493",
+          "papers": "b414376fdabc4ef19bcd5fbefaab1bc13c781e3e631114c7ce5f7a22d4131d44"
+        },
+        "task_rows": 1,
+        "temporal_rows_checked": 5,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 29.484899,
+        "mean": 27.471915,
+        "median": 27.224187,
+        "min": 27.069595,
+        "p95": 28.643355349999997,
+        "stdev": 0.722706961193047
+      },
+      "raw_samples": {
+        "latency_ms": [
+          27.338618,
+          27.352667,
+          27.227992,
+          27.355044,
+          27.045641,
+          27.039504,
+          26.956552,
+          27.24269,
+          27.08399,
+          27.421372
+        ],
+        "output_sha256": [
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            26.019391775131226,
+            24.311840534210205,
+            24.116607010364532,
+            24.214687943458557,
+            24.059616208076477,
+            24.11408030986786,
+            24.524928331375122,
+            24.152767837047577,
+            24.19119954109192,
+            24.17865514755249
+          ],
+          "output_assembly_ms": [
+            1.1279360055923462,
+            1.0444799661636353,
+            1.062559962272644,
+            1.090656042098999,
+            1.0638400316238403,
+            1.0902719497680664,
+            1.0867840051651,
+            1.1051520109176636,
+            1.0690560340881348,
+            1.0787839889526367
+          ],
+          "synchronization_other_ms": [
+            0.47382716901206834,
+            0.3186235407943734,
+            0.3047750004634864,
+            0.30511200628280477,
+            0.3095627336215969,
+            0.30204477661132856,
+            0.3034736485023508,
+            0.3268671404285435,
+            0.3123554485149391,
+            0.3021578732986434
+          ],
+          "task_to_seed_join_ms": [
+            0.41359999775886536,
+            0.3033599853515625,
+            0.2764799892902374,
+            0.2744320034980774,
+            0.3030399978160858,
+            0.29395198822021484,
+            0.2905920147895813,
+            0.3089919984340668,
+            0.28176000714302063,
+            0.2759360074996948
+          ],
+          "temporal_top_k_ms": [
+            1.4501440525054932,
+            1.3742079734802246,
+            1.3992640376091003,
+            1.35971200466156,
+            1.3335360288619995,
+            1.3754559755325317,
+            1.4090240001678467,
+            1.3490880131721497,
+            1.3511359691619873,
+            1.3333439826965332
+          ]
+        },
+        "profiled_latency_ms": [
+          29.484899,
+          27.352512,
+          27.159686,
+          27.2446,
+          27.069595,
+          27.175805,
+          27.614802,
+          27.242867,
+          27.205507,
+          27.168877
+        ],
+        "sampled_rows": [
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 5.0,
+        "mean": 5.0,
+        "median": 5.0,
+        "min": 5.0,
+        "p95": 5.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1,
+        "position_prefix": [
+          177909
+        ],
+        "positions_sha256": "a708276649043e2f39bd76f82e8cab41378499fce3cbe3b9fae11abe38beaeca"
+      },
+      "task_to_device_ms_excluded": 0.399942,
+      "throughput": {
+        "requests_per_second": 36.716999430996665,
+        "task_rows_per_second": 36.716999430996665
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 128,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 227,
+          "categories": 75,
+          "citations": 1232,
+          "paperAuthors": 227,
+          "paperCategories": 75,
+          "papers": 1466
+        },
+        "sampled_rows": 3302,
+        "table_hashes": {
+          "authors": "857859784613140849ff00e3bf27dd131a90a5a739f665591cb38e614f05f61b",
+          "categories": "be85bcb19464781d5960f97d78559edaac8a0b4f37e2d319e092a07309aabf01",
+          "citations": "c9c3984df37bb7fc4c81f87bd07be4a18e83487a39706a5f945cc6cf0cbe5043",
+          "paperAuthors": "270e5f7684bb221cb2f9b354da453d6e420feddff4ccd54e38c8a046d24614af",
+          "paperCategories": "919094f060fafce8f18dfe143c67c412aeb9a40acc2b695417dc6aee284c998a",
+          "papers": "206c3f32b44b48f4cf8b2eeb5412af8c4bdddf7ab64feffc906f36c846918abf"
+        },
+        "task_rows": 128,
+        "temporal_rows_checked": 3000,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 30.882856,
+        "mean": 30.681125299999998,
+        "median": 30.65495,
+        "min": 30.559775,
+        "p95": 30.860296599999998,
+        "stdev": 0.11274420241911451
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 29.36780834197998,
+          "mean": 26.94814413189888,
+          "median": 26.67924788594246,
+          "min": 26.408160090446472,
+          "p95": 28.36722440421581,
+          "stdev": 0.8857491952964
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 2.899519920349121,
+          "mean": 2.5581919670104982,
+          "median": 2.4901280403137207,
+          "min": 2.4253759384155273,
+          "p95": 2.8696975111961365,
+          "stdev": 0.16874254064986943
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.4516636848201756,
+          "mean": 0.33457588683700623,
+          "median": 0.3184357407875087,
+          "min": 0.3030095065212244,
+          "p95": 0.4148022153157229,
+          "stdev": 0.04559448340821775
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.48451200127601624,
+          "mean": 0.312118399143219,
+          "median": 0.29492799937725067,
+          "min": 0.28246399760246277,
+          "p95": 0.4017695948481558,
+          "stdev": 0.06083317614751617
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 1.5229120254516602,
+          "mean": 1.3973856151103974,
+          "median": 1.3840160071849823,
+          "min": 1.3483840227127075,
+          "p95": 1.4784736156463623,
+          "stdev": 0.0497866567276555
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 227,
+          "categories": 75,
+          "citations": 1232,
+          "paperAuthors": 227,
+          "paperCategories": 75,
+          "papers": 1466
+        },
+        "sampled_rows": 3302,
+        "table_hashes": {
+          "authors": "857859784613140849ff00e3bf27dd131a90a5a739f665591cb38e614f05f61b",
+          "categories": "be85bcb19464781d5960f97d78559edaac8a0b4f37e2d319e092a07309aabf01",
+          "citations": "c9c3984df37bb7fc4c81f87bd07be4a18e83487a39706a5f945cc6cf0cbe5043",
+          "paperAuthors": "270e5f7684bb221cb2f9b354da453d6e420feddff4ccd54e38c8a046d24614af",
+          "paperCategories": "919094f060fafce8f18dfe143c67c412aeb9a40acc2b695417dc6aee284c998a",
+          "papers": "206c3f32b44b48f4cf8b2eeb5412af8c4bdddf7ab64feffc906f36c846918abf"
+        },
+        "task_rows": 128,
+        "temporal_rows_checked": 3000,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 34.385424,
+        "mean": 31.550416000000002,
+        "median": 31.1428185,
+        "min": 30.841185,
+        "p95": 33.3441627,
+        "stdev": 1.08816774060528
+      },
+      "raw_samples": {
+        "latency_ms": [
+          30.645704,
+          30.664196,
+          30.611287,
+          30.599752,
+          30.560717,
+          30.882856,
+          30.559775,
+          30.773101,
+          30.832724,
+          30.681141
+        ],
+        "output_sha256": [
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad",
+          "d9016dec5dc93284987cf7c2f484770423cd40057bffc7ea04667306239b74ad"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            29.36780834197998,
+            27.031583786010742,
+            27.14428848028183,
+            26.690784692764282,
+            26.53744077682495,
+            26.667711079120636,
+            26.4260156750679,
+            26.452351570129395,
+            26.408160090446472,
+            26.75529682636261
+          ],
+          "output_assembly_ms": [
+            2.558527946472168,
+            2.8332479000091553,
+            2.899519920349121,
+            2.4716479778289795,
+            2.4500160217285156,
+            2.4781761169433594,
+            2.4253759384155273,
+            2.4268479347229004,
+            2.536479949951172,
+            2.502079963684082
+          ],
+          "synchronization_other_ms": [
+            0.4516636848201756,
+            0.3697493081436143,
+            0.3172695467567479,
+            0.31010729650878943,
+            0.32700223713874976,
+            0.33450576960373013,
+            0.305481403572081,
+            0.3030095065212244,
+            0.3196019348182695,
+            0.30736818048668013
+          ],
+          "task_to_seed_join_ms": [
+            0.48451200127601624,
+            0.29872000217437744,
+            0.2947840094566345,
+            0.2876160144805908,
+            0.28246399760246277,
+            0.2885439991950989,
+            0.3006399869918823,
+            0.2950719892978668,
+            0.2977280020713806,
+            0.2911039888858795
+          ],
+          "temporal_top_k_ms": [
+            1.5229120254516602,
+            1.4241600036621094,
+            1.4156480431556702,
+            1.3810880184173584,
+            1.3645119667053223,
+            1.3754560351371765,
+            1.3869439959526062,
+            1.3639039993286133,
+            1.3483840227127075,
+            1.3908480405807495
+          ]
+        },
+        "profiled_latency_ms": [
+          34.385424,
+          31.957461,
+          32.07151,
+          31.141244,
+          30.961435,
+          31.144393,
+          30.844457,
+          30.841185,
+          30.910354,
+          31.246697
+        ],
+        "sampled_rows": [
+          3302.0,
+          3302.0,
+          3302.0,
+          3302.0,
+          3302.0,
+          3302.0,
+          3302.0,
+          3302.0,
+          3302.0,
+          3302.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 3302.0,
+        "mean": 3302.0,
+        "median": 3302.0,
+        "min": 3302.0,
+        "p95": 3302.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 128,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5b6644c00d9094fc6f9885ec365ac36284e7a7bac1055678af74778913d3dce3"
+      },
+      "task_to_device_ms_excluded": 0.436653,
+      "throughput": {
+        "requests_per_second": 32.62115906240265,
+        "task_rows_per_second": 4175.508359987539
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 1024,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 2082,
+          "categories": 658,
+          "citations": 10285,
+          "paperAuthors": 2082,
+          "paperCategories": 658,
+          "papers": 12258
+        },
+        "sampled_rows": 28023,
+        "table_hashes": {
+          "authors": "c5ddf2aca9f56b178658855c94fd9f7cc139c5259178c408c41a093b78b73f8f",
+          "categories": "30cdfeaabc500bef0a6ee4cf231da56aa2542abaf9dc5bc1db869b24bf406df1",
+          "citations": "cf243ef338411f52c68a1dd2e6c6a99e7894d29c29f11dad2612d7f4f286cd1d",
+          "paperAuthors": "63792d404fb877bf9e7a76f74ba2b3cff531829e03eea262cabcd33467cd8f7b",
+          "paperCategories": "a0ca31edab3f96117233516bd38e6ee3fad89b7bdb1403679a4ef70e4d502c1c",
+          "papers": "f699525f1c375f48be7eb2831c6d6fc8f2d7f8a0c0cc88631b108586b892d49b"
+        },
+        "task_rows": 1024,
+        "temporal_rows_checked": 25283,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 46.453726,
+        "mean": 44.4606383,
+        "median": 44.0226335,
+        "min": 43.671737,
+        "p95": 46.38779695,
+        "stdev": 1.0301047005249364
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 40.15072178840637,
+          "mean": 38.41037484407425,
+          "median": 38.20358419418335,
+          "min": 38.151454746723175,
+          "p95": 39.32967690229415,
+          "stdev": 0.6140893216199356
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 2.532480001449585,
+          "mean": 2.4654143810272218,
+          "median": 2.4605120420455933,
+          "min": 2.409343957901001,
+          "p95": 2.5257407903671263,
+          "stdev": 0.04302415289379658
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.4747772005462636,
+          "mean": 0.33200116869811963,
+          "median": 0.31413645928287437,
+          "min": 0.3055013840141285,
+          "p95": 0.4118164125615108,
+          "stdev": 0.051065367131636445
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.47353601455688477,
+          "mean": 0.3143136024475098,
+          "median": 0.29923200607299805,
+          "min": 0.2805759906768799,
+          "p95": 0.4025440037250517,
+          "stdev": 0.05721592365595462
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 1.9151999950408936,
+          "mean": 1.7954048037528991,
+          "median": 1.7794079780578613,
+          "min": 1.7561280131340027,
+          "p95": 1.874116814136505,
+          "stdev": 0.04717288051947788
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 2082,
+          "categories": 658,
+          "citations": 10285,
+          "paperAuthors": 2082,
+          "paperCategories": 658,
+          "papers": 12258
+        },
+        "sampled_rows": 28023,
+        "table_hashes": {
+          "authors": "c5ddf2aca9f56b178658855c94fd9f7cc139c5259178c408c41a093b78b73f8f",
+          "categories": "30cdfeaabc500bef0a6ee4cf231da56aa2542abaf9dc5bc1db869b24bf406df1",
+          "citations": "cf243ef338411f52c68a1dd2e6c6a99e7894d29c29f11dad2612d7f4f286cd1d",
+          "paperAuthors": "63792d404fb877bf9e7a76f74ba2b3cff531829e03eea262cabcd33467cd8f7b",
+          "paperCategories": "a0ca31edab3f96117233516bd38e6ee3fad89b7bdb1403679a4ef70e4d502c1c",
+          "papers": "f699525f1c375f48be7eb2831c6d6fc8f2d7f8a0c0cc88631b108586b892d49b"
+        },
+        "task_rows": 1024,
+        "temporal_rows_checked": 25283,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 45.546715,
+        "mean": 43.3175088,
+        "median": 43.066631,
+        "min": 42.983733,
+        "p95": 44.5207573,
+        "stdev": 0.7874199910195884
+      },
+      "raw_samples": {
+        "latency_ms": [
+          43.671737,
+          43.899816,
+          44.018793,
+          44.32823,
+          43.813399,
+          44.220569,
+          46.307217,
+          46.453726,
+          44.026474,
+          43.866422
+        ],
+        "output_sha256": [
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961",
+          "faf5e378d131a188c00a8e4b2c0b0b901434b8de3eb96565e2ff4f3c7096a961"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            40.15072178840637,
+            38.2785262465477,
+            38.26512134075165,
+            38.19964814186096,
+            38.20752024650574,
+            38.15558385848999,
+            38.181600868701935,
+            38.151454746723175,
+            38.187393605709076,
+            38.3261775970459
+          ],
+          "output_assembly_ms": [
+            2.532480001449585,
+            2.409343957901001,
+            2.4576001167297363,
+            2.4671359062194824,
+            2.5155200958251953,
+            2.4268798828125,
+            2.4285759925842285,
+            2.4356799125671387,
+            2.46342396736145,
+            2.5175039768218994
+          ],
+          "synchronization_other_ms": [
+            0.4747772005462636,
+            0.3248288013687102,
+            0.3161215327968563,
+            0.3092349705104809,
+            0.30949469873237945,
+            0.32578526420593334,
+            0.3072521106796273,
+            0.3348643383579244,
+            0.3055013840141285,
+            0.31215138576889245
+          ],
+          "task_to_seed_join_ms": [
+            0.47353601455688477,
+            0.315775990486145,
+            0.29740801453590393,
+            0.28566399216651917,
+            0.28467199206352234,
+            0.2805759906768799,
+            0.3101760149002075,
+            0.30105599761009216,
+            0.30720001459121704,
+            0.28707200288772583
+          ],
+          "temporal_top_k_ms": [
+            1.9151999950408936,
+            1.7578240036964417,
+            1.768447995185852,
+            1.7852799892425537,
+            1.773535966873169,
+            1.7960000038146973,
+            1.7561280131340027,
+            1.8049280047416687,
+            1.7728000283241272,
+            1.823904037475586
+          ]
+        },
+        "profiled_latency_ms": [
+          45.546715,
+          43.086299,
+          43.104699,
+          43.046963,
+          43.090743,
+          42.984825,
+          42.983733,
+          43.027983,
+          43.036319,
+          43.266809
+        ],
+        "sampled_rows": [
+          28023.0,
+          28023.0,
+          28023.0,
+          28023.0,
+          28023.0,
+          28023.0,
+          28023.0,
+          28023.0,
+          28023.0,
+          28023.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 28023.0,
+        "mean": 28023.0,
+        "median": 28023.0,
+        "min": 28023.0,
+        "p95": 28023.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1024,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "9c600c7fdf0fe776e01d48a0a2327fe336f04ca9be586f678279a4275738e657"
+      },
+      "task_to_device_ms_excluded": 0.445986,
+      "throughput": {
+        "requests_per_second": 22.715587880493338,
+        "task_rows_per_second": 23260.761989625178
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 4096,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 8054,
+          "categories": 2800,
+          "citations": 38901,
+          "paperAuthors": 8055,
+          "paperCategories": 2800,
+          "papers": 46785
+        },
+        "sampled_rows": 107395,
+        "table_hashes": {
+          "authors": "1103da07824ddd5fa396ff742dc5f9a731c10c3e9123c93065b824307c451be5",
+          "categories": "bb7eacda078cf33d5cf9bd49849ee108b595d676f196d2d4e81668bbae10fb53",
+          "citations": "89b4f6a8c312e54acca4153a6e158a5c1086a90e855053021fd828bfbfdfbb0e",
+          "paperAuthors": "943aafcbf3244df68a3e28767ec1f2d7a92b1d4f84671581250a33a7e1cd66d1",
+          "paperCategories": "4bd9e07de91cb1cf2277135b898095084e7bc801bcc777fbf7b9f6e5c499b0a2",
+          "papers": "998b5f52dcdcea8ba4c451675e46581473eb8cf9bedc9cb48b1c65e355c32449"
+        },
+        "task_rows": 4096,
+        "temporal_rows_checked": 96541,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 67.852459,
+        "mean": 67.5839553,
+        "median": 67.609656,
+        "min": 67.220289,
+        "p95": 67.8273832,
+        "stdev": 0.20640782669325702
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 65.64451062679291,
+          "mean": 63.0284157037735,
+          "median": 62.682399690151215,
+          "min": 62.494876861572266,
+          "p95": 64.6465348958969,
+          "stdev": 0.9560918485745522
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 2.776063919067383,
+          "mean": 2.5588000059127807,
+          "median": 2.5173280239105225,
+          "min": 2.485152006149292,
+          "p95": 2.734016001224518,
+          "stdev": 0.0942971967403672
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.5085272656021118,
+          "mean": 0.34818849533309904,
+          "median": 0.32616299927520487,
+          "min": 0.31941180586814255,
+          "p95": 0.4412338134469016,
+          "stdev": 0.05768322685464295
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.5406399965286255,
+          "mean": 0.3297695994377136,
+          "median": 0.3056959956884384,
+          "min": 0.2890239953994751,
+          "p95": 0.4484367951750753,
+          "stdev": 0.0757225041440999
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 2.498304009437561,
+          "mean": 2.3385535955429075,
+          "median": 2.3209919929504395,
+          "min": 2.218463897705078,
+          "p95": 2.4684528470039364,
+          "stdev": 0.08637577149619645
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 8054,
+          "categories": 2800,
+          "citations": 38901,
+          "paperAuthors": 8055,
+          "paperCategories": 2800,
+          "papers": 46785
+        },
+        "sampled_rows": 107395,
+        "table_hashes": {
+          "authors": "1103da07824ddd5fa396ff742dc5f9a731c10c3e9123c93065b824307c451be5",
+          "categories": "bb7eacda078cf33d5cf9bd49849ee108b595d676f196d2d4e81668bbae10fb53",
+          "citations": "89b4f6a8c312e54acca4153a6e158a5c1086a90e855053021fd828bfbfdfbb0e",
+          "paperAuthors": "943aafcbf3244df68a3e28767ec1f2d7a92b1d4f84671581250a33a7e1cd66d1",
+          "paperCategories": "4bd9e07de91cb1cf2277135b898095084e7bc801bcc777fbf7b9f6e5c499b0a2",
+          "papers": "998b5f52dcdcea8ba4c451675e46581473eb8cf9bedc9cb48b1c65e355c32449"
+        },
+        "task_rows": 4096,
+        "temporal_rows_checked": 96541,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 71.874606,
+        "mean": 68.6037274,
+        "median": 68.15409650000001,
+        "min": 67.852714,
+        "p95": 70.53240315,
+        "stdev": 1.1855805031792277
+      },
+      "raw_samples": {
+        "latency_ms": [
+          67.220289,
+          67.338304,
+          67.852459,
+          67.67957,
+          67.758357,
+          67.670087,
+          67.549225,
+          67.796735,
+          67.429866,
+          67.544661
+        ],
+        "output_sha256": [
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac",
+          "85579263524fb70dd71193c04f0313c997eee82c3292ea6da035cdd2efae82ac"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            65.64451062679291,
+            63.42678678035736,
+            62.5468145608902,
+            62.790749192237854,
+            62.62765038013458,
+            62.494876861572266,
+            62.71666967868805,
+            62.64812970161438,
+            62.80614423751831,
+            62.58182501792908
+          ],
+          "output_assembly_ms": [
+            2.682624101638794,
+            2.5004799365997314,
+            2.51692795753479,
+            2.542112112045288,
+            2.5102078914642334,
+            2.509216070175171,
+            2.517728090286255,
+            2.485152006149292,
+            2.776063919067383,
+            2.54748797416687
+          ],
+          "synchronization_other_ms": [
+            0.5085272656021118,
+            0.32668227544593265,
+            0.32165237985802264,
+            0.3256437231044771,
+            0.31941180586814255,
+            0.3411331751480162,
+            0.3589862608127561,
+            0.31991619330024434,
+            0.32272689157105106,
+            0.3372049826202357
+          ],
+          "task_to_seed_join_ms": [
+            0.5406399965286255,
+            0.3357439935207367,
+            0.31622400879859924,
+            0.294624000787735,
+            0.2943359911441803,
+            0.2890239953994751,
+            0.2926720082759857,
+            0.31539198756217957,
+            0.29600000381469727,
+            0.3230400085449219
+          ],
+          "temporal_top_k_ms": [
+            2.498304009437561,
+            2.302240014076233,
+            2.431968092918396,
+            2.339743971824646,
+            2.302143931388855,
+            2.218463897705078,
+            2.2445119619369507,
+            2.4060161113739014,
+            2.3512959480285645,
+            2.2908480167388916
+          ]
+        },
+        "profiled_latency_ms": [
+          71.874606,
+          68.891933,
+          68.133587,
+          68.292873,
+          68.05375,
+          67.852714,
+          68.130568,
+          68.174606,
+          68.552231,
+          68.080406
+        ],
+        "sampled_rows": [
+          107395.0,
+          107395.0,
+          107395.0,
+          107395.0,
+          107395.0,
+          107395.0,
+          107395.0,
+          107395.0,
+          107395.0,
+          107395.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 107395.0,
+        "mean": 107395.0,
+        "median": 107395.0,
+        "min": 107395.0,
+        "p95": 107395.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 4096,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5caa508b1b77307288244b26fc14c27623c395bfe67481a4a01844baa8d3551e"
+      },
+      "task_to_device_ms_excluded": 0.42074,
+      "throughput": {
+        "requests_per_second": 14.790786688812615,
+        "task_rows_per_second": 60583.06227737647
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 8192,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 16023,
+          "categories": 5652,
+          "citations": 77774,
+          "paperAuthors": 16024,
+          "paperCategories": 5652,
+          "papers": 93516
+        },
+        "sampled_rows": 214641,
+        "table_hashes": {
+          "authors": "c4be8096bb55034b6a9b5fb5baa16d47050e8acaf73c18ca508614dce245bc9c",
+          "categories": "21f5827e70557a2cecd1ec26ab23a0b6873f93d4115ce348ba8b7c8d541bcb0d",
+          "citations": "805335d0e672d755b0e2cbf6c2940eae6bc7450078c844be0928444dc7387a32",
+          "paperAuthors": "ef9bf1f2ea9771dc70ff43e9358a9255db9a103dd942440d65af43cb478801d1",
+          "paperCategories": "baeba8857ec604689f8356299cf2b6c4c64369ffa01ea07dc197003ddd0b999a",
+          "papers": "0388e43f0eafe7e3d0c53417b7fc51ca6f878a0b1ec8fce57b662146062c93a8"
+        },
+        "task_rows": 8192,
+        "temporal_rows_checked": 192966,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 111.194421,
+        "mean": 110.8681345,
+        "median": 110.79262299999999,
+        "min": 110.623339,
+        "p95": 111.1624458,
+        "stdev": 0.19703665154441233
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 105.50566482543945,
+          "mean": 104.65799750089646,
+          "median": 104.65947550535202,
+          "min": 103.90835475921631,
+          "p95": 105.44744442105292,
+          "stdev": 0.5160979088804284
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 2.6642239093780518,
+          "mean": 2.594691205024719,
+          "median": 2.6013599634170532,
+          "min": 2.5108160972595215,
+          "p95": 2.638001561164856,
+          "stdev": 0.03793801603767238
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.48762036539078224,
+          "mean": 0.348998430476955,
+          "median": 0.33367940040684374,
+          "min": 0.3256132010040318,
+          "p95": 0.42350837150726744,
+          "stdev": 0.04916340667665739
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.5000960230827332,
+          "mean": 0.33698560297489166,
+          "median": 0.3209120035171509,
+          "min": 0.29919999837875366,
+          "p95": 0.42803841084241845,
+          "stdev": 0.058695290486695896
+        },
+        "temporal_top_k_ms": {
+          "count": 10,
+          "max": 3.664255976676941,
+          "mean": 3.5522655606269837,
+          "median": 3.540783941745758,
+          "min": 3.4868478775024414,
+          "p95": 3.656998348236084,
+          "stdev": 0.06029546488699955
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 16023,
+          "categories": 5652,
+          "citations": 77774,
+          "paperAuthors": 16024,
+          "paperCategories": 5652,
+          "papers": 93516
+        },
+        "sampled_rows": 214641,
+        "table_hashes": {
+          "authors": "c4be8096bb55034b6a9b5fb5baa16d47050e8acaf73c18ca508614dce245bc9c",
+          "categories": "21f5827e70557a2cecd1ec26ab23a0b6873f93d4115ce348ba8b7c8d541bcb0d",
+          "citations": "805335d0e672d755b0e2cbf6c2940eae6bc7450078c844be0928444dc7387a32",
+          "paperAuthors": "ef9bf1f2ea9771dc70ff43e9358a9255db9a103dd942440d65af43cb478801d1",
+          "paperCategories": "baeba8857ec604689f8356299cf2b6c4c64369ffa01ea07dc197003ddd0b999a",
+          "papers": "0388e43f0eafe7e3d0c53417b7fc51ca6f878a0b1ec8fce57b662146062c93a8"
+        },
+        "task_rows": 8192,
+        "temporal_rows_checked": 192966,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 112.710885,
+        "mean": 111.49093830000001,
+        "median": 111.44543250000001,
+        "min": 110.635117,
+        "p95": 112.51466835000001,
+        "stdev": 0.639865746684596
+      },
+      "raw_samples": {
+        "latency_ms": [
+          111.042378,
+          110.623339,
+          111.123365,
+          110.73936,
+          110.672856,
+          110.952056,
+          111.194421,
+          110.791637,
+          110.748324,
+          110.793609
+        ],
+        "output_sha256": [
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2",
+          "1d671003f08f2284c946f8e5639be9f0e0b58dba82fe261a9ff31f0f0b3ecac2"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            105.50566482543945,
+            105.37628614902496,
+            104.78329956531525,
+            104.80828976631165,
+            104.5356514453888,
+            104.08022582530975,
+            103.90835475921631,
+            104.2523181438446,
+            104.50838315486908,
+            104.82150137424469
+          ],
+          "output_assembly_ms": [
+            2.6642239093780518,
+            2.5922560691833496,
+            2.5912320613861084,
+            2.604640007019043,
+            2.5108160972595215,
+            2.569823980331421,
+            2.5980799198150635,
+            2.6048319339752197,
+            2.605056047439575,
+            2.605952024459839
+          ],
+          "synchronization_other_ms": [
+            0.48762036539078224,
+            0.3283858754139004,
+            0.33653138680077177,
+            0.34514926787186084,
+            0.3308274140129157,
+            0.3256132010040318,
+            0.3426344450874268,
+            0.3271528685722416,
+            0.3286907203502665,
+            0.3373787602653522
+          ],
+          "task_to_seed_join_ms": [
+            0.5000960230827332,
+            0.32979199290275574,
+            0.3075520098209381,
+            0.3160960078239441,
+            0.33087998628616333,
+            0.31334400177001953,
+            0.29919999837875366,
+            0.32572799921035767,
+            0.3399679958820343,
+            0.30720001459121704
+          ],
+          "temporal_top_k_ms": [
+            3.5532798767089844,
+            3.6481279134750366,
+            3.664255976676941,
+            3.5278079509735107,
+            3.5309760570526123,
+            3.493023991584778,
+            3.4868478775024414,
+            3.560960054397583,
+            3.5067840814590454,
+            3.550591826438904
+          ]
+        },
+        "profiled_latency_ms": [
+          112.710885,
+          112.274848,
+          111.682871,
+          111.601983,
+          111.239151,
+          110.782031,
+          110.635117,
+          111.070991,
+          111.288882,
+          111.622624
+        ],
+        "sampled_rows": [
+          214641.0,
+          214641.0,
+          214641.0,
+          214641.0,
+          214641.0,
+          214641.0,
+          214641.0,
+          214641.0,
+          214641.0,
+          214641.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 214641.0,
+        "mean": 214641.0,
+        "median": 214641.0,
+        "min": 214641.0,
+        "p95": 214641.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 8192,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "37853f3305263fceaa1eb4560f9e0954466e5f6bbadb68e6bb06ac863a23bea2"
+      },
+      "task_to_device_ms_excluded": 0.466871,
+      "throughput": {
+        "requests_per_second": 9.025871695446726,
+        "task_rows_per_second": 73939.94092909958
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 8,
+      "fanout": [
+        -1
+      ],
+      "invariants": {
+        "canonical_output_sha256": "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 114,
+          "paperAuthors": 17,
+          "paperCategories": 4,
+          "papers": 8
+        },
+        "sampled_rows": 143,
+        "table_hashes": {
+          "citations": "c24ebfb12ac8ac0eacedd5be7add40c58d1195462b71e6de6def848510b716e1",
+          "paperAuthors": "43f10b49a142568b2fffc36e4ecf7ddd2e5563c8a95475e1d03e29006f87b2c1",
+          "paperCategories": "88f5bd21d225b75f5aa09ed70faeedf61f46dc4c92de831c684393cef950bd7a",
+          "papers": "5a6b8b85ad4254865a368dc61d307bccc939cf855ab4b842a90baca8f84803e2"
+        },
+        "task_rows": 8,
+        "temporal_rows_checked": 143,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "exhaustive_parity",
+      "latency_ms": {
+        "count": 10,
+        "max": 13.570814,
+        "mean": 13.424264,
+        "median": 13.401505,
+        "min": 13.322162,
+        "p95": 13.55290175,
+        "stdev": 0.08772709893122448
+      },
+      "phases_ms": {
+        "neighbor_sampling_ms": {
+          "count": 10,
+          "max": 12.468223571777344,
+          "mean": 11.452294254302979,
+          "median": 11.28556776046753,
+          "min": 11.245535850524902,
+          "p95": 12.141055870056151,
+          "stdev": 0.38659386099459186
+        },
+        "output_assembly_ms": {
+          "count": 10,
+          "max": 1.9237760305404663,
+          "mean": 1.7738047957420349,
+          "median": 1.7687039971351624,
+          "min": 1.6812800168991089,
+          "p95": 1.8808640122413636,
+          "stdev": 0.06625822449010349
+        },
+        "synchronization_other_ms": {
+          "count": 10,
+          "max": 0.4573284066276546,
+          "mean": 0.3199977497306822,
+          "median": 0.30986991380786844,
+          "min": 0.28163078190994284,
+          "p95": 0.4017786149403566,
+          "stdev": 0.050873642251997385
+        },
+        "task_to_seed_join_ms": {
+          "count": 10,
+          "max": 0.4508799910545349,
+          "mean": 0.2966048002243042,
+          "median": 0.2760639935731888,
+          "min": 0.26208001375198364,
+          "p95": 0.3825376003980635,
+          "stdev": 0.05561733777055223
+        }
+      },
+      "profiled_invariants": {
+        "canonical_output_sha256": "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 114,
+          "paperAuthors": 17,
+          "paperCategories": 4,
+          "papers": 8
+        },
+        "sampled_rows": 143,
+        "table_hashes": {
+          "citations": "c24ebfb12ac8ac0eacedd5be7add40c58d1195462b71e6de6def848510b716e1",
+          "paperAuthors": "43f10b49a142568b2fffc36e4ecf7ddd2e5563c8a95475e1d03e29006f87b2c1",
+          "paperCategories": "88f5bd21d225b75f5aa09ed70faeedf61f46dc4c92de831c684393cef950bd7a",
+          "papers": "5a6b8b85ad4254865a368dc61d307bccc939cf855ab4b842a90baca8f84803e2"
+        },
+        "task_rows": 8,
+        "temporal_rows_checked": 143,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "profiled_latency_ms": {
+        "count": 10,
+        "max": 15.300208,
+        "mean": 13.8427016,
+        "median": 13.6292475,
+        "min": 13.493247,
+        "p95": 14.7948202,
+        "stdev": 0.5463461620902181
+      },
+      "raw_samples": {
+        "latency_ms": [
+          13.570814,
+          13.531009,
+          13.492483,
+          13.367025,
+          13.417471,
+          13.34087,
+          13.385539,
+          13.474658,
+          13.322162,
+          13.340609
+        ],
+        "output_sha256": [
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635"
+        ],
+        "phases_ms": {
+          "neighbor_sampling_ms": [
+            12.468223571777344,
+            11.74118423461914,
+            11.389151573181152,
+            11.280991554260254,
+            11.245535850524902,
+            11.24944019317627,
+            11.268256187438965,
+            11.258591651916504,
+            11.290143966674805,
+            11.33142375946045
+          ],
+          "output_assembly_ms": [
+            1.9237760305404663,
+            1.8284159898757935,
+            1.7836480140686035,
+            1.7361279726028442,
+            1.7600640058517456,
+            1.777951955795288,
+            1.6812800168991089,
+            1.777343988418579,
+            1.7532479763031006,
+            1.7161920070648193
+          ],
+          "synchronization_other_ms": [
+            0.4573284066276546,
+            0.30851576368713296,
+            0.3338844251003259,
+            0.2919084736404418,
+            0.288716132637024,
+            0.2925618464450839,
+            0.28163078190994284,
+            0.32047535637283353,
+            0.3112240639286039,
+            0.31373224695777857
+          ],
+          "task_to_seed_join_ms": [
+            0.4508799910545349,
+            0.29900801181793213,
+            0.2791999876499176,
+            0.27292799949645996,
+            0.2724800109863281,
+            0.29414400458335876,
+            0.26208001375198364,
+            0.27244800329208374,
+            0.2945919930934906,
+            0.2682879865169525
+          ]
+        },
+        "profiled_latency_ms": [
+          15.300208,
+          14.177124,
+          13.785884,
+          13.581956,
+          13.566796,
+          13.614098,
+          13.493247,
+          13.628859,
+          13.649208,
+          13.629636
+        ],
+        "sampled_rows": [
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 143.0,
+        "mean": 143.0,
+        "median": 143.0,
+        "min": 143.0,
+        "p95": 143.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 8,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "fcaac268820925b4b3152ebd6b3606510564e9a4d35c62fd08a8e52b625283c0"
+      },
+      "task_to_device_ms_excluded": 0.374818,
+      "throughput": {
+        "requests_per_second": 74.61848501343692,
+        "task_rows_per_second": 596.9478801074954
+      },
+      "warmups": 3
+    }
+  ],
+  "schema_version": 1,
+  "workload": {
+    "dataset": "rel-arxiv",
+    "relationships": [
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "References_Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Author_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Author_ID"
+        ],
+        "right_table": "authors"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Category_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Category_ID"
+        ],
+        "right_table": "categories"
+      }
+    ],
+    "relbench_version": "unknown",
+    "split": "test",
+    "tables": [
+      {
+        "columns": [
+          "Paper_ID",
+          "arXiv_Code",
+          "Title",
+          "Abstract",
+          "Submission_Date",
+          "DOI",
+          "Primary_Category_ID"
+        ],
+        "identity_columns": [
+          "Paper_ID"
+        ],
+        "name": "papers",
+        "rows": 222769,
+        "sampling_data_sha256": "40cb74a5a99d90b2642c06c3efd8d131f63219cc878c3ab966c703641f2307e5",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "References_Paper_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "References_Paper_ID"
+        ],
+        "name": "citations",
+        "rows": 1595687,
+        "sampling_data_sha256": "25c5a80e96b6f2b9c7a24ea69836de628a4c3fd5db13fa0f9fe8c23a360d9d62",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Author_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Author_ID"
+        ],
+        "name": "paperAuthors",
+        "rows": 616585,
+        "sampling_data_sha256": "378703ccfa632083101d7b8d72afaaebb52c3dd1758d7e5688d8361925d04246",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Category_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Category_ID"
+        ],
+        "name": "paperCategories",
+        "rows": 155061,
+        "sampling_data_sha256": "c2b9aa9e74c8f310fee505ffd55dfd970254b01e37ae74e45c955e6b9b06e8cb",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Author_ID",
+          "Name",
+          "ORCID"
+        ],
+        "identity_columns": [
+          "Author_ID"
+        ],
+        "name": "authors",
+        "rows": 143691,
+        "sampling_data_sha256": "ae1c991aa660ea856227da2d39bc6c46cfe4d044ca5bfa4dd131eb3dae398d5b",
+        "time_column": null
+      },
+      {
+        "columns": [
+          "Category_ID",
+          "Category"
+        ],
+        "identity_columns": [
+          "Category_ID"
+        ],
+        "name": "categories",
+        "rows": 53,
+        "sampling_data_sha256": "a151a1d461bf59ec269399007a525fab74bfb3152f33dd19925735aefcec272e",
+        "time_column": null
+      }
+    ],
+    "task": "paper-citation",
+    "task_link": {
+      "table": "papers",
+      "table_column": "Paper_ID",
+      "task_column": "Paper_ID"
+    },
+    "task_rows": 193696,
+    "task_sampling_data_sha256": "027838a9291c784ca4ae5bb9a96a4240c85a69a85c2b06588ee131302fdce3c7",
+    "task_time_column": "date",
+    "time_columns": {
+      "citations": "Submission_Date",
+      "paperAuthors": "Submission_Date",
+      "paperCategories": "Submission_Date",
+      "papers": "Submission_Date"
+    }
+  }
+}

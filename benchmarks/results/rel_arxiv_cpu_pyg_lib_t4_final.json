@@ -1,0 +1,1419 @@
+{
+  "command": [
+    "benchmarks/relational_sampler.py",
+    "run",
+    "--mode",
+    "cpu",
+    "--dataset",
+    "rel-arxiv",
+    "--task",
+    "paper-citation",
+    "--split",
+    "test",
+    "--batch-size",
+    "1,128,1024,4096,8192",
+    "--fanout",
+    "16",
+    "--fanout",
+    "16,16",
+    "--include-exhaustive",
+    "--parity-batch-size",
+    "8",
+    "--warmups",
+    "3",
+    "--repetitions",
+    "10",
+    "--seed",
+    "20260711",
+    "--output",
+    "benchmarks/results/rel_arxiv_cpu_pyg_lib_t4_final.json"
+  ],
+  "created_at_utc": "2026-07-11T01:55:40.574519+00:00",
+  "environment": {
+    "cpu": {
+      "architecture": "x86_64",
+      "cores_per_socket": "16",
+      "logical_cpu_count": 32,
+      "model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
+      "sockets": "1",
+      "threads_per_core": "2",
+      "torch_num_interop_threads": 16,
+      "torch_num_threads": 16
+    },
+    "gpu": {
+      "capability": [
+        7,
+        5
+      ],
+      "name": "Tesla T4",
+      "total_memory_bytes": 15636037632
+    },
+    "nvidia_driver": "580.159.03",
+    "versions": {
+      "cudf": "26.02.01",
+      "cupy": "14.1.1",
+      "numpy": "2.2.6",
+      "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.35",
+      "pyarrow": "24.0.0",
+      "pyg_lib": "0.7.0+pt212cu130",
+      "pylibcugraph": "not_installed",
+      "python": "3.10.12",
+      "relbench": "2.1.2",
+      "torch": "2.12.1+cu130",
+      "torch_cuda": "13.0"
+    }
+  },
+  "initialization": {
+    "data_to_cuda_ms_excluded_from_init": null,
+    "sampler_topology_build_ms": 408.599732
+  },
+  "measurement": {
+    "latency_ms": "Synchronized public sampler call with task input already resident on the sampler device; validation runs in a separate untimed pass",
+    "profiled_latency_ms": "Separate CUDA pass with event instrumentation; phases are independent medians",
+    "task_to_device_ms_excluded": "One observed task-table transfer, excluded from latency_ms"
+  },
+  "mode": "cpu",
+  "random_state": 20260711,
+  "runs": [
+    {
+      "batch_size": 1,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 2,
+          "papers": 1
+        },
+        "sampled_rows": 3,
+        "table_hashes": {
+          "citations": "f560915af55babbf85540d5b11ce9e4086f7f45e651e4a7f394d828cf9e1f493",
+          "papers": "44d6712c79e197b92e5e3fa4e3248aa85df7b12245ec4cc3d26268d143e88038"
+        },
+        "task_rows": 1,
+        "temporal_rows_checked": 3,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 19.321561,
+        "mean": 15.9061121,
+        "median": 15.992688000000001,
+        "min": 13.5525,
+        "p95": 18.677270799999995,
+        "stdev": 1.849589432376304
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          16.603137,
+          14.482653,
+          15.895829,
+          13.798457,
+          14.576492,
+          13.5525,
+          19.321561,
+          16.85114,
+          16.089547,
+          17.889805
+        ],
+        "output_sha256": [
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111",
+          "f04be32c359a6deaa4c23501e4bfb83250b4062ccbcef23c9ae9a1bd10791111"
+        ],
+        "sampled_rows": [
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0,
+          3.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 3.0,
+        "mean": 3.0,
+        "median": 3.0,
+        "min": 3.0,
+        "p95": 3.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1,
+        "position_prefix": [
+          177909
+        ],
+        "positions_sha256": "a708276649043e2f39bd76f82e8cab41378499fce3cbe3b9fae11abe38beaeca"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 62.52857555903047,
+        "task_rows_per_second": 62.52857555903047
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 128,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 1232,
+          "paperAuthors": 227,
+          "paperCategories": 75,
+          "papers": 128
+        },
+        "sampled_rows": 1662,
+        "table_hashes": {
+          "citations": "679ccaf57e18160b2783664fa789b7dc11804aa19e4f37cbeb75f3b330ff0739",
+          "paperAuthors": "00c2f8dcf0de68878baa0bf5624ffacfd08f42c3b80a6d6127744d0786a6b794",
+          "paperCategories": "8a85399cc354c614a66d5def6320c6bef63f79bd7dc7dfca4adbd0594f0d2b0e",
+          "papers": "1d41abaa250e001ecdc19361088536d809019030df07faec8b4a12dede96a7c0"
+        },
+        "task_rows": 128,
+        "temporal_rows_checked": 1662,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 18.262342,
+        "mean": 17.4292654,
+        "median": 17.4998665,
+        "min": 15.998007,
+        "p95": 18.071975350000002,
+        "stdev": 0.6035662901639445
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          17.423771,
+          18.262342,
+          17.519726,
+          17.684514,
+          17.122922,
+          17.791542,
+          17.480007,
+          17.839305,
+          17.170518,
+          15.998007
+        ],
+        "output_sha256": [
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58",
+          "21db3d4e06e54e2c99c30ee668bb2066e876a6cfd6989834df8407fca43d0c58"
+        ],
+        "sampled_rows": [
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0,
+          1662.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 1662.0,
+        "mean": 1662.0,
+        "median": 1662.0,
+        "min": 1662.0,
+        "p95": 1662.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 128,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5b6644c00d9094fc6f9885ec365ac36284e7a7bac1055678af74778913d3dce3"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 57.14329306454995,
+        "task_rows_per_second": 7314.341512262394
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 1024,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 10285,
+          "paperAuthors": 2082,
+          "paperCategories": 658,
+          "papers": 1024
+        },
+        "sampled_rows": 14049,
+        "table_hashes": {
+          "citations": "f40235d9d5ff0b31eb534f7bc39fbacb392a1dae451db937f68504b76eeb4915",
+          "paperAuthors": "3126ea630e2acd0a101afab675415ae5ed7f85fdb404fc27973e34f46ddd01f9",
+          "paperCategories": "5604f54452603bc9c66c82cbdd0bfdfdf9651bb9dce58b8d934dbe9c7cb6232b",
+          "papers": "f101dab7750b5de9a5dc4d5f023267fb09ca55140d5fd478571f834e28627352"
+        },
+        "task_rows": 1024,
+        "temporal_rows_checked": 14049,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 22.78997,
+        "mean": 19.5522131,
+        "median": 19.301419000000003,
+        "min": 16.405077,
+        "p95": 22.697156149999998,
+        "stdev": 2.402601766631307
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          17.983345,
+          17.628945,
+          16.784582,
+          20.241565,
+          21.511957,
+          22.78997,
+          21.2317,
+          22.583717,
+          18.361273,
+          16.405077
+        ],
+        "output_sha256": [
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87",
+          "bec8c118e30c2a9b11735b95755fec89191a50f62af4ce6e6b5c123c940acf87"
+        ],
+        "sampled_rows": [
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0,
+          14049.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 14049.0,
+        "mean": 14049.0,
+        "median": 14049.0,
+        "min": 14049.0,
+        "p95": 14049.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1024,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "9c600c7fdf0fe776e01d48a0a2327fe336f04ca9be586f678279a4275738e657"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 51.80966228441545,
+        "task_rows_per_second": 53053.09417924142
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 4096,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 38901,
+          "paperAuthors": 8055,
+          "paperCategories": 2800,
+          "papers": 4096
+        },
+        "sampled_rows": 53852,
+        "table_hashes": {
+          "citations": "c8d45007b73fa4ec11f8c0498f4b9dfa045f1f0faf1f84870b230ad446521631",
+          "paperAuthors": "25b378e5de38a2a281fa11dd03c91ea18ecccba3bfada80f097ebd5bc3925aa2",
+          "paperCategories": "d963ee5cd67f031f5424ccfb9e47c4efdfbd2b370ade38bc982b08ff396c1358",
+          "papers": "5bd0fcbdf7e9f2f54b429b8493af2afe0a27fc682c7ce1560b496897eeaa796a"
+        },
+        "task_rows": 4096,
+        "temporal_rows_checked": 53852,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 25.765122,
+        "mean": 24.5127519,
+        "median": 24.794656,
+        "min": 21.563299,
+        "p95": 25.648110300000003,
+        "stdev": 1.273413141740422
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          25.262415,
+          25.765122,
+          25.505096,
+          24.232905,
+          23.842215,
+          21.563299,
+          23.775069,
+          24.326897,
+          25.411174,
+          25.443327
+        ],
+        "output_sha256": [
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5",
+          "8db55a721fbd61f43691c15f8d497104049533d22b117d1dd0ae44c6ae2061a5"
+        ],
+        "sampled_rows": [
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0,
+          53852.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 53852.0,
+        "mean": 53852.0,
+        "median": 53852.0,
+        "min": 53852.0,
+        "p95": 53852.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 4096,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5caa508b1b77307288244b26fc14c27623c395bfe67481a4a01844baa8d3551e"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 40.331271383640086,
+        "task_rows_per_second": 165196.8875873898
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 8192,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 77774,
+          "paperAuthors": 16024,
+          "paperCategories": 5652,
+          "papers": 8192
+        },
+        "sampled_rows": 107642,
+        "table_hashes": {
+          "citations": "fd5c1ade9a7383b50304ea91dc4db8b53ec515859e54ef7572094faad3c64814",
+          "paperAuthors": "dc7e7c4e763b225cffad66d4fa51256cefbf07dbac1366a32531053fba9fc1d1",
+          "paperCategories": "1c5c16f69e4e5b824edd830e2c5198df4aa24d6c7d316a997eee8d106df15618",
+          "papers": "d04c1f1ba22477d722f7200794e69d60185dcfff564ab1f63165b755e5abdb8d"
+        },
+        "task_rows": 8192,
+        "temporal_rows_checked": 107642,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 43.57901,
+        "mean": 39.6285838,
+        "median": 41.302417500000004,
+        "min": 33.665827,
+        "p95": 43.01994485,
+        "stdev": 3.6875448082276097
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          34.869461,
+          33.665827,
+          42.184889,
+          42.336643,
+          40.699581,
+          39.895522,
+          43.57901,
+          41.905254,
+          42.186036,
+          34.963615
+        ],
+        "output_sha256": [
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b",
+          "255c8c8c09be02d1ae30e893a7da5ecd69b8b65af42e88480360edc2058d5e9b"
+        ],
+        "sampled_rows": [
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0,
+          107642.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 107642.0,
+        "mean": 107642.0,
+        "median": 107642.0,
+        "min": 107642.0,
+        "p95": 107642.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 8192,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "37853f3305263fceaa1eb4560f9e0954466e5f6bbadb68e6bb06ac863a23bea2"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 24.21165782850362,
+        "task_rows_per_second": 198341.90093110164
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 1,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 2,
+          "papers": 3
+        },
+        "sampled_rows": 5,
+        "table_hashes": {
+          "citations": "f560915af55babbf85540d5b11ce9e4086f7f45e651e4a7f394d828cf9e1f493",
+          "papers": "b414376fdabc4ef19bcd5fbefaab1bc13c781e3e631114c7ce5f7a22d4131d44"
+        },
+        "task_rows": 1,
+        "temporal_rows_checked": 5,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 57.274065,
+        "mean": 26.626875599999998,
+        "median": 18.3388305,
+        "min": 15.520746,
+        "p95": 53.85719789999999,
+        "stdev": 15.255388554116244
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          16.194586,
+          49.681027,
+          57.274065,
+          34.456509,
+          18.630408,
+          21.379845,
+          17.253241,
+          17.831076,
+          15.520746,
+          18.047253
+        ],
+        "output_sha256": [
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d",
+          "7da8066bcd97d8674ba9324ac427c0e4342f413caeb683283607f41c1564085d"
+        ],
+        "sampled_rows": [
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0,
+          5.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 5.0,
+        "mean": 5.0,
+        "median": 5.0,
+        "min": 5.0,
+        "p95": 5.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1,
+        "position_prefix": [
+          177909
+        ],
+        "positions_sha256": "a708276649043e2f39bd76f82e8cab41378499fce3cbe3b9fae11abe38beaeca"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 54.529104241407325,
+        "task_rows_per_second": 54.529104241407325
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 128,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 227,
+          "categories": 75,
+          "citations": 1232,
+          "paperAuthors": 227,
+          "paperCategories": 75,
+          "papers": 1351
+        },
+        "sampled_rows": 3187,
+        "table_hashes": {
+          "authors": "1c4df63e188676d79fb17de1eacb7a47a5c96a0eedf182b0e7e8fcd5d0eaafdb",
+          "categories": "9822de907e86d8ee077a5b906d2d4d58f19f99347ffb72a16b7d54ea83ed4edb",
+          "citations": "679ccaf57e18160b2783664fa789b7dc11804aa19e4f37cbeb75f3b330ff0739",
+          "paperAuthors": "00c2f8dcf0de68878baa0bf5624ffacfd08f42c3b80a6d6127744d0786a6b794",
+          "paperCategories": "8a85399cc354c614a66d5def6320c6bef63f79bd7dc7dfca4adbd0594f0d2b0e",
+          "papers": "606006d0422922c7e7cffed7df9322ef63c449d859a4c6f6aa1409430a68bb61"
+        },
+        "task_rows": 128,
+        "temporal_rows_checked": 2885,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 19.508276,
+        "mean": 18.5177506,
+        "median": 18.828587,
+        "min": 17.064468,
+        "p95": 19.38530495,
+        "stdev": 0.8602063432515862
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          17.064468,
+          19.235007,
+          19.059413,
+          19.039774,
+          18.614404,
+          17.573461,
+          18.6174,
+          17.392252,
+          19.073051,
+          19.508276
+        ],
+        "output_sha256": [
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34",
+          "d14ddcfcac800ad3318d9bfd559020646cbdd8090131ec816edadbe3030fcc34"
+        ],
+        "sampled_rows": [
+          3187.0,
+          3187.0,
+          3187.0,
+          3187.0,
+          3187.0,
+          3187.0,
+          3187.0,
+          3187.0,
+          3187.0,
+          3187.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 3187.0,
+        "mean": 3187.0,
+        "median": 3187.0,
+        "min": 3187.0,
+        "p95": 3187.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 128,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5b6644c00d9094fc6f9885ec365ac36284e7a7bac1055678af74778913d3dce3"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 53.11072997671042,
+        "task_rows_per_second": 6798.173437018933
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 1024,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 2082,
+          "categories": 658,
+          "citations": 10285,
+          "paperAuthors": 2082,
+          "paperCategories": 658,
+          "papers": 11252
+        },
+        "sampled_rows": 27017,
+        "table_hashes": {
+          "authors": "af07b5f0430978ed4af1678ec2074b2720ca6971bc944fe3b52f92cd14d51fcf",
+          "categories": "726b28d7a262f415c52207cc8f7f2a67bbfa8b8df4e191ea113e06028926272f",
+          "citations": "f40235d9d5ff0b31eb534f7bc39fbacb392a1dae451db937f68504b76eeb4915",
+          "paperAuthors": "3126ea630e2acd0a101afab675415ae5ed7f85fdb404fc27973e34f46ddd01f9",
+          "paperCategories": "5604f54452603bc9c66c82cbdd0bfdfdf9651bb9dce58b8d934dbe9c7cb6232b",
+          "papers": "eb831d7e8aefdad27df1f39dd5f312929c508a21e1c02d3991652da6cb944d41"
+        },
+        "task_rows": 1024,
+        "temporal_rows_checked": 24277,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 35.198579,
+        "mean": 29.7851836,
+        "median": 29.0850535,
+        "min": 26.99167,
+        "p95": 33.7126331,
+        "stdev": 2.5296604237422513
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          28.173297,
+          31.438469,
+          27.410293,
+          35.198579,
+          29.579853,
+          28.590254,
+          28.044009,
+          30.528935,
+          26.99167,
+          31.896477
+        ],
+        "output_sha256": [
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276",
+          "1ca26a9d83549c834ce0fa385905b3020aef83c03111d9725b8d386fcbe9f276"
+        ],
+        "sampled_rows": [
+          27017.0,
+          27017.0,
+          27017.0,
+          27017.0,
+          27017.0,
+          27017.0,
+          27017.0,
+          27017.0,
+          27017.0,
+          27017.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 27017.0,
+        "mean": 27017.0,
+        "median": 27017.0,
+        "min": 27017.0,
+        "p95": 27017.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 1024,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "9c600c7fdf0fe776e01d48a0a2327fe336f04ca9be586f678279a4275738e657"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 34.38192059712044,
+        "task_rows_per_second": 35207.08669145133
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 4096,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 8053,
+          "categories": 2800,
+          "citations": 38901,
+          "paperAuthors": 8055,
+          "paperCategories": 2800,
+          "papers": 42776
+        },
+        "sampled_rows": 103385,
+        "table_hashes": {
+          "authors": "c93281fd13a676d4df6bb9def2381802b0f3cce39e021dff8380a0566bb855c1",
+          "categories": "9f93b2e69a10ef280a6b9e1dfcd634ded1e01ddf1c6e95120a27ce03f8c5839f",
+          "citations": "c8d45007b73fa4ec11f8c0498f4b9dfa045f1f0faf1f84870b230ad446521631",
+          "paperAuthors": "25b378e5de38a2a281fa11dd03c91ea18ecccba3bfada80f097ebd5bc3925aa2",
+          "paperCategories": "d963ee5cd67f031f5424ccfb9e47c4efdfbd2b370ade38bc982b08ff396c1358",
+          "papers": "f2773b85a33d726096b62694d749da92deb2a9f0ddfca8a8830892c649eb83fb"
+        },
+        "task_rows": 4096,
+        "temporal_rows_checked": 92532,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 199.131474,
+        "mean": 67.8194178,
+        "median": 52.94099,
+        "min": 47.500817,
+        "p95": 136.82906354999986,
+        "stdev": 46.33937045045362
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          60.681673,
+          199.131474,
+          57.535124,
+          53.53483,
+          57.855937,
+          52.34715,
+          49.381014,
+          48.715849,
+          51.51031,
+          47.500817
+        ],
+        "output_sha256": [
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1",
+          "b9ad4cfe7c764272fbc41512180cad33a59d64fb6cff35f686a528aa7b43f1a1"
+        ],
+        "sampled_rows": [
+          103385.0,
+          103385.0,
+          103385.0,
+          103385.0,
+          103385.0,
+          103385.0,
+          103385.0,
+          103385.0,
+          103385.0,
+          103385.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 103385.0,
+        "mean": 103385.0,
+        "median": 103385.0,
+        "min": 103385.0,
+        "p95": 103385.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 4096,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "5caa508b1b77307288244b26fc14c27623c395bfe67481a4a01844baa8d3551e"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 18.888955419987425,
+        "task_rows_per_second": 77369.1614002685
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 8192,
+      "fanout": [
+        16,
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+        "errors": [],
+        "rows_by_table": {
+          "authors": 16022,
+          "categories": 5652,
+          "citations": 77774,
+          "paperAuthors": 16024,
+          "paperCategories": 5652,
+          "papers": 85497
+        },
+        "sampled_rows": 206621,
+        "table_hashes": {
+          "authors": "d3f0dc6c897a467a9d6338af9182dab47a9097d1a3c75967f5f832c68882aecf",
+          "categories": "1175e59d24956bbd2ac2efdc8a4e6a576893da56172650e190e694659f201ce5",
+          "citations": "fd5c1ade9a7383b50304ea91dc4db8b53ec515859e54ef7572094faad3c64814",
+          "paperAuthors": "dc7e7c4e763b225cffad66d4fa51256cefbf07dbac1366a32531053fba9fc1d1",
+          "paperCategories": "1c5c16f69e4e5b824edd830e2c5198df4aa24d6c7d316a997eee8d106df15618",
+          "papers": "477c91e768ab180f9889ce8b0030dfd83211b84d6bd34454de604dacecb6e7e0"
+        },
+        "task_rows": 8192,
+        "temporal_rows_checked": 184947,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 81.835106,
+        "mean": 73.4578607,
+        "median": 72.821556,
+        "min": 68.54717,
+        "p95": 79.14911314999998,
+        "stdev": 3.777902347639172
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          72.655552,
+          72.98756,
+          72.047327,
+          74.604628,
+          75.373791,
+          75.866233,
+          81.835106,
+          71.02341,
+          69.63783,
+          68.54717
+        ],
+        "output_sha256": [
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214",
+          "fa0240c926212063383e70af1b5551e359a78e9d53e22c71289d12fc1fc03214"
+        ],
+        "sampled_rows": [
+          206621.0,
+          206621.0,
+          206621.0,
+          206621.0,
+          206621.0,
+          206621.0,
+          206621.0,
+          206621.0,
+          206621.0,
+          206621.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 206621.0,
+        "mean": 206621.0,
+        "median": 206621.0,
+        "min": 206621.0,
+        "p95": 206621.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 8192,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "37853f3305263fceaa1eb4560f9e0954466e5f6bbadb68e6bb06ac863a23bea2"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 13.7321976476306,
+        "task_rows_per_second": 112494.16312938987
+      },
+      "warmups": 3
+    },
+    {
+      "batch_size": 8,
+      "fanout": [
+        -1
+      ],
+      "invariants": {
+        "canonical_output_sha256": "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 114,
+          "paperAuthors": 17,
+          "paperCategories": 4,
+          "papers": 8
+        },
+        "sampled_rows": 143,
+        "table_hashes": {
+          "citations": "c24ebfb12ac8ac0eacedd5be7add40c58d1195462b71e6de6def848510b716e1",
+          "paperAuthors": "43f10b49a142568b2fffc36e4ecf7ddd2e5563c8a95475e1d03e29006f87b2c1",
+          "paperCategories": "88f5bd21d225b75f5aa09ed70faeedf61f46dc4c92de831c684393cef950bd7a",
+          "papers": "5a6b8b85ad4254865a368dc61d307bccc939cf855ab4b842a90baca8f84803e2"
+        },
+        "task_rows": 8,
+        "temporal_rows_checked": 143,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "exhaustive_parity",
+      "latency_ms": {
+        "count": 10,
+        "max": 14.889361,
+        "mean": 13.9863184,
+        "median": 13.944253499999999,
+        "min": 13.349457,
+        "p95": 14.711215,
+        "stdev": 0.4882432129173144
+      },
+      "phases_ms": {},
+      "raw_samples": {
+        "latency_ms": [
+          14.158525,
+          14.889361,
+          13.349457,
+          14.493481,
+          13.836279,
+          13.913701,
+          13.35973,
+          14.270541,
+          13.974806,
+          13.617303
+        ],
+        "output_sha256": [
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635",
+          "f6bc02aa64ff082caff60737f37392e84e0f98167c9d831c02b80272b7b9c635"
+        ],
+        "sampled_rows": [
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0,
+          143.0
+        ]
+      },
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 143.0,
+        "mean": 143.0,
+        "median": 143.0,
+        "min": 143.0,
+        "p95": 143.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 8,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "fcaac268820925b4b3152ebd6b3606510564e9a4d35c62fd08a8e52b625283c0"
+      },
+      "task_to_device_ms_excluded": null,
+      "throughput": {
+        "requests_per_second": 71.71412940821824,
+        "task_rows_per_second": 573.7130352657459
+      },
+      "warmups": 3
+    }
+  ],
+  "schema_version": 1,
+  "workload": {
+    "dataset": "rel-arxiv",
+    "relationships": [
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "References_Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Author_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Author_ID"
+        ],
+        "right_table": "authors"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Category_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Category_ID"
+        ],
+        "right_table": "categories"
+      }
+    ],
+    "relbench_version": "unknown",
+    "split": "test",
+    "tables": [
+      {
+        "columns": [
+          "Paper_ID",
+          "arXiv_Code",
+          "Title",
+          "Abstract",
+          "Submission_Date",
+          "DOI",
+          "Primary_Category_ID"
+        ],
+        "identity_columns": [
+          "Paper_ID"
+        ],
+        "name": "papers",
+        "rows": 222769,
+        "sampling_data_sha256": "40cb74a5a99d90b2642c06c3efd8d131f63219cc878c3ab966c703641f2307e5",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "References_Paper_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "References_Paper_ID"
+        ],
+        "name": "citations",
+        "rows": 1595687,
+        "sampling_data_sha256": "25c5a80e96b6f2b9c7a24ea69836de628a4c3fd5db13fa0f9fe8c23a360d9d62",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Author_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Author_ID"
+        ],
+        "name": "paperAuthors",
+        "rows": 616585,
+        "sampling_data_sha256": "378703ccfa632083101d7b8d72afaaebb52c3dd1758d7e5688d8361925d04246",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Category_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Category_ID"
+        ],
+        "name": "paperCategories",
+        "rows": 155061,
+        "sampling_data_sha256": "c2b9aa9e74c8f310fee505ffd55dfd970254b01e37ae74e45c955e6b9b06e8cb",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Author_ID",
+          "Name",
+          "ORCID"
+        ],
+        "identity_columns": [
+          "Author_ID"
+        ],
+        "name": "authors",
+        "rows": 143691,
+        "sampling_data_sha256": "ae1c991aa660ea856227da2d39bc6c46cfe4d044ca5bfa4dd131eb3dae398d5b",
+        "time_column": null
+      },
+      {
+        "columns": [
+          "Category_ID",
+          "Category"
+        ],
+        "identity_columns": [
+          "Category_ID"
+        ],
+        "name": "categories",
+        "rows": 53,
+        "sampling_data_sha256": "a151a1d461bf59ec269399007a525fab74bfb3152f33dd19925735aefcec272e",
+        "time_column": null
+      }
+    ],
+    "task": "paper-citation",
+    "task_link": {
+      "table": "papers",
+      "table_column": "Paper_ID",
+      "task_column": "Paper_ID"
+    },
+    "task_rows": 193696,
+    "task_sampling_data_sha256": "027838a9291c784ca4ae5bb9a96a4240c85a69a85c2b06588ee131302fdce3c7",
+    "task_time_column": "date",
+    "time_columns": {
+      "citations": "Submission_Date",
+      "paperAuthors": "Submission_Date",
+      "paperCategories": "Submission_Date",
+      "papers": "Submission_Date"
+    }
+  }
+}

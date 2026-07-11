@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8">
-<title>Relational sampler timeline</title>
+<title>Relational sampler aggregate phase profile</title>
 <style>
 body { font-family: Arial, sans-serif; margin: 24px; color: #18202a; }
 .run { margin: 20px 0 30px; } .bar { display: flex; height: 34px; }
@@ -9,19 +9,23 @@ body { font-family: Arial, sans-serif; margin: 24px; color: #18202a; }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }
 .swatch { display: inline-block; width: 12px; height: 12px;
   margin-right: 4px; }
-</style><body><h1>CUDA relational sampler phase timeline</h1>
-<p>Median device spans from CUDA events. The final segment is synchronized
-wall-clock residual (host work, stream synchronization, and uninstrumented
-overhead), not an unsynchronized estimate.</p><div id="root"></div>
-<script>const payload = {"mode": "cuda", "runs": [{"label": "fanout=[16], batch=1", "latency_ms": 24.101243, "phases_ms": {"neighbor_sampling_ms": 13.723247796297073, "output_assembly_ms": 1.128719985485077, "synchronization_other_ms": 0.4356676504173276, "task_to_seed_join_ms": 8.035151958465576, "temporal_top_k_ms": 0.7459520101547241}}, {"label": "fanout=[16], batch=128", "latency_ms": 26.7005445, "phases_ms": {"neighbor_sampling_ms": 14.899344027042389, "output_assembly_ms": 1.8905760049819946, "synchronization_other_ms": 0.4477353399353028, "task_to_seed_join_ms": 8.689695835113525, "temporal_top_k_ms": 0.7529440224170685}}, {"label": "fanout=[16], batch=1024", "latency_ms": 29.811778, "phases_ms": {"neighbor_sampling_ms": 17.48504000902176, "output_assembly_ms": 1.91702401638031, "synchronization_other_ms": 0.46604030535888796, "task_to_seed_join_ms": 8.829376220703125, "temporal_top_k_ms": 0.9696159958839417}}, {"label": "fanout=[16, 16], batch=1", "latency_ms": 45.1851225, "phases_ms": {"neighbor_sampling_ms": 30.63030433654785, "output_assembly_ms": 1.2165120244026184, "synchronization_other_ms": 0.475115469764706, "task_to_seed_join_ms": 9.024864196777344, "temporal_top_k_ms": 1.7230879962444305}}, {"label": "fanout=[16, 16], batch=128", "latency_ms": 42.527463, "phases_ms": {"neighbor_sampling_ms": 29.138399958610535, "output_assembly_ms": 2.6663520336151123, "synchronization_other_ms": 0.47305105020141625, "task_to_seed_join_ms": 8.731856346130371, "temporal_top_k_ms": 1.5255520343780518}}, {"label": "fanout=[16, 16], batch=1024", "latency_ms": 56.7050205, "phases_ms": {"neighbor_sampling_ms": 42.37334340810776, "output_assembly_ms": 2.6713759899139404, "synchronization_other_ms": 0.4596772733230594, "task_to_seed_join_ms": 9.066847801208496, "temporal_top_k_ms": 1.9906080067157745}}, {"label": "fanout=[-1], batch=8", "latency_ms": 22.946966500000002, "phases_ms": {"neighbor_sampling_ms": 12.253119945526123, "output_assembly_ms": 1.9243680238723755, "synchronization_other_ms": 0.4761309503593445, "task_to_seed_join_ms": 8.227888107299805}}]};
+</style><body><h1>CUDA relational sampler aggregate phase profile</h1>
+<p>Each segment is an independently computed median, arranged in data-flow
+order. This is a flamegraph-like latency breakdown, not a single-request
+execution timeline. Synchronization/other is the synchronized wall-clock
+residual from the profiled call.</p><div id="root"></div>
+<script>const payload = {"mode": "cuda", "runs": [{"label": "fanout=[16], batch=1", "public_latency_ms": 24.101243, "profiled_latency_ms": 24.101243, "phases_ms": {"task_to_seed_join_ms": 8.035151958465576, "neighbor_sampling_ms": 13.723247796297073, "temporal_top_k_ms": 0.7459520101547241, "output_assembly_ms": 1.128719985485077, "synchronization_other_ms": 0.4356676504173276}}, {"label": "fanout=[16], batch=128", "public_latency_ms": 26.7005445, "profiled_latency_ms": 26.7005445, "phases_ms": {"task_to_seed_join_ms": 8.689695835113525, "neighbor_sampling_ms": 14.899344027042389, "temporal_top_k_ms": 0.7529440224170685, "output_assembly_ms": 1.8905760049819946, "synchronization_other_ms": 0.4477353399353028}}, {"label": "fanout=[16], batch=1024", "public_latency_ms": 29.811778, "profiled_latency_ms": 29.811778, "phases_ms": {"task_to_seed_join_ms": 8.829376220703125, "neighbor_sampling_ms": 17.48504000902176, "temporal_top_k_ms": 0.9696159958839417, "output_assembly_ms": 1.91702401638031, "synchronization_other_ms": 0.46604030535888796}}, {"label": "fanout=[16, 16], batch=1", "public_latency_ms": 45.1851225, "profiled_latency_ms": 45.1851225, "phases_ms": {"task_to_seed_join_ms": 9.024864196777344, "neighbor_sampling_ms": 30.63030433654785, "temporal_top_k_ms": 1.7230879962444305, "output_assembly_ms": 1.2165120244026184, "synchronization_other_ms": 0.475115469764706}}, {"label": "fanout=[16, 16], batch=128", "public_latency_ms": 42.527463, "profiled_latency_ms": 42.527463, "phases_ms": {"task_to_seed_join_ms": 8.731856346130371, "neighbor_sampling_ms": 29.138399958610535, "temporal_top_k_ms": 1.5255520343780518, "output_assembly_ms": 2.6663520336151123, "synchronization_other_ms": 0.47305105020141625}}, {"label": "fanout=[16, 16], batch=1024", "public_latency_ms": 56.7050205, "profiled_latency_ms": 56.7050205, "phases_ms": {"task_to_seed_join_ms": 9.066847801208496, "neighbor_sampling_ms": 42.37334340810776, "temporal_top_k_ms": 1.9906080067157745, "output_assembly_ms": 2.6713759899139404, "synchronization_other_ms": 0.4596772733230594}}, {"label": "fanout=[-1], batch=8", "public_latency_ms": 22.946966500000002, "profiled_latency_ms": 22.946966500000002, "phases_ms": {"task_to_seed_join_ms": 8.227888107299805, "neighbor_sampling_ms": 12.253119945526123, "output_assembly_ms": 1.9243680238723755, "synchronization_other_ms": 0.4761309503593445}}]};
 const colors = ['#1677b8','#24a37b','#df8b27','#9a5fb4','#607d8b'];
 const root = document.getElementById('root');
 payload.runs.forEach((run) => {
   const total = Object.values(run.phases_ms).reduce((a, b) => a + b, 0);
   const item = document.createElement('section'); item.className = 'run';
-  const latency = run.latency_ms.toFixed(3);
+  const publicLatency = run.public_latency_ms.toFixed(3);
+  const profiledLatency = run.profiled_latency_ms.toFixed(3);
   item.innerHTML = `<h2>${run.label}</h2>`
-    + `<p>Median end-to-end latency: ${latency} ms</p>`;
+    + `<p>Public sampler median: ${publicLatency} ms; `
+    + `profiled-call median: ${profiledLatency} ms; `
+    + `sum of phase medians: ${total.toFixed(3)} ms</p>`;
   const bar = document.createElement('div'); bar.className = 'bar';
   const legend = document.createElement('div'); legend.className = 'legend';
   Object.entries(run.phases_ms).forEach(([name, ms], index) => {

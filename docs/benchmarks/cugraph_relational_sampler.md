@@ -1,204 +1,190 @@
 # cuGraph relational sampler benchmark
 
 This report compares the host-memory `RelationalSampler` plus `pyg-lib` with
-the CUDA-primary `CuGraphRelationalSampler`. It retains the baseline measured
-at `99b5765`, then measures the cached single-integer-key CUDA searchsorted
-fast path added in `3ae4139` under the same workload and GPU environment.
+the CUDA-primary `CuGraphRelationalSampler` on RelBench. It also records the
+pre-optimization profile that led to the cached numeric task-key lookup in
+`3ae4139`, including the mutation invalidation added in `12b41ed`.
 
-## Workload and methodology
+## Verdict
 
-- **Dataset/task:** RelBench `rel-arxiv` / `paper-citation`, `test` split.
-  The database has 2,733,846 rows across six tables and six relationships.
-- **Inputs:** The benchmark follows `examples/kumorfm.py`: it creates
-  `TableTensor` inputs for every database table, registers every RelBench
-  foreign-key relationship, and links task `Paper_ID` rows to `papers`.
-  All four timestamped tables use their `Submission_Date`; task `date` is the
-  cutoff.
-- **Request construction:** Stable task positions are selected with Python's
-  `random.Random(20260711)`. Each mode receives the same selected task rows,
-  table schema, relationships, fanouts, and temporal cutoff. The comparison
-  JSON rejects mismatched workload contracts, random-state seeds, or task-row
-  selection hashes.
-- **Randomness:** Finite fanout runs use advancing random streams. The host
-  path seeds PyTorch once per benchmark invocation; cuGraph receives
-  `random_state=20260711` and advances the sampler generator per dispatch.
-  Finite output rows are therefore checked by invariants, not by equality.
-- **Timing:** Sampler topology construction is measured separately. Requests
-  have three warmups and ten measured repetitions. CPU latencies use
-  `perf_counter_ns`. CUDA requests synchronize before and after each request;
-  CUDA events measure join, sampling, temporal top-k, and output assembly.
-  `synchronization_other_ms` is the synchronized wall-clock residual.
-- **Invariants:** Every task seed must be retained, timestamped sampled rows
-  must not exceed the task cutoff, and a full canonical per-table identity
-  digest is recorded. An exhaustive one-hop `[-1]` temporal request with eight
-  task rows produced exactly matching CPU and CUDA output digests: 143 rows,
-  zero cutoff violations.
+- For one-hop `[16]` sampling, CUDA has a narrow 1.06--1.09x median advantage
+  at batches 1--1,024 and a clearer 1.15x and 1.58x advantage at batches 4,096
+  and 8,192. Treat the small-batch difference as inconclusive across process
+  runs; the two paths use different supported runtime builds.
+- Finite two-hop `[16, 16]` CUDA sampling remains 28--63% slower by request
+  median. It is also 19--36% slower after normalizing by sampled rows, so the
+  conclusion is not explained by its 3--4% larger sampled outputs alone.
+- Exact one-hop and two-hop exhaustive requests match CPU output digests: 143
+  and 277 rows respectively, with zero temporal cutoff violations.
+- The task-key optimization reduced the profiled lookup phase from 8--9 ms to
+  0.27--0.33 ms. The remaining two-hop cost is temporal neighbor gathering,
+  not task-to-seed resolution.
 
-Finite fanout samples are intentionally not compared row-for-row: the two
-implementations use different seeded random algorithms. This is why their
-two-hop sampled row medians may differ slightly.
+## Data flow
+
+```text
+RelBench pandas tables
+  -> TableTensor + RelationalData
+  -> CPU: pyg-lib CSC topology -> public RelationalSampler call
+  -> CUDA: one data transfer -> persistent pylibcugraph.SGGraph
+           -> cached numeric task lookup (cuDF fallback for general keys)
+           -> public CuGraphRelationalSampler call
+  -> RelationalSamplerOutput
+  -> seed retention + temporal cutoff + canonical identity digest checks
+  -> raw JSON summaries and aggregate HTML phase profile
+```
+
+## Methodology
+
+- **Workload:** RelBench `rel-arxiv` / `paper-citation`, `test` split. The
+  database has 2,733,846 rows across six tables and six relationships. Four
+  tables use `Submission_Date`; task `date` is the original cutoff at every
+  hop.
+- **Matched inputs:** Both modes use the same selected task positions, seed,
+  fanout, warmups, repetitions, schemas, relationships, and normalized SHA-256
+  fingerprints of every sampling-relevant ID/time column and task ID/time
+  column. The comparison command rejects any mismatch.
+- **Timing:** Each variant has three warmups and ten repetitions. Public
+  sampler calls run back-to-back in the latency pass. A separate untimed pass
+  validates all ten outputs. CUDA phase events run in a third pass, so profiler
+  allocation and method wrapping are excluded from public latency.
+- **Scope:** CUDA timing starts with the task `TableTensor` resident on the
+  device. The observed 0.37--0.50 ms task transfer is recorded but excluded.
+  Sampler topology initialization and the one-time relational data transfer
+  are also reported separately.
+- **Evidence:** Every latency, row count, output digest, profiled latency, and
+  phase duration is retained in the final raw JSON. The HTML and trace files
+  arrange independent phase medians in data-flow order; they are aggregate
+  flamegraph-like profiles, not single-request execution timelines.
+
+Finite fanout implementations use different random/tie ordering. They are
+compared as the same requested serving shape, not as identical concrete rows.
+The separate exhaustive cases establish semantic parity through two hops.
 
 ## Environment
 
-The GPU was a Tesla T4 (15,636,037,632 bytes, capability 7.5) on NVIDIA driver
-580.159.03.
+Both modes ran on one Intel Xeon Platinum 8259CL host with 16 physical cores,
+32 logical CPUs, and 16 PyTorch intra-op / interop threads. CPU affinity was
+not pinned. The GPU was a Tesla T4 (15,636,037,632 bytes, capability 7.5) on
+driver 580.159.03.
 
 | Mode                 | Runtime                                                                                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Host CPU + `pyg-lib` | Python 3.10.12, PyTorch 2.12.1+cu130, `pyg-lib` 0.7.0+pt212cu130, RelBench 2.1.2, PyArrow 24.0.0                                                                    |
 | CUDA cuGraph         | `sdm-rapids-cu13:torch`; Python 3.11.15, PyTorch 2.14.0.dev20260710+cu130, cuDF 26.08.00a882, pylibcugraph 26.08.00a39, CuPy 14.1.1, RelBench 2.1.2, PyArrow 24.0.0 |
 
-The CUDA run constructs tables from RelBench pandas data and transfers SDM
-tensors with `.to("cuda")`; it does not call `StringTensor.from_cudf`. This
-avoids the pre-existing cuDF 26.08 private `StringColumn.children` incompatibility
-in that separate conversion path; the benchmark does not fix or exercise it.
+This is a deployment-path comparison, not an isolated backend experiment.
+The available `pyg-lib` and RAPIDS builds require different Python and
+PyTorch versions, so the entire delta cannot be attributed to the sampler
+libraries alone. The CUDA run constructs tensors from pandas then calls
+`.to("cuda")`; it does not exercise the separate cuDF 26.08
+`StringColumn.children` compatibility issue.
+
+## Public latency
+
+Each cell is median / p95 milliseconds. `x` is CPU median divided by CUDA
+median; values above one favor CUDA.
+
+| Fanout     | Batch |           CPU ms |           CUDA ms | CPU/CUDA x |     CPU/CUDA rows |
+| ---------- | ----: | ---------------: | ----------------: | ---------: | ----------------: |
+| `[16]`     |     1 |  15.993 / 18.677 |   14.725 / 14.847 |       1.09 |             3 / 3 |
+| `[16]`     |   128 |  17.500 / 18.072 |   16.133 / 16.199 |       1.08 |     1,662 / 1,662 |
+| `[16]`     | 1,024 |  19.301 / 22.697 |   18.247 / 18.417 |       1.06 |   14,049 / 14,049 |
+| `[16]`     | 4,096 |  24.795 / 25.648 |   21.603 / 22.481 |       1.15 |   53,852 / 53,852 |
+| `[16]`     | 8,192 |  41.302 / 43.020 |   26.188 / 26.633 |   **1.58** | 107,642 / 107,642 |
+| `[16, 16]` |     1 |  18.339 / 53.857 |   27.235 / 27.392 |       0.67 |             5 / 5 |
+| `[16, 16]` |   128 |  18.829 / 19.385 |   30.655 / 30.860 |       0.61 |     3,187 / 3,302 |
+| `[16, 16]` | 1,024 |  29.085 / 33.713 |   44.023 / 46.388 |       0.66 |   27,017 / 28,023 |
+| `[16, 16]` | 4,096 | 52.941 / 136.829 |   67.610 / 67.827 |       0.78 | 103,385 / 107,395 |
+| `[16, 16]` | 8,192 |  72.822 / 79.149 | 110.793 / 111.162 |       0.66 | 206,621 / 214,641 |
+
+Ten samples make p95 sensitive to one slow request; the raw arrays are
+included so the CPU tails at two-hop batches 1 and 4,096 are auditable. Median
+is the primary comparison. For unequal finite two-hop row counts, CUDA/CPU
+sampled-row throughput ratios are 0.64, 0.69, 0.81, and 0.68 at batches 128,
+1,024, 4,096, and 8,192.
+
+## Correctness
+
+| Fanout    | Batch | Rows | CPU ms | CUDA ms | Exact digest | Cutoff violations |
+| --------- | ----: | ---: | -----: | ------: | :----------: | ----------------: |
+| `[-1]`    |     8 |  143 | 13.944 |  13.402 |     yes      |                 0 |
+| `[-1,-1]` |     8 |  277 | 27.941 |  25.248 |     yes      |                 0 |
+
+All ten validation repetitions in each exhaustive run have the same digest.
+This covers the original-cutoff behavior through two hops; finite output
+differences therefore reflect selection/tie behavior rather than a different
+temporal boundary.
+
+## CUDA profile
+
+The values below are independent medians from the separate profiled pass.
+`neighbor` excludes temporal top-k.
+
+| Fanout / batch     | Lookup | Neighbor | Top-k | Assembly | Other | Profiled total |
+| ------------------ | -----: | -------: | ----: | -------: | ----: | -------------: |
+| `[16]` / 1         |  0.278 |   12.648 | 0.691 |    1.043 | 0.304 |         14.978 |
+| `[16]` / 1,024     |  0.319 |   16.635 | 1.078 |    2.167 | 0.373 |         20.585 |
+| `[16, 16]` / 1,024 |  0.299 |   38.204 | 1.779 |    2.461 | 0.314 |         43.067 |
+| `[16, 16]` / 8,192 |  0.321 |  104.659 | 3.541 |    2.601 | 0.334 |        111.445 |
+
+The pre-optimization baseline used a repeated cuDF task merge and measured an
+8--9 ms lookup phase. The final 0.27--0.33 ms lookup is a 96% reduction under
+the same CUDA-event instrumentation. Historical total latency is not directly
+mixed with the final public-call table because the old run instrumented the
+headline call itself.
 
 ## Initialization
 
-From the primary small-batch suite, host sampler CSC setup took **439.7 ms**.
-CUDA data transfer took **86.8 ms** (excluded from sampler initialization), and
-CUDA topology construction took **907.4 ms**. Reuse the initialized sampler for
-request workloads; topology build is not included in the request tables below.
+Host CSC setup took **408.6 ms**. CUDA relational data transfer took **86.8
+ms** and persistent cuGraph topology construction took **867.4 ms**. These
+costs are excluded from request latency and must be amortized by sampler reuse.
 
-## Steady-state results
+## Interpretation
 
-Each cell is median / p95 milliseconds. `x` is CPU median divided by CUDA
-median; values above one favor CUDA. Row counts are total related-table rows
-per request at the median.
+The numeric task lookup was the useful fixed-cost optimization and is now
+small. The remaining finite two-hop bottleneck is the per-hop temporal gather
+and materialization. The next work should target fewer cuGraph dispatches or a
+native latest-k temporal primitive; further lookup tuning will not close the
+gap.
 
-| Fanout     | Batch |          CPU ms |          CUDA ms | CPU/CUDA x |   CPU/CUDA rows |
-| ---------- | ----: | --------------: | ---------------: | ---------: | --------------: |
-| `[16]`     |     1 | 14.655 / 17.525 |  24.101 / 24.724 |       0.61 |           3 / 3 |
-| `[16]`     |   128 | 16.064 / 17.606 |  26.701 / 27.160 |       0.60 |   1,662 / 1,662 |
-| `[16]`     | 1,024 | 18.163 / 20.298 |  29.812 / 30.854 |       0.61 | 14,049 / 14,049 |
-| `[16, 16]` |     1 | 13.833 / 15.501 |  45.185 / 64.102 |       0.31 |           5 / 5 |
-| `[16, 16]` |   128 | 15.933 / 17.393 |  42.527 / 71.924 |       0.37 |   3,187 / 3,302 |
-| `[16, 16]` | 1,024 | 24.850 / 28.386 | 56.705 / 114.517 |       0.44 | 27,017 / 28,023 |
+A size-aware CPU/CUDA policy is only practical when a service already keeps
+both topologies resident. Copying a CUDA-primary graph to host per request
+would erase any small-batch benefit. Re-measure thresholds on the production
+GPU and workload rather than hard-coding this T4 result.
 
-The one-hop crossover is visible only after the request is sufficiently
-amortized:
+## Artifacts
 
-| Fanout     |  Batch |           CPU ms |           CUDA ms | CPU/CUDA x |     CPU/CUDA rows |
-| ---------- | -----: | ---------------: | ----------------: | ---------: | ----------------: |
-| `[16]`     |  4,096 |  30.158 / 34.150 |   42.820 / 43.905 |       0.70 |   53,852 / 53,852 |
-| `[16]`     |  8,192 | 39.260 / 123.045 |   38.291 / 54.013 |       1.03 | 107,642 / 107,642 |
-| `[16]`     | 16,384 |  50.179 / 52.325 |   49.782 / 51.692 |       1.01 | 216,056 / 216,056 |
-| `[16]`     | 32,768 | 87.906 / 162.082 |   66.547 / 70.046 |   **1.32** | 432,040 / 432,041 |
-| `[16, 16]` |  4,096 |  55.382 / 67.582 |  83.256 / 109.479 |       0.67 | 103,385 / 107,395 |
-| `[16, 16]` |  8,192 | 86.426 / 195.734 | 125.121 / 153.055 |       0.69 | 206,621 / 214,641 |
-
-At batch 32,768 the CUDA mode sustains 492,404 task rows/s versus 372,760 for
-the host mode. The 8,192 and 16,384-row median differences are within
-run-to-run spread; 32,768 is the first clear CUDA advantage in this dataset
-and environment.
-
-## CUDA time breakdown
-
-`neighbor sampling` excludes temporal top-k so components do not overlap.
-
-| Fanout / batch     |  Join | Neighbor sampling | Temporal top-k | Assembly | Sync/other |  Total |
-| ------------------ | ----: | ----------------: | -------------: | -------: | ---------: | -----: |
-| `[16]` / 1         | 8.035 |            13.723 |          0.746 |    1.129 |      0.436 | 24.101 |
-| `[16]` / 1,024     | 8.829 |            17.485 |          0.970 |    1.917 |      0.466 | 29.812 |
-| `[16, 16]` / 1,024 | 9.067 |            42.373 |          1.991 |    2.671 |      0.460 | 56.705 |
-| `[16]` / 32,768    | 8.901 |            49.055 |          5.981 |    2.022 |      0.469 | 66.547 |
-
-The persistent cuDF task-to-seed merge is about 8--9 ms across request sizes.
-For two hops, temporal neighbor sampling accounts for roughly three quarters
-of request time. Output assembly and synchronization residual are small.
-
-## Post-optimization result
-
-Commit `3ae4139` caches a sorted lookup for a table's single integer task key
-and resolves each later request with CUDA `searchsorted`. Composite, string,
-and mixed-dtype keys retain the cuDF merge fallback. The cache is built lazily
-during the benchmark warmups and reused; these remain steady-state serving
-measurements rather than first-request latency.
-
-The optimized run used the same T4, software environment, RelBench cache,
-task-row positions, seed, fanouts, three warmups, and ten repetitions. All
-invariants remained valid. The exhaustive batch-8 digest still matched the
-CPU result exactly with 143 rows and zero temporal cutoff violations.
-
-| Fanout     | Batch | CPU median ms | Baseline CUDA ms | Optimized CUDA ms | CPU/optimized x |
-| ---------- | ----: | ------------: | ---------------: | ----------------: | --------------: |
-| `[16]`     |     1 |        14.655 |           24.101 |            16.757 |            0.87 |
-| `[16]`     |   128 |        16.064 |           26.701 |            18.250 |            0.88 |
-| `[16]`     | 1,024 |        18.163 |           29.812 |            21.141 |            0.86 |
-| `[16]`     | 4,096 |        30.158 |           42.820 |            24.065 |        **1.25** |
-| `[16]`     | 8,192 |        39.260 |           38.291 |            28.955 |        **1.36** |
-| `[16, 16]` | 1,024 |        24.850 |           56.705 |            47.524 |            0.52 |
-| `[16, 16]` | 4,096 |        55.382 |           83.256 |            71.685 |            0.77 |
-| `[16, 16]` | 8,192 |        86.426 |          125.121 |           114.702 |            0.75 |
-
-The task lookup median fell from 8--9 ms to 0.44--0.55 ms, roughly a 94%
-reduction. At batch 1,024, one-hop total latency fell 29% and two-hop latency
-fell 16%. The clear one-hop crossover moved from batch 32,768 in the baseline
-to batch 4,096: the optimized CUDA path is 1.25x faster there and 1.36x faster
-at batch 8,192. Small one-hop requests are substantially closer but remain
-12--16% slower than the host path.
-
-Two-hop CUDA remains 29--91% slower across the measured sizes. Its batch-1,024
-profile spends 41.7 ms in neighbor sampling versus 0.52 ms in task lookup, so
-further lookup tuning cannot close that gap. The next useful optimization must
-reduce the temporal gather/materialization and the per-hop cuGraph dispatch
-cost.
-
-## Interpretation and follow-ups
-
-The cached lookup addresses the dominant fixed request overhead and makes CUDA
-advantageous for medium and large one-hop requests. The current T4
-implementation is still not a latency win for small batches or the two-hop
-temporal workload. The remaining profile supports these follow-ups:
-
-1. Fuse temporal sampling output handling with top-k selection to reduce the
-   repeated materialization and sort work per hop.
-2. Batch/fuse two-hop temporal C API dispatches and retain frontier metadata in
-   a compact device representation; the second dispatch dominates the
-   two-hop gap.
-3. Consider a size-aware policy that keeps small requests on the host path and
-   uses CUDA for one-hop batches at or above the measured crossover. Recheck
-   that threshold on the production GPU and workload rather than hard-coding
-   the T4 result.
+- `benchmarks/results/rel_arxiv_{cpu_pyg_lib,cuda_cugraph}_t4_final.json`:
+  final raw runs with all samples, fingerprints, and invariants.
+- `benchmarks/results/rel_arxiv_comparison_t4_final.json`: final request and
+  sampled-row throughput comparison.
+- `benchmarks/results/rel_arxiv_*_two_hop_exhaustive.json` and the matching
+  comparison: two-hop semantic parity evidence.
+- `benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_final_profile.html` and
+  `_trace.json`: self-contained aggregate phase profile and
+  Chrome-trace-compatible representation.
+- Files without `final` retain the pre-optimization baseline and scaling
+  probes that motivated the lookup change.
 
 ## Reproduction
 
-The full commands, row-selection hashes, environments, timing samples,
-invariants, and phase summaries are retained under `benchmarks/results/`.
-The primary raw files are:
-
-- `rel_arxiv_cpu_pyg_lib_t4.json`, `rel_arxiv_cuda_cugraph_t4.json`, and
-  `rel_arxiv_comparison_t4.json` for small requests and exhaustive parity.
-- `rel_arxiv_*_large.json` for batches 4,096 and 8,192.
-- `rel_arxiv_*_16384.json` and `rel_arxiv_*_32768.json` for crossover probes.
-- `rel_arxiv_cuda_cugraph_t4_optimized.json` and the two optimized comparison
-  files for the post-`3ae4139` matrix through batch 8,192.
-- `../../benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_timeline.html` and
-  `../../benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_trace.json` for the
-  baseline self-contained phase timeline and its compact
-  Chrome-trace-compatible data. The corresponding `_optimized` artifacts
-  contain the post-optimization profile.
-
-Host baseline setup:
+Host run:
 
 ```bash
-/home/ubuntu/work/kumo/venv/bin/python -m pip install \
-  pyg_lib -f https://data.pyg.org/whl/torch-2.12.0+cu130.html
-/home/ubuntu/work/kumo/venv/bin/python -m pip install relbench -e .
 RELBENCH_CACHE_DIR="$PWD/.cache/relbench" \
   /home/ubuntu/work/kumo/venv/bin/python \
   benchmarks/relational_sampler.py run --mode cpu \
   --dataset rel-arxiv --task paper-citation --split test \
-  --batch-size 1,128,1024 --fanout 16 --fanout 16,16 \
-  --include-exhaustive --parity-batch-size 8 --warmups 3 --repetitions 10 \
-  --seed 20260711 --output benchmarks/results/rel_arxiv_cpu_pyg_lib_t4.json
+  --batch-size 1,128,1024,4096,8192 \
+  --fanout 16 --fanout 16,16 --include-exhaustive \
+  --parity-batch-size 8 --warmups 3 --repetitions 10 --seed 20260711 \
+  --output benchmarks/results/rel_arxiv_cpu_pyg_lib_t4_final.json
 ```
 
-CUDA setup and primary run:
+CUDA run:
 
 ```bash
-chmod -R a+rX "$PWD/.cache/relbench"
-chmod a+rwX benchmarks/results benchmarks/artifacts
 docker run --rm --gpus all --entrypoint bash \
   -v "$PWD":/workspace/structured-data-models \
   -v "$PWD/.cache/relbench":/cache/relbench \
@@ -208,23 +194,25 @@ docker run --rm --gpus all --entrypoint bash \
       relbench==2.1.2 pooch duckdb datasets multiprocess dill xxhash \
       huggingface-hub
     export PYTHONPATH=/workspace/structured-data-models:$PIP_TARGET
-    RELBENCH_CACHE_DIR=/cache/relbench python benchmarks/relational_sampler.py \
-      run --mode cuda --dataset rel-arxiv --task paper-citation --split test \
-      --batch-size 1,128,1024 --fanout 16 --fanout 16,16 \
-      --include-exhaustive --parity-batch-size 8 --warmups 3 --repetitions 10 \
-      --seed 20260711 --output benchmarks/results/rel_arxiv_cuda_cugraph_t4.json \
-      --timeline-html benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_timeline.html \
-      --timeline-trace benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_trace.json'
-python benchmarks/relational_sampler.py compare \
-  --cpu benchmarks/results/rel_arxiv_cpu_pyg_lib_t4.json \
-  --cuda benchmarks/results/rel_arxiv_cuda_cugraph_t4.json \
-  --output benchmarks/results/rel_arxiv_comparison_t4.json
+    RELBENCH_CACHE_DIR=/cache/relbench \
+      python benchmarks/relational_sampler.py run --mode cuda \
+      --dataset rel-arxiv --task paper-citation --split test \
+      --batch-size 1,128,1024,4096,8192 \
+      --fanout 16 --fanout 16,16 --include-exhaustive \
+      --parity-batch-size 8 --warmups 3 --repetitions 10 --seed 20260711 \
+      --output benchmarks/results/rel_arxiv_cuda_cugraph_t4_final.json \
+      --timeline-html \
+        benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_final_profile.html \
+      --timeline-trace \
+        benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_final_profile_trace.json'
 ```
 
-Use the same commands with `--batch-size 4096,8192`, `16384`, or `32768`
-and the corresponding result names to reproduce the amortization probes.
-For the optimized matrix, run the CUDA command from `3ae4139` or later with
-`--batch-size 1,128,1024,4096,8192` and write the result and timeline names
-with the `_optimized` suffix. Compare that result once against the primary CPU
-file and once against the `large` CPU file to reproduce the checked-in
-optimized comparison JSON.
+Run each mode again with `--batch-size 8 --fanout=-1,-1` for two-hop parity,
+then compare:
+
+```bash
+python benchmarks/relational_sampler.py compare \
+  --cpu benchmarks/results/rel_arxiv_cpu_pyg_lib_t4_final.json \
+  --cuda benchmarks/results/rel_arxiv_cuda_cugraph_t4_final.json \
+  --output benchmarks/results/rel_arxiv_comparison_t4_final.json
+```

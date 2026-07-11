@@ -1,0 +1,479 @@
+{
+  "comparisons": [
+    {
+      "batch_size": 8,
+      "cpu_median_ms": 13.944253499999999,
+      "cpu_sampled_rows_median": 143.0,
+      "cpu_sampled_rows_per_second": 10255.120505375207,
+      "cuda_median_ms": 13.401505,
+      "cuda_profiled_median_ms": 13.6292475,
+      "cuda_profiled_minus_public_ms": 0.22774249999999974,
+      "cuda_sampled_row_throughput_ratio": 1.0404990708133153,
+      "cuda_sampled_rows_median": 143.0,
+      "cuda_sampled_rows_per_second": 10670.44335692148,
+      "cuda_speedup": 1.0404990708133153,
+      "cuda_task_to_device_ms_excluded": 0.374818,
+      "equal_sampled_row_count": true,
+      "exact_output_parity": true,
+      "fanout": [
+        -1
+      ],
+      "kind": "exhaustive_parity"
+    },
+    {
+      "batch_size": 1,
+      "cpu_median_ms": 15.992688000000001,
+      "cpu_sampled_rows_median": 3.0,
+      "cpu_sampled_rows_per_second": 187.58572667709143,
+      "cuda_median_ms": 14.724972,
+      "cuda_profiled_median_ms": 14.977655500000001,
+      "cuda_profiled_minus_public_ms": 0.2526835000000016,
+      "cuda_sampled_row_throughput_ratio": 1.0860929311104974,
+      "cuda_sampled_rows_median": 3.0,
+      "cuda_sampled_rows_per_second": 203.73553172121484,
+      "cuda_speedup": 1.0860929311104974,
+      "cuda_task_to_device_ms_excluded": 0.381316,
+      "equal_sampled_row_count": true,
+      "fanout": [
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 128,
+      "cpu_median_ms": 17.4998665,
+      "cpu_sampled_rows_median": 1662.0,
+      "cpu_sampled_rows_per_second": 94972.15307328202,
+      "cuda_median_ms": 16.1331685,
+      "cuda_profiled_median_ms": 16.1957235,
+      "cuda_profiled_minus_public_ms": 0.0625549999999997,
+      "cuda_sampled_row_throughput_ratio": 1.0847135514638677,
+      "cuda_sampled_rows_median": 1662.0,
+      "cuda_sampled_rows_per_second": 103017.58145028981,
+      "cuda_speedup": 1.0847135514638677,
+      "cuda_task_to_device_ms_excluded": 0.3762,
+      "equal_sampled_row_count": true,
+      "fanout": [
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 1024,
+      "cpu_median_ms": 19.301419000000003,
+      "cpu_sampled_rows_median": 14049.0,
+      "cpu_sampled_rows_per_second": 727873.9454337527,
+      "cuda_median_ms": 18.247204500000002,
+      "cuda_profiled_median_ms": 20.585156,
+      "cuda_profiled_minus_public_ms": 2.337951499999999,
+      "cuda_sampled_row_throughput_ratio": 1.0577740277969703,
+      "cuda_sampled_rows_median": 14049.0,
+      "cuda_sampled_rows_per_second": 769926.1549899328,
+      "cuda_speedup": 1.0577740277969703,
+      "cuda_task_to_device_ms_excluded": 0.393871,
+      "equal_sampled_row_count": true,
+      "fanout": [
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 4096,
+      "cpu_median_ms": 24.794656,
+      "cpu_sampled_rows_median": 53852.0,
+      "cpu_sampled_rows_per_second": 2171919.626551786,
+      "cuda_median_ms": 21.603437999999997,
+      "cuda_profiled_median_ms": 23.1096165,
+      "cuda_profiled_minus_public_ms": 1.5061785000000043,
+      "cuda_sampled_row_throughput_ratio": 1.147718062282494,
+      "cuda_sampled_rows_median": 53852.0,
+      "cuda_sampled_rows_per_second": 2492751.3852193346,
+      "cuda_speedup": 1.1477180622824943,
+      "cuda_task_to_device_ms_excluded": 0.478876,
+      "equal_sampled_row_count": true,
+      "fanout": [
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 8192,
+      "cpu_median_ms": 41.302417500000004,
+      "cpu_sampled_rows_median": 107642.0,
+      "cpu_sampled_rows_per_second": 2606191.2719757864,
+      "cuda_median_ms": 26.188493,
+      "cuda_profiled_median_ms": 28.013916000000002,
+      "cuda_profiled_minus_public_ms": 1.8254230000000007,
+      "cuda_sampled_row_throughput_ratio": 1.57712081791037,
+      "cuda_sampled_rows_median": 107642.0,
+      "cuda_sampled_rows_per_second": 4110278.5104893204,
+      "cuda_speedup": 1.5771208179103702,
+      "cuda_task_to_device_ms_excluded": 0.497963,
+      "equal_sampled_row_count": true,
+      "fanout": [
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 1,
+      "cpu_median_ms": 18.3388305,
+      "cpu_sampled_rows_median": 5.0,
+      "cpu_sampled_rows_per_second": 272.6455212070366,
+      "cuda_median_ms": 27.235341,
+      "cuda_profiled_median_ms": 27.224187,
+      "cuda_profiled_minus_public_ms": -0.011153999999997666,
+      "cuda_sampled_row_throughput_ratio": 0.6733468290336442,
+      "cuda_sampled_rows_median": 5.0,
+      "cuda_sampled_rows_per_second": 183.5849971549833,
+      "cuda_speedup": 0.6733468290336443,
+      "cuda_task_to_device_ms_excluded": 0.399942,
+      "equal_sampled_row_count": true,
+      "fanout": [
+        16,
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 128,
+      "cpu_median_ms": 18.828587,
+      "cpu_sampled_rows_median": 3187.0,
+      "cpu_sampled_rows_per_second": 169263.89643577609,
+      "cuda_median_ms": 30.65495,
+      "cuda_profiled_median_ms": 31.1428185,
+      "cuda_profiled_minus_public_ms": 0.48786850000000115,
+      "cuda_sampled_row_throughput_ratio": 0.6363735533225418,
+      "cuda_sampled_rows_median": 3302.0,
+      "cuda_sampled_rows_per_second": 107715.06722405354,
+      "cuda_speedup": 0.6142103314472867,
+      "cuda_task_to_device_ms_excluded": 0.436653,
+      "equal_sampled_row_count": false,
+      "fanout": [
+        16,
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 1024,
+      "cpu_median_ms": 29.0850535,
+      "cpu_sampled_rows_median": 27017.0,
+      "cpu_sampled_rows_per_second": 928896.348772403,
+      "cuda_median_ms": 44.0226335,
+      "cuda_profiled_median_ms": 43.066631,
+      "cuda_profiled_minus_public_ms": -0.9560024999999968,
+      "cuda_sampled_row_throughput_ratio": 0.6852851989528422,
+      "cuda_sampled_rows_median": 28023.0,
+      "cuda_sampled_rows_per_second": 636558.9191750649,
+      "cuda_speedup": 0.6606840887881004,
+      "cuda_task_to_device_ms_excluded": 0.445986,
+      "equal_sampled_row_count": false,
+      "fanout": [
+        16,
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 4096,
+      "cpu_median_ms": 52.94099,
+      "cpu_sampled_rows_median": 103385.0,
+      "cpu_sampled_rows_per_second": 1952834.6560953998,
+      "cuda_median_ms": 67.609656,
+      "cuda_profiled_median_ms": 68.15409650000001,
+      "cuda_profiled_minus_public_ms": 0.5444405000000074,
+      "cuda_sampled_row_throughput_ratio": 0.8134106651000726,
+      "cuda_sampled_rows_median": 107395.0,
+      "cuda_sampled_rows_per_second": 1588456.536445031,
+      "cuda_speedup": 0.7830388901845617,
+      "cuda_task_to_device_ms_excluded": 0.42074,
+      "equal_sampled_row_count": false,
+      "fanout": [
+        16,
+        16
+      ],
+      "kind": "finite_stochastic"
+    },
+    {
+      "batch_size": 8192,
+      "cpu_median_ms": 72.821556,
+      "cpu_sampled_rows_median": 206621.0,
+      "cpu_sampled_rows_per_second": 2837360.410151082,
+      "cuda_median_ms": 110.79262299999999,
+      "cuda_profiled_median_ms": 111.44543250000001,
+      "cuda_profiled_minus_public_ms": 0.6528095000000178,
+      "cuda_sampled_row_throughput_ratio": 0.6827902862291729,
+      "cuda_sampled_rows_median": 214641.0,
+      "cuda_sampled_rows_per_second": 1937322.126582381,
+      "cuda_speedup": 0.6572780211187889,
+      "cuda_task_to_device_ms_excluded": 0.466871,
+      "equal_sampled_row_count": false,
+      "fanout": [
+        16,
+        16
+      ],
+      "kind": "finite_stochastic"
+    }
+  ],
+  "cpu": {
+    "environment": {
+      "cpu": {
+        "architecture": "x86_64",
+        "cores_per_socket": "16",
+        "logical_cpu_count": 32,
+        "model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
+        "sockets": "1",
+        "threads_per_core": "2",
+        "torch_num_interop_threads": 16,
+        "torch_num_threads": 16
+      },
+      "gpu": {
+        "capability": [
+          7,
+          5
+        ],
+        "name": "Tesla T4",
+        "total_memory_bytes": 15636037632
+      },
+      "nvidia_driver": "580.159.03",
+      "versions": {
+        "cudf": "26.02.01",
+        "cupy": "14.1.1",
+        "numpy": "2.2.6",
+        "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.35",
+        "pyarrow": "24.0.0",
+        "pyg_lib": "0.7.0+pt212cu130",
+        "pylibcugraph": "not_installed",
+        "python": "3.10.12",
+        "relbench": "2.1.2",
+        "torch": "2.12.1+cu130",
+        "torch_cuda": "13.0"
+      }
+    },
+    "initialization": {
+      "data_to_cuda_ms_excluded_from_init": null,
+      "sampler_topology_build_ms": 408.599732
+    }
+  },
+  "created_at_utc": "2026-07-11T01:59:08.768654+00:00",
+  "cuda": {
+    "environment": {
+      "cpu": {
+        "architecture": "x86_64",
+        "cores_per_socket": "16",
+        "logical_cpu_count": 32,
+        "model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
+        "sockets": "1",
+        "threads_per_core": "2",
+        "torch_num_interop_threads": 16,
+        "torch_num_threads": 16
+      },
+      "gpu": {
+        "capability": [
+          7,
+          5
+        ],
+        "name": "Tesla T4",
+        "total_memory_bytes": 15636037632
+      },
+      "nvidia_driver": "580.159.03",
+      "versions": {
+        "cudf": "26.08.00a882",
+        "cupy": "14.1.1",
+        "numpy": "2.4.6",
+        "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.39",
+        "pyarrow": "24.0.0",
+        "pyg_lib": "not_installed",
+        "pylibcugraph": "26.08.00a39",
+        "python": "3.11.15",
+        "relbench": "2.1.2",
+        "torch": "2.14.0.dev20260710+cu130",
+        "torch_cuda": "13.0"
+      }
+    },
+    "initialization": {
+      "data_to_cuda_ms_excluded_from_init": 86.829421,
+      "sampler_topology_build_ms": 867.425806
+    }
+  },
+  "exhaustive_parity_checked": true,
+  "exhaustive_parity_failures": [],
+  "exhaustive_parity_passed": true,
+  "random_state": 20260711,
+  "schema_version": 1,
+  "workload": {
+    "dataset": "rel-arxiv",
+    "relationships": [
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "References_Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Author_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Author_ID"
+        ],
+        "right_table": "authors"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Category_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Category_ID"
+        ],
+        "right_table": "categories"
+      }
+    ],
+    "relbench_version": "unknown",
+    "split": "test",
+    "tables": [
+      {
+        "columns": [
+          "Paper_ID",
+          "arXiv_Code",
+          "Title",
+          "Abstract",
+          "Submission_Date",
+          "DOI",
+          "Primary_Category_ID"
+        ],
+        "identity_columns": [
+          "Paper_ID"
+        ],
+        "name": "papers",
+        "rows": 222769,
+        "sampling_data_sha256": "40cb74a5a99d90b2642c06c3efd8d131f63219cc878c3ab966c703641f2307e5",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "References_Paper_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "References_Paper_ID"
+        ],
+        "name": "citations",
+        "rows": 1595687,
+        "sampling_data_sha256": "25c5a80e96b6f2b9c7a24ea69836de628a4c3fd5db13fa0f9fe8c23a360d9d62",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Author_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Author_ID"
+        ],
+        "name": "paperAuthors",
+        "rows": 616585,
+        "sampling_data_sha256": "378703ccfa632083101d7b8d72afaaebb52c3dd1758d7e5688d8361925d04246",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Category_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Category_ID"
+        ],
+        "name": "paperCategories",
+        "rows": 155061,
+        "sampling_data_sha256": "c2b9aa9e74c8f310fee505ffd55dfd970254b01e37ae74e45c955e6b9b06e8cb",
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Author_ID",
+          "Name",
+          "ORCID"
+        ],
+        "identity_columns": [
+          "Author_ID"
+        ],
+        "name": "authors",
+        "rows": 143691,
+        "sampling_data_sha256": "ae1c991aa660ea856227da2d39bc6c46cfe4d044ca5bfa4dd131eb3dae398d5b",
+        "time_column": null
+      },
+      {
+        "columns": [
+          "Category_ID",
+          "Category"
+        ],
+        "identity_columns": [
+          "Category_ID"
+        ],
+        "name": "categories",
+        "rows": 53,
+        "sampling_data_sha256": "a151a1d461bf59ec269399007a525fab74bfb3152f33dd19925735aefcec272e",
+        "time_column": null
+      }
+    ],
+    "task": "paper-citation",
+    "task_link": {
+      "table": "papers",
+      "table_column": "Paper_ID",
+      "task_column": "Paper_ID"
+    },
+    "task_rows": 193696,
+    "task_sampling_data_sha256": "027838a9291c784ca4ae5bb9a96a4240c85a69a85c2b06588ee131302fdce3c7",
+    "task_time_column": "date",
+    "time_columns": {
+      "citations": "Submission_Date",
+      "paperAuthors": "Submission_Date",
+      "paperCategories": "Submission_Date",
+      "papers": "Submission_Date"
+    }
+  }
+}

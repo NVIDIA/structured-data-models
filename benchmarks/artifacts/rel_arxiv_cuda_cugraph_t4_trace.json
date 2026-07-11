@@ -6,120 +6,95 @@
       "runs": [
         {
           "label": "fanout=[16], batch=1",
-          "latency_ms": 24.101243,
           "phases_ms": {
             "neighbor_sampling_ms": 13.723247796297073,
             "output_assembly_ms": 1.128719985485077,
             "synchronization_other_ms": 0.4356676504173276,
             "task_to_seed_join_ms": 8.035151958465576,
             "temporal_top_k_ms": 0.7459520101547241
-          }
+          },
+          "profiled_latency_ms": 24.101243,
+          "public_latency_ms": 24.101243
         },
         {
           "label": "fanout=[16], batch=128",
-          "latency_ms": 26.7005445,
           "phases_ms": {
             "neighbor_sampling_ms": 14.899344027042389,
             "output_assembly_ms": 1.8905760049819946,
             "synchronization_other_ms": 0.4477353399353028,
             "task_to_seed_join_ms": 8.689695835113525,
             "temporal_top_k_ms": 0.7529440224170685
-          }
+          },
+          "profiled_latency_ms": 26.7005445,
+          "public_latency_ms": 26.7005445
         },
         {
           "label": "fanout=[16], batch=1024",
-          "latency_ms": 29.811778,
           "phases_ms": {
             "neighbor_sampling_ms": 17.48504000902176,
             "output_assembly_ms": 1.91702401638031,
             "synchronization_other_ms": 0.46604030535888796,
             "task_to_seed_join_ms": 8.829376220703125,
             "temporal_top_k_ms": 0.9696159958839417
-          }
+          },
+          "profiled_latency_ms": 29.811778,
+          "public_latency_ms": 29.811778
         },
         {
           "label": "fanout=[16, 16], batch=1",
-          "latency_ms": 45.1851225,
           "phases_ms": {
             "neighbor_sampling_ms": 30.63030433654785,
             "output_assembly_ms": 1.2165120244026184,
             "synchronization_other_ms": 0.475115469764706,
             "task_to_seed_join_ms": 9.024864196777344,
             "temporal_top_k_ms": 1.7230879962444305
-          }
+          },
+          "profiled_latency_ms": 45.1851225,
+          "public_latency_ms": 45.1851225
         },
         {
           "label": "fanout=[16, 16], batch=128",
-          "latency_ms": 42.527463,
           "phases_ms": {
             "neighbor_sampling_ms": 29.138399958610535,
             "output_assembly_ms": 2.6663520336151123,
             "synchronization_other_ms": 0.47305105020141625,
             "task_to_seed_join_ms": 8.731856346130371,
             "temporal_top_k_ms": 1.5255520343780518
-          }
+          },
+          "profiled_latency_ms": 42.527463,
+          "public_latency_ms": 42.527463
         },
         {
           "label": "fanout=[16, 16], batch=1024",
-          "latency_ms": 56.7050205,
           "phases_ms": {
             "neighbor_sampling_ms": 42.37334340810776,
             "output_assembly_ms": 2.6713759899139404,
             "synchronization_other_ms": 0.4596772733230594,
             "task_to_seed_join_ms": 9.066847801208496,
             "temporal_top_k_ms": 1.9906080067157745
-          }
+          },
+          "profiled_latency_ms": 56.7050205,
+          "public_latency_ms": 56.7050205
         },
         {
           "label": "fanout=[-1], batch=8",
-          "latency_ms": 22.946966500000002,
           "phases_ms": {
             "neighbor_sampling_ms": 12.253119945526123,
             "output_assembly_ms": 1.9243680238723755,
             "synchronization_other_ms": 0.4761309503593445,
             "task_to_seed_join_ms": 8.227888107299805
-          }
+          },
+          "profiled_latency_ms": 22.946966500000002,
+          "public_latency_ms": 22.946966500000002
         }
       ]
     },
-    "source": "CUDA event spans plus synchronized wall-clock residual"
+    "source": "Synthetic aggregate of independent phase medians in data-flow order; not one request execution timeline"
   },
   "traceEvents": [
     {
       "args": {
-        "request": "fanout=[16], batch=1"
-      },
-      "dur": 13723.247796297073,
-      "name": "neighbor_sampling_ms",
-      "ph": "X",
-      "pid": 0,
-      "tid": 0,
-      "ts": 0.0
-    },
-    {
-      "args": {
-        "request": "fanout=[16], batch=1"
-      },
-      "dur": 1128.719985485077,
-      "name": "output_assembly_ms",
-      "ph": "X",
-      "pid": 0,
-      "tid": 0,
-      "ts": 13723.247796297073
-    },
-    {
-      "args": {
-        "request": "fanout=[16], batch=1"
-      },
-      "dur": 435.6676504173276,
-      "name": "synchronization_other_ms",
-      "ph": "X",
-      "pid": 0,
-      "tid": 0,
-      "ts": 14851.96778178215
-    },
-    {
-      "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1"
       },
       "dur": 8035.151958465576,
@@ -127,10 +102,23 @@
       "ph": "X",
       "pid": 0,
       "tid": 0,
-      "ts": 15287.635432199479
+      "ts": 0.0
     },
     {
       "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=1"
+      },
+      "dur": 13723.247796297073,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 0,
+      "tid": 0,
+      "ts": 8035.151958465576
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1"
       },
       "dur": 745.9520101547241,
@@ -138,43 +126,35 @@
       "ph": "X",
       "pid": 0,
       "tid": 0,
-      "ts": 23322.787390665057
+      "ts": 21758.39975476265
     },
     {
       "args": {
-        "request": "fanout=[16], batch=128"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=1"
       },
-      "dur": 14899.344027042389,
-      "name": "neighbor_sampling_ms",
-      "ph": "X",
-      "pid": 1,
-      "tid": 0,
-      "ts": 0.0
-    },
-    {
-      "args": {
-        "request": "fanout=[16], batch=128"
-      },
-      "dur": 1890.5760049819946,
+      "dur": 1128.719985485077,
       "name": "output_assembly_ms",
       "ph": "X",
-      "pid": 1,
+      "pid": 0,
       "tid": 0,
-      "ts": 14899.344027042389
+      "ts": 22504.351764917374
     },
     {
       "args": {
-        "request": "fanout=[16], batch=128"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=1"
       },
-      "dur": 447.7353399353028,
+      "dur": 435.6676504173276,
       "name": "synchronization_other_ms",
       "ph": "X",
-      "pid": 1,
+      "pid": 0,
       "tid": 0,
-      "ts": 16789.920032024384
+      "ts": 23633.07175040245
     },
     {
       "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16], batch=128"
       },
       "dur": 8689.695835113525,
@@ -182,10 +162,23 @@
       "ph": "X",
       "pid": 1,
       "tid": 0,
-      "ts": 17237.655371959685
+      "ts": 0.0
     },
     {
       "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=128"
+      },
+      "dur": 14899.344027042389,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 1,
+      "tid": 0,
+      "ts": 8689.695835113525
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16], batch=128"
       },
       "dur": 752.9440224170685,
@@ -193,43 +186,35 @@
       "ph": "X",
       "pid": 1,
       "tid": 0,
-      "ts": 25927.35120707321
+      "ts": 23589.039862155914
     },
     {
       "args": {
-        "request": "fanout=[16], batch=1024"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=128"
       },
-      "dur": 17485.04000902176,
-      "name": "neighbor_sampling_ms",
-      "ph": "X",
-      "pid": 2,
-      "tid": 0,
-      "ts": 0.0
-    },
-    {
-      "args": {
-        "request": "fanout=[16], batch=1024"
-      },
-      "dur": 1917.02401638031,
+      "dur": 1890.5760049819946,
       "name": "output_assembly_ms",
       "ph": "X",
-      "pid": 2,
+      "pid": 1,
       "tid": 0,
-      "ts": 17485.04000902176
+      "ts": 24341.983884572983
     },
     {
       "args": {
-        "request": "fanout=[16], batch=1024"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=128"
       },
-      "dur": 466.04030535888796,
+      "dur": 447.7353399353028,
       "name": "synchronization_other_ms",
       "ph": "X",
-      "pid": 2,
+      "pid": 1,
       "tid": 0,
-      "ts": 19402.06402540207
+      "ts": 26232.559889554977
     },
     {
       "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1024"
       },
       "dur": 8829.376220703125,
@@ -237,10 +222,23 @@
       "ph": "X",
       "pid": 2,
       "tid": 0,
-      "ts": 19868.104330760958
+      "ts": 0.0
     },
     {
       "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=1024"
+      },
+      "dur": 17485.04000902176,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 2,
+      "tid": 0,
+      "ts": 8829.376220703125
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1024"
       },
       "dur": 969.6159958839417,
@@ -248,43 +246,35 @@
       "ph": "X",
       "pid": 2,
       "tid": 0,
-      "ts": 28697.480551464083
+      "ts": 26314.416229724884
     },
     {
       "args": {
-        "request": "fanout=[16, 16], batch=1"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=1024"
       },
-      "dur": 30630.30433654785,
-      "name": "neighbor_sampling_ms",
-      "ph": "X",
-      "pid": 3,
-      "tid": 0,
-      "ts": 0.0
-    },
-    {
-      "args": {
-        "request": "fanout=[16, 16], batch=1"
-      },
-      "dur": 1216.5120244026184,
+      "dur": 1917.02401638031,
       "name": "output_assembly_ms",
       "ph": "X",
-      "pid": 3,
+      "pid": 2,
       "tid": 0,
-      "ts": 30630.30433654785
+      "ts": 27284.032225608826
     },
     {
       "args": {
-        "request": "fanout=[16, 16], batch=1"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16], batch=1024"
       },
-      "dur": 475.11546976470595,
+      "dur": 466.04030535888796,
       "name": "synchronization_other_ms",
       "ph": "X",
-      "pid": 3,
+      "pid": 2,
       "tid": 0,
-      "ts": 31846.81636095047
+      "ts": 29201.056241989136
     },
     {
       "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1"
       },
       "dur": 9024.864196777344,
@@ -292,10 +282,23 @@
       "ph": "X",
       "pid": 3,
       "tid": 0,
-      "ts": 32321.931830715177
+      "ts": 0.0
     },
     {
       "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=1"
+      },
+      "dur": 30630.30433654785,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 3,
+      "tid": 0,
+      "ts": 9024.864196777344
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1"
       },
       "dur": 1723.0879962444305,
@@ -303,43 +306,35 @@
       "ph": "X",
       "pid": 3,
       "tid": 0,
-      "ts": 41346.79602749252
+      "ts": 39655.168533325195
     },
     {
       "args": {
-        "request": "fanout=[16, 16], batch=128"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=1"
       },
-      "dur": 29138.399958610535,
-      "name": "neighbor_sampling_ms",
-      "ph": "X",
-      "pid": 4,
-      "tid": 0,
-      "ts": 0.0
-    },
-    {
-      "args": {
-        "request": "fanout=[16, 16], batch=128"
-      },
-      "dur": 2666.3520336151123,
+      "dur": 1216.5120244026184,
       "name": "output_assembly_ms",
       "ph": "X",
-      "pid": 4,
+      "pid": 3,
       "tid": 0,
-      "ts": 29138.399958610535
+      "ts": 41378.256529569626
     },
     {
       "args": {
-        "request": "fanout=[16, 16], batch=128"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=1"
       },
-      "dur": 473.0510502014163,
+      "dur": 475.11546976470595,
       "name": "synchronization_other_ms",
       "ph": "X",
-      "pid": 4,
+      "pid": 3,
       "tid": 0,
-      "ts": 31804.751992225647
+      "ts": 42594.768553972244
     },
     {
       "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=128"
       },
       "dur": 8731.856346130371,
@@ -347,10 +342,23 @@
       "ph": "X",
       "pid": 4,
       "tid": 0,
-      "ts": 32277.803042427062
+      "ts": 0.0
     },
     {
       "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=128"
+      },
+      "dur": 29138.399958610535,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 4,
+      "tid": 0,
+      "ts": 8731.856346130371
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=128"
       },
       "dur": 1525.5520343780518,
@@ -358,43 +366,35 @@
       "ph": "X",
       "pid": 4,
       "tid": 0,
-      "ts": 41009.65938855743
+      "ts": 37870.256304740906
     },
     {
       "args": {
-        "request": "fanout=[16, 16], batch=1024"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=128"
       },
-      "dur": 42373.34340810776,
-      "name": "neighbor_sampling_ms",
-      "ph": "X",
-      "pid": 5,
-      "tid": 0,
-      "ts": 0.0
-    },
-    {
-      "args": {
-        "request": "fanout=[16, 16], batch=1024"
-      },
-      "dur": 2671.3759899139404,
+      "dur": 2666.3520336151123,
       "name": "output_assembly_ms",
       "ph": "X",
-      "pid": 5,
+      "pid": 4,
       "tid": 0,
-      "ts": 42373.34340810776
+      "ts": 39395.80833911896
     },
     {
       "args": {
-        "request": "fanout=[16, 16], batch=1024"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=128"
       },
-      "dur": 459.6772733230594,
+      "dur": 473.0510502014163,
       "name": "synchronization_other_ms",
       "ph": "X",
-      "pid": 5,
+      "pid": 4,
       "tid": 0,
-      "ts": 45044.7193980217
+      "ts": 42062.16037273407
     },
     {
       "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1024"
       },
       "dur": 9066.847801208496,
@@ -402,10 +402,23 @@
       "ph": "X",
       "pid": 5,
       "tid": 0,
-      "ts": 45504.39667134476
+      "ts": 0.0
     },
     {
       "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=1024"
+      },
+      "dur": 42373.34340810776,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 5,
+      "tid": 0,
+      "ts": 9066.847801208496
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1024"
       },
       "dur": 1990.6080067157745,
@@ -413,43 +426,35 @@
       "ph": "X",
       "pid": 5,
       "tid": 0,
-      "ts": 54571.244472553255
+      "ts": 51440.191209316254
     },
     {
       "args": {
-        "request": "fanout=[-1], batch=8"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=1024"
       },
-      "dur": 12253.119945526123,
-      "name": "neighbor_sampling_ms",
-      "ph": "X",
-      "pid": 6,
-      "tid": 0,
-      "ts": 0.0
-    },
-    {
-      "args": {
-        "request": "fanout=[-1], batch=8"
-      },
-      "dur": 1924.3680238723755,
+      "dur": 2671.3759899139404,
       "name": "output_assembly_ms",
       "ph": "X",
-      "pid": 6,
+      "pid": 5,
       "tid": 0,
-      "ts": 12253.119945526123
+      "ts": 53430.79921603203
     },
     {
       "args": {
-        "request": "fanout=[-1], batch=8"
+        "aggregation": "independent phase median",
+        "request": "fanout=[16, 16], batch=1024"
       },
-      "dur": 476.1309503593445,
+      "dur": 459.6772733230594,
       "name": "synchronization_other_ms",
       "ph": "X",
-      "pid": 6,
+      "pid": 5,
       "tid": 0,
-      "ts": 14177.487969398499
+      "ts": 56102.17520594597
     },
     {
       "args": {
+        "aggregation": "independent phase median",
         "request": "fanout=[-1], batch=8"
       },
       "dur": 8227.888107299805,
@@ -457,7 +462,43 @@
       "ph": "X",
       "pid": 6,
       "tid": 0,
-      "ts": 14653.618919757842
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[-1], batch=8"
+      },
+      "dur": 12253.119945526123,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 6,
+      "tid": 0,
+      "ts": 8227.888107299805
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[-1], batch=8"
+      },
+      "dur": 1924.3680238723755,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 6,
+      "tid": 0,
+      "ts": 20481.008052825928
+    },
+    {
+      "args": {
+        "aggregation": "independent phase median",
+        "request": "fanout=[-1], batch=8"
+      },
+      "dur": 476.1309503593445,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 6,
+      "tid": 0,
+      "ts": 22405.376076698303
     }
   ]
 }

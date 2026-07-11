@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8">
+<title>Relational sampler aggregate phase profile</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 24px; color: #18202a; }
+.run { margin: 20px 0 30px; } .bar { display: flex; height: 34px; }
+.phase { min-width: 1px; box-sizing: border-box; border-right: 1px solid #fff;
+  padding: 9px 4px; overflow: hidden; white-space: nowrap; font-size: 12px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+.swatch { display: inline-block; width: 12px; height: 12px;
+  margin-right: 4px; }
+</style><body><h1>CUDA relational sampler aggregate phase profile</h1>
+<p>Each segment is an independently computed median, arranged in data-flow
+order. This is a flamegraph-like latency breakdown, not a single-request
+execution timeline. Synchronization/other is the synchronized wall-clock
+residual from the profiled call.</p><div id="root"></div>
+<script>const payload = {"mode": "cuda", "runs": [{"label": "fanout=[16], batch=1", "public_latency_ms": 14.724972, "profiled_latency_ms": 14.977655500000001, "phases_ms": {"task_to_seed_join_ms": 0.2783679962158203, "neighbor_sampling_ms": 12.647696405649185, "temporal_top_k_ms": 0.6913920044898987, "output_assembly_ms": 1.042896032333374, "synchronization_other_ms": 0.3039910556621548}}, {"label": "fanout=[16], batch=128", "public_latency_ms": 16.1331685, "profiled_latency_ms": 16.1957235, "phases_ms": {"task_to_seed_join_ms": 0.27427199482917786, "neighbor_sampling_ms": 13.216448187828064, "temporal_top_k_ms": 0.6759519875049591, "output_assembly_ms": 1.7234400510787964, "synchronization_other_ms": 0.29519492987537355}}, {"label": "fanout=[16], batch=1024", "public_latency_ms": 18.247204500000002, "profiled_latency_ms": 20.585156, "phases_ms": {"task_to_seed_join_ms": 0.319472000002861, "neighbor_sampling_ms": 16.635328203439713, "temporal_top_k_ms": 1.0784319639205933, "output_assembly_ms": 2.167472004890442, "synchronization_other_ms": 0.3729040851717009}}, {"label": "fanout=[16], batch=4096", "public_latency_ms": 21.603437999999997, "profiled_latency_ms": 23.1096165, "phases_ms": {"task_to_seed_join_ms": 0.33164799213409424, "neighbor_sampling_ms": 19.083983421325684, "temporal_top_k_ms": 1.1202239990234375, "output_assembly_ms": 2.0728800296783447, "synchronization_other_ms": 0.36862582755374973}}, {"label": "fanout=[16], batch=8192", "public_latency_ms": 26.188493, "profiled_latency_ms": 28.013916000000002, "phases_ms": {"task_to_seed_join_ms": 0.31281599402427673, "neighbor_sampling_ms": 23.767568588256836, "temporal_top_k_ms": 1.5545920133590698, "output_assembly_ms": 1.96971195936203, "synchronization_other_ms": 0.36397724348259075}}, {"label": "fanout=[16, 16], batch=1", "public_latency_ms": 27.235341, "profiled_latency_ms": 27.224187, "phases_ms": {"task_to_seed_join_ms": 0.29227200150489807, "neighbor_sampling_ms": 24.184927344322205, "temporal_top_k_ms": 1.3669599890708923, "output_assembly_ms": 1.0827839970588684, "synchronization_other_ms": 0.30733736995220085}}, {"label": "fanout=[16, 16], batch=128", "public_latency_ms": 30.65495, "profiled_latency_ms": 31.1428185, "phases_ms": {"task_to_seed_join_ms": 0.29492799937725067, "neighbor_sampling_ms": 26.67924788594246, "temporal_top_k_ms": 1.3840160071849823, "output_assembly_ms": 2.4901280403137207, "synchronization_other_ms": 0.3184357407875087}}, {"label": "fanout=[16, 16], batch=1024", "public_latency_ms": 44.0226335, "profiled_latency_ms": 43.066631, "phases_ms": {"task_to_seed_join_ms": 0.29923200607299805, "neighbor_sampling_ms": 38.20358419418335, "temporal_top_k_ms": 1.7794079780578613, "output_assembly_ms": 2.4605120420455933, "synchronization_other_ms": 0.31413645928287437}}, {"label": "fanout=[16, 16], batch=4096", "public_latency_ms": 67.609656, "profiled_latency_ms": 68.15409650000001, "phases_ms": {"task_to_seed_join_ms": 0.3056959956884384, "neighbor_sampling_ms": 62.682399690151215, "temporal_top_k_ms": 2.3209919929504395, "output_assembly_ms": 2.5173280239105225, "synchronization_other_ms": 0.32616299927520487}}, {"label": "fanout=[16, 16], batch=8192", "public_latency_ms": 110.79262299999999, "profiled_latency_ms": 111.44543250000001, "phases_ms": {"task_to_seed_join_ms": 0.3209120035171509, "neighbor_sampling_ms": 104.65947550535202, "temporal_top_k_ms": 3.540783941745758, "output_assembly_ms": 2.6013599634170532, "synchronization_other_ms": 0.33367940040684374}}, {"label": "fanout=[-1], batch=8", "public_latency_ms": 13.401505, "profiled_latency_ms": 13.6292475, "phases_ms": {"task_to_seed_join_ms": 0.2760639935731888, "neighbor_sampling_ms": 11.28556776046753, "output_assembly_ms": 1.7687039971351624, "synchronization_other_ms": 0.30986991380786844}}]};
+const colors = ['#1677b8','#24a37b','#df8b27','#9a5fb4','#607d8b'];
+const root = document.getElementById('root');
+payload.runs.forEach((run) => {
+  const total = Object.values(run.phases_ms).reduce((a, b) => a + b, 0);
+  const item = document.createElement('section'); item.className = 'run';
+  const publicLatency = run.public_latency_ms.toFixed(3);
+  const profiledLatency = run.profiled_latency_ms.toFixed(3);
+  item.innerHTML = `<h2>${run.label}</h2>`
+    + `<p>Public sampler median: ${publicLatency} ms; `
+    + `profiled-call median: ${profiledLatency} ms; `
+    + `sum of phase medians: ${total.toFixed(3)} ms</p>`;
+  const bar = document.createElement('div'); bar.className = 'bar';
+  const legend = document.createElement('div'); legend.className = 'legend';
+  Object.entries(run.phases_ms).forEach(([name, ms], index) => {
+    const color = colors[index % colors.length];
+    const width = 100 * ms / total;
+    const part = document.createElement('div'); part.className = 'phase';
+    part.style.width = `${width}%`; part.style.background = color;
+    part.title = `${name}: ${ms.toFixed(3)} ms`;
+    part.textContent = `${name}`;
+    bar.appendChild(part);
+    const key = document.createElement('span');
+    key.innerHTML = `<i class="swatch" style="background:${color}"></i>`
+      + `${name}: ${ms.toFixed(3)} ms`;
+    legend.appendChild(key);
+  }); item.append(bar, legend); root.appendChild(item);
+});</script></body></html>
