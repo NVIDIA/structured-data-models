@@ -110,6 +110,52 @@ def test_from_tensor() -> None:
     }
 
 
+def test_inference_mode() -> None:
+    def make_table() -> TableTensor:
+        return TableTensor(
+            columns={
+                "numerical": ["value"],
+                "categorical": ["kind"],
+                "id": ["name"],
+            },
+            numerical=torch.randn(3, 1),
+            categorical=CategoricalTensor(
+                data=torch.arange(3, dtype=torch.int32).unsqueeze(-1),
+                categories=(StringTensor.from_list(["a", "b", "c"]),),
+            ),
+            id=ColumnarTensor((StringTensor.from_list(["x", "y", "z"]),)),
+        )
+
+    table = make_table()
+    with torch.inference_mode():
+        view = table[:2]
+
+    assert not torch.is_inference(view)
+    assert not torch.is_inference(view.categorical)
+    assert not torch.is_inference(view.id)
+    assert not torch.is_inference(view.id._columns[0])
+
+    # Like PyTorch's NestedTensor, direct construction follows the active mode
+    # while views preserve the inference state of their outer input.
+    with torch.inference_mode():
+        table = table.replace_blocks()
+    assert torch.is_inference(table)
+    assert not torch.is_inference(table.numerical)
+
+    view = table[:2]
+    assert torch.is_inference(view)
+    assert not torch.is_inference(view.numerical)
+
+    with torch.inference_mode():
+        table = make_table()
+
+    view = table[:2]
+    assert torch.is_inference(view)
+    assert torch.is_inference(view.categorical)
+    assert torch.is_inference(view.id)
+    assert torch.is_inference(view.id._columns[0])
+
+
 def test_replace_blocks() -> None:
     tensor = TableTensor(
         columns={

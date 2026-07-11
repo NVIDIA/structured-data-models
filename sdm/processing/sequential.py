@@ -15,6 +15,8 @@ class Sequential(Processor, InvertibleMixin):
     def __init__(self, *args: Processor) -> None:
         super().__init__()
         self.steps: tuple[Processor, ...] = args
+        for i, step in enumerate(self.steps):
+            self.add_module(str(i), step)
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
     def _fit(self, input: TableTensor) -> None:
