@@ -359,7 +359,9 @@ class RelationalData(DeviceMixin):
         self,
         time_columns: Mapping[str, str] | None = None,
     ) -> RelationalSampler:
-        r"""Create a subgraph sampler over this relational data.
+        r"""Create a device-appropriate sampler over this relational data.
+
+        CPU tables use pyg-lib and CUDA tables use pylibcugraph.
 
         .. code-block:: python
 
@@ -390,6 +392,16 @@ class RelationalData(DeviceMixin):
                 for temporal sampling. A row in a time-aware table can only be
                 sampled if its timestamp does not exceed the query timestamp.
         """
+        if self.device.type == "cuda":
+            from sdm.relational.cugraph_sampler import (
+                CuGraphRelationalSampler,
+            )
+
+            return CuGraphRelationalSampler(
+                data=self,
+                time_columns=time_columns,
+            )
+
         from sdm.relational import RelationalSampler
 
         return RelationalSampler(
