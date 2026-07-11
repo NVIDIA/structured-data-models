@@ -96,6 +96,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.StypeDispatch.html">StypeDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.TaskDispatch.html">TaskDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ClassShuffle.html">ClassShuffle</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ConstantFilter.html">ConstantFilter</a></li>
@@ -186,43 +187,46 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.StypeDispatch.html#sdm.processing.StypeDispatch" title="sdm.processing.StypeDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.StypeDispatch</span></code></a></p></td>
 <td><p>Apply separate processor pipelines to columns grouped by semantic type.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Clip.html#sdm.processing.Clip" title="sdm.processing.Clip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Clip</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.TaskDispatch.html#sdm.processing.TaskDispatch" title="sdm.processing.TaskDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.TaskDispatch</span></code></a></p></td>
+<td><p>Route model output by the transformed target's semantic type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Clip.html#sdm.processing.Clip" title="sdm.processing.Clip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Clip</span></code></a></p></td>
 <td><p>Clamp feature columns to fitted quantile bounds.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.ClassShuffle.html#sdm.processing.ClassShuffle" title="sdm.processing.ClassShuffle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ClassShuffle</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.ClassShuffle.html#sdm.processing.ClassShuffle" title="sdm.processing.ClassShuffle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ClassShuffle</span></code></a></p></td>
 <td><p>Independently permute the integer codes of categorical columns.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.ConstantFilter.html#sdm.processing.ConstantFilter" title="sdm.processing.ConstantFilter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ConstantFilter</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.ConstantFilter.html#sdm.processing.ConstantFilter" title="sdm.processing.ConstantFilter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ConstantFilter</span></code></a></p></td>
 <td><p>Remove non-informative numerical columns learned during fit.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.FeaturePermute.html#sdm.processing.FeaturePermute" title="sdm.processing.FeaturePermute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.FeaturePermute</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.FeaturePermute.html#sdm.processing.FeaturePermute" title="sdm.processing.FeaturePermute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.FeaturePermute</span></code></a></p></td>
 <td><p>Permute the numerical feature columns.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Identity.html#sdm.processing.Identity" title="sdm.processing.Identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Identity</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Identity.html#sdm.processing.Identity" title="sdm.processing.Identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Identity</span></code></a></p></td>
 <td><p>Return inputs unchanged.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.MeanImpute.html#sdm.processing.MeanImpute" title="sdm.processing.MeanImpute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.MeanImpute</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.MeanImpute.html#sdm.processing.MeanImpute" title="sdm.processing.MeanImpute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.MeanImpute</span></code></a></p></td>
 <td><p>Replace missing feature values with fitted per-column means.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Power.html#sdm.processing.Power" title="sdm.processing.Power"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Power</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Power.html#sdm.processing.Power" title="sdm.processing.Power"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Power</span></code></a></p></td>
 <td><p>Apply a feature-wise Yeo-Johnson power transform.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Quantile.html#sdm.processing.Quantile" title="sdm.processing.Quantile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Quantile</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Quantile.html#sdm.processing.Quantile" title="sdm.processing.Quantile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Quantile</span></code></a></p></td>
 <td><p>Map feature columns through their empirical quantiles.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.SigmaClip.html#sdm.processing.SigmaClip" title="sdm.processing.SigmaClip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.SigmaClip</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.SigmaClip.html#sdm.processing.SigmaClip" title="sdm.processing.SigmaClip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.SigmaClip</span></code></a></p></td>
 <td><p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.SoftmaxTemperature.html#sdm.processing.SoftmaxTemperature" title="sdm.processing.SoftmaxTemperature"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.SoftmaxTemperature</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.SoftmaxTemperature.html#sdm.processing.SoftmaxTemperature" title="sdm.processing.SoftmaxTemperature"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.SoftmaxTemperature</span></code></a></p></td>
 <td><p>Apply softmax to logits after temperature scaling.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.StandardScale.html#sdm.processing.StandardScale" title="sdm.processing.StandardScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.StandardScale</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.StandardScale.html#sdm.processing.StandardScale" title="sdm.processing.StandardScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.StandardScale</span></code></a></p></td>
 <td><p>Center and scale each feature column.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.ToNumerical.html#sdm.processing.ToNumerical" title="sdm.processing.ToNumerical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ToNumerical</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.ToNumerical.html#sdm.processing.ToNumerical" title="sdm.processing.ToNumerical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ToNumerical</span></code></a></p></td>
 <td><p>Move categorical columns into the numerical block.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Recipe</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Recipe</span></code></a></p></td>
 <td><p>Processing contract around an external model boundary.</p></td>
 </tr>
 </tbody>
@@ -254,7 +258,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=4a30a0bd"></script>
+      <script src="../_static/documentation_options.js?v=256f1ad5"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
