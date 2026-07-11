@@ -70,6 +70,9 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
+# Resolve new torch releases immediately instead of after the 7-day soak;
+# torch's dependencies still go through the global window above.
+exclude-newer-package = { torch = "1 hour" }
 
 [tool.pytest.ini_options]
 addopts = [
