@@ -43,11 +43,6 @@ jobs:
 
       - name: Install package
         run: |
-          # cu130 + cudf-cu13 keep torch, cudf, and cupy on one CUDA major.
-          # Pairing cudf-cu12 with cu130 torch is unresolvable (they pin
-          # cuda-toolkit to 12.* vs 13.*), which backtracks torch to
-          # 2.9.1+cu130, a version that fails to preload libnvrtc-builtins
-          # and breaks every JIT-compiled CUDA op.
           uv pip install --torch-backend=cu130 '.[test]' cudf-cu13
 
       - name: GPU sanity check
