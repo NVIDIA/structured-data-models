@@ -61,8 +61,4 @@ jobs:
           # Slow tests only on merges to main, matching test.yml and kumo-ml.
           FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
         run: |
-          # --deselect: StringTensor.from_cudf mishandles sliced string
-          # columns ("'offset' is out of bounds"); fails on every cudf
-          # version. Re-enable once sdm/tensor/string.py is fixed.
-          pytest -rs --durations=25 \
-            --deselect test/tensor/test_string.py::test_from_cudf_sliced_values
+          pytest -rs --durations=25

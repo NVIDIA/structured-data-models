@@ -154,13 +154,14 @@ class StringTensor(VarLenTensor):
                 size=size,
             )
 
+        # Unlike Arrow, cudf rebases sliced columns in `data`/`children`,
+        # so `column.offset` must not be applied on top.
         return cls(
             data=torch.from_dlpack(cp.asarray(column.data)).to(device),
             offset=torch.from_dlpack(cp.asarray(column.children[0])).to(
                 device
             ),
             size=size,
-            storage_offset=column.offset,
         )
 
     @classmethod
