@@ -61,4 +61,6 @@ jobs:
           # Slow tests only on merges to main, matching test.yml and kumo-ml.
           FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
         run: |
-          pytest -rs --durations=25
+          # Only GPU-marked tests (onlyCUDA tests and the cuda:0 cases of
+          # withCUDA tests); CPU tests run in test.yml on ubuntu-latest.
+          pytest -m gpu -rs --durations=25
