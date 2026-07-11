@@ -720,7 +720,7 @@ class TableTensor(Tensor):
     def tolist() -> Any:
         raise NotImplementedError("'tolist() is not yet implemented")  # TODO
 
-    def __repr__(self, *, indent: int = 0) -> str:
+    def __repr__(self, *, indent: int = 0) -> str:  # type: ignore
         def _columns_repr(
             columns: Sequence[str],
             max_cols: int = 3,
