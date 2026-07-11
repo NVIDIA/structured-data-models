@@ -1,0 +1,293 @@
+{
+  "command": [
+    "benchmarks/relational_sampler.py",
+    "run",
+    "--mode",
+    "cpu",
+    "--dataset",
+    "rel-arxiv",
+    "--task",
+    "paper-citation",
+    "--split",
+    "test",
+    "--batch-size",
+    "16384",
+    "--fanout",
+    "16",
+    "--warmups",
+    "3",
+    "--repetitions",
+    "10",
+    "--seed",
+    "20260711",
+    "--output",
+    "benchmarks/results/rel_arxiv_cpu_pyg_lib_t4_16384.json"
+  ],
+  "created_at_utc": "2026-07-11T01:11:07.755590+00:00",
+  "environment": {
+    "gpu": {
+      "capability": [
+        7,
+        5
+      ],
+      "name": "Tesla T4",
+      "total_memory_bytes": 15636037632
+    },
+    "nvidia_driver": "580.159.03",
+    "versions": {
+      "cudf": "26.02.01",
+      "cupy": "14.1.1",
+      "numpy": "2.2.6",
+      "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.35",
+      "pyarrow": "24.0.0",
+      "pyg_lib": "0.7.0+pt212cu130",
+      "pylibcugraph": "not_installed",
+      "python": "3.10.12",
+      "relbench": "2.1.2",
+      "torch": "2.12.1+cu130",
+      "torch_cuda": "13.0"
+    }
+  },
+  "initialization": {
+    "data_to_cuda_ms_excluded_from_init": null,
+    "sampler_topology_build_ms": 383.562863
+  },
+  "mode": "cpu",
+  "random_state": 20260711,
+  "runs": [
+    {
+      "batch_size": 16384,
+      "fanout": [
+        16
+      ],
+      "invariants": {
+        "canonical_output_sha256": "94393ee945955868a182e907c2b67f52d3b4c16c6c03accb6e8bad034810e42f",
+        "errors": [],
+        "rows_by_table": {
+          "citations": 155927,
+          "paperAuthors": 32478,
+          "paperCategories": 11267,
+          "papers": 16384
+        },
+        "sampled_rows": 216056,
+        "table_hashes": {
+          "citations": "c2c1abaa95adce44f0732345508642b8aa0e2e15faf2e290b408dc0e6e95282c",
+          "paperAuthors": "00070c99dde69ba165244d0f072b45df75bff7523fa2d8052424b6a5c18b72d4",
+          "paperCategories": "254a40cf8d0aff90b53ddf5f9a0b9c135e9ed9e67fe7eb1e84f3413169dca99a",
+          "papers": "7ea57e52b5fa14e51378e8d6ae69028a657ff388f78851d93945971b36991b0e"
+        },
+        "task_rows": 16384,
+        "temporal_rows_checked": 216056,
+        "temporal_violations": 0,
+        "valid": true
+      },
+      "kind": "finite_stochastic",
+      "latency_ms": {
+        "count": 10,
+        "max": 178.0137,
+        "mean": 63.8034943,
+        "median": 48.909814499999996,
+        "min": 47.556791,
+        "p95": 127.63582154999989,
+        "stdev": 40.51090700149069
+      },
+      "phases_ms": {},
+      "repetitions": 10,
+      "sampled_rows": {
+        "count": 10,
+        "max": 216056.0,
+        "mean": 216056.0,
+        "median": 216056.0,
+        "min": 216056.0,
+        "p95": 216056.0,
+        "stdev": 0.0
+      },
+      "task_selection": {
+        "count": 16384,
+        "position_prefix": [
+          177909,
+          106864,
+          135431,
+          30104,
+          124523,
+          114290,
+          156240,
+          49904
+        ],
+        "positions_sha256": "cd888c4ef8a8d629bc8a58d24ea14b4da0718db86fb9834b5484e33af6f4316f"
+      },
+      "throughput": {
+        "requests_per_second": 20.445794166731098,
+        "task_rows_per_second": 334983.8916277223
+      },
+      "warmups": 3
+    }
+  ],
+  "schema_version": 1,
+  "workload": {
+    "dataset": "rel-arxiv",
+    "relationships": [
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "References_Paper_ID"
+        ],
+        "left_table": "citations",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Author_ID"
+        ],
+        "left_table": "paperAuthors",
+        "right_columns": [
+          "Author_ID"
+        ],
+        "right_table": "authors"
+      },
+      {
+        "left_columns": [
+          "Paper_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Paper_ID"
+        ],
+        "right_table": "papers"
+      },
+      {
+        "left_columns": [
+          "Category_ID"
+        ],
+        "left_table": "paperCategories",
+        "right_columns": [
+          "Category_ID"
+        ],
+        "right_table": "categories"
+      }
+    ],
+    "relbench_version": "unknown",
+    "split": "test",
+    "tables": [
+      {
+        "columns": [
+          "Paper_ID",
+          "arXiv_Code",
+          "Title",
+          "Abstract",
+          "Submission_Date",
+          "DOI",
+          "Primary_Category_ID"
+        ],
+        "identity_columns": [
+          "Paper_ID"
+        ],
+        "name": "papers",
+        "rows": 222769,
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "References_Paper_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "References_Paper_ID"
+        ],
+        "name": "citations",
+        "rows": 1595687,
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Author_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Author_ID"
+        ],
+        "name": "paperAuthors",
+        "rows": 616585,
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Paper_ID",
+          "Category_ID",
+          "Submission_Date"
+        ],
+        "identity_columns": [
+          "Paper_ID",
+          "Category_ID"
+        ],
+        "name": "paperCategories",
+        "rows": 155061,
+        "time_column": "Submission_Date"
+      },
+      {
+        "columns": [
+          "Author_ID",
+          "Name",
+          "ORCID"
+        ],
+        "identity_columns": [
+          "Author_ID"
+        ],
+        "name": "authors",
+        "rows": 143691,
+        "time_column": null
+      },
+      {
+        "columns": [
+          "Category_ID",
+          "Category"
+        ],
+        "identity_columns": [
+          "Category_ID"
+        ],
+        "name": "categories",
+        "rows": 53,
+        "time_column": null
+      }
+    ],
+    "task": "paper-citation",
+    "task_link": {
+      "table": "papers",
+      "table_column": "Paper_ID",
+      "task_column": "Paper_ID"
+    },
+    "task_time_column": "date",
+    "time_columns": {
+      "citations": "Submission_Date",
+      "paperAuthors": "Submission_Date",
+      "paperCategories": "Submission_Date",
+      "papers": "Submission_Date"
+    }
+  }
+}

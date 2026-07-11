@@ -1,0 +1,463 @@
+{
+  "displayTimeUnit": "ms",
+  "metadata": {
+    "payload": {
+      "mode": "cuda",
+      "runs": [
+        {
+          "label": "fanout=[16], batch=1",
+          "latency_ms": 24.101243,
+          "phases_ms": {
+            "neighbor_sampling_ms": 13.723247796297073,
+            "output_assembly_ms": 1.128719985485077,
+            "synchronization_other_ms": 0.4356676504173276,
+            "task_to_seed_join_ms": 8.035151958465576,
+            "temporal_top_k_ms": 0.7459520101547241
+          }
+        },
+        {
+          "label": "fanout=[16], batch=128",
+          "latency_ms": 26.7005445,
+          "phases_ms": {
+            "neighbor_sampling_ms": 14.899344027042389,
+            "output_assembly_ms": 1.8905760049819946,
+            "synchronization_other_ms": 0.4477353399353028,
+            "task_to_seed_join_ms": 8.689695835113525,
+            "temporal_top_k_ms": 0.7529440224170685
+          }
+        },
+        {
+          "label": "fanout=[16], batch=1024",
+          "latency_ms": 29.811778,
+          "phases_ms": {
+            "neighbor_sampling_ms": 17.48504000902176,
+            "output_assembly_ms": 1.91702401638031,
+            "synchronization_other_ms": 0.46604030535888796,
+            "task_to_seed_join_ms": 8.829376220703125,
+            "temporal_top_k_ms": 0.9696159958839417
+          }
+        },
+        {
+          "label": "fanout=[16, 16], batch=1",
+          "latency_ms": 45.1851225,
+          "phases_ms": {
+            "neighbor_sampling_ms": 30.63030433654785,
+            "output_assembly_ms": 1.2165120244026184,
+            "synchronization_other_ms": 0.475115469764706,
+            "task_to_seed_join_ms": 9.024864196777344,
+            "temporal_top_k_ms": 1.7230879962444305
+          }
+        },
+        {
+          "label": "fanout=[16, 16], batch=128",
+          "latency_ms": 42.527463,
+          "phases_ms": {
+            "neighbor_sampling_ms": 29.138399958610535,
+            "output_assembly_ms": 2.6663520336151123,
+            "synchronization_other_ms": 0.47305105020141625,
+            "task_to_seed_join_ms": 8.731856346130371,
+            "temporal_top_k_ms": 1.5255520343780518
+          }
+        },
+        {
+          "label": "fanout=[16, 16], batch=1024",
+          "latency_ms": 56.7050205,
+          "phases_ms": {
+            "neighbor_sampling_ms": 42.37334340810776,
+            "output_assembly_ms": 2.6713759899139404,
+            "synchronization_other_ms": 0.4596772733230594,
+            "task_to_seed_join_ms": 9.066847801208496,
+            "temporal_top_k_ms": 1.9906080067157745
+          }
+        },
+        {
+          "label": "fanout=[-1], batch=8",
+          "latency_ms": 22.946966500000002,
+          "phases_ms": {
+            "neighbor_sampling_ms": 12.253119945526123,
+            "output_assembly_ms": 1.9243680238723755,
+            "synchronization_other_ms": 0.4761309503593445,
+            "task_to_seed_join_ms": 8.227888107299805
+          }
+        }
+      ]
+    },
+    "source": "CUDA event spans plus synchronized wall-clock residual"
+  },
+  "traceEvents": [
+    {
+      "args": {
+        "request": "fanout=[16], batch=1"
+      },
+      "dur": 13723.247796297073,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 0,
+      "tid": 0,
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1"
+      },
+      "dur": 1128.719985485077,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 0,
+      "tid": 0,
+      "ts": 13723.247796297073
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1"
+      },
+      "dur": 435.6676504173276,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 0,
+      "tid": 0,
+      "ts": 14851.96778178215
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1"
+      },
+      "dur": 8035.151958465576,
+      "name": "task_to_seed_join_ms",
+      "ph": "X",
+      "pid": 0,
+      "tid": 0,
+      "ts": 15287.635432199479
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1"
+      },
+      "dur": 745.9520101547241,
+      "name": "temporal_top_k_ms",
+      "ph": "X",
+      "pid": 0,
+      "tid": 0,
+      "ts": 23322.787390665057
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=128"
+      },
+      "dur": 14899.344027042389,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 1,
+      "tid": 0,
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=128"
+      },
+      "dur": 1890.5760049819946,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 1,
+      "tid": 0,
+      "ts": 14899.344027042389
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=128"
+      },
+      "dur": 447.7353399353028,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 1,
+      "tid": 0,
+      "ts": 16789.920032024384
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=128"
+      },
+      "dur": 8689.695835113525,
+      "name": "task_to_seed_join_ms",
+      "ph": "X",
+      "pid": 1,
+      "tid": 0,
+      "ts": 17237.655371959685
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=128"
+      },
+      "dur": 752.9440224170685,
+      "name": "temporal_top_k_ms",
+      "ph": "X",
+      "pid": 1,
+      "tid": 0,
+      "ts": 25927.35120707321
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1024"
+      },
+      "dur": 17485.04000902176,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 2,
+      "tid": 0,
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1024"
+      },
+      "dur": 1917.02401638031,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 2,
+      "tid": 0,
+      "ts": 17485.04000902176
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1024"
+      },
+      "dur": 466.04030535888796,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 2,
+      "tid": 0,
+      "ts": 19402.06402540207
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1024"
+      },
+      "dur": 8829.376220703125,
+      "name": "task_to_seed_join_ms",
+      "ph": "X",
+      "pid": 2,
+      "tid": 0,
+      "ts": 19868.104330760958
+    },
+    {
+      "args": {
+        "request": "fanout=[16], batch=1024"
+      },
+      "dur": 969.6159958839417,
+      "name": "temporal_top_k_ms",
+      "ph": "X",
+      "pid": 2,
+      "tid": 0,
+      "ts": 28697.480551464083
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1"
+      },
+      "dur": 30630.30433654785,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 3,
+      "tid": 0,
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1"
+      },
+      "dur": 1216.5120244026184,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 3,
+      "tid": 0,
+      "ts": 30630.30433654785
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1"
+      },
+      "dur": 475.11546976470595,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 3,
+      "tid": 0,
+      "ts": 31846.81636095047
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1"
+      },
+      "dur": 9024.864196777344,
+      "name": "task_to_seed_join_ms",
+      "ph": "X",
+      "pid": 3,
+      "tid": 0,
+      "ts": 32321.931830715177
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1"
+      },
+      "dur": 1723.0879962444305,
+      "name": "temporal_top_k_ms",
+      "ph": "X",
+      "pid": 3,
+      "tid": 0,
+      "ts": 41346.79602749252
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=128"
+      },
+      "dur": 29138.399958610535,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 4,
+      "tid": 0,
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=128"
+      },
+      "dur": 2666.3520336151123,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 4,
+      "tid": 0,
+      "ts": 29138.399958610535
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=128"
+      },
+      "dur": 473.0510502014163,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 4,
+      "tid": 0,
+      "ts": 31804.751992225647
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=128"
+      },
+      "dur": 8731.856346130371,
+      "name": "task_to_seed_join_ms",
+      "ph": "X",
+      "pid": 4,
+      "tid": 0,
+      "ts": 32277.803042427062
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=128"
+      },
+      "dur": 1525.5520343780518,
+      "name": "temporal_top_k_ms",
+      "ph": "X",
+      "pid": 4,
+      "tid": 0,
+      "ts": 41009.65938855743
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1024"
+      },
+      "dur": 42373.34340810776,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 5,
+      "tid": 0,
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1024"
+      },
+      "dur": 2671.3759899139404,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 5,
+      "tid": 0,
+      "ts": 42373.34340810776
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1024"
+      },
+      "dur": 459.6772733230594,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 5,
+      "tid": 0,
+      "ts": 45044.7193980217
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1024"
+      },
+      "dur": 9066.847801208496,
+      "name": "task_to_seed_join_ms",
+      "ph": "X",
+      "pid": 5,
+      "tid": 0,
+      "ts": 45504.39667134476
+    },
+    {
+      "args": {
+        "request": "fanout=[16, 16], batch=1024"
+      },
+      "dur": 1990.6080067157745,
+      "name": "temporal_top_k_ms",
+      "ph": "X",
+      "pid": 5,
+      "tid": 0,
+      "ts": 54571.244472553255
+    },
+    {
+      "args": {
+        "request": "fanout=[-1], batch=8"
+      },
+      "dur": 12253.119945526123,
+      "name": "neighbor_sampling_ms",
+      "ph": "X",
+      "pid": 6,
+      "tid": 0,
+      "ts": 0.0
+    },
+    {
+      "args": {
+        "request": "fanout=[-1], batch=8"
+      },
+      "dur": 1924.3680238723755,
+      "name": "output_assembly_ms",
+      "ph": "X",
+      "pid": 6,
+      "tid": 0,
+      "ts": 12253.119945526123
+    },
+    {
+      "args": {
+        "request": "fanout=[-1], batch=8"
+      },
+      "dur": 476.1309503593445,
+      "name": "synchronization_other_ms",
+      "ph": "X",
+      "pid": 6,
+      "tid": 0,
+      "ts": 14177.487969398499
+    },
+    {
+      "args": {
+        "request": "fanout=[-1], batch=8"
+      },
+      "dur": 8227.888107299805,
+      "name": "task_to_seed_join_ms",
+      "ph": "X",
+      "pid": 6,
+      "tid": 0,
+      "ts": 14653.618919757842
+    }
+  ]
+}
