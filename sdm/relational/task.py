@@ -11,7 +11,7 @@ from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
 from sdm.tensor.mixin import DeviceMixin
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class TaskLink:
     r"""Link between task rows to a table in relational data.
 
@@ -77,8 +77,18 @@ class TaskLink:
             table_columns=table_columns,
         )
 
+    def __repr__(self) -> str:
+        if len(self.task_columns) == 1:
+            task_columns = self.task_columns[0]
+            table_columns = self.table_columns[0]
+        else:
+            task_columns = "[" + ", ".join(self.task_columns) + "]"
+            table_columns = "[" + ", ".join(self.table_columns) + "]"
 
-@dataclass(frozen=True, init=False)
+        return f"{task_columns}->{self.table}.{table_columns}"
+
+
+@dataclass(frozen=True, init=False, repr=False)
 class RelatedTables(DeviceMixin):
     r"""Task-specific related tables attached to model inputs.
 
@@ -180,3 +190,29 @@ class RelatedTables(DeviceMixin):
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
+
+    def __repr__(self) -> str:
+        out = f"{self.__class__.__name__}(\n"
+        if len(self.tables) > 0:
+            out += "  tables={\n"
+            out += "".join(
+                f"    {name}: {table.__repr__(indent=4)[4:]},\n"
+                for name, table in self.tables.items()
+            )
+            out += "  },\n"
+        else:
+            out += "  tables={},\n"
+        if len(self.relationships) > 0:
+            out += "  relationships=[\n"
+            out += "".join(f"    {rel},\n" for rel in self.relationships)
+            out += "  ],\n"
+        else:
+            out += "  relationships=[],\n"
+        if len(self.task_links) > 0:
+            out += "  task_links=[\n"
+            out += "".join(f"    {link},\n" for link in self.task_links)
+            out += "  ],\n"
+        else:
+            out += "  task_links=[],\n"
+        out += ")"
+        return out
