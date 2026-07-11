@@ -43,12 +43,14 @@ jobs:
 
       - name: Install package
         run: |
-          # cu128 keeps torch aligned with cudf-cu12/cupy-cuda12x; `auto` picks
-          # cu130 wheels whose nvrtc runtime is incomplete (missing
-          # libnvrtc-builtins.so.13.0), breaking JIT-compiled ops and cudf.
+          # cu130 + cudf-cu13 keep torch, cudf, and cupy on one CUDA major.
+          # Pairing cudf-cu12 with cu130 torch is unresolvable (they pin
+          # cuda-toolkit to 12.* vs 13.*), which backtracks torch to
+          # 2.9.1+cu130, a version that fails to preload libnvrtc-builtins
+          # and breaks every JIT-compiled CUDA op.
           # cudf is pinned to 25.12: `from_cudf` uses Column.children, which
           # cudf 26.x removed. Unpin once sdm/tensor migrates to the new API.
-          uv pip install --torch-backend=cu128 '.[test]' 'cudf-cu12==25.12.*'
+          uv pip install --torch-backend=cu130 '.[test]' 'cudf-cu13==25.12.*'
 
       - name: GPU sanity check
         run: |
