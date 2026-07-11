@@ -274,6 +274,34 @@ def test_cugraph_sampler_resolves_composite_string_seed() -> None:
     ) == [(0, 11)]
 
 
+def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _require_rapids()
+    data = _non_temporal_data()
+    sampler = data.sampler()
+    task_table = _table({"entity": [2, 0]}, {"entity": Stype.id})
+
+    def fail(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("numeric seed lookup used the cuDF join fallback")
+
+    monkeypatch.setattr("sdm.relational.cugraph_sampler._to_cudf", fail)
+
+    output = sampler(
+        task_table=task_table,
+        task_link={
+            "task_column": "entity",
+            "table": "users",
+            "table_column": "user_id",
+        },
+        num_neighbors=[0],
+    )
+
+    assert _rows(
+        output.related_tables.tables["users"], EXAMPLE_ID, "user_id"
+    ) == [(0, 2), (1, 0)]
+
+
 def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors() -> None:
     _require_rapids()
     data = _temporal_data()

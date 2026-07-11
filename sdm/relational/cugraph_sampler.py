@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import Stype, TableTensor
 from sdm.relational.data import (
     LEFT_ROW_ID,
     RIGHT_ROW_ID,
@@ -19,6 +19,14 @@ from sdm.relational.sampler import (
 )
 from sdm.relational.task import TaskLink
 from sdm.tensor.io import to_cudf
+
+_INTEGER_DTYPES = {
+    torch.uint8,
+    torch.int8,
+    torch.int16,
+    torch.int32,
+    torch.int64,
+}
 
 
 class CuGraphRelationalSampler(RelationalSampler):
@@ -68,6 +76,9 @@ class CuGraphRelationalSampler(RelationalSampler):
         self._table_ids = {
             table_name: i for i, table_name in enumerate(self._table_names)
         }
+        self._numeric_seed_lookups: dict[
+            tuple[str, str], tuple[Tensor, Tensor]
+        ] = {}
 
         offsets = [0]
         for table in self.data.tables.values():
@@ -233,6 +244,65 @@ class CuGraphRelationalSampler(RelationalSampler):
         task_table: TableTensor,
         task_link: TaskLink,
     ) -> Tensor:
+        local_seed = self._resolve_numeric_seed(
+            task_table=task_table,
+            task_link=task_link,
+        )
+        if local_seed is None:
+            local_seed = self._resolve_seed_cudf(
+                task_table=task_table,
+                task_link=task_link,
+            )
+        return local_seed + self._table_offset(task_link.table)
+
+    def _resolve_numeric_seed(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink,
+    ) -> Tensor | None:
+        if len(task_link.task_columns) != 1:
+            return None
+
+        task_value = self._id_column(
+            task_table,
+            task_link.task_columns[0],
+        )
+        table_value = self._id_column(
+            self.data.tables[task_link.table],
+            task_link.table_columns[0],
+        )
+        # ColumnarTensor stores numeric IDs as plain tensors. String and
+        # composite IDs continue through the general cuDF join below.
+        if (
+            task_value.__class__ is not Tensor
+            or table_value.__class__ is not Tensor
+            or task_value.dtype != table_value.dtype
+            or task_value.dtype not in _INTEGER_DTYPES
+        ):
+            return None
+
+        key = (task_link.table, task_link.table_columns[0])
+        lookup = self._numeric_seed_lookups.get(key)
+        if lookup is None:
+            lookup = table_value.sort()
+            self._numeric_seed_lookups[key] = lookup
+        value, row = lookup
+
+        task_value = task_value.contiguous()
+        lower = torch.searchsorted(value, task_value)
+        upper = torch.searchsorted(value, task_value, right=True)
+        if not torch.all((upper - lower) == 1):
+            raise ValueError(
+                f"Expected each task row to match exactly one row in "
+                f"'{task_link.table}'"
+            )
+        return row[lower]
+
+    def _resolve_seed_cudf(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink,
+    ) -> Tensor:
         left = _to_cudf(
             table=task_table,
             columns=task_link.task_columns,
@@ -268,8 +338,12 @@ class CuGraphRelationalSampler(RelationalSampler):
                 f"'{task_link.table}'"
             )
 
-        local_seed = torch.as_tensor(joined[RIGHT_ROW_ID]).to(torch.int64)
-        return local_seed + self._table_offset(task_link.table)
+        return torch.as_tensor(joined[RIGHT_ROW_ID]).to(torch.int64)
+
+    @staticmethod
+    def _id_column(table: TableTensor, column: str) -> Tensor:
+        columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
+        return columns[column]
 
     def _sample_non_temporal(
         self,
