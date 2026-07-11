@@ -186,7 +186,7 @@ class Recipe:
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}("
+            f"{self.__class__.__name__}(\n"
             f"  features={self.features.__repr__(indent=2)[2:]},\n"
             f"  target={self.target.__repr__(indent=2)[2:]},\n"
             f"  output={self.output.__repr__(indent=2)[2:]},\n"

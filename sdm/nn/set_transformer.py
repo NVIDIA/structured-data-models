@@ -91,6 +91,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
+        batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -102,6 +103,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
+        batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -113,6 +115,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -122,6 +125,8 @@ class InducedTransformerBlock(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., KV]
         return_key_value: bool = False,
+        *,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -140,6 +145,9 @@ class InducedTransformerBlock(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             return_key_value: Whether to return the computed key and value
                 projections for the final attention site alongside the output.
+            batch_size_limit: Maximum number of broadcast batch elements
+                processed at once during non-compiled evaluation. ``None``
+                disables batch chunking.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -156,9 +164,11 @@ class InducedTransformerBlock(torch.nn.Module):
                 key_value=key_value,  # [..., KV, C]
                 seqused_key_value=seqused_key_value,  # [...]
                 attn_mask=attn_mask,  # [..., 1, KV]
+                batch_size_limit=batch_size_limit,
             )  # [..., M, C]
         return self.transformer_2(
             query=query,  # [..., Q, C]
             key_value=key_value,  # [..., M, C]
             return_key_value=return_key_value,
+            batch_size_limit=batch_size_limit,
         )  # [..., Q, C]

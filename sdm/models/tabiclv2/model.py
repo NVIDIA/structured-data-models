@@ -144,8 +144,8 @@ class TabICLv2(BaseModel):
         assert related_tables is None
 
         if y.is_floating_point():
-            return self.reg_model(x, y, cache=cache)
-        return self.cls_model(x, y, cache=cache)
+            return self.reg_model(x=x, y=y, cache=cache)
+        return self.cls_model(x=x, y=y, cache=cache)
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -213,8 +213,8 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x, y, cache=cache)
-        x = self.icl_block(x, y, cache=cache)
+        x = self.row_embedding(x=x, y=y, cache=cache)
+        x = self.icl_block(x=x, y=y, cache=cache)
         return self.head(x)
 
 

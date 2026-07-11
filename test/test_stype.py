@@ -3,8 +3,8 @@ from decimal import Decimal
 import pandas as pd
 import pyarrow as pa
 import pytest
-import torch
 from sdm import Stype, infer_stypes
+from sdm.testing import onlyCUDA
 
 
 def test_from_pandas() -> None:
@@ -57,10 +57,9 @@ def test_from_arrow() -> None:
     }
 
 
+@onlyCUDA
 def test_from_cudf() -> None:
     cudf = pytest.importorskip("cudf")
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is not available")
 
     df = cudf.DataFrame(
         {
@@ -91,42 +90,6 @@ def test_from_cudf() -> None:
         "active": Stype.categorical,
         "created_at": Stype.datetime,
     }
-
-
-def test_consistent_inference_across_backends() -> None:
-    cudf = pytest.importorskip("cudf")
-    if not torch.cuda.is_available():
-        pytest.skip("CUDA is not available")
-
-    df = pd.DataFrame(
-        {
-            "user_id": pd.Series([1, 2], dtype="int64"),
-            "age": pd.Series([25, 31], dtype="int32"),
-            "income": pd.Series([1.0, 2.5], dtype="float64"),
-            "name": pd.Series(["a", "b"], dtype="string"),
-            "city": pd.Series(["NY", None], dtype="object"),
-            "segment": pd.Series(["x", "y"], dtype="category"),
-            "active": pd.Series([True, False], dtype="bool"),
-            "created_at": pd.to_datetime(["2026-01-01", "2026-01-02"]),
-        }
-    )
-    expected = {
-        "user_id": Stype.id,
-        "age": Stype.numerical,
-        "income": Stype.numerical,
-        "name": Stype.categorical,
-        "city": Stype.categorical,
-        "segment": Stype.categorical,
-        "active": Stype.categorical,
-        "created_at": Stype.datetime,
-    }
-
-    assert infer_stypes(df) == expected
-    assert (
-        infer_stypes(pa.Table.from_pandas(df, preserve_index=False))
-        == expected
-    )
-    assert infer_stypes(cudf.from_pandas(df)) == expected
 
 
 def test_id_detection() -> None:

@@ -14,10 +14,11 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
+from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import to_arrow
 
 if TYPE_CHECKING:
-    import cudf  # ty: ignore[unresolved-import]
+    import cudf
     import pandas as pd
 
 aten = torch.ops.aten
@@ -298,7 +299,6 @@ class TableTensor(Tensor):
 
         return cls(
             columns=cast(Mapping[StypeLike, Sequence[str]], columns),
-            device=device,
             **blocks,
         )
 
@@ -380,17 +380,14 @@ class TableTensor(Tensor):
         *,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create a tensor from a ``cudf.DataFrame``.
+        r"""Create a tensor from a :class:`cudf.DataFrame`.
 
         Args:
             df: The dataframe.
             stypes: The semantic type for each column. Columns that are present
                 in ``df`` but not included in ``stypes`` will be ignored.
-            device: The device. If ``None``, tensors stay on the cuDF columns'
-                CUDA device.
+            device: The device.
         """
-        device = torch.device(device) if device is not None else None
-
         columns: dict[Stype, list[str]] = defaultdict(list)
         for column, stype in stypes.items():
             columns[Stype(stype)].append(column)
@@ -399,38 +396,24 @@ class TableTensor(Tensor):
         for stype in columns:
             tensors: list[Tensor] = []
             for column in columns[stype]:
-                series = df[column]
+                ser = df[column]
                 if stype == Stype.numerical:
-                    values = series.astype("float32", copy=False)
-                    if values.null_count > 0:
-                        # DLPack cannot carry cuDF validity masks.
-                        values = values.fillna(float("nan"))
-                    tensor = torch.from_dlpack(values.to_dlpack()).unsqueeze(
-                        -1
-                    )
+                    ser = ser.astype("float32", copy=False)
+                    if ser.null_count > 0:
+                        ser = ser.fillna(float("nan"))
+                    tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
                     tensor = tensor.to(device)
                 elif stype == Stype.categorical:
-                    tensor = CategoricalTensor.from_cudf(
-                        series,
-                        device=device,
-                    )
+                    tensor = CategoricalTensor.from_cudf(ser, device=device)
                 elif stype == Stype.datetime:
-                    values = series.astype(
-                        "datetime64[us]",
-                        copy=False,
-                    ).astype("int64", copy=False)
-                    if values.null_count > 0:
-                        # DLPack cannot carry cuDF validity masks.
-                        values = values.fillna(torch.iinfo(torch.int64).min)
-                    tensor = torch.from_dlpack(values.to_dlpack()).unsqueeze(
-                        -1
-                    )
+                    ser = ser.astype("datetime64[us]", copy=False)
+                    ser = ser.astype("int64", copy=False)
+                    if ser.null_count > 0:
+                        ser = ser.fillna(torch.iinfo(torch.int64).min)
+                    tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
                     tensor = tensor.to(device)
                 elif stype == Stype.id:
-                    tensor = ColumnarTensor.from_cudf(
-                        series,
-                        device=device,
-                    )
+                    tensor = ColumnarTensor.from_cudf(ser, device=device)
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
@@ -676,7 +659,8 @@ class TableTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            with _preserve_view_inference_mode(func, args[0]):
+                return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"
@@ -1226,19 +1210,31 @@ def _index(
 
 @TableTensor.implements(aten.cat.default)
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
+    if len(tensors) == 0:
+        raise ValueError("torch.cat(): expected a non-empty list of Tensors")
+
     if not all(isinstance(tensor, TableTensor) for tensor in tensors):
         raise TypeError(
             f"Expected all tensors to be '{TableTensor.__name__}' instances"
         )
-
     tensors = cast(Sequence[TableTensor], tensors)
-    blocks = {
-        stype: torch.cat([tensor.blocks[stype] for tensor in tensors], dim=dim)
-        for stype, _ in tensors[0].items()
-    }
 
-    if dim % tensors[0].dim() != tensors[0].dim() - 1:
+    blocks: dict[Stype, Tensor] = {}
+    for stype, _ in tensors[0].items():
+        block_list = [tensor.blocks[stype] for tensor in tensors]
+        block_list = [block for block in block_list if block.size(-1) > 0]
+        if len(block_list) == 1:
+            blocks[stype] = block_list[0]
+        elif len(block_list) > 1:
+            blocks[stype] = torch.cat(block_list, dim=dim)
+
+    size: Sequence[int] | None = None
+    if not _is_column_dim(tensors[0], dim):
         columns = tensors[0]._columns
+        if len(blocks) == 0:
+            size = list(tensors[0].size())
+            for tensor in tensors[1:]:
+                size[dim] += tensor.size(dim)
     else:
         columns = {
             stype: tuple(
@@ -1246,7 +1242,10 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             )
             for stype, _ in tensors[0].items()
         }
+        size = tensors[0].size()
+
     return tensors[0].__class__(
+        size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
         **blocks,
     )

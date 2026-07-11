@@ -1,4 +1,5 @@
 import math
+from typing import Literal
 
 import pytest
 import torch
@@ -7,29 +8,50 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_rope(device: torch.device) -> None:
-    module = RotaryEmbedding(channels=2, device=device)
+@pytest.mark.parametrize("layout", ["split_half", "interleaved"])
+def test_rope(
+    device: torch.device,
+    layout: Literal["split_half", "interleaved"],
+) -> None:
+    if layout == "split_half":
+        expected = torch.tensor(
+            [
+                [[1.0, 2.0, 3.0, 4.0]],
+                [[-3.0, 2.0, 1.0, 4.0]],
+                [[-1.0, 2.0, -3.0, 4.0]],
+            ],
+            device=device,
+        )
+    else:
+        expected = torch.tensor(
+            [
+                [[1.0, 2.0, 3.0, 4.0]],
+                [[-2.0, 1.0, 3.0, 4.0]],
+                [[-1.0, -2.0, 3.0, 4.0]],
+            ],
+            device=device,
+        )
+
+    module = RotaryEmbedding(channels=4, layout=layout, device=device)
+
     with torch.no_grad():
-        module.inv_freq.fill_(math.pi / 2)
+        inv_freq = torch.tensor([math.pi / 2, 0], device=device)
+        module.inv_freq.copy_(inv_freq)
 
-    x = torch.zeros(4, 1, 2, device=device)
-    x[..., 0] = 1
-
-    out = module(x)
-    expected = torch.tensor(
+    x = torch.tensor(
         [
-            [[1, 0]],
-            [[0, 1]],
-            [[-1, 0]],
-            [[0, -1]],
+            [[1.0, 2.0, 3.0, 4.0]],
+            [[1.0, 2.0, 3.0, 4.0]],
+            [[1.0, 2.0, 3.0, 4.0]],
         ],
-        dtype=x.dtype,
         device=device,
     )
+
+    out = module(x)
     torch.testing.assert_close(out, expected)
 
-    with pytest.raises(ValueError, match="Expected 2 channels, got 4"):
-        module(torch.randn(2, 4, 3, 4, device=device))
+    with pytest.raises(ValueError, match="Expected 4 channels"):
+        module(torch.randn(2, 4, 3, 2, device=device))
 
-    with pytest.raises(ValueError, match="`channels` must be even"):
-        RotaryEmbedding(channels=3, device=device)
+    with pytest.raises(ValueError, match="'channels' must be even"):
+        RotaryEmbedding(channels=3, layout=layout, device=device)
