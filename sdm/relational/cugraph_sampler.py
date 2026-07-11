@@ -77,7 +77,7 @@ class CuGraphRelationalSampler(RelationalSampler):
             table_name: i for i, table_name in enumerate(self._table_names)
         }
         self._numeric_seed_lookups: dict[
-            tuple[str, str], tuple[Tensor, Tensor]
+            tuple[str, str], tuple[Tensor, int, Tensor, Tensor]
         ] = {}
 
         offsets = [0]
@@ -283,10 +283,14 @@ class CuGraphRelationalSampler(RelationalSampler):
 
         key = (task_link.table, task_link.table_columns[0])
         lookup = self._numeric_seed_lookups.get(key)
-        if lookup is None:
-            lookup = table_value.sort()
+        if lookup is None or not self._lookup_matches_source(
+            lookup,
+            table_value,
+        ):
+            value, row = table_value.sort()
+            lookup = (table_value, table_value._version, value, row)
             self._numeric_seed_lookups[key] = lookup
-        value, row = lookup
+        _, _, value, row = lookup
 
         task_value = task_value.contiguous()
         lower = torch.searchsorted(value, task_value)
@@ -297,6 +301,20 @@ class CuGraphRelationalSampler(RelationalSampler):
                 f"'{task_link.table}'"
             )
         return row[lower]
+
+    @staticmethod
+    def _lookup_matches_source(
+        lookup: tuple[Tensor, int, Tensor, Tensor],
+        source: Tensor,
+    ) -> bool:
+        cached, version, _, _ = lookup
+        return (
+            cached._version == version
+            and cached.data_ptr() == source.data_ptr()
+            and cached.size() == source.size()
+            and cached.stride() == source.stride()
+            and cached.storage_offset() == source.storage_offset()
+        )
 
     def _resolve_seed_cudf(
         self,
