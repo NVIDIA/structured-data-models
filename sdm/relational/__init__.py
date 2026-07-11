@@ -3,6 +3,7 @@
 from sdm.relational.data import Relationship, RelationalData
 from sdm.relational.task import TaskLink, RelatedTables
 from sdm.relational.sampler import RelationalSampler
+from sdm.relational.cugraph_sampler import CuGraphRelationalSampler
 
 __all__ = [
     "Relationship",
@@ -10,4 +11,5 @@ __all__ = [
     "TaskLink",
     "RelatedTables",
     "RelationalSampler",
+    "CuGraphRelationalSampler",
 ]

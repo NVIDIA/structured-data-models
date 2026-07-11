@@ -105,12 +105,21 @@ def _temporal_data() -> RelationalData:
 
 def _rows(table: TableTensor, *columns: str) -> list[tuple[Any, ...]]:
     values = (
-        cast(TableTensor, table.cpu())
-        .to_arrow()
-        .select(columns)
-        .to_pydict()
+        cast(TableTensor, table.cpu()).to_arrow().select(columns).to_pydict()
     )
     return sorted(zip(*(values[column] for column in columns)))
+
+
+def test_last_per_source_selects_latest_per_edge_type() -> None:
+    selected = CuGraphRelationalSampler._last_per_source(
+        batch=torch.tensor([0, 0, 0, 0, 1]),
+        major=torch.tensor([5, 5, 5, 6, 5]),
+        edge_type=torch.tensor([0, 0, 0, 0, 0]),
+        edge_time=torch.tensor([1, 3, 2, 9, 4]),
+        count=2,
+    )
+
+    assert selected.equal(torch.tensor([1, 2, 3, 4]))
 
 
 def test_cuda_data_uses_cugraph_sampler() -> None:
@@ -148,6 +157,80 @@ def test_cugraph_sampler_is_disjoint_and_retains_isolated_seeds() -> None:
     ) == [(0, 10), (0, 11), (2, 10), (2, 11)]
 
 
+def test_cugraph_sampler_retains_seed_when_relationship_is_empty() -> None:
+    _require_rapids()
+    data = _non_temporal_data()
+    data = RelationalData(
+        tables={**data.tables, "orders": data.tables["orders"][:0]},
+        relationships=data.relationships,
+    )
+    task_table = _table({"entity": [2]}, {"entity": Stype.id})
+
+    output = data.sampler()(
+        task_table=task_table,
+        task_link={
+            "task_column": "entity",
+            "table": "users",
+            "table_column": "user_id",
+        },
+        num_neighbors=[-1],
+    )
+
+    assert _rows(
+        output.related_tables.tables["users"], EXAMPLE_ID, "user_id"
+    ) == [(0, 2)]
+
+
+def test_cugraph_sampler_resolves_composite_string_seed() -> None:
+    _require_rapids()
+    data = RelationalData(
+        tables={
+            "users": _table(
+                {"account": [1, 2], "region": ["é", "東京"]},
+                {"account": Stype.id, "region": Stype.id},
+            ),
+            "orders": _table(
+                {
+                    "order_id": [10, 11],
+                    "account": [1, 2],
+                    "region": ["é", "東京"],
+                },
+                {
+                    "order_id": Stype.id,
+                    "account": Stype.id,
+                    "region": Stype.id,
+                },
+            ),
+        },
+        relationships=[
+            {
+                "left_table": "orders",
+                "left_columns": ("account", "region"),
+                "right_table": "users",
+                "right_columns": ("account", "region"),
+            }
+        ],
+    )
+    task_table = _table(
+        {"account": [2], "region": ["東京"]},
+        {"account": Stype.id, "region": Stype.id},
+    )
+
+    output = data.sampler()(
+        task_table=task_table,
+        task_link={
+            "task_columns": ("account", "region"),
+            "table": "users",
+            "table_columns": ("account", "region"),
+        },
+        num_neighbors=[-1],
+    )
+
+    assert _rows(
+        output.related_tables.tables["orders"], EXAMPLE_ID, "order_id"
+    ) == [(0, 11)]
+
+
 def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors() -> None:
     _require_rapids()
     data = _temporal_data()
@@ -159,9 +242,7 @@ def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors() -> None:
         {"entity": Stype.id, "cutoff": Stype.datetime},
     )
 
-    output = data.sampler(
-        time_columns={"first": "time", "second": "time"}
-    )(
+    output = data.sampler(time_columns={"first": "time", "second": "time"})(
         task_table=task_table,
         task_link={
             "task_column": "entity",

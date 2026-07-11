@@ -1,0 +1,509 @@
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+import numpy as np
+import torch
+from torch import Tensor
+
+from sdm import TableTensor
+from sdm.relational.data import (
+    LEFT_ROW_ID,
+    RIGHT_ROW_ID,
+    RelationalData,
+    _to_cudf,
+)
+from sdm.relational.sampler import (
+    RelationalSampler,
+    RelationalSamplerOutput,
+    _validate_time_columns,
+)
+from sdm.relational.task import TaskLink
+from sdm.tensor.io import to_cudf
+
+
+class CuGraphRelationalSampler(RelationalSampler):
+    r"""GPU subgraph sampler over relational data.
+
+    The sampler materializes a persistent single-GPU cuGraph topology and
+    keeps task lookup, sampling, and output assembly on the CUDA device.
+    For temporal data, each hop gathers eligible neighbors with cuGraph and
+    applies the ``"last"`` top-k selection on CUDA against the original task
+    cutoff. This matches the node-time semantics of
+    :class:`RelationalSampler` without propagating edge times between hops.
+
+    Args:
+        data: CUDA-resident tables and their relationships.
+        time_columns: Mapping from table name to the datetime column used for
+            temporal ``"last"`` sampling.
+    """
+
+    def __init__(
+        self,
+        data: RelationalData,
+        time_columns: Mapping[str, str] | None = None,
+    ) -> None:
+        if data.device.type != "cuda":
+            raise ValueError(
+                f"'{self.__class__.__name__}' requires CUDA-resident data"
+            )
+
+        self.data = data
+        self.time_columns = time_columns or {}
+        _validate_time_columns(self.data, self.time_columns)
+
+        try:
+            import cupy as cp
+            import pylibcugraph
+        except ImportError as exc:
+            raise ImportError(
+                "CUDA relational sampling requires cupy and pylibcugraph"
+            ) from exc
+
+        self._cp = cp
+        self._pylibcugraph = pylibcugraph
+        self._table_names = tuple(self.data.tables)
+        self._table_ids = {
+            table_name: i for i, table_name in enumerate(self._table_names)
+        }
+
+        offsets = [0]
+        for table in self.data.tables.values():
+            offsets.append(offsets[-1] + table.size(0))
+        self._vertex_offsets = torch.tensor(
+            offsets,
+            dtype=torch.int64,
+            device=self.data.device,
+        )
+        self._num_vertices = offsets[-1]
+        self._num_edge_types = 2 * len(self.data.relationships)
+        self._num_edges = 0
+
+        with torch.cuda.device(self.data.device):
+            self._build_graph()
+
+    def sample(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink | Mapping[str, str | Sequence[str]],
+        num_neighbors: Sequence[int],
+        task_time_column: str | None = None,
+    ) -> RelationalSamplerOutput:
+        r"""Sample CUDA-resident related tables for task rows."""
+        task_link = self._validate_sample_inputs(
+            task_table=task_table,
+            task_link=task_link,
+            task_time_column=task_time_column,
+        )
+        if task_table.device != self.data.device:
+            raise ValueError(
+                "Expected task and relational tables on the same CUDA device"
+            )
+        if len(num_neighbors) == 0:
+            raise ValueError("Expected at least one sampling hop")
+
+        with torch.cuda.device(self.data.device):
+            seed = self._resolve_seed(
+                task_table=task_table,
+                task_link=task_link,
+            )
+            if task_time_column is None:
+                seed_time = torch.full_like(
+                    seed,
+                    torch.iinfo(torch.int64).max,
+                )
+            else:
+                seed_time = task_table[task_time_column].datetime.squeeze(-1)
+
+            if self._num_edges == 0:
+                nodes = self._seed_nodes(seed=seed, task_link=task_link)
+            elif self.time_columns:
+                nodes = self._sample_temporal(
+                    seed=seed,
+                    seed_time=seed_time,
+                    num_neighbors=num_neighbors,
+                )
+            else:
+                nodes = self._sample_non_temporal(
+                    seed=seed,
+                    num_neighbors=num_neighbors,
+                )
+
+        return self._to_output(
+            task_table=task_table,
+            task_link=task_link,
+            nodes=nodes,
+        )
+
+    def _build_graph(self) -> None:
+        cp = self._cp
+        pylibcugraph = self._pylibcugraph
+        edge_indices = self.data.edge_indices(dtype=torch.int64)
+
+        srcs: list[Tensor] = []
+        dsts: list[Tensor] = []
+        edge_types: list[Tensor] = []
+        edge_times: list[Tensor] = []
+        target_is_temporal: list[bool] = []
+        minimum_time = torch.iinfo(torch.int64).min
+
+        times = {
+            table_name: self.data.tables[table_name][
+                column_name
+            ].datetime.squeeze(-1)
+            for table_name, column_name in self.time_columns.items()
+        }
+
+        for i, (relationship, edge_index) in enumerate(
+            zip(self.data.relationships, edge_indices)
+        ):
+            left_offset = self._table_offset(relationship.left_table)
+            right_offset = self._table_offset(relationship.right_table)
+            left, right = edge_index
+
+            # cuGraph traverses outgoing edges. Reverse each PyG direction so
+            # a right-table seed discovers its left-table relational rows.
+            srcs.extend((right + right_offset, left + left_offset))
+            dsts.extend((left + left_offset, right + right_offset))
+            edge_types.extend(
+                (
+                    torch.full_like(left, 2 * i, dtype=torch.int32),
+                    torch.full_like(left, 2 * i + 1, dtype=torch.int32),
+                )
+            )
+
+            for table_name, index in (
+                (relationship.left_table, left),
+                (relationship.right_table, right),
+            ):
+                target_is_temporal.append(table_name in times)
+                if table_name in times:
+                    edge_times.append(times[table_name][index])
+                else:
+                    edge_times.append(torch.full_like(index, minimum_time))
+
+        self._edge_target_is_temporal = torch.tensor(
+            target_is_temporal,
+            dtype=torch.bool,
+            device=self.data.device,
+        )
+        self._edge_target_is_temporal_host = tuple(target_is_temporal)
+        if self._num_edge_types == 0:
+            self._resource_handle = None
+            self._graph = None
+            return
+
+        src = torch.cat(srcs)
+        dst = torch.cat(dsts)
+        self._num_edges = src.numel()
+        edge_type = torch.cat(edge_types)
+        edge_time = torch.cat(edge_times) if self.time_columns else None
+        self._has_outgoing = torch.zeros(
+            self._num_vertices,
+            dtype=torch.bool,
+            device=self.data.device,
+        )
+        self._has_outgoing[src] = True
+
+        self._resource_handle = pylibcugraph.ResourceHandle()
+        properties = pylibcugraph.GraphProperties(
+            is_multigraph=True,
+            is_symmetric=False,
+        )
+        self._graph = pylibcugraph.SGGraph(
+            self._resource_handle,
+            properties,
+            cp.from_dlpack(src),
+            cp.from_dlpack(dst),
+            vertices_array=cp.arange(self._num_vertices, dtype=cp.int64),
+            edge_id_array=cp.arange(src.numel(), dtype=cp.int64),
+            edge_type_array=cp.from_dlpack(edge_type),
+            edge_start_time_array=(
+                cp.from_dlpack(edge_time) if edge_time is not None else None
+            ),
+            store_transposed=False,
+            renumber=False,
+            do_expensive_check=False,
+        )
+
+    def _resolve_seed(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink,
+    ) -> Tensor:
+        left = _to_cudf(
+            table=task_table,
+            columns=task_link.task_columns,
+        )
+        left[LEFT_ROW_ID] = to_cudf(
+            torch.arange(
+                task_table.size(0),
+                device=task_table.device,
+            )
+        )
+        right_table = self.data.tables[task_link.table]
+        right = _to_cudf(
+            table=right_table,
+            columns=task_link.table_columns,
+        )
+        right[RIGHT_ROW_ID] = to_cudf(
+            torch.arange(
+                right_table.size(0),
+                device=right_table.device,
+            )
+        )
+
+        joined = left.merge(
+            right,
+            left_on=list(task_link.task_columns),
+            right_on=list(task_link.table_columns),
+            how="left",
+        )
+        joined = joined[[LEFT_ROW_ID, RIGHT_ROW_ID]].sort_values(LEFT_ROW_ID)
+        if len(joined) != len(left) or joined[RIGHT_ROW_ID].null_count > 0:
+            raise ValueError(
+                f"Expected each task row to match exactly one row in "
+                f"'{task_link.table}'"
+            )
+
+        local_seed = torch.as_tensor(joined[RIGHT_ROW_ID]).to(torch.int64)
+        return local_seed + self._table_offset(task_link.table)
+
+    def _sample_non_temporal(
+        self,
+        seed: Tensor,
+        num_neighbors: Sequence[int],
+    ) -> dict[str, tuple[Tensor, Tensor]]:
+        cp = self._cp
+        example = torch.arange(seed.numel(), device=seed.device)
+        seed_keys = example * self._num_vertices + seed
+        if num_neighbors[0] == 0:
+            return self._nodes_from_keys(seed_keys)
+
+        active = self._has_outgoing[seed]
+        active_seed = seed[active]
+        active_example = example[active]
+        if active_seed.numel() == 0:
+            return self._nodes_from_keys(seed_keys)
+
+        fanout = np.repeat(
+            np.asarray(num_neighbors, dtype=np.int32),
+            self._num_edge_types,
+        )
+        label_offsets = cp.arange(active_seed.numel() + 1, dtype=cp.int64)
+        result = self._pylibcugraph.heterogeneous_uniform_neighbor_sample(
+            self._resource_handle,
+            self._graph,
+            cp.from_dlpack(active_seed),
+            label_offsets,
+            cp.from_dlpack(self._vertex_offsets),
+            fanout,
+            num_edge_types=self._num_edge_types,
+            with_replacement=False,
+            do_expensive_check=False,
+            prior_sources_behavior="exclude",
+            deduplicate_sources=True,
+            disjoint_sampling=False,
+            return_hops=True,
+            renumber=True,
+            retain_seeds=True,
+            compression="COO",
+            compress_per_hop=False,
+            random_state=0,
+        )
+        node = self._as_tensor(result["renumber_map"])
+        offsets = self._as_tensor(result["renumber_map_offsets"]).long()
+        position = torch.arange(node.numel(), device=node.device)
+        segment = torch.bucketize(position, offsets[1:], right=True)
+        num_tables = len(self._table_names)
+        sampled_example = active_example[
+            segment.div(num_tables, rounding_mode="floor")
+        ]
+        sampled_keys = sampled_example * self._num_vertices + node
+        return self._nodes_from_keys(
+            torch.cat((seed_keys, sampled_keys)).unique(sorted=True)
+        )
+
+    def _sample_temporal(
+        self,
+        seed: Tensor,
+        seed_time: Tensor,
+        num_neighbors: Sequence[int],
+    ) -> dict[str, tuple[Tensor, Tensor]]:
+        total = self._num_vertices
+        example = torch.arange(seed.numel(), device=seed.device)
+        visited = (example * total + seed).unique(sorted=True)
+        frontier = visited
+
+        for hop, count in enumerate(num_neighbors):
+            if frontier.numel() == 0:
+                break
+            frontier_example = frontier.div(total, rounding_mode="floor")
+            frontier_node = frontier.remainder(total)
+            sampled = self._sample_temporal_hop(
+                frontier_node=frontier_node,
+                frontier_example=frontier_example,
+                seed_time=seed_time,
+                count=count,
+                random_state=hop,
+            )
+            if sampled.numel() == 0:
+                break
+
+            sampled = sampled.unique(sorted=True)
+            position = torch.searchsorted(visited, sampled)
+            clamped = position.clamp_max(max(visited.numel() - 1, 0))
+            is_visited = (position < visited.numel()) & (
+                visited[clamped] == sampled
+            )
+            frontier = sampled[~is_visited]
+            visited = torch.cat((visited, frontier)).sort().values
+
+        return self._nodes_from_keys(visited)
+
+    def _nodes_from_keys(
+        self,
+        keys: Tensor,
+    ) -> dict[str, tuple[Tensor, Tensor]]:
+        example = keys.div(self._num_vertices, rounding_mode="floor")
+        node = keys.remainder(self._num_vertices)
+        table_id = torch.bucketize(
+            node,
+            self._vertex_offsets[1:],
+            right=True,
+        )
+        nodes: dict[str, tuple[Tensor, Tensor]] = {}
+        for i, table_name in enumerate(self._table_names):
+            mask = table_id == i
+            nodes[table_name] = (
+                example[mask],
+                node[mask] - self._vertex_offsets[i],
+            )
+        return nodes
+
+    def _sample_temporal_hop(
+        self,
+        frontier_node: Tensor,
+        frontier_example: Tensor,
+        seed_time: Tensor,
+        count: int,
+        random_state: int,
+    ) -> Tensor:
+        cp = self._cp
+        num_examples = seed_time.numel()
+        counts = torch.bincount(
+            frontier_example,
+            minlength=num_examples,
+        )
+        label_offsets = torch.cat(
+            (
+                torch.zeros(1, dtype=torch.int64, device=self.data.device),
+                counts.cumsum(0),
+            )
+        )
+
+        if count == 0:
+            return torch.empty(0, dtype=torch.int64, device=self.data.device)
+        fanout = np.full(self._num_edge_types, count, dtype=np.int32)
+        if count > 0:
+            fanout[np.asarray(self._edge_target_is_temporal_host)] = -1
+
+        result = (
+            self._pylibcugraph.heterogeneous_uniform_temporal_neighbor_sample(
+                self._resource_handle,
+                self._graph,
+                "edge_start_time",
+                cp.from_dlpack(frontier_node),
+                cp.from_dlpack(seed_time[frontier_example]),
+                cp.from_dlpack(label_offsets),
+                cp.from_dlpack(self._vertex_offsets),
+                fanout,
+                num_edge_types=self._num_edge_types,
+                with_replacement=False,
+                do_expensive_check=False,
+                prior_sources_behavior=None,
+                deduplicate_sources=True,
+                disjoint_sampling=False,
+                return_hops=False,
+                renumber=False,
+                retain_seeds=False,
+                compression="COO",
+                compress_per_hop=False,
+                random_state=random_state,
+                temporal_sampling_comparison="monotonically_decreasing",
+            )
+        )
+        minor = self._as_tensor(result["minors"])
+        if minor.numel() == 0:
+            return minor
+        batch = self._as_tensor(result["batch_id"]).long()
+        if count > 0:
+            major = self._as_tensor(result["majors"])
+            edge_type = self._as_tensor(result["edge_type"]).long()
+            edge_time = self._as_tensor(result["edge_start_time"])
+            is_temporal = self._edge_target_is_temporal[edge_type]
+            keep = ~is_temporal
+            selected = self._last_per_source(
+                batch=batch[is_temporal],
+                major=major[is_temporal],
+                edge_type=edge_type[is_temporal],
+                edge_time=edge_time[is_temporal],
+                count=count,
+            )
+            temporal_index = is_temporal.nonzero().flatten()
+            keep[temporal_index[selected]] = True
+            minor = minor[keep]
+            batch = batch[keep]
+
+        return batch * self._num_vertices + minor
+
+    @staticmethod
+    def _last_per_source(
+        batch: Tensor,
+        major: Tensor,
+        edge_type: Tensor,
+        edge_time: Tensor,
+        count: int,
+    ) -> Tensor:
+        if batch.numel() == 0:
+            return torch.empty(0, dtype=torch.int64, device=batch.device)
+
+        order = edge_time.argsort(descending=True, stable=True)
+        for value in (edge_type, major, batch):
+            order = order[value[order].argsort(stable=True)]
+
+        sorted_batch = batch[order]
+        sorted_major = major[order]
+        sorted_type = edge_type[order]
+        group_start = torch.ones(
+            order.numel(),
+            dtype=torch.bool,
+            device=order.device,
+        )
+        group_start[1:] = (
+            (sorted_batch[1:] != sorted_batch[:-1])
+            | (sorted_major[1:] != sorted_major[:-1])
+            | (sorted_type[1:] != sorted_type[:-1])
+        )
+        position = torch.arange(order.numel(), device=order.device)
+        start = torch.where(group_start, position, -1).cummax(0).values
+        return order[(position - start) < count]
+
+    def _seed_nodes(
+        self,
+        seed: Tensor,
+        task_link: TaskLink,
+    ) -> dict[str, tuple[Tensor, Tensor]]:
+        local_seed = seed - self._table_offset(task_link.table)
+        return {
+            task_link.table: (
+                torch.arange(seed.numel(), device=seed.device),
+                local_seed,
+            )
+        }
+
+    def _table_offset(self, table_name: str) -> Tensor:
+        return self._vertex_offsets[self._table_ids[table_name]]
+
+    @staticmethod
+    def _as_tensor(array: Any) -> Tensor:
+        return torch.from_dlpack(array)

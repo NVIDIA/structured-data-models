@@ -18,6 +18,20 @@ from sdm.tensor.mixin import DeviceMixin
 EXAMPLE_ID = "__example__"
 
 
+def _validate_time_columns(
+    data: RelationalData,
+    time_columns: Mapping[str, str],
+) -> None:
+    for table_name, column_name in time_columns.items():
+        stype = data.tables[table_name].stype(column_name)
+        if stype != Stype.datetime:
+            raise ValueError(
+                f"Expected '{column_name}' in table '{table_name}' to "
+                f"have semantic type '{Stype.datetime.value}' "
+                f"(got '{stype.value}')"
+            )
+
+
 class _RelationalSamplerOutput(NamedTuple):
     task_table: TableTensor
     related_tables: RelatedTables
@@ -68,15 +82,7 @@ class RelationalSampler:
     ) -> None:
         self.data = data
         self.time_columns = time_columns or {}
-
-        for table_name, column_name in self.time_columns.items():
-            stype = self.data.tables[table_name].stype(column_name)
-            if stype != Stype.datetime:
-                raise ValueError(
-                    f"Expected '{column_name}' in table '{table_name}' to "
-                    f"have semantic type '{Stype.datetime.value}' "
-                    f"(got '{stype.value}')"
-                )
+        _validate_time_columns(self.data, self.time_columns)
 
         self._row_dict: dict[tuple[str, str, str], Tensor] = {}
         self._colptr_dict: dict[tuple[str, str, str], Tensor] = {}
@@ -133,28 +139,11 @@ class RelationalSampler:
             task_time_column: Datetime column in ``task_table`` used as the
                 query timestamp for temporal sampling.
         """
-        if not isinstance(task_link, TaskLink):
-            task_link = TaskLink.from_mapping(task_link)
-
-        for table, columns in (
-            (task_table, task_link.task_columns),
-            (self.data.tables[task_link.table], task_link.table_columns),
-        ):
-            for column in columns:
-                stype = table.stype(column)
-                if stype != Stype.id:
-                    raise ValueError(
-                        f"Expected column '{column}' to have semantic type "
-                        f"'{Stype.id.value}' (got '{stype.value}')"
-                    )
-
-        if task_time_column is not None:
-            stype = task_table.stype(task_time_column)
-            if stype != Stype.datetime:
-                raise ValueError(
-                    f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value}')"
-                )
+        task_link = self._validate_sample_inputs(
+            task_table=task_table,
+            task_link=task_link,
+            task_time_column=task_time_column,
+        )
 
         try:
             import pyg_lib  # noqa
@@ -241,11 +230,57 @@ class RelationalSampler:
             return_edge_id=False,
         )
 
+        nodes = {
+            table_name: tuple(node.t().contiguous())
+            for table_name, node in node_dict.items()
+            if node.numel() > 0
+        }
+        return self._to_output(
+            task_table=task_table,
+            task_link=task_link,
+            nodes=cast(dict[str, tuple[Tensor, Tensor]], nodes),
+        )
+
+    def _validate_sample_inputs(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink | Mapping[str, str | Sequence[str]],
+        task_time_column: str | None,
+    ) -> TaskLink:
+        if not isinstance(task_link, TaskLink):
+            task_link = TaskLink.from_mapping(task_link)
+
+        for table, columns in (
+            (task_table, task_link.task_columns),
+            (self.data.tables[task_link.table], task_link.table_columns),
+        ):
+            for column in columns:
+                stype = table.stype(column)
+                if stype != Stype.id:
+                    raise ValueError(
+                        f"Expected column '{column}' to have semantic type "
+                        f"'{Stype.id.value}' (got '{stype.value}')"
+                    )
+
+        if task_time_column is not None:
+            stype = task_table.stype(task_time_column)
+            if stype != Stype.datetime:
+                raise ValueError(
+                    f"Expected task time column to have semantic type "
+                    f"'{Stype.datetime.value}' (got '{stype.value}')"
+                )
+        return task_link
+
+    def _to_output(
+        self,
+        task_table: TableTensor,
+        task_link: TaskLink,
+        nodes: Mapping[str, tuple[Tensor, Tensor]],
+    ) -> RelationalSamplerOutput:
         tables: dict[str, Tensor] = {}
-        for table_name, node in node_dict.items():
-            if node.numel() == 0:
+        for table_name, (example, index) in nodes.items():
+            if index.numel() == 0:
                 continue
-            example, index = node.t().contiguous()
             tables[table_name] = torch.cat(
                 [
                     self.data.tables[table_name][index],
@@ -280,7 +315,14 @@ class RelationalSampler:
                 task_table,
                 TableTensor(
                     columns={"id": (EXAMPLE_ID,)},
-                    id=ColumnarTensor((torch.arange(task_table.size(0)),)),
+                    id=ColumnarTensor(
+                        (
+                            torch.arange(
+                                task_table.size(0),
+                                device=task_table.device,
+                            ),
+                        )
+                    ),
                 ),
             ],
             dim=-1,
