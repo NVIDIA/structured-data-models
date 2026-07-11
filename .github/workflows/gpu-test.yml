@@ -25,8 +25,6 @@ jobs:
 
       - name: Set up proxy cache
         uses: nv-gha-runners/setup-proxy-cache@main
-        # The proxy is a download cache, not a security boundary; fall back
-        # to direct downloads rather than failing CI on a proxy outage.
         continue-on-error: true
 
       - name: Install uv
@@ -43,11 +41,6 @@ jobs:
 
       - name: Install package
         run: |
-          # cu128 keeps torch aligned with cudf-cu12/cupy-cuda12x; `auto` picks
-          # cu130 wheels whose nvrtc runtime is incomplete (missing
-          # libnvrtc-builtins.so.13.0), breaking JIT-compiled ops and cudf.
-          # cudf is pinned to 25.12: `from_cudf` uses Column.children, which
-          # cudf 26.x removed. Unpin once sdm/tensor migrates to the new API.
           uv pip install --torch-backend=cu128 '.[test]' 'cudf-cu12==25.12.*'
 
       - name: GPU sanity check
@@ -58,9 +51,6 @@ jobs:
 
       - name: Run tests
         env:
-          # Slow tests only on merges to main, matching test.yml and kumo-ml.
           FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
         run: |
-          # Only GPU-marked tests (onlyCUDA tests and the cuda:0 cases of
-          # withCUDA tests); CPU tests run in test.yml on ubuntu-latest.
           pytest -m gpu -rs --durations=25
