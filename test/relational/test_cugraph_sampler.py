@@ -278,9 +278,17 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _require_rapids()
-    data = _non_temporal_data()
+    data = RelationalData(
+        tables={
+            "users": _table(
+                {"user_id": [30, 10, 20]},
+                {"user_id": Stype.id},
+            )
+        },
+        relationships=[],
+    )
     sampler = data.sampler()
-    task_table = _table({"entity": [2, 0]}, {"entity": Stype.id})
+    task_table = _table({"entity": [20, 30]}, {"entity": Stype.id})
 
     def fail(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("numeric seed lookup used the cuDF join fallback")
@@ -299,7 +307,49 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
 
     assert _rows(
         output.related_tables.tables["users"], EXAMPLE_ID, "user_id"
-    ) == [(0, 2), (1, 0)]
+    ) == [(0, 20), (1, 30)]
+
+
+def test_cugraph_sampler_invalidates_mutated_numeric_seed_lookup() -> None:
+    _require_rapids()
+    data = RelationalData(
+        tables={
+            "users": _table(
+                {"user_id": [30, 10, 20]},
+                {"user_id": Stype.id},
+            )
+        },
+        relationships=[],
+    )
+    sampler = data.sampler()
+    link = {
+        "task_column": "entity",
+        "table": "users",
+        "table_column": "user_id",
+    }
+
+    sampler(
+        task_table=_table({"entity": [30]}, {"entity": Stype.id}),
+        task_link=link,
+        num_neighbors=[0],
+    )
+    data.tables["users"].id.unbind(-1)[0][0] = 40
+
+    with pytest.raises(ValueError, match="match exactly one row"):
+        sampler(
+            task_table=_table({"entity": [30]}, {"entity": Stype.id}),
+            task_link=link,
+            num_neighbors=[0],
+        )
+
+    output = sampler(
+        task_table=_table({"entity": [40]}, {"entity": Stype.id}),
+        task_link=link,
+        num_neighbors=[0],
+    )
+    assert _rows(
+        output.related_tables.tables["users"], EXAMPLE_ID, "user_id"
+    ) == [(0, 40)]
 
 
 def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors() -> None:
