@@ -14,6 +14,7 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
+from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import to_arrow
 
 if TYPE_CHECKING:
@@ -658,7 +659,8 @@ class TableTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            with _preserve_view_inference_mode(func, args[0]):
+                return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"

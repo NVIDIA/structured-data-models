@@ -168,7 +168,6 @@ class StringTensor(VarLenTensor):
             .view(offset_dtype)
             .to(device),
             size=size,
-            storage_offset=column.offset,
         )
 
     @classmethod

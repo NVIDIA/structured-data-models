@@ -77,6 +77,10 @@ addopts = [
     "--color=yes",
     "-vv",
     "--import-mode=importlib",
+    "--strict-markers",
+]
+markers = [
+    "gpu: tests that require a CUDA GPU",
 ]
 testpaths = ["test"]
 xfail_strict = true

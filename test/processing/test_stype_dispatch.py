@@ -39,6 +39,37 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
         table.categorical.as_tensor(),
     )
 
+    restored = dispatch.inverse_transform(output)
+
+    assert restored.columns == table.columns
+    assert torch.allclose(restored.numerical, table.numerical)
+    assert torch.equal(
+        restored.categorical.as_tensor(), table.categorical.as_tensor()
+    )
+
+
+def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
+    table = _mixed_table()
+    dispatch = StypeDispatch(numerical=MeanImpute())
+
+    output = dispatch.fit_transform(table)
+
+    with pytest.raises(TypeError, match=r"numerical.*MeanImpute"):
+        dispatch.inverse_transform(output)
+
+
+def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
+    table = _mixed_table()
+    dispatch = StypeDispatch(
+        numerical=StandardScale(),
+        remainder="drop",
+    )
+
+    output = dispatch.fit_transform(table)
+
+    with pytest.raises(ValueError, match="remainder='drop'"):
+        dispatch.inverse_transform(output)
+
 
 def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     table = _mixed_table()
@@ -80,9 +111,6 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-
-
-# TODO: Cover shape-changing routes once ConstantFilter is available.
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:

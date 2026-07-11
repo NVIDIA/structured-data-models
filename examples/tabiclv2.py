@@ -18,6 +18,8 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
         x=table.drop_columns("target"),
         y=table[:300, "target"],
+        # TODO: Re-enable once the recipe supports classification.
+        # recipe=model.default_recipe(),
         num_estimators=2,
     )
 
@@ -26,6 +28,8 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model.fit(
         x=table[:300].drop_columns("target"),
         y=table[:300, "target"],
+        # TODO: Re-enable once the recipe supports classification.
+        # recipe=model.default_recipe(),
         num_estimators=2,
     )
     model.predict(
