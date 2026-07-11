@@ -32,10 +32,8 @@ def test_init() -> None:
         "TableTensor(\n"
         "  size=(2, 4),\n"
         "  blocks={\n"
-        "    numerical (2): ['age', 'income'],\n"
-        "    categorical (2): ['country', 'segment'],\n"
-        "    datetime (0): [],\n"
-        "    id (0): [],\n"
+        "    numerical (2): [age, income],\n"
+        "    categorical (2): [country, segment],\n"
         "  },\n"
         ")"
     )
