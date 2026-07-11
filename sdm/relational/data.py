@@ -92,8 +92,22 @@ class Relationship:
             right_columns=right_columns,
         )
 
+    def __repr__(self) -> str:
+        if len(self.left_columns) == 1:
+            left_columns = self.left_columns[0]
+            right_columns = self.right_columns[0]
+        else:
+            left_columns = "[" + ", ".join(self.left_columns) + "]"
+            right_columns = "[" + ", ".join(self.right_columns) + "]"
 
-@dataclass(frozen=True, init=False)
+        return (
+            f"{self.left_table}.{left_columns}"
+            "<>"
+            f"{self.right_table}.{right_columns}"
+        )
+
+
+@dataclass(frozen=True, init=False, repr=False)
 class RelationalData(DeviceMixin):
     r"""Collection of named tables and join relationships.
 
@@ -292,3 +306,23 @@ class RelationalData(DeviceMixin):
             data=self,
             time_columns=time_columns,
         )
+
+    def __repr__(self) -> str:
+        out = f"{self.__class__.__name__}(\n"
+        if len(self.tables) > 0:
+            out += "  tables={\n"
+            out += "".join(
+                f"    {name}: {table.__repr__(indent=4)[4:]},\n"
+                for name, table in self.tables.items()
+            )
+            out += "  },\n"
+        else:
+            out += "  tables={},\n"
+        if len(self.relationships) > 0:
+            out += "  relationships=[\n"
+            out += "".join(f"    {rel},\n" for rel in self.relationships)
+            out += "  ],\n"
+        else:
+            out += "  relationships=[],\n"
+        out += ")"
+        return out
