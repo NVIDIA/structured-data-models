@@ -5,11 +5,7 @@ import torch
 
 
 def onlyCUDA(func: Callable) -> Callable:
-    """Skip the test if CUDA is not available.
-
-    The test is additionally marked with ``gpu``, so it can be selected
-    via ``pytest -m gpu``.
-    """
+    """Skip the test if CUDA is not available."""
     import pytest
 
     func = pytest.mark.gpu(func)
@@ -20,12 +16,7 @@ def onlyCUDA(func: Callable) -> Callable:
 
 
 def withCUDA(func: Callable) -> Callable:
-    """Parametrize the test over ``cpu`` and ``cuda:0``.
-
-    The ``cuda:0`` case is skipped when CUDA is not available.
-    It is additionally marked with ``gpu``, so it can be selected via
-    ``pytest -m gpu``.
-    """
+    """Parametrize the test over ``cpu`` and ``cuda:0``."""
     import pytest
 
     devices = [
@@ -34,7 +25,7 @@ def withCUDA(func: Callable) -> Callable:
             torch.device("cuda:0"),
             id="cuda:0",
             marks=[
-                pytest.mark.gpu,
+                pytest.mark.cuda,
                 pytest.mark.skipif(
                     not torch.cuda.is_available(),
                     reason="CUDA not available",
