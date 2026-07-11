@@ -11,12 +11,13 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
+from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
 
 if TYPE_CHECKING:
-    import cudf  # ty: ignore[unresolved-import]
+    import cudf
 
 
 class ColumnarTensor(Tensor):
@@ -151,33 +152,28 @@ class ColumnarTensor(Tensor):
     @classmethod
     def from_cudf(
         cls,
-        values: cudf.Series | cudf.Index,
+        ser: cudf.Series | cudf.Index,
         *,
         device: torch.device | str | None = None,
     ) -> Self:
-        r"""Create tensor from a ``cudf`` series or index.
+        r"""Create tensor from a :class:`cudf.Series`.
 
         Args:
-            values: The ``cudf`` series or index.
-            device: The device. If ``None``, tensors stay on the cuDF values'
-                CUDA device.
+            ser: The :class:`cudf.Series` or :class:`cudf.Index`.
+            device: The device.
         """
-        from cudf.api.types import (  # ty: ignore[unresolved-import]
-            is_integer_dtype,
-            is_string_dtype,
-        )
+        from cudf.api.types import is_integer_dtype, is_string_dtype
 
-        null_count = values._column.null_count
-        if is_string_dtype(values.dtype):
-            column = StringTensor.from_cudf(values, device=device)
+        if is_string_dtype(ser.dtype):
+            column = StringTensor.from_cudf(ser, device=device)
         else:
-            if null_count > 0 and is_integer_dtype(values.dtype):
+            if ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
                 raise ValueError(
                     f"'{cls.__name__}' cannot represent null integer values"
                 )
-            if null_count > 0 and values.dtype.kind == "f":
-                values = values.fillna(float("nan"))
-            column = torch.from_dlpack(values.to_dlpack()).to(device)
+            if ser._column.null_count > 0 and ser.dtype.kind == "f":
+                ser = ser.fillna(float("nan"))
+            column = torch.from_dlpack(ser.to_dlpack()).to(device)
 
         return cls(columns=(column,), device=device)
 
@@ -236,7 +232,8 @@ class ColumnarTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            with _preserve_view_inference_mode(func, args[0]):
+                return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"

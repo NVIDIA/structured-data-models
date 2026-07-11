@@ -79,7 +79,7 @@ kwargs = {
     "num_neighbors": [16, 16],
     "task_time_column": task.time_col,
 }
-train_table, related_tables = sampler(train_table, **kwargs)
+train_table, related_tables = sampler(train_table, **kwargs).to(device)
 model.fit(
     x=train_table.drop_columns(task.target_col),
     y=train_table[task.target_col],
@@ -88,5 +88,5 @@ model.fit(
 
 test_table = task_tables[-1].drop_columns(task.target_col)
 for test_batch in test_table.split(args.batch_size):
-    model.predict(*sampler(test_batch, **kwargs))
+    model.predict(*sampler(test_batch, **kwargs).to(device))
 model.clear()

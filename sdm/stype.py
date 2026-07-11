@@ -63,8 +63,8 @@ def infer_stypes(
       ``"userId"``, ``"id"``, but not ``"solid"`` or ``"covid"``).
 
     Args:
-        table: A :class:`pandas.DataFrame`, :class:`cudf.DataFrame`, or
-            :class:`pyarrow.Table`.
+        table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
+            :class:`cudf.DataFrame`.
         overrides: Optional semantic type overrides by column name.
 
     Returns:
@@ -78,9 +78,6 @@ def infer_stypes(
         if isinstance(table, pd.DataFrame):
             table = pa.Schema.from_pandas(table, preserve_index=False)
 
-    if isinstance(table, pa.Table):
-        table = table.schema
-
     if importlib.util.find_spec("cudf") is not None:
         import cudf
 
@@ -88,26 +85,28 @@ def infer_stypes(
             return {
                 column: Stype(overrides[column])
                 if column in overrides
-                else _infer_stype_cudf(column, dtype)
+                else _infer_cudf_stype(column, dtype)
                 for column, dtype in table.dtypes.items()
             }
 
+    if isinstance(table, pa.Table):
+        table = table.schema
+
     if not isinstance(table, pa.Schema):
         raise TypeError(
-            f"Expected input to be a 'pandas.DataFrame', 'cudf.DataFrame', "
-            f"or 'pyarrow.Table' "
-            f"(got '{type(table).__name__}')"
+            f"Expected input to be a 'pandas.DataFrame', 'pyarrow.Table', "
+            f"or 'cudf.DataFrame' (got '{type(table).__name__}')"
         )
 
     return {
         field.name: Stype(overrides[field.name])
         if field.name in overrides
-        else _infer_stype(field.name, field.type)
+        else _infer_arrow_stype(field.name, field.type)
         for field in table
     }
 
 
-def _infer_stype(name: str, dtype: pa.DataType) -> Stype:
+def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     if (
         pa.types.is_integer(dtype)
         or pa.types.is_string(dtype)
@@ -136,7 +135,7 @@ def _infer_stype(name: str, dtype: pa.DataType) -> Stype:
     raise TypeError(f"Unsupported Arrow type '{dtype}' for column '{name}'")
 
 
-def _infer_stype_cudf(name: str, dtype: Any) -> Stype:
+def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
     import cudf
     from cudf.api.types import (
         is_bool_dtype,
