@@ -35,12 +35,14 @@ class CuGraphRelationalSampler(RelationalSampler):
         data: CUDA-resident tables and their relationships.
         time_columns: Mapping from table name to the datetime column used for
             temporal ``"last"`` sampling.
+        random_state: Seed for the advancing cuGraph random-state stream.
     """
 
     def __init__(
         self,
         data: RelationalData,
         time_columns: Mapping[str, str] | None = None,
+        random_state: int | None = None,
     ) -> None:
         if data.device.type != "cuda":
             raise ValueError(
@@ -49,6 +51,7 @@ class CuGraphRelationalSampler(RelationalSampler):
 
         self.data = data
         self.time_columns = time_columns or {}
+        self._generator = np.random.default_rng(random_state)
         _validate_time_columns(self.data, self.time_columns)
 
         try:
@@ -308,7 +311,7 @@ class CuGraphRelationalSampler(RelationalSampler):
             retain_seeds=True,
             compression="COO",
             compress_per_hop=False,
-            random_state=0,
+            random_state=self._next_random_state(),
         )
         node = self._as_tensor(result["renumber_map"])
         offsets = self._as_tensor(result["renumber_map_offsets"]).long()
@@ -334,7 +337,7 @@ class CuGraphRelationalSampler(RelationalSampler):
         visited = (example * total + seed).unique(sorted=True)
         frontier = visited
 
-        for hop, count in enumerate(num_neighbors):
+        for count in num_neighbors:
             if frontier.numel() == 0:
                 break
             frontier_example = frontier.div(total, rounding_mode="floor")
@@ -344,7 +347,6 @@ class CuGraphRelationalSampler(RelationalSampler):
                 frontier_example=frontier_example,
                 seed_time=seed_time,
                 count=count,
-                random_state=hop,
             )
             if sampled.numel() == 0:
                 break
@@ -386,7 +388,6 @@ class CuGraphRelationalSampler(RelationalSampler):
         frontier_example: Tensor,
         seed_time: Tensor,
         count: int,
-        random_state: int,
     ) -> Tensor:
         cp = self._cp
         num_examples = seed_time.numel()
@@ -428,7 +429,7 @@ class CuGraphRelationalSampler(RelationalSampler):
                 retain_seeds=False,
                 compression="COO",
                 compress_per_hop=False,
-                random_state=random_state,
+                random_state=self._next_random_state(),
                 temporal_sampling_comparison="monotonically_decreasing",
             )
         )
@@ -503,6 +504,14 @@ class CuGraphRelationalSampler(RelationalSampler):
 
     def _table_offset(self, table_name: str) -> Tensor:
         return self._vertex_offsets[self._table_ids[table_name]]
+
+    def _next_random_state(self) -> int:
+        return int(
+            self._generator.integers(
+                low=0,
+                high=np.iinfo(np.int32).max,
+            )
+        )
 
     @staticmethod
     def _as_tensor(array: Any) -> Tensor:
