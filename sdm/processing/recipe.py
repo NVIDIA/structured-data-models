@@ -149,7 +149,7 @@ class Recipe:
             direct_paths = {""}
         elif isinstance(output, Sequential):
             direct_paths = {
-                f"steps.{index}"
+                str(index)
                 for index, step in enumerate(output.steps)
                 if isinstance(step, TaskDispatch)
             }
