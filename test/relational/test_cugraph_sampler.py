@@ -3,7 +3,7 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 import torch
-from sdm import RelationalData, Stype, TableTensor
+from sdm import ColumnarTensor, RelationalData, Stype, TableTensor
 from sdm.relational import CuGraphRelationalSampler
 from sdm.relational.sampler import EXAMPLE_ID
 
@@ -21,6 +21,19 @@ def _table(
 ) -> TableTensor:
     table = TableTensor.from_pandas(df=pd.DataFrame(data), stypes=stypes)
     return cast(TableTensor, table.cuda())
+
+
+def _id_table(
+    column: str,
+    values: list[int],
+    dtype: torch.dtype,
+) -> TableTensor:
+    return TableTensor(
+        columns={Stype.id: (column,)},
+        id=ColumnarTensor(
+            columns=(torch.tensor(values, dtype=dtype, device="cuda"),)
+        ),
+    )
 
 
 def _non_temporal_data() -> RelationalData:
@@ -350,6 +363,41 @@ def test_cugraph_sampler_invalidates_mutated_numeric_seed_lookup() -> None:
     assert _rows(
         output.related_tables.tables["users"], EXAMPLE_ID, "user_id"
     ) == [(0, 40)]
+
+
+def test_cugraph_sampler_invalidates_retyped_numeric_seed_lookup() -> None:
+    _require_rapids()
+    tables = {"users": _id_table("user_id", [-1, 1], torch.int8)}
+    data = RelationalData(
+        tables=tables,
+        relationships=[],
+    )
+    sampler = data.sampler()
+    link = {
+        "task_column": "entity",
+        "table": "users",
+        "table_column": "user_id",
+    }
+    sampler(
+        task_table=_id_table("entity", [-1], torch.int8),
+        task_link=link,
+        num_neighbors=[0],
+    )
+
+    source = data.tables["users"].id.unbind(-1)[0]
+    tables["users"] = TableTensor(
+        columns={Stype.id: ("user_id",)},
+        id=ColumnarTensor(columns=(source.view(torch.uint8),)),
+    )
+
+    output = sampler(
+        task_table=_id_table("entity", [255], torch.uint8),
+        task_link=link,
+        num_neighbors=[0],
+    )
+    assert _rows(
+        output.related_tables.tables["users"], EXAMPLE_ID, "user_id"
+    ) == [(0, 255)]
 
 
 def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors() -> None:

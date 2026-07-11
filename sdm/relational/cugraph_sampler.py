@@ -310,6 +310,9 @@ class CuGraphRelationalSampler(RelationalSampler):
         cached, version, _, _ = lookup
         return (
             cached._version == version
+            and cached.dtype == source.dtype
+            and cached.device == source.device
+            and cached.layout == source.layout
             and cached.data_ptr() == source.data_ptr()
             and cached.size() == source.size()
             and cached.stride() == source.stride()
