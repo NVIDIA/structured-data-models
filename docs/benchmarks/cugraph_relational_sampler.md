@@ -1,11 +1,9 @@
 # cuGraph relational sampler benchmark
 
 This report compares the host-memory `RelationalSampler` plus `pyg-lib` with
-the CUDA-primary `CuGraphRelationalSampler` after commit `99b5765`.
-
-These are the baseline measurements before the cached single-integer-key CUDA
-searchsorted fast path in `3ae4139`; rerun the CUDA matrix after rebasing onto
-that commit before using these figures as post-optimization results.
+the CUDA-primary `CuGraphRelationalSampler`. It retains the baseline measured
+at `99b5765`, then measures the cached single-integer-key CUDA searchsorted
+fast path added in `3ae4139` under the same workload and GPU environment.
 
 ## Workload and methodology
 
@@ -109,22 +107,59 @@ The persistent cuDF task-to-seed merge is about 8--9 ms across request sizes.
 For two hops, temporal neighbor sampling accounts for roughly three quarters
 of request time. Output assembly and synchronization residual are small.
 
+## Post-optimization result
+
+Commit `3ae4139` caches a sorted lookup for a table's single integer task key
+and resolves each later request with CUDA `searchsorted`. Composite, string,
+and mixed-dtype keys retain the cuDF merge fallback. The cache is built lazily
+during the benchmark warmups and reused; these remain steady-state serving
+measurements rather than first-request latency.
+
+The optimized run used the same T4, software environment, RelBench cache,
+task-row positions, seed, fanouts, three warmups, and ten repetitions. All
+invariants remained valid. The exhaustive batch-8 digest still matched the
+CPU result exactly with 143 rows and zero temporal cutoff violations.
+
+| Fanout     | Batch | CPU median ms | Baseline CUDA ms | Optimized CUDA ms | CPU/optimized x |
+| ---------- | ----: | ------------: | ---------------: | ----------------: | --------------: |
+| `[16]`     |     1 |        14.655 |           24.101 |            16.757 |            0.87 |
+| `[16]`     |   128 |        16.064 |           26.701 |            18.250 |            0.88 |
+| `[16]`     | 1,024 |        18.163 |           29.812 |            21.141 |            0.86 |
+| `[16]`     | 4,096 |        30.158 |           42.820 |            24.065 |        **1.25** |
+| `[16]`     | 8,192 |        39.260 |           38.291 |            28.955 |        **1.36** |
+| `[16, 16]` | 1,024 |        24.850 |           56.705 |            47.524 |            0.52 |
+| `[16, 16]` | 4,096 |        55.382 |           83.256 |            71.685 |            0.77 |
+| `[16, 16]` | 8,192 |        86.426 |          125.121 |           114.702 |            0.75 |
+
+The task lookup median fell from 8--9 ms to 0.44--0.55 ms, roughly a 94%
+reduction. At batch 1,024, one-hop total latency fell 29% and two-hop latency
+fell 16%. The clear one-hop crossover moved from batch 32,768 in the baseline
+to batch 4,096: the optimized CUDA path is 1.25x faster there and 1.36x faster
+at batch 8,192. Small one-hop requests are substantially closer but remain
+12--16% slower than the host path.
+
+Two-hop CUDA remains 29--91% slower across the measured sizes. Its batch-1,024
+profile spends 41.7 ms in neighbor sampling versus 0.52 ms in task lookup, so
+further lookup tuning cannot close that gap. The next useful optimization must
+reduce the temporal gather/materialization and the per-hop cuGraph dispatch
+cost.
+
 ## Interpretation and follow-ups
 
-CUDA is advantageous for sufficiently large one-hop requests, but the current
-T4 implementation is not a latency win for ordinary small batches or the
-two-hop temporal workload. The profile and measurements support these
-low-hanging implementation improvements:
+The cached lookup addresses the dominant fixed request overhead and makes CUDA
+advantageous for medium and large one-hop requests. The current T4
+implementation is still not a latency win for small batches or the two-hop
+temporal workload. The remaining profile supports these follow-ups:
 
-1. Cache or pre-index the task key to table-row-ID mapping. Removing the
-   repeated cuDF merge targets the fixed 8--9 ms join cost.
-2. Fuse temporal sampling output handling with top-k selection to reduce the
+1. Fuse temporal sampling output handling with top-k selection to reduce the
    repeated materialization and sort work per hop.
-3. Batch/fuse two-hop temporal C API dispatches and retain frontier metadata in
+2. Batch/fuse two-hop temporal C API dispatches and retain frontier metadata in
    a compact device representation; the second dispatch dominates the
    two-hop gap.
-4. Consider a size-aware policy that keeps small requests on the host path and
-   uses CUDA for large one-hop batches until the fixed join cost is reduced.
+3. Consider a size-aware policy that keeps small requests on the host path and
+   uses CUDA for one-hop batches at or above the measured crossover. Recheck
+   that threshold on the production GPU and workload rather than hard-coding
+   the T4 result.
 
 ## Reproduction
 
@@ -136,9 +171,13 @@ The primary raw files are:
   `rel_arxiv_comparison_t4.json` for small requests and exhaustive parity.
 - `rel_arxiv_*_large.json` for batches 4,096 and 8,192.
 - `rel_arxiv_*_16384.json` and `rel_arxiv_*_32768.json` for crossover probes.
+- `rel_arxiv_cuda_cugraph_t4_optimized.json` and the two optimized comparison
+  files for the post-`3ae4139` matrix through batch 8,192.
 - `../../benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_timeline.html` and
   `../../benchmarks/artifacts/rel_arxiv_cuda_cugraph_t4_trace.json` for the
-  self-contained phase timeline and its compact Chrome-trace-compatible data.
+  baseline self-contained phase timeline and its compact
+  Chrome-trace-compatible data. The corresponding `_optimized` artifacts
+  contain the post-optimization profile.
 
 Host baseline setup:
 
@@ -184,3 +223,8 @@ python benchmarks/relational_sampler.py compare \
 
 Use the same commands with `--batch-size 4096,8192`, `16384`, or `32768`
 and the corresponding result names to reproduce the amortization probes.
+For the optimized matrix, run the CUDA command from `3ae4139` or later with
+`--batch-size 1,128,1024,4096,8192` and write the result and timeline names
+with the `_optimized` suffix. Compare that result once against the primary CPU
+file and once against the `large` CPU file to reproduce the checked-in
+optimized comparison JSON.
