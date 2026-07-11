@@ -1,3 +1,8 @@
+from collections.abc import Sequence
+from typing import cast
+
+import torch
+
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -14,9 +19,10 @@ class Sequential(Processor, InvertibleMixin):
 
     def __init__(self, *args: Processor) -> None:
         super().__init__()
-        self.steps: tuple[Processor, ...] = args
-        for i, step in enumerate(self.steps):
-            self.add_module(str(i), step)
+        self.steps: Sequence[Processor] = cast(
+            Sequence[Processor],
+            torch.nn.Sequential(*args),
+        )
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
     def _fit(self, input: TableTensor) -> None:
