@@ -8,7 +8,7 @@ def onlyCUDA(func: Callable) -> Callable:
     """Skip the test if CUDA is not available."""
     import pytest
 
-    func = pytest.mark.gpu(func)
+    func = pytest.mark.cuda(func)
     return pytest.mark.skipif(
         not torch.cuda.is_available(),
         reason="CUDA not available",

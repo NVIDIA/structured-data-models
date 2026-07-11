@@ -53,4 +53,4 @@ jobs:
         env:
           FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
         run: |
-          pytest -m gpu -rs --durations=25
+          pytest -m cuda -rs --durations=25
