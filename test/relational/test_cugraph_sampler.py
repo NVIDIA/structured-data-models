@@ -157,6 +157,49 @@ def test_cugraph_sampler_is_disjoint_and_retains_isolated_seeds() -> None:
     ) == [(0, 10), (0, 11), (2, 10), (2, 11)]
 
 
+def test_cugraph_sampler_advances_seeded_random_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _require_rapids()
+    data = _non_temporal_data()
+    first = CuGraphRelationalSampler(data=data, random_state=123)
+    second = CuGraphRelationalSampler(data=data, random_state=123)
+    task_table = _table({"entity": [0]}, {"entity": Stype.id})
+    states: list[int] = []
+    sample = first._pylibcugraph.heterogeneous_uniform_neighbor_sample
+
+    def capture(*args: Any, **kwargs: Any) -> Any:
+        states.append(kwargs["random_state"])
+        return sample(*args, **kwargs)
+
+    monkeypatch.setattr(
+        first._pylibcugraph,
+        "heterogeneous_uniform_neighbor_sample",
+        capture,
+    )
+
+    def sample_orders(
+        sampler: CuGraphRelationalSampler,
+    ) -> list[tuple[Any, ...]]:
+        output = sampler(
+            task_table=task_table,
+            task_link={
+                "task_column": "entity",
+                "table": "users",
+                "table_column": "user_id",
+            },
+            num_neighbors=[1],
+        )
+        return _rows(output.related_tables.tables["orders"], "order_id")
+
+    first_sequence = [sample_orders(first), sample_orders(first)]
+    second_sequence = [sample_orders(second), sample_orders(second)]
+
+    assert states[0] != states[1]
+    assert states[:2] == states[2:]
+    assert first_sequence == second_sequence
+
+
 def test_cugraph_sampler_retains_seed_when_relationship_is_empty() -> None:
     _require_rapids()
     data = _non_temporal_data()
