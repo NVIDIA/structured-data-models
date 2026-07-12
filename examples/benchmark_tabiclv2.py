@@ -103,7 +103,8 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 
 CONFIGS = {
     # name: (precision, sdpa_priority, compile_kwargs, te_recipe) with an
-    # optional fifth element enabling shape-bucketed padding.
+    # optional fifth element enabling shape-bucketed padding and an
+    # optional sixth enabling cuDNN variable-length attention.
     "c0-fp32": ("fp32", False, None, None),
     "c1-tf32": ("tf32", False, None, None),
     "c2-bf16-autocast": ("bf16-autocast", False, None, None),
@@ -194,6 +195,18 @@ CONFIGS = {
         False,
         {"fullgraph": True, "dynamic": True, "regional": True},
         None,
+    ),
+    # c18 plus cuDNN variable-length attention for the padded key/value
+    # streams (native padding-mask support instead of boolean masks;
+    # requires the optional nvidia-cudnn-frontend package). The sixth
+    # tuple element enables the path.
+    "c20-bucket-regional-varlen": (
+        "bf16-full",
+        True,
+        {"fullgraph": True, "dynamic": True, "regional": True},
+        None,
+        True,
+        True,
     ),
 }
 
@@ -539,6 +552,10 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
     bucketed = bool(extras and extras[0])
     device = torch.device("cuda")
     result: dict[str, Any] = dict(spec)
+    if len(extras) > 1 and extras[1]:
+        from sdm.nn import enable_cudnn_varlen
+
+        result["cudnn_varlen_active"] = enable_cudnn_varlen(True)
 
     model = TabICLv2(pretrained=True, device=device)
     apply_precision(model, precision)
