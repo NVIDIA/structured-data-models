@@ -160,7 +160,6 @@ class StringTensor(VarLenTensor):
                 device
             ),
             size=size,
-            storage_offset=column.offset,
         )
 
     @classmethod

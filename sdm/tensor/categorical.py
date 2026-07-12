@@ -11,6 +11,7 @@ from torch.utils import _pytree as pytree
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
+from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
@@ -296,7 +297,8 @@ class CategoricalTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            with _preserve_view_inference_mode(func, args[0]):
+                return handler(*args, **(kwargs or {}))
 
         # Operate on vanilla tensors for all non-handled functions:
         args = pytree.tree_map_only(CategoricalTensor, lambda x: x._data, args)

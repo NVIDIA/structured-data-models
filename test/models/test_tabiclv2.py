@@ -4,7 +4,7 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Sequential
+from sdm.processing import Recipe, Sequential, SoftmaxTemperature
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -68,6 +68,50 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
     model.fit(x[..., :R_train, :], y, num_estimators=3)
     torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
     model.clear()
+
+
+def test_tabiclv2_recipe() -> None:
+    model = TabICLv2(pretrained=False)
+
+    R, C, R_train = 8, 6, 5
+    x = TableTensor.from_tensor(torch.randn(R, C))
+    y = TableTensor.from_tensor(torch.randn(R_train, 1))
+
+    # An empty recipe matches the recipe-less forward pass:
+    torch.testing.assert_close(
+        model(x, y, recipe=Recipe()),
+        model(x, y),
+    )
+
+    # Output steps run after the model and ensembling:
+    raw = model(x, y)
+    output_recipe = Recipe(output=[SoftmaxTemperature()])
+    out = model(x, y, recipe=output_recipe)
+    torch.testing.assert_close(out, raw.softmax(dim=-1))
+    model.fit(x[:R_train], y, recipe=output_recipe)
+    torch.testing.assert_close(model.predict(x[R_train:]), out)
+
+    # The recipe matches its manual driver-side application:
+    out = model(x, y, recipe=model.default_recipe())
+    assert out.size() == (R - R_train, 999)
+    assert torch.is_inference(out)
+    recipe = model.default_recipe()
+    recipe.features.fit(x[:R_train])
+    raw = model(
+        x=recipe.features.transform(x),
+        y=recipe.target.fit_transform(y),
+    )
+    assert isinstance(recipe.target, Sequential)
+    expected = recipe.target.inverse_transform(
+        TableTensor.from_tensor(raw.clone())
+    ).numerical
+    torch.testing.assert_close(out, expected)
+
+    # The fitted recipe state is reused across predict calls:
+    model.fit(x[:R_train], y, recipe=model.default_recipe())
+    torch.testing.assert_close(model.predict(x[R_train:]), out)
+    model.clear()
+    assert model._recipe is None
 
 
 def test_default_recipe_regression_roundtrip() -> None:
