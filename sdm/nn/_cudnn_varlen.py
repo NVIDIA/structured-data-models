@@ -253,9 +253,7 @@ def cudnn_varlen_sdpa(
     # the op (opaque to compilation), so unsupported shapes degrade to
     # the masked fallback at runtime without touching the traced graph.
     with _lock:
-        graph = _get_graph_or_none(
-            B, H, Q, KV, D, query.dtype, query.device
-        )
+        graph = _get_graph_or_none(B, H, Q, KV, D, query.dtype, query.device)
         if graph is None:
             return _masked_fallback(query, key, value, seqused_key_value)
         out = torch.empty_like(query)
@@ -269,9 +267,7 @@ def cudnn_varlen_sdpa(
                 graph.k: key,
                 graph.v: value,
                 graph.seq_q: graph.seq_q_value,
-                graph.seq_kv: seqused_key_value.view(
-                    B, 1, 1, 1
-                ).contiguous(),
+                graph.seq_kv: seqused_key_value.view(B, 1, 1, 1).contiguous(),
                 graph.out: out,
             },
             graph.workspace,
