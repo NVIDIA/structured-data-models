@@ -10,7 +10,7 @@ from torch import Tensor
 from torch.nn import GELU, LayerNorm, Linear, Sequential
 
 from sdm.cache import KVCacheEntry
-from sdm.nn import RotaryEmbedding
+from sdm.nn import RotaryEmbedding, _cudnn_varlen
 
 _BatchTile = tuple[slice, ...]
 
@@ -425,7 +425,25 @@ class SDPA(torch.nn.Module):
 
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
-            seqused_key_value = seqused_key_value.reshape(-1).unsqueeze(-1)
+            seqused_key_value = seqused_key_value.reshape(-1)
+            if _cudnn_varlen.eligible(
+                query,
+                key,
+                num_query_heads=self.num_query_heads,
+                num_key_value_heads=self.num_key_value_heads,
+            ):
+                # cuDNN's native padding-mask support bounds attention to
+                # the valid key/value region instead of masking it, which
+                # measures 3.3-5.5x faster than the boolean-mask kernels
+                # at bucketed-serving shapes (see sdm/nn/_cudnn_varlen.py).
+                out = _cudnn_varlen.cudnn_varlen_sdpa(
+                    query.contiguous(),
+                    key.contiguous(),
+                    value.contiguous(),
+                    seqused_key_value.contiguous(),
+                )
+                return out.view(batch_shape + out.size()[-3:])
+            seqused_key_value = seqused_key_value.unsqueeze(-1)
             key_index = torch.arange(key.size(-3), device=key.device)
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)

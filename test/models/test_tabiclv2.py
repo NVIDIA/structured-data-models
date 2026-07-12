@@ -788,3 +788,150 @@ def test_tabiclv2_seqused_cols_table_tensor_warns() -> None:
             seqused_cols=torch.tensor(3, dtype=torch.int32),
         )
     assert any("numerical block" in str(entry.message) for entry in record)
+
+
+def test_tabiclv2_cudnn_varlen_toggle_and_degrade() -> None:
+    from sdm.nn import _cudnn_varlen, enable_cudnn_varlen
+
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 6, 5
+    x = torch.randn(R_train + 5 + R_test, C)
+    y = torch.randint(0, 10, (R_train + 5,))
+    seqused_train = torch.tensor(R_train, dtype=torch.int32)
+
+    expected = model(x, y, seqused_train=seqused_train)
+
+    # Without the optional dependency (or on CPU) the boolean-mask path
+    # keeps serving exactly, and disabling always reports inactive.
+    active = enable_cudnn_varlen(True)
+    if not _cudnn_varlen.is_available():
+        assert not active
+    try:
+        out = model(x, y, seqused_train=seqused_train)
+        torch.testing.assert_close(out, expected, atol=1e-3, rtol=1e-3)
+    finally:
+        assert enable_cudnn_varlen(False) is False
+
+
+def test_cudnn_varlen_eligibility_gates() -> None:
+    from sdm.nn import _cudnn_varlen
+
+    query = torch.randn(4, 32, 8, 64)
+    key = torch.randn(4, 48, 8, 64)
+
+    # A disabled flag short-circuits everything.
+    _cudnn_varlen.enable_cudnn_varlen(False)
+    assert not _cudnn_varlen.eligible(
+        query, key, num_query_heads=8, num_key_value_heads=8
+    )
+
+    _cudnn_varlen.enable_cudnn_varlen(True)
+    try:
+        # CPU tensors are never eligible (also covers environments
+        # without the optional dependency, where enabling is inert).
+        assert not _cudnn_varlen.eligible(
+            query, key, num_query_heads=8, num_key_value_heads=8
+        )
+        if torch.cuda.is_available() and _cudnn_varlen.is_available():
+            base = query.cuda().bfloat16()
+            base_k = key.cuda().bfloat16()
+            # Eligibility mirrors serving: inference (no-grad) context.
+            with torch.no_grad():
+                assert _cudnn_varlen.eligible(
+                    base, base_k, num_query_heads=8, num_key_value_heads=8
+                )
+                # Grouped-query attention stays on the boolean-mask path.
+                assert not _cudnn_varlen.eligible(
+                    base, base_k, num_query_heads=8, num_key_value_heads=2
+                )
+                # Head dims must be multiples of eight (and at most 128).
+                assert not _cudnn_varlen.eligible(
+                    base[..., :36],
+                    base_k[..., :36],
+                    num_query_heads=8,
+                    num_key_value_heads=8,
+                )
+            # Gradient-enabled calls stay on the boolean-mask path.
+            with torch.enable_grad():
+                assert not _cudnn_varlen.eligible(
+                    base.clone().requires_grad_(True),
+                    base_k,
+                    num_query_heads=8,
+                    num_key_value_heads=8,
+                )
+    finally:
+        _cudnn_varlen.enable_cudnn_varlen(False)
+
+
+def test_cudnn_varlen_build_failure_degrades() -> None:
+    from sdm.nn import _cudnn_varlen
+
+    # A graph-build failure must degrade to the masked fallback inside
+    # the op (probed once, negatively cached), never raise mid-serving.
+    class _FailingFrontend:
+        class data_type:
+            BFLOAT16 = HALF = FLOAT = INT32 = object()
+
+        @staticmethod
+        def create_handle() -> object:
+            return object()
+
+        @staticmethod
+        def pygraph(**kwargs: object) -> object:
+            raise RuntimeError("No execution plans support the graph.")
+
+    original = _cudnn_varlen._cudnn_fe
+    _cudnn_varlen._cudnn_fe = _FailingFrontend()
+    _cudnn_varlen._enabled = True
+    try:
+        query = torch.randn(2, 16, 8, 64)
+        key = torch.randn(2, 32, 8, 64)
+        value = torch.randn(2, 32, 8, 64)
+        seqused = torch.tensor([20, 32], dtype=torch.int32)
+        with pytest.warns(UserWarning, match="masked fallback"):
+            out = _cudnn_varlen.cudnn_varlen_sdpa(query, key, value, seqused)
+        expected = _cudnn_varlen._masked_fallback(query, key, value, seqused)
+        torch.testing.assert_close(out, expected)
+        # Negatively cached: the second call neither warns nor rebuilds.
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            _cudnn_varlen.cudnn_varlen_sdpa(query, key, value, seqused)
+        assert not record
+    finally:
+        _cudnn_varlen._cudnn_fe = original
+        _cudnn_varlen.enable_cudnn_varlen(False)
+
+
+@withCUDA
+def test_tabiclv2_cudnn_varlen_equivalence(device: torch.device) -> None:
+    from sdm.nn import _cudnn_varlen, enable_cudnn_varlen
+
+    if device.type != "cuda" or not _cudnn_varlen.is_available():
+        pytest.skip("requires CUDA and nvidia-cudnn-frontend")
+
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device).to(torch.bfloat16)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 96, 32, 8
+    x = torch.randn(
+        R_train + 32 + R_test, C, device=device, dtype=torch.bfloat16
+    )
+    y = torch.randint(0, 10, (R_train + 32,), device=device)
+    seqused_train = torch.tensor(R_train, dtype=torch.int32, device=device)
+
+    expected = model(x, y, seqused_train=seqused_train)
+    enable_cudnn_varlen(True)
+    try:
+        out = model(x, y, seqused_train=seqused_train)
+    finally:
+        enable_cudnn_varlen(False)
+
+    # The variable-length kernels differ from the masked kernels, so
+    # allow kernel-switch-scale noise (same class as the padding tests).
+    torch.testing.assert_close(
+        out[:R_test], expected[:R_test], atol=1e-2, rtol=1e-2
+    )
