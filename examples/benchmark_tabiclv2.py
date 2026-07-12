@@ -556,6 +556,13 @@ def run_cell(spec: dict[str, Any], workdir: str) -> dict[str, Any]:
         from sdm.nn import enable_cudnn_varlen
 
         result["cudnn_varlen_active"] = enable_cudnn_varlen(True)
+        if not result["cudnn_varlen_active"]:
+            raise RuntimeError(
+                f"config '{config}' requests the cuDNN variable-length "
+                f"path but it is inert (nvidia-cudnn-frontend missing or "
+                f"unimportable); refusing to publish boolean-mask numbers "
+                f"under the variable-length label"
+            )
 
     model = TabICLv2(pretrained=True, device=device)
     apply_precision(model, precision)

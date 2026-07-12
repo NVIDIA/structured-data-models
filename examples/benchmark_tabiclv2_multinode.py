@@ -8,9 +8,16 @@ coordination and metric collection - never inside the serving path.
 Tensor-parallel execution of a single table was evaluated and rejected:
 at 128-512 channels the per-layer collectives dominate the sub-millisecond
 layer compute, and single-table latency is already launch-bound.
+cuGraph was likewise considered and rejected: single-table in-context
+inference has no graph structure to partition or traverse.
 
-Launch under SLURM (one task per GPU)::
+Launch under SLURM (one task per GPU). The ``env://`` rendezvous needs
+``MASTER_ADDR``/``MASTER_PORT`` exported before ``srun`` (for example in
+the batch script, where ``scontrol`` is available)::
 
+    export MASTER_ADDR=$(scontrol show hostnames \
+        "$SLURM_JOB_NODELIST" | head -n1)
+    export MASTER_PORT=29500
     srun -N10 --ntasks-per-node=4 --gres=gpu:4 \
         python examples/benchmark_tabiclv2_multinode.py --out scaling.json
 
@@ -18,10 +25,13 @@ The benchmark reports, per active world size (strong/weak scaling
 phases): aggregate tables/second, per-rank throughput spread, scaling
 efficiency against the single-GPU baseline, and startup cost
 distributions (model load, compile, bucket warmup). Rank agreement is
-gated before any timing: every rank predicts the same broadcast probe
-table, and per-rank deviations from rank 0 are gated on decision
-margins (independently compiled ranks may autotune different kernels,
-so bitwise identity is not required; the raw spread is reported).
+enforced before any timing: every rank predicts the same broadcast
+probe table through the padded, length-masked path the phases actually
+time; per-rank deviations from rank 0 are gated on decision margins
+(independently compiled ranks may autotune different kernels, so
+bitwise identity is not required), the per-rank spread is stored in the
+report, and a failing gate aborts every rank with a nonzero exit code -
+no timing phase runs on unverified ranks.
 """
 
 import argparse
@@ -34,7 +44,12 @@ import torch.distributed as dist
 from sdm.models import TabICLv2
 from sdm.nn import InducedTransformerBlock, TransformerBlock
 
-from benchmark_tabiclv2 import ROW_BUCKETS, make_table, pad_to_buckets
+from benchmark_tabiclv2 import (
+    ROW_BUCKETS,
+    make_table,
+    pad_to_buckets,
+    reachable_buckets,
+)
 
 
 def init_distributed() -> tuple[int, int, torch.device]:
@@ -82,6 +97,9 @@ def prepare_model(
     if use_varlen:
         from sdm.nn import enable_cudnn_varlen
 
+        # Record only: the inert-path abort happens in ``main`` after a
+        # cross-rank reduction, so a rank missing the optional wheel
+        # cannot abort alone and strand the others at a collective.
         timings["varlen_active"] = float(enable_cudnn_varlen(True))
 
     start = time.perf_counter()
@@ -97,14 +115,15 @@ def prepare_model(
 
     start = time.perf_counter()
     with torch.inference_mode():
-        for train_bucket, test_bucket in (
-            (6144, 2048),
-            (6144, 3072),
-            (8192, 3072),
+        # Every (train, test, column) bucket family the jittered stream
+        # can reach must be warm before any timed window, or the first
+        # phase absorbs fresh-shape costs and skews the scaling baseline.
+        for train_bucket, test_bucket, col_bucket in sorted(
+            reachable_buckets("large")
         ):
             xw = torch.zeros(
                 train_bucket + test_bucket,
-                72,
+                col_bucket,
                 device=device,
                 dtype=torch.bfloat16,
             )
@@ -130,17 +149,29 @@ def rank_agreement_gate(
     rank: int,
     world: int,
     device: torch.device,
-) -> bool:
-    """Every rank predicts the same broadcast table; must match rank 0."""
-    x, y = make_table("large", "cls", seed=0, device=device)
+) -> tuple[bool, list[list[float]]]:
+    """Gate rank agreement on the padded, masked path the phases time.
+
+    Every rank predicts the same broadcast off-grid table through
+    ``pad_to_buckets`` (so the length-masked kernels - and the
+    variable-length path when enabled - are what get compared), and
+    per-rank deviations from rank 0 are gated on decision margins.
+    Returns the verdict and the per-rank ``[max_abs_diff, margin_ratio,
+    top1]`` statistics.
+    """
+    x, y = make_table("large", "cls", seed=17, device=device, jitter=17)
     x = x.to(torch.bfloat16)
     if world > 1:
         dist.broadcast(x, src=0)
         dist.broadcast(y, src=0)
+    x_padded, y_padded, seqused, num_test = pad_to_buckets(x, y)
+    # The probe must stay off-grid: an exact-fit table returns empty
+    # seqused kwargs and would silently gate the unmasked path again.
+    assert seqused
     with torch.inference_mode():
-        out = model(x, y).float()
+        out = model(x_padded, y_padded, **seqused)[..., :num_test, :].float()
     if world == 1:
-        return True
+        return True, [[0.0, 0.0, 1.0]]
     reference = out.clone()
     dist.broadcast(reference, src=0)
     # Ranks compile independently, so autotuned kernel choices (and thus
@@ -168,7 +199,8 @@ def rank_agreement_gate(
             f"worst_top1={worst_top1:.4f}",
             flush=True,
         )
-    return worst_top1 >= 0.995 and worst_margin < 0.05
+    verdict = worst_top1 >= 0.995 and worst_margin < 0.05
+    return verdict, [[v.item() for v in g] for g in gathered]
 
 
 def serve_tables(
@@ -208,6 +240,23 @@ def main() -> None:
     torch.set_float32_matmul_precision("high")
 
     model, timings = prepare_model(device, use_varlen=args.use_varlen)
+    if args.use_varlen:
+        active = torch.tensor(timings["varlen_active"], device=device)
+        if world > 1:
+            dist.all_reduce(active, op=dist.ReduceOp.MIN)
+        if active.item() == 0.0:
+            if rank == 0:
+                print(
+                    "--use-varlen requested but the cuDNN variable-length "
+                    "path is inert on at least one rank "
+                    "(nvidia-cudnn-frontend missing or unimportable) - "
+                    "aborting instead of publishing boolean-mask numbers "
+                    "under the variable-length label",
+                    flush=True,
+                )
+            if world > 1:
+                dist.destroy_process_group()
+            raise SystemExit(1)
     report: dict = {
         "world_size": world,
         "row_buckets": ROW_BUCKETS,
@@ -217,8 +266,28 @@ def main() -> None:
         },
     }
 
-    agreement = rank_agreement_gate(model, rank, world, device)
+    agreement, agreement_stats = rank_agreement_gate(
+        model=model,
+        rank=rank,
+        world=world,
+        device=device,
+    )
     report["rank_agreement"] = agreement
+    report["rank_agreement_stats"] = agreement_stats
+    if not agreement:
+        # Abort on every rank symmetrically (the verdict is identical
+        # everywhere, so no rank reaches the phase barriers) - timing an
+        # unverified fleet would publish numbers the gate disowns.
+        if rank == 0:
+            with open(args.out, "w") as handle:
+                json.dump(report, handle, indent=2)
+            print(
+                "rank agreement FAILED - aborting before any timing",
+                flush=True,
+            )
+        if world > 1:
+            dist.destroy_process_group()
+        raise SystemExit(1)
 
     # Strong/weak scaling: phases with the first k ranks active. Inactive
     # ranks wait at the barriers, so every phase runs on an otherwise
