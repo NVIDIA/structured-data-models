@@ -232,6 +232,7 @@ def test_row_embedding() -> None:
 
 
 @onlyFullTest
+@onlyFullTest
 @withCUDA
 def test_tabiclv2_fit_predict_compile(device: torch.device) -> None:
     torch.manual_seed(0)
