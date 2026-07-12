@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from sdm.relational import RelationalSampler
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class Relationship:
     r"""Join relationship between two tables.
 
@@ -92,8 +92,21 @@ class Relationship:
             right_columns=right_columns,
         )
 
+    def _left_columns_repr(self) -> str:
+        if len(self.left_columns) == 1:
+            return f"{self.left_table}.{self.left_columns[0]}"
+        return f"{self.left_table}.[{', '.join(self.left_columns)}]"
 
-@dataclass(frozen=True, init=False)
+    def _right_columns_repr(self) -> str:
+        if len(self.right_columns) == 1:
+            return f"{self.right_table}.{self.right_columns[0]}"
+        return f"{self.right_table}.[{', '.join(self.right_columns)}]"
+
+    def __repr__(self) -> str:
+        return f"{self._left_columns_repr()}<>{self._right_columns_repr()}"
+
+
+@dataclass(frozen=True, init=False, repr=False)
 class RelationalData(DeviceMixin):
     r"""Collection of named tables and join relationships.
 
@@ -292,3 +305,57 @@ class RelationalData(DeviceMixin):
             data=self,
             time_columns=time_columns,
         )
+
+    def __repr__(self) -> str:
+        out = f"{self.__class__.__name__}(\n"
+        if len(self.tables) > 0:
+            out += "  tables={\n"
+            out += "".join(
+                f"    {name}: {table.__repr__(indent=4)[4:]},\n"
+                for name, table in self.tables.items()
+            )
+            out += "  },\n"
+        else:
+            out += "  tables={},\n"
+        if len(self.relationships) > 0:
+            out += "  relationships=[\n"
+            out += "".join(f"    {rel},\n" for rel in self.relationships)
+            out += "  ],\n"
+        else:
+            out += "  relationships=[],\n"
+        out += ")"
+        return out
+
+    def _repr_html_(self) -> str:
+        from html import escape
+
+        import pandas as pd
+
+        rows = [
+            [
+                name,
+                table.size(-2),
+                table.size(-1),
+                ", ".join(
+                    stype.value
+                    for stype, tensor in table.items()
+                    if tensor.size(-1) > 0
+                ),
+            ]
+            for name, table in self.tables.items()
+        ]
+        df = pd.DataFrame(
+            rows,
+            columns=pd.Index(["Table", "Rows", "Columns", "Stypes"]),
+        )
+
+        ul = "".join(
+            f"<li>"
+            f"<code>{escape(rel._left_columns_repr())}</code>"
+            f" ↔️ "
+            f"<code>{escape(rel._right_columns_repr())}</code>"
+            f"</li>"
+            for rel in self.relationships
+        )
+
+        return df.to_html(index=False, escape=True) + f"<ul>{ul}</ul>"

@@ -25,8 +25,6 @@ jobs:
 
       - name: Set up proxy cache
         uses: nv-gha-runners/setup-proxy-cache@main
-        # The proxy is a download cache, not a security boundary; fall back
-        # to direct downloads rather than failing CI on a proxy outage.
         continue-on-error: true
 
       - name: Install uv
@@ -53,7 +51,6 @@ jobs:
 
       - name: Run tests
         env:
-          # Slow tests only on merges to main, matching test.yml and kumo-ml.
           FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
         run: |
-          pytest -rs --durations=25
+          pytest -m cuda -rs --durations=25
