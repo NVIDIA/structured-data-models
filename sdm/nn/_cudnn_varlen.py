@@ -5,9 +5,10 @@ provide ``seqused_key_value``: instead of materializing a mask and
 routing to the masked kernels, the attention runs on cuDNN's native
 padding-mask support with per-batch valid lengths (``seq_len_kv``),
 which bounds the computation to the valid region. Measured on GB200:
-3.1-5.5x over the boolean-mask path at TabICLv2's attention shapes,
-with accuracy equal to the boolean-mask path against the fp32
-reference.
+3.1-5.5x over the boolean-mask path at TabICLv2's D=64 ICL shapes, and
+~2.0-2.4x at the D=16 column/row-embedding shapes the gate also serves,
+with fp32-reference deviation within 2x of the boolean-mask path's at
+every bake-off shape.
 
 The dependency (``nvidia-cudnn-frontend``, the ``cudnn`` extra) is
 optional: when it is missing, eligibility fails and callers keep the
@@ -77,6 +78,21 @@ def is_available() -> bool:
     return _cudnn_fe is not None
 
 
+def _shape_eligible(
+    query: Tensor,  # [B, Q, H, D] (flattened batch, pre-transpose layout)
+    num_query_heads: int,
+    num_key_value_heads: int,
+) -> bool:
+    """The shape/dtype half of :func:`eligible`, testable without CUDA."""
+    return (
+        query.dtype in (torch.bfloat16, torch.float16)
+        and num_query_heads == num_key_value_heads
+        and query.size(-1) % 8 == 0
+        and query.size(-1) <= 128
+        and query.size(0) <= 65535
+    )
+
+
 def eligible(
     query: Tensor,  # [B, Q, H, D] (flattened batch, pre-transpose layout)
     key: Tensor,  # [B, KV, H, D]
@@ -89,11 +105,7 @@ def eligible(
         and _cudnn_fe is not None
         and query.is_cuda
         and not torch.is_grad_enabled()
-        and query.dtype in (torch.bfloat16, torch.float16)
-        and num_query_heads == num_key_value_heads
-        and query.size(-1) % 8 == 0
-        and query.size(-1) <= 128
-        and query.size(0) <= 65535
+        and _shape_eligible(query, num_query_heads, num_key_value_heads)
     )
 
 
@@ -228,12 +240,16 @@ def _masked_fallback(
     """Boolean-mask attention identical to the SDPA seqused path."""
     kv_index = torch.arange(key.size(1), device=key.device)
     mask = kv_index.view(1, 1, 1, -1) < seqused_key_value.view(-1, 1, 1, 1)
-    return F.scaled_dot_product_attention(
+    out = F.scaled_dot_product_attention(
         query=query.transpose(-3, -2),
         key=key.transpose(-3, -2),
         value=value.transpose(-3, -2),
         attn_mask=mask,
     ).transpose(-3, -2)
+    # The op's fake registration promises a contiguous [B, Q, H, D]
+    # result; a transposed view here would violate that stride contract
+    # and crash compiled callers on the degrade path.
+    return out.contiguous()
 
 
 @torch.library.custom_op("sdm::cudnn_varlen_sdpa", mutates_args=())

@@ -12,6 +12,7 @@ from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention, InducedTransformerBlock, TransformerBlock
 from sdm.processing import Recipe, Sequential, SoftmaxTemperature
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 
 def _small_tabiclv2(device: torch.device) -> TabICLv2:
@@ -816,6 +817,50 @@ def test_tabiclv2_cudnn_varlen_toggle_and_degrade() -> None:
         assert enable_cudnn_varlen(False) is False
 
 
+def test_cudnn_varlen_shape_eligibility() -> None:
+    from sdm.nn import _cudnn_varlen
+
+    def shape_ok(
+        batch: int = 4,
+        head_dim: int = 64,
+        num_heads: int = 8,
+        num_key_value_heads: int = 8,
+        dtype: torch.dtype = torch.bfloat16,
+    ) -> bool:
+        query = torch.empty(batch, 2, num_heads, head_dim, dtype=dtype)
+        return _cudnn_varlen._shape_eligible(
+            query,
+            num_query_heads=num_heads,
+            num_key_value_heads=num_key_value_heads,
+        )
+
+    assert shape_ok()
+    assert shape_ok(dtype=torch.float16)
+    # Full precision stays on the boolean-mask path.
+    assert not shape_ok(dtype=torch.float32)
+    # Grouped-query attention stays on the boolean-mask path.
+    assert not shape_ok(num_key_value_heads=2)
+    # Head dims must be multiples of eight...
+    assert not shape_ok(head_dim=36)
+    # ...with 128 the inclusive ceiling (136 is a multiple of eight,
+    # isolating the ceiling gate).
+    assert shape_ok(head_dim=128)
+    assert not shape_ok(head_dim=136)
+    # Batch 65535 is the inclusive ceiling.
+    assert shape_ok(
+        batch=65535,
+        head_dim=8,
+        num_heads=1,
+        num_key_value_heads=1,
+    )
+    assert not shape_ok(
+        batch=65536,
+        head_dim=8,
+        num_heads=1,
+        num_key_value_heads=1,
+    )
+
+
 def test_cudnn_varlen_eligibility_gates() -> None:
     from sdm.nn import _cudnn_varlen
 
@@ -851,6 +896,46 @@ def test_cudnn_varlen_eligibility_gates() -> None:
                 assert not _cudnn_varlen.eligible(
                     base[..., :36],
                     base_k[..., :36],
+                    num_query_heads=8,
+                    num_key_value_heads=8,
+                )
+                # Head dim 128 is the inclusive ceiling (136 is a
+                # multiple of eight, isolating the ceiling gate).
+                wide = torch.randn(
+                    2, 4, 8, 136, device="cuda", dtype=torch.bfloat16
+                )
+                assert _cudnn_varlen.eligible(
+                    wide[..., :128],
+                    wide[..., :128],
+                    num_query_heads=8,
+                    num_key_value_heads=8,
+                )
+                assert not _cudnn_varlen.eligible(
+                    wide,
+                    wide,
+                    num_query_heads=8,
+                    num_key_value_heads=8,
+                )
+                # Batch 65535 is the inclusive ceiling.
+                flat = torch.randn(
+                    65536, 1, 1, 8, device="cuda", dtype=torch.bfloat16
+                )
+                assert _cudnn_varlen.eligible(
+                    flat[:65535],
+                    flat[:65535],
+                    num_query_heads=1,
+                    num_key_value_heads=1,
+                )
+                assert not _cudnn_varlen.eligible(
+                    flat,
+                    flat,
+                    num_query_heads=1,
+                    num_key_value_heads=1,
+                )
+                # Full precision stays on the boolean-mask path.
+                assert not _cudnn_varlen.eligible(
+                    base.float(),
+                    base_k.float(),
                     num_query_heads=8,
                     num_key_value_heads=8,
                 )
@@ -891,15 +976,29 @@ def test_cudnn_varlen_build_failure_degrades() -> None:
         key = torch.randn(2, 32, 8, 64)
         value = torch.randn(2, 32, 8, 64)
         seqused = torch.tensor([20, 32], dtype=torch.int32)
-        with pytest.warns(UserWarning, match="masked fallback"):
-            out = _cudnn_varlen.cudnn_varlen_sdpa(query, key, value, seqused)
-        expected = _cudnn_varlen._masked_fallback(query, key, value, seqused)
+        # Pin the math backend: the fused CPU kernels happen to return
+        # contiguous outputs even without the fallback's stride fix,
+        # which would make the contract assertions below vacuous.
+        with sdpa_kernel([SDPBackend.MATH]):
+            with pytest.warns(UserWarning, match="masked fallback"):
+                out = _cudnn_varlen.cudnn_varlen_sdpa(
+                    query, key, value, seqused
+                )
+            expected = _cudnn_varlen._masked_fallback(
+                query, key, value, seqused
+            )
         torch.testing.assert_close(out, expected)
         # Negatively cached: the second call neither warns nor rebuilds.
         with warnings.catch_warnings(record=True) as record:
             warnings.simplefilter("always")
             _cudnn_varlen.cudnn_varlen_sdpa(query, key, value, seqused)
         assert not record
+        # The fallback must honor the op's fake stride contract: a
+        # compiled caller receives the fake's layout and crashes if the
+        # real output is a transposed view.
+        assert out.is_contiguous()
+        fake = torch.empty_like(query)
+        assert out.stride() == fake.stride()
     finally:
         _cudnn_varlen._cudnn_fe = original
         _cudnn_varlen.enable_cudnn_varlen(False)

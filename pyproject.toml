@@ -43,7 +43,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cudnn = [
-    "nvidia-cudnn-frontend",
+    "nvidia-cudnn-frontend>=1.23",
 ]
 test = [
     "pytest",

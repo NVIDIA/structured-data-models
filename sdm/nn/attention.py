@@ -433,9 +433,9 @@ class SDPA(torch.nn.Module):
                 num_key_value_heads=self.num_key_value_heads,
             ):
                 # cuDNN's native padding-mask support bounds attention to
-                # the valid key/value region instead of masking it, which
-                # measures 3.3-5.5x faster than the boolean-mask kernels
-                # at bucketed-serving shapes (see sdm/nn/_cudnn_varlen.py).
+                # the valid key/value region instead of masking it: 3.1-5.5x
+                # over the boolean-mask kernels at D=64 ICL shapes and
+                # ~2.0-2.4x at D=16 sites (see sdm/nn/_cudnn_varlen.py).
                 out = _cudnn_varlen.cudnn_varlen_sdpa(
                     query.contiguous(),
                     key.contiguous(),
