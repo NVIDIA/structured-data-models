@@ -194,12 +194,13 @@ def test_attention_compile_key_value_cache(device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("qassmax", "rope", "masking"),
+    ("qassmax", "rope", "masking", "batch_size_limit"),
     [
-        (False, False, None),
-        (True, True, None),
-        (False, True, "seqused"),
-        (True, False, "attn_mask"),
+        (False, False, None, None),
+        (True, True, None, None),
+        (False, True, "seqused", None),
+        (True, False, "attn_mask", None),
+        (False, False, None, 1),
     ],
 )
 def test_transformer_block_compile(
@@ -207,6 +208,7 @@ def test_transformer_block_compile(
     qassmax: bool,
     rope: bool,
     masking: str | None,
+    batch_size_limit: int | None,
 ) -> None:
     channels = 8
     module = TransformerBlock(
@@ -232,12 +234,15 @@ def test_transformer_block_compile(
     elif masking == "seqused":
         seqused = torch.tensor([3, 1], dtype=torch.int32, device=device)
 
+    # `batch_size_limit` chunking is skipped while compiling, so passing it
+    # must not introduce graph breaks.
     expected = module(
         query=query,
         key_value=key_value,
         seqused_key_value=seqused,
         attn_mask=attn_mask,
         rope=rotary_embedding,
+        batch_size_limit=batch_size_limit,
     )
     out = fullgraph(module)(
         query=query,
@@ -245,15 +250,18 @@ def test_transformer_block_compile(
         seqused_key_value=seqused,
         attn_mask=attn_mask,
         rope=rotary_embedding,
+        batch_size_limit=batch_size_limit,
     )
     torch.testing.assert_close(out, expected)
 
 
 @withCUDA
 @pytest.mark.parametrize("self_attn", [False, True])
+@pytest.mark.parametrize("batch_size_limit", [None, 1])
 def test_induced_transformer_block_compile(
     device: torch.device,
     self_attn: bool,
+    batch_size_limit: int | None,
 ) -> None:
     channels = 8
     module = InducedTransformerBlock(
@@ -269,6 +277,10 @@ def test_induced_transformer_block_compile(
         None if self_attn else torch.randn(2, 5, channels, device=device)
     )
 
-    expected = module(query=query, key_value=key_value)
-    out = fullgraph(module)(query=query, key_value=key_value)
+    expected = module(
+        query=query, key_value=key_value, batch_size_limit=batch_size_limit
+    )
+    out = fullgraph(module)(
+        query=query, key_value=key_value, batch_size_limit=batch_size_limit
+    )
     torch.testing.assert_close(out, expected)

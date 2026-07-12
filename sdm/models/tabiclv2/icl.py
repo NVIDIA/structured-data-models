@@ -50,6 +50,7 @@ class ICLBlock(torch.nn.Module):
         x: Tensor,  # [..., R, D]
         y: Tensor,  # [..., R_train]
         *,
+        seqused_train: Tensor | None = None,  # [...]
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, D]
@@ -71,6 +72,7 @@ class ICLBlock(torch.nn.Module):
                 key_value=cache[key]
                 if cache is not None and cache.is_replaying
                 else x[..., :R_train, :],  # [..., R_train, D]
+                seqused_key_value=seqused_train,
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit=batch_size_limit,
             )

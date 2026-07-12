@@ -143,11 +143,13 @@ class InducedTransformerBlock(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., KV]``.
                 Entries set to ``True`` participate in attention.
+            batch_size_limit: If set, run each inner block in chunks of at most
+                this many broadcasted batch elements to cap peak memory for
+                very large batches. Only active in inference (gradients
+                disabled) and eager (non-compiled) mode; nested tensor inputs
+                execute unchunked. ``None`` disables it.
             return_key_value: Whether to return the computed key and value
                 projections for the final attention site alongside the output.
-            batch_size_limit: Maximum number of broadcast batch elements
-                processed at once during non-compiled evaluation. ``None``
-                disables batch chunking.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is

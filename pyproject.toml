@@ -155,6 +155,9 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]
+"examples/**/*.py" = [
+    "T201",  # Examples and benchmarks report results via `print`.
+]
 "test/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"

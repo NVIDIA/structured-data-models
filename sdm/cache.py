@@ -19,6 +19,10 @@ class _KVCacheEntry(NamedTuple):
 class KVCacheEntry(_KVCacheEntry, DeviceMixin):
     r"""Cached key/value projections for a single transformer block.
 
+    Keys and values have shape ``[..., KV, H, C]``. Their leading batch
+    dimensions retain the native key/value batch shape and may broadcast
+    against query batch dimensions during cache replay.
+
     Args:
         key: Cached key projection tensor.
         value: Cached value projection tensor.

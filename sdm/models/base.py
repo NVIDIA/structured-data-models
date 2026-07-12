@@ -2,7 +2,7 @@ import contextlib
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from typing import ClassVar, cast
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
@@ -55,6 +55,9 @@ class BaseModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
 
@@ -69,16 +72,72 @@ class BaseModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
+            seqused_train: Valid in-context example counts with shape ``[...]``
+                and :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                Counts must be positive. When set, only the first
+                ``seqused_train`` of the ``R_train`` in-context rows act as
+                context, and the remaining rows are treated as padding: they
+                are masked from every attention key/value stream and cannot
+                influence any prediction, provided the padded feature
+                entries are finite and of moderate magnitude (``0`` is
+                recommended - masking adds ``-inf`` to attention logits
+                after the query/key product, so non-finite or overflowing
+                padded values poison the softmax with ``NaN``).
+                Padded ``y`` entries must still be valid targets (for example
+                ``0``). Together with padded test rows (whose extra outputs
+                callers simply discard), this lets streams of varying table
+                sizes be padded to a small set of bucketed shapes so compiled
+                graphs and per-shape kernel selection are reused across
+                tables. Pass a tensor rather than a Python integer so
+                compiled graphs treat the count as data instead of a
+                constant to specialize on.
+            seqused_cols: Valid column count as a positive scalar tensor with
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                When set, only the first ``seqused_cols`` columns act as
+                features; the remaining columns are padding, excluded from
+                feature grouping and masked from row-wise attention. For
+                :class:`~sdm.TableTensor` inputs the count refers to the
+                extracted numerical block (``x.numerical.size(-1)``), not
+                the table width - non-numerical columns are removed before
+                masking applies. The same finite-values contract as
+                ``seqused_train`` applies; out-of-range counts are clamped
+                and produce degenerate predictions rather than errors.
+                Unlike ``seqused_train``, the count is shared across batch
+                elements.
+            batch_size_limit: If set, run attention blocks in chunks of at
+                most this many broadcasted batch elements to cap peak memory
+                for very large batches; ``None`` disables it.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
+        self._validate_seqused(seqused_train, seqused_cols)
+        self._warn_seqused_cols_table(x, seqused_cols)
+        if recipe is not None and (
+            seqused_train is not None or seqused_cols is not None
+        ):
+            raise ValueError(
+                "`recipe` preprocessing fits on the padded rows/targets, "
+                "letting padding influence predictions in violation of the "
+                "seqused contract; pass `recipe=None` together with "
+                "`seqused_train`/`seqused_cols`"
+            )
         if not self.supports_related_tables and related_tables is not None:
             warnings.warn(
                 f"'{self.__class__.__name__}' does not support related tables",
                 stacklevel=2,
             )
             related_tables = None
+
+        # Only forward the padding/chunking keywords when set so that
+        # subclasses implementing the older hook signature keep working.
+        kwargs: dict[str, Any] = {}
+        if seqused_train is not None:
+            kwargs["seqused_train"] = seqused_train
+        if seqused_cols is not None:
+            kwargs["seqused_cols"] = seqused_cols
+        if batch_size_limit is not None:
+            kwargs["batch_size_limit"] = batch_size_limit
 
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
@@ -87,7 +146,7 @@ class BaseModel(torch.nn.Module, ABC):
             # TODO Iterate over Recipes instead of using a single recipe once
             # Recipe adds support for multiple recipes.
             x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
-            out = self._forward(x_i, y_i, related_tables, cache=None)
+            out = self._forward(x_i, y_i, related_tables, cache=None, **kwargs)
             out = self._postprocess(out, recipe)
             outs.append(out)
 
@@ -97,7 +156,7 @@ class BaseModel(torch.nn.Module, ABC):
             return table.numerical
         return recipe.output.transform(table).numerical
 
-    @torch.inference_mode()
+    @_maybe_inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R_train, C]
@@ -106,6 +165,9 @@ class BaseModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
+        batch_size_limit: int | None = None,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -121,13 +183,49 @@ class BaseModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
+            seqused_train: Valid in-context example counts with shape ``[...]``
+                and :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                When set, rows beyond the per-element count are padding and
+                are masked from the cached key/value projections; subsequent
+                :meth:`predict` calls reuse the count automatically. See
+                :meth:`forward` for the padding contract.
+            seqused_cols: Valid column count as a scalar tensor with
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                When set, columns beyond the count are padding; subsequent
+                :meth:`predict` calls reuse the count and must pass ``x``
+                padded to the same number of columns. See :meth:`forward`
+                for the padding contract.
+            batch_size_limit: If set, run attention blocks in chunks of at
+                most this many broadcasted batch elements to cap peak memory
+                for large batches.
         """
+        self._validate_seqused(seqused_train, seqused_cols)
+        self._warn_seqused_cols_table(x, seqused_cols)
+        if recipe is not None and (
+            seqused_train is not None or seqused_cols is not None
+        ):
+            raise ValueError(
+                "`recipe` preprocessing fits on the padded rows/targets, "
+                "letting padding influence predictions in violation of the "
+                "seqused contract; pass `recipe=None` together with "
+                "`seqused_train`/`seqused_cols`"
+            )
         if not self.supports_related_tables and related_tables is not None:
             warnings.warn(
                 f"'{self.__class__.__name__}' does not support related tables",
                 stacklevel=2,
             )
             related_tables = None
+
+        # Only forward the padding/chunking keywords when set so that
+        # subclasses implementing the older hook signature keep working.
+        kwargs: dict[str, Any] = {}
+        if seqused_train is not None:
+            kwargs["seqused_train"] = seqused_train
+        if seqused_cols is not None:
+            kwargs["seqused_cols"] = seqused_cols
+        if batch_size_limit is not None:
+            kwargs["batch_size_limit"] = batch_size_limit
 
         self.clear()
         caches: list[Cache] = []
@@ -139,7 +237,11 @@ class BaseModel(torch.nn.Module, ABC):
 
             # TODO Don't store y.dtype for every estimator.
             cache = Cache({"y.dtype": y.dtype})
-            self._forward(x_i, y_i, related_tables, cache)
+            if seqused_train is not None:
+                cache["seqused_train"] = seqused_train
+            if seqused_cols is not None:
+                cache["seqused_cols"] = seqused_cols
+            self._forward(x_i, y_i, related_tables, cache, **kwargs)
             cache.freeze()
             caches.append(cache)
 
@@ -154,11 +256,13 @@ class BaseModel(torch.nn.Module, ABC):
         self._caches = None
         self._recipe = None
 
-    @torch.inference_mode()
+    @_maybe_inference_mode()
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R_test, C]
         related_tables: RelatedTables | None = None,
+        *,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, *]
         r"""Predict unseen test examples.
 
@@ -170,6 +274,14 @@ class BaseModel(torch.nn.Module, ABC):
             x: The feature tensor with shape ``[..., R_test, C]`` with
                 ``R_test`` rows and ``C`` columns.
             related_tables: Additional related context provided to the model.
+                If :meth:`fit` was called with ``seqused_train`` or
+                ``seqused_cols``, the stored counts are reused so padded
+                in-context rows stay masked; with ``seqused_cols``, ``x``
+                must be padded to the same number of columns as the
+                fitted rows.
+            batch_size_limit: If set, run attention blocks in chunks of at
+                most this many broadcasted batch elements to cap peak memory
+                for large batches.
 
         Returns:
             The prediction for ``[..., R_test]`` test rows.
@@ -195,6 +307,15 @@ class BaseModel(torch.nn.Module, ABC):
                 dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
                 device=x.device,
             )
+            seqused_train = cast(Tensor | None, cache.get("seqused_train"))
+            seqused_cols = cast(Tensor | None, cache.get("seqused_cols"))
+            kwargs: dict[str, Any] = {}
+            if seqused_train is not None:
+                kwargs["seqused_train"] = seqused_train
+            if seqused_cols is not None:
+                kwargs["seqused_cols"] = seqused_cols
+            if batch_size_limit is not None:
+                kwargs["batch_size_limit"] = batch_size_limit
             # TODO Iterate over Recipes instead of using a single recipe once
             # Recipe adds support for multiple recipes.
             x_i, y_i = self._preprocess(
@@ -204,7 +325,7 @@ class BaseModel(torch.nn.Module, ABC):
                 recipe=recipe,
                 fit_recipe=False,
             )
-            out = self._forward(x_i, y_i, related_tables, cache)
+            out = self._forward(x_i, y_i, related_tables, cache, **kwargs)
             out = self._postprocess(out, recipe)
             outs.append(out)
 
@@ -215,6 +336,46 @@ class BaseModel(torch.nn.Module, ABC):
         return recipe.output.transform(table).numerical
 
     # Helpers #################################################################
+
+    def _warn_seqused_cols_table(
+        self,
+        x: Tensor | TableTensor,
+        seqused_cols: Tensor | None,
+    ) -> None:
+        if (
+            seqused_cols is not None
+            and isinstance(x, TableTensor)
+            and x.size(-1) != x.numerical.size(-1)
+        ):
+            warnings.warn(
+                f"`seqused_cols` counts columns of the extracted numerical "
+                f"block ({x.numerical.size(-1)} columns), but 'x' has "
+                f"{x.size(-1)} table columns; non-numerical columns "
+                f"(including id data) are removed before masking applies.",
+                stacklevel=3,
+            )
+
+    def _validate_seqused(
+        self,
+        seqused_train: Tensor | None,
+        seqused_cols: Tensor | None = None,
+    ) -> None:
+        if seqused_train is not None and seqused_train.dtype != torch.int32:
+            raise ValueError(
+                f"`seqused_train` must have dtype torch.int32 "
+                f"(got {seqused_train.dtype})"
+            )
+        if seqused_cols is not None:
+            if seqused_cols.dtype != torch.int32:
+                raise ValueError(
+                    f"`seqused_cols` must have dtype torch.int32 "
+                    f"(got {seqused_cols.dtype})"
+                )
+            if seqused_cols.dim() != 0:
+                raise ValueError(
+                    f"`seqused_cols` must be a scalar tensor "
+                    f"(got shape {tuple(seqused_cols.size())})"
+                )
 
     def _preprocess(
         self,
@@ -323,6 +484,9 @@ class BaseModel(torch.nn.Module, ABC):
         related_tables: RelatedTables | None,
         cache: Cache | None,
     ) -> Tensor:  # [..., R - R_train, *]
+        # Subclasses may additionally accept keyword-only `seqused_train`,
+        # `seqused_cols`, and `batch_size_limit`; the public entry points
+        # only forward those keywords when the caller sets them.
         pass
 
     @classmethod

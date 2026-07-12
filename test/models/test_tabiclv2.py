@@ -1,11 +1,62 @@
+import warnings
+from contextlib import ExitStack
+from unittest import mock
+
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm.cache import KVCacheEntry
 from sdm.models import TabICLv2
+from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.nn import Attention
+from sdm.nn import Attention, InducedTransformerBlock, TransformerBlock
 from sdm.processing import Recipe, Sequential, SoftmaxTemperature
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+
+
+def _small_tabiclv2(device: torch.device) -> TabICLv2:
+    model = TabICLv2(pretrained=False, device=device)
+    model.cls_model = _TabICLv2(
+        num_classes=10,
+        num_quantiles=0,
+        channels=8,
+        num_embedding_layers=2,
+        num_embedding_heads=2,
+        num_inducing_points=3,
+        group_size=3,
+        num_readout_tokens=2,
+        num_icl_layers=2,
+        num_icl_heads=2,
+        norm_bias=True,
+        device=device,
+        dtype=torch.float64,
+    )
+    return model.eval()
+
+
+def _randomize_residual_exits(model: torch.nn.Module) -> None:
+    # Transformer residual exits are zero-initialized. Randomizing them makes
+    # cache equivalence sensitive to the projected keys and values.
+    with torch.no_grad():
+        for block in model.modules():
+            if not isinstance(block, TransformerBlock):
+                continue
+            block.attn.out_lin.weight.normal_(std=0.05)
+            block.attn.out_lin.bias.normal_(std=0.05)
+            mlp_out = block.mlp[-1]
+            assert isinstance(mlp_out, torch.nn.Linear)
+            mlp_out.weight.normal_(std=0.05)
+            mlp_out.bias.normal_(std=0.05)
+
+
+def _assert_chunked(spies: list[mock.Mock], limit: int) -> None:
+    for spy in spies:
+        assert spy.call_count > 1
+        for call in spy.call_args_list:
+            query = call.kwargs.get("query")
+            if query is None:
+                query = call.args[0]
+            assert query.shape[:-2].numel() <= limit
 
 
 @withCUDA
@@ -152,6 +203,157 @@ def test_default_recipe_regression_roundtrip() -> None:
 
 
 @withCUDA
+def test_tabiclv2_batch_size_limit(device: torch.device) -> None:
+    model = TabICLv2(pretrained=False, device=device).eval()
+
+    R, C, R_train = 40, 6, 30
+    x = torch.randn(R, C, device=device)
+    y = torch.randint(0, 10, (R_train,), device=device)
+
+    # A call-time batch_size_limit reaches and chunks the attention blocks.
+    blocks = [m for m in model.modules() if isinstance(m, TransformerBlock)]
+    assert blocks
+
+    with ExitStack() as stack:
+        spies = [
+            stack.enter_context(
+                mock.patch.object(block, "_block", wraps=block._block)
+            )
+            for block in blocks
+        ]
+        chunked = model(x, y, batch_size_limit=4)
+        # Chunking engaged in at least one block.
+        assert any(spy.call_count > 0 for spy in spies)
+
+    unchunked = model(x, y)
+    torch.testing.assert_close(chunked, unchunked, atol=1e-4, rtol=1e-3)
+
+
+@withCUDA
+def test_tabiclv2_fit_predict_batch_size_limit(
+    device: torch.device,
+) -> None:
+    model = _small_tabiclv2(device)
+    _randomize_residual_exits(model.cls_model)
+
+    batch_shape = (2, 3)
+    batch_size_limit = 4
+    num_train = 5
+    num_test = 3
+    num_columns = 4
+    x_train = torch.randn(
+        *batch_shape,
+        num_train,
+        num_columns,
+        device=device,
+        dtype=torch.float64,
+    )
+    x_test = torch.randn(
+        *batch_shape,
+        num_test,
+        num_columns,
+        device=device,
+        dtype=torch.float64,
+    )
+    y = torch.randint(0, 10, (*batch_shape, num_train), device=device)
+
+    # Cache-producing sites are transformer_2 in every induced column block
+    # and every ICL layer. Their flattened batches are B*C and B,
+    # respectively, and both exceed the limit chosen above.
+    col_blocks: list[TransformerBlock] = []
+    for layer in model.cls_model.row_embedding.col_layers:
+        assert isinstance(layer, InducedTransformerBlock)
+        col_blocks.append(layer.transformer_2)
+    icl_blocks: list[TransformerBlock] = []
+    for layer in model.cls_model.icl_block.layers:
+        assert isinstance(layer, TransformerBlock)
+        icl_blocks.append(layer)
+    cache_blocks = [*col_blocks, *icl_blocks]
+
+    expected = model(torch.cat([x_train, x_test], dim=-2), y)
+
+    with ExitStack() as stack:
+        fit_spies = [
+            stack.enter_context(
+                mock.patch.object(block, "_block", wraps=block._block)
+            )
+            for block in [*col_blocks, *icl_blocks[:-1]]
+        ]
+        final_cache_spy = stack.enter_context(
+            mock.patch.object(
+                icl_blocks[-1].attn,
+                "_project_key_value",
+                wraps=icl_blocks[-1].attn._project_key_value,
+            )
+        )
+        model.fit(x_train, y, batch_size_limit=batch_size_limit)
+
+    _assert_chunked(fit_spies, batch_size_limit)
+    # The final fit-time ICL query is empty, but its complete train cache is
+    # still projected in bounded native-batch tiles.
+    assert final_cache_spy.call_count > 1
+    for call in final_cache_spy.call_args_list:
+        key_value = call.args[0]
+        assert key_value.shape[:-2].numel() <= batch_size_limit
+    assert model._caches is not None
+    assert len(model._caches) == 1
+    cache = model._caches[0]
+    assert cache.is_replaying
+
+    cache_snapshot: dict[str, tuple[torch.Tensor, torch.Tensor]] = {}
+    for i in range(len(col_blocks)):
+        key = f"row_embedding.col_layer{i}"
+        entry = cache[key]
+        assert isinstance(entry, KVCacheEntry)
+        expected_shape = (
+            *batch_shape,
+            num_columns,
+            3,  # inducing points
+            2,  # heads
+            4,  # head channels
+        )
+        assert entry.key.shape == expected_shape
+        assert entry.value.shape == expected_shape
+        cache_snapshot[key] = (entry.key.clone(), entry.value.clone())
+
+    for i in range(len(icl_blocks)):
+        key = f"icl_block.layer{i}"
+        entry = cache[key]
+        assert isinstance(entry, KVCacheEntry)
+        expected_shape = (
+            *batch_shape,
+            num_train,
+            2,  # heads
+            8,  # head channels: 2 readout tokens * 8 channels / 2 heads
+        )
+        assert entry.key.shape == expected_shape
+        assert entry.value.shape == expected_shape
+        cache_snapshot[key] = (entry.key.clone(), entry.value.clone())
+
+    with ExitStack() as stack:
+        predict_spies = [
+            stack.enter_context(
+                mock.patch.object(block, "_block", wraps=block._block)
+            )
+            for block in cache_blocks
+        ]
+        actual = model.predict(x_test, batch_size_limit=batch_size_limit)
+
+    _assert_chunked(predict_spies, batch_size_limit)
+    torch.testing.assert_close(actual, expected)
+
+    # Replay only reads the cache: it retains the complete training context
+    # and does not append one copy per prediction chunk.
+    assert model._caches is not None
+    assert model._caches[0] is cache
+    for key, (expected_key, expected_value) in cache_snapshot.items():
+        entry = cache[key]
+        assert isinstance(entry, KVCacheEntry)
+        torch.testing.assert_close(entry.key, expected_key)
+        torch.testing.assert_close(entry.value, expected_value)
+
+
+@withCUDA
 def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     row_embedding = RowEmbedding(
         num_classes=10,
@@ -204,10 +406,36 @@ def test_tabiclv2_compile(dtype: torch.dtype) -> None:
     torch.testing.assert_close(actual, expected)
     assert torch.is_inference(actual)
 
+    # `batch_size_limit` chunking is skipped while compiling, so passing it
+    # must not introduce graph breaks under fullgraph=True.
+    actual = model(x, y, batch_size_limit=1)
+    torch.testing.assert_close(actual, expected)
+
     model.fit(x[:R_train], y)
     predicted = model.predict(x[R_train:])
     torch.testing.assert_close(predicted, expected)
     assert torch.is_inference(predicted)
+
+
+def test_row_embedding_max_keys_seqused_conflict() -> None:
+    row_embedding = RowEmbedding(
+        num_classes=2,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+        group_size=3,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+    )
+    with pytest.raises(ValueError, match="max_keys"):
+        row_embedding(
+            x=torch.randn(6, 4),
+            y=torch.tensor([0, 1]),
+            train_mask=torch.tensor([False, True, False, False, True, False]),
+            max_keys=1,
+            seqused_train=torch.tensor(2, dtype=torch.int32),
+        )
 
 
 def test_row_embedding() -> None:
@@ -231,7 +459,6 @@ def test_row_embedding() -> None:
     assert out.size() == (6, 16)
 
 
-@onlyFullTest
 @onlyFullTest
 @withCUDA
 def test_tabiclv2_fit_predict_compile(device: torch.device) -> None:
@@ -258,7 +485,6 @@ def test_tabiclv2_fit_predict_compile(device: torch.device) -> None:
 
 
 @onlyFullTest
-@onlyFullTest
 @withCUDA
 def test_tabiclv2_autocast_compile(device: torch.device) -> None:
     torch.manual_seed(0)
@@ -282,3 +508,283 @@ def test_tabiclv2_autocast_compile(device: torch.device) -> None:
         torch.testing.assert_close(model(x, y), expected)
         model.fit(x[:R_train], y)
         torch.testing.assert_close(model.predict(x[R_train:]), expected_pred)
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+def test_tabiclv2_seqused_train_padding(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device)
+    # Zero-initialized residual exits would hide masking bugs (junk rows
+    # could not influence outputs even without masking).
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 6, 5
+    x = torch.randn(R_train + R_test, C, device=device)
+    if dtype.is_floating_point:
+        y = torch.randn(R_train, device=device)
+    else:
+        y = torch.randint(0, 10, (R_train,), device=device)
+
+    expected = model(x, y)
+
+    # Pad train rows with junk features and junk-but-valid targets, and pad
+    # test rows with junk features. Neither may influence the true rows.
+    x_padded = torch.cat(
+        [
+            x[:R_train],
+            torch.full((5, C), 123.0, device=device),
+            x[R_train:],
+            torch.full((3, C), -7.0, device=device),
+        ]
+    )
+    y_padded = torch.cat([y, y.new_zeros(5)])
+    seqused_train = torch.tensor(R_train, dtype=torch.int32, device=device)
+
+    out = model(x_padded, y_padded, seqused_train=seqused_train)
+
+    assert out.size(-2) == R_test + 3
+    # Masked and unmasked attention select different CUDA kernels, so
+    # allow kernel-switch-scale noise (observed max ~5e-4); junk leakage
+    # through a masking bug would show as O(0.1) or NaN.
+    torch.testing.assert_close(out[:R_test], expected, atol=1e-3, rtol=1e-3)
+
+
+@withCUDA
+def test_tabiclv2_seqused_train_batched(device: torch.device) -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 4, 5
+    lengths = [7, 9, 11]
+    x = torch.randn(len(lengths), R_train + R_test, C, device=device)
+    y = torch.randint(0, 10, (len(lengths), R_train), device=device)
+    seqused_train = torch.tensor(lengths, dtype=torch.int32, device=device)
+
+    out = model(x, y, seqused_train=seqused_train)
+
+    # Each batch element must match its individually unpadded forward.
+    for i, length in enumerate(lengths):
+        x_i = torch.cat([x[i, :length], x[i, R_train:]])
+        expected = model(x_i, y[i, :length])
+        torch.testing.assert_close(out[i], expected, atol=1e-3, rtol=1e-3)
+
+
+@withCUDA
+def test_tabiclv2_seqused_train_fit_predict(device: torch.device) -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 6, 5
+    x = torch.randn(R_train + R_test, C, device=device)
+    y = torch.randint(0, 10, (R_train,), device=device)
+
+    model.fit(x[:R_train], y)
+    expected = model.predict(x[R_train:])
+    model.clear()
+
+    # Padded fit must cache masked key/value projections, and predict must
+    # reuse the stored counts automatically.
+    x_padded = torch.cat(
+        [x[:R_train], torch.full((5, C), 123.0, device=device)]
+    )
+    y_padded = torch.cat([y, y.new_zeros(5)])
+    model.fit(
+        x_padded,
+        y_padded,
+        seqused_train=torch.tensor(R_train, dtype=torch.int32, device=device),
+    )
+    out = model.predict(x[R_train:])
+    model.clear()
+
+    torch.testing.assert_close(out, expected, atol=1e-3, rtol=1e-3)
+
+
+def test_tabiclv2_seqused_train_validates_dtype() -> None:
+    model = TabICLv2(pretrained=False)
+    x = torch.randn(8, 5)
+    y = torch.randint(0, 10, (6,))
+    with pytest.raises(ValueError, match=r"torch\.int32"):
+        model(x, y, seqused_train=torch.tensor(6))
+    with pytest.raises(ValueError, match=r"torch\.int32"):
+        model.fit(x[:6], y, seqused_train=torch.tensor(6))
+
+
+@withCUDA
+def test_tabiclv2_seqused_train_compile(device: torch.device) -> None:
+    torch._dynamo.reset()
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 6, 5
+    x = torch.randn(R_train + 5 + R_test, C + 3, device=device)
+    y = torch.randint(0, 10, (R_train + 5,), device=device)
+    seqused_train = torch.tensor(R_train, dtype=torch.int32, device=device)
+    seqused_cols = torch.tensor(C, dtype=torch.int32, device=device)
+
+    expected = model(
+        x, y, seqused_train=seqused_train, seqused_cols=seqused_cols
+    )
+
+    # The padded route must compile without graph breaks.
+    model.cls_model.compile(fullgraph=True, backend="eager")
+    out = model(x, y, seqused_train=seqused_train, seqused_cols=seqused_cols)
+
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+def test_tabiclv2_seqused_cols_padding(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 6, 5
+    x = torch.randn(R_train + R_test, C, device=device)
+    if dtype.is_floating_point:
+        y = torch.randn(R_train, device=device)
+    else:
+        y = torch.randint(0, 10, (R_train,), device=device)
+
+    expected = model(x, y)
+
+    # Junk-valued padded columns must not influence any prediction: they
+    # are excluded from feature grouping and masked from row attention.
+    x_padded = torch.cat(
+        [x, torch.full((R_train + R_test, 3), 55.0, device=device)], dim=-1
+    )
+    out = model(
+        x_padded,
+        y,
+        seqused_cols=torch.tensor(C, dtype=torch.int32, device=device),
+    )
+
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+def test_tabiclv2_seqused_rows_and_cols_padding(
+    device: torch.device,
+) -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 6, 5
+    x = torch.randn(R_train + R_test, C, device=device)
+    y = torch.randint(0, 10, (R_train,), device=device)
+
+    expected = model(x, y)
+
+    # Combined bucketing: pad columns, train rows, and test rows at once.
+    x_padded = torch.cat(
+        [x, torch.full((R_train + R_test, 3), 55.0, device=device)], dim=-1
+    )
+    x_padded = torch.cat(
+        [
+            x_padded[:R_train],
+            torch.full((5, C + 3), 123.0, device=device),
+            x_padded[R_train:],
+            torch.full((3, C + 3), -7.0, device=device),
+        ]
+    )
+    y_padded = torch.cat([y, y.new_zeros(5)])
+    out = model(
+        x_padded,
+        y_padded,
+        seqused_train=torch.tensor(R_train, dtype=torch.int32, device=device),
+        seqused_cols=torch.tensor(C, dtype=torch.int32, device=device),
+    )
+
+    torch.testing.assert_close(out[:R_test], expected, atol=1e-3, rtol=1e-3)
+
+
+@withCUDA
+def test_tabiclv2_seqused_cols_fit_predict(device: torch.device) -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False, device=device)
+    _randomize_residual_exits(model)
+
+    R_train, R_test, C = 11, 6, 5
+    x = torch.randn(R_train + R_test, C, device=device)
+    y = torch.randint(0, 10, (R_train,), device=device)
+
+    model.fit(x[:R_train], y)
+    expected = model.predict(x[R_train:])
+    model.clear()
+
+    # Predict must reuse the stored column count; test rows are padded to
+    # the same column width as the fitted rows.
+    x_padded = torch.cat(
+        [x, torch.full((R_train + R_test, 3), 55.0, device=device)], dim=-1
+    )
+    model.fit(
+        x_padded[:R_train],
+        y,
+        seqused_cols=torch.tensor(C, dtype=torch.int32, device=device),
+    )
+    out = model.predict(x_padded[R_train:])
+    model.clear()
+
+    torch.testing.assert_close(out, expected, atol=1e-3, rtol=1e-3)
+
+
+def test_tabiclv2_seqused_cols_validates() -> None:
+    model = TabICLv2(pretrained=False)
+    x = torch.randn(8, 5)
+    y = torch.randint(0, 10, (6,))
+    with pytest.raises(ValueError, match=r"torch\.int32"):
+        model(x, y, seqused_cols=torch.tensor(5))
+    with pytest.raises(ValueError, match="scalar"):
+        model(
+            x,
+            y,
+            seqused_cols=torch.tensor([5], dtype=torch.int32),
+        )
+
+
+def test_tabiclv2_seqused_cols_out_of_range_clamped() -> None:
+    torch.manual_seed(0)
+    model = TabICLv2(pretrained=False)
+    _randomize_residual_exits(model)
+
+    x = torch.randn(12, 5)
+    y = torch.randint(0, 10, (9,))
+
+    # Over-counts clamp to the true width (degenerate but memory-safe).
+    full = model(x, y, seqused_cols=torch.tensor(5, dtype=torch.int32))
+    over = model(x, y, seqused_cols=torch.tensor(7, dtype=torch.int32))
+    torch.testing.assert_close(over, full)
+
+
+def test_tabiclv2_seqused_cols_table_tensor_warns() -> None:
+    model = TabICLv2(pretrained=False)
+    table = TableTensor(
+        columns={"numerical": ["a", "b", "c", "d"], "datetime": ["t"]},
+        numerical=torch.randn(12, 4),
+        datetime=torch.arange(12, dtype=torch.int64).view(12, 1),
+    )
+    y = torch.randint(0, 10, (9,))
+
+    # `seqused_cols` counts the numerical block; table columns beyond it
+    # are dropped before masking, which deserves a warning so callers do
+    # not compute the count from the table width. The call also emits the
+    # generic ignored-columns warning, so record all and match ours.
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        model(
+            table,
+            y,
+            seqused_cols=torch.tensor(3, dtype=torch.int32),
+        )
+    assert any("numerical block" in str(entry.message) for entry in record)

@@ -131,6 +131,10 @@ class TabICLv2(BaseModel):
         y: Tensor,  # [..., R_train]
         related_tables: RelatedTables | None,
         cache: Cache | None,
+        *,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
 
@@ -144,8 +148,22 @@ class TabICLv2(BaseModel):
         assert related_tables is None
 
         if y.is_floating_point():
-            return self.reg_model(x=x, y=y, cache=cache)
-        return self.cls_model(x=x, y=y, cache=cache)
+            return self.reg_model(
+                x=x,
+                y=y,
+                seqused_train=seqused_train,
+                seqused_cols=seqused_cols,
+                cache=cache,
+                batch_size_limit=batch_size_limit,
+            )
+        return self.cls_model(
+            x=x,
+            y=y,
+            seqused_train=seqused_train,
+            seqused_cols=seqused_cols,
+            cache=cache,
+            batch_size_limit=batch_size_limit,
+        )
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -211,10 +229,26 @@ class _TabICLv2(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
+        seqused_train: Tensor | None = None,  # [...]
+        seqused_cols: Tensor | None = None,  # []
         cache: Cache | None = None,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x=x, y=y, cache=cache)
-        x = self.icl_block(x=x, y=y, cache=cache)
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            seqused_train=seqused_train,
+            seqused_cols=seqused_cols,
+            cache=cache,
+            batch_size_limit=batch_size_limit,
+        )
+        x = self.icl_block(
+            x=x,
+            y=y,
+            seqused_train=seqused_train,
+            cache=cache,
+            batch_size_limit=batch_size_limit,
+        )
         return self.head(x)
 
 
