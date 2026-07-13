@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CategoricalImpute - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="TaskDispatch" href="sdm.processing.TaskDispatch.html" /><link rel="prev" title="StypeDispatch" href="sdm.processing.StypeDispatch.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CategoricalImpute - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="TaskDispatch" href="sdm.processing.TaskDispatch.html" /><link rel="prev" title="CategoricalAlign" href="sdm.processing.CategoricalAlign.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -96,6 +96,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.StypeDispatch.html">StypeDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.CategoricalAlign.html">CategoricalAlign</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">CategoricalImpute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.TaskDispatch.html">TaskDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Clip.html">Clip</a></li>
@@ -187,7 +188,9 @@ learned independently for every categorical column and applied without
 changing its category vocabulary.
 Transform inputs must use the fitted per-column category vocabularies.
 The processor raises if they do not match. Column names are not
-validated.</p>
+validated. Use <a class="reference internal" href="sdm.processing.CategoricalAlign.html#sdm.processing.CategoricalAlign" title="sdm.processing.CategoricalAlign"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalAlign</span></code></a> before this
+processor when training and transform inputs were tensorized
+independently.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>strategy</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'most_frequent'</em><em>]</em>) – Imputation strategy. <code class="docutils literal notranslate"><span class="pre">&quot;most_frequent&quot;</span></code> selects the most
@@ -205,10 +208,10 @@ lowest category code.</p>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.StypeDispatch.html">
+    <a href="sdm.processing.CategoricalAlign.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">StypeDispatch</div></div>
+        <span>Previous</span><div class="title">CategoricalAlign</div></div>
     </a>
   </div><div class="navigation-next">
     <a href="sdm.processing.TaskDispatch.html">
@@ -223,7 +226,7 @@ lowest category code.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=0d0b559b"></script>
+      <script src="../../_static/documentation_options.js?v=7574c438"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
