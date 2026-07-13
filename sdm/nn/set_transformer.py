@@ -65,7 +65,7 @@ class InducedTransformerBlock(torch.nn.Module):
             num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
             qassmax=qassmax,
-            norm="layer",
+            norm="layer_norm",
             norm_kwargs={"bias": norm_bias},
             **factory_kwargs,
         )
@@ -74,7 +74,7 @@ class InducedTransformerBlock(torch.nn.Module):
             num_query_heads=num_query_heads,
             num_key_value_heads=num_key_value_heads,
             feedforward_channels=feedforward_channels,
-            norm="layer",
+            norm="layer_norm",
             norm_kwargs={"bias": norm_bias},
             **factory_kwargs,
         )
