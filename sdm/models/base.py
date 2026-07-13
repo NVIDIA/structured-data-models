@@ -93,13 +93,16 @@ class Model(torch.nn.Module, ABC):
                 related_tables,
                 recipe=recipe,
             )
+            class_indices = self._class_indices(
+                original_class_labels,
+                member_class_labels,
+            )
             out = self._forward(x_i, y_i, related_tables, cache=None)
             out = self._postprocess(
                 out,
                 y_i,
                 recipe,
-                member_class_labels=member_class_labels,
-                original_class_labels=original_class_labels,
+                class_indices=class_indices,
             )
             outs.append(out)
 
@@ -154,14 +157,17 @@ class Model(torch.nn.Module, ABC):
                 recipe=recipe,
             )
             x_i = x_i[..., : y_i.size(-1), :]
+            class_indices = self._class_indices(
+                original_class_labels,
+                member_class_labels,
+            )
 
             cache = Cache(
                 {
                     "y.dtype": y_i.dtype,
                     # predict() only receives features, so retain the fitted
-                    # target order needed to map this member's output.
-                    "target.member_class_labels": member_class_labels,
-                    "target.original_class_labels": original_class_labels,
+                    # mapping needed to restore this member's class order.
+                    "target.class_indices": class_indices,
                 }
             )
             self._forward(x_i, y_i, related_tables, cache)
@@ -230,20 +236,15 @@ class Model(torch.nn.Module, ABC):
                 fit_recipe=False,
             )
             out = self._forward(x_i, y_i, related_tables, cache)
-            member_class_labels = cast(
-                tuple[str, ...] | None,
-                cache["target.member_class_labels"],
-            )
-            original_class_labels = cast(
-                tuple[str, ...] | None,
-                cache["target.original_class_labels"],
+            class_indices = cast(
+                tuple[int, ...] | None,
+                cache["target.class_indices"],
             )
             out = self._postprocess(
                 out,
                 y_i,
                 recipe,
-                member_class_labels=member_class_labels,
-                original_class_labels=original_class_labels,
+                class_indices=class_indices,
             )
             outs.append(out)
 
@@ -345,8 +346,7 @@ class Model(torch.nn.Module, ABC):
         y: Tensor,  # [..., R_train]
         recipe: Recipe | None,
         *,
-        member_class_labels: tuple[str, ...] | None,
-        original_class_labels: tuple[str, ...] | None,
+        class_indices: tuple[int, ...] | None,
     ) -> Tensor:  # [..., R_test, *]
         if y.is_floating_point():
             if recipe is None:
@@ -365,33 +365,43 @@ class Model(torch.nn.Module, ABC):
 
         # Raw tensor targets have no class-label metadata and therefore no
         # recipe-induced class order to restore.
-        if member_class_labels is None:
+        if class_indices is None:
             return out
 
-        n_classes = len(member_class_labels)
-        if out.size(-1) < n_classes:
+        n_classes = len(class_indices)
+        required_columns = max(class_indices, default=-1) + 1
+        if out.size(-1) < required_columns:
             raise ValueError(
                 "Expected the classification output to contain at least "
-                f"{n_classes} columns (got {out.size(-1)})."
+                f"{required_columns} columns (got {out.size(-1)})."
             )
-        out = out[..., :n_classes]
 
-        assert original_class_labels is not None
-        if member_class_labels == original_class_labels:
-            return out
+        if class_indices == tuple(range(n_classes)):
+            return out[..., :n_classes]
 
-        member_indices = {
-            label: index for index, label in enumerate(member_class_labels)
-        }
         indices = torch.tensor(
-            [
-                member_indices[label]
-                for label in original_class_labels
-                if label in member_indices
-            ],
+            class_indices,
             device=out.device,
         )
         return out.index_select(-1, indices)
+
+    @staticmethod
+    def _class_indices(
+        original_class_labels: tuple[str, ...] | None,
+        member_class_labels: tuple[str, ...] | None,
+    ) -> tuple[int, ...] | None:
+        if member_class_labels is None:
+            return None
+
+        assert original_class_labels is not None
+        member_indices = {
+            label: index for index, label in enumerate(member_class_labels)
+        }
+        return tuple(
+            member_indices[label]
+            for label in original_class_labels
+            if label in member_indices
+        )
 
     @staticmethod
     def _class_labels(
