@@ -38,12 +38,12 @@ class CategoricalAlign(Processor):
         super().__init__()
         self._categories: tuple[Tensor, ...] = ()
 
-    def _fit(self, inp: TableTensor) -> None:
-        _check_categorical_codes(inp)
-        data = inp.categorical
-        columns = inp.columns[Stype.categorical]
+    def _fit(self, table: TableTensor) -> None:
+        _check_categorical_codes(table)
+        data = table.categorical
+        columns = table.columns[Stype.categorical]
         categories: list[Tensor] = []
-        for index, category in enumerate(inp.categorical.categories):
+        for index, category in enumerate(table.categorical.categories):
             if category.is_complex():
                 raise ValueError(
                     "CategoricalAlign does not support complex category "
@@ -76,17 +76,17 @@ class CategoricalAlign(Processor):
 
         self._categories = tuple(categories)
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        _check_categorical_codes(inp)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        _check_categorical_codes(table)
 
-        columns = inp.columns[Stype.categorical]
+        columns = table.columns[Stype.categorical]
         # Start from all-missing output codes; the per-column loop below only
         # overwrites observed positions, so missing and unseen values stay -1.
-        data = torch.full_like(inp.categorical, -1)
+        data = torch.full_like(table.categorical, -1)
         for index, (actual, expected) in enumerate(
-            zip(inp.categorical.categories, self._categories, strict=True)
+            zip(table.categorical.categories, self._categories, strict=True)
         ):
-            codes = inp.categorical[..., index]
+            codes = table.categorical[..., index]
             observed = codes >= 0
             if not observed.any():
                 continue
@@ -108,7 +108,7 @@ class CategoricalAlign(Processor):
                 for category in self._categories
             ),
         )
-        return inp.replace_blocks(categorical=categorical)
+        return table.replace_blocks(categorical=categorical)
 
     @staticmethod
     def _select_categories(category: Tensor, index: Tensor) -> Tensor:
