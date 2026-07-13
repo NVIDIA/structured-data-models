@@ -45,24 +45,24 @@ The explicit member uses Identity normalization in both implementations.
 
 | Stage                                    | Pinned TabICLv2 median / p95 |  SDM median / p95 |      SDM difference |
 | ---------------------------------------- | ---------------------------: | ----------------: | ------------------: |
-| Feature + target preprocessing           |            286.662 / 371.923 | 241.486 / 388.189 | -45.176 ms (-15.8%) |
-| Map model output to original class space |                0.008 / 0.010 |     0.220 / 0.255 |           +0.212 ms |
-| Output transform                         |                0.060 / 0.070 |     0.521 / 1.275 |           +0.461 ms |
-| E2E deterministic zero-head pipeline     |            301.857 / 357.215 | 256.612 / 273.860 | -45.245 ms (-15.0%) |
-| Total processing overhead                |            301.857 / 357.215 | 256.612 / 273.860 | -45.245 ms (-15.0%) |
+| Feature + target preprocessing           |            259.272 / 275.178 | 200.334 / 243.763 | -58.939 ms (-22.7%) |
+| Map model output to original class space |                0.008 / 0.010 |     0.097 / 0.125 |           +0.089 ms |
+| Output transform                         |                0.061 / 0.084 |     0.437 / 0.471 |           +0.376 ms |
+| E2E deterministic zero-head pipeline     |            261.080 / 299.176 | 207.153 / 210.961 | -53.927 ms (-20.7%) |
+| Total processing overhead                |            261.080 / 299.176 | 207.153 / 210.961 | -53.927 ms (-20.7%) |
 
 ### Regression
 
 The model-output mapping uses a 999-coordinate head, matching TabICLv2's raw
 regression output width.
 
-| Stage                                     | Pinned TabICLv2 median / p95 |  SDM median / p95 |       SDM difference |
-| ----------------------------------------- | ---------------------------: | ----------------: | -------------------: |
-| Feature + target preprocessing            |            428.044 / 506.331 | 241.240 / 337.816 | -186.803 ms (-43.6%) |
-| Map model output to original target space |              66.927 / 83.512 |   50.791 / 77.087 |  -16.136 ms (-24.1%) |
-| Output transform                          |            0.00012 / 0.00022 |     0.029 / 0.036 |            +0.029 ms |
-| E2E deterministic zero-head pipeline      |            359.801 / 581.818 | 388.136 / 526.340 |   +28.335 ms (+7.9%) |
-| Total processing overhead                 |            359.801 / 581.818 | 388.136 / 526.340 |   +28.335 ms (+7.9%) |
+| Stage                                     | Pinned TabICLv2 median / p95 |  SDM median / p95 |      SDM difference |
+| ----------------------------------------- | ---------------------------: | ----------------: | ------------------: |
+| Feature + target preprocessing            |            244.691 / 267.188 | 211.536 / 217.519 | -33.155 ms (-13.5%) |
+| Map model output to original target space |              38.366 / 42.665 |   43.393 / 44.594 |  +5.027 ms (+13.1%) |
+| Output transform                          |            0.00018 / 0.00046 |     0.023 / 0.028 |           +0.023 ms |
+| E2E deterministic zero-head pipeline      |            277.552 / 290.675 | 315.298 / 363.493 | +37.746 ms (+13.6%) |
+| Total processing overhead                 |            277.552 / 290.675 | 315.298 / 363.493 | +37.746 ms (+13.6%) |
 
 Stage medians are independent measurements and are not additive. In
 particular, CPU scheduling and allocator reuse explain why a separately timed

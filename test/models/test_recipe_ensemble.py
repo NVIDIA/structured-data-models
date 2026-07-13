@@ -290,12 +290,18 @@ def test_cache_reuses_member_recipe_and_category_mapping() -> None:
 
     _CyclingClassShuffle.reset()
     cached_model = _AnalyticModel(raw)
+    recipe = _classification_recipe()
     cached_model.fit(
         features[:3],
         _classification_target(),
-        recipe=_classification_recipe(),
+        recipe=recipe,
         num_estimators=2,
     )
+    assert cached_model._caches is not None
+    cached_recipes = [cache["recipe"] for cache in cached_model._caches]
+    assert cached_recipes[0] is not recipe
+    assert cached_recipes[1] is not recipe
+    assert cached_recipes[0] is not cached_recipes[1]
     cached = cached_model.predict(features[3:])
     repeated = cached_model.predict(features[3:])
 

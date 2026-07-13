@@ -24,7 +24,7 @@ from typing import Any, Literal, cast
 
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.models.base import Model, _OutputMapping
+from sdm.models.base import Model
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.processing import (
     CategoricalAlign,
@@ -293,14 +293,16 @@ def _mapping_setup(workload: Workload):
     torch.manual_seed(0)
     transformed = recipe.target.fit_transform(workload.y)
     if workload.task == "classification":
+        target = transformed.categorical.as_tensor().squeeze(-1)
         member = _classification_columns(transformed)
         canonical = _classification_columns(workload.y)
         raw = torch.zeros(workload.rows - workload.train_rows, 10)
-        mapping = _OutputMapping(False, member, canonical)
     else:
+        target = transformed.numerical.squeeze(-1)
         raw = torch.zeros(workload.rows - workload.train_rows, 999)
-        mapping = _OutputMapping(True)
-    return recipe, raw, mapping
+        member = None
+        canonical = None
+    return recipe, raw, target, member, canonical
 
 
 def _assert_workload_correct(workload: Workload) -> None:
@@ -431,7 +433,7 @@ def benchmark_pipeline(
         if workload.task == "regression":
 
             def inverse_prepare():
-                recipe, raw, _ = _mapping_setup(workload)
+                recipe, raw, _, _, _ = _mapping_setup(workload)
                 inverse = cast(InvertibleMixin, recipe.target)
                 table = TableTensor.from_tensor(raw)
                 return lambda: inverse.inverse_transform(table)
@@ -439,25 +441,29 @@ def benchmark_pipeline(
             add("target_inverse_transform", inverse_prepare)
 
         def mapping_prepare():
-            recipe, raw, mapping = _mapping_setup(workload)
+            recipe, raw, target, member, canonical = _mapping_setup(workload)
             model = _ZeroModel()
-            return lambda: model._map_model_output(
+            return lambda: model._postprocess(
                 raw,
+                target,
                 recipe,
-                mapping=mapping,
+                member_columns=member,
+                canonical_columns=canonical,
             )
 
         add("model_output_inverse_mapping", mapping_prepare)
 
         def output_prepare():
-            recipe, raw, mapping = _mapping_setup(workload)
+            recipe, raw, target, member, canonical = _mapping_setup(workload)
             model = _ZeroModel()
-            canonical = model._map_model_output(
+            mapped = model._postprocess(
                 raw,
+                target,
                 recipe,
-                mapping=mapping,
+                member_columns=member,
+                canonical_columns=canonical,
             )
-            table = TableTensor.from_tensor(canonical)
+            table = TableTensor.from_tensor(mapped)
             return lambda: recipe.output.transform(table)
 
         add("output_transform", output_prepare)
@@ -691,7 +697,11 @@ def write_results(results: list[BenchmarkResult], output: Path) -> None:
         row.update(characteristics)
         flat_rows.append(row)
     with csv_path.open("w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=list(flat_rows[0]))
+        writer = csv.DictWriter(
+            file,
+            fieldnames=list(flat_rows[0]),
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(flat_rows)
 
