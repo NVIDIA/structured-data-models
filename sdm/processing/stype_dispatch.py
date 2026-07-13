@@ -148,7 +148,9 @@ class StypeDispatch(Processor, InvertibleMixin):
             if stype.value not in self.processors and len(columns) > 0
         ]
         self._check_remainder(remainder_stypes)
-        outputs.extend(table.select_stypes(stype) for stype in remainder_stypes)
+        outputs.extend(
+            table.select_stypes(stype) for stype in remainder_stypes
+        )
         if len(outputs) == 0:
             return table.select_columns(())
 
