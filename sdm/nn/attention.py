@@ -7,10 +7,11 @@ from typing import Any, Literal, cast, overload
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import GELU, LayerNorm, Linear, Sequential
+from torch.nn import GELU, Linear, Sequential
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
+from sdm.nn.resolver import normalization_resolver
 
 
 def _validate_batch_size_limit(batch_size_limit: int | None) -> None:
@@ -686,7 +687,10 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
-        norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
+        norm: The normalization name passed to
+            :func:`sdm.nn.normalization_resolver`.
+        norm_kwargs: Additional keyword arguments passed to the normalization
+            layer.
         device: The device.
         dtype: The dtype.
     """
@@ -698,15 +702,19 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
-        norm_bias: bool = True,
+        norm: str = "layer_norm",
+        norm_kwargs: dict[str, Any] | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.q_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
-        self.kv_norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
+        norm_kwargs = dict(norm_kwargs or {})
+        norm_kwargs.update(factory_kwargs)
+
+        self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
+        self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)
         self.attn = Attention(
             channels=channels,
             num_query_heads=num_query_heads,
@@ -715,7 +723,7 @@ class TransformerBlock(torch.nn.Module):
             **factory_kwargs,
         )
         self.mlp = Sequential(
-            LayerNorm(channels, bias=norm_bias, **factory_kwargs),
+            normalization_resolver(norm, channels, **norm_kwargs),
             Linear(channels, feedforward_channels, **factory_kwargs),
             GELU(),
             Linear(feedforward_channels, channels, **factory_kwargs),
