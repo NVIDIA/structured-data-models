@@ -70,8 +70,8 @@ class ConstantFilter(Processor):
         self.tolerance = 1e-6 if tolerance is None else tolerance
         self._columns_to_keep: tuple[str, ...] = ()
 
-    def _fit(self, input: TableTensor) -> None:
-        data = input.numerical
+    def _fit(self, inp: TableTensor) -> None:
+        data = inp.numerical
 
         if self.method == "variance":
             keep = _as_float(data).std(dim=0) > self.tolerance
@@ -99,12 +99,12 @@ class ConstantFilter(Processor):
             keep = changed.sum(dim=0) >= self.threshold
 
         indices = keep.nonzero().flatten().tolist()
-        columns = input.columns[Stype.numerical]
+        columns = inp.columns[Stype.numerical]
         self._columns_to_keep = tuple(columns[index] for index in indices)
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, inp: TableTensor) -> TableTensor:
         """Drop columns rejected by the fitted filtering rule."""
-        columns = input.columns[Stype.numerical]
+        columns = inp.columns[Stype.numerical]
         if self._columns_to_keep == columns:
-            return input
-        return input.select_columns(self._columns_to_keep)
+            return inp
+        return inp.select_columns(self._columns_to_keep)

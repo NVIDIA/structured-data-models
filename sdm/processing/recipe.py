@@ -29,19 +29,19 @@ class _TaskResolver(Processor, InvertibleMixin):
         self.processor = processor
         self._task_dispatchers = task_dispatchers
 
-    def fit(self, input: TableTensor) -> Self:
-        self.fit_transform(input)
+    def fit(self, inp: TableTensor) -> Self:
+        self.fit_transform(inp)
         return self
 
-    def fit_transform(self, input: TableTensor) -> TableTensor:
-        self._check_supported_stypes(input)
+    def fit_transform(self, inp: TableTensor) -> TableTensor:
+        self._check_supported_stypes(inp)
         self._fitted = False
         for task_dispatcher in self._task_dispatchers:
             task_dispatcher._reset()
 
         succeeded = False
         try:
-            target = self.processor.fit_transform(input)
+            target = self.processor.fit_transform(inp)
             for task_dispatcher in self._task_dispatchers:
                 task_dispatcher._resolve(target)
             self._fitted = True
@@ -52,17 +52,17 @@ class _TaskResolver(Processor, InvertibleMixin):
                 for task_dispatcher in self._task_dispatchers:
                     task_dispatcher._reset()
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return self.processor.transform(input)
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        return self.processor.transform(inp)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
         fn = getattr(self.processor, "inverse_transform", None)
         if not callable(fn):
             raise AttributeError(
                 f"'{self.processor.__class__.__name__}' object has no "
                 "attribute 'inverse_transform'"
             )
-        return fn(input)
+        return fn(inp)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.processor.__repr__(indent=indent)

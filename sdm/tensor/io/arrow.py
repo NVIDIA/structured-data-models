@@ -33,12 +33,12 @@ def to_arrow(tensor: Tensor) -> pa.Array:
 
     tensor = tensor.detach().contiguous().view(-1).cpu()
 
-    type = TORCH_ARROW_DTYPES.get(tensor.dtype)
-    if type is None:
+    arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
+    if arrow_type is None:
         raise TypeError(f"Unsupported data type '{tensor.dtype}'")
 
     return pa.Array.from_buffers(
-        type=type,
+        type=arrow_type,
         length=tensor.numel(),
         buffers=[None, pa.py_buffer(tensor.numpy())],
     )
