@@ -140,9 +140,7 @@ class TabICLv2(BaseModel):
         Returns:
             Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
             and ``[..., R_test, 999]`` for floating-point ``y``.
-            Integer ``y`` return class logits over ten classes, or over
-            ``y.max() + 1`` classes via hierarchical classification when the
-            context holds more than ten classes.
+            Integer ``y`` return class logits.
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
         """
