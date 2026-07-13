@@ -285,7 +285,7 @@ class TableTensor(Tensor):
                 array = table.column(column)
                 if stype == Stype.numerical:
                     with warnings.catch_warnings():
-                        warnings.filterwarnings(  # Safe to filter.
+                        warnings.filterwarnings(  # Safe to ignore.
                             "ignore",
                             message="The given NumPy array is not writable",
                         )
