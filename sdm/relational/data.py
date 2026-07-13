@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow as pa
 import torch
@@ -314,11 +314,14 @@ class RelationalData(DeviceMixin):
         self,
         *,
         hide_columns: bool = False,
+        **kwargs: Any,
     ) -> graphviz.Graph:
         r"""Return a graph visualization of the relational schema.
 
         Args:
             hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments pass to
+                :class:`graphviz.Graph`.
         """
         import graphviz
 
@@ -327,7 +330,7 @@ class RelationalData(DeviceMixin):
                 return ""
             return "\\l".join(keys) + "\\l"
 
-        graph = graphviz.Graph()
+        graph = graphviz.Graph(**kwargs)
 
         for table_name, table in self.tables.items():
             if hide_columns:
