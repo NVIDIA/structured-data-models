@@ -159,11 +159,9 @@ def test_default_recipe(task: str) -> None:
     if task == "regression":
         model_output = TableTensor.from_tensor(torch.randn(16, 999))
         restored = recipe.target.inverse_transform(model_output)
-        expected = (
-            model_output.numerical
-            * target.numerical.std(dim=0, correction=0)
-            + target.numerical.mean(dim=0)
-        )
+        expected = model_output.numerical * target.numerical.std(
+            dim=0, correction=0
+        ) + target.numerical.mean(dim=0)
         torch.testing.assert_close(restored.numerical, expected)
 
     output = TableTensor.from_tensor(
