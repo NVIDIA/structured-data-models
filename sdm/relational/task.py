@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from typing_extensions import Self
@@ -93,7 +93,7 @@ class TaskLink:
         return f"{self.table}.[{','.join(self.table_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._task_columns_repr()} -> {self._table_columns_repr()}"
+        return f"{self._task_columns_repr()} > {self._table_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -203,22 +203,25 @@ class RelatedTables(DeviceMixin):
         self,
         *,
         hide_columns: bool = False,
+        **kwargs: Any,
     ) -> graphviz.Graph:
         r"""Return a task visualization of the relational schema.
 
         Args:
             hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments pass to
+                :class:`graphviz.Graph`.
         """
         graph = RelationalData(
             tables=self.tables,
             relationships=self.relationships,
-        ).to_graphviz(hide_columns=hide_columns)
+        ).to_graphviz(hide_columns=hide_columns, **kwargs)
 
         graph.node("__task_table__", label="", shape="point")
 
         for link in self.task_links:
             label = "\\n".join(
-                f" {task_column} -> {table_column} "
+                f" {task_column} > {table_column} "
                 for task_column, table_column in zip(
                     link.task_columns, link.table_columns
                 )

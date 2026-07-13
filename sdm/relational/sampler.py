@@ -254,11 +254,11 @@ class RelationalSampler:
             example, index = node.t().contiguous()
             tables[table_name] = torch.cat(
                 [
+                    self.data.tables[table_name][index],
                     TableTensor(
                         columns={"id": (EXAMPLE_ID,)},
                         id=ColumnarTensor((example,)),
                     ),
-                    self.data.tables[table_name][index],
                 ],
                 dim=-1,
             )
@@ -267,27 +267,27 @@ class RelationalSampler:
         relationships = tuple(
             Relationship(
                 left_table=rel.left_table,
-                left_columns=(EXAMPLE_ID, *rel.left_columns),
+                left_columns=(*rel.left_columns, EXAMPLE_ID),
                 right_table=rel.right_table,
-                right_columns=(EXAMPLE_ID, *rel.right_columns),
+                right_columns=(*rel.right_columns, EXAMPLE_ID),
             )
             for rel in self.data.relationships
             if rel.left_table in tables and rel.right_table in tables
         )
 
         task_link = TaskLink(
-            task_columns=(EXAMPLE_ID, *task_link.task_columns),
+            task_columns=(*task_link.task_columns, EXAMPLE_ID),
             table=task_link.table,
-            table_columns=(EXAMPLE_ID, *task_link.table_columns),
+            table_columns=(*task_link.table_columns, EXAMPLE_ID),
         )
 
         task_table: Tensor = torch.cat(
             [
+                task_table,
                 TableTensor(
                     columns={"id": (EXAMPLE_ID,)},
                     id=ColumnarTensor((torch.arange(task_table.size(0)),)),
                 ),
-                task_table,
             ],
             dim=-1,
         )
