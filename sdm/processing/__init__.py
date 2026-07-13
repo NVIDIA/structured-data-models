@@ -7,7 +7,7 @@ from sdm.processing.stype_dispatch import StypeDispatch
 from sdm.processing.categorical_impute import CategoricalImpute
 from sdm.processing.task_dispatch import TaskDispatch
 from sdm.processing.clip import Clip
-from sdm.processing.class_shuffle import ClassShuffle
+from sdm.processing.category_shuffle import CategoryShuffle
 from sdm.processing.constant_filter import ConstantFilter
 from sdm.processing.feature_permute import FeaturePermute
 from sdm.processing.identity import Identity
@@ -29,7 +29,7 @@ __all__ = [
     "CategoricalImpute",
     "TaskDispatch",
     "Clip",
-    "ClassShuffle",
+    "CategoryShuffle",
     "ConstantFilter",
     "FeaturePermute",
     "Identity",
