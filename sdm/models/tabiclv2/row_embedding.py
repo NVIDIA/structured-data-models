@@ -62,7 +62,7 @@ class RowEmbedding(torch.nn.Module):
                 num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=False,
-                norm_bias=norm_bias,
+                norm_kwargs={"bias": norm_bias},
                 **factory_kwargs,
             )
             for _ in range(num_layers)

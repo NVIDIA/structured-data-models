@@ -930,8 +930,25 @@ def test_transformer_block_norm(
         assert norm_module.eps == 1e-6
 
 
+def test_transformer_block_norm_kwargs() -> None:
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm="layer",
+        norm_kwargs={"bias": False},
+    )
+
+    for norm_module in (module.q_norm, module.kv_norm, module.mlp[0]):
+        assert isinstance(norm_module, torch.nn.LayerNorm)
+        assert norm_module.bias is None
+
+
 def test_transformer_block_invalid_norm() -> None:
-    with pytest.raises(ValueError, match="Unknown normalization layer 'foo'"):
+    with pytest.raises(
+        ValueError,
+        match="Could not resolve normalization 'foo'",
+    ):
         TransformerBlock(
             channels=8,
             num_query_heads=2,
