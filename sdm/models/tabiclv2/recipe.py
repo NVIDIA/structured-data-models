@@ -1,12 +1,6 @@
-"""Default preprocessing recipe for the TabICLv2 model.
-
-The factory composes shared :mod:`sdm.processing` processors into the
-``TableTensor``-to-model-input path of the original TabICLv2 model
-(``soda-inria/tabicl``).
-"""
-
 from sdm.processing import (
-    CategoricalAlign,
+    # TODO: Align categorical vocabularies once 'CategoricalAlign' lands:
+    # CategoricalAlign,
     CategoryShuffle,
     Choice,
     ConstantFilter,
@@ -25,18 +19,21 @@ from sdm.processing import (
 
 
 def default_recipe() -> Recipe:
-    """Return the default regression and classification recipe.
+    """Return the task-aware default recipe of the TabICLv2 model.
 
-    Categorical features are aligned to vocabularies fitted on context rows
-    before numerical conversion. Missing and unseen category values remain
-    encoded as ``-1``; they are not categorically imputed.
+    Composes shared :mod:`sdm.processing` processors into the
+    ``TableTensor``-to-model-input path of the original TabICLv2 model
+    (``soda-inria/tabicl``). Fitting the target selects the regression or
+    classification route for the target and output roles. The target inverse
+    receives the complete numerical model-output head. Missing and unseen
+    categorical feature values remain encoded as ``-1``.
     """
     return Recipe(
         features=[
             StypeDispatch(
                 numerical=Identity(),
                 categorical=[
-                    CategoricalAlign(),
+                    # CategoricalAlign(),
                     ToNumerical(),
                 ],
             ),
@@ -50,13 +47,10 @@ def default_recipe() -> Recipe:
             SigmaClip(threshold=4.0),
             FeaturePermute(method="shift"),
         ],
-        # TODO: Replace this with fitted target dispatch before model
-        # integration. The selected route must receive the complete numerical
-        # head (10 class logits or 999 regression quantiles) during inverse.
         target=[
-            StypeDispatch(
-                numerical=StandardScale(),
-                categorical=CategoryShuffle(method="shift"),
+            TaskDispatch(
+                classification=CategoryShuffle(method="shift"),
+                regression=StandardScale(),
             ),
         ],
         output=[

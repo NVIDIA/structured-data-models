@@ -123,8 +123,12 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
 
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
         Recipe(features=[TaskDispatch(regression=Identity())])
-    with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
-        Recipe(target=[TaskDispatch(regression=Identity())])
+    with pytest.raises(ValueError, match=r"stateless routes"):
+        Recipe(output=[TaskDispatch(regression=StandardScale())])
+
+    # A fit-requiring dispatch is supported in the target role:
+    fitted = Recipe(target=[TaskDispatch(regression=StandardScale())])
+    fitted.target.fit(_numerical_target())
 
     shared = TaskDispatch(regression=Identity())
     nested = Choice(Identity(), shared)

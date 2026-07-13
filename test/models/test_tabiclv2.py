@@ -7,9 +7,9 @@ from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.processing import (
+    CategoryShuffle,
     InvertibleMixin,
     Recipe,
-    Sequential,
     SoftmaxTemperature,
 )
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
@@ -108,7 +108,7 @@ def test_tabiclv2_recipe() -> None:
         x=recipe.features.transform(x),
         y=recipe.target.fit_transform(y),
     )
-    assert isinstance(recipe.target, Sequential)
+    assert isinstance(recipe.target, InvertibleMixin)
     expected = recipe.target.inverse_transform(
         TableTensor.from_tensor(raw.clone())
     ).numerical
@@ -162,12 +162,26 @@ def test_default_recipe(task: str) -> None:
         "kind",
     }
 
-    restored = cast(InvertibleMixin, recipe.target).inverse_transform(
-        model_target
-    )
     if task == "classification":
-        assert torch.equal(restored.categorical, target.categorical)
+        # The target inverse receives the complete numerical model-output
+        # head and restores the original class-score order:
+        head = torch.randn(16, 10)
+        restored = cast(InvertibleMixin, recipe.target).inverse_transform(
+            TableTensor.from_tensor(head)
+        )
+        shuffle = next(
+            module
+            for module in recipe.target.modules()
+            if isinstance(module, CategoryShuffle)
+        )
+        torch.testing.assert_close(
+            restored.numerical,
+            head[:, shuffle.permutations],
+        )
     else:
+        restored = cast(InvertibleMixin, recipe.target).inverse_transform(
+            model_target
+        )
         torch.testing.assert_close(
             restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
         )

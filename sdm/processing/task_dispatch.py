@@ -2,32 +2,39 @@ from collections.abc import Iterable
 from typing import Literal, cast
 
 import torch
+from typing_extensions import Self
 
-from sdm.processing.base import Processor
+from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.sequential import Sequential
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class TaskDispatch(Processor):
-    """Route model output by the transformed target's semantic type.
+class TaskDispatch(Processor, InvertibleMixin):
+    """Route processing by the target task.
 
-    When used in :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
+    One numerical target column selects the regression route and one
+    categorical target column selects the classification route.
+
+    In :attr:`Recipe.target <sdm.processing.Recipe.target>`, fitting resolves
+    the route from the fitted target itself and fits the selected route. The
+    route transforms the target, and its inverse receives the complete
+    numerical model-output head (e.g., class logits or regression quantiles).
+
+    In :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
     :attr:`Recipe.target <sdm.processing.Recipe.target>` resolves the route
-    from the final transformed target. One numerical column selects regression
-    and one categorical column selects classification. Routes must be stateless
+    from the final transformed target. Output routes must be stateless
     because output processing has no fitting data of its own. Configure
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
-        classification: Output processor for categorical targets. An iterable
-            is normalized to :class:`~sdm.processing.Sequential`.
-        regression: Output processor for numerical targets. An iterable is
+        classification: Route for categorical targets. An iterable is
             normalized to :class:`~sdm.processing.Sequential`.
+        regression: Route for numerical targets. An iterable is normalized
+            to :class:`~sdm.processing.Sequential`.
     """
 
     supported_stypes = frozenset(Stype)
-    requires_fit = False
 
     def __init__(
         self,
@@ -45,11 +52,6 @@ class TaskDispatch(Processor):
                 continue
             if not isinstance(processor, Processor):
                 processor = Sequential(*processor)
-            if processor.requires_fit:
-                raise ValueError(
-                    f"'{self.__class__.__name__}' requires stateless routes, "
-                    f"but the '{task}' route requires fit."
-                )
             self.processors[task] = processor
 
         if len(self.processors) == 0:
@@ -57,13 +59,31 @@ class TaskDispatch(Processor):
                 f"'{self.__class__.__name__}' requires at least one route."
             )
 
+        self.requires_fit = any(
+            cast(Processor, processor).requires_fit
+            for processor in self.processors.values()
+        )
         self._task: Literal["classification", "regression"] | None = None
+
+    def fit(self, input: TableTensor) -> Self:  # noqa: D102
+        # Resolving the route is fitted state, so fitting always resolves,
+        # even when every route is stateless.
+        self._check_supported_stypes(input)
+        self._fit(input)
+        self._fitted = True
+        return self
+
+    def _fit(self, input: TableTensor) -> None:
+        self._resolve(input)
+        task = self._task
+        assert task is not None
+        cast(Processor, self.processors[task]).fit(input)
 
     def _resolve(self, target: TableTensor) -> None:
         self._reset()
         if target.size(-1) != 1:
             raise ValueError(
-                "Expected the transformed target to contain exactly one "
+                "Expected the target to contain exactly one "
                 f"column (got {target.size(-1)} columns)."
             )
 
@@ -78,7 +98,7 @@ class TaskDispatch(Processor):
                 if len(columns) > 0
             )
             raise ValueError(
-                "Expected the transformed target to be numerical or "
+                "Expected the target to be numerical or "
                 f"categorical (got '{stype}')."
             )
 
@@ -100,6 +120,20 @@ class TaskDispatch(Processor):
             )
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(input)
+
+    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+        if self._task is None:
+            raise RuntimeError(
+                f"'{self.__class__.__name__}' has no resolved task; call "
+                "'recipe.target.fit()' before inverting model output."
+            )
+        processor = cast(Processor, self.processors[self._task])
+        if not isinstance(processor, InvertibleMixin):
+            raise TypeError(
+                f"Route '{self._task}' uses non-invertible processor "
+                f"'{processor.__class__.__name__}'"
+            )
+        return processor.inverse_transform(input)
 
     def get_extra_state(self) -> str | None:  # noqa: D102
         return self._task

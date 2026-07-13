@@ -85,7 +85,8 @@ class Recipe:
     ``recipe.features.transform(table)`` or
     ``recipe.target.inverse_transform(prediction)``. When ``output`` contains
     :class:`~sdm.processing.TaskDispatch`, fitting ``target`` also selects its
-    task-specific output route.
+    task-specific output route. A ``TaskDispatch`` in ``target`` resolves and
+    fits its own route while the target is fitted.
 
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
@@ -125,18 +126,13 @@ class Recipe:
 
         # TODO: Support TaskDispatch in features after defining task-aware
         # feature fit ordering.
-        for role, processor in (
-            ("features", features),
-            ("target", target),
+        if any(
+            isinstance(module, TaskDispatch) for module in features.modules()
         ):
-            if any(
-                isinstance(module, TaskDispatch)
-                for module in processor.modules()
-            ):
-                raise ValueError(
-                    f"'TaskDispatch' is only supported in 'Recipe.output' "
-                    f"(found in '{role}')."
-                )
+            raise ValueError(
+                "'TaskDispatch' is only supported in 'Recipe.target' and "
+                "'Recipe.output' (found in 'features')."
+            )
 
         # Common output steps can remain adjacent; nesting would require
         # defining whether dispatchers in inactive branches are resolved.
@@ -173,6 +169,13 @@ class Recipe:
             for path, module in task_dispatcher_entries
             if path in direct_paths
         )
+        for task_dispatcher in task_dispatchers:
+            if task_dispatcher.requires_fit:
+                raise ValueError(
+                    "'TaskDispatch' in 'Recipe.output' requires stateless "
+                    "routes; routes that require fit are only supported in "
+                    "'Recipe.target'."
+                )
 
         if len(task_dispatchers) > 0:
             target = _TaskResolver(
