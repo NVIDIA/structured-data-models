@@ -13,6 +13,7 @@ from sdm.tensor import (
 from sdm.relational import (
     Relationship,
     RelationalData,
+    RelationalSample,
     TaskLink,
     RelatedTables,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "TableTensor",
     "Relationship",
     "RelationalData",
+    "RelationalSample",
     "TaskLink",
     "RelatedTables",
     "__version__",

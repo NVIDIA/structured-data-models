@@ -9,7 +9,7 @@ from torch import Tensor
 from typing_extensions import Self
 
 from sdm import TableTensor
-from sdm.relational import RelationalData, Relationship
+from sdm.relational import RelationalData, RelationalSample, Relationship
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
 from sdm.tensor.mixin import DeviceMixin
 
@@ -139,11 +139,13 @@ class RelatedTables(DeviceMixin):
         tables: Related tables keyed by table name.
         relationships: Join relationships among ``tables``.
         task_links: Links from task columns to related ``tables``.
+        sample: Optional exact neighborhood sample for these tables and links.
     """
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
     task_links: tuple[TaskLink, ...]
+    sample: RelationalSample | None
 
     def __init__(
         self,
@@ -152,6 +154,7 @@ class RelatedTables(DeviceMixin):
             Relationship | Mapping[str, str | Sequence[str]]
         ],
         task_links: Collection[TaskLink | Mapping[str, str | Sequence[str]]],
+        sample: RelationalSample | None = None,
     ) -> None:
 
         relationships = tuple(
@@ -171,12 +174,81 @@ class RelatedTables(DeviceMixin):
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", relationships)
         object.__setattr__(self, "task_links", task_links)
+        object.__setattr__(self, "sample", sample)
         self.__post_init__()
 
     def __post_init__(self) -> None:
         for table in self.tables.values():
             if table.dim() != 2:
                 raise ValueError("Tables need to be two-dimensional")
+
+        if self.sample is not None:
+            self._validate_sample(self.sample)
+
+    def _validate_sample(self, sample: RelationalSample) -> None:
+        if sample.node_batch.keys() != self.tables.keys():
+            raise ValueError(
+                "Expected sample metadata for every related table"
+            )
+        if len(sample.edge_indices) != len(self.relationships):
+            raise ValueError(
+                "Expected one sampled edge index per relationship"
+            )
+        if len(sample.task_edge_indices) != len(self.task_links):
+            raise ValueError(
+                "Expected one sampled task edge index per task link"
+            )
+
+        for table_name, table in self.tables.items():
+            batch = sample.node_batch[table_name]
+            if batch.numel() != table.size(0):
+                raise ValueError(
+                    f"Expected sampled metadata for every row in table "
+                    f"{table_name!r}"
+                )
+
+        for index, (relationship, edge_index) in enumerate(
+            zip(self.relationships, sample.edge_indices)
+        ):
+            if edge_index.numel() == 0:
+                continue
+            src, dst = edge_index
+            if bool((src < 0).any()) or bool(
+                (src >= self.tables[relationship.left_table].size(0)).any()
+            ):
+                raise ValueError(
+                    f"Sampled edge index {index} contains an invalid left "
+                    "table row"
+                )
+            if bool((dst < 0).any()) or bool(
+                (dst >= self.tables[relationship.right_table].size(0)).any()
+            ):
+                raise ValueError(
+                    f"Sampled edge index {index} contains an invalid right "
+                    "table row"
+                )
+            left_batch = sample.node_batch[relationship.left_table][src]
+            right_batch = sample.node_batch[relationship.right_table][dst]
+            if not torch.equal(left_batch, right_batch):
+                raise ValueError(
+                    f"Sampled edge index {index} crosses task examples"
+                )
+
+        for index, (task_link, edge_index) in enumerate(
+            zip(self.task_links, sample.task_edge_indices)
+        ):
+            if edge_index.numel() > 0 and (
+                bool((edge_index[0] < 0).any())
+                or bool((edge_index[1] < 0).any())
+                or bool(
+                    (
+                        edge_index[1] >= self.tables[task_link.table].size(0)
+                    ).any()
+                )
+            ):
+                raise ValueError(
+                    f"Sampled task edge index {index} contains an invalid row"
+                )
 
     def to(self, device: torch.device | str | None) -> Self:
         r""":meta private:"""  # noqa: D415
@@ -187,12 +259,15 @@ class RelatedTables(DeviceMixin):
             },
             relationships=self.relationships,
             task_links=self.task_links,
+            sample=None if self.sample is None else self.sample.to(device),
         )
 
     @property
     def device(self) -> torch.device:
         r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
+        if self.sample is not None:
+            devices.add(self.sample.device)
         if len(devices) == 0:
             raise RuntimeError(
                 f"Could not determine 'device' of empty "
@@ -225,6 +300,26 @@ class RelatedTables(DeviceMixin):
             table indices in the first row and right table indices in the
             second row.
         """
+        if self.sample is not None:
+            for index, edge_index in enumerate(self.sample.task_edge_indices):
+                if edge_index.numel() > 0 and bool(
+                    (edge_index[0] >= task_table.size(0)).any()
+                ):
+                    raise ValueError(
+                        f"Sampled task edge index {index} contains an invalid "
+                        "task row"
+                    )
+            return (
+                tuple(
+                    edge_index.to(device=device, dtype=dtype)
+                    for edge_index in self.sample.edge_indices
+                ),
+                tuple(
+                    edge_index.to(device=device, dtype=dtype)
+                    for edge_index in self.sample.task_edge_indices
+                ),
+            )
+
         edge_indices = RelationalData(
             tables={**self.tables, TASK_TABLE: task_table},
             relationships=(
