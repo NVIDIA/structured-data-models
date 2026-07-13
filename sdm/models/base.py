@@ -80,12 +80,14 @@ class Model(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        canonical_columns = self._classification_columns(y)
+        # Align every member output to the input target's class order before
+        # aggregating the ensemble.
+        original_class_labels = self._class_labels(y)
         outs: list[Tensor] = []
         for _ in range(num_estimators):
             # TODO Iterate over Recipes instead of using a single recipe once
             # Recipe adds support for multiple recipes.
-            x_i, y_i, member_columns = self._preprocess(
+            x_i, y_i, member_class_labels = self._preprocess(
                 x,
                 y,
                 related_tables,
@@ -96,8 +98,8 @@ class Model(torch.nn.Module, ABC):
                 out,
                 y_i,
                 recipe,
-                member_columns=member_columns,
-                canonical_columns=canonical_columns,
+                member_class_labels=member_class_labels,
+                original_class_labels=original_class_labels,
             )
             outs.append(out)
 
@@ -140,12 +142,12 @@ class Model(torch.nn.Module, ABC):
             related_tables = None
 
         self.clear()
-        canonical_columns = self._classification_columns(y)
+        original_class_labels = self._class_labels(y)
         caches: list[Cache] = []
         for _ in range(num_estimators):
             # TODO Iterate over Recipes instead of using a single recipe once
             # Recipe adds support for multiple recipes.
-            x_i, y_i, member_columns = self._preprocess(
+            x_i, y_i, member_class_labels = self._preprocess(
                 x,
                 y,
                 related_tables,
@@ -156,8 +158,10 @@ class Model(torch.nn.Module, ABC):
             cache = Cache(
                 {
                     "y.dtype": y_i.dtype,
-                    "target.member_columns": member_columns,
-                    "target.canonical_columns": canonical_columns,
+                    # predict() only receives features, so retain the fitted
+                    # target order needed to map this member's output.
+                    "target.member_class_labels": member_class_labels,
+                    "target.original_class_labels": original_class_labels,
                 }
             )
             self._forward(x_i, y_i, related_tables, cache)
@@ -213,7 +217,7 @@ class Model(torch.nn.Module, ABC):
         for cache in self._caches:
             y_i = torch.empty(
                 (*x.size()[:-2], 0),
-                dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
+                dtype=cast(torch.dtype, cache["y.dtype"]),
                 device=x.device,
             )
             # TODO Iterate over Recipes instead of using a single recipe once
@@ -226,18 +230,20 @@ class Model(torch.nn.Module, ABC):
                 fit_recipe=False,
             )
             out = self._forward(x_i, y_i, related_tables, cache)
+            member_class_labels = cast(
+                tuple[str, ...] | None,
+                cache["target.member_class_labels"],
+            )
+            original_class_labels = cast(
+                tuple[str, ...] | None,
+                cache["target.original_class_labels"],
+            )
             out = self._postprocess(
                 out,
                 y_i,
                 recipe,
-                member_columns=cast(
-                    tuple[str, ...] | None,
-                    cache["target.member_columns"],
-                ),
-                canonical_columns=cast(
-                    tuple[str, ...] | None,
-                    cache["target.canonical_columns"],
-                ),
+                member_class_labels=member_class_labels,
+                original_class_labels=original_class_labels,
             )
             outs.append(out)
 
@@ -249,8 +255,9 @@ class Model(torch.nn.Module, ABC):
 
     # Helpers #################################################################
 
-    # FIXME: Remove this guard once variable-length tensor metadata supports
-    # every inference-mode view and host-conversion operation used by recipes.
+    # Recipe transforms can create variable-length category metadata while the
+    # public model call runs in inference mode. StringTensor does not yet
+    # support the inference-only host conversion used to read that metadata.
     @torch.inference_mode(False)
     def _preprocess(
         self,
@@ -283,7 +290,9 @@ class Model(torch.nn.Module, ABC):
 
             x = recipe.features.transform(x)
 
-        member_columns = self._classification_columns(y)
+        # A target processor may assign a different class-code order to each
+        # ensemble member; the model head follows this transformed order.
+        member_class_labels = self._class_labels(y)
 
         if isinstance(x, TableTensor):
             invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
@@ -328,7 +337,7 @@ class Model(torch.nn.Module, ABC):
                 f"(got {tuple(x.size()[:-2])} and {tuple(y.size()[:-1])}"
             )
 
-        return x, y, member_columns
+        return x, y, member_class_labels
 
     def _postprocess(
         self,
@@ -336,52 +345,56 @@ class Model(torch.nn.Module, ABC):
         y: Tensor,  # [..., R_train]
         recipe: Recipe | None,
         *,
-        member_columns: tuple[str, ...] | None,
-        canonical_columns: tuple[str, ...] | None,
+        member_class_labels: tuple[str, ...] | None,
+        original_class_labels: tuple[str, ...] | None,
     ) -> Tensor:  # [..., R_test, *]
-        if not y.is_floating_point():
-            if member_columns is None:
+        if y.is_floating_point():
+            if recipe is None:
                 return out
-            n_classes = len(member_columns)
-            if out.size(-1) < n_classes:
+
+            if not isinstance(recipe.target, InvertibleMixin):
                 raise ValueError(
-                    "Expected the classification output to contain at least "
-                    f"{n_classes} columns (got {out.size(-1)})."
+                    f"Expected the target steps of 'recipe' to support "
+                    f"'inverse_transform' to map predictions back to the "
+                    f"original target space "
+                    f"(got '{recipe.target.__class__.__name__}')"
                 )
-            out = out[..., :n_classes]
-            if canonical_columns is not None:
-                active = frozenset(member_columns)
-                canonical_columns = tuple(
-                    column for column in canonical_columns if column in active
-                )
-                indices = torch.tensor(
-                    [
-                        member_columns.index(column)
-                        for column in canonical_columns
-                    ],
-                    device=out.device,
-                )
-                return out.index_select(-1, indices)
+
+            table = TableTensor.from_tensor(out.clone())
+            return recipe.target.inverse_transform(table).numerical
+
+        # Raw tensor targets have no class-label metadata and therefore no
+        # recipe-induced class order to restore.
+        if member_class_labels is None:
             return out
 
-        if recipe is None:
-            return out
-
-        if not isinstance(recipe.target, InvertibleMixin):
+        n_classes = len(member_class_labels)
+        if out.size(-1) < n_classes:
             raise ValueError(
-                f"Expected the target steps of 'recipe' to support "
-                f"'inverse_transform' to map predictions back to the "
-                f"original target space "
-                f"(got '{recipe.target.__class__.__name__}')"
+                "Expected the classification output to contain at least "
+                f"{n_classes} columns (got {out.size(-1)})."
             )
+        out = out[..., :n_classes]
 
-        table = TableTensor.from_tensor(out.clone())
-        table = recipe.target.inverse_transform(table)
+        assert original_class_labels is not None
+        if member_class_labels == original_class_labels:
+            return out
 
-        return table.numerical
+        member_indices = {
+            label: index for index, label in enumerate(member_class_labels)
+        }
+        indices = torch.tensor(
+            [
+                member_indices[label]
+                for label in original_class_labels
+                if label in member_indices
+            ],
+            device=out.device,
+        )
+        return out.index_select(-1, indices)
 
     @staticmethod
-    def _classification_columns(
+    def _class_labels(
         target: Tensor | TableTensor,
     ) -> tuple[str, ...] | None:
         if not isinstance(target, TableTensor):
@@ -395,13 +408,13 @@ class Model(torch.nn.Module, ABC):
         # ``aten.to`` overload used by ``tolist``.
         with torch.inference_mode(False):
             values = category.tolist()
-        columns = tuple(str(value) for value in values)
-        if len(columns) != len(set(columns)):
+        labels = tuple(str(value) for value in values)
+        if len(labels) != len(set(labels)):
             raise ValueError(
-                "Expected categorical target values to have unique string "
-                "representations for model-output columns."
+                "Expected categorical targets to have unique class-label "
+                "representations."
             )
-        return columns
+        return labels
 
     # Abstract Methods ########################################################
 
