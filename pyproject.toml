@@ -122,6 +122,7 @@ target-version = "py310"
 [tool.ruff.lint]
 # https://docs.astral.sh/ruff/rules/
 select = [
+    "A",    # flake8-builtins
     "B",    # bugbear
     "BLE",  # blind-except
     "C4",   # comprehensions
