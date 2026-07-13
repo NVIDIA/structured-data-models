@@ -154,8 +154,12 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.flake8-builtins]
+ignorelist = ["id"]
+
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]
+"docs/source/conf.py" = ["A001"]
 "test/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
