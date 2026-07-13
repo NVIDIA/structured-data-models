@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, SupportsIndex, cast
@@ -13,6 +14,17 @@ from typing_extensions import Self, override
 from sdm.tensor.io import ARROW_TORCH_DTYPES, to_arrow
 
 aten = torch.ops.aten
+
+
+def preserve_view_inference_mode(fn: Callable) -> Callable:
+    r"""Preserve input inference state for tensor view operations."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with torch.inference_mode(args[0].is_inference()):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 class VarLenTensor(Tensor):
@@ -537,19 +549,20 @@ class VarLenTensor(Tensor):
 
 
 @VarLenTensor.implements(aten.alias.default)
-def _alias(input: VarLenTensor) -> VarLenTensor:
-    return input.__class__(
-        data=aten.alias.default(input._data),
-        offset=aten.alias.default(input._offset),
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
+@preserve_view_inference_mode
+def _alias(inp: VarLenTensor) -> VarLenTensor:
+    return inp.__class__(
+        data=aten.alias.default(inp._data),
+        offset=aten.alias.default(inp._offset),
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()),
     )
 
 
 @VarLenTensor.implements(aten._to_copy.default)
 def _to_copy(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
@@ -564,49 +577,49 @@ def _to_copy(
 
     if (
         dtype is not None
-        and input.ALLOWED_DTYPES is not None
-        and dtype not in input.ALLOWED_DTYPES
+        and inp.ALLOWED_DTYPES is not None
+        and dtype not in inp.ALLOWED_DTYPES
     ):
         raise TypeError(
-            f"Can't convert '{input.__class__.__name__}' to dtype '{dtype}'"
+            f"Can't convert '{inp.__class__.__name__}' to dtype '{dtype}'"
         )
     if layout is not None and layout != torch.strided:
         raise TypeError(
-            f"Can't convert '{input.__class__.__name__}' to layout '{layout}'"
+            f"Can't convert '{inp.__class__.__name__}' to layout '{layout}'"
         )
     if memory_format not in (torch.preserve_format, torch.contiguous_format):
         raise ValueError(
             f"Unsupported memory format '{memory_format}' for "
-            f"'{input.__class__.__name__}.clone'"
+            f"'{inp.__class__.__name__}.clone'"
         )
 
     # Copying has two cases:
     # 1. Slice when the output layout can reuse the input storage order.
     # 2. Materialize in case of holes, overlaps, or change in memory format.
     use_slice = (
-        input.numel() == 0
+        inp.numel() == 0
         or (
             memory_format == torch.preserve_format
-            and torch._debug_has_internal_overlap(_layout_view(input)) == 0
+            and torch._debug_has_internal_overlap(_layout_view(inp)) == 0
         )
         or (
             memory_format == torch.contiguous_format
-            and input.stride() == _contiguous_stride(input.size())
+            and inp.stride() == _contiguous_stride(inp.size())
         )
     )
     if not use_slice:
         return _materialize(
-            input,
+            inp,
             lambda x: x.clone(memory_format=memory_format),
             device=device,
             dtype=dtype,
             non_blocking=non_blocking,
         )
 
-    storage_offset = int(input.storage_offset())
-    span_len = _span_len(input.size(), input.stride())
-    offset = input._offset[storage_offset : storage_offset + span_len + 1]
-    data = input._data[offset[0] : offset[-1]].to(
+    storage_offset = int(inp.storage_offset())
+    span_len = _span_len(inp.size(), inp.stride())
+    offset = inp._offset[storage_offset : storage_offset + span_len + 1]
+    data = inp._data[offset[0] : offset[-1]].to(
         device=device,
         dtype=dtype,
         non_blocking=non_blocking,
@@ -614,70 +627,71 @@ def _to_copy(
     )
     offset = (offset - offset[0]).to(device, non_blocking=non_blocking)
 
-    return input.__class__(
+    return inp.__class__(
         data=data,
         offset=offset,
-        size=input.size(),
-        stride=input.stride()
+        size=inp.size(),
+        stride=inp.stride()
         if memory_format == torch.preserve_format
-        else _contiguous_stride(input.size()),
+        else _contiguous_stride(inp.size()),
         storage_offset=0,
     )
 
 
 @VarLenTensor.implements(aten.clone.default)
 def _clone(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     *,
     memory_format: torch.memory_format | None = None,
 ) -> VarLenTensor:
-    return _to_copy(input, memory_format=memory_format)
+    return _to_copy(inp, memory_format=memory_format)
 
 
 @VarLenTensor.implements(aten.detach.default)
-def _detach(input: VarLenTensor) -> VarLenTensor:
-    return input.__class__(
-        data=input._data.detach(),
-        offset=input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
+@preserve_view_inference_mode
+def _detach(inp: VarLenTensor) -> VarLenTensor:
+    return inp.__class__(
+        data=inp._data.detach(),
+        offset=inp._offset,
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()),
     )
 
 
 @VarLenTensor.implements(aten.contiguous.default)
 def _contiguous(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> VarLenTensor:
-    return _to_copy(input, memory_format=memory_format)
+    return _to_copy(inp, memory_format=memory_format)
 
 
 @VarLenTensor.implements(aten.is_pinned.default)
-def _is_pinned(input: VarLenTensor) -> bool:
-    return input._data.is_pinned() and input._offset.is_pinned()
+def _is_pinned(inp: VarLenTensor) -> bool:
+    return inp._data.is_pinned() and inp._offset.is_pinned()
 
 
 @VarLenTensor.implements(aten._pin_memory.default)
-def _pin_memory(input: VarLenTensor) -> VarLenTensor:
-    return input.__class__(
-        data=input._data.pin_memory(),
-        offset=input._offset.pin_memory(),
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
+def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
+    return inp.__class__(
+        data=inp._data.pin_memory(),
+        offset=inp._offset.pin_memory(),
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()),
     )
 
 
 @VarLenTensor.implements(aten.equal.default)
-def _equal(input: VarLenTensor, other: Tensor) -> bool:
-    if input.__class__ is not other.__class__:
+def _equal(inp: VarLenTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
         return False
-    if input.size() != other.size():
+    if inp.size() != other.size():
         return False
 
-    data1, offset1 = cast(VarLenTensor, input.contiguous()).data_offset
+    data1, offset1 = cast(VarLenTensor, inp.contiguous()).data_offset
     data2, offset2 = cast(VarLenTensor, other.contiguous()).data_offset
 
     return offset1.equal(offset2) and data1.equal(data2)
@@ -685,18 +699,18 @@ def _equal(input: VarLenTensor, other: Tensor) -> bool:
 
 @VarLenTensor.implements(aten.allclose.default)
 def _allclose(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     other: Tensor,
     rtol: float = 1e-05,
     atol: float = 1e-08,
     equal_nan: bool = False,
 ) -> bool:
-    if input.__class__ is not other.__class__:
+    if inp.__class__ is not other.__class__:
         return False
-    if input.size() != other.size():
+    if inp.size() != other.size():
         return False
 
-    data1, offset1 = cast(VarLenTensor, input.contiguous()).data_offset
+    data1, offset1 = cast(VarLenTensor, inp.contiguous()).data_offset
     data2, offset2 = cast(VarLenTensor, other.contiguous()).data_offset
 
     return offset1.equal(offset2) and data1.allclose(
@@ -705,158 +719,173 @@ def _allclose(
 
 
 @VarLenTensor.implements(aten.view.default)
-def _view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
-    view = _layout_view(input).view(tuple(size))
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
+    view = _layout_view(inp).view(tuple(size))
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten._unsafe_view.default)
-def _unsafe_view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
-    view = aten._unsafe_view.default(_layout_view(input), size)
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _unsafe_view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
+    view = aten._unsafe_view.default(_layout_view(inp), size)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.squeeze.default)
-def _squeeze(input: VarLenTensor) -> VarLenTensor:
-    view = _layout_view(input).squeeze()
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _squeeze(inp: VarLenTensor) -> VarLenTensor:
+    view = _layout_view(inp).squeeze()
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.squeeze.dim)
-def _squeeze_dim(input: VarLenTensor, dim: int) -> VarLenTensor:
-    view = _layout_view(input).squeeze(dim)
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _squeeze_dim(inp: VarLenTensor, dim: int) -> VarLenTensor:
+    view = _layout_view(inp).squeeze(dim)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.squeeze.dims)
-def _squeeze_dims(input: VarLenTensor, dim: Sequence[int]) -> VarLenTensor:
-    view = _layout_view(input).squeeze(tuple(dim))
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _squeeze_dims(inp: VarLenTensor, dim: Sequence[int]) -> VarLenTensor:
+    view = _layout_view(inp).squeeze(tuple(dim))
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.unsqueeze.default)
-def _unsqueeze(input: VarLenTensor, dim: int) -> VarLenTensor:
-    view = _layout_view(input).unsqueeze(dim)
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _unsqueeze(inp: VarLenTensor, dim: int) -> VarLenTensor:
+    view = _layout_view(inp).unsqueeze(dim)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.expand.default)
+@preserve_view_inference_mode
 def _expand(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     size: Sequence[int],
     *,
     implicit: bool = False,
 ) -> VarLenTensor:
-    view = aten.expand.default(_layout_view(input), size, implicit=implicit)
-    return _from_layout_view(input, view)
+    view = aten.expand.default(_layout_view(inp), size, implicit=implicit)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.t.default)
-def _t(input: VarLenTensor) -> VarLenTensor:
-    view = _layout_view(input).t()
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _t(inp: VarLenTensor) -> VarLenTensor:
+    view = _layout_view(inp).t()
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.transpose.int)
-def _transpose(input: VarLenTensor, dim0: int, dim1: int) -> VarLenTensor:
-    view = _layout_view(input).transpose(dim0, dim1)
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _transpose(inp: VarLenTensor, dim0: int, dim1: int) -> VarLenTensor:
+    view = _layout_view(inp).transpose(dim0, dim1)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.permute.default)
-def _permute(input: VarLenTensor, dims: Sequence[int]) -> VarLenTensor:
-    view = _layout_view(input).permute(tuple(dims))
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _permute(inp: VarLenTensor, dims: Sequence[int]) -> VarLenTensor:
+    view = _layout_view(inp).permute(tuple(dims))
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.select.int)
-def _select(input: VarLenTensor, dim: int, index: int) -> VarLenTensor:
-    view = _layout_view(input).select(dim, index)
-    return _from_layout_view(input, view)
+@preserve_view_inference_mode
+def _select(inp: VarLenTensor, dim: int, index: int) -> VarLenTensor:
+    view = _layout_view(inp).select(dim, index)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.slice.Tensor)
+@preserve_view_inference_mode
 def _slice(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     dim: int = 0,
     start: int | None = None,
     end: int | None = None,
     step: int = 1,
 ) -> VarLenTensor:
-    view = aten.slice.Tensor(_layout_view(input), dim, start, end, step)
-    return _from_layout_view(input, view)
+    view = aten.slice.Tensor(_layout_view(inp), dim, start, end, step)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.narrow.default)
+@preserve_view_inference_mode
 def _narrow(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     dim: int,
     start: int,
     length: int,
 ) -> VarLenTensor:
-    view = _layout_view(input).narrow(dim, start, length)
-    return _from_layout_view(input, view)
+    view = _layout_view(inp).narrow(dim, start, length)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.unbind.int)
-def _unbind(input: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
+@preserve_view_inference_mode
+def _unbind(inp: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
     return tuple(
-        _from_layout_view(input, view)
-        for view in _layout_view(input).unbind(dim)
+        _from_layout_view(inp, view) for view in _layout_view(inp).unbind(dim)
     )
 
 
 @VarLenTensor.implements(aten.split.Tensor)
+@preserve_view_inference_mode
 def _split(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     split_size: int,
     dim: int = 0,
 ) -> tuple[VarLenTensor, ...]:
     return tuple(
-        _from_layout_view(input, view)
-        for view in _layout_view(input).split(split_size, dim)
+        _from_layout_view(inp, view)
+        for view in _layout_view(inp).split(split_size, dim)
     )
 
 
 @VarLenTensor.implements(aten.split.sizes)
 @VarLenTensor.implements(aten.split.default)
 @VarLenTensor.implements(aten.split_with_sizes.default)
+@preserve_view_inference_mode
 def _split_with_sizes(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
 ) -> tuple[VarLenTensor, ...]:
     return tuple(
-        _from_layout_view(input, view)
-        for view in _layout_view(input).split(tuple(split_sizes), dim)
+        _from_layout_view(inp, view)
+        for view in _layout_view(inp).split(tuple(split_sizes), dim)
     )
 
 
 @VarLenTensor.implements(aten.masked_select.default)
-def _masked_select(input: VarLenTensor, mask: Tensor) -> VarLenTensor:
-    return _materialize(input, lambda x: x.masked_select(mask))
+def _masked_select(inp: VarLenTensor, mask: Tensor) -> VarLenTensor:
+    return _materialize(inp, lambda x: x.masked_select(mask))
 
 
 @VarLenTensor.implements(aten.index_select.default)
 def _index_select(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     dim: int,
     index: Tensor,
 ) -> VarLenTensor:
-    return _materialize(input, lambda x: x.index_select(dim, index))
+    return _materialize(inp, lambda x: x.index_select(dim, index))
 
 
 @VarLenTensor.implements(aten.take.default)
-def _take(input: VarLenTensor, index: Tensor) -> VarLenTensor:
-    return _materialize(input, lambda x: x.take(index))
+def _take(inp: VarLenTensor, index: Tensor) -> VarLenTensor:
+    return _materialize(inp, lambda x: x.take(index))
 
 
 @VarLenTensor.implements(aten.index.Tensor)
 def _index(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     indices: Sequence[Tensor | None],
 ) -> VarLenTensor:
-    return _materialize(input, lambda x: aten.index.Tensor(x, indices))
+    return _materialize(inp, lambda x: aten.index.Tensor(x, indices))
 
 
 @VarLenTensor.implements(aten.cat.default)
@@ -947,19 +976,19 @@ def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
     )
 
 
-def _layout_view(input: VarLenTensor) -> Tensor:
+def _layout_view(inp: VarLenTensor) -> Tensor:
     return torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
+        inp._offset,
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()),
     )
 
 
-def _from_layout_view(input: VarLenTensor, view: Tensor) -> VarLenTensor:
-    return input.__class__(
-        data=input._data,
-        offset=input._offset,
+def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
+    return inp.__class__(
+        data=inp._data,
+        offset=inp._offset,
         size=view.size(),
         stride=view.stride(),
         storage_offset=int(view.storage_offset()),
@@ -989,7 +1018,7 @@ def _compact(start: Tensor, end: Tensor) -> tuple[Tensor, Tensor]:
 
 
 def _materialize(
-    input: VarLenTensor,
+    inp: VarLenTensor,
     function: Callable[[Tensor], Tensor],
     *,
     device: torch.device | str | None = None,
@@ -998,20 +1027,20 @@ def _materialize(
 ) -> VarLenTensor:
     # Use PyTorch's own memory-format semantics to materialize data:
     start = torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()),
+        inp._offset,
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()),
     )
     start = function(start)
     assert start.storage_offset() == 0
     assert _span_len(start.size(), start.stride()) == start.numel()
 
     end = torch.as_strided(
-        input._offset,
-        size=input.size(),
-        stride=input.stride(),
-        storage_offset=int(input.storage_offset()) + 1,
+        inp._offset,
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()) + 1,
     )
     end = function(end)
     assert end.storage_offset() == 0
@@ -1035,8 +1064,8 @@ def _materialize(
 
     offset, index = _compact(start, end)
 
-    return input.__class__(
-        data=input._data[index].to(
+    return inp.__class__(
+        data=inp._data[index].to(
             device=device,
             dtype=dtype,
             non_blocking=non_blocking,

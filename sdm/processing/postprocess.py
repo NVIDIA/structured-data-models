@@ -30,10 +30,10 @@ class SoftmaxTemperature(Processor):
             raise ValueError("temperature must be finite and positive.")
         self.temperature = temperature
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, inp: TableTensor) -> TableTensor:
         """Return ``softmax(input / temperature)`` over the last dimension."""
         numerical = torch.softmax(
-            _as_float(input.numerical) / self.temperature,
+            _as_float(inp.numerical) / self.temperature,
             dim=-1,
         )
-        return input.replace_blocks(numerical=numerical)
+        return inp.replace_blocks(numerical=numerical)
