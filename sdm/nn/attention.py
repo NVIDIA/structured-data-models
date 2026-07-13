@@ -688,11 +688,9 @@ class TransformerBlock(torch.nn.Module):
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
         norm: The normalization name passed to
-            :func:`sdm.nn.normalization_resolver`. The resolved module must
-            normalize channel-last inputs.
+            :func:`sdm.nn.normalization_resolver`.
         norm_kwargs: Additional keyword arguments passed to the normalization
-            layer, such as ``{"bias": False}`` for
-            :class:`~torch.nn.LayerNorm`.
+            layer.
         device: The device.
         dtype: The dtype.
     """
