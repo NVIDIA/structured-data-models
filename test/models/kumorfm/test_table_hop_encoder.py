@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import cast
 
 import pytest
@@ -6,6 +7,7 @@ import torch
 from sdm import CategoricalTensor, ColumnarTensor, RelatedTables, TableTensor
 from sdm.models.kumorfm.table_hop_encoder import (
     TableHopEncoder,
+    _encode_datetime_features,
     _fit_kumo_categorical_align,
     _preprocess_features,
 )
@@ -221,6 +223,8 @@ def test_numerical_preprocessing_matches_kumo_train_statistics() -> None:
         TableTensor.from_tensor(values[:, :3]),
         train_mask=fit_mask,
         task_x=values[:, 3:],
+        batch=torch.arange(values.size(0)),
+        seed_time=None,
         device=torch.device("cpu"),
         dtype=torch.float,
     )
@@ -256,6 +260,74 @@ def test_relational_input_without_exact_sample_is_rejected() -> None:
             x=torch.tensor([[100.0], [200.0], [300.0]]),
             y=torch.tensor([4, 8]),
             related_tables=related_tables,
+        )
+
+
+def test_datetime_features_match_kumo_and_use_anchor_time() -> None:
+    timestamp = datetime(
+        2024,
+        2,
+        29,
+        13,
+        45,
+        0,
+        900_000,
+        tzinfo=timezone.utc,
+    )
+    first_anchor = datetime(
+        2024, 3, 1, microsecond=100_000, tzinfo=timezone.utc
+    )
+    second_anchor = datetime(
+        2024, 3, 2, microsecond=100_000, tzinfo=timezone.utc
+    )
+
+    def to_microseconds(value: datetime) -> int:
+        return int(value.timestamp() * 1_000_000)
+
+    missing = torch.iinfo(torch.int64).min
+    values = torch.tensor(
+        [[to_microseconds(timestamp), missing]],
+        dtype=torch.long,
+    )
+    first = _encode_datetime_features(
+        timestamp=values,
+        anchor_time=torch.tensor([to_microseconds(first_anchor)]),
+        dtype=torch.float,
+    )
+    second = _encode_datetime_features(
+        timestamp=values,
+        anchor_time=torch.tensor([to_microseconds(second_anchor)]),
+        dtype=torch.float,
+    )
+
+    expected = torch.tensor(
+        [
+            45 / 60,
+            13 / 24,
+            3 / 7,
+            28 / 29,
+            59 / 366,
+            (10 * 60 + 15) / (24 * 60),
+        ]
+    )
+    torch.testing.assert_close(first[0, :6], expected)
+    assert torch.equal(first[0, 6:], torch.zeros(6))
+    torch.testing.assert_close(second[0, :5], first[0, :5])
+    torch.testing.assert_close(second[0, 5], first[0, 5] + 1)
+
+    table = TableTensor(
+        columns={"datetime": ("known", "missing")},
+        datetime=values,
+    )
+    with pytest.raises(ValueError, match="anchor times"):
+        _preprocess_features(
+            table,
+            train_mask=torch.tensor([True]),
+            task_x=None,
+            batch=torch.tensor([0]),
+            seed_time=None,
+            device=torch.device("cpu"),
+            dtype=torch.float,
         )
 
 

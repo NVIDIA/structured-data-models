@@ -17,6 +17,10 @@ from sdm.processing import (
 )
 from sdm.relational.sampler import EXAMPLE_ID
 
+_MICROSECONDS_PER_MINUTE = 60 * 1_000_000
+_MICROSECONDS_PER_HOUR = 60 * _MICROSECONDS_PER_MINUTE
+_MICROSECONDS_PER_DAY = 24 * _MICROSECONDS_PER_HOUR
+
 
 class _KumoNumericalClip(Clip):
     r"""Apply KumoRFM's finite-only clipping to selected columns."""
@@ -71,15 +75,16 @@ class _MaterializedGraph:
     edge_index_dict: dict[tuple[str, str, str], Tensor]
     root_index: Tensor
     num_hops: int
+    seed_time: Tensor | None
 
 
 class TableHopEncoder(torch.nn.Module):
     r"""Encode each sampled table hop with a shared row embedding.
 
-    Exact sampled edges, task roots, example assignments, and discovery hops
-    are consumed from :class:`RelatedTables`. Each non-empty hop is
-    preprocessed and encoded independently. Encoded rows are restored to their
-    original table order so table-local edge indices remain aligned.
+    Exact sampled edges, task roots, example assignments, discovery hops, and
+    anchor times are consumed from :class:`RelatedTables`. Each non-empty hop
+    is preprocessed and encoded independently. Encoded rows are restored to
+    their original table order so table-local edge indices remain aligned.
 
     Args:
         row_embedding: Generic row embedding shared across tables and hops.
@@ -100,9 +105,10 @@ class TableHopEncoder(torch.nn.Module):
     ) -> _TableHopEncoding:
         r"""Return encoded rows and their ephemeral sampled-graph layout.
 
-        ``x`` is the processed numerical task table. Identifier and datetime
-        columns in related tables are not used as model features. Root indices
-        are entity-table-local and ordered by task row.
+        ``x`` is the processed numerical task table. Identifier columns in
+        related tables are not used as model features. Datetime columns use
+        seasonal and anchor-relative encodings. Root indices are
+        entity-table-local and ordered by task row.
         """
         if x.dim() != 2:
             raise ValueError("`x` must be a two-dimensional tensor")
@@ -169,6 +175,8 @@ class TableHopEncoder(torch.nn.Module):
                     table[row_index.to(table.device)],
                     train_mask=train_mask,
                     task_x=task_x,
+                    batch=hop_batch,
+                    seed_time=graph.seed_time,
                     device=parameter.device,
                     dtype=parameter.dtype,
                     categorical_align=categorical_align,
@@ -297,12 +305,21 @@ def _materialize_exact_graph(
             "zero"
         )
 
+    seed_time = sample.seed_time
+    if seed_time is not None:
+        if seed_time.numel() != num_task_rows:
+            raise ValueError(
+                "Sampled seed times must align one-to-one with task rows"
+            )
+        seed_time = seed_time.to(device=device, dtype=torch.long)
+
     return _MaterializedGraph(
         batch_dict=batch_dict,
         hop_dict=hop_dict,
         edge_index_dict=edge_index_dict,
         root_index=root_index,
         num_hops=sample.num_hops,
+        seed_time=seed_time,
     )
 
 
@@ -375,6 +392,7 @@ def _materialize_zero_hop_graph(
         edge_index_dict={},
         root_index=permutation,
         num_hops=0,
+        seed_time=None,
     )
 
 
@@ -446,6 +464,8 @@ def _preprocess_features(
     *,
     train_mask: Tensor,
     task_x: Tensor | None,
+    batch: Tensor,
+    seed_time: Tensor | None,
     device: torch.device,
     dtype: torch.dtype,
     categorical_align: CategoricalAlign | None = None,
@@ -464,6 +484,15 @@ def _preprocess_features(
             dtype=dtype,
         )
     )
+    if table.datetime.size(-1) > 0:
+        if seed_time is None:
+            raise ValueError("KumoRFM datetime features require anchor times")
+        datetime_features = _encode_datetime_features(
+            timestamp=table.datetime.to(device=device),
+            anchor_time=seed_time.index_select(0, batch),
+            dtype=dtype,
+        )
+        values = torch.cat((values, datetime_features), dim=-1)
     if task_x is not None:
         values = torch.cat((values, task_x), dim=-1)
 
@@ -487,3 +516,94 @@ def _preprocess_features(
     if values.size(-1) == 0:
         return values.new_zeros((values.size(0), 1))
     return values.clamp(-15.0, 15.0)
+
+
+def _encode_datetime_features(
+    *,
+    timestamp: Tensor,
+    anchor_time: Tensor,
+    dtype: torch.dtype,
+) -> Tensor:
+    r"""Encode microsecond timestamps as KumoRFM time features."""
+    missing = timestamp == torch.iinfo(torch.int64).min
+    safe_timestamp = timestamp.masked_fill(missing, 0)
+    days = safe_timestamp.div(
+        _MICROSECONDS_PER_DAY,
+        rounding_mode="floor",
+    )
+    time_of_day = safe_timestamp.remainder(_MICROSECONDS_PER_DAY)
+    minute = time_of_day.div(
+        _MICROSECONDS_PER_MINUTE,
+        rounding_mode="floor",
+    ).remainder(60)
+    hour = time_of_day.div(
+        _MICROSECONDS_PER_HOUR,
+        rounding_mode="floor",
+    )
+
+    year, month, day = _civil_from_days(days)
+    leap = (year.remainder(4) == 0) & (
+        (year.remainder(100) != 0) | (year.remainder(400) == 0)
+    )
+    month_lengths = timestamp.new_tensor(
+        (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    )
+    days_in_month = month_lengths[month - 1]
+    days_in_month = days_in_month + (leap & (month == 2))
+    month_starts = timestamp.new_tensor(
+        (0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334)
+    )
+    day_of_year = month_starts[month - 1] + day - 1
+    day_of_year = day_of_year + (leap & (month > 2))
+    days_in_year = 365 + leap
+    day_of_week = (days + 3).remainder(7)
+
+    timestamp_seconds = safe_timestamp.div(1_000_000, rounding_mode="floor")
+    anchor_seconds = anchor_time.div(1_000_000, rounding_mode="floor")
+    relative_days = (anchor_seconds.unsqueeze(-1) - timestamp_seconds).to(
+        dtype
+    ) / (24 * 60 * 60)
+    features = torch.stack(
+        (
+            minute.to(dtype) / 60,
+            hour.to(dtype) / 24,
+            day_of_week.to(dtype) / 7,
+            (day - 1).to(dtype) / days_in_month.to(dtype),
+            day_of_year.to(dtype) / days_in_year.to(dtype),
+            relative_days,
+        ),
+        dim=-1,
+    )
+    features = features.masked_fill(missing.unsqueeze(-1), 0)
+    return features.flatten(-2)
+
+
+def _civil_from_days(days: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    r"""Convert days since Unix epoch to Gregorian year, month, and day."""
+    shifted = days + 719_468
+    era = shifted.div(146_097, rounding_mode="floor")
+    day_of_era = shifted - era * 146_097
+    year_of_era = (
+        day_of_era
+        - day_of_era.div(1_460, rounding_mode="floor")
+        + day_of_era.div(36_524, rounding_mode="floor")
+        - day_of_era.div(146_096, rounding_mode="floor")
+    ).div(365, rounding_mode="floor")
+    year = year_of_era + era * 400
+    day_of_year = day_of_era - (
+        365 * year_of_era
+        + year_of_era.div(4, rounding_mode="floor")
+        - year_of_era.div(100, rounding_mode="floor")
+    )
+    month_prime = (5 * day_of_year + 2).div(153, rounding_mode="floor")
+    day = (
+        day_of_year
+        - (153 * month_prime + 2).div(
+            5,
+            rounding_mode="floor",
+        )
+        + 1
+    )
+    month = month_prime + torch.where(month_prime < 10, 3, -9)
+    year = year + (month <= 2)
+    return year, month, day
