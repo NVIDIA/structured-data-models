@@ -16,7 +16,9 @@ class CategoricalImpute(Processor):
     changing its category vocabulary.
     Transform inputs must use the fitted per-column category vocabularies.
     The processor raises if they do not match. Column names are not
-    validated.
+    validated. Use :class:`~sdm.processing.CategoricalAlign` before this
+    processor when training and transform inputs were tensorized
+    independently.
 
     Args:
         strategy: Imputation strategy. ``"most_frequent"`` selects the most
@@ -95,5 +97,7 @@ class CategoricalImpute(Processor):
                 raise ValueError(
                     "Expected the category vocabulary for categorical column "
                     f"'{columns[index]}' to match the fitted values and "
-                    "order."
+                    "order. "
+                    "Use 'CategoricalAlign' before this processor for "
+                    "independently tensorized inputs."
                 )
