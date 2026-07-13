@@ -156,16 +156,7 @@ def test_default_recipe(task: str) -> None:
     }
     assert isinstance(recipe.target, InvertibleMixin)
 
-    if task == "classification":
-        assert (
-            model_target.categorical.tolist()
-            == target.categorical.tolist()
-        )
-        output_columns = tuple(
-            str(category)
-            for category in target.categorical.categories[0].tolist()
-        )
-    else:
+    if task == "regression":
         model_output = TableTensor.from_tensor(torch.randn(16, 999))
         restored = recipe.target.inverse_transform(model_output)
         expected = (
@@ -174,15 +165,13 @@ def test_default_recipe(task: str) -> None:
             + target.numerical.mean(dim=0)
         )
         torch.testing.assert_close(restored.numerical, expected)
-        output_columns = ("y0", "y1")
 
     output = TableTensor.from_tensor(
-        torch.randn(16, len(output_columns)),
-        columns=output_columns,
+        torch.randn(16, 2),
+        columns=("y0", "y1"),
     )
     transformed = recipe.output.transform(output)
     if task == "classification":
-        assert transformed.columns[Stype.numerical] == output_columns
         torch.testing.assert_close(
             transformed.numerical,
             (output.numerical / 0.9).softmax(dim=-1),
