@@ -41,7 +41,7 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install --torch-backend=cu128 '.[test]' 'cudf-cu12==25.12.*'
+          uv pip install --torch-backend=cu128 '.[test,cudnn]' 'cudf-cu12==25.12.*'
 
       - name: GPU sanity check
         run: |
