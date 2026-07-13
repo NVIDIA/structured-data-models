@@ -1,0 +1,56 @@
+name: GPU Test
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - main
+      - 'pull-request/[0-9]+'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  pytest-gpu:
+    runs-on: linux-amd64-gpu-rtxpro6000-latest-1
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up proxy cache
+        uses: nv-gha-runners/setup-proxy-cache@main
+        continue-on-error: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
+        with:
+          python-version: '3.12'
+          activate-environment: true
+
+      - name: Route uv through the proxy cache
+        run: |
+          if [ -n "${PIP_INDEX_URL:-}" ]; then
+            echo "UV_DEFAULT_INDEX=${PIP_INDEX_URL}" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Install package
+        run: |
+          uv pip install --torch-backend=cu128 '.[test]' 'cudf-cu12==25.12.*'
+
+      - name: GPU sanity check
+        run: |
+          nvidia-smi
+          python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available to torch'"
+          python -c "import cudf; print('cudf', cudf.__version__)"
+
+      - name: Run tests
+        env:
+          FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
+        run: |
+          pytest -m cuda -rs --durations=25

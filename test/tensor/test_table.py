@@ -1,5 +1,6 @@
 import io
 from datetime import datetime
+from textwrap import dedent
 from typing import cast
 
 import pandas as pd
@@ -28,17 +29,14 @@ def test_init() -> None:
             categories=(torch.arange(2), torch.arange(2)),
         ),
     )
-    assert repr(tensor) == (
-        "TableTensor(\n"
-        "  size=(2, 4),\n"
-        "  blocks={\n"
-        "    numerical (2): ['age', 'income'],\n"
-        "    categorical (2): ['country', 'segment'],\n"
-        "    datetime (0): [],\n"
-        "    id (0): [],\n"
-        "  },\n"
-        ")"
-    )
+    assert repr(tensor) == dedent("""\
+        TableTensor(
+          size=(2, 4),
+          blocks={
+            numerical (2): [age, income],
+            categorical (2): [country, segment],
+          },
+        )""")
 
     assert tensor.size() == (2, 4)
     assert tensor.dtype == torch.float32
@@ -108,6 +106,52 @@ def test_from_tensor() -> None:
         Stype.datetime: (),
         Stype.id: (),
     }
+
+
+def test_inference_mode() -> None:
+    def make_table() -> TableTensor:
+        return TableTensor(
+            columns={
+                "numerical": ["value"],
+                "categorical": ["kind"],
+                "id": ["name"],
+            },
+            numerical=torch.randn(3, 1),
+            categorical=CategoricalTensor(
+                data=torch.arange(3, dtype=torch.int32).unsqueeze(-1),
+                categories=(StringTensor.from_list(["a", "b", "c"]),),
+            ),
+            id=ColumnarTensor((StringTensor.from_list(["x", "y", "z"]),)),
+        )
+
+    table = make_table()
+    with torch.inference_mode():
+        view = table[:2]
+
+    assert not torch.is_inference(view)
+    assert not torch.is_inference(view.categorical)
+    assert not torch.is_inference(view.id)
+    assert not torch.is_inference(view.id._columns[0])
+
+    # Like PyTorch's NestedTensor, direct construction follows the active mode
+    # while views preserve the inference state of their outer input.
+    with torch.inference_mode():
+        table = table.replace_blocks()
+    assert torch.is_inference(table)
+    assert not torch.is_inference(table.numerical)
+
+    view = table[:2]
+    assert torch.is_inference(view)
+    assert not torch.is_inference(view.numerical)
+
+    with torch.inference_mode():
+        table = make_table()
+
+    view = table[:2]
+    assert torch.is_inference(view)
+    assert torch.is_inference(view.categorical)
+    assert torch.is_inference(view.id)
+    assert torch.is_inference(view.id._columns[0])
 
 
 def test_replace_blocks() -> None:

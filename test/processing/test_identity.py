@@ -4,8 +4,8 @@ from sdm.processing import Identity
 
 
 def test_identity_returns_input_tensor_unchanged() -> None:
-    input = torch.tensor([[1.0, 2.0]])
-    table = TableTensor.from_tensor(input)
+    inp = torch.tensor([[1.0, 2.0]])
+    table = TableTensor.from_tensor(inp)
     processor = Identity()
 
     assert processor.transform(table) is table
