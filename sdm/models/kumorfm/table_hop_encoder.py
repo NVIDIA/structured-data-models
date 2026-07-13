@@ -1,11 +1,13 @@
 """Table-hop row encoding for KumoRFM."""
 
 from dataclasses import dataclass
+from typing import Literal, TypeAlias, cast
 
 import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
+from sdm.cache import Cache
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import (
     CategoricalAlign,
@@ -17,9 +19,23 @@ from sdm.processing import (
 )
 from sdm.relational.sampler import EXAMPLE_ID
 
+_ZERO_FEATURES = "zero_features"
 _MICROSECONDS_PER_MINUTE = 60 * 1_000_000
 _MICROSECONDS_PER_HOUR = 60 * _MICROSECONDS_PER_MINUTE
 _MICROSECONDS_PER_DAY = 24 * _MICROSECONDS_PER_HOUR
+_FeatureProcessor: TypeAlias = Sequential | Literal["zero_features"]
+_RelationshipSchema: TypeAlias = tuple[
+    str,
+    tuple[str, ...],
+    str,
+    tuple[str, ...],
+]
+_TableSchema: TypeAlias = tuple[tuple[str, tuple[tuple[str, str], ...]], ...]
+_TaskLinkSchema: TypeAlias = tuple[tuple[str, ...], str, tuple[str, ...]]
+_FEATURE_STYPES = frozenset(
+    {Stype.numerical, Stype.categorical, Stype.datetime}
+)
+_SamplingPolicy: TypeAlias = tuple[int, bool, bool, str] | None
 
 
 class _KumoNumericalClip(Clip):
@@ -100,6 +116,7 @@ class TableHopEncoder(torch.nn.Module):
         y: Tensor,
         related_tables: RelatedTables,
         *,
+        cache: Cache | None = None,
         max_keys: int | None = None,
         generator: torch.Generator | None = None,
     ) -> _TableHopEncoding:
@@ -135,6 +152,56 @@ class TableHopEncoder(torch.nn.Module):
         x = x.to(device=parameter.device, dtype=parameter.dtype)
         y = y.to(device=parameter.device)
 
+        relationship_matches: dict[int, int] = {}
+        if cache is not None and cache.is_replaying:
+            table_schema = cast(_TableSchema, cache["table_schema"])
+            retained_tables = cast(tuple[str, ...], cache["retained_tables"])
+            _validate_table_schema(
+                related_tables,
+                table_schema,
+                retained_tables=retained_tables,
+            )
+
+            task_link_schema = _task_link_schema(related_tables)
+            if task_link_schema != cache["task_link_schema"]:
+                raise ValueError(
+                    "Query task link is incompatible with the fitted schema"
+                )
+
+            sampling_policy = _sampling_policy(related_tables)
+            if sampling_policy != cache["sampling_policy"]:
+                raise ValueError(
+                    "Query sampling policy is incompatible with the fitted "
+                    "context"
+                )
+
+            relationship_schema = cast(
+                tuple[_RelationshipSchema, ...],
+                cache["relationship_schema"],
+            )
+            retained_relationships = cast(
+                tuple[int, ...], cache["retained_relationships"]
+            )
+            fitted_nonempty_relationships = cast(
+                tuple[int, ...], cache["nonempty_relationships"]
+            )
+            relationship_matches = _match_relationships(
+                query=_relationship_schema(related_tables),
+                fitted=relationship_schema,
+                retained_indices=retained_relationships,
+                retained_tables=retained_tables,
+            )
+            num_hops = cast(int, cache["num_hops"])
+            tables_cache = cast(Cache, cache["tables"])
+        else:
+            table_schema = _table_schema(related_tables)
+            relationship_schema = _relationship_schema(related_tables)
+            retained_tables = ()
+            retained_relationships = ()
+            fitted_nonempty_relationships = ()
+            num_hops = -1
+            tables_cache = None
+
         graph = _materialize_graph(
             related_tables=related_tables,
             entity_table=entity_table,
@@ -142,38 +209,113 @@ class TableHopEncoder(torch.nn.Module):
             device=parameter.device,
         )
 
+        if (
+            cache is not None
+            and cache.is_recording
+            and any(
+                bool((batch >= y.size(0)).any())
+                for batch in graph.batch_dict.values()
+            )
+        ):
+            raise ValueError(
+                "Fit-related tables must contain only training examples"
+            )
+
+        if cache is None or not cache.is_replaying:
+            num_hops = graph.num_hops
+            retained_tables = tuple(
+                table_name
+                for table_name in related_tables.tables
+                if bool(
+                    (
+                        (graph.batch_dict[table_name] < y.size(0))
+                        & (graph.hop_dict[table_name] >= 0)
+                    ).any()
+                )
+            )
+            retained_table_set = set(retained_tables)
+            retained_relationships = tuple(
+                index
+                for index, relationship in enumerate(
+                    related_tables.relationships
+                )
+                if relationship.left_table in retained_table_set
+                and relationship.right_table in retained_table_set
+            )
+            fitted_nonempty_relationships = tuple(
+                index
+                for index in retained_relationships
+                if graph.edge_index_dict[
+                    (
+                        relationship_schema[index][0],
+                        str(index),
+                        relationship_schema[index][2],
+                    )
+                ].numel()
+                > 0
+            )
+
+            if cache is not None:
+                tables_cache = Cache()
+                cache["table_schema"] = table_schema
+                cache["task_link_schema"] = _task_link_schema(related_tables)
+                cache["sampling_policy"] = _sampling_policy(related_tables)
+                cache["relationship_schema"] = relationship_schema
+                cache["retained_tables"] = retained_tables
+                cache["retained_relationships"] = retained_relationships
+                cache["nonempty_relationships"] = fitted_nonempty_relationships
+                cache["num_hops"] = num_hops
+                cache["tables"] = tables_cache
+
         x_dict: dict[str, Tensor] = {}
-        for table_name, table in related_tables.tables.items():
+        for table_name in retained_tables:
+            table = related_tables.tables.get(table_name)
+            if table is None:
+                x_dict[table_name] = parameter.new_empty(
+                    (0, _embedding_channels(self.row_embedding))
+                )
+                continue
+
             batch = graph.batch_dict[table_name]
             hop = graph.hop_dict[table_name]
-            if not ((batch < y.size(0)) & (hop >= 0)).any():
-                continue
+
+            table_cache: Cache | None = None
+            if tables_cache is not None:
+                if tables_cache.is_replaying:
+                    table_cache = cast(Cache, tables_cache[table_name])
+                else:
+                    table_cache = Cache()
+                    tables_cache[table_name] = table_cache
 
             categorical_align: CategoricalAlign | None = None
             if table.categorical.size(-1) > 0:
-                table_train_mask = (batch < y.size(0)) & (hop >= 0)
-                categorical_align = _fit_kumo_categorical_align(
-                    table[table_train_mask.to(table.device)].select_stypes(
-                        Stype.categorical
+                if table_cache is not None and table_cache.is_replaying:
+                    categorical_align = cast(
+                        CategoricalAlign,
+                        table_cache["categorical_align"],
                     )
-                )
+                else:
+                    table_train_mask = (batch < y.size(0)) & (hop >= 0)
+                    categorical_align = _fit_kumo_categorical_align(
+                        table[table_train_mask.to(table.device)].select_stypes(
+                            Stype.categorical
+                        )
+                    )
+                    if table_cache is not None:
+                        table_cache["categorical_align"] = categorical_align
 
             row_indices: list[Tensor] = []
             embeddings: list[Tensor] = []
-            for current_hop in range(graph.num_hops + 1):
+            for current_hop in range(num_hops + 1):
                 row_index = (hop == current_hop).nonzero().flatten()
-                if row_index.numel() == 0:
-                    continue
-
                 hop_batch = batch.index_select(0, row_index)
                 train_mask = hop_batch < y.size(0)
                 task_x = None
                 if table_name == entity_table and current_hop == 0:
                     task_x = x.index_select(0, hop_batch)
 
-                features = _preprocess_features(
+                feature_table = _to_feature_table(
                     table[row_index.to(table.device)],
-                    train_mask=train_mask,
                     task_x=task_x,
                     batch=hop_batch,
                     seed_time=graph.seed_time,
@@ -181,23 +323,91 @@ class TableHopEncoder(torch.nn.Module):
                     dtype=parameter.dtype,
                     categorical_align=categorical_align,
                 )
+                clip_indices = tuple(range(table.numerical.size(-1)))
+                if task_x is not None:
+                    clip_indices = (
+                        *clip_indices,
+                        *range(
+                            feature_table.size(-1) - task_x.size(-1),
+                            feature_table.size(-1),
+                        ),
+                    )
+                has_context = bool(train_mask.any())
+                hop_key = f"hop{current_hop}"
+                hop_cache: Cache | None = None
+                cached_context = False
+                if table_cache is not None:
+                    if table_cache.is_replaying:
+                        hop_cache = cast(Cache, table_cache[hop_key])
+                        expected_width = cast(
+                            int, hop_cache["source_feature_width"]
+                        )
+                        if feature_table.size(-1) != expected_width:
+                            raise ValueError(
+                                f"Query source feature width for "
+                                f"{table_name!r} hop {current_hop} is "
+                                f"incompatible: expected {expected_width}, "
+                                f"got {feature_table.size(-1)}"
+                            )
+                        cached_context = cast(bool, hop_cache["has_context"])
+                    else:
+                        hop_cache = Cache(
+                            {
+                                "has_context": has_context,
+                                "source_feature_width": feature_table.size(-1),
+                            }
+                        )
+                        table_cache[hop_key] = hop_cache
+
+                if row_index.numel() == 0:
+                    continue
+
+                row_cache: Cache | None = None
+                if cached_context:
+                    assert hop_cache is not None
+                    processor = cast(_FeatureProcessor, hop_cache["processor"])
+                    features = _transform_features(
+                        feature_table,
+                        processor,
+                    )
+                    row_cache = cast(Cache, hop_cache["row_embedding"])
+                else:
+                    features, processor = _fit_transform_features(
+                        feature_table,
+                        fit_mask=train_mask,
+                        clip_indices=clip_indices,
+                    )
+                    if hop_cache is not None and has_context:
+                        row_cache = Cache()
+                        hop_cache["processor"] = processor
+                        hop_cache["row_embedding"] = row_cache
+
                 targets = y.index_select(0, hop_batch[train_mask])
 
                 # KumoRFM uses all rows as column-attention context when a hop
                 # has no labeled examples, without injecting any targets.
                 context_mask = train_mask
-                if not context_mask.any():
+                if not has_context and not cached_context:
                     context_mask = torch.ones_like(context_mask)
 
-                embeddings.append(
-                    self.row_embedding(
+                if row_cache is None:
+                    embedding = self.row_embedding(
                         features,
                         targets,
                         train_mask=context_mask,
                         max_keys=max_keys,
                         generator=generator,
                     )
-                )
+                else:
+                    embedding = self.row_embedding(
+                        features,
+                        targets,
+                        train_mask=context_mask,
+                        max_keys=max_keys,
+                        cache=row_cache,
+                        generator=generator,
+                    )
+                embeddings.append(embedding)
                 row_indices.append(row_index)
 
             if embeddings:
@@ -210,21 +420,161 @@ class TableHopEncoder(torch.nn.Module):
                     row_index,
                     encoded,
                 )
+            else:
+                x_dict[table_name] = parameter.new_empty(
+                    (table.size(0), _embedding_channels(self.row_embedding))
+                )
 
-        retained_tables = set(x_dict)
-        edge_index_dict = {
-            edge_type: edge_index
-            for edge_type, edge_index in graph.edge_index_dict.items()
-            if edge_type[0] in retained_tables
-            and edge_type[2] in retained_tables
-            and edge_index.numel() > 0
-        }
+        empty_edge_index = graph.root_index.new_empty((2, 0))
+        edge_index_dict: dict[tuple[str, str, str], Tensor] = {}
+        for index in retained_relationships:
+            relationship = relationship_schema[index]
+            edge_type = (relationship[0], str(index), relationship[2])
+            if cache is not None and cache.is_replaying:
+                query_index = relationship_matches.get(index)
+                if query_index is None:
+                    edge_index = empty_edge_index
+                else:
+                    query_edge_type = (
+                        relationship[0],
+                        str(query_index),
+                        relationship[2],
+                    )
+                    edge_index = graph.edge_index_dict.get(
+                        query_edge_type,
+                        empty_edge_index,
+                    )
+                if (
+                    index not in fitted_nonempty_relationships
+                    and edge_index.numel() == 0
+                ):
+                    continue
+            else:
+                edge_index = graph.edge_index_dict.get(
+                    edge_type,
+                    empty_edge_index,
+                )
+                if edge_index.numel() == 0:
+                    continue
+            edge_index_dict[edge_type] = edge_index
+
         return _TableHopEncoding(
             x_dict=x_dict,
             edge_index_dict=edge_index_dict,
             root_index=graph.root_index,
-            num_hops=graph.num_hops,
+            num_hops=num_hops,
         )
+
+
+def _embedding_channels(row_embedding: RowEmbedding) -> int:
+    channels = row_embedding.lin.out_features
+    readout_token = getattr(row_embedding, "readout_token", None)
+    if isinstance(readout_token, Tensor):
+        channels *= readout_token.size(-2)
+    return channels
+
+
+def _table_schema(related_tables: RelatedTables) -> _TableSchema:
+    return tuple(
+        (
+            table_name,
+            tuple(
+                (column, stype.value)
+                for column, stype in table.stypes.items()
+                if stype in _FEATURE_STYPES
+            ),
+        )
+        for table_name, table in related_tables.tables.items()
+    )
+
+
+def _validate_table_schema(
+    related_tables: RelatedTables,
+    fitted: _TableSchema,
+    *,
+    retained_tables: tuple[str, ...],
+) -> None:
+    fitted_by_name = dict(fitted)
+    for table_name in retained_tables:
+        table = related_tables.tables.get(table_name)
+        if table is None:
+            continue
+        actual = tuple(
+            (column, stype.value)
+            for column, stype in table.stypes.items()
+            if stype in _FEATURE_STYPES
+        )
+        expected = fitted_by_name[table_name]
+        if actual != expected:
+            raise ValueError(
+                f"Query table {table_name!r} is incompatible with the "
+                "fitted schema"
+            )
+
+
+def _task_link_schema(related_tables: RelatedTables) -> _TaskLinkSchema:
+    task_link = related_tables.task_links[0]
+    return (
+        tuple(task_link.task_columns),
+        task_link.table,
+        tuple(task_link.table_columns),
+    )
+
+
+def _sampling_policy(related_tables: RelatedTables) -> _SamplingPolicy:
+    sample = related_tables.sample
+    if sample is None:
+        return None
+    return (
+        sample.num_hops,
+        sample.disjoint,
+        sample.temporal,
+        sample.temporal_strategy,
+    )
+
+
+def _relationship_schema(
+    related_tables: RelatedTables,
+) -> tuple[_RelationshipSchema, ...]:
+    return tuple(
+        (
+            relationship.left_table,
+            tuple(relationship.left_columns),
+            relationship.right_table,
+            tuple(relationship.right_columns),
+        )
+        for relationship in related_tables.relationships
+    )
+
+
+def _match_relationships(
+    *,
+    query: tuple[_RelationshipSchema, ...],
+    fitted: tuple[_RelationshipSchema, ...],
+    retained_indices: tuple[int, ...],
+    retained_tables: tuple[str, ...],
+) -> dict[int, int]:
+    unused = list(retained_indices)
+    retained_table_set = set(retained_tables)
+    matches: dict[int, int] = {}
+    for query_index, relationship in enumerate(query):
+        try:
+            fitted_index = next(
+                index for index in unused if fitted[index] == relationship
+            )
+        except StopIteration:
+            if (
+                relationship[0] in retained_table_set
+                and relationship[2] in retained_table_set
+            ):
+                raise ValueError(
+                    f"Query relationship at index {query_index} is "
+                    "incompatible with the fitted schema"
+                ) from None
+            continue
+        unused.remove(fitted_index)
+        matches[fitted_index] = query_index
+    return matches
 
 
 def _materialize_graph(
@@ -459,31 +809,25 @@ def _fit_kumo_categorical_align(table: TableTensor) -> CategoricalAlign:
     return CategoricalAlign().fit(ordered)
 
 
-def _preprocess_features(
+@torch.inference_mode(False)
+def _to_feature_table(
     table: TableTensor,
     *,
-    train_mask: Tensor,
     task_x: Tensor | None,
     batch: Tensor,
     seed_time: Tensor | None,
     device: torch.device,
     dtype: torch.dtype,
     categorical_align: CategoricalAlign | None = None,
-) -> Tensor:
+) -> TableTensor:
     feature_table = table.select_stypes((Stype.numerical, Stype.categorical))
     if categorical_align is not None:
         categorical = categorical_align.transform(
             feature_table.select_stypes(Stype.categorical)
         ).categorical
         feature_table = feature_table.replace_blocks(categorical=categorical)
-    values = (
-        ToNumerical()
-        .transform(feature_table)
-        .numerical.to(
-            device=device,
-            dtype=dtype,
-        )
-    )
+    feature_table = ToNumerical().transform(feature_table)
+    values = feature_table.numerical.to(device=device, dtype=dtype)
     if table.datetime.size(-1) > 0:
         if seed_time is None:
             raise ValueError("KumoRFM datetime features require anchor times")
@@ -495,27 +839,8 @@ def _preprocess_features(
         values = torch.cat((values, datetime_features), dim=-1)
     if task_x is not None:
         values = torch.cat((values, task_x), dim=-1)
-
-    if values.size(-1) == 0 or train_mask.count_nonzero() <= 1:
-        return values.new_zeros((values.size(0), 1))
-
-    table = TableTensor.from_tensor(values)
-    clip_indices = tuple(range(feature_table.numerical.size(-1)))
-    if task_x is not None:
-        clip_indices = (
-            *clip_indices,
-            *range(values.size(-1) - task_x.size(-1), values.size(-1)),
-        )
-    processor = Sequential(
-        _KumoNumericalClip(clip_indices),
-        ConstantFilter(method="unique", threshold=1),
-        StandardScale(epsilon=1e-6),
-    )
-    processor.fit(table[train_mask])
-    values = processor.transform(table).numerical
-    if values.size(-1) == 0:
-        return values.new_zeros((values.size(0), 1))
-    return values.clamp(-15.0, 15.0)
+    values = values.where(values.isfinite(), torch.nan)
+    return TableTensor.from_tensor(values)
 
 
 def _encode_datetime_features(
@@ -607,3 +932,36 @@ def _civil_from_days(days: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     month = month_prime + torch.where(month_prime < 10, 3, -9)
     year = year + (month <= 2)
     return year, month, day
+
+
+@torch.inference_mode(False)
+def _fit_transform_features(
+    table: TableTensor,
+    *,
+    fit_mask: Tensor,
+    clip_indices: tuple[int, ...],
+) -> tuple[Tensor, _FeatureProcessor]:
+    values = table.numerical
+    if values.size(-1) == 0 or fit_mask.count_nonzero() <= 1:
+        return values.new_zeros((values.size(0), 1)), _ZERO_FEATURES
+
+    processor = Sequential(
+        _KumoNumericalClip(clip_indices),
+        ConstantFilter(method="unique", threshold=1),
+        StandardScale(epsilon=1e-6),
+    )
+    processor.fit(table[fit_mask])
+    values = processor.transform(table).numerical
+    if values.size(-1) == 0:
+        return values.new_zeros((values.size(0), 1)), _ZERO_FEATURES
+    return values.clamp(-15.0, 15.0), processor
+
+
+@torch.inference_mode(False)
+def _transform_features(
+    table: TableTensor,
+    processor: _FeatureProcessor,
+) -> Tensor:
+    if processor == _ZERO_FEATURES:
+        return table.numerical.new_zeros((table.size(0), 1))
+    return processor.transform(table).numerical.clamp(-15.0, 15.0)

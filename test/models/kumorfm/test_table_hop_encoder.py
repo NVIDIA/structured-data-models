@@ -4,12 +4,19 @@ from typing import cast
 
 import pytest
 import torch
-from sdm import CategoricalTensor, ColumnarTensor, RelatedTables, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    RelatedTables,
+    RelationalSample,
+    TableTensor,
+)
+from sdm.cache import Cache
 from sdm.models.kumorfm.table_hop_encoder import (
     TableHopEncoder,
-    _encode_datetime_features,
     _fit_kumo_categorical_align,
-    _preprocess_features,
+    _fit_transform_features,
+    _to_feature_table,
 )
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
@@ -136,6 +143,27 @@ def _related_tables() -> RelatedTables:
     )
 
 
+def _entity_tables(values: list[float]) -> RelatedTables:
+    num_rows = len(values)
+    return RelatedTables(
+        tables={
+            "entity": _table(
+                example=list(range(num_rows)),
+                ids={"entity_id": list(range(num_rows))},
+                value=values,
+            )
+        },
+        relationships=(),
+        task_links=(
+            {
+                "task_columns": (EXAMPLE_ID, "entity_id"),
+                "table": "entity",
+                "table_columns": (EXAMPLE_ID, "entity_id"),
+            },
+        ),
+    )
+
+
 def test_multiple_hops_unlabeled_hop_pruning_and_row_alignment() -> None:
     related_tables = _related_tables()
     row_embedding = _RecordingRowEmbedding()
@@ -219,22 +247,18 @@ def test_numerical_preprocessing_matches_kumo_train_statistics() -> None:
         ]
     )
     fit_mask = torch.tensor([True, True, True, True, False, False])
-    actual = _preprocess_features(
-        TableTensor.from_tensor(values[:, :3]),
-        train_mask=fit_mask,
-        task_x=values[:, 3:],
-        batch=torch.arange(values.size(0)),
-        seed_time=None,
-        device=torch.device("cpu"),
-        dtype=torch.float,
+    actual, _ = _fit_transform_features(
+        TableTensor.from_tensor(values),
+        fit_mask=fit_mask,
+        clip_indices=(0, 1, 2),
     )
 
-    low, high = torch.nanquantile(
-        values[fit_mask], torch.tensor([0.02, 0.98]), dim=0
-    )
+    train = values[fit_mask, :3]
+    low, high = torch.nanquantile(train, torch.tensor([0.02, 0.98]), dim=0)
     low = torch.nan_to_num(low, nan=float("-inf")).clamp(max=0.0)
     high = torch.nan_to_num(high, nan=float("inf"))
-    expected = values.clamp(min=low, max=high)
+    expected = values.clone()
+    expected[:, :3] = expected[:, :3].clamp(min=low, max=high)
     expected = expected.where(expected.isfinite(), 0.0)
     keep = (expected[fit_mask] != expected[fit_mask][:1]).any(dim=0)
     expected = expected[:, keep]
@@ -246,20 +270,32 @@ def test_numerical_preprocessing_matches_kumo_train_statistics() -> None:
     torch.testing.assert_close(actual, expected.clamp(-15.0, 15.0))
 
 
-def test_relational_input_without_exact_sample_is_rejected() -> None:
-    sampled = _related_tables()
+def test_fit_rejects_non_training_example_ids() -> None:
+    related_tables = _entity_tables([1.0, 2.0])
     related_tables = RelatedTables(
-        tables=sampled.tables,
-        relationships=sampled.relationships,
-        task_links=sampled.task_links,
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+        task_links=related_tables.task_links,
+        sample=RelationalSample(
+            node_batch={"entity": torch.tensor([0, 1])},
+            node_hops={"entity": torch.tensor([0, 0])},
+            edge_indices=(),
+            edge_hops=(),
+            task_edge_indices=(torch.tensor([[0, 1], [0, 1]]),),
+            num_hops=0,
+            num_neighbors=(),
+            disjoint=True,
+            temporal=False,
+            temporal_strategy="last",
+        ),
     )
 
-    row_embedding = _RecordingRowEmbedding()
-    with pytest.raises(ValueError, match="require exact sample metadata"):
-        TableHopEncoder(cast(RowEmbedding, row_embedding))(
-            x=torch.tensor([[100.0], [200.0], [300.0]]),
-            y=torch.tensor([4, 8]),
+    with pytest.raises(ValueError, match="only training examples"):
+        TableHopEncoder(cast(RowEmbedding, _RecordingRowEmbedding()))(
+            x=torch.zeros(2, 1),
+            y=torch.tensor([0]),
             related_tables=related_tables,
+            cache=Cache(),
         )
 
 
@@ -285,20 +321,30 @@ def test_datetime_features_match_kumo_and_use_anchor_time() -> None:
         return int(value.timestamp() * 1_000_000)
 
     missing = torch.iinfo(torch.int64).min
-    values = torch.tensor(
-        [[to_microseconds(timestamp), missing]],
-        dtype=torch.long,
+    table = TableTensor(
+        columns={"datetime": ("known", "missing")},
+        datetime=torch.tensor(
+            [[to_microseconds(timestamp), missing]],
+            dtype=torch.long,
+        ),
     )
-    first = _encode_datetime_features(
-        timestamp=values,
-        anchor_time=torch.tensor([to_microseconds(first_anchor)]),
+
+    first = _to_feature_table(
+        table,
+        task_x=None,
+        batch=torch.tensor([0]),
+        seed_time=torch.tensor([to_microseconds(first_anchor)]),
+        device=torch.device("cpu"),
         dtype=torch.float,
-    )
-    second = _encode_datetime_features(
-        timestamp=values,
-        anchor_time=torch.tensor([to_microseconds(second_anchor)]),
+    ).numerical
+    second = _to_feature_table(
+        table,
+        task_x=None,
+        batch=torch.tensor([0]),
+        seed_time=torch.tensor([to_microseconds(second_anchor)]),
+        device=torch.device("cpu"),
         dtype=torch.float,
-    )
+    ).numerical
 
     expected = torch.tensor(
         [
@@ -315,19 +361,31 @@ def test_datetime_features_match_kumo_and_use_anchor_time() -> None:
     torch.testing.assert_close(second[0, :5], first[0, :5])
     torch.testing.assert_close(second[0, 5], first[0, 5] + 1)
 
-    table = TableTensor(
-        columns={"datetime": ("known", "missing")},
-        datetime=values,
-    )
     with pytest.raises(ValueError, match="anchor times"):
-        _preprocess_features(
+        _to_feature_table(
             table,
-            train_mask=torch.tensor([True]),
             task_x=None,
             batch=torch.tensor([0]),
             seed_time=None,
             device=torch.device("cpu"),
             dtype=torch.float,
+        )
+
+
+def test_relational_input_without_exact_sample_is_rejected() -> None:
+    sampled = _related_tables()
+    related_tables = RelatedTables(
+        tables=sampled.tables,
+        relationships=sampled.relationships,
+        task_links=sampled.task_links,
+    )
+
+    row_embedding = _RecordingRowEmbedding()
+    with pytest.raises(ValueError, match="require exact sample metadata"):
+        TableHopEncoder(cast(RowEmbedding, row_embedding))(
+            x=torch.tensor([[100.0], [200.0], [300.0]]),
+            y=torch.tensor([4, 8]),
+            related_tables=related_tables,
         )
 
 
@@ -356,3 +414,51 @@ def test_real_row_embedding_produces_finite_aligned_rows() -> None:
     assert result.x_dict["entity"].size() == (4, 4)
     assert result.x_dict["orders"].size() == (3, 4)
     assert all(torch.isfinite(value).all() for value in result.x_dict.values())
+
+
+def test_row_cache_replay_matches_joint_encoding() -> None:
+    torch.manual_seed(0)
+    row_embedding = RowEmbedding(
+        num_classes=3,
+        channels=4,
+        num_layers=1,
+        num_heads=1,
+        group_size=1,
+        num_inducing_points=2,
+        num_readout_tokens=1,
+        norm_bias=True,
+    )
+    encoder = TableHopEncoder(row_embedding)
+    train_x = torch.tensor([[0.0], [1.0], [3.0]])
+    query_x = torch.tensor([[2.0], [5.0]])
+    y = torch.tensor([0, 1, 2])
+
+    joint = encoder(
+        x=torch.cat((train_x, query_x)),
+        y=y,
+        related_tables=_entity_tables([1.0, 4.0, 9.0, 6.0, 12.0]),
+        generator=torch.Generator().manual_seed(7),
+    )
+    cache = Cache()
+    encoder(
+        x=train_x,
+        y=y,
+        related_tables=_entity_tables([1.0, 4.0, 9.0]),
+        cache=cache,
+        generator=torch.Generator().manual_seed(7),
+    )
+    cache.freeze()
+    replay = encoder(
+        x=query_x,
+        y=torch.empty(0, dtype=torch.long),
+        related_tables=_entity_tables([6.0, 12.0]),
+        cache=cache,
+        generator=torch.Generator().manual_seed(7),
+    )
+
+    torch.testing.assert_close(
+        replay.x_dict["entity"],
+        joint.x_dict["entity"][y.numel() :],
+        atol=1e-5,
+        rtol=1e-5,
+    )
