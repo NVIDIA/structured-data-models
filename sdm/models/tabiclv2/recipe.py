@@ -4,6 +4,7 @@ from sdm.processing import (
     Choice,
     ConstantFilter,
     FeaturePermute,
+    HardClip,
     Identity,
     MeanImpute,
     Power,
@@ -40,9 +41,7 @@ def default_recipe() -> Recipe:
             ConstantFilter(),
             StandardScale(epsilon=1e-6),
             Choice(Identity(), Power()),
-            # TabICL also clips z-scores to [-100, 100] here; left out for now
-            # (likely subsumed by SigmaClip); revisit after benchmarking.
-            # Clip(min_value=-100.0, max_value=100.0),
+            HardClip(min_value=-100.0, max_value=100.0),
             SigmaClip(threshold=4.0),
             FeaturePermute(method="shift"),
         ],

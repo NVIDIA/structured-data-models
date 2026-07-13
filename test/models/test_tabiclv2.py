@@ -4,7 +4,13 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import InvertibleMixin, Recipe, SoftmaxTemperature
+from sdm.processing import (
+    HardClip,
+    InvertibleMixin,
+    Recipe,
+    Sequential,
+    SoftmaxTemperature,
+)
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -118,6 +124,11 @@ def test_tabiclv2_recipe() -> None:
 def test_default_recipe(task: str) -> None:
     torch.manual_seed(0)
     recipe = TabICLv2.default_recipe()
+
+    assert isinstance(recipe.features, Sequential)
+    hard_clip = recipe.features.steps[5]
+    assert isinstance(hard_clip, HardClip)
+    assert (hard_clip.min_value, hard_clip.max_value) == (-100.0, 100.0)
 
     features = TableTensor(
         columns={
