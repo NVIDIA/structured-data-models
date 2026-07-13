@@ -142,7 +142,7 @@ class CategoricalTensor(Tensor):
             >>> tensor([[ 0],
             >>>         [-1],
             >>>         [ 1]])
-            print(tensor.categories[0].to_list())
+            print(tensor.categories[0].tolist())
             >>> ['foo', 'bar']
 
         Args:
