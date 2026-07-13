@@ -3,6 +3,7 @@ import torch
 from sdm import TableTensor
 from sdm.processing import (
     Clip,
+    HardClip,
     MeanImpute,
     Power,
     Quantile,
@@ -16,6 +17,7 @@ from sdm.processing import (
     "processor",
     [
         Clip(),
+        HardClip(min_value=-1.0, max_value=1.0),
         MeanImpute(),
         Power(),
         Quantile(n_quantiles=4, subsample=None),

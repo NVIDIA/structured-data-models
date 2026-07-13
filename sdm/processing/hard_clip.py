@@ -5,15 +5,16 @@ from sdm.tensor import TableTensor
 
 
 class HardClip(Processor):
-    """Clamp numerical values to fixed lower and upper bounds.
+    """Clamp numerical values to a fixed interval.
 
-    Unlike :class:`~sdm.processing.Clip`, the bounds are configuration rather
-    than fitted quantiles. The transformation is not invertible because values
-    outside the interval are discarded.
+    Values below ``min_value`` are set to ``min_value``, and values above
+    ``max_value`` are set to ``max_value``. Values within the interval are
+    unchanged. This processor is stateless, so it can transform a table
+    without being fitted first.
 
     Args:
-        min_value: Inclusive lower bound.
-        max_value: Inclusive upper bound.
+        min_value: Inclusive lower bound for every numerical value.
+        max_value: Inclusive upper bound for every numerical value.
     """
 
     supported_stypes = frozenset({Stype.numerical})
@@ -33,13 +34,13 @@ class HardClip(Processor):
         self.min_value = min_value
         self.max_value = max_value
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        """Clamp ``input`` to the configured interval."""
-        numerical = _as_float(input.numerical).clamp(
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        """Clamp ``inp`` to the configured interval."""
+        numerical = _as_float(inp.numerical).clamp(
             min=self.min_value,
             max=self.max_value,
         )
-        return input.replace_blocks(numerical=numerical)
+        return inp.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
