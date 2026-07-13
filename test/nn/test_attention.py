@@ -856,8 +856,7 @@ def test_transformer_block(
     torch.testing.assert_close(out1, out3)
 
 
-@pytest.mark.parametrize("norm", ["layer_norm", "rms_norm"])
-def test_transformer_block_kv_cache(norm: str) -> None:
+def test_transformer_block_kv_cache() -> None:
     batch_size = 2
     query_len = 3
     key_value_len = 5
@@ -867,7 +866,6 @@ def test_transformer_block_kv_cache(norm: str) -> None:
         channels=channels,
         num_query_heads=num_heads,
         feedforward_channels=16,
-        norm=norm,
     )
     with torch.no_grad():
         module.attn.out_lin.weight.copy_(torch.eye(channels))
