@@ -104,8 +104,7 @@ class CategoricalAlign(Processor):
         categorical = CategoricalTensor(
             data=out,
             categories=tuple(
-                category.to(device=out.device)
-                for category in self._categories
+                category.to(device=out.device) for category in self._categories
             ),
         )
         return table.replace_blocks(categorical=categorical)
