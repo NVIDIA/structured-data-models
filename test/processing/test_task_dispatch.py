@@ -5,7 +5,7 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
-    CategoryShuffle,
+    ClassShuffle,
     Identity,
     SoftmaxTemperature,
     StandardScale,
@@ -94,7 +94,7 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
 def test_task_dispatch_fits_target_route() -> None:
     torch.manual_seed(0)
     dispatch = TaskDispatch(
-        classification=CategoryShuffle(method="shift"),
+        classification=ClassShuffle(method="shift"),
         regression=StandardScale(),
     )
     assert dispatch.requires_fit
@@ -107,7 +107,7 @@ def test_task_dispatch_fits_target_route() -> None:
     # restores the original class-score order:
     head = torch.randn(2, 10)
     restored = dispatch.inverse_transform(TableTensor.from_tensor(head))
-    shuffle = cast(CategoryShuffle, dispatch.processors["classification"])
+    shuffle = cast(ClassShuffle, dispatch.processors["classification"])
     torch.testing.assert_close(
         restored.numerical,
         head[:, shuffle.permutations],

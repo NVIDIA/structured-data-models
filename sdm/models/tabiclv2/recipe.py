@@ -1,7 +1,7 @@
 from sdm.processing import (
     CategoricalAlign,
-    CategoryShuffle,
     Choice,
+    ClassShuffle,
     ConstantFilter,
     FeaturePermute,
     Identity,
@@ -48,7 +48,7 @@ def default_recipe() -> Recipe:
         ],
         target=[
             TaskDispatch(
-                classification=CategoryShuffle(method="shift"),
+                classification=ClassShuffle(method="shift"),
                 regression=StandardScale(),
             ),
         ],

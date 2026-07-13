@@ -7,7 +7,7 @@ from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.processing import (
-    CategoryShuffle,
+    ClassShuffle,
     InvertibleMixin,
     Recipe,
     SoftmaxTemperature,
@@ -172,7 +172,7 @@ def test_default_recipe(task: str) -> None:
         shuffle = next(
             module
             for module in recipe.target.modules()
-            if isinstance(module, CategoryShuffle)
+            if isinstance(module, ClassShuffle)
         )
         torch.testing.assert_close(
             restored.numerical,
