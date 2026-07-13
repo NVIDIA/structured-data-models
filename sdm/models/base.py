@@ -1,13 +1,31 @@
+import contextlib
 import warnings
 from abc import ABC, abstractmethod
-from typing import cast
+from collections.abc import Iterator
+from typing import ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype, TableTensor
+from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.processing import Recipe
+from sdm.processing import InvertibleMixin, Recipe
+
+
+@contextlib.contextmanager
+def _maybe_inference_mode() -> Iterator[None]:
+    # `torch.inference_mode` is not supported inside a compiled region, so do
+    # not enter it when this function is already being compiled.
+    # https://github.com/pytorch/pytorch/issues/180823
+    # FIXME: Come up with a solution to use torch.compile under
+    # torch.inference_mode and remove this workaround.
+    if torch.compiler.is_compiling():
+        context_fn = contextlib.nullcontext
+    else:
+        context_fn = torch.inference_mode
+
+    with context_fn():
+        yield
 
 
 class BaseModel(torch.nn.Module, ABC):
@@ -19,18 +37,23 @@ class BaseModel(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
-    def __init__(self):
+    supports_related_tables: ClassVar[bool]
+
+    def __init__(self) -> None:
         super().__init__()
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
+        self._recipe: Recipe | None = None
 
-    @torch.inference_mode()
+    @_maybe_inference_mode()
     def forward(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        related_tables: RelatedTables | None = None,
         *,
+        recipe: Recipe | None = None,
         num_estimators: int = 1,
     ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
@@ -42,33 +65,46 @@ class BaseModel(torch.nn.Module, ABC):
                 examples.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-            num_estimators: The number of ensemble members ``E``.
-                The forward pass runs once per member, and predictions are
-                averaged across members.
+            related_tables: Additional related context provided to the model.
+            recipe: The recipe for pre- and post-processing. If ``None``, no
+                recipe is applied.
+            num_estimators: The number of estimators for ensembling.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
-        if num_estimators < 1:
-            raise ValueError(
-                f"Expected 'num_estimators' to be a positive integer "
-                f"(got {num_estimators})"
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
             )
+            related_tables = None
 
-        x, y = self._preprocess(x, y)
         # TODO Create an ensemble dimension to process across ensemble
         # members for better efficiency.
         outs: list[Tensor] = []
         for _ in range(num_estimators):
-            outs.append(self._forward(x, y, cache=None))
-        return torch.stack(outs).mean(dim=0)
+            # TODO Iterate over Recipes instead of using a single recipe once
+            # Recipe adds support for multiple recipes.
+            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
+            out = self._forward(x_i, y_i, related_tables, cache=None)
+            out = self._postprocess(out, recipe)
+            outs.append(out)
+
+        out = torch.stack(outs).mean(dim=0)
+        table = TableTensor.from_tensor(out.clone())
+        if recipe is None:
+            return table.numerical
+        return recipe.output.transform(table).numerical
 
     @torch.inference_mode()
     def fit(
         self,
         x: Tensor | TableTensor,  # [..., R_train, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        related_tables: RelatedTables | None = None,
         *,
+        recipe: Recipe | None = None,
         num_estimators: int = 1,
     ) -> None:
         r"""Fit and cache in-context examples.
@@ -81,37 +117,48 @@ class BaseModel(torch.nn.Module, ABC):
                 ``R_train`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
                 ``[..., R_train]`` or ``[..., R_train, 1]``.
-            num_estimators: The number of ensemble members ``E``.
-                In-context examples are fitted once per member, and subsequent
-                :meth:`predict` calls average predictions across members.
+            related_tables: Additional related context provided to the model.
+            recipe: The recipe for pre- and post-processing. If ``None``, no
+                recipe is applied.
+            num_estimators: The number of estimators for ensembling.
         """
-        if num_estimators < 1:
-            raise ValueError(
-                f"Expected 'num_estimators' to be a positive integer "
-                f"(got {num_estimators})"
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
             )
+            related_tables = None
 
         self.clear()
-        x, y = self._preprocess(x, y)
-        x = x[..., : y.size(-1), :]
         caches: list[Cache] = []
         for _ in range(num_estimators):
-            # TODO: Don't store y.dtype in every cache once we introduce a
-            # nested cache.
+            # TODO Iterate over Recipes instead of using a single recipe once
+            # Recipe adds support for multiple recipes.
+            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
+            x_i = x_i[..., : y_i.size(-1), :]
+
+            # TODO Don't store y.dtype for every estimator.
             cache = Cache({"y.dtype": y.dtype})
-            self._forward(x, y, cache=cache)
+            self._forward(x_i, y_i, related_tables, cache)
             cache.freeze()
             caches.append(cache)
+
         self._caches = caches
+        # TODO: Once creating Recipes from a Recipe is supported, we should
+        # iterate over the recipes so that every predict call runs a consistent
+        # recipe per ensemble member.
+        self._recipe = recipe
 
     def clear(self) -> None:
-        r"""Clears cached in-context examples."""
+        r"""Clears cached in-context examples and the fitted recipe."""
         self._caches = None
+        self._recipe = None
 
     @torch.inference_mode()
     def predict(
         self,
         x: Tensor | TableTensor,  # [..., R_test, C]
+        related_tables: RelatedTables | None = None,
     ) -> Tensor:  # [..., R_test, *]
         r"""Predict unseen test examples.
 
@@ -122,27 +169,50 @@ class BaseModel(torch.nn.Module, ABC):
         Args:
             x: The feature tensor with shape ``[..., R_test, C]`` with
                 ``R_test`` rows and ``C`` columns.
+            related_tables: Additional related context provided to the model.
 
         Returns:
-            The prediction for ``[..., R_test]`` test rows, averaged across
-            ensemble members when fitted with ``num_estimators > 1``.
+            The prediction for ``[..., R_test]`` test rows.
         """
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
+            )
+            related_tables = None
+
         if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        y = torch.empty(
-            (*x.size()[:-2], 0),
-            dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
-            device=x.device,
-        )
-        x, y = self._preprocess(x, y)
+        recipe = self._recipe
         outs: list[Tensor] = []
         for cache in self._caches:
-            outs.append(self._forward(x, y, cache=cache))
-        return torch.stack(outs).mean(dim=0)
+            y_i = torch.empty(
+                (*x.size()[:-2], 0),
+                dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
+                device=x.device,
+            )
+            # TODO Iterate over Recipes instead of using a single recipe once
+            # Recipe adds support for multiple recipes.
+            x_i, y_i = self._preprocess(
+                x,
+                y_i,
+                related_tables,
+                recipe=recipe,
+                fit_recipe=False,
+            )
+            out = self._forward(x_i, y_i, related_tables, cache)
+            out = self._postprocess(out, recipe)
+            outs.append(out)
+
+        out = torch.stack(outs).mean(dim=0)
+        table = TableTensor.from_tensor(out.clone())
+        if recipe is None:
+            return table.numerical
+        return recipe.output.transform(table).numerical
 
     # Helpers #################################################################
 
@@ -150,7 +220,33 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, C]
         y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        related_tables: RelatedTables | None,
+        *,
+        recipe: Recipe | None = None,
+        fit_recipe: bool = True,
     ) -> tuple[Tensor, Tensor]:
+        if related_tables is not None:
+            # TODO Support preprocessing related tables.
+            related_tables = None
+
+        if recipe is not None:
+            if not isinstance(x, TableTensor):
+                raise ValueError(
+                    f"Expected 'x' to be a 'TableTensor' when 'recipe' is "
+                    f"given (got '{type(x).__name__}')"
+                )
+            if fit_recipe:
+                if not isinstance(y, TableTensor):
+                    raise ValueError(
+                        f"Expected 'y' to be a 'TableTensor' when "
+                        f"'recipe' is given (got '{type(y).__name__}')"
+                    )
+                # Fit on the in-context rows only to avoid leakage:
+                recipe.features.fit(x[..., : y.size(-2), :])
+                y = recipe.target.fit_transform(y)
+
+            x = recipe.features.transform(x)
+
         if isinstance(x, TableTensor):
             invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
             if invalid_columns > 0:
@@ -196,6 +292,27 @@ class BaseModel(torch.nn.Module, ABC):
 
         return x, y
 
+    def _postprocess(
+        self,
+        out: Tensor,  # [..., R_test, *]
+        recipe: Recipe | None,
+    ) -> Tensor:  # [..., R_test, *]
+        if recipe is None:
+            return out
+
+        if not isinstance(recipe.target, InvertibleMixin):
+            raise ValueError(
+                f"Expected the target steps of 'recipe' to support "
+                f"'inverse_transform' to map predictions back to the "
+                f"original target space "
+                f"(got '{recipe.target.__class__.__name__}')"
+            )
+
+        table = TableTensor.from_tensor(out.clone())
+        table = recipe.target.inverse_transform(table)
+
+        return table.numerical
+
     # Abstract Methods ########################################################
 
     @abstractmethod
@@ -203,19 +320,12 @@ class BaseModel(torch.nn.Module, ABC):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
-        *,
-        cache: Cache | None = None,
+        related_tables: RelatedTables | None,
+        cache: Cache | None,
     ) -> Tensor:  # [..., R - R_train, *]
         pass
 
+    @classmethod
     @abstractmethod
-    def default_recipe(self) -> Recipe:
-        r"""Return the default processing recipe for this model.
-
-        Model subclasses must override this method to expose the model-specific
-        preprocessing and postprocessing recipe.
-
-        Returns:
-            The :class:`~sdm.processing.Recipe` applied during pre- and
-            postprocessing by default.
-        """
+    def default_recipe(cls) -> Recipe:
+        r"""Return the default processing recipe for this model."""

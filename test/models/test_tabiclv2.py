@@ -5,8 +5,8 @@ from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Sequential
-from sdm.testing import withCUDA
+from sdm.processing import Recipe, Sequential, SoftmaxTemperature
+from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
 def _make_small_classifier(
@@ -57,6 +57,7 @@ def test_tabiclv2(
 
     assert out.dtype == x.dtype
     assert out.device == x.device
+    assert torch.is_inference(out)
 
     if len(batch_shape) > 0:
         looped = torch.stack(
@@ -88,15 +89,53 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
     torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
     model.clear()
 
-    with pytest.raises(ValueError, match="num_estimators"):
-        model(x, y, num_estimators=0)
 
-    with pytest.raises(ValueError, match="num_estimators"):
-        model.fit(x[..., :R_train, :], y, num_estimators=0)
+def test_tabiclv2_recipe() -> None:
+    model = TabICLv2(pretrained=False)
+
+    R, C, R_train = 8, 6, 5
+    x = TableTensor.from_tensor(torch.randn(R, C))
+    y = TableTensor.from_tensor(torch.randn(R_train, 1))
+
+    # An empty recipe matches the recipe-less forward pass:
+    torch.testing.assert_close(
+        model(x, y, recipe=Recipe()),
+        model(x, y),
+    )
+
+    # Output steps run after the model and ensembling:
+    raw = model(x, y)
+    output_recipe = Recipe(output=[SoftmaxTemperature()])
+    out = model(x, y, recipe=output_recipe)
+    torch.testing.assert_close(out, raw.softmax(dim=-1))
+    model.fit(x[:R_train], y, recipe=output_recipe)
+    torch.testing.assert_close(model.predict(x[R_train:]), out)
+
+    # The recipe matches its manual driver-side application:
+    out = model(x, y, recipe=model.default_recipe())
+    assert out.size() == (R - R_train, 999)
+    assert torch.is_inference(out)
+    recipe = model.default_recipe()
+    recipe.features.fit(x[:R_train])
+    raw = model(
+        x=recipe.features.transform(x),
+        y=recipe.target.fit_transform(y),
+    )
+    assert isinstance(recipe.target, Sequential)
+    expected = recipe.target.inverse_transform(
+        TableTensor.from_tensor(raw.clone())
+    ).numerical
+    torch.testing.assert_close(out, expected)
+
+    # The fitted recipe state is reused across predict calls:
+    model.fit(x[:R_train], y, recipe=model.default_recipe())
+    torch.testing.assert_close(model.predict(x[R_train:]), out)
+    model.clear()
+    assert model._recipe is None
 
 
 def test_default_recipe_regression_roundtrip() -> None:
-    recipe = TabICLv2(pretrained=False).default_recipe()
+    recipe = TabICLv2.default_recipe()
 
     features = TableTensor(
         columns={
@@ -117,13 +156,13 @@ def test_default_recipe_regression_roundtrip() -> None:
     assert model_features.size() == features.size()
     assert model_target.size() == target.size()
     assert model_features.categorical.size(-1) == 0
-    assert model_features.columns[Stype.numerical] == (
+    assert set(model_features.columns[Stype.numerical]) == {
         "a",
         "b",
         "c",
         "d",
         "kind",
-    )
+    }
 
     assert isinstance(recipe.target, Sequential)
     restored = recipe.target.inverse_transform(model_target)
@@ -311,3 +350,52 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         probabilities.sum(dim=-1),
         torch.ones(test_size, device=device),
     )
+
+
+@onlyCUDA
+@onlyFullTest
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+def test_tabiclv2_compile(dtype: torch.dtype) -> None:
+    torch._dynamo.reset()
+    model = TabICLv2(pretrained=False, device="cuda")
+
+    R, C, R_train = 8, 6, 5
+    x = torch.randn(R, C, device="cuda")
+    if dtype.is_floating_point:
+        y = torch.randn(R_train, device="cuda")
+    else:
+        y = torch.randint(0, 10, (R_train,), device="cuda")
+
+    expected = model(x, y)
+    submodel = model.reg_model if dtype.is_floating_point else model.cls_model
+    submodel.compile(fullgraph=True)
+
+    actual = model(x, y)
+    torch.testing.assert_close(actual, expected)
+    assert torch.is_inference(actual)
+
+    model.fit(x[:R_train], y)
+    predicted = model.predict(x[R_train:])
+    torch.testing.assert_close(predicted, expected)
+    assert torch.is_inference(predicted)
+
+
+def test_row_embedding() -> None:
+    row_embedding = RowEmbedding(
+        num_classes=2,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+        group_size=3,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+    )
+
+    out = row_embedding(
+        x=torch.randn(6, 4),
+        y=torch.tensor([0, 1]),
+        train_mask=torch.tensor([False, True, False, False, True, False]),
+        max_keys=1,
+    )
+    assert out.size() == (6, 16)

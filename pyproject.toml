@@ -77,6 +77,10 @@ addopts = [
     "--color=yes",
     "-vv",
     "--import-mode=importlib",
+    "--strict-markers",
+]
+markers = [
+    "cuda: tests that require a NVIDIA GPU",
 ]
 testpaths = ["test"]
 xfail_strict = true
@@ -107,6 +111,7 @@ include = ["examples/**"]
 
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
+unresolved-attribute = "ignore"
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
 src = ["pyproject.toml", "sdm", "test", "examples"]
@@ -162,4 +167,5 @@ convention = "google"
 allowed-unresolved-imports = [
     "cudf.**",
     "cupy.**",
+    "pyg_lib.**",
 ]

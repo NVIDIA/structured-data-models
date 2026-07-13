@@ -1,5 +1,6 @@
 import io
 from datetime import datetime
+from textwrap import dedent
 from typing import cast
 
 import pandas as pd
@@ -13,6 +14,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.testing import onlyCUDA
 
 
 def test_init() -> None:
@@ -27,17 +29,14 @@ def test_init() -> None:
             categories=(torch.arange(2), torch.arange(2)),
         ),
     )
-    assert repr(tensor) == (
-        "TableTensor(\n"
-        "  size=(2, 4),\n"
-        "  blocks={\n"
-        "    numerical (2): ['age', 'income'],\n"
-        "    categorical (2): ['country', 'segment'],\n"
-        "    datetime (0): [],\n"
-        "    id (0): [],\n"
-        "  },\n"
-        ")"
-    )
+    assert repr(tensor) == dedent("""\
+        TableTensor(
+          size=(2, 4),
+          blocks={
+            numerical (2): [age, income],
+            categorical (2): [country, segment],
+          },
+        )""")
 
     assert tensor.size() == (2, 4)
     assert tensor.dtype == torch.float32
@@ -107,6 +106,52 @@ def test_from_tensor() -> None:
         Stype.datetime: (),
         Stype.id: (),
     }
+
+
+def test_inference_mode() -> None:
+    def make_table() -> TableTensor:
+        return TableTensor(
+            columns={
+                "numerical": ["value"],
+                "categorical": ["kind"],
+                "id": ["name"],
+            },
+            numerical=torch.randn(3, 1),
+            categorical=CategoricalTensor(
+                data=torch.arange(3, dtype=torch.int32).unsqueeze(-1),
+                categories=(StringTensor.from_list(["a", "b", "c"]),),
+            ),
+            id=ColumnarTensor((StringTensor.from_list(["x", "y", "z"]),)),
+        )
+
+    table = make_table()
+    with torch.inference_mode():
+        view = table[:2]
+
+    assert not torch.is_inference(view)
+    assert not torch.is_inference(view.categorical)
+    assert not torch.is_inference(view.id)
+    assert not torch.is_inference(view.id._columns[0])
+
+    # Like PyTorch's NestedTensor, direct construction follows the active mode
+    # while views preserve the inference state of their outer input.
+    with torch.inference_mode():
+        table = table.replace_blocks()
+    assert torch.is_inference(table)
+    assert not torch.is_inference(table.numerical)
+
+    view = table[:2]
+    assert torch.is_inference(view)
+    assert not torch.is_inference(view.numerical)
+
+    with torch.inference_mode():
+        table = make_table()
+
+    view = table[:2]
+    assert torch.is_inference(view)
+    assert torch.is_inference(view.categorical)
+    assert torch.is_inference(view.id)
+    assert torch.is_inference(view.id._columns[0])
 
 
 def test_replace_blocks() -> None:
@@ -784,6 +829,8 @@ def test_arrow_empty() -> None:
         },
     )
 
+    assert tensor.size() == (0, 2)
+
     table = tensor.to_arrow()
 
     assert table.num_rows == 0
@@ -816,3 +863,94 @@ def test_from_pandas() -> None:
     assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+@onlyCUDA
+def test_from_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    data = {
+        "age": [0.0, 1.0, 2.0, 3.0],
+        "income": [10.0, 11.0, 12.0, 13.0],
+        "country": ["US", "CA", "", "US"],
+        "time": [
+            datetime(2024, 1, 1, 0, 0),
+            None,
+            datetime(2024, 1, 2, 0, 0),
+            datetime(2024, 1, 3, 0, 0),
+        ],
+        "user_id": [0, 1, 2, 3],
+        "item_id": ["a", "b", "c", "d"],
+    }
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(data),
+        stypes={
+            "age": "numerical",
+            "income": "numerical",
+            "country": "categorical",
+            "time": "datetime",
+            "user_id": "id",
+            "item_id": "id",
+        },
+    )
+
+    assert tensor.size() == (4, 6)
+    assert tensor.numerical.equal(
+        torch.tensor(
+            [
+                [0.0, 10.0],
+                [1.0, 11.0],
+                [2.0, 12.0],
+                [3.0, 13.0],
+            ],
+            device=tensor.device,
+        )
+    )
+    assert tensor.categorical.equal(
+        torch.tensor([[0], [1], [2], [0]], device=tensor.device)
+    )
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
+    assert tensor.datetime.equal(
+        torch.tensor(
+            [
+                [1704067200000000],
+                [-9223372036854775808],
+                [1704153600000000],
+                [1704240000000000],
+            ],
+            device=tensor.device,
+        )
+    )
+    assert tensor.id[:, 0].equal(
+        torch.tensor([0, 1, 2, 3], device=tensor.device)
+    )
+    assert tensor.id[:, 1].equal(
+        StringTensor.from_list(["a", "b", "c", "d"], device=tensor.device)
+    )
+
+
+@onlyCUDA
+def test_from_cudf_empty() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(
+            {
+                "age": [],
+                "country": [],
+            }
+        ),
+        stypes={
+            "age": "numerical",
+            "country": "categorical",
+        },
+    )
+
+    assert tensor.size() == (0, 2)
+    assert tensor.is_cuda
+
+    table = tensor.to_arrow()
+    assert table.num_rows == 0
+    assert table.column_names == ["age", "country"]
+    assert table.to_pydict() == {"age": [], "country": []}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
-from typing import Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
@@ -11,9 +11,13 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
+from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import to_arrow
 
 aten = torch.ops.aten
+
+if TYPE_CHECKING:
+    import cudf
 
 
 class ColumnarTensor(Tensor):
@@ -145,6 +149,34 @@ class ColumnarTensor(Tensor):
 
         return cls(columns=(column,), device=device)
 
+    @classmethod
+    def from_cudf(
+        cls,
+        ser: cudf.Series | cudf.Index,
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create tensor from a :class:`cudf.Series`.
+
+        Args:
+            ser: The :class:`cudf.Series` or :class:`cudf.Index`.
+            device: The device.
+        """
+        from cudf.api.types import is_integer_dtype, is_string_dtype
+
+        if is_string_dtype(ser.dtype):
+            column = StringTensor.from_cudf(ser, device=device)
+        else:
+            if ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
+                raise ValueError(
+                    f"'{cls.__name__}' cannot represent null integer values"
+                )
+            if ser._column.null_count > 0 and ser.dtype.kind == "f":
+                ser = ser.fillna(float("nan"))
+            column = torch.from_dlpack(ser.to_dlpack()).to(device)
+
+        return cls(columns=(column,), device=device)
+
     def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
         r"""Convert this tensor to a flat :class:`pyarrow.Table`.
 
@@ -200,7 +232,8 @@ class ColumnarTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            with _preserve_view_inference_mode(func, args[0]):
+                return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"

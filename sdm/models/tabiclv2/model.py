@@ -1,6 +1,6 @@
 # ruff: noqa: D205
 
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -8,6 +8,7 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm import RelatedTables
 from sdm.cache import Cache
 from sdm.models import BaseModel
 from sdm.models.tabiclv2.icl import ICLBlock
@@ -68,6 +69,9 @@ class TabICLv2(BaseModel):
         device: The device.
     """
 
+    #:
+    supports_related_tables: ClassVar[bool] = False
+
     def __init__(
         self,
         pretrained: bool = True,
@@ -93,13 +97,9 @@ class TabICLv2(BaseModel):
 
         self.eval()
 
-    def default_recipe(self) -> Recipe:
-        r"""Return the default single-estimator regression recipe.
-
-        Returns:
-            The default :class:`~sdm.processing.Recipe` applied during pre- and
-            postprocessing.
-        """
+    @classmethod
+    def default_recipe(cls) -> Recipe:
+        r""":meta private:"""  # noqa: D415
         return default_regression_recipe()
 
     def _load_from_pretrained(self) -> "TabICLv2":
@@ -132,8 +132,8 @@ class TabICLv2(BaseModel):
         self,
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
-        *,
-        cache: Cache | None = None,
+        related_tables: RelatedTables | None,
+        cache: Cache | None,
     ) -> Tensor:  # [..., R_test, num_classes or 999]
         r"""The forward pass.
 
@@ -144,9 +144,11 @@ class TabICLv2(BaseModel):
             Floating-point ``y`` return 999 quantiles at probability levels
             :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
         """
+        assert related_tables is None
+
         if y.is_floating_point():
-            return self.reg_model(x, y, cache=cache)
-        return self.cls_model(x, y, cache=cache)
+            return self.reg_model(x=x, y=y, cache=cache)
+        return self.cls_model(x=x, y=y, cache=cache)
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -225,16 +227,19 @@ class _TabICLv2(torch.nn.Module):
         if self.max_classes > 0 and y.numel() > 0:
             # TODO Cache `num_classes` to avoid device synchronization.
             num_classes = int(y.max()) + 1
+            if torch.compiler.is_compiling():
+                # FIXME Don't give up on hierarchical classification.
+                torch._check(num_classes <= self.max_classes)
         if cache is not None and num_classes > self.max_classes:
             raise NotImplementedError(
                 f"Key/value caching is not supported with more than "
                 f"{self.max_classes} classes (got {num_classes})"
             )
 
-        x = self.row_embedding(x, y, cache=cache)
+        x = self.row_embedding(x=x, y=y, cache=cache)
 
         if num_classes <= self.max_classes:
-            x = self.icl_block(x, y, cache=cache)
+            x = self.icl_block(x=x, y=y, cache=cache)
             return self.head(x)
 
         assert self.hierarchical_classifier is not None
@@ -252,7 +257,7 @@ class _TabICLv2(torch.nn.Module):
         row_embeddings: Tensor,  # [R_node + R_test, D]
         y: Tensor,  # [R_node]
     ) -> Tensor:  # [R_test, max_classes]
-        return self.head(self.icl_block(row_embeddings, y))
+        return self.head(self.icl_block(x=row_embeddings, y=y))
 
 
 # Helpers #####################################################################

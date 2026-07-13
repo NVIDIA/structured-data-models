@@ -6,11 +6,12 @@ import importlib.util
 import re
 from collections.abc import Mapping
 from enum import Enum
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 import pyarrow as pa
 
 if TYPE_CHECKING:
+    import cudf
     import pandas as pd
 
 
@@ -44,7 +45,7 @@ _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 
 def infer_stypes(
-    table: pa.Table | pd.DataFrame,
+    table: pa.Table | pd.DataFrame | cudf.DataFrame,
     overrides: Mapping[str, StypeLike] | None = None,
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
@@ -62,7 +63,8 @@ def infer_stypes(
       ``"userId"``, ``"id"``, but not ``"solid"`` or ``"covid"``).
 
     Args:
-        table: A :class:`pandas.DataFrame` or :class:`pyarrow.Table`.
+        table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
+            :class:`cudf.DataFrame`.
         overrides: Optional semantic type overrides by column name.
 
     Returns:
@@ -76,29 +78,40 @@ def infer_stypes(
         if isinstance(table, pd.DataFrame):
             table = pa.Schema.from_pandas(table, preserve_index=False)
 
+    if importlib.util.find_spec("cudf") is not None:
+        import cudf
+
+        if isinstance(table, cudf.DataFrame):
+            return {
+                column: Stype(overrides[column])
+                if column in overrides
+                else _infer_cudf_stype(column, dtype)
+                for column, dtype in table.dtypes.items()
+            }
+
     if isinstance(table, pa.Table):
         table = table.schema
 
     if not isinstance(table, pa.Schema):
         raise TypeError(
-            f"Expected input to be a 'pandas.DataFrame' or 'pyarrow.Table' "
-            f"(got '{type(table).__name__}')"
+            f"Expected input to be a 'pandas.DataFrame', 'pyarrow.Table', "
+            f"or 'cudf.DataFrame' (got '{type(table).__name__}')"
         )
 
     return {
         field.name: Stype(overrides[field.name])
         if field.name in overrides
-        else _infer_stype(field.name, field.type)
+        else _infer_arrow_stype(field.name, field.type)
         for field in table
     }
 
 
-def _infer_stype(name: str, dtype: pa.DataType) -> Stype:
+def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     if (
         pa.types.is_integer(dtype)
         or pa.types.is_string(dtype)
         or pa.types.is_large_string(dtype)
-    ) and "id" in (word.lower() for word in _WORD_PATTERN.split(name)):
+    ) and _has_id_token(name):
         return Stype.id
 
     if (
@@ -120,3 +133,43 @@ def _infer_stype(name: str, dtype: pa.DataType) -> Stype:
         return Stype.datetime
 
     raise TypeError(f"Unsupported Arrow type '{dtype}' for column '{name}'")
+
+
+def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
+    import cudf
+    from cudf.api.types import (
+        is_bool_dtype,
+        is_datetime64_any_dtype,
+        is_decimal_dtype,
+        is_float_dtype,
+        is_integer_dtype,
+        is_string_dtype,
+    )
+
+    if (is_integer_dtype(dtype) or is_string_dtype(dtype)) and _has_id_token(
+        name
+    ):
+        return Stype.id
+
+    if (
+        is_integer_dtype(dtype)
+        or is_float_dtype(dtype)
+        or is_decimal_dtype(dtype)
+    ):
+        return Stype.numerical
+
+    if (
+        is_string_dtype(dtype)
+        or is_bool_dtype(dtype)
+        or isinstance(dtype, cudf.CategoricalDtype)
+    ):
+        return Stype.categorical
+
+    if is_datetime64_any_dtype(dtype):
+        return Stype.datetime
+
+    raise TypeError(f"Unsupported cuDF type '{dtype}' for column '{name}'")
+
+
+def _has_id_token(name: str) -> bool:
+    return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
