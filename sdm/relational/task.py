@@ -1,17 +1,22 @@
+from __future__ import annotations
+
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import torch
 from typing_extensions import Self
 
 from sdm import TableTensor
-from sdm.relational import Relationship
+from sdm.relational import RelationalData, Relationship
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
 from sdm.tensor.mixin import DeviceMixin
 
+if TYPE_CHECKING:
+    import graphviz
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, repr=False)
 class TaskLink:
     r"""Link between task rows to a table in relational data.
 
@@ -77,8 +82,21 @@ class TaskLink:
             table_columns=table_columns,
         )
 
+    def _task_columns_repr(self) -> str:
+        if len(self.task_columns) == 1:
+            return self.task_columns[0]
+        return f"[{','.join(self.task_columns)}]"
 
-@dataclass(frozen=True, init=False)
+    def _table_columns_repr(self) -> str:
+        if len(self.table_columns) == 1:
+            return f"{self.table}.{self.table_columns[0]}"
+        return f"{self.table}.[{','.join(self.table_columns)}]"
+
+    def __repr__(self) -> str:
+        return f"{self._task_columns_repr()} -> {self._table_columns_repr()}"
+
+
+@dataclass(frozen=True, init=False, repr=False)
 class RelatedTables(DeviceMixin):
     r"""Task-specific related tables attached to model inputs.
 
@@ -180,3 +198,104 @@ class RelatedTables(DeviceMixin):
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+    ) -> graphviz.Graph:
+        r"""Return a task visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+        """
+        graph = RelationalData(
+            tables=self.tables,
+            relationships=self.relationships,
+        ).to_graphviz(hide_columns=hide_columns)
+
+        graph.node("__task_table__", label="", shape="point")
+
+        for link in self.task_links:
+            label = "\\n".join(
+                f" {task_column} -> {table_column} "
+                for task_column, table_column in zip(
+                    link.task_columns, link.table_columns
+                )
+            )
+            graph.edge(
+                "__task_table__",
+                link.table,
+                label=label,
+                fontsize="11pt",
+            )
+
+        return graph
+
+    def __repr__(self) -> str:
+        out = f"{self.__class__.__name__}(\n"
+        if len(self.tables) > 0:
+            out += "  tables={\n"
+            out += "".join(
+                f"    {name}: {table.__repr__(indent=4)[4:]},\n"
+                for name, table in self.tables.items()
+            )
+            out += "  },\n"
+        else:
+            out += "  tables={},\n"
+        if len(self.relationships) > 0:
+            out += "  relationships=[\n"
+            out += "".join(f"    {rel},\n" for rel in self.relationships)
+            out += "  ],\n"
+        else:
+            out += "  relationships=[],\n"
+        if len(self.task_links) > 0:
+            out += "  task_links=[\n"
+            out += "".join(f"    {link},\n" for link in self.task_links)
+            out += "  ],\n"
+        else:
+            out += "  task_links=[],\n"
+        out += ")"
+        return out
+
+    def _repr_html_(self) -> str:
+        from html import escape
+
+        import pandas as pd
+
+        rows = [
+            [
+                name,
+                table.size(-2),
+                table.size(-1),
+                ", ".join(
+                    stype.value
+                    for stype, tensor in table.items()
+                    if tensor.size(-1) > 0
+                ),
+            ]
+            for name, table in self.tables.items()
+        ]
+        df = pd.DataFrame(
+            rows,
+            columns=pd.Index(["Table", "Rows", "Columns", "Stypes"]),
+        )
+
+        ul = "".join(
+            f"<li>"
+            f"<code>{escape(link._task_columns_repr())}</code>"
+            f" ➡️ "
+            f"<code>{escape(link._table_columns_repr())}</code>"
+            f"</li>"
+            for link in self.task_links
+        )
+        ul += "".join(
+            f"<li>"
+            f"<code>{escape(rel._left_columns_repr())}</code>"
+            f" ↔️ "
+            f"<code>{escape(rel._right_columns_repr())}</code>"
+            f"</li>"
+            for rel in self.relationships
+        )
+
+        return df.to_html(index=False, escape=True) + f"<ul>{ul}</ul>"

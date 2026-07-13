@@ -1,5 +1,6 @@
 import io
 from datetime import datetime
+from textwrap import dedent
 from typing import cast
 
 import pandas as pd
@@ -28,17 +29,14 @@ def test_init() -> None:
             categories=(torch.arange(2), torch.arange(2)),
         ),
     )
-    assert repr(tensor) == (
-        "TableTensor(\n"
-        "  size=(2, 4),\n"
-        "  blocks={\n"
-        "    numerical (2): ['age', 'income'],\n"
-        "    categorical (2): ['country', 'segment'],\n"
-        "    datetime (0): [],\n"
-        "    id (0): [],\n"
-        "  },\n"
-        ")"
-    )
+    assert repr(tensor) == dedent("""\
+        TableTensor(
+          size=(2, 4),
+          blocks={
+            numerical (2): [age, income],
+            categorical (2): [country, segment],
+          },
+        )""")
 
     assert tensor.size() == (2, 4)
     assert tensor.dtype == torch.float32

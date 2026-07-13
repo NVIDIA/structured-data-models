@@ -720,14 +720,14 @@ class TableTensor(Tensor):
     def tolist() -> Any:
         raise NotImplementedError("'tolist() is not yet implemented")  # TODO
 
-    def __repr__(self, *, tensor_contents: Any = None) -> str:
+    def __repr__(self, *, indent: int = 0) -> str:  # type: ignore
         def _columns_repr(
             columns: Sequence[str],
             max_cols: int = 3,
             max_item_len: int = 24,
         ) -> str:
             columns = [
-                f"'{column}'"
+                column
                 if len(column) <= max_item_len
                 else column[: max_item_len - 1] + "…"
                 for column in columns
@@ -738,21 +738,50 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"    {stype.value} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype.value} ({tensor.size(-1):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
             for stype, tensor in self.items()
+            if tensor.size(-1) > 0
         ]
 
-        out = f"{self.__class__.__name__}(\n"
-        out += f"  size={tuple(self.size())},\n"
-        out += "  blocks={\n"
-        out += "\n".join(stype_repr) + "\n"
-        out += "  },\n"
+        out = f"{' ' * indent}{self.__class__.__name__}(\n"
+        out += f"{' ' * (indent + 2)}size={tuple(self.size())},\n"
+        if len(stype_repr) > 0:
+            out += f"{' ' * (indent + 2)}blocks={{\n"
+            out += "\n".join(stype_repr) + "\n"
+            out += f"{' ' * (indent + 2)}}},\n"
         if not self.is_cpu:
-            out += f"  device={self.device},\n"
-        out += ")"
+            out += f"{' ' * (indent + 2)}device={self.device},\n"
+        out += f"{' ' * indent})"
         return out
+
+    def _repr_html_(self) -> str:
+        import pandas as pd
+
+        max_columns = 10
+        rows = [
+            [column, stype.value]
+            for stype, columns in self._columns.items()
+            for column in columns
+        ]
+        if len(rows) > max_columns + 1:
+            rows = [
+                *rows[: max_columns // 2],
+                ["...", "..."],
+                *rows[-max_columns // 2 :],
+            ]
+        df = pd.DataFrame(
+            data=rows,
+            columns=pd.Index(["Column", "Stype"]),
+        )
+
+        size = f"{self.size(-2)} rows x {self.size(-1)} columns"
+        if self.dim() > 2:
+            examples = " x ".join(str(dim) for dim in self.size()[:-2])
+            size = f"{examples} examples x {size}"
+
+        return df.to_html(index=False, escape=True) + f"<p>{size}</p>"
 
 
 @TableTensor.implements(aten.alias.default)

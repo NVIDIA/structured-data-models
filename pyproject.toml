@@ -80,7 +80,7 @@ addopts = [
     "--strict-markers",
 ]
 markers = [
-    "gpu: tests that require a CUDA GPU",
+    "cuda: tests that require a NVIDIA GPU",
 ]
 testpaths = ["test"]
 xfail_strict = true
@@ -168,4 +168,5 @@ allowed-unresolved-imports = [
     "cudf.**",
     "cupy.**",
     "pyg_lib.**",
+    "graphviz.**",
 ]
