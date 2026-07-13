@@ -8,7 +8,7 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
 from sdm.models.tabiclv2.icl import ICLBlock
@@ -66,6 +66,16 @@ class TabICLv2(Model):
         device: The device.
     """
 
+    #:
+    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical}
+    )
+    #:
+    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical, Stype.categorical}
+    )
+    #:
+    supports_multi_target: ClassVar[bool] = False
     #:
     supports_related_tables: ClassVar[bool] = False
 
@@ -125,27 +135,34 @@ class TabICLv2(Model):
 
         return self
 
-    def _forward(  # TODO Add multi-class support.
+    def _forward(
         self,
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
+        x: TableTensor,  # [..., R, C_1]
+        y: TableTensor,  # [..., R_train, C_2]
         related_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:  # [..., R_test, num_classes or 999]
-        r"""The forward pass.
+    ) -> TableTensor:  # [..., R_test, num_classes or 999]
 
-        Returns:
-            Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
-            and ``[..., R_test, 999]`` for floating-point ``y``.
-            Integer ``y`` return class logits.
-            Floating-point ``y`` return 999 quantiles at probability levels
-            :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
-        """
-        assert related_tables is None
+        if y.categorical.size(-1) > 0:
+            return TableTensor(
+                columns={
+                    Stype.numerical: y.categorical.categories[0].tolist(),
+                },
+                numerical=self.cls_model(
+                    x=x.numerical,
+                    y=y.categorical[..., 0],
+                    cache=cache,
+                ),
+            )
 
-        if y.is_floating_point():
-            return self.reg_model(x=x, y=y, cache=cache)
-        return self.cls_model(x=x, y=y, cache=cache)
+        return TableTensor(
+            columns={Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]},
+            numerical=self.reg_model(
+                x=x.numerical,
+                y=y.numerical[..., 0],
+                cache=cache,
+            ),
+        )
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
