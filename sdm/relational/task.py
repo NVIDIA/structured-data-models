@@ -1,14 +1,19 @@
+from __future__ import annotations
+
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import torch
 from typing_extensions import Self
 
 from sdm import TableTensor
-from sdm.relational import Relationship
+from sdm.relational import RelationalData, Relationship
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
 from sdm.tensor.mixin import DeviceMixin
+
+if TYPE_CHECKING:
+    import graphviz
 
 
 @dataclass(frozen=True, repr=False)
@@ -80,15 +85,15 @@ class TaskLink:
     def _task_columns_repr(self) -> str:
         if len(self.task_columns) == 1:
             return self.task_columns[0]
-        return f"[{', '.join(self.task_columns)}]"
+        return f"[{','.join(self.task_columns)}]"
 
     def _table_columns_repr(self) -> str:
         if len(self.table_columns) == 1:
             return f"{self.table}.{self.table_columns[0]}"
-        return f"{self.table}.[{', '.join(self.table_columns)}]"
+        return f"{self.table}.[{','.join(self.table_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._task_columns_repr()}->{self._table_columns_repr()}"
+        return f"{self._task_columns_repr()} -> {self._table_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -193,6 +198,39 @@ class RelatedTables(DeviceMixin):
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+    ) -> graphviz.Graph:
+        r"""Return a task visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+        """
+        graph = RelationalData(
+            tables=self.tables,
+            relationships=self.relationships,
+        ).to_graphviz(hide_columns=hide_columns)
+
+        graph.node("__task_table__", label="", shape="point")
+
+        for link in self.task_links:
+            label = "\\n".join(
+                f" {task_column} -> {table_column} "
+                for task_column, table_column in zip(
+                    link.task_columns, link.table_columns
+                )
+            )
+            graph.edge(
+                "__task_table__",
+                link.table,
+                label=label,
+                fontsize="11pt",
+            )
+
+        return graph
 
     def __repr__(self) -> str:
         out = f"{self.__class__.__name__}(\n"

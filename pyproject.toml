@@ -168,4 +168,5 @@ allowed-unresolved-imports = [
     "cudf.**",
     "cupy.**",
     "pyg_lib.**",
+    "graphviz.**",
 ]

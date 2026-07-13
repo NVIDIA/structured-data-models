@@ -105,10 +105,10 @@ def test_sampler(data: RelationalData) -> None:
             ),
           },
           relationships=[
-            orders.[__example__, user_id]<>users.[__example__, user_id],
-            orders.[__example__, item_id]<>items.[__example__, item_id],
+            orders.[__example__,user_id] <> users.[__example__,user_id],
+            orders.[__example__,item_id] <> items.[__example__,item_id],
           ],
           task_links=[
-            [__example__, user_id]->users.[__example__, user_id],
+            [__example__,user_id] -> users.[__example__,user_id],
           ],
         )""")
