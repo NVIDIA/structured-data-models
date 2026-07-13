@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
@@ -11,14 +12,23 @@ from torch.utils import _pytree as pytree
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
-from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import to_arrow
+
+if TYPE_CHECKING:
+    import cudf
 
 aten = torch.ops.aten
 
 
-if TYPE_CHECKING:
-    import cudf
+def preserve_view_inference_mode(fn: Callable) -> Callable:
+    r"""Preserve input inference state for tensor view operations."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with torch.inference_mode(args[0].is_inference()):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 class CategoricalTensor(Tensor):
@@ -297,8 +307,7 @@ class CategoricalTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            with _preserve_view_inference_mode(func, args[0]):
-                return handler(*args, **(kwargs or {}))
+            return handler(*args, **(kwargs or {}))
 
         # Operate on vanilla tensors for all non-handled functions:
         args = pytree.tree_map_only(CategoricalTensor, lambda x: x._data, args)
@@ -360,6 +369,7 @@ def _isnan(input: CategoricalTensor) -> Tensor:
 
 
 @CategoricalTensor.implements(aten.alias.default)
+@preserve_view_inference_mode
 def _alias(input: CategoricalTensor) -> CategoricalTensor:
     return input.__class__(aten.alias.default(input._data), input._categories)
 
@@ -430,36 +440,43 @@ def _pin_memory(input: CategoricalTensor) -> CategoricalTensor:
 
 
 @CategoricalTensor.implements(aten.view.default)
+@preserve_view_inference_mode
 def _view(input: CategoricalTensor, size: Sequence[int]) -> Tensor:
     return _maybe_wrap(input, input._data.view(size))
 
 
 @CategoricalTensor.implements(aten._unsafe_view.default)
+@preserve_view_inference_mode
 def _unsafe_view(input: CategoricalTensor, size: Sequence[int]) -> Tensor:
     return _maybe_wrap(input, aten._unsafe_view(input._data, size))
 
 
 @CategoricalTensor.implements(aten.squeeze.default)
+@preserve_view_inference_mode
 def _squeeze(input: CategoricalTensor) -> Tensor:
     return _maybe_wrap(input, input._data.squeeze())
 
 
 @CategoricalTensor.implements(aten.squeeze.dim)
+@preserve_view_inference_mode
 def _squeeze_dim(input: CategoricalTensor, dim: int) -> Tensor:
     return _maybe_wrap(input, input._data.squeeze(dim))
 
 
 @CategoricalTensor.implements(aten.squeeze.dims)
+@preserve_view_inference_mode
 def _squeeze_dims(input: CategoricalTensor, dim: Sequence[int]) -> Tensor:
     return _maybe_wrap(input, input._data.squeeze(tuple(dim)))
 
 
 @CategoricalTensor.implements(aten.unsqueeze.default)
+@preserve_view_inference_mode
 def _unsqueeze(input: CategoricalTensor, dim: int) -> Tensor:
     return _maybe_wrap(input, input._data.unsqueeze(dim))
 
 
 @CategoricalTensor.implements(aten.expand.default)
+@preserve_view_inference_mode
 def _expand(
     input: CategoricalTensor,
     size: Sequence[int],
@@ -471,6 +488,7 @@ def _expand(
 
 
 @CategoricalTensor.implements(aten.transpose.int)
+@preserve_view_inference_mode
 def _transpose(input: CategoricalTensor, dim0: int, dim1: int) -> Tensor:
     data = input._data.transpose(dim0, dim1)
     dim0 %= input.dim()
@@ -481,6 +499,7 @@ def _transpose(input: CategoricalTensor, dim0: int, dim1: int) -> Tensor:
 
 
 @CategoricalTensor.implements(aten.permute.default)
+@preserve_view_inference_mode
 def _permute(input: CategoricalTensor, dims: Sequence[int]) -> Tensor:
     data = input._data.permute(tuple(dims))
     dims = tuple(dim % input.dim() for dim in dims)
@@ -490,6 +509,7 @@ def _permute(input: CategoricalTensor, dims: Sequence[int]) -> Tensor:
 
 
 @CategoricalTensor.implements(aten.select.int)
+@preserve_view_inference_mode
 def _select(input: CategoricalTensor, dim: int, index: int) -> Tensor:
     data = input._data.select(dim, index)
     dim %= input.dim()
@@ -499,6 +519,7 @@ def _select(input: CategoricalTensor, dim: int, index: int) -> Tensor:
 
 
 @CategoricalTensor.implements(aten.slice.Tensor)
+@preserve_view_inference_mode
 def _slice(
     input: CategoricalTensor,
     dim: int = 0,
@@ -514,6 +535,7 @@ def _slice(
 
 
 @CategoricalTensor.implements(aten.narrow.default)
+@preserve_view_inference_mode
 def _narrow(
     input: CategoricalTensor,
     dim: int,
@@ -530,6 +552,7 @@ def _narrow(
 
 
 @CategoricalTensor.implements(aten.unbind.int)
+@preserve_view_inference_mode
 def _unbind(input: CategoricalTensor, dim: int = 0) -> tuple[Tensor, ...]:
     data_list = input._data.unbind(dim)
     dim %= input.dim()
@@ -539,6 +562,7 @@ def _unbind(input: CategoricalTensor, dim: int = 0) -> tuple[Tensor, ...]:
 
 
 @CategoricalTensor.implements(aten.split.Tensor)
+@preserve_view_inference_mode
 def _split(
     input: CategoricalTensor,
     split_size: int,
@@ -559,6 +583,7 @@ def _split(
 @CategoricalTensor.implements(aten.split.sizes)
 @CategoricalTensor.implements(aten.split.default)
 @CategoricalTensor.implements(aten.split_with_sizes.default)
+@preserve_view_inference_mode
 def _split_with_sizes(
     input: CategoricalTensor,
     split_sizes: Sequence[int],
