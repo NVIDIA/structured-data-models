@@ -63,14 +63,6 @@ class TabICLv2(BaseModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
-    For classification contexts with more than ten classes, the output head
-    uses hierarchical classification over the row representations. This is
-    independent of the mixed-radix target embeddings in :class:`RowEmbedding`.
-    Key/value caching through :meth:`fit` is unavailable for these contexts
-    because each hierarchy node uses a different target and training-row
-    context. Batched contexts share the global class space determined by the
-    maximum label across the batch.
-
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
