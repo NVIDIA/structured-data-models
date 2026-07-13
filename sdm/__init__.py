@@ -2,7 +2,6 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-
 from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
     VarLenTensor,
@@ -22,7 +21,6 @@ try:
     __version__ = version("structured-data-models")
 except PackageNotFoundError:
     __version__ = "0+unknown"
-
 
 __all__ = [
     "Stype",
