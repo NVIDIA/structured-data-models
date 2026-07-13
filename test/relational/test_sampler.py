@@ -112,3 +112,14 @@ def test_sampler(data: RelationalData) -> None:
             [user_id,__example__] > users.[user_id,__example__],
           ],
         )""")
+
+    edge_indices, task_links = related_tables.edge_indices(task_table)
+    assert len(edge_indices) == 2
+    assert edge_indices[0].equal(
+        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 0, 2, 3, 3]])
+    )
+    assert edge_indices[1].equal(
+        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 0, 2, 3, 4]])
+    )
+    assert len(task_links) == 1
+    assert task_links[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
