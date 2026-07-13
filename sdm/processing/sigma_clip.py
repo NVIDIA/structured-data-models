@@ -7,11 +7,11 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-def _nanstd(input: Tensor, *, dim: int) -> Tensor:
-    mask = ~torch.isnan(input)
+def _nanstd(inp: Tensor, *, dim: int) -> Tensor:
+    mask = ~torch.isnan(inp)
     count = mask.sum(dim=dim)
-    mean = torch.nanmean(input, dim=dim)
-    centered = input - mean
+    mean = torch.nanmean(inp, dim=dim)
+    centered = inp - mean
     centered = torch.where(mask, centered, torch.zeros_like(centered))
     sum_squares = centered.square().sum(dim=dim)
 
@@ -49,8 +49,8 @@ class SigmaClip(Processor):
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
-    def _fit(self, input: TableTensor) -> None:
-        numerical = _as_float(input.numerical)
+    def _fit(self, inp: TableTensor) -> None:
+        numerical = _as_float(inp.numerical)
         min_std = numerical.new_tensor(1e-6)
 
         mean = torch.nanmean(numerical, dim=0)
@@ -84,10 +84,10 @@ class SigmaClip(Processor):
             self._mean + self.threshold * self._std,
         )
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        """Clip ``input`` using the fitted soft lower and upper bounds."""
-        numerical = _as_float(input.numerical)
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        """Clip ``inp`` using the fitted soft lower and upper bounds."""
+        numerical = _as_float(inp.numerical)
         log_abs = numerical.abs().log1p()
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
         numerical = torch.minimum(log_abs + self.upper_bound, clipped)
-        return input.replace_blocks(numerical=numerical)
+        return inp.replace_blocks(numerical=numerical)

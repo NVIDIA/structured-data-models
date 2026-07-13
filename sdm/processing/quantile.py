@@ -72,19 +72,19 @@ class Quantile(Processor, InvertibleMixin):
         self.register_buffer("quantiles", torch.empty(0))
         self.register_buffer("references", torch.empty(0))
 
-    def _subsample_indices(self, input: Tensor) -> Tensor:
+    def _subsample_indices(self, inp: Tensor) -> Tensor:
         generator = None
         if self.random_state is not None:
-            generator = torch.Generator(device=input.device)
+            generator = torch.Generator(device=inp.device)
             generator.manual_seed(self.random_state)
         return torch.randperm(
-            input.shape[0],
-            device=input.device,
+            inp.shape[0],
+            device=inp.device,
             generator=generator,
         )[: self.subsample]
 
-    def _fit(self, input: TableTensor) -> None:
-        numerical = _as_float(input.numerical)
+    def _fit(self, inp: TableTensor) -> None:
+        numerical = _as_float(inp.numerical)
         n_samples = numerical.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
@@ -114,12 +114,12 @@ class Quantile(Processor, InvertibleMixin):
 
     def _transform_col(
         self,
-        input: Tensor,
+        inp: Tensor,
         quantiles: Tensor,
         *,
         inverse: bool = False,
     ) -> Tensor:
-        input_col = input.clone()
+        input_col = inp.clone()
         zero = input_col.new_zeros(())
         one = input_col.new_ones(())
 
@@ -178,9 +178,9 @@ class Quantile(Processor, InvertibleMixin):
 
         return input_col
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        """Transform ``input`` into the configured output distribution."""
-        numerical = _as_float(input.numerical)
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        """Transform ``inp`` into the configured output distribution."""
+        numerical = _as_float(inp.numerical)
         transformed = torch.empty_like(numerical)
         for i in range(numerical.shape[1]):
             transformed[:, i] = self._transform_col(
@@ -188,10 +188,10 @@ class Quantile(Processor, InvertibleMixin):
                 self.quantiles[:, i],
                 inverse=False,
             )
-        return input.replace_blocks(numerical=transformed)
+        return inp.replace_blocks(numerical=transformed)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        numerical = _as_float(input.numerical)
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
+        numerical = _as_float(inp.numerical)
         inverse = numerical.clone()
         for i in range(numerical.shape[1]):
             inverse[:, i] = self._transform_col(
@@ -199,4 +199,4 @@ class Quantile(Processor, InvertibleMixin):
                 self.quantiles[:, i],
                 inverse=True,
             )
-        return input.replace_blocks(numerical=inverse)
+        return inp.replace_blocks(numerical=inverse)

@@ -37,20 +37,20 @@ class Clip(Processor, InvertibleMixin):
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
-    def _fit(self, input: TableTensor) -> None:
-        numerical = _as_float(input.numerical)
+    def _fit(self, inp: TableTensor) -> None:
+        numerical = _as_float(inp.numerical)
         quantiles = numerical.new_tensor([self.q_low, self.q_high])
         q_low, q_high = torch.quantile(numerical, quantiles, dim=0)
         self.lower_bound = q_low
         self.upper_bound = q_high
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        """Clamp ``input`` to the fitted lower and upper bounds."""
-        numerical = _as_float(input.numerical).clamp(
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        """Clamp ``inp`` to the fitted lower and upper bounds."""
+        numerical = _as_float(inp.numerical).clamp(
             min=self.lower_bound,
             max=self.upper_bound,
         )
-        return input.replace_blocks(numerical=numerical)
+        return inp.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        return input
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
+        return inp
