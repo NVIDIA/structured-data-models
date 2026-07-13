@@ -107,7 +107,7 @@ class RelatedTables(DeviceMixin):
     :class:`RelatedTables` store the relational context provided to a model
     for a particular task table.
     It may contain a sampled subset of a larger :class:`RelationalData`.
-    The ``task_link`` describes how rows in the model input match rows in
+    The ``task_links`` describe how rows in the model input match to rows in
     the related tables.
 
     .. code-block:: python
@@ -178,7 +178,8 @@ class RelatedTables(DeviceMixin):
             if table.dim() != 2:
                 raise ValueError("Tables need to be two-dimensional")
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
@@ -189,7 +190,8 @@ class RelatedTables(DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
         if len(devices) == 0:
             raise RuntimeError(
@@ -217,8 +219,8 @@ class RelatedTables(DeviceMixin):
             device: The device.
 
         Returns:
-            A ``(relationships, task_links)`` pair of edge indices for each
-            relationship and task link in order.
+            A ``(relationships, task_links)`` pair, each holding edge indices
+            for each relationship and task link in order.
             Each edge index has shape ``[2, num_edges]`` and stores left/task
             table indices in the first row and right table indices in the
             second row.
@@ -254,7 +256,7 @@ class RelatedTables(DeviceMixin):
 
         Args:
             hide_columns: Whether to hide column name descriptions.
-            **kwargs: Additional keyword arguments pass to
+            **kwargs: Additional keyword arguments passed to
                 :class:`graphviz.Graph`.
         """
         graph = RelationalData(

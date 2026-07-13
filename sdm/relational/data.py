@@ -185,7 +185,8 @@ class RelationalData(DeviceMixin):
                             f"(got '{stype.value}')"
                         )
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
@@ -195,7 +196,8 @@ class RelationalData(DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
         if len(devices) == 0:
             raise RuntimeError(
@@ -320,7 +322,7 @@ class RelationalData(DeviceMixin):
 
         Args:
             hide_columns: Whether to hide column name descriptions.
-            **kwargs: Additional keyword arguments pass to
+            **kwargs: Additional keyword arguments passed to
                 :class:`graphviz.Graph`.
         """
         import graphviz
