@@ -35,21 +35,21 @@ class Choice(Processor, InvertibleMixin):
             )
         return cast(Processor, self.options[self._index])
 
-    def _fit(self, input: TableTensor) -> None:
+    def _fit(self, inp: TableTensor) -> None:
         self._index = int(torch.randint(len(self.options), (1,)).item())
-        self.selected.fit(input)
+        self.selected.fit(inp)
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return self.selected.transform(input)
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        return self.selected.transform(inp)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
         fn = getattr(self.selected, "inverse_transform", None)
         if not callable(fn):
             raise AttributeError(
                 f"'{self.selected.__class__.__name__}' object has no "
                 f"attribute 'inverse_transform'"
             )
-        return fn(input)
+        return fn(inp)
 
     def get_extra_state(self) -> int | None:  # noqa: D102
         return self._index

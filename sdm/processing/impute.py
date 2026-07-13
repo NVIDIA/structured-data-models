@@ -25,13 +25,13 @@ class MeanImpute(Processor):
         self.fill_value = fill_value
         self.register_buffer("_mean", torch.empty(0))
 
-    def _fit(self, input: TableTensor) -> None:
-        numerical = _as_float(input.numerical)
+    def _fit(self, inp: TableTensor) -> None:
+        numerical = _as_float(inp.numerical)
         mean = torch.nanmean(numerical, dim=0)
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, inp: TableTensor) -> TableTensor:
         """Replace NaNs with the fitted per-column means."""
-        numerical = _as_float(input.numerical)
+        numerical = _as_float(inp.numerical)
         numerical = torch.where(numerical.isnan(), self._mean, numerical)
-        return input.replace_blocks(numerical=numerical)
+        return inp.replace_blocks(numerical=numerical)
