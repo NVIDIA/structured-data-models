@@ -1,6 +1,5 @@
 """Default processing recipe for the TabICLv2 model."""
 
-from sdm import Stype
 from sdm.processing import (
     CategoricalAlign,
     Choice,
@@ -37,7 +36,6 @@ def default_recipe() -> Recipe:
                     CategoricalAlign(order="sorted"),
                     ToNumerical(),
                 ],
-                route_order=(Stype.categorical, Stype.numerical),
             ),
             MeanImpute(),
             ConstantFilter(),

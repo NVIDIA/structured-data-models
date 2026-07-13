@@ -31,17 +31,18 @@ reordered to the original target categories before aggregation.
 
 Previous work was classified as follows:
 
-| Previous change or test                                           | Current classification                          |
-| ----------------------------------------------------------------- | ----------------------------------------------- |
-| Recipe/TaskDispatch foundations from #202, #220, #221, #236, #245 | Already merged into `main`                      |
-| Categorical vocabulary alignment from #244                        | Still required and integrated                   |
-| Default TabICLv2 Recipe/model wiring from #230                    | Still required, adapted                         |
-| Per-member fitted Recipe and cache ownership                      | Still required, redesigned on current `Model`   |
-| Regression target inverse before aggregation                      | Still required and retained                     |
-| Classification inverse through TargetDispatch                     | Obsolete under category-labelled output mapping |
-| Quantile endpoint comparison                                      | Obsolete; the Recipe now uses Power             |
-| Analytic ordering/cache/fake-model tests                          | Test-only instrumentation retained              |
-| Pinned GPU row/ICL/head hooks                                     | Test-only instrumentation retained              |
+| Previous change or test                                           | Current classification                           |
+| ----------------------------------------------------------------- | ------------------------------------------------ |
+| Recipe/TaskDispatch foundations from #202, #220, #221, #236, #245 | Already merged into `main`                       |
+| Categorical vocabulary alignment from #244                        | Still required and integrated                    |
+| Default TabICLv2 Recipe/model wiring from #230                    | Still required, adapted                          |
+| Per-member fitted Recipe and cache ownership                      | Still required, redesigned on current `Model`    |
+| Regression target inverse before aggregation                      | Still required and retained                      |
+| Classification inverse through TargetDispatch                     | Obsolete under category-labelled output mapping  |
+| Quantile endpoint comparison                                      | Obsolete; the Recipe now uses Power              |
+| Analytic ordering/cache/fake-model tests                          | Test-only instrumentation retained               |
+| Pinned GPU row/ICL/head hooks                                     | Test-only instrumentation retained               |
+| Categorical-before-numerical feature order                        | Intentional positional difference; value-aligned |
 
 ## Pipelines
 
@@ -70,7 +71,7 @@ SDM:
 
 ```mermaid
 flowchart LR
-  A[raw TableTensor] --> B[StypeDispatch: categorical then numerical]
+  A[raw TableTensor] --> B[StypeDispatch: numerical then categorical]
   B --> C[sorted CategoricalAlign and ToNumerical]
   C --> D[MeanImpute and ConstantFilter]
   D --> E[StandardScale and HardClip]
@@ -92,42 +93,49 @@ constructs round-robin normalization groups. This known planning difference
 is reported but excluded from execution-parity failures. When an explicit
 member Recipe/plan is injected, the semantic execution stages are compared.
 
+The reference also emits encoded categorical features before numerical
+features, while SDM retains `StypeDispatch`'s default
+numerical-before-categorical route order. This positional difference is
+intentional and does not change the transformed value associated with each
+feature. Mixed-feature parity checks therefore align by column identity rather
+than requiring the same block order.
+
 ## Stage contracts
 
 All fitting uses context rows only. Feature transforms then apply to the
 combined context/query table.
 
-| Stage                        | Shape and dtype                                                  | State or mapping                                                                   | Aggregation/inversion contract                       |
-| ---------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Raw features                 | `[N,C_raw]`, mixed SDM blocks                                    | No fitted state                                                                    | Not invertible as a pipeline                         |
-| Encoded numerical features   | `[N,C_encoded]`, float32 at model boundary                       | Fitted sorted categorical vocabulary; missing/unseen `-1`; categorical block first | Discrete codes and columns compare exactly           |
-| Feature pipeline output      | `[N,C_nonconstant]`, float32                                     | Means, retained columns, scale, normalization, sigma bounds                        | Feature-only; no output inverse                      |
-| Feature permutation          | `[N,C_nonconstant]`, float32                                     | `output[j]=input[P[j]]`                                                            | Exact permutation and member order                   |
-| Target encoding              | `[N_train]`                                                      | Sorted class vocabulary or original regression target                              | Exact discrete codes; float tolerance for regression |
-| Target transformation        | `[N_train]`                                                      | `new=P[old]` or standardized target                                                | Categories move with class codes                     |
-| Model input                  | features plus target above                                       | Complete explicit member plan                                                      | Float32 comparison at model boundary                 |
-| Raw model output             | `[N_test,10]` classification or `[N_test,999]` regression in SDM | Member-local class/target space                                                    | No aggregation yet                                   |
-| Original-space member output | `[N_test,K]` or `[N_test,999]`                                   | Category-column reorder or regression inverse                                      | Must run per member                                  |
-| Aggregated output            | same canonical shape                                             | Arithmetic mean                                                                    | Canonical logits or original regression target space |
-| Output transform             | probabilities or unchanged regression output                     | Stateless resolved TaskDispatch                                                    | Runs once after aggregation                          |
-| User prediction              | final tensor                                                     | Classification probabilities; regression 999 coordinates                           | No additional mapping in `Model`                     |
+| Stage                        | Shape and dtype                                                  | State or mapping                                                                           | Aggregation/inversion contract                       |
+| ---------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| Raw features                 | `[N,C_raw]`, mixed SDM blocks                                    | No fitted state                                                                            | Not invertible as a pipeline                         |
+| Encoded numerical features   | `[N,C_encoded]`, float32 at model boundary                       | Fitted sorted categorical vocabulary; missing/unseen `-1`; SDM keeps numerical block first | Discrete codes compare after column alignment        |
+| Feature pipeline output      | `[N,C_nonconstant]`, float32                                     | Means, retained columns, scale, normalization, sigma bounds                                | Feature-only; no output inverse                      |
+| Feature permutation          | `[N,C_nonconstant]`, float32                                     | `output[j]=input[P[j]]`                                                                    | Exact permutation and member order                   |
+| Target encoding              | `[N_train]`                                                      | Sorted class vocabulary or original regression target                                      | Exact discrete codes; float tolerance for regression |
+| Target transformation        | `[N_train]`                                                      | `new=P[old]` or standardized target                                                        | Categories move with class codes                     |
+| Model input                  | features plus target above                                       | Complete explicit member plan                                                              | Float32 comparison at model boundary                 |
+| Raw model output             | `[N_test,10]` classification or `[N_test,999]` regression in SDM | Member-local class/target space                                                            | No aggregation yet                                   |
+| Original-space member output | `[N_test,K]` or `[N_test,999]`                                   | Category-column reorder or regression inverse                                              | Must run per member                                  |
+| Aggregated output            | same canonical shape                                             | Arithmetic mean                                                                            | Canonical logits or original regression target space |
+| Output transform             | probabilities or unchanged regression output                     | Stateless resolved TaskDispatch                                                            | Runs once after aggregation                          |
+| User prediction              | final tensor                                                     | Classification probabilities; regression 999 coordinates                                   | No additional mapping in `Model`                     |
 
 Processor-specific contracts:
 
-| Processor                          | Input to output                            | Fitted state / randomness                       | Value/order change                                   | Inverse                                     |
-| ---------------------------------- | ------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- |
-| `StypeDispatch`                    | mixed table to concatenated routes         | Route processors; optional explicit route order | May change stype and block order                     | Only for stype-preserving invertible routes |
-| `CategoricalAlign(order="sorted")` | categorical codes to fitted codes          | Observed context vocabulary                     | Unknown/missing to `-1`; sklearn-compatible ordering | None                                        |
-| `ToNumerical`                      | categorical block to float numerical block | Stateless                                       | Drops category metadata                              | None                                        |
-| `MeanImpute`                       | float table to same                        | Per-column context mean                         | NaN to mean                                          | None                                        |
-| `ConstantFilter`                   | `[N,C]` to `[N,C_keep]`                    | Retained context columns                        | Drops constants                                      | None                                        |
-| `StandardScale(epsilon=1e-6)`      | float table to same                        | Mean and population standard deviation          | Center/scale                                         | Algebraic inverse                           |
-| `HardClip(-100,100)`               | float table to same                        | Stateless                                       | Fixed non-linear clamp                               | None                                        |
-| `Choice(Identity,Power)`           | float table to same                        | Global torch RNG selects and fits one option    | Optional Yeo-Johnson normalization                   | Delegates to selected inverse               |
-| `SigmaClip(4)`                     | float table to same                        | Two-pass mean/std bounds                        | Logarithmic soft clipping                            | None                                        |
-| `FeaturePermute`                   | numerical table to same                    | Global torch RNG, stored `P`                    | Exact feature order                                  | Gather by `argsort(P)`                      |
-| `ClassShuffle`                     | categorical target to same                 | Global torch RNG, stored `P`                    | `new=P[old]`, categories move                        | Not used for model output                   |
-| `TaskDispatch`                     | canonical output to task route             | Resolved while target fits                      | Softmax temperature or identity                      | None                                        |
+| Processor                          | Input to output                            | Fitted state / randomness                    | Value/order change                                    | Inverse                                     |
+| ---------------------------------- | ------------------------------------------ | -------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- |
+| `StypeDispatch`                    | mixed table to concatenated routes         | Fitted route processors                      | May change stype; uses its stable default route order | Only for stype-preserving invertible routes |
+| `CategoricalAlign(order="sorted")` | categorical codes to fitted codes          | Observed context vocabulary                  | Unknown/missing to `-1`; sklearn-compatible ordering  | None                                        |
+| `ToNumerical`                      | categorical block to float numerical block | Stateless                                    | Drops category metadata                               | None                                        |
+| `MeanImpute`                       | float table to same                        | Per-column context mean                      | NaN to mean                                           | None                                        |
+| `ConstantFilter`                   | `[N,C]` to `[N,C_keep]`                    | Retained context columns                     | Drops constants                                       | None                                        |
+| `StandardScale(epsilon=1e-6)`      | float table to same                        | Mean and population standard deviation       | Center/scale                                          | Algebraic inverse                           |
+| `HardClip(-100,100)`               | float table to same                        | Stateless                                    | Fixed non-linear clamp                                | None                                        |
+| `Choice(Identity,Power)`           | float table to same                        | Global torch RNG selects and fits one option | Optional Yeo-Johnson normalization                    | Delegates to selected inverse               |
+| `SigmaClip(4)`                     | float table to same                        | Two-pass mean/std bounds                     | Logarithmic soft clipping                             | None                                        |
+| `FeaturePermute`                   | numerical table to same                    | Global torch RNG, stored `P`                 | Exact feature order                                   | Gather by `argsort(P)`                      |
+| `ClassShuffle`                     | categorical target to same                 | Global torch RNG, stored `P`                 | `new=P[old]`, categories move                         | Not used for model output                   |
+| `TaskDispatch`                     | canonical output to task route             | Resolved while target fits                   | Softmax temperature or identity                       | None                                        |
 
 ## Test redesign
 
@@ -135,7 +143,7 @@ Processor-specific contracts:
 | ------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | Reference plan cardinality, identity member, seed determinism | Still valid                                                             |
 | Explicit numeric identity and Power members                   | Still valid                                                             |
-| Mixed feature and string-target mismatch characterization     | Updated expected behaviour after sorted vocabularies and route ordering |
+| Mixed feature and string-target mismatch characterization     | Sorted vocabularies; route-order difference accepted and column-aligned |
 | Quantile endpoint mismatch                                    | Obsolete                                                                |
 | TargetDispatch score-head inverse                             | Replaced by category-column reconstruction tests                        |
 | Logit-vs-probability, inverse-before-mean, output-once tests  | Still valid                                                             |

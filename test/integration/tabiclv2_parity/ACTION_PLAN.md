@@ -12,12 +12,20 @@ pinned-checkpoint tests.
 | P0       | Map every member to canonical class/original target space before averaging; run output once | Generic pipeline correctness                                    | Class direction, logit-vs-probability averaging, nonlinear inverse placement |
 | P0       | Reconstruct classification output from fitted target categories; never call target inverse  | Current output design                                           | Obsolete TargetDispatch/class-score inverse coupling                         |
 | P0       | Add fixed HardClip after feature scaling and use Power instead of Quantile                  | TabICLv2-specific Recipe configuration using generic Processors | Reference feature-stage mismatch                                             |
-| P0       | Add configurable StypeDispatch route order and sorted CategoricalAlign vocabulary           | Generic pipeline capability, TabICLv2-specific configuration    | Mixed feature block order and sklearn vocabulary-code mismatch               |
+| P0       | Use a sorted CategoricalAlign vocabulary                                                    | TabICLv2-specific Recipe configuration                          | Sklearn vocabulary-code mismatch                                             |
 
-These changes are dependency ordered: vocabulary/order alignment precedes
+These changes are dependency ordered: vocabulary alignment precedes
 feature parity; member-local fitted state precedes correct output mapping;
 canonical member mapping precedes aggregation; aggregation precedes the final
 nonlinear output transform.
+
+## Accepted intentional deviation
+
+The pinned reference emits encoded categorical features before numerical
+features. SDM retains `StypeDispatch`'s default numerical-before-categorical
+route order and does not add a generic route-ordering API for this difference.
+The parity harness compares these stages by column identity because the
+per-feature transformed values are unchanged; only their positions differ.
 
 ## Recommended follow-up
 

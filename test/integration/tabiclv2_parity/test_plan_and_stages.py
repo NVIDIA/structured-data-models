@@ -302,7 +302,7 @@ def test_explicit_power_member_is_structurally_equivalent() -> None:
     assert relative.max().item() <= 4e-4
 
 
-def test_mixed_categories_reach_equivalent_model_input() -> None:
+def test_mixed_categories_preserve_values_across_route_order() -> None:
     case = classification_cases()[1]
     member = _member(
         task="classification",
@@ -330,25 +330,31 @@ def test_mixed_categories_reach_equivalent_model_input() -> None:
 
     reference_encoded = reference.snapshots[ENCODED_NUMERICAL_FEATURES]
     candidate_encoded = candidate.snapshots[ENCODED_NUMERICAL_FEATURES]
-    assert (
-        reference_encoded.columns
-        == candidate_encoded.columns
-        == (
-            "category",
-            "number",
-        )
-    )
+    assert reference_encoded.columns == ("category", "number")
+    assert candidate_encoded.columns == ("number", "category")
     assert reference_encoded.values is not None
     assert candidate_encoded.values is not None
+    reference_category = reference_encoded.values[
+        :, reference_encoded.columns.index("category")
+    ]
+    candidate_category = candidate_encoded.values[
+        :, candidate_encoded.columns.index("category")
+    ]
     torch.testing.assert_close(
-        candidate_encoded.values[:, :1],
-        reference_encoded.values[:, :1].to(candidate_encoded.values.dtype),
+        candidate_category,
+        reference_category.to(candidate_category.dtype),
         atol=0,
         rtol=0,
     )
-    assert torch.isnan(candidate_encoded.values[1, 1])
-    assert not torch.isnan(reference_encoded.values[1, 1])
-    assert candidate_encoded.values[-2:, 0].tolist() == [-1.0, -1.0]
+    reference_number = reference_encoded.values[
+        :, reference_encoded.columns.index("number")
+    ]
+    candidate_number = candidate_encoded.values[
+        :, candidate_encoded.columns.index("number")
+    ]
+    assert torch.isnan(candidate_number[1])
+    assert not torch.isnan(reference_number[1])
+    assert candidate_category[-2:].tolist() == [-1.0, -1.0]
 
     expected_target = reference.snapshots[TARGET_TRANSFORMATION]
     actual_target = candidate.snapshots[TARGET_TRANSFORMATION]
@@ -357,10 +363,22 @@ def test_mixed_categories_reach_equivalent_model_input() -> None:
     assert expected_target.values.tolist() == [0, 1, 2, 0, 1, 2]
     assert actual_target.values.tolist() == expected_target.values.tolist()
 
-    expected_model = reference.snapshots[FINAL_MODEL_INPUT].values
-    actual_model = candidate.snapshots[FINAL_MODEL_INPUT].values
+    expected_snapshot = reference.snapshots[FINAL_MODEL_INPUT]
+    actual_snapshot = candidate.snapshots[FINAL_MODEL_INPUT]
+    expected_model = expected_snapshot.values
+    actual_model = actual_snapshot.values
     assert expected_model is not None
     assert actual_model is not None
+    assert set(actual_snapshot.columns) == set(expected_snapshot.columns)
+    # SDM intentionally retains StypeDispatch's default route order. Route
+    # order changes positions, not the transformed value for each feature.
+    actual_model = actual_model[
+        :,
+        [
+            actual_snapshot.columns.index(column)
+            for column in expected_snapshot.columns
+        ],
+    ]
     torch.testing.assert_close(
         actual_model,
         expected_model,

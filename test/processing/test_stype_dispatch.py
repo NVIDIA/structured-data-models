@@ -2,11 +2,9 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
-    Identity,
     MeanImpute,
     StandardScale,
     StypeDispatch,
-    ToNumerical,
 )
 
 
@@ -130,27 +128,3 @@ def test_stype_dispatch_uses_route_fitted_state() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-
-
-def test_stype_dispatch_can_order_routes_for_external_model_contract() -> None:
-    dispatch = StypeDispatch(
-        numerical=Identity(),
-        categorical=ToNumerical(),
-        route_order=(Stype.categorical, Stype.numerical),
-    )
-
-    output = dispatch.fit_transform(_mixed_table())
-
-    assert output.columns[Stype.numerical] == ("kind", "x0", "x1")
-    torch.testing.assert_close(
-        output.numerical,
-        torch.tensor([[0.0, 1.0, 2.0], [1.0, 3.0, 4.0]]),
-    )
-
-
-def test_stype_dispatch_rejects_duplicate_route_order() -> None:
-    with pytest.raises(ValueError, match=r"route_order.*duplicates"):
-        StypeDispatch(
-            numerical=Identity(),
-            route_order=(Stype.numerical, Stype.numerical),
-        )
