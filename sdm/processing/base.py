@@ -56,7 +56,7 @@ class Processor(torch.nn.Module, abc.ABC):
         """Alias of :meth:`~Processor.transform`.
 
         This is the :class:`torch.nn.Module` entry point, so
-        ``processor(tableut)`` and ``processor.transform(tableut)`` share the same
+        ``processor(table)`` and ``processor.transform(table)`` share the same
         fitted-state checks.
 
         Args:
