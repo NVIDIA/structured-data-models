@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow as pa
 import torch
@@ -17,6 +19,8 @@ LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
 if TYPE_CHECKING:
+    import graphviz
+
     from sdm.relational import RelationalSampler
 
 
@@ -95,15 +99,15 @@ class Relationship:
     def _left_columns_repr(self) -> str:
         if len(self.left_columns) == 1:
             return f"{self.left_table}.{self.left_columns[0]}"
-        return f"{self.left_table}.[{', '.join(self.left_columns)}]"
+        return f"{self.left_table}.[{','.join(self.left_columns)}]"
 
     def _right_columns_repr(self) -> str:
         if len(self.right_columns) == 1:
             return f"{self.right_table}.{self.right_columns[0]}"
-        return f"{self.right_table}.[{', '.join(self.right_columns)}]"
+        return f"{self.right_table}.[{','.join(self.right_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._left_columns_repr()}<>{self._right_columns_repr()}"
+        return f"{self._left_columns_repr()} <> {self._right_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -181,7 +185,8 @@ class RelationalData(DeviceMixin):
                             f"(got '{stype.value}')"
                         )
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
@@ -191,7 +196,8 @@ class RelationalData(DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
         if len(devices) == 0:
             raise RuntimeError(
@@ -267,7 +273,7 @@ class RelationalData(DeviceMixin):
     def sampler(
         self,
         time_columns: Mapping[str, str] | None = None,
-    ) -> "RelationalSampler":
+    ) -> RelationalSampler:
         r"""Create a subgraph sampler over this relational data.
 
         .. code-block:: python
@@ -305,6 +311,56 @@ class RelationalData(DeviceMixin):
             data=self,
             time_columns=time_columns,
         )
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+        **kwargs: Any,
+    ) -> graphviz.Graph:
+        r"""Return a graph visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
+        """
+        import graphviz
+
+        def left_align(keys: list[str]) -> str:
+            if len(keys) == 0:
+                return ""
+            return "\\l".join(keys) + "\\l"
+
+        graph = graphviz.Graph(**kwargs)
+
+        for table_name, table in self.tables.items():
+            if hide_columns:
+                label = f"{{{table_name}}}"
+            else:
+                columns = [
+                    f"{column}: {stype.value}"
+                    for stype, columns in table._columns.items()
+                    for column in columns
+                ]
+                label = f"{{{table_name}|{left_align(columns)}}}"
+            graph.node(table_name, shape="record", label=label)
+
+        for rel in self.relationships:
+            label = "\\n".join(
+                f" {left_column} <> {right_column} "
+                for left_column, right_column in zip(
+                    rel.left_columns, rel.right_columns
+                )
+            )
+            graph.edge(
+                rel.left_table,
+                rel.right_table,
+                label=label,
+                fontsize="11pt",
+            )
+
+        return graph
 
     def __repr__(self) -> str:
         out = f"{self.__class__.__name__}(\n"

@@ -32,8 +32,8 @@ def test_repr(data: RelationalData) -> None:
             ),
           },
           relationships=[
-            orders.user_id<>users.user_id,
-            orders.item_id<>items.item_id,
+            orders.user_id <> users.user_id,
+            orders.item_id <> items.item_id,
           ],
         )""")
 

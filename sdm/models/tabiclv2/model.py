@@ -10,7 +10,7 @@ from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables
 from sdm.cache import Cache
-from sdm.models import BaseModel
+from sdm.models import Model
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_regression_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -20,7 +20,7 @@ from sdm.processing import Recipe
 _CLASSIFICATION_TEMPERATURE = 0.9
 
 
-class TabICLv2(BaseModel):
+class TabICLv2(Model):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.

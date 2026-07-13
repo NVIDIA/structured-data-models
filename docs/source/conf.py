@@ -41,6 +41,7 @@ intersphinx_mapping = {
     "pyarrow": ("https://arrow.apache.org/docs", None),
     "python": ("https://docs.python.org/3", None),
     "torch": ("https://docs.pytorch.org/docs/stable", None),
+    "graphviz": ("https://graphviz.readthedocs.io/en/stable/", None),
     "typing_extensions": (
         "https://typing-extensions.readthedocs.io/en/latest",
         None,

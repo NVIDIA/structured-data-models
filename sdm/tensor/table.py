@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import math
 import warnings
 from collections import defaultdict
@@ -14,7 +15,6 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
-from sdm.tensor._utils import _preserve_view_inference_mode
 from sdm.tensor.io import to_arrow
 
 if TYPE_CHECKING:
@@ -22,6 +22,17 @@ if TYPE_CHECKING:
     import pandas as pd
 
 aten = torch.ops.aten
+
+
+def preserve_view_inference_mode(fn: Callable) -> Callable:
+    r"""Preserve input inference state for tensor view operations."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with torch.inference_mode(args[0].is_inference()):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 class TableTensor(Tensor):
@@ -274,7 +285,7 @@ class TableTensor(Tensor):
                 array = table.column(column)
                 if stype == Stype.numerical:
                     with warnings.catch_warnings():
-                        warnings.filterwarnings(  # Safe to filter.
+                        warnings.filterwarnings(  # Safe to ignore.
                             "ignore",
                             message="The given NumPy array is not writable",
                         )
@@ -659,8 +670,7 @@ class TableTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            with _preserve_view_inference_mode(func, args[0]):
-                return handler(*args, **(kwargs or {}))
+            return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"
@@ -785,6 +795,7 @@ class TableTensor(Tensor):
 
 
 @TableTensor.implements(aten.alias.default)
+@preserve_view_inference_mode
 def _alias(input: TableTensor) -> TableTensor:
     blocks = {
         stype: aten.alias.default(tensor) for stype, tensor in input.items()
@@ -875,6 +886,7 @@ def _pin_memory(input: TableTensor) -> TableTensor:
 
 
 @TableTensor.implements(aten.view.default)
+@preserve_view_inference_mode
 def _view(input: TableTensor, size: Sequence[int]) -> TableTensor:
     size = tuple(size)
     for i, dim_size in enumerate(size):
@@ -920,21 +932,25 @@ def _view(input: TableTensor, size: Sequence[int]) -> TableTensor:
 
 
 @TableTensor.implements(aten._unsafe_view.default)
+@preserve_view_inference_mode
 def _unsafe_view(input: TableTensor, size: Sequence[int]) -> TableTensor:
     return _view(input, size)
 
 
 @TableTensor.implements(aten.squeeze.default)
+@preserve_view_inference_mode
 def _squeeze(input: TableTensor) -> TableTensor:
     return _squeeze_dims(input, range(input.dim() - 1))
 
 
 @TableTensor.implements(aten.squeeze.dim)
+@preserve_view_inference_mode
 def _squeeze_dim(input: TableTensor, dim: int) -> TableTensor:
     return _squeeze_dims(input, (dim,))
 
 
 @TableTensor.implements(aten.squeeze.dims)
+@preserve_view_inference_mode
 def _squeeze_dims(input: TableTensor, dim: Sequence[int]) -> TableTensor:
     dims = tuple(dim)
     blocks = {stype: tensor.squeeze(dims) for stype, tensor in input.items()}
@@ -952,6 +968,7 @@ def _squeeze_dims(input: TableTensor, dim: Sequence[int]) -> TableTensor:
 
 
 @TableTensor.implements(aten.unsqueeze.default)
+@preserve_view_inference_mode
 def _unsqueeze(input: TableTensor, dim: int) -> TableTensor:
     blocks = {stype: tensor.unsqueeze(dim) for stype, tensor in input.items()}
 
@@ -968,6 +985,7 @@ def _unsqueeze(input: TableTensor, dim: int) -> TableTensor:
 
 
 @TableTensor.implements(aten.expand.default)
+@preserve_view_inference_mode
 def _expand(
     input: TableTensor,
     size: Sequence[int],
@@ -997,6 +1015,7 @@ def _expand(
 
 
 @TableTensor.implements(aten.transpose.int)
+@preserve_view_inference_mode
 def _transpose(input: TableTensor, dim0: int, dim1: int) -> TableTensor:
     blocks = {
         stype: tensor.transpose(dim0, dim1) for stype, tensor in input.items()
@@ -1017,6 +1036,7 @@ def _transpose(input: TableTensor, dim0: int, dim1: int) -> TableTensor:
 
 
 @TableTensor.implements(aten.permute.default)
+@preserve_view_inference_mode
 def _permute(input: TableTensor, dims: Sequence[int]) -> TableTensor:
     dims = tuple(dims)
     blocks = {stype: tensor.permute(dims) for stype, tensor in input.items()}
@@ -1035,6 +1055,7 @@ def _permute(input: TableTensor, dims: Sequence[int]) -> TableTensor:
 
 
 @TableTensor.implements(aten.select.int)
+@preserve_view_inference_mode
 def _select(input: TableTensor, dim: int, index: int) -> TableTensor:
     if _is_column_dim(input, dim):
         raise RuntimeError(
@@ -1053,6 +1074,7 @@ def _select(input: TableTensor, dim: int, index: int) -> TableTensor:
 
 
 @TableTensor.implements(aten.slice.Tensor)
+@preserve_view_inference_mode
 def _slice(
     input: TableTensor,
     dim: int = 0,
@@ -1077,6 +1099,7 @@ def _slice(
 
 
 @TableTensor.implements(aten.narrow.default)
+@preserve_view_inference_mode
 def _narrow(
     input: TableTensor,
     dim: int,
@@ -1101,6 +1124,7 @@ def _narrow(
 
 
 @TableTensor.implements(aten.unbind.int)
+@preserve_view_inference_mode
 def _unbind(input: TableTensor, dim: int = 0) -> tuple[TableTensor, ...]:
     if _is_column_dim(input, dim):
         return _split(input, split_size=1, dim=dim)
@@ -1120,6 +1144,7 @@ def _unbind(input: TableTensor, dim: int = 0) -> tuple[TableTensor, ...]:
 
 
 @TableTensor.implements(aten.split.Tensor)
+@preserve_view_inference_mode
 def _split(
     input: TableTensor,
     split_size: int,
@@ -1157,6 +1182,7 @@ def _split(
 @TableTensor.implements(aten.split.sizes)
 @TableTensor.implements(aten.split.default)
 @TableTensor.implements(aten.split_with_sizes.default)
+@preserve_view_inference_mode
 def _split_with_sizes(
     input: TableTensor,
     split_sizes: Sequence[int],
