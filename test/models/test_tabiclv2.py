@@ -111,7 +111,7 @@ def test_tabiclv2_recipe() -> None:
     model.fit(x[:R_train], y, recipe=model.default_recipe())
     torch.testing.assert_close(model.predict(x[R_train:]), out)
     model.clear()
-    assert model._recipe is None
+    assert model._caches is None
 
 
 def test_default_recipe_regression_roundtrip() -> None:
