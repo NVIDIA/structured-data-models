@@ -1,8 +1,8 @@
-﻿ClassShuffle
-============
+﻿CategoryShuffle
+===============
 
 .. currentmodule:: sdm.processing
 
-.. autoclass:: ClassShuffle
+.. autoclass:: CategoryShuffle
    :members:
    :show-inheritance:
