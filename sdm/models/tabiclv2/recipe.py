@@ -1,6 +1,5 @@
 from sdm.processing import (
-    # TODO: Align categorical vocabularies once 'CategoricalAlign' lands:
-    # CategoricalAlign,
+    CategoricalAlign,
     CategoryShuffle,
     Choice,
     ConstantFilter,
@@ -33,7 +32,7 @@ def default_recipe() -> Recipe:
             StypeDispatch(
                 numerical=Identity(),
                 categorical=[
-                    # CategoricalAlign(),
+                    CategoricalAlign(),
                     ToNumerical(),
                 ],
             ),

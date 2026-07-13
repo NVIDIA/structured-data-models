@@ -65,19 +65,19 @@ class TaskDispatch(Processor, InvertibleMixin):
         )
         self._task: Literal["classification", "regression"] | None = None
 
-    def fit(self, input: TableTensor) -> Self:  # noqa: D102
+    def fit(self, inp: TableTensor) -> Self:  # noqa: D102
         # Resolving the route is fitted state, so fitting always resolves,
         # even when every route is stateless.
-        self._check_supported_stypes(input)
-        self._fit(input)
+        self._check_supported_stypes(inp)
+        self._fit(inp)
         self._fitted = True
         return self
 
-    def _fit(self, input: TableTensor) -> None:
-        self._resolve(input)
+    def _fit(self, inp: TableTensor) -> None:
+        self._resolve(inp)
         task = self._task
         assert task is not None
-        cast(Processor, self.processors[task]).fit(input)
+        cast(Processor, self.processors[task]).fit(inp)
 
     def _resolve(self, target: TableTensor) -> None:
         self._reset()
@@ -112,16 +112,16 @@ class TaskDispatch(Processor, InvertibleMixin):
     def _reset(self) -> None:
         self._task = None
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, inp: TableTensor) -> TableTensor:
         if self._task is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
         processor = cast(Processor, self.processors[self._task])
-        return processor.transform(input)
+        return processor.transform(inp)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
         if self._task is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' has no resolved task; call "
@@ -133,7 +133,7 @@ class TaskDispatch(Processor, InvertibleMixin):
                 f"Route '{self._task}' uses non-invertible processor "
                 f"'{processor.__class__.__name__}'"
             )
-        return processor.inverse_transform(input)
+        return processor.inverse_transform(inp)
 
     def get_extra_state(self) -> str | None:  # noqa: D102
         return self._task

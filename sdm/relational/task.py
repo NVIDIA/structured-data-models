@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
+from torch import Tensor
 from typing_extensions import Self
 
 from sdm import TableTensor
@@ -14,6 +15,9 @@ from sdm.tensor.mixin import DeviceMixin
 
 if TYPE_CHECKING:
     import graphviz
+
+
+TASK_TABLE = "__task_table__"
 
 
 @dataclass(frozen=True, repr=False)
@@ -93,7 +97,7 @@ class TaskLink:
         return f"{self.table}.[{','.join(self.table_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._task_columns_repr()} -> {self._table_columns_repr()}"
+        return f"{self._task_columns_repr()} > {self._table_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -103,7 +107,7 @@ class RelatedTables(DeviceMixin):
     :class:`RelatedTables` store the relational context provided to a model
     for a particular task table.
     It may contain a sampled subset of a larger :class:`RelationalData`.
-    The ``task_link`` describes how rows in the model input match rows in
+    The ``task_links`` describe how rows in the model input match to rows in
     the related tables.
 
     .. code-block:: python
@@ -174,7 +178,8 @@ class RelatedTables(DeviceMixin):
             if table.dim() != 2:
                 raise ValueError("Tables need to be two-dimensional")
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
@@ -185,7 +190,8 @@ class RelatedTables(DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
         if len(devices) == 0:
             raise RuntimeError(
@@ -199,32 +205,76 @@ class RelatedTables(DeviceMixin):
             )
         return next(iter(devices))
 
+    def edge_indices(
+        self,
+        task_table: TableTensor,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+    ) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...]]:
+        r"""Materialize heterogeneous graph edges for table relationships.
+
+        Args:
+            task_table: The task table.
+            dtype: The dtype.
+            device: The device.
+
+        Returns:
+            A ``(relationships, task_links)`` pair, each holding edge indices
+            for each relationship and task link in order.
+            Each edge index has shape ``[2, num_edges]`` and stores left/task
+            table indices in the first row and right table indices in the
+            second row.
+        """
+        edge_indices = RelationalData(
+            tables={**self.tables, TASK_TABLE: task_table},
+            relationships=(
+                *self.relationships,
+                *(
+                    Relationship(
+                        left_table=TASK_TABLE,
+                        left_columns=link.task_columns,
+                        right_table=link.table,
+                        right_columns=link.table_columns,
+                    )
+                    for link in self.task_links
+                ),
+            ),
+        ).edge_indices(dtype=dtype, device=device)
+
+        return (
+            edge_indices[: len(self.relationships)],
+            edge_indices[len(self.relationships) :],
+        )
+
     def to_graphviz(
         self,
         *,
         hide_columns: bool = False,
+        **kwargs: Any,
     ) -> graphviz.Graph:
         r"""Return a task visualization of the relational schema.
 
         Args:
             hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
         """
         graph = RelationalData(
             tables=self.tables,
             relationships=self.relationships,
-        ).to_graphviz(hide_columns=hide_columns)
+        ).to_graphviz(hide_columns=hide_columns, **kwargs)
 
-        graph.node("__task_table__", label="", shape="point")
+        graph.node(TASK_TABLE, label="", shape="point")
 
         for link in self.task_links:
             label = "\\n".join(
-                f" {task_column} -> {table_column} "
+                f" {task_column} > {table_column} "
                 for task_column, table_column in zip(
                     link.task_columns, link.table_columns
                 )
             )
             graph.edge(
-                "__task_table__",
+                TASK_TABLE,
                 link.table,
                 label=label,
                 fontsize="11pt",

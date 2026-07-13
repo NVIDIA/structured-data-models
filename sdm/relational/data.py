@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow as pa
 import torch
@@ -185,7 +185,8 @@ class RelationalData(DeviceMixin):
                             f"(got '{stype.value}')"
                         )
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
@@ -195,7 +196,8 @@ class RelationalData(DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
         if len(devices) == 0:
             raise RuntimeError(
@@ -314,11 +316,14 @@ class RelationalData(DeviceMixin):
         self,
         *,
         hide_columns: bool = False,
+        **kwargs: Any,
     ) -> graphviz.Graph:
         r"""Return a graph visualization of the relational schema.
 
         Args:
             hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
         """
         import graphviz
 
@@ -327,7 +332,7 @@ class RelationalData(DeviceMixin):
                 return ""
             return "\\l".join(keys) + "\\l"
 
-        graph = graphviz.Graph()
+        graph = graphviz.Graph(**kwargs)
 
         for table_name, table in self.tables.items():
             if hide_columns:
