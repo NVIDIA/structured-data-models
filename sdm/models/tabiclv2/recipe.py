@@ -6,7 +6,7 @@ from sdm.processing import (
     FeaturePermute,
     Identity,
     MeanImpute,
-    Quantile,
+    Power,
     Recipe,
     SigmaClip,
     SoftmaxTemperature,
@@ -39,7 +39,7 @@ def default_recipe() -> Recipe:
             MeanImpute(),
             ConstantFilter(),
             StandardScale(epsilon=1e-6),
-            Choice(Identity(), Quantile(output_distribution="normal")),
+            Choice(Identity(), Power()),
             # TabICL also clips z-scores to [-100, 100] here; left out for now
             # (likely subsumed by SigmaClip); revisit after benchmarking.
             # Clip(min_value=-100.0, max_value=100.0),
