@@ -687,9 +687,10 @@ class TransformerBlock(torch.nn.Module):
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
         norm_bias: Whether :class:`~torch.nn.LayerNorm` uses a learnable bias.
-        rms_norm: Whether to use :class:`~torch.nn.RMSNorm` instead of
-            :class:`~torch.nn.LayerNorm`. RMS normalization uses an epsilon of
-            ``1e-6`` and does not have a learnable bias.
+        norm: The normalization layer to use (``"layer_norm"`` or
+            ``"rms_norm"``).
+        norm_kwargs: Additional keyword arguments passed to the normalization
+            layer.
         device: The device.
         dtype: The dtype.
     """
@@ -702,17 +703,27 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
         norm_bias: bool = True,
-        rms_norm: bool = False,
+        norm: str = "layer_norm",
+        norm_kwargs: dict[str, Any] | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
+        norm_kwargs = norm_kwargs or {}
+
         def new_norm() -> LayerNorm | RMSNorm:
-            if rms_norm:
-                return RMSNorm(channels, eps=1e-6, **factory_kwargs)
-            return LayerNorm(channels, bias=norm_bias, **factory_kwargs)
+            if norm == "layer_norm":
+                return LayerNorm(
+                    channels,
+                    bias=norm_bias,
+                    **norm_kwargs,
+                    **factory_kwargs,
+                )
+            if norm == "rms_norm":
+                return RMSNorm(channels, **norm_kwargs, **factory_kwargs)
+            raise ValueError(f"Unknown normalization layer '{norm}'")
 
         self.q_norm = new_norm()
         self.kv_norm = new_norm()
