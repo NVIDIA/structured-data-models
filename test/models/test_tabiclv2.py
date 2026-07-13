@@ -1,17 +1,10 @@
-from typing import cast
-
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import (
-    ClassShuffle,
-    InvertibleMixin,
-    Recipe,
-    SoftmaxTemperature,
-)
+from sdm.processing import InvertibleMixin, Recipe, SoftmaxTemperature
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -124,7 +117,7 @@ def test_tabiclv2_recipe() -> None:
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_default_recipe(task: str) -> None:
     torch.manual_seed(0)
-    recipe = TabICLv2(pretrained=False).default_recipe()
+    recipe = TabICLv2.default_recipe()
 
     features = TableTensor(
         columns={
@@ -161,37 +154,35 @@ def test_default_recipe(task: str) -> None:
         "d",
         "kind",
     }
+    assert isinstance(recipe.target, InvertibleMixin)
 
     if task == "classification":
-        # The target inverse receives the complete numerical model-output
-        # head and restores the original class-score order:
-        head = torch.randn(16, 10)
-        restored = cast(InvertibleMixin, recipe.target).inverse_transform(
-            TableTensor.from_tensor(head)
+        assert (
+            model_target.categorical.tolist()
+            == target.categorical.tolist()
         )
-        shuffle = next(
-            module
-            for module in recipe.target.modules()
-            if isinstance(module, ClassShuffle)
-        )
-        torch.testing.assert_close(
-            restored.numerical,
-            head[:, shuffle.permutations],
+        output_columns = tuple(
+            str(category)
+            for category in target.categorical.categories[0].tolist()
         )
     else:
-        restored = cast(InvertibleMixin, recipe.target).inverse_transform(
-            model_target
+        model_output = TableTensor.from_tensor(torch.randn(16, 999))
+        restored = recipe.target.inverse_transform(model_output)
+        expected = (
+            model_output.numerical
+            * target.numerical.std(dim=0, correction=0)
+            + target.numerical.mean(dim=0)
         )
-        torch.testing.assert_close(
-            restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
-        )
+        torch.testing.assert_close(restored.numerical, expected)
+        output_columns = ("y0", "y1")
 
     output = TableTensor.from_tensor(
-        torch.randn(16, 2),
-        columns=("y0", "y1"),
+        torch.randn(16, len(output_columns)),
+        columns=output_columns,
     )
     transformed = recipe.output.transform(output)
     if task == "classification":
+        assert transformed.columns[Stype.numerical] == output_columns
         torch.testing.assert_close(
             transformed.numerical,
             (output.numerical / 0.9).softmax(dim=-1),

@@ -22,10 +22,10 @@ def default_recipe() -> Recipe:
 
     Composes shared :mod:`sdm.processing` processors into the
     ``TableTensor``-to-model-input path of the original TabICLv2 model
-    (``soda-inria/tabicl``). Fitting the target selects the regression or
-    classification route for the target and output roles. The target inverse
-    receives the complete numerical model-output head. Missing and unseen
-    categorical feature values remain encoded as ``-1``.
+    (``soda-inria/tabicl``). The target semantic type selects the target and
+    output routes. For regression, the target inverse receives the complete
+    numerical model-output head. Missing and unseen categorical feature
+    values remain encoded as ``-1``.
     """
     return Recipe(
         features=[
@@ -47,9 +47,9 @@ def default_recipe() -> Recipe:
             FeaturePermute(method="shift"),
         ],
         target=[
-            TaskDispatch(
-                classification=ClassShuffle(method="shift"),
-                regression=StandardScale(),
+            StypeDispatch(
+                categorical=ClassShuffle(method="shift"),
+                numerical=StandardScale(),
             ),
         ],
         output=[
