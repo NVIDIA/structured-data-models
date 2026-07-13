@@ -6,9 +6,17 @@ from typing import NamedTuple
 
 import torch
 from torch import Tensor
+from typing_extensions import Self
+
+from sdm.tensor.mixin import DeviceMixin
 
 
-class KVCacheEntry(NamedTuple):
+class _KVCacheEntry(NamedTuple):
+    key: Tensor
+    value: Tensor
+
+
+class KVCacheEntry(_KVCacheEntry, DeviceMixin):
     r"""Cached key/value projections for a single transformer block.
 
     Args:
@@ -16,37 +24,26 @@ class KVCacheEntry(NamedTuple):
         value: Cached value projection tensor.
     """
 
-    key: Tensor
-    value: Tensor
-
-    def to(self, device: torch.device | str | None) -> "KVCacheEntry":
-        r"""Perform :class:`~torch.Tensor` device conversion.
-
-        Args:
-            device: The device.
-        """
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             key=self.key.to(device),
             value=self.value.to(device),
         )
 
-    def cpu(self) -> "KVCacheEntry":
-        r"""Copy :class:`KVCacheEntry` data in CPU memory."""
-        return self.to("cpu")
-
-    def cuda(
-        self,
-        device: torch.device | str | int | None = None,
-    ) -> "KVCacheEntry":
-        r"""Copy :class:`KVCacheEntry` data in CUDA memory."""
-        if device is None:
-            return self.to("cuda")
-        if isinstance(device, int):
-            return self.to(torch.device("cuda", device))
-        return self.to(device)
+    @property
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
+        devices = {self.key.device, self.value.device}
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected key and value cache tensors to be on the same "
+                f"device (got '{self.key.device}' and '{self.value.device}')"
+            )
+        return next(iter(devices))
 
 
-class Cache(MutableMapping[str, object]):
+class Cache(MutableMapping[str, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
     class Mode(str, Enum):
@@ -113,12 +110,8 @@ class Cache(MutableMapping[str, object]):
     def __repr__(self) -> str:
         return repr(self._items)
 
-    def to(self, device: torch.device | str | None) -> "Cache":
-        r"""Perform nested :class:`~torch.Tensor` device conversion.
-
-        Args:
-            device: The device.
-        """
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
 
         def _to(value: object, device: torch.device | str | None) -> object:
             if isinstance(value, Tensor):
@@ -138,19 +131,38 @@ class Cache(MutableMapping[str, object]):
                 }
             return value
 
-        return self.__class__({k: _to(v, device) for k, v in self.items()})
+        out = self.__class__({k: _to(v, device) for k, v in self.items()})
+        out._mode = self._mode
+        return out
 
-    def cpu(self) -> "Cache":
-        r"""Copy :class:`Cache` data in CPU memory."""
-        return self.to("cpu")
+    @property
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
 
-    def cuda(
-        self,
-        device: torch.device | str | int | None = None,
-    ) -> "Cache":
-        r"""Copy :class:`Cache` data in CUDA memory."""
-        if device is None:
-            return self.to("cuda")
-        if isinstance(device, int):
-            return self.to(torch.device("cuda", device))
-        return self.to(device)
+        def _devices(value: object) -> set[torch.device]:
+            if isinstance(value, Tensor | KVCacheEntry | Cache):
+                return {value.device}
+            if isinstance(value, list | tuple):
+                return {device for item in value for device in _devices(item)}
+            if isinstance(value, dict):
+                return {
+                    device
+                    for item in value.values()
+                    for device in _devices(item)
+                }
+            return set()
+
+        devices = {
+            device for item in self.values() for device in _devices(item)
+        }
+        if len(devices) == 0:
+            raise RuntimeError(
+                f"Could not determine 'device' of empty "
+                f"'{self.__class__.__name__}'"
+            )
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected tensors in '{self.__class__.__name__}' to be on "
+                f"the same device (got {list(devices)})"
+            )
+        return next(iter(devices))

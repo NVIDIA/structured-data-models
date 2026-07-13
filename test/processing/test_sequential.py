@@ -1,3 +1,5 @@
+from textwrap import dedent
+
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
@@ -50,11 +52,13 @@ def test_pipeline_transforms_numerical() -> None:
     assert not torch.equal(output.numerical, table.numerical)
 
 
-def test_repr_lists_steps() -> None:
+def test_repr() -> None:
     assert repr(Sequential()) == "Sequential()"
-    assert repr(Sequential(StandardScale(), Power())) == (
-        "Sequential(\n  StandardScale(),\n  Power(),\n)"
-    )
+    assert repr(Sequential(StandardScale(), Power())) == dedent("""\
+        Sequential(
+          StandardScale(),
+          Power(),
+        )""")
 
 
 def test_pipeline_checks_fitted_state() -> None:

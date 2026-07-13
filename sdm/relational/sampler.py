@@ -1,9 +1,10 @@
 from collections.abc import Mapping, Sequence
-from typing import cast
+from typing import NamedTuple, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
+from typing_extensions import Self
 
 from sdm import ColumnarTensor, Stype, TableTensor
 from sdm.relational import (
@@ -13,8 +14,42 @@ from sdm.relational import (
     TaskLink,
 )
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID
+from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
+
+
+class _RelationalSamplerOutput(NamedTuple):
+    task_table: TableTensor
+    related_tables: RelatedTables
+
+
+class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
+    r"""Relational sampler output.
+
+    Args:
+        task_table: The task table.
+        related_tables: The related tables for the task table.
+    """
+
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
+        return self.__class__(
+            task_table=cast(TableTensor, self.task_table.to(device)),
+            related_tables=self.related_tables.to(device),
+        )
+
+    @property
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
+        devices = list({self.task_table.device, self.related_tables.device})
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected 'task_table' and 'related_tables' to be on the "
+                f"same device (got '{self.task_table.device}' and "
+                f"'{self.related_tables.device}')"
+            )
+        return next(iter(devices))
 
 
 class RelationalSampler:
@@ -49,7 +84,7 @@ class RelationalSampler:
         self._time_dict: dict[str, Tensor] = {}
         for table_name, time_column in self.time_columns.items():
             time = self.data.tables[table_name][time_column].datetime
-            self._time_dict[table_name] = time.squeeze(-1).contiguous().cpu()
+            self._time_dict[table_name] = time.squeeze(-1).contiguous()
 
         for i, (rel, edge_index) in enumerate(
             zip(self.data.relationships, self.data.edge_indices())
@@ -73,7 +108,7 @@ class RelationalSampler:
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
         num_neighbors: Sequence[int],
         task_time_column: str | None = None,
-    ) -> tuple[TableTensor, RelatedTables]:
+    ) -> RelationalSamplerOutput:
         r"""Alias of :meth:`sample`."""
         return self.sample(
             task_table=task_table,
@@ -88,7 +123,7 @@ class RelationalSampler:
         task_link: TaskLink | Mapping[str, str | Sequence[str]],
         num_neighbors: Sequence[int],
         task_time_column: str | None = None,
-    ) -> tuple[TableTensor, RelatedTables]:
+    ) -> RelationalSamplerOutput:
         r"""Sample :class:`RelatedTables` for task rows.
 
         Args:
@@ -98,7 +133,6 @@ class RelationalSampler:
                 relational data.
             task_time_column: Datetime column in ``task_table`` used as the
                 query timestamp for temporal sampling.
-
         """
         if not isinstance(task_link, TaskLink):
             task_link = TaskLink.from_mapping(task_link)
@@ -174,11 +208,17 @@ class RelationalSampler:
             )
 
         seed = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy())
+        seed = seed.to(task_table.device)
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
         else:
             fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)
+
+        if not seed.is_cpu or not self.data.is_cpu:
+            raise NotImplementedError(
+                f"'{self.__class__.__name__}' requires input data on CPU"
+            )
 
         # Perform subgraph sampling:
         _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
@@ -229,18 +269,18 @@ class RelationalSampler:
         relationships = tuple(
             Relationship(
                 left_table=rel.left_table,
-                left_columns=(EXAMPLE_ID, *rel.left_columns),
+                left_columns=(*rel.left_columns, EXAMPLE_ID),
                 right_table=rel.right_table,
-                right_columns=(EXAMPLE_ID, *rel.right_columns),
+                right_columns=(*rel.right_columns, EXAMPLE_ID),
             )
             for rel in self.data.relationships
             if rel.left_table in tables and rel.right_table in tables
         )
 
         task_link = TaskLink(
-            task_columns=(EXAMPLE_ID, *task_link.task_columns),
+            task_columns=(*task_link.task_columns, EXAMPLE_ID),
             table=task_link.table,
-            table_columns=(EXAMPLE_ID, *task_link.table_columns),
+            table_columns=(*task_link.table_columns, EXAMPLE_ID),
         )
 
         task_table: Tensor = torch.cat(
@@ -254,10 +294,13 @@ class RelationalSampler:
             dim=-1,
         )
 
-        return cast(TableTensor, task_table), RelatedTables(
-            tables=cast(dict[str, TableTensor], tables),
-            relationships=relationships,
-            task_links=(task_link,),
+        return RelationalSamplerOutput(
+            task_table=cast(TableTensor, task_table),
+            related_tables=RelatedTables(
+                tables=cast(dict[str, TableTensor], tables),
+                relationships=relationships,
+                task_links=(task_link,),
+            ),
         )
 
 

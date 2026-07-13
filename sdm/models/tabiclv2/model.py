@@ -10,14 +10,14 @@ from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables
 from sdm.cache import Cache
-from sdm.models import BaseModel
+from sdm.models import Model
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_regression_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
 
-class TabICLv2(BaseModel):
+class TabICLv2(Model):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
@@ -144,8 +144,8 @@ class TabICLv2(BaseModel):
         assert related_tables is None
 
         if y.is_floating_point():
-            return self.reg_model(x, y, cache=cache)
-        return self.cls_model(x, y, cache=cache)
+            return self.reg_model(x=x, y=y, cache=cache)
+        return self.cls_model(x=x, y=y, cache=cache)
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -213,8 +213,8 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x, y, cache=cache)
-        x = self.icl_block(x, y, cache=cache)
+        x = self.row_embedding(x=x, y=y, cache=cache)
+        x = self.icl_block(x=x, y=y, cache=cache)
         return self.head(x)
 
 

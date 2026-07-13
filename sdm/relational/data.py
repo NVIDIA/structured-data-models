@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import pyarrow as pa
 import torch
@@ -9,6 +11,7 @@ from torch import Tensor
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
+from sdm.tensor.mixin import DeviceMixin
 
 PREFIX = "sdm_internal"
 ROW_ID = f"__{PREFIX}_row_id__"
@@ -16,10 +19,12 @@ LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
 if TYPE_CHECKING:
+    import graphviz
+
     from sdm.relational import RelationalSampler
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class Relationship:
     r"""Join relationship between two tables.
 
@@ -91,9 +96,22 @@ class Relationship:
             right_columns=right_columns,
         )
 
+    def _left_columns_repr(self) -> str:
+        if len(self.left_columns) == 1:
+            return f"{self.left_table}.{self.left_columns[0]}"
+        return f"{self.left_table}.[{','.join(self.left_columns)}]"
 
-@dataclass(frozen=True, init=False)
-class RelationalData:
+    def _right_columns_repr(self) -> str:
+        if len(self.right_columns) == 1:
+            return f"{self.right_table}.{self.right_columns[0]}"
+        return f"{self.right_table}.[{','.join(self.right_columns)}]"
+
+    def __repr__(self) -> str:
+        return f"{self._left_columns_repr()} <> {self._right_columns_repr()}"
+
+
+@dataclass(frozen=True, init=False, repr=False)
+class RelationalData(DeviceMixin):
     r"""Collection of named tables and join relationships.
 
     .. code-block:: python
@@ -167,6 +185,32 @@ class RelationalData:
                             f"(got '{stype.value}')"
                         )
 
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
+        return self.__class__(
+            tables={
+                table_name: cast(TableTensor, table.to(device))
+                for table_name, table in self.tables.items()
+            },
+            relationships=self.relationships,
+        )
+
+    @property
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
+        devices = {table.device for table in self.tables.values()}
+        if len(devices) == 0:
+            raise RuntimeError(
+                f"Could not determine 'device' of empty "
+                f"'{self.__class__.__name__}'"
+            )
+        if len(devices) > 1:
+            raise RuntimeError(
+                f"Expected tables in '{self.__class__.__name__}' to be on "
+                f"the same device (got {list(devices)})"
+            )
+        return next(iter(devices))
+
     def edge_indices(
         self,
         dtype: torch.dtype | None = None,
@@ -183,6 +227,8 @@ class RelationalData:
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
         """
+        device = self.device if device is None else device
+
         columns: dict[str, list[str]] = defaultdict(list)
         for rel in self.relationships:
             columns[rel.left_table].extend(rel.left_columns)
@@ -227,7 +273,7 @@ class RelationalData:
     def sampler(
         self,
         time_columns: Mapping[str, str] | None = None,
-    ) -> "RelationalSampler":
+    ) -> RelationalSampler:
         r"""Create a subgraph sampler over this relational data.
 
         .. code-block:: python
@@ -265,3 +311,107 @@ class RelationalData:
             data=self,
             time_columns=time_columns,
         )
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+        **kwargs: Any,
+    ) -> graphviz.Graph:
+        r"""Return a graph visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
+        """
+        import graphviz
+
+        def left_align(keys: list[str]) -> str:
+            if len(keys) == 0:
+                return ""
+            return "\\l".join(keys) + "\\l"
+
+        graph = graphviz.Graph(**kwargs)
+
+        for table_name, table in self.tables.items():
+            if hide_columns:
+                label = f"{{{table_name}}}"
+            else:
+                columns = [
+                    f"{column}: {stype.value}"
+                    for stype, columns in table._columns.items()
+                    for column in columns
+                ]
+                label = f"{{{table_name}|{left_align(columns)}}}"
+            graph.node(table_name, shape="record", label=label)
+
+        for rel in self.relationships:
+            label = "\\n".join(
+                f" {left_column} <> {right_column} "
+                for left_column, right_column in zip(
+                    rel.left_columns, rel.right_columns
+                )
+            )
+            graph.edge(
+                rel.left_table,
+                rel.right_table,
+                label=label,
+                fontsize="11pt",
+            )
+
+        return graph
+
+    def __repr__(self) -> str:
+        out = f"{self.__class__.__name__}(\n"
+        if len(self.tables) > 0:
+            out += "  tables={\n"
+            out += "".join(
+                f"    {name}: {table.__repr__(indent=4)[4:]},\n"
+                for name, table in self.tables.items()
+            )
+            out += "  },\n"
+        else:
+            out += "  tables={},\n"
+        if len(self.relationships) > 0:
+            out += "  relationships=[\n"
+            out += "".join(f"    {rel},\n" for rel in self.relationships)
+            out += "  ],\n"
+        else:
+            out += "  relationships=[],\n"
+        out += ")"
+        return out
+
+    def _repr_html_(self) -> str:
+        from html import escape
+
+        import pandas as pd
+
+        rows = [
+            [
+                name,
+                table.size(-2),
+                table.size(-1),
+                ", ".join(
+                    stype.value
+                    for stype, tensor in table.items()
+                    if tensor.size(-1) > 0
+                ),
+            ]
+            for name, table in self.tables.items()
+        ]
+        df = pd.DataFrame(
+            rows,
+            columns=pd.Index(["Table", "Rows", "Columns", "Stypes"]),
+        )
+
+        ul = "".join(
+            f"<li>"
+            f"<code>{escape(rel._left_columns_repr())}</code>"
+            f" ↔️ "
+            f"<code>{escape(rel._right_columns_repr())}</code>"
+            f"</li>"
+            for rel in self.relationships
+        )
+
+        return df.to_html(index=False, escape=True) + f"<ul>{ul}</ul>"
