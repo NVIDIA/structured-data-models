@@ -501,6 +501,10 @@ class CuGraphRelationalSampler(RelationalSampler):
             return torch.empty(0, dtype=torch.int64, device=self.data.device)
         fanout = np.full(self._num_edge_types, count, dtype=np.int32)
         if count > 0:
+            # PyG's temporal "last" strategy keeps the newest neighbors per
+            # task example, source, and edge type. cuGraph filters by cutoff
+            # but cannot apply that grouped latest-k here, so gather all
+            # temporal candidates and reproduce the selection below on CUDA.
             fanout[np.asarray(self._edge_target_is_temporal_host)] = -1
 
         result = (
@@ -560,6 +564,7 @@ class CuGraphRelationalSampler(RelationalSampler):
         edge_time: Tensor,
         count: int,
     ) -> Tensor:
+        """Return PyG-compatible latest-k indices for each source group."""
         if batch.numel() == 0:
             return torch.empty(0, dtype=torch.int64, device=batch.device)
 
