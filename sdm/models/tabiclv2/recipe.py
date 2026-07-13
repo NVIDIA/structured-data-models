@@ -88,7 +88,7 @@ def default_regression_recipe() -> Recipe:
 #         ],
 #         target=[
 #             TaskDispatch({
-#                 classification: CategoryShuffle(method="shift"),
+#                 classification: ClassShuffle(method="shift"),
 #                 regression: StandardScale(),
 #             }),
 #         ],
