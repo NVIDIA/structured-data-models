@@ -1,0 +1,22 @@
+operation,task_type,processor_or_recipe,size,row_count,feature_count,train_row_count,dataset_characteristics,median_ms,p95_ms,standard_deviation_ms,peak_memory_bytes,device,gpu_model,dtype,repetitions,correctness_status,constant,hard_outlier,sigma_outlier,categorical,missing,unknown_category
+feature_fit,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,171.1752375,226.161607,20.13453634988693,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+feature_transform,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,77.273354,120.670059,16.08783512794132,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+feature_fit_transform,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,164.333483,260.203234,29.36832028454354,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+target_fit,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,6.836129,7.857786,0.3253170737072372,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+target_transform,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,2.4682494999999998,3.258132,0.32810530528415716,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+target_fit_transform,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,4.8421775,5.880244,0.5398265654890004,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+preprocessing_total,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,241.48586899999998,388.189156,52.19381159650115,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+model_output_inverse_mapping,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,0.22018900000000002,0.254584,0.01691049562402001,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+output_transform,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,0.520578,1.27473,0.22991345068968885,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+total_recipe_overhead,classification,TabICLv2 Recipe,large,50000,100,40000,baseline,256.612216,273.860441,12.111776116940458,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+feature_fit,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,181.5846135,248.410434,24.749058671658393,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+feature_transform,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,69.704778,109.135842,12.24008108384699,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+feature_fit_transform,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,188.878625,316.006924,45.37776925048473,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+target_fit,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,0.540988,0.59619,0.02626172498980216,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+target_transform,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,0.28707499999999997,0.353316,0.0491442793522298,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+target_fit_transform,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,0.7244865,0.816213,0.050588375653009464,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+preprocessing_total,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,241.24030349999998,337.81615,31.427664521606832,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+target_inverse_transform,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,42.862704,60.444874,9.957051647572488,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+model_output_inverse_mapping,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,50.7909905,77.087339,9.692216101164536,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+output_transform,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,0.028650500000000002,0.0361,0.0034464248200127626,,cpu,,torch.float32,10,pass,False,False,False,False,False,False
+total_recipe_overhead,regression,TabICLv2 Recipe,large,50000,100,40000,baseline,388.136168,526.339978,51.010791594914345,,cpu,,torch.float32,10,pass,False,False,False,False,False,False

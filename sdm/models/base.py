@@ -2,6 +2,8 @@ import contextlib
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from copy import deepcopy
+from dataclasses import dataclass
 from typing import ClassVar, cast
 
 import torch
@@ -10,6 +12,15 @@ from torch import Tensor
 from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Recipe
+
+
+@dataclass(frozen=True)
+class _OutputMapping:
+    """Metadata required to map one member output to a common space."""
+
+    is_regression: bool
+    member_columns: tuple[str, ...] | None = None
+    canonical_columns: tuple[str, ...] | None = None
 
 
 @contextlib.contextmanager
@@ -44,7 +55,7 @@ class Model(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
-        self._recipe: Recipe | None = None
+        self._recipes: list[Recipe | None] | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -80,22 +91,25 @@ class Model(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        # TODO Create an ensemble dimension to process across ensemble
-        # members for better efficiency.
+        recipes = self._create_member_recipes(
+            recipe=recipe,
+            num_estimators=num_estimators,
+        )
         outs: list[Tensor] = []
-        for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
+        for member_recipe in recipes:
+            x_i, y_i, mapping = self._preprocess(
+                x,
+                y,
+                related_tables,
+                recipe=member_recipe,
+            )
             out = self._forward(x_i, y_i, related_tables, cache=None)
-            out = self._postprocess(out, recipe)
-            outs.append(out)
+            outs.append(
+                self._map_model_output(out, member_recipe, mapping=mapping)
+            )
 
         out = torch.stack(outs).mean(dim=0)
-        table = TableTensor.from_tensor(out.clone())
-        if recipe is None:
-            return table.numerical
-        return recipe.output.transform(table).numerical
+        return self._transform_output(out, recipes[0])
 
     @torch.inference_mode()
     def fit(
@@ -130,29 +144,37 @@ class Model(torch.nn.Module, ABC):
             related_tables = None
 
         self.clear()
+        recipes = self._create_member_recipes(
+            recipe=recipe,
+            num_estimators=num_estimators,
+        )
         caches: list[Cache] = []
-        for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
+        for member_recipe in recipes:
+            x_i, y_i, mapping = self._preprocess(
+                x,
+                y,
+                related_tables,
+                recipe=member_recipe,
+            )
             x_i = x_i[..., : y_i.size(-1), :]
 
-            # TODO Don't store y.dtype for every estimator.
-            cache = Cache({"y.dtype": y.dtype})
+            cache = Cache(
+                {
+                    "y.dtype": y_i.dtype,
+                    "output.mapping": mapping,
+                }
+            )
             self._forward(x_i, y_i, related_tables, cache)
             cache.freeze()
             caches.append(cache)
 
         self._caches = caches
-        # TODO: Once creating Recipes from a Recipe is supported, we should
-        # iterate over the recipes so that every predict call runs a consistent
-        # recipe per ensemble member.
-        self._recipe = recipe
+        self._recipes = recipes
 
     def clear(self) -> None:
-        r"""Clears cached in-context examples and the fitted recipe."""
+        r"""Clear cached in-context examples and fitted member recipes."""
         self._caches = None
-        self._recipe = None
+        self._recipes = None
 
     @torch.inference_mode()
     def predict(
@@ -181,41 +203,48 @@ class Model(torch.nn.Module, ABC):
             )
             related_tables = None
 
-        if self._caches is None:
+        if self._caches is None or self._recipes is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        recipe = self._recipe
         outs: list[Tensor] = []
-        for cache in self._caches:
+        for cache, member_recipe in zip(
+            self._caches,
+            self._recipes,
+            strict=True,
+        ):
             y_i = torch.empty(
                 (*x.size()[:-2], 0),
-                dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
+                dtype=cast(torch.dtype, cache["y.dtype"]),
                 device=x.device,
             )
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(
+            x_i, y_i, _ = self._preprocess(
                 x,
                 y_i,
                 related_tables,
-                recipe=recipe,
+                recipe=member_recipe,
                 fit_recipe=False,
             )
             out = self._forward(x_i, y_i, related_tables, cache)
-            out = self._postprocess(out, recipe)
-            outs.append(out)
+            mapping = cast(_OutputMapping, cache["output.mapping"])
+            outs.append(
+                self._map_model_output(
+                    out,
+                    member_recipe,
+                    mapping=mapping,
+                )
+            )
 
         out = torch.stack(outs).mean(dim=0)
-        table = TableTensor.from_tensor(out.clone())
-        if recipe is None:
-            return table.numerical
-        return recipe.output.transform(table).numerical
+        return self._transform_output(out, self._recipes[0])
 
     # Helpers #################################################################
 
+    # FIXME: Remove this guard once variable-length tensor metadata supports
+    # every inference-mode view and host-conversion operation used by recipes.
+    @torch.inference_mode(False)
     def _preprocess(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
@@ -224,11 +253,12 @@ class Model(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         fit_recipe: bool = True,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, _OutputMapping]:
         if related_tables is not None:
             # TODO Support preprocessing related tables.
             related_tables = None
 
+        canonical_columns = self._classification_columns(y)
         if recipe is not None:
             if not isinstance(x, TableTensor):
                 raise ValueError(
@@ -246,6 +276,13 @@ class Model(torch.nn.Module, ABC):
                 y = recipe.target.fit_transform(y)
 
             x = recipe.features.transform(x)
+
+        member_columns = self._classification_columns(y)
+        if canonical_columns is not None and member_columns is not None:
+            active = frozenset(member_columns)
+            canonical_columns = tuple(
+                column for column in canonical_columns if column in active
+            )
 
         if isinstance(x, TableTensor):
             invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
@@ -290,13 +327,44 @@ class Model(torch.nn.Module, ABC):
                 f"(got {tuple(x.size()[:-2])} and {tuple(y.size()[:-1])}"
             )
 
-        return x, y
+        mapping = _OutputMapping(
+            is_regression=y.is_floating_point(),
+            member_columns=member_columns,
+            canonical_columns=canonical_columns,
+        )
+        return x, y, mapping
 
-    def _postprocess(
+    def _map_model_output(
         self,
         out: Tensor,  # [..., R_test, *]
         recipe: Recipe | None,
+        *,
+        mapping: _OutputMapping,
     ) -> Tensor:  # [..., R_test, *]
+        if not mapping.is_regression:
+            if mapping.member_columns is None:
+                return out
+            n_classes = len(mapping.member_columns)
+            if out.size(-1) < n_classes:
+                raise ValueError(
+                    "Expected the classification output to contain at least "
+                    f"{n_classes} columns (got {out.size(-1)})."
+                )
+            table = TableTensor.from_tensor(
+                out[..., :n_classes].clone(),
+                columns=mapping.member_columns,
+            )
+            if mapping.canonical_columns is not None:
+                indices = torch.tensor(
+                    [
+                        mapping.member_columns.index(column)
+                        for column in mapping.canonical_columns
+                    ],
+                    device=out.device,
+                )
+                return table.numerical.index_select(-1, indices)
+            return table.numerical
+
         if recipe is None:
             return out
 
@@ -312,6 +380,51 @@ class Model(torch.nn.Module, ABC):
         table = recipe.target.inverse_transform(table)
 
         return table.numerical
+
+    def _transform_output(
+        self,
+        out: Tensor,  # [..., R_test, *]
+        recipe: Recipe | None,
+    ) -> Tensor:  # [..., R_test, *]
+        table = TableTensor.from_tensor(out.clone())
+        if recipe is None:
+            return table.numerical
+        return recipe.output.transform(table).numerical
+
+    @staticmethod
+    def _create_member_recipes(
+        recipe: Recipe | None,
+        num_estimators: int,
+    ) -> list[Recipe | None]:
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+        return [
+            None if recipe is None else deepcopy(recipe)
+            for _ in range(num_estimators)
+        ]
+
+    @staticmethod
+    def _classification_columns(
+        target: Tensor | TableTensor,
+    ) -> tuple[str, ...] | None:
+        if not isinstance(target, TableTensor):
+            return None
+        if target.categorical.size(-1) != 1:
+            return None
+
+        category = target.categorical.categories[0]
+        # StringTensor host conversion is intentionally outside inference mode;
+        # its variable-length storage cannot dispatch the inference-only
+        # ``aten.to`` overload used by ``tolist``.
+        with torch.inference_mode(False):
+            values = category.tolist()
+        columns = tuple(str(value) for value in values)
+        if len(columns) != len(set(columns)):
+            raise ValueError(
+                "Expected categorical target values to have unique string "
+                "representations for model-output columns."
+            )
+        return columns
 
     # Abstract Methods ########################################################
 

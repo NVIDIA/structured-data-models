@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 from torch import Tensor
 
@@ -30,12 +32,23 @@ class CategoricalAlign(Processor):
     because their required tensor operations are unavailable on every device.
     This path performs linear Python work in the vocabulary size; a vectorized
     implementation may be preferable if these category types need to scale.
+
+    Args:
+        order: Store observed category values in first-appearance order, or
+            sort them to match encoders such as sklearn's OrdinalEncoder.
     """
 
     supported_stypes = frozenset({Stype.categorical})
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        order: Literal["appearance", "sorted"] = "appearance",
+    ) -> None:
         super().__init__()
+        if order not in {"appearance", "sorted"}:
+            raise ValueError("order must be 'appearance' or 'sorted'")
+        self.order = order
         self._categories: tuple[Tensor, ...] = ()
 
     def _fit(self, input: TableTensor) -> None:
@@ -72,7 +85,10 @@ class CategoricalAlign(Processor):
             # [num_observed_categories]
             observed = (first_positions < codes.numel()).nonzero().view(-1)
             observed = observed[first_positions[observed].argsort()]
-            categories.append(self._select_categories(category, observed))
+            selected = self._select_categories(category, observed)
+            if self.order == "sorted":
+                selected = self._sort_categories(selected)
+            categories.append(selected)
 
         self._categories = tuple(categories)
 
@@ -120,6 +136,24 @@ class CategoricalAlign(Processor):
                 device=category.device,
             )
         return category.index_select(0, index.to(device=category.device))
+
+    @staticmethod
+    def _sort_categories(category: Tensor) -> Tensor:
+        if isinstance(category, StringTensor):
+            return StringTensor.from_list(
+                sorted(category.tolist()),
+                device=category.device,
+            )
+        if (
+            category.dtype in _HOST_MAPPED_DTYPES
+            or category.dtype == torch.bool
+        ):
+            return torch.tensor(
+                sorted(category.tolist()),
+                dtype=category.dtype,
+                device=category.device,
+            )
+        return category.sort().values
 
     @staticmethod
     def _category_mapping(

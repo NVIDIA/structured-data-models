@@ -76,8 +76,9 @@ class Recipe:
     relative to the model:
 
     - ``features``: model inputs, transformed before the model.
-    - ``target``: labels, transformed forward before the model and inverted
-      after it (predictions back to the original space).
+    - ``target``: labels transformed forward before the model. Regression
+      predictions are inverted through this pipeline; classification outputs
+      are reconstructed from the fitted target categories instead.
     - ``output``: shape-preserving cleanup of the model output.
 
     Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
@@ -92,9 +93,10 @@ class Recipe:
 
     Args:
         features: Steps applied to model inputs before the model.
-        target: Steps applied to labels; transformed forward before the model
-            and inverted after it.
-        output: Steps applied to model output after the target inverse.
+        target: Steps applied to labels. Invertible numerical target steps map
+            regression output back to the original space.
+        output: Steps applied after member outputs have been mapped to a
+            common class or target space and aggregated.
     """
 
     features: Processor

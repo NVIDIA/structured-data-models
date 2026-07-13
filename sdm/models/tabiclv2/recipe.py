@@ -1,101 +1,65 @@
-"""Default preprocessing recipes for the TabICLv2 model.
+"""Default processing recipe for the TabICLv2 model."""
 
-Each factory composes shared :mod:`sdm.processing` processors into the
-deterministic ``TableTensor``-to-model-input path of the original TabICLv2
-model (``soda-inria/tabicl``).
-
-Supported now:
-
-- :func:`default_regression_recipe` -- single-estimator regression.
-
-Planned, staged towards one task-aware recipe:
-
-- per-member normalization via ``Choice`` plus ``n_estimators``.
-- a single recipe that serves both regression and classification,
-  dispatching the target and output roles per task with ``TaskDispatch``.
-  The end-state is sketched (commented) at the bottom of this module.
-
-``TaskDispatch`` and ``SoftmaxTemperature`` are not implemented yet, so the
-task-aware recipe remains a commented placeholder.
-
-"""
-
+from sdm import Stype
 from sdm.processing import (
+    CategoricalAlign,
+    Choice,
+    ClassShuffle,
+    ConstantFilter,
     FeaturePermute,
+    HardClip,
     Identity,
     MeanImpute,
+    Power,
     Recipe,
     SigmaClip,
+    SoftmaxTemperature,
     StandardScale,
     StypeDispatch,
+    TaskDispatch,
     ToNumerical,
 )
 
 
-def default_regression_recipe() -> Recipe:
-    """Return the default single-estimator regression recipe.
+def default_recipe() -> Recipe:
+    """Return the task-aware default recipe of the TabICLv2 model.
 
-    Mirrors the original TabICLv2 regressor: categorical columns are routed
-    through :class:`~sdm.processing.ToNumerical`, followed by mean imputation
-    (``SimpleImputer``), standard scaling (``CustomStandardScaler``), and
-    two-stage 4-sigma outlier clipping (``OutlierRemover``) on the
-    features, ending in a drawn cyclic feature shift
-    (:class:`~sdm.processing.FeaturePermute`). The target is standard-scaled
-    and its inverse maps predictions back to the original space.
+    Categorical feature vocabularies are fitted on context rows. Missing and
+    unseen categories remain encoded as ``-1``. The target stays under
+    semantic-type dispatch: classification targets are code-shuffled while
+    regression targets are standardized and later inverse-transformed.
     """
     return Recipe(
         features=[
             StypeDispatch(
                 numerical=Identity(),
-                categorical=ToNumerical(),
+                categorical=[
+                    CategoricalAlign(order="sorted"),
+                    ToNumerical(),
+                ],
+                route_order=(Stype.categorical, Stype.numerical),
             ),
             MeanImpute(),
-            # ConstantFilter(),
+            ConstantFilter(),
             StandardScale(epsilon=1e-6),
-            # TabICL also clips z-scores to [-100, 100] here; left out for now
-            # (likely subsumed by SigmaClip); revisit after benchmarking.
-            # Clip(min_value=-100.0, max_value=100.0),
+            HardClip(min_value=-100.0, max_value=100.0),
+            Choice(Identity(), Power()),
             SigmaClip(threshold=4.0),
             FeaturePermute(method="shift"),
         ],
         target=[
-            StandardScale(),
+            StypeDispatch(
+                numerical=StandardScale(),
+                categorical=[
+                    CategoricalAlign(order="sorted"),
+                    ClassShuffle(method="shift"),
+                ],
+            ),
         ],
         output=[
-            # Identity(),
+            TaskDispatch(
+                classification=SoftmaxTemperature(temperature=0.9),
+                regression=Identity(),
+            ),
         ],
     )
-
-
-# End-state target, once the remaining processors exist: a single
-# task-aware recipe that serves both regression and classification. It cycles
-# per-member normalization with ``Choice`` + ``n_estimators`` and
-# dispatches the target and output roles per task with ``TaskDispatch``.
-# ``TabICLv2.default_recipe()`` would then pick the regression branch, and a
-# classifier the classification branch. Class-index-to-label decoding stays
-# driver-side (argmax + CategoricalTensor categories), not an output step.
-#
-# def default_recipe() -> Recipe:
-#     return Recipe(
-#         features=[
-#             MeanImpute(),
-#             # ConstantFilter(),
-#             StandardScale(epsilon=1e-6),
-#             # norm options: none, power, quantile, quantile_rtdl, robust
-#             Choice(Identity(), Quantile(output_distribution="normal")),
-#             SigmaClip(threshold=4.0),
-#             FeaturePermute(method="shift"),
-#         ],
-#         target=[
-#             TaskDispatch({
-#                 classification: ClassShuffle(method="shift"),
-#                 regression: StandardScale(),
-#             }),
-#         ],
-#         output=[
-#             TaskDispatch({
-#                 classification: SoftmaxTemperature(temperature=0.9),
-#                 regression: Identity(),
-#             }),
-#         ],
-#     )

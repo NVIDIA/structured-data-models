@@ -32,13 +32,13 @@ def classification_cases() -> tuple[DatasetCase, ...]:
             pd.DataFrame(
                 {
                     "number": [1.0, np.nan, 3.0, 4.0, 5.0, 6.0],
-                    "category": ["b", "a", "b", None, "c", "a"],
+                    "category": ["b", "a", "b", np.nan, "c", "a"],
                 }
             ),
             pd.DataFrame(
                 {
                     "number": [7.0, 8.0],
-                    "category": ["unseen", None],
+                    "category": ["unseen", np.nan],
                 }
             ),
             np.array(["z", "a", "m", "z", "a", "m"]),

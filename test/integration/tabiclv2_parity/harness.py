@@ -4,21 +4,20 @@ from collections import OrderedDict
 from collections.abc import Iterable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 import numpy as np
 import torch
 from sdm import Stype, TableTensor
 from sdm.processing import (
-    CategoryShuffle,
     Choice,
+    ClassShuffle,
     FeaturePermute,
     Identity,
     Power,
-    Quantile,
     Recipe,
     Sequential,
-    TargetDispatch,
+    StypeDispatch,
 )
 from torch import Tensor
 
@@ -391,10 +390,13 @@ def sdm_ensemble_plan(
 
         choice = _one_module(member_recipe.features, Choice)
         permutation = _one_module(member_recipe.features, FeaturePermute)
-        target_dispatch = _one_module(member_recipe.target, TargetDispatch)
+        target_dispatch = _one_module(member_recipe.target, StypeDispatch)
         class_permutation: tuple[int, ...] | None = None
-        if target_dispatch.get_extra_state() == "classification":
-            shuffle = cast(CategoryShuffle, target_dispatch.selected)
+        if target.categorical.size(-1) == 1:
+            shuffle = _one_module(
+                target_dispatch.processors["categorical"],
+                ClassShuffle,
+            )
             class_permutation = tuple(
                 int(index) for index in shuffle.permutations.tolist()
             )
@@ -406,16 +408,13 @@ def sdm_ensemble_plan(
         normalization = {
             Identity: "none",
             Power: "power",
-            Quantile: "quantile",
         }.get(type(selected), selected.__class__.__name__.lower())
         seeds: list[tuple[str, int | None]] = [
             ("torch_global", seed),
             ("choice", None),
             ("feature_permute", None),
-            ("category_shuffle", None),
+            ("class_shuffle", None),
         ]
-        if isinstance(selected, Quantile):
-            seeds.append(("quantile", selected.random_state))
         members.append(
             EnsembleMemberPlan(
                 member_index=member_index,
@@ -501,11 +500,21 @@ def trace_sdm_member(
         )
     )
     transformed_target = fitted.target.fit_transform(target)
-    dispatch = _one_module(fitted.target, TargetDispatch)
+    dispatch = _one_module(fitted.target, StypeDispatch)
+    task: Task = (
+        "classification" if target.categorical.size(-1) == 1 else "regression"
+    )
     if member.class_permutation is not None:
-        shuffle = cast(CategoryShuffle, dispatch.selected)
+        shuffle = _one_module(
+            dispatch.processors["categorical"],
+            ClassShuffle,
+        )
         shuffle.permutations = torch.tensor(
             member.class_permutation,
+            device=target.device,
+        )
+        shuffle.offsets = torch.tensor(
+            [0, len(member.class_permutation)],
             device=target.device,
         )
         transformed_target = fitted.target.transform(target)
@@ -516,10 +525,10 @@ def trace_sdm_member(
             metadata={
                 "space": (
                     "permuted_label_codes"
-                    if dispatch.get_extra_state() == "classification"
+                    if task == "classification"
                     else "standardized_target"
                 ),
-                "task": dispatch.get_extra_state(),
+                "task": task,
             },
         )
     )
@@ -727,8 +736,6 @@ def trace_reference_member(
 def _choice_index(choice: Choice, normalization: str) -> int:
     for index, option in enumerate(choice.options):
         if normalization == "none" and isinstance(option, Identity):
-            return index
-        if normalization == "quantile" and isinstance(option, Quantile):
             return index
         if normalization == "power" and isinstance(option, Power):
             return index

@@ -4,7 +4,7 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import Stype
+from sdm import Stype, StypeLike
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.sequential import Sequential
 from sdm.tensor import TableTensor
@@ -34,6 +34,10 @@ class StypeDispatch(Processor, InvertibleMixin):
             normalized to :class:`~sdm.processing.Sequential`.
         id: Processor route for identifier columns. An iterable is normalized
             to :class:`~sdm.processing.Sequential`.
+        route_order: Optional output order for configured routes. Semantic
+            types omitted from the sequence follow in their default order.
+            This is useful when an external model defines a stable block
+            order, such as categorical columns before numerical columns.
         remainder: How to handle non-empty semantic types without a configured
             route. ``"passthrough"`` keeps them unchanged and is the default,
             ``"drop"`` removes them, and ``"error"`` raises.
@@ -48,16 +52,28 @@ class StypeDispatch(Processor, InvertibleMixin):
         categorical: Processor | Iterable[Processor] | None = None,
         datetime: Processor | Iterable[Processor] | None = None,
         id: Processor | Iterable[Processor] | None = None,
+        route_order: Iterable[StypeLike] | None = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
+        ordered_stypes = list(Stype)
+        if route_order is not None:
+            requested = [Stype(stype) for stype in route_order]
+            if len(requested) != len(set(requested)):
+                raise ValueError("route_order must not contain duplicates")
+            ordered_stypes = requested + [
+                stype for stype in Stype if stype not in requested
+            ]
+
+        configured = {
+            Stype.numerical: numerical,
+            Stype.categorical: categorical,
+            Stype.datetime: datetime,
+            Stype.id: id,
+        }
         self.processors = torch.nn.ModuleDict()
-        for stype, processor in (
-            (Stype.numerical, numerical),
-            (Stype.categorical, categorical),
-            (Stype.datetime, datetime),
-            (Stype.id, id),
-        ):
+        for stype in ordered_stypes:
+            processor = configured[stype]
             if processor is None:
                 continue
             if not isinstance(processor, Processor):

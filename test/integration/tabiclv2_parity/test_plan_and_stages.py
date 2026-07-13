@@ -190,7 +190,7 @@ def test_sdm_plan_seed_and_intentional_difference() -> None:
     assert len(first.members) == 8
     assert {member.normalization for member in first.members} <= {
         "none",
-        "quantile",
+        "power",
     }
     reference = reference_ensemble_plan(
         n_features=2,
@@ -302,52 +302,7 @@ def test_explicit_power_member_is_structurally_equivalent() -> None:
     assert relative.max().item() <= 4e-4
 
 
-def test_default_quantile_choice_has_measured_endpoint_difference() -> None:
-    train = pd.DataFrame(
-        {
-            "a": np.arange(1, 9, dtype=np.float64),
-            "b": [8.0, 2.0, 7.0, 3.0, 6.0, 4.0, 5.0, 1.0],
-        }
-    )
-    test = pd.DataFrame({"a": [2.5, 9.0], "b": [2.5, 9.0]})
-    target_values = np.arange(8, dtype=np.float64)
-    member = _member(task="regression", feature_permutation=(0, 1))
-    member = replace(member, normalization="quantile")
-
-    with pytest.warns(UserWarning, match="n_quantiles.*n_samples"):
-        reference = trace_reference_member(
-            train_features=train,
-            test_features=test,
-            target=target_values,
-            member=member,
-            task="regression",
-            seed=42,
-        )
-    candidate, _ = trace_sdm_member(
-        recipe=default_recipe(),
-        features=_features(train, test),
-        target=_target(target_values, "regression"),
-        member=member,
-    )
-    expected = reference.snapshots[FINAL_MODEL_INPUT].values
-    actual = candidate.snapshots[FINAL_MODEL_INPUT].values
-    assert expected is not None
-    assert actual is not None
-
-    absolute = (expected - actual).abs().max().item()
-    relative = (
-        (
-            (expected - actual).abs()
-            / expected.abs().clamp_min(torch.finfo(expected.dtype).tiny)
-        )
-        .max()
-        .item()
-    )
-    assert 0.03 < absolute < 0.04
-    assert 0.006 < relative < 0.007
-
-
-def test_mixed_categories_expose_first_semantic_divergence() -> None:
+def test_mixed_categories_reach_equivalent_model_input() -> None:
     case = classification_cases()[1]
     member = _member(
         task="classification",
@@ -375,30 +330,43 @@ def test_mixed_categories_expose_first_semantic_divergence() -> None:
 
     reference_encoded = reference.snapshots[ENCODED_NUMERICAL_FEATURES]
     candidate_encoded = candidate.snapshots[ENCODED_NUMERICAL_FEATURES]
-    assert reference_encoded.columns == ("category", "number")
-    assert candidate_encoded.columns == ("number", "category")
+    assert (
+        reference_encoded.columns
+        == candidate_encoded.columns
+        == (
+            "category",
+            "number",
+        )
+    )
     assert reference_encoded.values is not None
     assert candidate_encoded.values is not None
-    # Both encode the unseen query category as -1.
-    assert reference_encoded.values[-2, 0].item() == -1.0
-    assert candidate_encoded.values[-2, 1].item() == -1.0
-    # sklearn treats a fitted object-typed None as category 3; TableTensor
-    # treats it as missing and keeps code -1.
-    assert reference_encoded.values[-1, 0].item() == 3.0
-    assert candidate_encoded.values[-1, 1].item() == -1.0
-    # Reference OrdinalEncoder sorts strings; SDM preserves fitted first use.
-    assert reference_encoded.values[:3, 0].tolist() == [1.0, 0.0, 1.0]
-    assert candidate_encoded.values[:3, 1].tolist() == [0.0, 1.0, 0.0]
+    torch.testing.assert_close(
+        candidate_encoded.values[:, :1],
+        reference_encoded.values[:, :1].to(candidate_encoded.values.dtype),
+        atol=0,
+        rtol=0,
+    )
+    assert torch.isnan(candidate_encoded.values[1, 1])
+    assert not torch.isnan(reference_encoded.values[1, 1])
+    assert candidate_encoded.values[-2:, 0].tolist() == [-1.0, -1.0]
 
     expected_target = reference.snapshots[TARGET_TRANSFORMATION]
     actual_target = candidate.snapshots[TARGET_TRANSFORMATION]
     assert expected_target.values is not None
     assert actual_target.values is not None
-    # LabelEncoder sorts ["a", "m", "z"], while TableTensor preserves first
-    # use ["z", "a", "m"]; the same index permutation therefore acts on
-    # different label vocabularies.
     assert expected_target.values.tolist() == [0, 1, 2, 0, 1, 2]
-    assert actual_target.values.tolist() == [1, 2, 0, 1, 2, 0]
+    assert actual_target.values.tolist() == expected_target.values.tolist()
+
+    expected_model = reference.snapshots[FINAL_MODEL_INPUT].values
+    actual_model = candidate.snapshots[FINAL_MODEL_INPUT].values
+    assert expected_model is not None
+    assert actual_model is not None
+    torch.testing.assert_close(
+        actual_model,
+        expected_model,
+        atol=2e-7,
+        rtol=1e-7,
+    )
 
 
 def test_output_stage_recorder_preserves_contract_metadata() -> None:

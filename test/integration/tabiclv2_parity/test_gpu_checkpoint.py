@@ -398,11 +398,16 @@ def test_pinned_single_member_pipeline_end_to_end(task: Task) -> None:
         reference_canonical = reference_raw * float(scaler.scale_[0]) + float(
             scaler.mean_[0]
         )
-    fitted_recipe.target.to("cuda")
-    target_inverse = cast(InvertibleMixin, fitted_recipe.target)
-    candidate_canonical = target_inverse.inverse_transform(
-        TableTensor.from_tensor(candidate_raw)
-    ).numerical
+    if task == "classification":
+        # Classification is reconstructed from the fitted target categories;
+        # it is deliberately not passed through target.inverse_transform.
+        candidate_canonical = candidate_raw[..., : len(target_values) // 2]
+    else:
+        fitted_recipe.target.to("cuda")
+        target_inverse = cast(InvertibleMixin, fitted_recipe.target)
+        candidate_canonical = target_inverse.inverse_transform(
+            TableTensor.from_tensor(candidate_raw)
+        ).numerical
     reference_aggregate = reference_canonical
     candidate_aggregate = candidate_canonical
     if task == "classification":

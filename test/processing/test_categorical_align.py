@@ -86,6 +86,27 @@ def test_categorical_align_joint_vocabulary_uses_context_order() -> None:
     assert query.categorical.as_tensor().squeeze(-1).tolist() == [1]
 
 
+def test_categorical_align_can_sort_like_sklearn_ordinal_encoder() -> None:
+    table = TableTensor.from_pandas(
+        pd.DataFrame({"kind": ["blue", "red", "amber", "blue"]}),
+        stypes={"kind": "categorical"},
+    )
+
+    output = CategoricalAlign(order="sorted").fit_transform(table)
+
+    assert output.categorical.categories[0].tolist() == [
+        "amber",
+        "blue",
+        "red",
+    ]
+    assert output.categorical.as_tensor().squeeze(-1).tolist() == [1, 2, 0, 1]
+
+
+def test_categorical_align_rejects_unknown_order() -> None:
+    with pytest.raises(ValueError, match="order must be"):
+        CategoricalAlign(order="frequency")  # ty: ignore[invalid-argument-type]
+
+
 @withCUDA
 def test_categorical_align_numeric_values(device: torch.device) -> None:
     context = TableTensor(

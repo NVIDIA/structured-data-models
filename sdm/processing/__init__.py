@@ -8,6 +8,7 @@ from sdm.processing.categorical_align import CategoricalAlign
 from sdm.processing.categorical_impute import CategoricalImpute
 from sdm.processing.task_dispatch import TaskDispatch
 from sdm.processing.clip import Clip
+from sdm.processing.hard_clip import HardClip
 from sdm.processing.class_shuffle import ClassShuffle
 from sdm.processing.constant_filter import ConstantFilter
 from sdm.processing.feature_permute import FeaturePermute
@@ -31,6 +32,7 @@ __all__ = [
     "CategoricalImpute",
     "TaskDispatch",
     "Clip",
+    "HardClip",
     "ClassShuffle",
     "ConstantFilter",
     "FeaturePermute",
