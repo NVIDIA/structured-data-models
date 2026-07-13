@@ -28,7 +28,7 @@ from sdm.models.base import Model
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.processing import (
     CategoricalAlign,
-    ClassShuffle,
+    CategoryShuffle,
     FeaturePermute,
     HardClip,
     InvertibleMixin,
@@ -302,7 +302,8 @@ def _mapping_setup(workload: Workload):
         raw = torch.zeros(workload.rows - workload.train_rows, 999)
         member = None
         canonical = None
-    return recipe, raw, target, member, canonical
+    class_indices = _ZeroModel._class_indices(canonical, member)
+    return recipe, raw, target, class_indices
 
 
 def _assert_workload_correct(workload: Workload) -> None:
@@ -433,7 +434,7 @@ def benchmark_pipeline(
         if workload.task == "regression":
 
             def inverse_prepare():
-                recipe, raw, _, _, _ = _mapping_setup(workload)
+                recipe, raw, _, _ = _mapping_setup(workload)
                 inverse = cast(InvertibleMixin, recipe.target)
                 table = TableTensor.from_tensor(raw)
                 return lambda: inverse.inverse_transform(table)
@@ -441,27 +442,25 @@ def benchmark_pipeline(
             add("target_inverse_transform", inverse_prepare)
 
         def mapping_prepare():
-            recipe, raw, target, member, canonical = _mapping_setup(workload)
+            recipe, raw, target, class_indices = _mapping_setup(workload)
             model = _ZeroModel()
             return lambda: model._postprocess(
                 raw,
                 target,
                 recipe,
-                member_columns=member,
-                canonical_columns=canonical,
+                class_indices=class_indices,
             )
 
         add("model_output_inverse_mapping", mapping_prepare)
 
         def output_prepare():
-            recipe, raw, target, member, canonical = _mapping_setup(workload)
+            recipe, raw, target, class_indices = _mapping_setup(workload)
             model = _ZeroModel()
             mapped = model._postprocess(
                 raw,
                 target,
                 recipe,
-                member_columns=member,
-                canonical_columns=canonical,
+                class_indices=class_indices,
             )
             table = TableTensor.from_tensor(mapped)
             return lambda: recipe.output.transform(table)
@@ -505,7 +504,7 @@ def _processor_inputs(
         )
     if workload.task == "classification":
         inputs.append(
-            ("ClassShuffle", ClassShuffle(method="shift"), workload.y)
+            ("CategoryShuffle", CategoryShuffle(method="shift"), workload.y)
         )
     return inputs
 

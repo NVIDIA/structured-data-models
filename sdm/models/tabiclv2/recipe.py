@@ -1,9 +1,7 @@
-"""Default processing recipe for the TabICLv2 model."""
-
 from sdm.processing import (
     CategoricalAlign,
+    CategoryShuffle,
     Choice,
-    ClassShuffle,
     ConstantFilter,
     FeaturePermute,
     HardClip,
@@ -23,10 +21,12 @@ from sdm.processing import (
 def default_recipe() -> Recipe:
     """Return the task-aware default recipe of the TabICLv2 model.
 
-    Categorical feature vocabularies are fitted on context rows. Missing and
-    unseen categories remain encoded as ``-1``. The target stays under
-    semantic-type dispatch: classification targets are code-shuffled while
-    regression targets are standardized and later inverse-transformed.
+    Composes shared :mod:`sdm.processing` processors into the
+    ``TableTensor``-to-model-input path of the original TabICLv2 model
+    (``soda-inria/tabicl``). The target semantic type selects the target and
+    output routes. For regression, the target inverse receives the complete
+    numerical model-output head. Missing and unseen categorical feature
+    values remain encoded as ``-1``.
     """
     return Recipe(
         features=[
@@ -47,11 +47,11 @@ def default_recipe() -> Recipe:
         ],
         target=[
             StypeDispatch(
-                numerical=StandardScale(),
                 categorical=[
                     CategoricalAlign(order="sorted"),
-                    ClassShuffle(method="shift"),
+                    CategoryShuffle(method="shift"),
                 ],
+                numerical=StandardScale(),
             ),
         ],
         output=[

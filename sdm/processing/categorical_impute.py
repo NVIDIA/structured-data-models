@@ -45,12 +45,12 @@ class CategoricalImpute(Processor):
             torch.empty(0, dtype=torch.long),
         )
 
-    def _fit(self, input: TableTensor) -> None:
-        data = input.categorical
-        _check_categorical_codes(input)
+    def _fit(self, inp: TableTensor) -> None:
+        data = inp.categorical
+        _check_categorical_codes(inp)
         fill_values: list[torch.Tensor] = []
-        columns = input.columns[Stype.categorical]
-        for index, category in enumerate(input.categorical.categories):
+        columns = inp.columns[Stype.categorical]
+        for index, category in enumerate(inp.categorical.categories):
             codes = data[..., index]
             observed = codes[codes >= 0].to(torch.long)
             if observed.numel() == 0:
@@ -67,30 +67,30 @@ class CategoricalImpute(Processor):
             if len(fill_values) > 0
             else torch.empty(0, dtype=torch.long, device=data.device)
         )
-        self._categories = input.categorical.categories
+        self._categories = inp.categorical.categories
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        self._check_categories(input)
-        _check_categorical_codes(input)
-        data = input.categorical.where(
-            input.categorical >= 0,
-            self._fill_values.to(dtype=input.categorical.dtype),
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        self._check_categories(inp)
+        _check_categorical_codes(inp)
+        data = inp.categorical.where(
+            inp.categorical >= 0,
+            self._fill_values.to(dtype=inp.categorical.dtype),
         )
         categorical = CategoricalTensor(
             data=data,
-            categories=input.categorical.categories,
+            categories=inp.categorical.categories,
         )
-        return input.replace_blocks(categorical=categorical)
+        return inp.replace_blocks(categorical=categorical)
 
-    def _check_categories(self, input: TableTensor) -> None:
-        columns = input.columns[Stype.categorical]
-        if len(input.categorical.categories) != len(self._categories):
+    def _check_categories(self, inp: TableTensor) -> None:
+        columns = inp.columns[Stype.categorical]
+        if len(inp.categorical.categories) != len(self._categories):
             raise ValueError(
                 f"Expected {len(self._categories)} fitted categorical "
                 f"columns (got {len(columns)})."
             )
         for index, (actual, expected) in enumerate(
-            zip(input.categorical.categories, self._categories)
+            zip(inp.categorical.categories, self._categories)
         ):
             expected = expected.to(device=actual.device)
             if not actual.equal(expected):

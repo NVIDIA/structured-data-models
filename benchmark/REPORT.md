@@ -79,7 +79,7 @@ Representative Large transform medians from the three-repetition full run:
 | `Power`              | baseline                 |     141.216 ms | 135.644 ms |
 | `SigmaClip`          | baseline                 |      11.982 ms |  10.830 ms |
 | `FeaturePermute`     | baseline                 |       3.161 ms |   2.435 ms |
-| `ClassShuffle`       | baseline                 |       0.992 ms |        n/a |
+| `CategoryShuffle`    | baseline                 |       0.992 ms |        n/a |
 | `CategoricalAlign`   | categorical              |       8.301 ms |   9.890 ms |
 | `SoftmaxTemperature` | 10-column numerical head |       2.640 ms |   2.471 ms |
 

@@ -10,6 +10,7 @@ Follow these best practices up front to keep docstrings consistent across the co
 
 ## General Principles
 
+- Keep docstrings as minimal as possible and avoid documenting implementation details.
 - Do not add module-level docstrings to individual modules; keep only a short package summary in the package `__init__.py`.
 - Every public class and function has a docstring, a one-line summary, then an `Args:` section.
 - When a class or function implements functionality proposed in an academic paper, cite it in the first sentence of its docstring.

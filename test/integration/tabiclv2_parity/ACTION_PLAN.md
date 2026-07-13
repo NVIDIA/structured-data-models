@@ -35,7 +35,7 @@ per-feature transformed values are unchanged; only their positions differ.
    limitation and does not fail explicit-Recipe execution parity. This could
    also serve future TabPFN/RFM planners without coupling `Model` to TabICLv2.
 2. **P1 — Give stochastic Processors explicit generator ownership.** Choice,
-   FeaturePermute, and ClassShuffle currently use the global torch CPU RNG.
+   FeaturePermute, and CategoryShuffle currently use the global torch CPU RNG.
    Explicit generators would improve independent plan reproduction and make
    cache metadata self-contained for future models.
 3. **P2 — Add GPU Processor benchmarks when those paths are supported.** The

@@ -12,9 +12,9 @@ class Identity(Processor, InvertibleMixin):
     supported_stypes = frozenset(Stype)
     requires_fit = False
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        """Return ``input`` unchanged."""
-        return input
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        """Return ``inp`` unchanged."""
+        return inp
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        return input
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
+        return inp

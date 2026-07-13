@@ -33,13 +33,13 @@ class HardClip(Processor):
         self.min_value = min_value
         self.max_value = max_value
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, inp: TableTensor) -> TableTensor:
         """Clamp ``input`` to the configured interval."""
-        numerical = _as_float(input.numerical).clamp(
+        numerical = _as_float(inp.numerical).clamp(
             min=self.min_value,
             max=self.max_value,
         )
-        return input.replace_blocks(numerical=numerical)
+        return inp.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (

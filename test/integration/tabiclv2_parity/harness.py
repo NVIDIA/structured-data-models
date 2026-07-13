@@ -10,8 +10,8 @@ import numpy as np
 import torch
 from sdm import Stype, TableTensor
 from sdm.processing import (
+    CategoryShuffle,
     Choice,
-    ClassShuffle,
     FeaturePermute,
     Identity,
     Power,
@@ -395,7 +395,7 @@ def sdm_ensemble_plan(
         if target.categorical.size(-1) == 1:
             shuffle = _one_module(
                 target_dispatch.processors["categorical"],
-                ClassShuffle,
+                CategoryShuffle,
             )
             class_permutation = tuple(
                 int(index) for index in shuffle.permutations.tolist()
@@ -507,7 +507,7 @@ def trace_sdm_member(
     if member.class_permutation is not None:
         shuffle = _one_module(
             dispatch.processors["categorical"],
-            ClassShuffle,
+            CategoryShuffle,
         )
         shuffle.permutations = torch.tensor(
             member.class_permutation,

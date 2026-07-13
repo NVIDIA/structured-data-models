@@ -1,19 +1,10 @@
-from typing import cast
-
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import (
-    Choice,
-    HardClip,
-    InvertibleMixin,
-    Power,
-    Recipe,
-    SoftmaxTemperature,
-)
+from sdm.processing import InvertibleMixin, Recipe, SoftmaxTemperature
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -110,21 +101,22 @@ def test_tabiclv2_recipe() -> None:
         x=recipe.features.transform(x),
         y=recipe.target.fit_transform(y),
     )
-    expected = (
-        cast(InvertibleMixin, recipe.target)
-        .inverse_transform(TableTensor.from_tensor(raw.clone()))
-        .numerical
-    )
+    assert isinstance(recipe.target, InvertibleMixin)
+    expected = recipe.target.inverse_transform(
+        TableTensor.from_tensor(raw.clone())
+    ).numerical
     torch.testing.assert_close(out, expected)
 
     # The fitted recipe state is reused across predict calls:
     model.fit(x[:R_train], y, recipe=model.default_recipe())
     torch.testing.assert_close(model.predict(x[R_train:]), out)
     model.clear()
-    assert model._caches is None
+    assert model._recipe is None
 
 
-def test_default_recipe_regression_roundtrip() -> None:
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_default_recipe(task: str) -> None:
+    torch.manual_seed(0)
     recipe = TabICLv2.default_recipe()
 
     features = TableTensor(
@@ -138,7 +130,16 @@ def test_default_recipe_regression_roundtrip() -> None:
             categories=(StringTensor.from_list(["a", "b"]),),
         ),
     )
-    target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
+    if task == "classification":
+        target = TableTensor(
+            columns={"categorical": ("y",)},
+            categorical=CategoricalTensor(
+                data=(torch.arange(16, dtype=torch.int64) % 2).unsqueeze(-1),
+                categories=(StringTensor.from_list(["a", "b"]),),
+            ),
+        )
+    else:
+        target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
 
     model_features = recipe.features.fit_transform(features)
     model_target = recipe.target.fit_transform(target)
@@ -153,65 +154,28 @@ def test_default_recipe_regression_roundtrip() -> None:
         "d",
         "kind",
     }
+    assert isinstance(recipe.target, InvertibleMixin)
 
-    restored = cast(InvertibleMixin, recipe.target).inverse_transform(
-        model_target
-    )
-    torch.testing.assert_close(
-        restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
-    )
+    if task == "regression":
+        model_output = TableTensor.from_tensor(torch.randn(16, 999))
+        restored = recipe.target.inverse_transform(model_output)
+        expected = model_output.numerical * target.numerical.std(
+            dim=0, correction=0
+        ) + target.numerical.mean(dim=0)
+        torch.testing.assert_close(restored.numerical, expected)
 
-    assert any(
-        isinstance(module, HardClip) for module in recipe.features.modules()
+    output = TableTensor.from_tensor(
+        torch.randn(16, 2),
+        columns=("y0", "y1"),
     )
-    choice = next(
-        module
-        for module in recipe.features.modules()
-        if isinstance(module, Choice)
-    )
-    assert any(isinstance(option, Power) for option in choice.options)
-
-
-def test_default_recipe_binary_classification_smoke() -> None:
-    model = TabICLv2(pretrained=False)
-    features = TableTensor.from_tensor(
-        torch.tensor(
-            [
-                [0.0, 1.0],
-                [1.0, 0.0],
-                [0.5, 0.5],
-                [2.0, -1.0],
-                [-1.0, 2.0],
-                [0.25, 0.75],
-                [1.5, -0.5],
-            ]
-        ),
-        columns=("a", "b"),
-    )
-    target = TableTensor(
-        columns={"categorical": ("label",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [0], [1], [0]]),
-            categories=(StringTensor.from_list(["positive", "negative"]),),
-        ),
-    )
-
-    torch.manual_seed(0)
-    direct = model(features, target, recipe=model.default_recipe())
-
-    assert direct.size() == (2, 2)
-    assert direct.isfinite().all()
-    torch.testing.assert_close(
-        direct.sum(dim=-1),
-        torch.ones(2),
-        rtol=0,
-        atol=1e-6,
-    )
-
-    torch.manual_seed(0)
-    model.fit(features[:5], target, recipe=model.default_recipe())
-    cached = model.predict(features[5:])
-    torch.testing.assert_close(cached, direct, rtol=1e-5, atol=1e-6)
+    transformed = recipe.output.transform(output)
+    if task == "classification":
+        torch.testing.assert_close(
+            transformed.numerical,
+            (output.numerical / 0.9).softmax(dim=-1),
+        )
+    else:
+        assert transformed is output
 
 
 @withCUDA

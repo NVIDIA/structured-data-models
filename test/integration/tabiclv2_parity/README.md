@@ -12,37 +12,32 @@ equivalent stages. The pinned checkpoint files and digests are:
 
 ## Integration decisions
 
-The branch starts from current `main`. PR #244 is integrated as its five
-focused `CategoricalAlign` commits. PR #230 is not merged wholesale because
-its older TargetDispatch/class-inverse design conflicts with the current
-output contract. Its default-Recipe and model wiring are retained and adapted
-to the current design:
+The branch is merged with current `main`. PRs #230 and #244 are already
+present in the base, and #280 supplies the `CategoryShuffle` name. This PR
+retains only the parity-specific extensions that are not yet on `main`:
+fixed-bound `HardClip`, opt-in sorted categorical alignment, the combined
+#277/#278 model-output and member-local Recipe behavior, the differential
+harness, and benchmarks.
 
-```python
-if transformed_target.is_floating_point():
-    output = recipe.target.inverse_transform(TableTensor.from_tensor(output))
-else:
-    output = TableTensor.from_tensor(output, columns=target_categories)
-```
-
-Classification never calls `target.inverse_transform`. Every member output is
-instead labelled with that fitted member's target categories and explicitly
-reordered to the original target categories before aggregation.
+Classification never calls `target.inverse_transform`. Each member derives a
+class-index mapping from its fitted target categories, restores original class
+order before aggregation, and applies output processing once after aggregation.
+Regression applies the fitted member target inverse before aggregation.
 
 Previous work was classified as follows:
 
-| Previous change or test                                           | Current classification                           |
-| ----------------------------------------------------------------- | ------------------------------------------------ |
-| Recipe/TaskDispatch foundations from #202, #220, #221, #236, #245 | Already merged into `main`                       |
-| Categorical vocabulary alignment from #244                        | Still required and integrated                    |
-| Default TabICLv2 Recipe/model wiring from #230                    | Still required, adapted                          |
-| Per-member fitted Recipe and cache ownership                      | Still required, redesigned on current `Model`    |
-| Regression target inverse before aggregation                      | Still required and retained                      |
-| Classification inverse through TargetDispatch                     | Obsolete under category-labelled output mapping  |
-| Quantile endpoint comparison                                      | Obsolete; the Recipe now uses Power              |
-| Analytic ordering/cache/fake-model tests                          | Test-only instrumentation retained               |
-| Pinned GPU row/ICL/head hooks                                     | Test-only instrumentation retained               |
-| Categorical-before-numerical feature order                        | Intentional positional difference; value-aligned |
+| Previous change or test                                           | Current classification                               |
+| ----------------------------------------------------------------- | ---------------------------------------------------- |
+| Recipe/TaskDispatch foundations from #202, #220, #221, #236, #245 | Already merged into `main`                           |
+| Categorical vocabulary alignment from #244                        | Already merged; opt-in sorted order retained in #271 |
+| Default TabICLv2 Recipe/model wiring from #230                    | Already merged; parity-specific refinements retained |
+| Per-member fitted Recipe and cache ownership                      | #278 behavior retained on current `Model`            |
+| Regression target inverse before aggregation                      | #277 behavior retained                               |
+| Classification inverse through TargetDispatch                     | Obsolete under category-labelled output mapping      |
+| Quantile endpoint comparison                                      | Obsolete; the Recipe now uses Power                  |
+| Analytic ordering/cache/fake-model tests                          | Test-only instrumentation retained                   |
+| Pinned GPU row/ICL/head hooks                                     | Test-only instrumentation retained                   |
+| Categorical-before-numerical feature order                        | Intentional positional difference; value-aligned     |
 
 ## Pipelines
 
@@ -78,7 +73,7 @@ flowchart LR
   E --> F[Choice: Identity or Power]
   F --> G[SigmaClip and FeaturePermute]
   H[raw target] --> I[StypeDispatch]
-  I --> J[sorted align plus ClassShuffle, or StandardScale]
+  I --> J[sorted align plus CategoryShuffle, or StandardScale]
   G --> K[SDM TabICLv2 member]
   J --> K
   K --> L[raw member output]
@@ -134,7 +129,7 @@ Processor-specific contracts:
 | `Choice(Identity,Power)`           | float table to same                        | Global torch RNG selects and fits one option | Optional Yeo-Johnson normalization                    | Delegates to selected inverse               |
 | `SigmaClip(4)`                     | float table to same                        | Two-pass mean/std bounds                     | Logarithmic soft clipping                             | None                                        |
 | `FeaturePermute`                   | numerical table to same                    | Global torch RNG, stored `P`                 | Exact feature order                                   | Gather by `argsort(P)`                      |
-| `ClassShuffle`                     | categorical target to same                 | Global torch RNG, stored `P`                 | `new=P[old]`, categories move                         | Not used for model output                   |
+| `CategoryShuffle`                  | categorical target to same                 | Global torch RNG, stored `P`                 | `new=P[old]`, categories move                         | Not used for model output                   |
 | `TaskDispatch`                     | canonical output to task route             | Resolved while target fits                   | Softmax temperature or identity                       | None                                        |
 
 ## Test redesign

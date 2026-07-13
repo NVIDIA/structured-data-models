@@ -40,16 +40,16 @@ class _CyclingClassShuffle(Processor):
     def reset(cls) -> None:
         cls.next_plan = 0
 
-    def _fit(self, input: TableTensor) -> None:
+    def _fit(self, inp: TableTensor) -> None:
         plan = self.plans[self.__class__.next_plan]
         self.__class__.next_plan += 1
-        self.permutation = torch.tensor(plan, device=input.device)
+        self.permutation = torch.tensor(plan, device=inp.device)
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        data = input.categorical.as_tensor()
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        data = inp.categorical.as_tensor()
         transformed = self.permutation[data.to(torch.long)].to(data.dtype)
-        categories = input.categorical.categories[0]
-        return input.replace_blocks(
+        categories = inp.categorical.categories[0]
+        return inp.replace_blocks(
             categorical=CategoricalTensor(
                 data=transformed,
                 categories=(categories[self.permutation.argsort()],),
@@ -60,29 +60,29 @@ class _CyclingClassShuffle(Processor):
 class _LogTarget(Processor, InvertibleMixin):
     supported_stypes = frozenset({Stype.numerical})
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return input.replace_blocks(numerical=input.numerical.log())
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        return inp.replace_blocks(numerical=inp.numerical.log())
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        return input.replace_blocks(numerical=input.numerical.exp())
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
+        return inp.replace_blocks(numerical=inp.numerical.exp())
 
 
 class _SquareOutput(Processor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return input.replace_blocks(numerical=input.numerical.square())
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        return inp.replace_blocks(numerical=inp.numerical.square())
 
 
 class _SwapFeatures(Processor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        columns = tuple(reversed(input.columns[Stype.numerical]))
+    def _transform(self, inp: TableTensor) -> TableTensor:
+        columns = tuple(reversed(inp.columns[Stype.numerical]))
         return TableTensor.from_tensor(
-            input.numerical.flip(-1),
+            inp.numerical.flip(-1),
             columns=columns,
         )
 

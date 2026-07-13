@@ -28,9 +28,9 @@ class Processor(torch.nn.Module, abc.ABC):
         super().__init__()
         self._fitted = False
 
-    def _check_supported_stypes(self, input: TableTensor) -> None:
+    def _check_supported_stypes(self, inp: TableTensor) -> None:
         supported_stypes = self.supported_stypes
-        for stype, columns in input.columns.items():
+        for stype, columns in inp.columns.items():
             if stype not in supported_stypes and len(columns) > 0:
                 # TODO: Include all invalid columns in the error message
                 raise ValueError(
@@ -45,14 +45,14 @@ class Processor(torch.nn.Module, abc.ABC):
                 "call 'fit()' before."
             )
 
-    def _fit(self, input: TableTensor) -> None:
+    def _fit(self, inp: TableTensor) -> None:
         pass
 
     @abc.abstractmethod
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, inp: TableTensor) -> TableTensor:
         pass
 
-    def forward(self, input: TableTensor) -> TableTensor:
+    def forward(self, inp: TableTensor) -> TableTensor:
         """Alias of :meth:`~Processor.transform`.
 
         This is the :class:`torch.nn.Module` entry point, so
@@ -60,51 +60,51 @@ class Processor(torch.nn.Module, abc.ABC):
         fitted-state checks.
 
         Args:
-            input: Table to transform.
+            inp: Table to transform.
 
         Returns:
             Transformed table.
         """
-        return self.transform(input)
+        return self.transform(inp)
 
-    def fit(self, input: TableTensor) -> Self:
-        """Fit the processor on ``input`` and return it.
+    def fit(self, inp: TableTensor) -> Self:
+        """Fit the processor on ``inp`` and return it.
 
         Args:
-            input: Feature table used to compute the processor state.
+            inp: Feature table used to compute the processor state.
 
         Returns:
             This processor.
         """
-        self._check_supported_stypes(input)
+        self._check_supported_stypes(inp)
         if self.requires_fit:
-            self._fit(input)
+            self._fit(inp)
             self._fitted = True
         return self
 
-    def transform(self, input: TableTensor) -> TableTensor:
-        """Transform ``input`` using the fitted processor.
+    def transform(self, inp: TableTensor) -> TableTensor:
+        """Transform ``inp`` using the fitted processor.
 
         Args:
-            input: Table to transform.
+            inp: Table to transform.
 
         Returns:
             Transformed table.
         """
-        self._check_supported_stypes(input)
+        self._check_supported_stypes(inp)
         self._check_is_fitted()
-        return self._transform(input)
+        return self._transform(inp)
 
-    def fit_transform(self, input: TableTensor) -> TableTensor:
-        """Fit on ``input`` and return the transformed result.
+    def fit_transform(self, inp: TableTensor) -> TableTensor:
+        """Fit on ``inp`` and return the transformed result.
 
         Args:
-            input: Feature table to fit on and transform.
+            inp: Feature table to fit on and transform.
 
         Returns:
             Transformed table.
         """
-        return self.fit(input).transform(input)
+        return self.fit(inp).transform(inp)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"
@@ -118,19 +118,19 @@ class InvertibleMixin(abc.ABC):
     """
 
     @abc.abstractmethod
-    def _inverse_transform(self, input: TableTensor) -> TableTensor: ...
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor: ...
 
-    def inverse_transform(self, input: TableTensor) -> TableTensor:
-        """Invert the transform of ``input`` using the fitted processor.
+    def inverse_transform(self, inp: TableTensor) -> TableTensor:
+        """Invert the transform of ``inp`` using the fitted processor.
 
         Args:
-            input: Table in transformed space.
+            inp: Table in transformed space.
 
         Returns:
             Table mapped back to the original processor space.
         """
         self._check_is_fitted()
-        return self._inverse_transform(input)
+        return self._inverse_transform(inp)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
