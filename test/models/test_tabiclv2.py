@@ -197,6 +197,69 @@ def test_tabiclv2_many_classes(
         torch.testing.assert_close(out, looped)
 
 
+def test_tabiclv2_hierarchical_probabilities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class IdentityRowEmbedding(torch.nn.Module):
+        def forward(
+            self,
+            x: torch.Tensor,
+            y: torch.Tensor,
+            *,
+            cache: object | None = None,
+        ) -> torch.Tensor:
+            return x
+
+    class NodePredictor(torch.nn.Module):
+        def forward(
+            self,
+            x: torch.Tensor,
+            y: torch.Tensor,
+        ) -> torch.Tensor:
+            test_size = x.size(0) - y.size(0)
+            if y.size(0) == 3:
+                probabilities = x.new_tensor([0.6, 0.4])
+            else:
+                probabilities = x.new_tensor([0.25, 0.75])
+            return probabilities.log().mul(0.9).expand(test_size, -1)
+
+    model = _make_small_classifier(
+        max_classes=2,
+        device=torch.device("cpu"),
+    )
+    monkeypatch.setattr(model, "row_embedding", IdentityRowEmbedding())
+    monkeypatch.setattr(model, "icl_block", NodePredictor())
+    monkeypatch.setattr(model, "head", torch.nn.Identity())
+
+    y = torch.tensor([[0, 1, 0], [0, 1, 2]])
+    out = model(torch.randn(2, 5, 4), y)
+
+    probabilities = torch.tensor([[0.6, 0.4, 0.0], [0.15, 0.45, 0.4]])
+    probabilities = probabilities.unsqueeze(1).expand(-1, 2, -1)
+    expected = (probabilities + 1e-6).log().mul(0.9)
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+def test_tabiclv2_heterogeneous_class_batch(device: torch.device) -> None:
+    model = _make_small_classifier(max_classes=3, device=device)
+    x = torch.randn(2, 6, 6, device=device)
+    y = torch.tensor(
+        [[0, 1, 2, 0], [0, 1, 2, 3]],
+        device=device,
+    )
+
+    out = model(x, y)
+
+    assert out.size() == (2, 2, 4)
+    probabilities = (out / 0.9).softmax(dim=-1)
+    torch.testing.assert_close(
+        probabilities.sum(dim=-1),
+        torch.ones(2, 2, device=device),
+    )
+    assert (probabilities[0, :, 3] < 1e-5).all()
+
+
 @pytest.mark.parametrize("num_classes", [10, 11])
 def test_tabiclv2_native_class_boundary(num_classes: int) -> None:
     model = _make_small_classifier(

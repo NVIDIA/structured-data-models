@@ -63,11 +63,13 @@ class TabICLv2(BaseModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
-    Classification contexts with more than ten classes use mixed-radix target
-    embeddings followed by hierarchical classification over the cached row
-    representations. Key/value caching through :meth:`fit` is unavailable for
-    these contexts because each hierarchy node uses a different target and
-    training-row context.
+    For classification contexts with more than ten classes, the output head
+    uses hierarchical classification over the row representations. This is
+    independent of the mixed-radix target embeddings in :class:`RowEmbedding`.
+    Key/value caching through :meth:`fit` is unavailable for these contexts
+    because each hierarchy node uses a different target and training-row
+    context. Batched contexts share the global class space determined by the
+    maximum label across the batch.
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
@@ -215,6 +217,12 @@ class _TabICLv2(torch.nn.Module):
             ),
         )
         self.max_classes = num_classes
+        self.hierarchical_classifier: HierarchicalClassifier | None = None
+        if num_classes > 1:
+            self.hierarchical_classifier = HierarchicalClassifier(
+                max_classes=num_classes,
+                temperature=_CLASSIFICATION_TEMPERATURE,
+            )
 
     def forward(
         self,
@@ -223,22 +231,24 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x, y, cache=cache)
-
         num_classes = 0
         if self.max_classes > 0 and y.numel() > 0:
             # TODO Cache `num_classes` to avoid device synchronization.
             num_classes = int(y.max()) + 1
+        if cache is not None and num_classes > self.max_classes:
+            raise NotImplementedError(
+                f"Key/value caching is not supported with more than "
+                f"{self.max_classes} classes (got {num_classes})"
+            )
+
+        x = self.row_embedding(x, y, cache=cache)
 
         if num_classes <= self.max_classes:
             x = self.icl_block(x, y, cache=cache)
             return self.head(x)
 
-        classifier = HierarchicalClassifier(
-            max_classes=self.max_classes,
-            temperature=_CLASSIFICATION_TEMPERATURE,
-        )
-        probabilities = classifier(
+        assert self.hierarchical_classifier is not None
+        probabilities = self.hierarchical_classifier(
             row_embeddings=x,
             y=y,
             num_classes=num_classes,
