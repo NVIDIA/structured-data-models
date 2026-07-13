@@ -6,11 +6,11 @@ from torch import Tensor
 
 from sdm import RelatedTables
 from sdm.cache import Cache
-from sdm.models import BaseModel
+from sdm.models import Model
 from sdm.processing import Recipe
 
 
-class KumoRFM(BaseModel):
+class KumoRFM(Model):
     r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
     Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.

@@ -77,6 +77,10 @@ addopts = [
     "--color=yes",
     "-vv",
     "--import-mode=importlib",
+    "--strict-markers",
+]
+markers = [
+    "cuda: tests that require a NVIDIA GPU",
 ]
 testpaths = ["test"]
 xfail_strict = true
@@ -165,4 +169,5 @@ allowed-unresolved-imports = [
     "cupy.**",
     "pyg_lib.**",
     "pylibcudf.**",
+    "graphviz.**",
 ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, SupportsIndex, cast
@@ -13,6 +14,17 @@ from typing_extensions import Self, override
 from sdm.tensor.io import ARROW_TORCH_DTYPES, to_arrow
 
 aten = torch.ops.aten
+
+
+def preserve_view_inference_mode(fn: Callable) -> Callable:
+    r"""Preserve input inference state for tensor view operations."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with torch.inference_mode(args[0].is_inference()):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 class VarLenTensor(Tensor):
@@ -537,6 +549,7 @@ class VarLenTensor(Tensor):
 
 
 @VarLenTensor.implements(aten.alias.default)
+@preserve_view_inference_mode
 def _alias(input: VarLenTensor) -> VarLenTensor:
     return input.__class__(
         data=aten.alias.default(input._data),
@@ -635,6 +648,7 @@ def _clone(
 
 
 @VarLenTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
 def _detach(input: VarLenTensor) -> VarLenTensor:
     return input.__class__(
         data=input._data.detach(),
@@ -705,42 +719,49 @@ def _allclose(
 
 
 @VarLenTensor.implements(aten.view.default)
+@preserve_view_inference_mode
 def _view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).view(tuple(size))
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten._unsafe_view.default)
+@preserve_view_inference_mode
 def _unsafe_view(input: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     view = aten._unsafe_view.default(_layout_view(input), size)
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.squeeze.default)
+@preserve_view_inference_mode
 def _squeeze(input: VarLenTensor) -> VarLenTensor:
     view = _layout_view(input).squeeze()
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.squeeze.dim)
+@preserve_view_inference_mode
 def _squeeze_dim(input: VarLenTensor, dim: int) -> VarLenTensor:
     view = _layout_view(input).squeeze(dim)
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.squeeze.dims)
+@preserve_view_inference_mode
 def _squeeze_dims(input: VarLenTensor, dim: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).squeeze(tuple(dim))
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.unsqueeze.default)
+@preserve_view_inference_mode
 def _unsqueeze(input: VarLenTensor, dim: int) -> VarLenTensor:
     view = _layout_view(input).unsqueeze(dim)
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.expand.default)
+@preserve_view_inference_mode
 def _expand(
     input: VarLenTensor,
     size: Sequence[int],
@@ -752,30 +773,35 @@ def _expand(
 
 
 @VarLenTensor.implements(aten.t.default)
+@preserve_view_inference_mode
 def _t(input: VarLenTensor) -> VarLenTensor:
     view = _layout_view(input).t()
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.transpose.int)
+@preserve_view_inference_mode
 def _transpose(input: VarLenTensor, dim0: int, dim1: int) -> VarLenTensor:
     view = _layout_view(input).transpose(dim0, dim1)
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.permute.default)
+@preserve_view_inference_mode
 def _permute(input: VarLenTensor, dims: Sequence[int]) -> VarLenTensor:
     view = _layout_view(input).permute(tuple(dims))
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.select.int)
+@preserve_view_inference_mode
 def _select(input: VarLenTensor, dim: int, index: int) -> VarLenTensor:
     view = _layout_view(input).select(dim, index)
     return _from_layout_view(input, view)
 
 
 @VarLenTensor.implements(aten.slice.Tensor)
+@preserve_view_inference_mode
 def _slice(
     input: VarLenTensor,
     dim: int = 0,
@@ -788,6 +814,7 @@ def _slice(
 
 
 @VarLenTensor.implements(aten.narrow.default)
+@preserve_view_inference_mode
 def _narrow(
     input: VarLenTensor,
     dim: int,
@@ -799,6 +826,7 @@ def _narrow(
 
 
 @VarLenTensor.implements(aten.unbind.int)
+@preserve_view_inference_mode
 def _unbind(input: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
     return tuple(
         _from_layout_view(input, view)
@@ -807,6 +835,7 @@ def _unbind(input: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
 
 
 @VarLenTensor.implements(aten.split.Tensor)
+@preserve_view_inference_mode
 def _split(
     input: VarLenTensor,
     split_size: int,
@@ -821,6 +850,7 @@ def _split(
 @VarLenTensor.implements(aten.split.sizes)
 @VarLenTensor.implements(aten.split.default)
 @VarLenTensor.implements(aten.split_with_sizes.default)
+@preserve_view_inference_mode
 def _split_with_sizes(
     input: VarLenTensor,
     split_sizes: Sequence[int],

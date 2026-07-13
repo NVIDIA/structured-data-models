@@ -196,3 +196,18 @@ def test_tolist() -> None:
         [["a", "bb", "c"], ["dd", "e", "ff"]],
     ]:
         assert StringTensor.from_list(strings).tolist() == strings
+
+
+def test_sort() -> None:
+    tensor = StringTensor.from_list(["b", "aa", "a", "é", ""])
+
+    out, perm = tensor.sort()
+    assert out.tolist() == ["", "a", "aa", "b", "é"]
+    assert perm.equal(torch.tensor([4, 2, 1, 0, 3]))
+
+    out, perm = torch.sort(tensor, dim=-1, descending=True)
+    assert out.tolist() == ["é", "b", "aa", "a", ""]
+    assert perm.equal(torch.tensor([3, 0, 1, 2, 4]))
+
+    perm = torch.argsort(tensor)
+    assert perm.equal(torch.tensor([4, 2, 1, 0, 3]))

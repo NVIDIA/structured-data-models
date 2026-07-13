@@ -32,14 +32,16 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
         related_tables: The related tables for the task table.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             task_table=cast(TableTensor, self.task_table.to(device)),
             related_tables=self.related_tables.to(device),
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = list({self.task_table.device, self.related_tables.device})
         if len(devices) > 1:
             raise RuntimeError(
@@ -267,18 +269,18 @@ class RelationalSampler:
         relationships = tuple(
             Relationship(
                 left_table=rel.left_table,
-                left_columns=(EXAMPLE_ID, *rel.left_columns),
+                left_columns=(*rel.left_columns, EXAMPLE_ID),
                 right_table=rel.right_table,
-                right_columns=(EXAMPLE_ID, *rel.right_columns),
+                right_columns=(*rel.right_columns, EXAMPLE_ID),
             )
             for rel in self.data.relationships
             if rel.left_table in tables and rel.right_table in tables
         )
 
         task_link = TaskLink(
-            task_columns=(EXAMPLE_ID, *task_link.task_columns),
+            task_columns=(*task_link.task_columns, EXAMPLE_ID),
             table=task_link.table,
-            table_columns=(EXAMPLE_ID, *task_link.table_columns),
+            table_columns=(*task_link.table_columns, EXAMPLE_ID),
         )
 
         task_table: Tensor = torch.cat(

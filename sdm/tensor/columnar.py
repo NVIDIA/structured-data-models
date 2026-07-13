@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
@@ -13,10 +14,21 @@ from typing_extensions import Self, override
 from sdm.tensor import StringTensor
 from sdm.tensor.io import to_arrow
 
-aten = torch.ops.aten
-
 if TYPE_CHECKING:
     import cudf
+
+aten = torch.ops.aten
+
+
+def preserve_view_inference_mode(fn: Callable) -> Callable:
+    r"""Preserve input inference state for tensor view operations."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with torch.inference_mode(args[0].is_inference()):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 class ColumnarTensor(Tensor):
@@ -296,6 +308,7 @@ class ColumnarTensor(Tensor):
 
 
 @ColumnarTensor.implements(aten.alias.default)
+@preserve_view_inference_mode
 def _alias(input: ColumnarTensor) -> ColumnarTensor:
     return input.__class__(
         columns=input._columns,
@@ -381,6 +394,7 @@ def _pin_memory(input: ColumnarTensor) -> ColumnarTensor:
 
 
 @ColumnarTensor.implements(aten.view.default)
+@preserve_view_inference_mode
 def _view(input: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
     size = tuple(size)
     for i, dim_size in enumerate(size):
@@ -423,6 +437,7 @@ def _view(input: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
 
 
 @ColumnarTensor.implements(aten._unsafe_view.default)
+@preserve_view_inference_mode
 def _unsafe_view(
     input: ColumnarTensor,
     size: Sequence[int],
@@ -431,16 +446,19 @@ def _unsafe_view(
 
 
 @ColumnarTensor.implements(aten.squeeze.default)
+@preserve_view_inference_mode
 def _squeeze(input: ColumnarTensor) -> ColumnarTensor:
     return _squeeze_dims(input, range(input.dim() - 1))
 
 
 @ColumnarTensor.implements(aten.squeeze.dim)
+@preserve_view_inference_mode
 def _squeeze_dim(input: ColumnarTensor, dim: int) -> ColumnarTensor:
     return _squeeze_dims(input, (dim,))
 
 
 @ColumnarTensor.implements(aten.squeeze.dims)
+@preserve_view_inference_mode
 def _squeeze_dims(input: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
     dims = tuple(_normalize_dim(input, d) for d in dim)
 
@@ -462,6 +480,7 @@ def _squeeze_dims(input: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
 
 
 @ColumnarTensor.implements(aten.unsqueeze.default)
+@preserve_view_inference_mode
 def _unsqueeze(input: ColumnarTensor, dim: int) -> ColumnarTensor:
     if dim < -input.dim() - 1 or dim > input.dim():
         raise IndexError(
@@ -484,6 +503,7 @@ def _unsqueeze(input: ColumnarTensor, dim: int) -> ColumnarTensor:
 
 
 @ColumnarTensor.implements(aten.expand.default)
+@preserve_view_inference_mode
 def _expand(
     input: ColumnarTensor,
     size: Sequence[int],
@@ -525,6 +545,7 @@ def _expand(
 
 
 @ColumnarTensor.implements(aten.transpose.int)
+@preserve_view_inference_mode
 def _transpose(
     input: ColumnarTensor,
     dim0: int,
@@ -556,6 +577,7 @@ def _transpose(
 
 
 @ColumnarTensor.implements(aten.permute.default)
+@preserve_view_inference_mode
 def _permute(input: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
     dims = tuple(_normalize_dim(input, dim) for dim in dims)
     if dims[-1] != input.dim() - 1:
@@ -572,6 +594,7 @@ def _permute(input: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
 
 
 @ColumnarTensor.implements(aten.select.int)
+@preserve_view_inference_mode
 def _select(input: ColumnarTensor, dim: int, index: int) -> Tensor:
     dim = _normalize_dim(input, dim)
 
@@ -586,6 +609,7 @@ def _select(input: ColumnarTensor, dim: int, index: int) -> Tensor:
 
 
 @ColumnarTensor.implements(aten.slice.Tensor)
+@preserve_view_inference_mode
 def _slice(
     input: ColumnarTensor,
     dim: int = 0,
@@ -617,6 +641,7 @@ def _slice(
 
 
 @ColumnarTensor.implements(aten.narrow.default)
+@preserve_view_inference_mode
 def _narrow(
     input: ColumnarTensor,
     dim: int,
@@ -627,6 +652,7 @@ def _narrow(
 
 
 @ColumnarTensor.implements(aten.unbind.int)
+@preserve_view_inference_mode
 def _unbind(input: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
     dim = _normalize_dim(input, dim)
 
@@ -652,6 +678,7 @@ def _unbind(input: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
 
 
 @ColumnarTensor.implements(aten.split.Tensor)
+@preserve_view_inference_mode
 def _split(
     input: ColumnarTensor,
     split_size: int,
@@ -667,6 +694,7 @@ def _split(
 @ColumnarTensor.implements(aten.split.sizes)
 @ColumnarTensor.implements(aten.split.default)
 @ColumnarTensor.implements(aten.split_with_sizes.default)
+@preserve_view_inference_mode
 def _split_with_sizes(
     input: ColumnarTensor,
     split_sizes: Sequence[int],
