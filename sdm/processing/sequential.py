@@ -19,35 +19,35 @@ class Sequential(Processor, InvertibleMixin):
             self.add_module(str(i), step)
         self.requires_fit = any(step.requires_fit for step in self.steps)
 
-    def _fit(self, input: TableTensor) -> None:
-        out = input
+    def _fit(self, table: TableTensor) -> None:
+        out = table
         for step in self.steps:
             out = step.fit_transform(out)
 
-    def fit(self, input: TableTensor) -> "Sequential":  # noqa: D102
-        out = input
+    def fit(self, table: TableTensor) -> "Sequential":  # noqa: D102
+        out = table
         for step in self.steps:
             out = step.fit_transform(out)
         if self.requires_fit:
             self._fitted = True
         return self
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        out = input
+    def _transform(self, table: TableTensor) -> TableTensor:
+        out = table
         for step in self.steps:
             out = step.transform(out)
         return out
 
-    def fit_transform(self, input: TableTensor) -> TableTensor:  # noqa: D102
-        out = input
+    def fit_transform(self, table: TableTensor) -> TableTensor:  # noqa: D102
+        out = table
         for step in self.steps:
             out = step.fit_transform(out)
         if self.requires_fit:
             self._fitted = True
         return out
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        out = input
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        out = table
         for step in self.steps[::-1]:
             fn = getattr(step, "inverse_transform", None)
             if not callable(fn):

@@ -311,26 +311,26 @@ class StringTensor(VarLenTensor):
 @StringTensor.implements(aten.sort.default)
 @StringTensor.implements(aten.sort.stable)
 def _sort(
-    input: StringTensor,
+    inp: StringTensor,
     dim: int = -1,
     descending: bool = False,
     *,
     stable: bool | None = None,
 ) -> tuple[StringTensor, Tensor]:
-    if dim < -input.dim() or dim >= input.dim():
+    if dim < -inp.dim() or dim >= inp.dim():
         raise IndexError(
             f"Dimension out of range (expected to be in range of "
-            f"[{-input.dim()}, {input.dim() - 1}], but got {dim})"
+            f"[{-inp.dim()}, {inp.dim() - 1}], but got {dim})"
         )
 
-    if input.dim() != 1:
+    if inp.dim() != 1:
         raise NotImplementedError("'sort' only supports one-dimensional input")
 
     import pyarrow.compute as pc
 
     out = pc.call_function(  # TODO Add GPU implementation
         "array_sort_indices",
-        [input.to_arrow()],
+        [inp.to_arrow()],
         options=pc.ArraySortOptions(
             order="descending" if descending else "ascending",
         ),
@@ -340,6 +340,6 @@ def _sort(
             "ignore",
             message="The given NumPy array is not writable",
         )
-        perm = torch.from_numpy(out.to_numpy()).to(input.device, torch.int64)
+        perm = torch.from_numpy(out.to_numpy()).to(inp.device, torch.int64)
 
-    return cast(StringTensor, input[perm]), perm
+    return cast(StringTensor, inp[perm]), perm
