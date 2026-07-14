@@ -5,6 +5,7 @@ import math
 import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
@@ -33,6 +34,17 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
             return fn(*args, **kwargs)
 
     return wrapper
+
+
+@dataclass(frozen=True)
+class TableSchema:
+    r"""The schema of a :class:`TableTensor`.
+
+    Args:
+        columns: Column names grouped by semantic type.
+    """
+
+    columns: Mapping[Stype, tuple[str, ...]]
 
 
 class TableTensor(Tensor):
@@ -378,6 +390,12 @@ class TableTensor(Tensor):
         if columns is None:
             columns = [str(i) for i in range(tensor.size(-1))]
 
+        if tensor.dtype in CategoricalTensor.ALLOWED_DTYPES:
+            return cls(
+                columns={Stype.categorical: columns},
+                categorical=CategoricalTensor.from_tensor(tensor),
+            )
+
         return cls(
             columns={Stype.numerical: columns},
             numerical=tensor,
@@ -487,6 +505,19 @@ class TableTensor(Tensor):
     def blocks(self) -> Mapping[Stype, Tensor]:
         r"""Return typed column blocks per semantic type."""
         return dict(self.items())
+
+    @property
+    def schema(self) -> TableSchema:
+        r"""The schema of this table."""
+        return TableSchema(columns=self._columns)
+
+    def is_same_schema(self, other: TableTensor) -> bool:
+        r"""Whether ``other`` has the same schema layout.
+
+        Args:
+            other: The object to compare against.
+        """
+        return self.schema == other.schema
 
     def replace_blocks(
         self,
@@ -1268,8 +1299,12 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         )
     tensors = cast(Sequence[TableTensor], tensors)
 
+    ref = tensors[0]
+    if not _is_column_dim(ref, dim):
+        tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
+
     blocks: dict[Stype, Tensor] = {}
-    for stype, _ in tensors[0].items():
+    for stype, _ in ref.items():
         block_list = [tensor.blocks[stype] for tensor in tensors]
         block_list = [block for block in block_list if block.size(-1) > 0]
         if len(block_list) == 1:
@@ -1278,8 +1313,8 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             blocks[stype] = torch.cat(block_list, dim=dim)
 
     size: Sequence[int] | None = None
-    if not _is_column_dim(tensors[0], dim):
-        columns = tensors[0]._columns
+    if not _is_column_dim(ref, dim):
+        columns = ref._columns
         if len(blocks) == 0:
             size = list(tensors[0].size())
             for tensor in tensors[1:]:
@@ -1289,27 +1324,27 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
             stype: tuple(
                 chain.from_iterable(t._columns[stype] for t in tensors)
             )
-            for stype, _ in tensors[0].items()
+            for stype, _ in ref.items()
         }
-        size = tensors[0].size()
+        size = ref.size()
 
-    return tensors[0].__class__(
+    return ref.__class__(
         size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
+        device=ref.device if len(blocks) == 0 else None,
         **blocks,
     )
 
 
 @TableTensor.implements(aten.stack.default)
-def _stack(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
-    if not all(isinstance(tensor, TableTensor) for tensor in tensors):
-        raise TypeError("Expected all tensors to be 'TableTensor' instances")
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
+    if len(tensors) == 0:
+        raise RuntimeError("stack expects a non-empty TensorList")
 
-    tensors = cast(Sequence[TableTensor], tensors)
-    blocks = {
-        stype: torch.stack([tensor.blocks[stype] for tensor in tensors], dim)
-        for stype in tensors[0]._columns
-    }
+    if not all(isinstance(tensor, TableTensor) for tensor in tensors):
+        raise TypeError(
+            f"Expected all tensors to be '{TableTensor.__name__}' instances"
+        )
 
     dim %= tensors[0].dim() + 1
     if dim >= tensors[0].dim():
@@ -1318,8 +1353,18 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
             f"'{tensors[0].__class__.__name__}'"
         )
 
-    return tensors[0].__class__(
-        columns=cast(dict[StypeLike, tuple[str, ...]], tensors[0]._columns),
+    tensors = cast(Sequence[TableTensor], tensors)
+
+    ref = tensors[0]
+    tensors = (ref, *(_align_like(tensor, ref) for tensor in tensors[1:]))
+
+    blocks = {
+        stype: torch.stack([tensor.blocks[stype] for tensor in tensors], dim)
+        for stype in ref._columns
+    }
+
+    return ref.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], ref._columns),
         **blocks,
     )
 
@@ -1339,3 +1384,33 @@ def _is_column_dim(inp: Tensor, dim: int) -> bool:
     if dim < -inp.dim() or dim >= inp.dim():
         return False
     return dim % inp.dim() == inp.dim() - 1
+
+
+def _align_like(inp: TableTensor, ref: TableTensor) -> TableTensor:
+    if inp._columns == ref._columns:
+        return inp
+
+    if inp.stypes != ref.stypes:
+        raise ValueError(
+            "Expected all tensors to have the same column names and stypes"
+        )
+
+    blocks: dict[Stype, Tensor] = {}
+    columns: dict[StypeLike, tuple[str, ...]] = {}
+
+    for stype, ref_columns in ref._columns.items():
+        if len(ref_columns) == 0:
+            blocks[stype] = inp.blocks[stype]
+            columns[stype] = ref_columns
+            continue
+
+        inp_columns = inp._columns[stype]
+        index = torch.tensor(
+            [inp_columns.index(column) for column in ref_columns],
+            dtype=torch.int64,
+            device=inp.blocks[stype].device,
+        )
+        blocks[stype] = inp.blocks[stype].index_select(-1, index)
+        columns[stype] = ref_columns
+
+    return inp.__class__(columns=columns, **blocks)

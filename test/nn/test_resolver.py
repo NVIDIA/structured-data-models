@@ -1,6 +1,6 @@
 import pytest
 import torch
-from sdm.nn import normalization_resolver
+from sdm.nn.resolver import normalization_resolver
 
 
 def test_normalization_resolver() -> None:
@@ -28,8 +28,5 @@ def test_normalization_resolver() -> None:
     module = torch.nn.LayerNorm(8)
     assert normalization_resolver(module) is module
 
-    with pytest.raises(
-        ValueError,
-        match="Could not resolve normalization 'linear'",
-    ):
-        normalization_resolver("linear", 8, 8)
+    with pytest.raises(ValueError, match="resolve normalization 'linear'"):
+        normalization_resolver("linear")

@@ -127,6 +127,33 @@ def test_allowed_dtype() -> None:
         tensor.to(torch.float32)
 
 
+def test_to_dtype_layout_copy() -> None:
+    tensor = StringTensor.from_list(["hi", "é", ""])
+
+    out = tensor.to(torch.uint8, copy=True)
+    assert isinstance(out, StringTensor)
+    assert out.tolist() == tensor.tolist()
+
+    out = tensor.clone()
+    assert isinstance(out, StringTensor)
+    assert out.tolist() == tensor.tolist()
+
+
+@pytest.mark.parametrize("create_in_inference_mode", [False, True])
+def test_to_list_in_inference_mode(
+    create_in_inference_mode: bool,
+) -> None:
+    values = ["hi", "é", ""]
+    if create_in_inference_mode:
+        with torch.inference_mode():
+            tensor = StringTensor.from_list(values)
+    else:
+        tensor = StringTensor.from_list(values)
+
+    with torch.inference_mode():
+        assert tensor.tolist() == values
+
+
 def test_item() -> None:
     assert StringTensor.from_list("é").item() == "é"
     assert StringTensor.from_list(["hi", "é"])[1].item() == "é"

@@ -687,10 +687,9 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
-        norm: The normalization name passed to
-            :func:`sdm.nn.normalization_resolver`.
+        norm: The normalization layer name.
         norm_kwargs: Additional keyword arguments passed to the normalization
-            layer.
+            layer constructor.
         device: The device.
         dtype: The dtype.
     """
@@ -709,9 +708,7 @@ class TransformerBlock(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-
-        norm_kwargs = dict(norm_kwargs or {})
-        norm_kwargs.update(factory_kwargs)
+        norm_kwargs = {**(norm_kwargs or {}), **factory_kwargs}
 
         self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
         self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)

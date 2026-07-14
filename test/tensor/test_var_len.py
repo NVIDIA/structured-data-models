@@ -477,8 +477,17 @@ def test_pin_memory() -> None:
     )
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        assert tensor.pin_memory().is_pinned()
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    tensor = VarLenTensor(
+        data=torch.arange(4),
+        offset=torch.arange(5),
+        size=(4,),
+    )
+
+    assert tensor.pin_memory().is_pinned()
 
 
 def test_share_memory() -> None:
