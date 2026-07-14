@@ -73,7 +73,6 @@ def test_recipe_role_fit_accepts_table() -> None:
 
 @withCUDA
 def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
-    torch.manual_seed(0)
     recipe = TabICLv2.default_recipe()
 
     features = TableTensor(
