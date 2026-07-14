@@ -231,7 +231,7 @@ def _validate_provenance(value: str, *, option: str) -> str:
 
 
 def _require_finite_value(
-    value: object,
+    value: Any,
     *,
     field: str,
     non_negative: bool = True,

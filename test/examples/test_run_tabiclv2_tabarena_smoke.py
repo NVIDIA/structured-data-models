@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 from pathlib import Path
 from typing import Any
@@ -11,9 +12,9 @@ import pytest
 pytest.importorskip("autogluon")
 pytest.importorskip("tabarena")
 
-import tabarena.contexts as tabarena_contexts
 from examples.benchmarking import run_tabiclv2_tabarena_smoke as runner
 
+tabarena_contexts = importlib.import_module("tabarena.contexts")
 pytestmark = pytest.mark.tabarena
 
 SDM_METHOD = "[New] SDM-TabICLv2_c1"
@@ -85,7 +86,7 @@ class _FakeContext:
         )
         self.all_results = _all_results()
         self.new_leaderboard = (
-            pd.DataFrame({"rank": [1]}, index=[SDM_METHOD])
+            pd.DataFrame({"rank": [1]}, index=pd.Index([SDM_METHOD]))
             if new_leaderboard is None
             else new_leaderboard
         )
@@ -132,7 +133,7 @@ class _FakeContext:
             return self.new_leaderboard, self.new_results
         leaderboard = pd.DataFrame(
             {"rank": [1, 2]},
-            index=[ORIGINAL_METHOD, SDM_METHOD],
+            index=pd.Index([ORIGINAL_METHOD, SDM_METHOD]),
         )
         return leaderboard, self.all_results
 
@@ -295,7 +296,7 @@ def test_baseline_enriched_rows_cannot_satisfy_completion_check(
 ) -> None:
     baseline_enriched = pd.DataFrame(
         {"rank": [1, 2]},
-        index=[ORIGINAL_METHOD, SDM_METHOD],
+        index=pd.Index([ORIGINAL_METHOD, SDM_METHOD]),
     )
     context = _FakeContext(
         new_leaderboard=baseline_enriched,
