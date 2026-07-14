@@ -50,8 +50,8 @@ class StatelessProcessor(Processor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        return inp.replace_blocks(numerical=inp.numerical + 1)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical + 1)
 
 
 def test_stateless_processor_runs_without_fit() -> None:

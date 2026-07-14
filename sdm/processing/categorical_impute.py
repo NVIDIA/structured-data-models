@@ -14,7 +14,7 @@ class CategoricalImpute(Processor):
     Negative category codes are missing values. The fitted fill value is
     learned independently for every categorical column and applied without
     changing its category vocabulary.
-    Transform inputs must use the fitted per-column category vocabularies.
+    Transform tableuts must use the fitted per-column category vocabularies.
     The processor raises if they do not match. Column names are not
     validated. Use :class:`~sdm.processing.CategoricalAlign` before this
     processor when training and transform inputs were tensorized
@@ -45,12 +45,12 @@ class CategoricalImpute(Processor):
             torch.empty(0, dtype=torch.long),
         )
 
-    def _fit(self, inp: TableTensor) -> None:
-        data = inp.categorical
-        _check_categorical_codes(inp)
+    def _fit(self, table: TableTensor) -> None:
+        data = table.categorical
+        _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []
-        columns = inp.columns[Stype.categorical]
-        for index, category in enumerate(inp.categorical.categories):
+        columns = table.columns[Stype.categorical]
+        for index, category in enumerate(table.categorical.categories):
             codes = data[..., index]
             observed = codes[codes >= 0].to(torch.long)
             if observed.numel() == 0:
@@ -67,30 +67,30 @@ class CategoricalImpute(Processor):
             if len(fill_values) > 0
             else torch.empty(0, dtype=torch.long, device=data.device)
         )
-        self._categories = inp.categorical.categories
+        self._categories = table.categorical.categories
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        self._check_categories(inp)
-        _check_categorical_codes(inp)
-        data = inp.categorical.where(
-            inp.categorical >= 0,
-            self._fill_values.to(dtype=inp.categorical.dtype),
+    def _transform(self, table: TableTensor) -> TableTensor:
+        self._check_categories(table)
+        _check_categorical_codes(table)
+        data = table.categorical.where(
+            table.categorical >= 0,
+            self._fill_values.to(dtype=table.categorical.dtype),
         )
         categorical = CategoricalTensor(
             data=data,
-            categories=inp.categorical.categories,
+            categories=table.categorical.categories,
         )
-        return inp.replace_blocks(categorical=categorical)
+        return table.replace_blocks(categorical=categorical)
 
-    def _check_categories(self, inp: TableTensor) -> None:
-        columns = inp.columns[Stype.categorical]
-        if len(inp.categorical.categories) != len(self._categories):
+    def _check_categories(self, table: TableTensor) -> None:
+        columns = table.columns[Stype.categorical]
+        if len(table.categorical.categories) != len(self._categories):
             raise ValueError(
                 f"Expected {len(self._categories)} fitted categorical "
                 f"columns (got {len(columns)})."
             )
         for index, (actual, expected) in enumerate(
-            zip(inp.categorical.categories, self._categories)
+            zip(table.categorical.categories, self._categories)
         ):
             expected = expected.to(device=actual.device)
             if not actual.equal(expected):
