@@ -14,7 +14,7 @@ class CategoricalImpute(Processor):
     Negative category codes are missing values. The fitted fill value is
     learned independently for every categorical column and applied without
     changing its category vocabulary.
-    Transform tableuts must use the fitted per-column category vocabularies.
+    Transform inputs must use the fitted per-column category vocabularies.
     The processor raises if they do not match. Column names are not
     validated. Use :class:`~sdm.processing.CategoricalAlign` before this
     processor when training and transform inputs were tensorized

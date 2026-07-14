@@ -19,7 +19,7 @@ class ConstantFilter(Processor):
     ``threshold``, all columns are preserved.
 
     With ``method="variance"``, columns are retained when their sample
-    standard deviation is greater than ``tolerance``. Non-floating tableut is
+    standard deviation is greater than ``tolerance``. Non-floating input is
     promoted to the default floating-point dtype for this calculation. Columns
     containing NaN have NaN standard deviation and are removed.
 
