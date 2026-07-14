@@ -126,11 +126,8 @@ class InvariantGNN(torch.nn.Module):
                 )
                 - h.square()
             )
-            # Zero out (near-)zero variance segments. Compare against the
-            # variance *before* taking the square root: in `float16`,
-            # `clamp(0.0, min=1e-5).sqrt()` rounds up above
-            # `math.sqrt(1e-5)`, so a post-`sqrt` comparison would fail to
-            # zero out zero-variance segments:
+            # Compare before `sqrt`: in `float16`, `clamp(0, 1e-5).sqrt()`
+            # rounds above `sqrt(1e-5)` and would escape a post-`sqrt` check:
             h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
             x = x + self.std_lin(h)
 

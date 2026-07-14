@@ -30,9 +30,7 @@ def test_invariant_gnn(device: torch.device) -> None:
 
 @withCUDA
 def test_invariant_gnn_half_zero_variance_std(device: torch.device) -> None:
-    # Since both 'orders' rows are identical, every node receives either
-    # identical incoming messages or no messages at all ('users[1]'), such
-    # that the standard deviation of every segment is exactly zero:
+    # Every segment sees identical or no incoming messages, so std is zero:
     x_dict = {
         "users": torch.randn(2, 8, device=device, dtype=torch.half),
         "orders": torch.randn(1, 8, device=device, dtype=torch.half).repeat(
