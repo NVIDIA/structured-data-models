@@ -348,10 +348,20 @@ def _to_copy(
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
 
+    # `Tensor.to(device)` fills in the placeholder wrapper dtype, so treat a
+    # same-dtype request as no dtype conversion:
+    if dtype == inp.dtype:
+        dtype = None
+
     if dtype is not None:
         raise TypeError(
             f"Can't convert '{inp.__class__.__name__}' to dtype '{dtype}'"
         )
+
+    if device is not None:
+        # Canonicalize index-less devices such as 'cuda' to, e.g., 'cuda:0'
+        # to match the device of the copied columns:
+        device = torch.empty(0, device=device).device
 
     return inp.__class__(
         columns=[
@@ -368,6 +378,69 @@ def _to_copy(
         ],
         size=inp.size()[:-1],
         device=device,
+    )
+
+
+@ColumnarTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
+    inp: ColumnarTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool | None = None,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=bool(pin_memory),
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
+@ColumnarTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: ColumnarTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
+@ColumnarTensor.implements(aten.to.device)
+def _to_device(
+    inp: ColumnarTensor,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
     )
 
 

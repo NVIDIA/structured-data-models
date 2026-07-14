@@ -535,6 +535,56 @@ def test_to_copy() -> None:
     assert out._column_to_loc == tensor._column_to_loc
 
 
+def test_to_in_inference_mode() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+        },
+        numerical=torch.randn(2, 2),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+            categories=(torch.arange(2), torch.arange(2)),
+        ),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to(torch.float64)
+
+    assert isinstance(out, TableTensor)
+    assert out.dtype == torch.float64
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.dtype == torch.int32
+    assert out.columns == tensor.columns
+    assert out._column_to_loc == tensor._column_to_loc
+
+
+@onlyCUDA
+def test_to_cuda_in_inference_mode() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+        },
+        numerical=torch.randn(2, 2),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+            categories=(torch.arange(2), torch.arange(2)),
+        ),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to("cuda")
+
+    assert isinstance(out, TableTensor)
+    assert out.is_cuda
+    assert out.numerical.is_cuda
+    assert out.categorical.is_cuda
+    assert isinstance(out.categorical, CategoricalTensor)
+    assert out.columns == tensor.columns
+    assert out._column_to_loc == tensor._column_to_loc
+
+
 def test_clone_contiguous() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},

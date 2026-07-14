@@ -663,6 +663,44 @@ def _to_dtype_layout(
     )
 
 
+@VarLenTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: VarLenTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> VarLenTensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
+@VarLenTensor.implements(aten.to.device)
+def _to_device(
+    inp: VarLenTensor,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> VarLenTensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
 @VarLenTensor.implements(aten.clone.default)
 def _clone(
     inp: VarLenTensor,

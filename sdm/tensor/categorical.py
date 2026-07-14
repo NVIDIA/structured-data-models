@@ -457,6 +457,69 @@ def _to_copy(
     return inp.__class__(data, categories)
 
 
+@CategoricalTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
+    inp: CategoricalTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool | None = None,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=bool(pin_memory),
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
+@CategoricalTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: CategoricalTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
+@CategoricalTensor.implements(aten.to.device)
+def _to_device(
+    inp: CategoricalTensor,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
 @CategoricalTensor.implements(aten.clone.default)
 def _clone(
     inp: CategoricalTensor,

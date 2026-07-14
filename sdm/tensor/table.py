@@ -952,6 +952,69 @@ def _to_copy(
     )
 
 
+@TableTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
+    inp: TableTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool | None = None,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=bool(pin_memory),
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
+@TableTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: TableTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
+@TableTensor.implements(aten.to.device)
+def _to_device(
+    inp: TableTensor,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    # TODO Return `inp` when `copy` is false and no conversion is requested
+    # to preserve the zero-copy behavior of `Tensor.to`.
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
+    )
+
+
 @TableTensor.implements(aten.clone.default)
 def _clone(
     inp: TableTensor,
