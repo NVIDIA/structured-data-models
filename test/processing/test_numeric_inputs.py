@@ -6,6 +6,7 @@ from sdm.processing import (
     MeanImpute,
     Power,
     Quantile,
+    QuantileClip,
     SigmaClip,
     SoftmaxTemperature,
     StandardScale,
@@ -15,7 +16,8 @@ from sdm.processing import (
 @pytest.mark.parametrize(
     "processor",
     [
-        Clip(),
+        Clip(min_value=-1.0, max_value=1.0),
+        QuantileClip(),
         MeanImpute(),
         Power(),
         Quantile(n_quantiles=4, subsample=None),
@@ -25,7 +27,7 @@ from sdm.processing import (
     ],
 )
 def test_numeric_processors_accept_integer_input(processor) -> None:
-    input = torch.tensor(
+    inp = torch.tensor(
         [
             [1, 2],
             [3, 4],
@@ -34,20 +36,20 @@ def test_numeric_processors_accept_integer_input(processor) -> None:
         ]
     )
 
-    output = processor.fit_transform(TableTensor.from_tensor(input)).numerical
+    output = processor.fit_transform(TableTensor.from_tensor(inp)).numerical
 
     assert output.dtype == torch.get_default_dtype()
-    assert output.shape == input.shape
+    assert output.shape == inp.shape
 
 
 def test_numeric_processors_promote_integer_input_to_default_dtype() -> None:
-    input = torch.tensor([[1, 2], [3, 4]])
+    inp = torch.tensor([[1, 2], [3, 4]])
     previous_dtype = torch.get_default_dtype()
     torch.set_default_dtype(torch.float64)
     try:
         output = (
             StandardScale()
-            .fit_transform(TableTensor.from_tensor(input))
+            .fit_transform(TableTensor.from_tensor(inp))
             .numerical
         )
     finally:

@@ -14,7 +14,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_init() -> None:
@@ -752,6 +752,55 @@ def test_cat_stack() -> None:
         _ = torch.stack([tensor1, tensor1], dim=-1)
 
 
+@withCUDA
+def test_cat_all_column_empty(device: torch.device) -> None:
+    tensor1 = TableTensor(size=(2,), device=device)
+    tensor2 = TableTensor(size=(3,), device=device)
+
+    out = torch.cat([tensor1, tensor2], dim=0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (5, 0)
+    assert out.device == device
+    assert out.numerical.device == device
+    assert out.columns == tensor1.columns
+
+    out = torch.cat([tensor1, tensor1], dim=-1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 0)
+    assert out.device == device
+    assert out.numerical.device == device
+    assert out.columns == tensor1.columns
+
+
+def test_cat_stack_reorder() -> None:
+    tensor1 = TableTensor(
+        columns={
+            "numerical": ["age", "amount"],
+        },
+        numerical=torch.randn(4, 2),
+    )
+    tensor2 = TableTensor(
+        columns={
+            "numerical": ["amount", "age"],
+        },
+        numerical=torch.randn(4, 2),
+    )
+
+    out = torch.cat([tensor1, tensor2], dim=0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (8, 2)
+    assert out.numerical.equal(
+        torch.cat([tensor1.numerical, tensor2.numerical.flip(1)], dim=0)
+    )
+
+    out = torch.stack([tensor1, tensor2], dim=0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 4, 2)
+    assert out.numerical.equal(
+        torch.stack([tensor1.numerical, tensor2.numerical.flip(1)], dim=0)
+    )
+
+
 def test_pin_memory() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
@@ -759,13 +808,21 @@ def test_pin_memory() -> None:
     )
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        out = cast(TableTensor, tensor.pin_memory())
-        assert out.is_pinned()
-        assert out.numerical.is_pinned()
-        assert out.categorical is tensor.categorical
-        assert out.datetime is tensor.datetime
-        assert out.id is tensor.id
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age", "income"]},
+        numerical=torch.randn(2, 2),
+    )
+
+    out = cast(TableTensor, tensor.pin_memory())
+    assert out.is_pinned()
+    assert out.numerical.is_pinned()
+    assert out.categorical is tensor.categorical
+    assert out.datetime is tensor.datetime
+    assert out.id is tensor.id
 
 
 def test_share_memory() -> None:

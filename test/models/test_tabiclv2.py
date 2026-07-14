@@ -4,7 +4,12 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Recipe, Sequential, SoftmaxTemperature
+from sdm.processing import (
+    InvertibleMixin,
+    Recipe,
+    SoftmaxTemperature,
+    StandardScale,
+)
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -69,6 +74,35 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
     torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
     model.clear()
 
+    with pytest.raises(ValueError, match="num_estimators must be positive"):
+        model(x, y, num_estimators=0)
+    with pytest.raises(ValueError, match="num_estimators must be positive"):
+        model.fit(x[..., :R_train, :], y, num_estimators=0)
+
+
+def test_tabiclv2_member_recipes() -> None:
+    model = TabICLv2(pretrained=False)
+
+    R, C, R_train = 8, 6, 5
+    x = TableTensor.from_tensor(torch.randn(R, C))
+    y = TableTensor.from_tensor(torch.randn(R_train, 1))
+    recipe = Recipe(target=[StandardScale()])
+
+    expected = model(x, y, recipe=recipe, num_estimators=2)
+    model.fit(
+        x[:R_train],
+        y,
+        recipe=recipe,
+        num_estimators=2,
+    )
+
+    assert model._caches is not None
+    member_recipes = [cache["recipe"] for cache in model._caches]
+    assert member_recipes[0] is not recipe
+    assert member_recipes[1] is not recipe
+    assert member_recipes[0] is not member_recipes[1]
+    torch.testing.assert_close(model.predict(x[R_train:]), expected)
+
 
 def test_tabiclv2_recipe() -> None:
     model = TabICLv2(pretrained=False)
@@ -101,7 +135,7 @@ def test_tabiclv2_recipe() -> None:
         x=recipe.features.transform(x),
         y=recipe.target.fit_transform(y),
     )
-    assert isinstance(recipe.target, Sequential)
+    assert isinstance(recipe.target, InvertibleMixin)
     expected = recipe.target.inverse_transform(
         TableTensor.from_tensor(raw.clone())
     ).numerical
@@ -111,10 +145,12 @@ def test_tabiclv2_recipe() -> None:
     model.fit(x[:R_train], y, recipe=model.default_recipe())
     torch.testing.assert_close(model.predict(x[R_train:]), out)
     model.clear()
-    assert model._recipe is None
+    assert model._caches is None
 
 
-def test_default_recipe_regression_roundtrip() -> None:
+@pytest.mark.parametrize("task", ["classification", "regression"])
+def test_default_recipe(task: str) -> None:
+    torch.manual_seed(0)
     recipe = TabICLv2.default_recipe()
 
     features = TableTensor(
@@ -128,7 +164,16 @@ def test_default_recipe_regression_roundtrip() -> None:
             categories=(StringTensor.from_list(["a", "b"]),),
         ),
     )
-    target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
+    if task == "classification":
+        target = TableTensor(
+            columns={"categorical": ("y",)},
+            categorical=CategoricalTensor(
+                data=(torch.arange(16, dtype=torch.int64) % 2).unsqueeze(-1),
+                categories=(StringTensor.from_list(["a", "b"]),),
+            ),
+        )
+    else:
+        target = TableTensor.from_tensor(torch.randn(16, 1), columns=["y"])
 
     model_features = recipe.features.fit_transform(features)
     model_target = recipe.target.fit_transform(target)
@@ -143,12 +188,28 @@ def test_default_recipe_regression_roundtrip() -> None:
         "d",
         "kind",
     }
+    assert isinstance(recipe.target, InvertibleMixin)
 
-    assert isinstance(recipe.target, Sequential)
-    restored = recipe.target.inverse_transform(model_target)
-    torch.testing.assert_close(
-        restored.numerical, target.numerical, atol=1e-4, rtol=1e-4
+    if task == "regression":
+        model_output = TableTensor.from_tensor(torch.randn(16, 999))
+        restored = recipe.target.inverse_transform(model_output)
+        expected = model_output.numerical * target.numerical.std(
+            dim=0, correction=0
+        ) + target.numerical.mean(dim=0)
+        torch.testing.assert_close(restored.numerical, expected)
+
+    output = TableTensor.from_tensor(
+        torch.randn(16, 2),
+        columns=("y0", "y1"),
     )
+    transformed = recipe.output.transform(output)
+    if task == "classification":
+        torch.testing.assert_close(
+            transformed.numerical,
+            (output.numerical / 0.9).softmax(dim=-1),
+        )
+    else:
+        assert transformed is output
 
 
 @withCUDA

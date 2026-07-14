@@ -38,7 +38,8 @@ class ICLBlock(torch.nn.Module):
                 num_query_heads=num_heads,
                 feedforward_channels=2 * channels,
                 qassmax=True,
-                norm_bias=norm_bias,
+                norm="layer_norm",
+                norm_kwargs={"bias": norm_bias},
                 **factory_kwargs,
             )
             self.layers.append(layer)
