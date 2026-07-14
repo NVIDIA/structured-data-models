@@ -56,7 +56,7 @@ class Model(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-    ) -> Tensor:  # [..., R_query, *]
+    ) -> TableTensor:  # [..., R_query, *]
         r"""The in-context learning forward pass.
 
         Args:

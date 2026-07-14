@@ -165,7 +165,7 @@ class TabICLv2(Model):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=self.reg_model(x, y, cache=cache),
+                numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
             )
 
         return TableTensor(
