@@ -29,5 +29,5 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
         y=table[:300, "target"],
         num_estimators=2,
     )
-    model.predict(x=table[300:].drop_columns("target"))
+    model.predict(table[300:].drop_columns("target"))
     model.clear()
