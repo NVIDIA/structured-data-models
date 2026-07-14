@@ -187,7 +187,7 @@ data-aria-dark="Switch to auto color mode">
 <p>A recipe bundles three processing pipelines, one per role the data plays
 relative to the model:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">features</span></code>: model tableuts, transformed before the model.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">features</span></code>: model inputs, transformed before the model.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">target</span></code>: labels transformed forward before the model. Regression
 predictions are inverted through this pipeline; classification outputs
 are reconstructed from the fitted target categories instead.</p></li>
@@ -204,7 +204,7 @@ output dispatchers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to model tableuts before the model.</p></li>
+<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to model inputs before the model.</p></li>
 <li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to labels. Invertible numerical target steps map
 regression output back to the original space.</p></li>
 <li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied after member outputs have been mapped to a
@@ -240,7 +240,7 @@ common class or target space and aggregated.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=0e32036c"></script>
+      <script src="../../_static/documentation_options.js?v=4e294478"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
