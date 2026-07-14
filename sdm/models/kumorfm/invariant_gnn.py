@@ -126,7 +126,7 @@ class InvariantGNN(torch.nn.Module):
                 )
                 - h.square()
             )
-            # In `float16`, `sqrt` rounds above `sqrt(1e-5)`; compare pre-`sqrt`:
+            # `float16` rounds `sqrt` above `sqrt(1e-5)`; compare pre-`sqrt`:
             h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
             x = x + self.std_lin(h)
 
