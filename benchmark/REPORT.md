@@ -2,121 +2,114 @@
 
 ## Method
 
-Benchmarks ran on 13 July 2026 on an AWS Linux host with four AMD EPYC 7R13
-vCPUs and 15 GiB RAM. An NVIDIA L4 (23,034 MiB) was present and used for the
-pinned model parity tests, but all Processors in this benchmark ran on CPU.
-SDM used PyTorch 2.12.1+cu130 with float32 tensors. The pinned reference used
-NumPy/sklearn float32 inputs from TabICLv2 commit
+Benchmarks ran on 14 July 2026 on an AWS Linux host with four AMD EPYC 7R13
+vCPUs, 15 GiB RAM, and an NVIDIA L4 (23,034 MiB). SDM used PyTorch
+2.12.1+cu130 with float32 tensors. The pinned reference used NumPy/sklearn
+float32 inputs from TabICLv2 commit
 `f719c886a586ed4a29236345e319ac1ea596c478`.
 
-Dataset sizes were selected around the pinned TabICLv2 50,000-row/100-feature
-headline workload while retaining smaller development-sized cases:
+The headline combined-stress workload has 50,000 rows and 100 features, split
+into 40,000 context and 10,000 query rows. It contains 90 numerical and 10
+categorical columns and exercises all requested paths:
 
-| Size   |   Rows | Features | Context rows | Query rows |
-| ------ | -----: | -------: | -----------: | ---------: |
-| Tiny   |    300 |       10 |          240 |         60 |
-| Small  |  1,000 |       50 |          800 |        200 |
-| Medium | 10,000 |      100 |        8,000 |      2,000 |
-| Large  | 50,000 |      100 |       40,000 |     10,000 |
+- a constant numerical column;
+- 1% missing numerical values and missing categorical codes every 97 rows;
+- 4,096 observed categorical values plus one query-only unseen value;
+- a `1e12` query outlier for fixed `Clip(-100, 100)`;
+- a value of `20` for sigma-based soft clipping;
+- explicit Power and Quantile Recipe variants.
 
-The full SDM run contains exactly 512 total-Recipe workloads: four sizes,
-binary classification and regression, and the Cartesian product of six
-binary characteristics (constant columns, HardClip outliers, sigma outliers,
-categorical columns, missing values, and unknown query categories). Detailed
-stage measurements use the baseline, every one-factor-at-a-time case, and two
-combined stress cases. Individual Processor measurements cover fit,
-transform, fit_transform, and inverse_transform where supported.
+The reference receives the equivalent pandas DataFrame, so its
+`TransformToNumerical` path fits an `OrdinalEncoder` and handles unseen
+categories as `-1`. Each measurement uses one warmup and five repetitions.
+Dataset construction, fitted-state preparation, assertions, and output
+comparisons occur outside timed regions. GPU timings synchronize the device
+before and after the operation. GPU peak memory is the largest incremental
+CUDA allocation above the prepared-operation baseline. CPU peak memory remains
+null to avoid perturbing short operations.
 
-Dataset creation, fresh-Processor preparation, assertions, and output
-comparisons occur outside timed regions. The full matrix uses one warmup and
-three repetitions. The Large baseline headline uses one warmup and ten
-repetitions. Median, p95, and population standard deviation are recorded.
-CPU peak memory is `null`: sampling it would perturb these short operations.
-Observed process RSS during the full run was approximately 808 MB, but it is
-not reported as a per-operation peak.
+All 210 recorded large-stress results (194 SDM and 16 reference) have
+`correctness_status="pass"`.
 
-## Large baseline headline
+## Power Recipe headline
 
-Times below are milliseconds for 50,000 rows, 100 numerical features, 40,000
-context rows, 10,000 query rows, CPU, float32 input, and ten repetitions.
-The explicit member uses Identity normalization in both implementations.
+Times are median / p95 milliseconds. Cells contain classification / regression.
+"Speedup" is SDM CPU median divided by SDM GPU median. Stage distributions are
+measured independently and are not additive.
 
-### Binary classification
+| Stage                              | Pinned TabICLv2 CPU |             SDM CPU |             SDM GPU | CPU/GPU speedup |
+| ---------------------------------- | ------------------: | ------------------: | ------------------: | --------------: |
+| Feature + target preprocessing     | 4310.751 / 4388.693 | 5500.250 / 5513.649 | 2911.733 / 2867.174 |   1.89× / 1.92× |
+| Map model output to original space |      0.008 / 31.059 |      0.017 / 45.349 |       0.029 / 2.071 |  0.61× / 21.90× |
+| Output transform                   |      0.059 / 0.0002 |       0.445 / 0.026 |       0.103 / 0.020 |   4.33× / 1.32× |
+| Total Recipe overhead              | 4300.828 / 4368.834 | 5372.213 / 5549.592 | 2796.823 / 2732.915 |   1.92× / 2.03× |
 
-| Stage                                    | Pinned TabICLv2 median / p95 |  SDM median / p95 |      SDM difference |
-| ---------------------------------------- | ---------------------------: | ----------------: | ------------------: |
-| Feature + target preprocessing           |            259.272 / 275.178 | 200.334 / 243.763 | -58.939 ms (-22.7%) |
-| Map model output to original class space |                0.008 / 0.010 |     0.097 / 0.125 |           +0.089 ms |
-| Output transform                         |                0.061 / 0.084 |     0.437 / 0.471 |           +0.376 ms |
-| E2E deterministic zero-head pipeline     |            261.080 / 299.176 | 207.153 / 210.961 | -53.927 ms (-20.7%) |
-| Total processing overhead                |            261.080 / 299.176 | 207.153 / 210.961 | -53.927 ms (-20.7%) |
+The largest observed incremental GPU peak was 180,534,272 bytes (172.2 MiB)
+for the regression Quantile total. Power preprocessing peaked at 97.4 MiB;
+the Power regression total peaked at 171.8 MiB because it also materializes
+the 10,000 × 999 output head.
 
-### Regression
+Classification output mapping is too small for CUDA to amortize dispatch and
+synchronization. Regression mapping is large enough to improve from 45.349 ms
+on CPU to 2.071 ms on GPU.
 
-The model-output mapping uses a 999-coordinate head, matching TabICLv2's raw
-regression output width.
+## Quantile Recipe comparison
 
-| Stage                                     | Pinned TabICLv2 median / p95 |  SDM median / p95 |      SDM difference |
-| ----------------------------------------- | ---------------------------: | ----------------: | ------------------: |
-| Feature + target preprocessing            |            244.691 / 267.188 | 211.536 / 217.519 | -33.155 ms (-13.5%) |
-| Map model output to original target space |              38.366 / 42.665 |   43.393 / 44.594 |  +5.027 ms (+13.1%) |
-| Output transform                          |            0.00018 / 0.00046 |     0.023 / 0.028 |           +0.023 ms |
-| E2E deterministic zero-head pipeline      |            277.552 / 290.675 | 315.298 / 363.493 | +37.746 ms (+13.6%) |
-| Total processing overhead                 |            277.552 / 290.675 | 315.298 / 363.493 | +37.746 ms (+13.6%) |
+Quantile exposes a materially more GPU-friendly path than Power:
 
-Stage medians are independent measurements and are not additive. In
-particular, CPU scheduling and allocator reuse explain why a separately timed
-preprocessing median can exceed the median of an E2E distribution.
+| Task           | Stage         | Pinned TabICLv2 CPU |  SDM CPU | SDM GPU | CPU/GPU speedup |
+| -------------- | ------------- | ------------------: | -------: | ------: | --------------: |
+| Classification | Preprocessing |            1830.848 | 1324.511 | 252.847 |           5.24× |
+| Classification | Total Recipe  |            1789.067 | 1304.179 | 238.477 |           5.47× |
+| Regression     | Preprocessing |            1781.132 | 1386.787 | 246.220 |           5.63× |
+| Regression     | Total Recipe  |            1837.495 | 1478.236 | 239.726 |           6.17× |
 
 ## Individual Processor results
 
-Representative Large transform medians from the three-repetition full run:
+Representative classification timings on the same combined-stress workload:
 
-| Processor            | Scenario                 | Classification | Regression |
-| -------------------- | ------------------------ | -------------: | ---------: |
-| `StandardScale`      | baseline                 |       2.107 ms |   2.179 ms |
-| `HardClip`           | baseline                 |       1.261 ms |   1.085 ms |
-| `Power`              | baseline                 |     141.216 ms | 135.644 ms |
-| `SigmaClip`          | baseline                 |      11.982 ms |  10.830 ms |
-| `FeaturePermute`     | baseline                 |       3.161 ms |   2.435 ms |
-| `CategoryShuffle`    | baseline                 |       0.992 ms |        n/a |
-| `CategoricalAlign`   | categorical              |       8.301 ms |   9.890 ms |
-| `SoftmaxTemperature` | 10-column numerical head |       2.640 ms |   2.471 ms |
+| Processor / operation               | Device |      Median |         p95 | Notes                                      |
+| ----------------------------------- | ------ | ----------: | ----------: | ------------------------------------------ |
+| `Clip.transform`                    | L4     |    0.165 ms |    0.180 ms | 18.0 MB incremental peak                   |
+| `Power.fit`                         | L4     | 2531.540 ms | 2588.057 ms | Primary bottleneck; CPU median 4419.076 ms |
+| `Power.transform`                   | L4     |   41.254 ms |   51.740 ms | CPU median 114.987 ms                      |
+| `Quantile.fit`                      | L4     |    0.590 ms |    0.680 ms | CPU median 34.673 ms                       |
+| `Quantile.transform`                | L4     |   90.761 ms |   99.187 ms | CPU median 543.585 ms                      |
+| `SigmaClip.fit_transform`           | L4     |    2.212 ms |    2.241 ms | CPU median 55.454 ms                       |
+| `CategoricalAlign.fit`              | L4     |    5.455 ms |    5.576 ms | 10 columns, 4,096-value vocabulary         |
+| `CategoricalAlign.transform`        | L4     |    8.334 ms |    8.523 ms | Includes missing and unseen query values   |
+| `StandardScale.fit_transform`       | L4     |    0.240 ms |    0.518 ms | CPU median 12.589 ms                       |
+| Classification target fit/transform | L4     |    0.933 ms |    0.989 ms | Sorted alignment plus CategoryShuffle      |
+| Regression target inverse           | L4     |    0.097 ms |    0.131 ms | One-column target Processor only           |
 
-For `CategoricalAlign` with ten categorical columns and 50,000 rows, fitted on
-40,000 rows, classification medians were 7.121 ms fit, 8.301 ms transform,
-and 14.340 ms fit_transform. Corresponding regression-labelled workload
-medians were 7.171, 9.890, and 17.591 ms; feature processing itself is
-task-independent and the difference is run variance.
+The full JSON/CSV artifacts contain fit, transform, fit_transform, and
+inverse_transform distributions for every applicable Processor and both tasks.
 
-## Factor sweeps and correctness
+## Bottleneck and interpretation
 
-Every recorded workload has `correctness_status="pass"`. Assertions include
-finite final output, expected class/quantile width, retained row count, and
-unknown query categories becoming `-1` immediately after vocabulary
-alignment. Dataset creation and these assertions were not timed.
+`Power.fit` dominates the Power Recipe on both devices. Its feature-wise
+Yeo-Johnson lambda search includes Python control flow and scalar reductions,
+which limit GPU utilization and introduce synchronization. Tensorized
+Quantile, scale, sigma clip, fixed Clip, permutation, output transform, and
+large regression inverse mapping all benefit substantially from CUDA.
 
-Across all Large Cartesian combinations, measured total-Recipe medians were:
-
-| Task           |                                                            Minimum |                                                       Maximum |
-| -------------- | -----------------------------------------------------------------: | ------------------------------------------------------------: |
-| Classification | 227.857 ms (`constant+sigma_outlier+categorical+unknown_category`) |                                  413.335 ms (`sigma_outlier`) |
-| Regression     |  256.927 ms (`sigma_outlier+categorical+missing+unknown_category`) | 693.775 ms (`hard_outlier+sigma_outlier+categorical+missing`) |
-
-Three repetitions make the full matrix suitable for regression detection and
-factor ranking, not fine-grained micro-optimization. The ten-repetition Large
-baseline should be used for headline comparisons.
+Consequently, moving the complete Recipe to GPU yields about 2× for Power but
+5–6× for Quantile. The smallest localized performance opportunity is to
+vectorize or batch Power lambda fitting; Clip is not a meaningful bottleneck.
 
 ## Artifacts
 
-- `tabiclv2_processing_full.json` / `.csv`: 1,740 SDM result rows, including
-  the complete 512-workload Cartesian matrix.
-- `tabiclv2_processing_large_baseline.json` / `.csv`: ten-repetition SDM
-  headline.
-- `tabiclv2_reference_large_baseline.json` / `.csv`: ten-repetition pinned
-  reference headline.
+- `tabiclv2_processing_large_stress.json` / `.csv`: 194 SDM CPU/GPU
+  large-stress results for explicit Power and Quantile Recipes and individual
+  Processors.
+- `tabiclv2_reference_large_stress.json` / `.csv`: 16 pinned-reference
+  large-stress results.
+- `tabiclv2_processing_full.json` / `.csv`: historical 512-workload
+  Cartesian run from the prior six-factor suite.
+- `tabiclv2_processing_large_baseline.json` and
+  `tabiclv2_reference_large_baseline.json`: historical numerical-only,
+  Identity-member baselines.
 
-All JSON artifacts include the exact reference commit, system metadata,
-dataset sizes, operation, task, Processor/Recipe, characteristics, median,
-p95, standard deviation, memory field, device, dtype, repetitions, and
-correctness status.
+The current seven-factor Cartesian generator contains 128 characteristic
+combinations, or 1,024 task/size workloads before Recipe variants. The
+large-stress run is the reproducible all-factors subset requested here.

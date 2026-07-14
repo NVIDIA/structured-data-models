@@ -1,5 +1,6 @@
 import json
 
+import torch
 from benchmark.tabiclv2_processing import (
     Characteristics,
     benchmark_pipeline,
@@ -7,13 +8,14 @@ from benchmark.tabiclv2_processing import (
     full_characteristics,
     write_results,
 )
+from sdm.testing import withCUDA
 
 
 def test_full_characteristic_matrix_has_every_binary_combination() -> None:
     matrix = tuple(full_characteristics())
 
-    assert len(matrix) == 64
-    assert len(set(matrix)) == 64
+    assert len(matrix) == 128
+    assert len(set(matrix)) == 128
     assert Characteristics() in matrix
     assert (
         Characteristics(
@@ -23,6 +25,7 @@ def test_full_characteristic_matrix_has_every_binary_combination() -> None:
             categorical=True,
             missing=True,
             unknown_category=True,
+            high_cardinality=True,
         )
         in matrix
     )
@@ -55,6 +58,52 @@ def test_pipeline_benchmark_validates_unknown_categories_and_writes_results(
     assert result["operation"] == "total_recipe_overhead"
     assert result["peak_memory_bytes"] is None
     assert output.with_suffix(".csv").is_file()
+
+
+def test_high_cardinality_workload_contains_unseen_query_values() -> None:
+    workload = build_workload(
+        size="tiny",
+        task="classification",
+        characteristics=Characteristics(
+            categorical=True,
+            unknown_category=True,
+            high_cardinality=True,
+        ),
+    )
+
+    categorical = workload.x.categorical
+    assert categorical.categories[0].numel() == 257
+    assert torch.equal(
+        categorical[workload.train_rows :],
+        torch.full_like(categorical[workload.train_rows :], 256),
+    )
+
+
+@withCUDA
+def test_pipeline_benchmark_records_device_and_cuda_memory(
+    device: torch.device,
+) -> None:
+    workload = build_workload(
+        size="tiny",
+        task="classification",
+        characteristics=Characteristics(),
+        device=device,
+    )
+
+    result = benchmark_pipeline(
+        workload,
+        repetitions=2,
+        detailed=False,
+        recipe_variant="power",
+    )[0]
+
+    assert result.device == str(device)
+    if device.type == "cuda":
+        assert result.gpu_model == torch.cuda.get_device_name(device)
+        assert result.peak_memory_bytes is not None
+    else:
+        assert result.gpu_model is None
+        assert result.peak_memory_bytes is None
 
 
 def test_regression_benchmark_includes_all_output_stages() -> None:

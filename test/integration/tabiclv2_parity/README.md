@@ -12,12 +12,12 @@ equivalent stages. The pinned checkpoint files and digests are:
 
 ## Integration decisions
 
-The branch is merged with current `main`. PRs #230 and #244 are already
-present in the base, and #280 supplies the `CategoryShuffle` name. This PR
-retains only the parity-specific extensions that are not yet on `main`:
-fixed-bound `HardClip`, opt-in sorted categorical alignment, the combined
-#277/#278 model-output and member-local Recipe behavior, the differential
-harness, and benchmarks.
+The branch is merged with current `main` at `57c1268`. PRs #230, #244,
+#272, #277, #278, #280, and the VarLenTensor inference-mode fix #293 are
+already present in the base. PR #272 supplies fixed-bound `Clip` and renames
+the previous quantile-based processor to `QuantileClip`. This PR retains only
+opt-in sorted categorical alignment, the differential harness, deterministic
+orchestration coverage, and benchmarks.
 
 Classification never calls `target.inverse_transform`. Each member derives a
 class-index mapping from its fitted target categories, restores original class
@@ -31,8 +31,8 @@ Previous work was classified as follows:
 | Recipe/TaskDispatch foundations from #202, #220, #221, #236, #245 | Already merged into `main`                           |
 | Categorical vocabulary alignment from #244                        | Already merged; opt-in sorted order retained in #271 |
 | Default TabICLv2 Recipe/model wiring from #230                    | Already merged; parity-specific refinements retained |
-| Per-member fitted Recipe and cache ownership                      | #278 behavior retained on current `Model`            |
-| Regression target inverse before aggregation                      | #277 behavior retained                               |
+| Per-member fitted Recipe and cache ownership                      | Already merged through #278                          |
+| Regression target inverse before aggregation                      | Already merged through #277                          |
 | Classification inverse through TargetDispatch                     | Obsolete under category-labelled output mapping      |
 | Quantile endpoint comparison                                      | Obsolete; the Recipe now uses Power                  |
 | Analytic ordering/cache/fake-model tests                          | Test-only instrumentation retained                   |
@@ -47,9 +47,9 @@ Pinned TabICLv2:
 flowchart LR
   A[raw features] --> B[categorical then numerical encoding]
   B --> C[mean impute and constant filter]
-  C --> D[standard scale and hard clip -100..100]
+  C --> D[standard scale]
   D --> E[identity or Yeo-Johnson power]
-  E --> F[two-pass sigma soft clip]
+  E --> F[fixed Clip -100..100 and two-pass sigma soft clip]
   F --> G[member feature permutation]
   H[raw target] --> I[sorted label encode or standard scale]
   I --> J[member class permutation for classification]
@@ -69,9 +69,9 @@ flowchart LR
   A[raw TableTensor] --> B[StypeDispatch: numerical then categorical]
   B --> C[sorted CategoricalAlign and ToNumerical]
   C --> D[MeanImpute and ConstantFilter]
-  D --> E[StandardScale and HardClip]
+  D --> E[StandardScale]
   E --> F[Choice: Identity or Power]
-  F --> G[SigmaClip and FeaturePermute]
+  F --> G[Clip, SigmaClip, and FeaturePermute]
   H[raw target] --> I[StypeDispatch]
   I --> J[sorted align plus CategoryShuffle, or StandardScale]
   G --> K[SDM TabICLv2 member]
@@ -125,7 +125,7 @@ Processor-specific contracts:
 | `MeanImpute`                       | float table to same                        | Per-column context mean                      | NaN to mean                                           | None                                        |
 | `ConstantFilter`                   | `[N,C]` to `[N,C_keep]`                    | Retained context columns                     | Drops constants                                       | None                                        |
 | `StandardScale(epsilon=1e-6)`      | float table to same                        | Mean and population standard deviation       | Center/scale                                          | Algebraic inverse                           |
-| `HardClip(-100,100)`               | float table to same                        | Stateless                                    | Fixed non-linear clamp                                | None                                        |
+| `Clip(-100,100)`                   | float table to same                        | Stateless                                    | Fixed non-linear clamp                                | None                                        |
 | `Choice(Identity,Power)`           | float table to same                        | Global torch RNG selects and fits one option | Optional Yeo-Johnson normalization                    | Delegates to selected inverse               |
 | `SigmaClip(4)`                     | float table to same                        | Two-pass mean/std bounds                     | Logarithmic soft clipping                             | None                                        |
 | `FeaturePermute`                   | numerical table to same                    | Global torch RNG, stored `P`                 | Exact feature order                                   | Gather by `argsort(P)`                      |
@@ -157,11 +157,10 @@ pre/model/post execution.
 
 The current focused results are:
 
-- Processor, model orchestration, and TabICLv2 smoke tests: pass on CPU/CUDA.
-- Semantic preprocessing and ensemble-plan tests: pass.
-- Deterministic fake-model tests: pass.
-- Pinned L4 core-model classification/regression tests: pass.
-- Pinned L4 single-member end-to-end classification/regression tests: pass.
+- Full repository suite: 394 passed, 59 skipped; normal CUDA parametrizations ran on the L4.
+- Semantic preprocessing and ensemble-plan suite: 15 passed.
+- Deterministic fake-model orchestration suite: 5 passed.
+- Pinned L4 core-model and single-member end-to-end suite: 4 passed.
 
 The first model-internal floating-point divergence remains the completed row
 representation. Model inputs, checkpoint bytes, configuration, dtype, device,

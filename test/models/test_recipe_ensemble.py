@@ -12,7 +12,7 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import Model
 from sdm.processing import (
-    HardClip,
+    Clip,
     Identity,
     InvertibleMixin,
     MeanImpute,
@@ -40,16 +40,16 @@ class _CyclingClassShuffle(Processor):
     def reset(cls) -> None:
         cls.next_plan = 0
 
-    def _fit(self, inp: TableTensor) -> None:
+    def _fit(self, table: TableTensor) -> None:
         plan = self.plans[self.__class__.next_plan]
         self.__class__.next_plan += 1
-        self.permutation = torch.tensor(plan, device=inp.device)
+        self.permutation = torch.tensor(plan, device=table.device)
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        data = inp.categorical.as_tensor()
+    def _transform(self, table: TableTensor) -> TableTensor:
+        data = table.categorical.as_tensor()
         transformed = self.permutation[data.to(torch.long)].to(data.dtype)
-        categories = inp.categorical.categories[0]
-        return inp.replace_blocks(
+        categories = table.categorical.categories[0]
+        return table.replace_blocks(
             categorical=CategoricalTensor(
                 data=transformed,
                 categories=(categories[self.permutation.argsort()],),
@@ -60,29 +60,29 @@ class _CyclingClassShuffle(Processor):
 class _LogTarget(Processor, InvertibleMixin):
     supported_stypes = frozenset({Stype.numerical})
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        return inp.replace_blocks(numerical=inp.numerical.log())
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical.log())
 
-    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
-        return inp.replace_blocks(numerical=inp.numerical.exp())
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical.exp())
 
 
 class _SquareOutput(Processor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        return inp.replace_blocks(numerical=inp.numerical.square())
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical.square())
 
 
 class _SwapFeatures(Processor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        columns = tuple(reversed(inp.columns[Stype.numerical]))
+    def _transform(self, table: TableTensor) -> TableTensor:
+        columns = tuple(reversed(table.columns[Stype.numerical]))
         return TableTensor.from_tensor(
-            inp.numerical.flip(-1),
+            table.numerical.flip(-1),
             columns=columns,
         )
 
@@ -260,7 +260,7 @@ def test_deterministic_model_end_to_end_includes_pre_and_postprocessing() -> (
         features=[
             MeanImpute(),
             StandardScale(),
-            HardClip(min_value=-2.0, max_value=2.0),
+            Clip(min_value=-2.0, max_value=2.0),
             _SwapFeatures(),
         ],
         target=[StandardScale()],

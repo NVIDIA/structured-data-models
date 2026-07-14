@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import logging
+from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from tabicl.sklearn.base import TabICLBaseEstimator
 from tabicl.sklearn.preprocessing import (
@@ -15,6 +17,7 @@ from tabicl.sklearn.preprocessing import (
 )
 
 from benchmark.tabiclv2_processing import (
+    FACTOR_NAMES,
     SIZES,
     BenchmarkResult,
     Characteristics,
@@ -27,15 +30,35 @@ from benchmark.tabiclv2_processing import (
 LOGGER = logging.getLogger(__name__)
 
 
-def _arrays(size: str, task: Task):
+def _arrays(
+    size: str,
+    task: Task,
+    characteristics: Characteristics,
+):
     workload = build_workload(
         size=size,
         task=task,
-        characteristics=Characteristics(),
+        characteristics=characteristics,
     )
-    features = workload.x.numerical.numpy()
-    train = features[: workload.train_rows]
-    query = features[workload.train_rows :]
+    data: dict[str, np.ndarray] = {}
+    numerical = workload.x.numerical.numpy()
+    for index in range(numerical.shape[1]):
+        data[f"num_{index}"] = numerical[:, index]
+
+    categorical = workload.x.categorical.as_tensor().numpy()
+    for index in range(categorical.shape[1]):
+        codes = categorical[:, index]
+        values = np.empty(codes.shape, dtype=object)
+        missing = codes < 0
+        values[missing] = None
+        values[~missing] = [
+            f"value_{code}" for code in codes[~missing].tolist()
+        ]
+        data[f"cat_{index}"] = values
+
+    frame = pd.DataFrame(data)
+    train = frame.iloc[: workload.train_rows].copy()
+    query = frame.iloc[workload.train_rows :].copy()
     if task == "classification":
         target = np.asarray(["negative", "positive"])[
             workload.y.categorical.as_tensor().squeeze(-1).numpy()
@@ -46,10 +69,11 @@ def _arrays(size: str, task: Task):
 
 
 def _preprocess_operation(
-    train: np.ndarray,
-    query: np.ndarray,
+    train: pd.DataFrame,
+    query: pd.DataFrame,
     target: np.ndarray,
     task: Task,
+    normalization_method: str,
 ):
     def operation():
         encoder = TransformToNumerical().fit(train)
@@ -66,7 +90,7 @@ def _preprocess_operation(
         ensemble = EnsembleGenerator(
             classification=task == "classification",
             n_estimators=1,
-            norm_methods=["none"],
+            norm_methods=[normalization_method],
             feat_shuffle_method="none",
             class_shuffle_method="none",
             random_state=0,
@@ -118,25 +142,25 @@ def _output_operation(task: Task, canonical: np.ndarray):
     return lambda: canonical
 
 
-def _result(workload, operation, repetitions, timing):
+def _result(
+    workload,
+    operation,
+    repetitions,
+    timing,
+    normalization_method,
+):
     median, p95, deviation, peak = timing
     return BenchmarkResult(
         operation=operation,
         task_type=workload.task,
         processor_or_recipe="Pinned TabICLv2",
+        recipe_variant=normalization_method,
         size=workload.name,
         row_count=workload.rows,
         feature_count=workload.features,
         train_row_count=workload.train_rows,
-        dataset_characteristics="baseline",
-        characteristics={
-            "constant": False,
-            "hard_outlier": False,
-            "sigma_outlier": False,
-            "categorical": False,
-            "missing": False,
-            "unknown_category": False,
-        },
+        dataset_characteristics=workload.characteristics.label,
+        characteristics=asdict(workload.characteristics),
         median_ms=median,
         p95_ms=p95,
         standard_deviation_ms=deviation,
@@ -154,17 +178,28 @@ def benchmark_reference(
     size: str,
     task: Task,
     repetitions: int,
+    characteristics: Characteristics,
+    normalization_method: str,
 ) -> list[BenchmarkResult]:
     """Benchmark equivalent semantic stages in the pinned reference."""
-    workload, train, query, target = _arrays(size, task)
-    query_rows = query.shape[0]
-    preprocessing = _preprocess_operation(train, query, target, task)
-    preprocessed = preprocessing()
-    assert next(iter(preprocessed.values()))[0].shape == (
-        1,
-        workload.rows,
-        workload.features,
+    workload, train, query, target = _arrays(
+        size,
+        task,
+        characteristics,
     )
+    query_rows = query.shape[0]
+    preprocessing = _preprocess_operation(
+        train,
+        query,
+        target,
+        task,
+        normalization_method,
+    )
+    preprocessed = preprocessing()
+    transformed = next(iter(preprocessed.values()))[0]
+    assert transformed.shape[0] == 1
+    assert transformed.shape[1] == workload.rows
+    assert transformed.shape[2] <= workload.features
 
     _, mapping = _mapping_setup(task, target, query_rows)
     canonical = mapping()
@@ -177,7 +212,13 @@ def benchmark_reference(
     results = []
     timing = _measure(lambda: preprocessing, repetitions=repetitions)
     results.append(
-        _result(workload, "preprocessing_total", repetitions, timing)
+        _result(
+            workload,
+            "preprocessing_total",
+            repetitions,
+            timing,
+            normalization_method,
+        )
     )
     timing = _measure(lambda: mapping, repetitions=repetitions)
     results.append(
@@ -186,13 +227,28 @@ def benchmark_reference(
             "model_output_inverse_mapping",
             repetitions,
             timing,
+            normalization_method,
         )
     )
     timing = _measure(lambda: output, repetitions=repetitions)
-    results.append(_result(workload, "output_transform", repetitions, timing))
+    results.append(
+        _result(
+            workload,
+            "output_transform",
+            repetitions,
+            timing,
+            normalization_method,
+        )
+    )
 
     def total_prepare():
-        preprocess = _preprocess_operation(train, query, target, task)
+        preprocess = _preprocess_operation(
+            train,
+            query,
+            target,
+            task,
+            normalization_method,
+        )
 
         def operation():
             preprocess()
@@ -204,7 +260,13 @@ def benchmark_reference(
 
     timing = _measure(total_prepare, repetitions=repetitions)
     results.append(
-        _result(workload, "total_recipe_overhead", repetitions, timing)
+        _result(
+            workload,
+            "total_recipe_overhead",
+            repetitions,
+            timing,
+            normalization_method,
+        )
     )
     return results
 
@@ -215,6 +277,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--size", choices=tuple(SIZES), default="large")
     parser.add_argument("--repetitions", type=int, default=10)
+    parser.add_argument("--stress", action="store_true")
+    parser.add_argument(
+        "--normalization-methods",
+        nargs="+",
+        choices=("power", "quantile"),
+        default=("power",),
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -224,19 +293,28 @@ def main() -> None:
     )
     args = parser.parse_args()
     results = []
+    characteristics = (
+        Characteristics(**dict.fromkeys(FACTOR_NAMES, True))
+        if args.stress
+        else Characteristics()
+    )
     for task in ("classification", "regression"):
-        LOGGER.info(
-            "benchmarking pinned reference task=%s size=%s",
-            task,
-            args.size,
-        )
-        results.extend(
-            benchmark_reference(
-                size=args.size,
-                task=task,
-                repetitions=args.repetitions,
+        for normalization_method in args.normalization_methods:
+            LOGGER.info(
+                "benchmarking pinned reference task=%s size=%s normalizer=%s",
+                task,
+                args.size,
+                normalization_method,
             )
-        )
+            results.extend(
+                benchmark_reference(
+                    size=args.size,
+                    task=task,
+                    repetitions=args.repetitions,
+                    characteristics=characteristics,
+                    normalization_method=normalization_method,
+                )
+            )
     write_results(results, args.output)
     LOGGER.info("wrote %d results to %s", len(results), args.output)
 

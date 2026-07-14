@@ -2,7 +2,7 @@
 
 Dataset construction, correctness checks, and fresh-processor preparation are
 outside the timed region. The full matrix is the Cartesian product of task,
-size, and six binary data characteristics; detailed stage measurements use
+size, and seven binary data characteristics; detailed stage measurements use
 one-factor-at-a-time cases plus two combined stress cases.
 """
 
@@ -16,7 +16,7 @@ import logging
 import platform
 import statistics
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -29,18 +29,27 @@ from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.processing import (
     CategoricalAlign,
     CategoryShuffle,
+    Clip,
+    ConstantFilter,
     FeaturePermute,
-    HardClip,
+    Identity,
     InvertibleMixin,
+    MeanImpute,
     Power,
     Processor,
+    Quantile,
+    Recipe,
     SigmaClip,
     SoftmaxTemperature,
     StandardScale,
+    StypeDispatch,
+    TaskDispatch,
+    ToNumerical,
 )
 from torch import Tensor
 
 Task = Literal["classification", "regression"]
+RecipeVariant = Literal["default", "power", "quantile"]
 LOGGER = logging.getLogger(__name__)
 
 SIZES = {
@@ -57,6 +66,7 @@ FACTOR_NAMES = (
     "categorical",
     "missing",
     "unknown_category",
+    "high_cardinality",
 )
 
 
@@ -70,6 +80,7 @@ class Characteristics:
     categorical: bool = False
     missing: bool = False
     unknown_category: bool = False
+    high_cardinality: bool = False
 
     @property
     def label(self) -> str:
@@ -99,6 +110,7 @@ class BenchmarkResult:
     operation: str
     task_type: Task
     processor_or_recipe: str
+    recipe_variant: str
     size: str
     row_count: int
     feature_count: int
@@ -132,19 +144,68 @@ class _ZeroModel(Model):
         return x.new_zeros((*x.shape[:-2], n_test, width))
 
 
+def benchmark_recipe(variant: RecipeVariant = "default") -> Recipe:
+    """Build the default or an explicit nonlinear preprocessing Recipe."""
+    if variant == "default":
+        return default_recipe()
+
+    nonlinear: Processor
+    if variant == "power":
+        nonlinear = Power()
+    else:
+        nonlinear = Quantile(output_distribution="normal")
+
+    return Recipe(
+        features=[
+            StypeDispatch(
+                numerical=Identity(),
+                categorical=[
+                    CategoricalAlign(order="sorted"),
+                    ToNumerical(),
+                ],
+            ),
+            MeanImpute(),
+            ConstantFilter(),
+            StandardScale(epsilon=1e-6),
+            nonlinear,
+            Clip(min_value=-100.0, max_value=100.0),
+            SigmaClip(threshold=4.0),
+            FeaturePermute(method="shift"),
+        ],
+        target=[
+            StypeDispatch(
+                categorical=[
+                    CategoricalAlign(order="sorted"),
+                    CategoryShuffle(method="shift"),
+                ],
+                numerical=StandardScale(),
+            ),
+        ],
+        output=[
+            TaskDispatch(
+                classification=SoftmaxTemperature(temperature=0.9),
+                regression=Identity(),
+            ),
+        ],
+    )
+
+
 def build_workload(
     *,
     size: str,
     task: Task,
     characteristics: Characteristics,
     seed: int = 0,
+    device: torch.device | str = "cpu",
 ) -> Workload:
     """Build deterministic train/query data outside timed regions."""
     rows, features = SIZES[size]
     train_rows = max(2, int(rows * 0.8))
     generator = torch.Generator().manual_seed(seed)
     use_categorical = (
-        characteristics.categorical or characteristics.unknown_category
+        characteristics.categorical
+        or characteristics.unknown_category
+        or characteristics.high_cardinality
     )
     categorical_features = max(1, features // 10) if use_categorical else 0
     numerical_features = features - categorical_features
@@ -172,7 +233,11 @@ def build_workload(
         "numerical": tuple(f"num_{i}" for i in range(numerical_features))
     }
     if categorical_features > 0:
-        vocabulary_size = 16
+        vocabulary_size = (
+            min(4_096, max(256, train_rows / 4))
+            if characteristics.high_cardinality
+            else 16
+        )
         codes = torch.randint(
             vocabulary_size,
             (rows, categorical_features),
@@ -209,6 +274,10 @@ def build_workload(
         target = torch.linspace(-3.0, 3.0, train_rows).unsqueeze(-1)
         y = TableTensor.from_tensor(target, columns=("target",))
 
+    target_device = torch.device(device)
+    x = x.to(target_device)
+    y = y.to(target_device)
+
     return Workload(
         name=size,
         task=task,
@@ -232,17 +301,39 @@ def _measure(
     *,
     repetitions: int,
     warmups: int = 1,
+    device: torch.device | str = "cpu",
 ) -> tuple[float, float, float, int | None]:
+    measured_device = torch.device(device)
+    is_cuda = measured_device.type == "cuda"
+
     for _ in range(warmups):
         prepare()()
+        if is_cuda:
+            torch.cuda.synchronize(measured_device)
 
     durations: list[float] = []
     peak_memory: int | None = None
     for _ in range(repetitions):
         operation = prepare()
+        baseline_memory = 0
+        if is_cuda:
+            torch.cuda.synchronize(measured_device)
+            baseline_memory = torch.cuda.memory_allocated(measured_device)
+            torch.cuda.reset_peak_memory_stats(measured_device)
+
         started = time.perf_counter_ns()
         operation()
+        if is_cuda:
+            torch.cuda.synchronize(measured_device)
         durations.append((time.perf_counter_ns() - started) / 1e6)
+
+        if is_cuda:
+            incremental_peak = max(
+                0,
+                torch.cuda.max_memory_allocated(measured_device)
+                - baseline_memory,
+            )
+            peak_memory = max(peak_memory or 0, incremental_peak)
 
     return (
         statistics.median(durations),
@@ -259,12 +350,15 @@ def _result(
     owner: str,
     repetitions: int,
     timing: tuple[float, float, float, int | None],
+    recipe_variant: str = "default",
 ) -> BenchmarkResult:
     median, p95, deviation, peak = timing
+    device = workload.x.device
     return BenchmarkResult(
         operation=operation,
         task_type=workload.task,
         processor_or_recipe=owner,
+        recipe_variant=recipe_variant,
         size=workload.name,
         row_count=workload.rows,
         feature_count=workload.features,
@@ -275,8 +369,12 @@ def _result(
         p95_ms=p95,
         standard_deviation_ms=deviation,
         peak_memory_bytes=peak,
-        device="cpu",
-        gpu_model=None,
+        device=str(device),
+        gpu_model=(
+            torch.cuda.get_device_name(device)
+            if device.type == "cuda"
+            else None
+        ),
         dtype="torch.float32",
         repetitions=repetitions,
         correctness_status="pass",
@@ -288,26 +386,40 @@ def _classification_columns(target: TableTensor) -> tuple[str, ...]:
     return tuple(str(value) for value in values)
 
 
-def _mapping_setup(workload: Workload):
-    recipe = default_recipe()
+def _mapping_setup(
+    workload: Workload,
+    recipe_variant: RecipeVariant,
+):
+    recipe = benchmark_recipe(recipe_variant)
     torch.manual_seed(0)
     transformed = recipe.target.fit_transform(workload.y)
     if workload.task == "classification":
         target = transformed.categorical.as_tensor().squeeze(-1)
         member = _classification_columns(transformed)
         canonical = _classification_columns(workload.y)
-        raw = torch.zeros(workload.rows - workload.train_rows, 10)
+        raw = torch.zeros(
+            workload.rows - workload.train_rows,
+            10,
+            device=workload.x.device,
+        )
     else:
         target = transformed.numerical.squeeze(-1)
-        raw = torch.zeros(workload.rows - workload.train_rows, 999)
+        raw = torch.zeros(
+            workload.rows - workload.train_rows,
+            999,
+            device=workload.x.device,
+        )
         member = None
         canonical = None
     class_indices = _ZeroModel._class_indices(canonical, member)
     return recipe, raw, target, class_indices
 
 
-def _assert_workload_correct(workload: Workload) -> None:
-    recipe = default_recipe()
+def _assert_workload_correct(
+    workload: Workload,
+    recipe_variant: RecipeVariant,
+) -> None:
+    recipe = benchmark_recipe(recipe_variant)
     torch.manual_seed(0)
     context = workload.x[: workload.train_rows]
     recipe.features.fit(context)
@@ -328,7 +440,11 @@ def _assert_workload_correct(workload: Workload) -> None:
 
     model = _ZeroModel()
     torch.manual_seed(0)
-    output = model(workload.x, workload.y, recipe=default_recipe())
+    output = model(
+        workload.x,
+        workload.y,
+        recipe=benchmark_recipe(recipe_variant),
+    )
     expected_width = 2 if workload.task == "classification" else 999
     assert output.shape == (
         workload.rows - workload.train_rows,
@@ -342,14 +458,19 @@ def benchmark_pipeline(
     *,
     repetitions: int,
     detailed: bool,
+    recipe_variant: RecipeVariant = "default",
 ) -> list[BenchmarkResult]:
     """Benchmark logical stages and total Recipe overhead."""
-    _assert_workload_correct(workload)
+    _assert_workload_correct(workload, recipe_variant)
     results: list[BenchmarkResult] = []
     context = workload.x[: workload.train_rows]
 
     def add(operation, prepare):
-        timing = _measure(prepare, repetitions=repetitions)
+        timing = _measure(
+            prepare,
+            repetitions=repetitions,
+            device=workload.x.device,
+        )
         results.append(
             _result(
                 workload,
@@ -357,23 +478,21 @@ def benchmark_pipeline(
                 owner="TabICLv2 Recipe",
                 repetitions=repetitions,
                 timing=timing,
+                recipe_variant=recipe_variant,
             )
         )
 
     if detailed:
 
         def feature_fit_prepare():
-            recipe = default_recipe()
+            recipe = benchmark_recipe(recipe_variant)
             torch.manual_seed(0)
             return lambda: recipe.features.fit(context)
 
-        add(
-            "feature_fit",
-            feature_fit_prepare,
-        )
+        add("feature_fit", feature_fit_prepare)
 
         def feature_transform_prepare():
-            recipe = default_recipe()
+            recipe = benchmark_recipe(recipe_variant)
             torch.manual_seed(0)
             recipe.features.fit(context)
             return lambda: recipe.features.transform(workload.x)
@@ -381,27 +500,21 @@ def benchmark_pipeline(
         add("feature_transform", feature_transform_prepare)
 
         def feature_fit_transform_prepare():
-            recipe = default_recipe()
+            recipe = benchmark_recipe(recipe_variant)
             torch.manual_seed(0)
             return lambda: recipe.features.fit_transform(context)
 
-        add(
-            "feature_fit_transform",
-            feature_fit_transform_prepare,
-        )
+        add("feature_fit_transform", feature_fit_transform_prepare)
 
         def target_fit_prepare():
-            recipe = default_recipe()
+            recipe = benchmark_recipe(recipe_variant)
             torch.manual_seed(0)
             return lambda: recipe.target.fit(workload.y)
 
-        add(
-            "target_fit",
-            target_fit_prepare,
-        )
+        add("target_fit", target_fit_prepare)
 
         def target_transform_prepare():
-            recipe = default_recipe()
+            recipe = benchmark_recipe(recipe_variant)
             torch.manual_seed(0)
             recipe.target.fit(workload.y)
             return lambda: recipe.target.transform(workload.y)
@@ -409,17 +522,14 @@ def benchmark_pipeline(
         add("target_transform", target_transform_prepare)
 
         def target_fit_transform_prepare():
-            recipe = default_recipe()
+            recipe = benchmark_recipe(recipe_variant)
             torch.manual_seed(0)
             return lambda: recipe.target.fit_transform(workload.y)
 
-        add(
-            "target_fit_transform",
-            target_fit_transform_prepare,
-        )
+        add("target_fit_transform", target_fit_transform_prepare)
 
         def preprocessing_prepare():
-            recipe = default_recipe()
+            recipe = benchmark_recipe(recipe_variant)
             torch.manual_seed(0)
 
             def operation():
@@ -434,7 +544,10 @@ def benchmark_pipeline(
         if workload.task == "regression":
 
             def inverse_prepare():
-                recipe, raw, _, _ = _mapping_setup(workload)
+                recipe, raw, _, _ = _mapping_setup(
+                    workload,
+                    recipe_variant,
+                )
                 inverse = cast(InvertibleMixin, recipe.target)
                 table = TableTensor.from_tensor(raw)
                 return lambda: inverse.inverse_transform(table)
@@ -442,7 +555,10 @@ def benchmark_pipeline(
             add("target_inverse_transform", inverse_prepare)
 
         def mapping_prepare():
-            recipe, raw, target, class_indices = _mapping_setup(workload)
+            recipe, raw, target, class_indices = _mapping_setup(
+                workload,
+                recipe_variant,
+            )
             model = _ZeroModel()
             return lambda: model._postprocess(
                 raw,
@@ -454,7 +570,10 @@ def benchmark_pipeline(
         add("model_output_inverse_mapping", mapping_prepare)
 
         def output_prepare():
-            recipe, raw, target, class_indices = _mapping_setup(workload)
+            recipe, raw, target, class_indices = _mapping_setup(
+                workload,
+                recipe_variant,
+            )
             model = _ZeroModel()
             mapped = model._postprocess(
                 raw,
@@ -469,7 +588,7 @@ def benchmark_pipeline(
 
     def total_prepare():
         model = _ZeroModel()
-        recipe = default_recipe()
+        recipe = benchmark_recipe(recipe_variant)
         torch.manual_seed(0)
         return lambda: model(workload.x, workload.y, recipe=recipe)
 
@@ -483,14 +602,25 @@ def _processor_inputs(
     numeric = workload.x.select_stypes(Stype.numerical)
     inputs: list[tuple[str, Processor, TableTensor]] = [
         ("StandardScale", StandardScale(epsilon=1e-6), numeric),
-        ("HardClip", HardClip(min_value=-100, max_value=100), numeric),
+        ("Clip", Clip(min_value=-100, max_value=100), numeric),
         ("Power", Power(), numeric),
+        (
+            "Quantile",
+            Quantile(output_distribution="normal"),
+            numeric,
+        ),
         ("SigmaClip", SigmaClip(threshold=4), numeric),
         ("FeaturePermute", FeaturePermute(method="shift"), numeric),
         (
             "SoftmaxTemperature",
             SoftmaxTemperature(temperature=0.9),
-            TableTensor.from_tensor(torch.zeros(workload.rows, 10)),
+            TableTensor.from_tensor(
+                torch.zeros(
+                    workload.rows,
+                    10,
+                    device=workload.x.device,
+                )
+            ),
         ),
     ]
     categorical = workload.x.select_stypes(Stype.categorical)
@@ -503,9 +633,9 @@ def _processor_inputs(
             )
         )
     if workload.task == "classification":
-        inputs.append(
-            ("CategoryShuffle", CategoryShuffle(method="shift"), workload.y)
-        )
+        inputs.append(("Target", CategoryShuffle(method="shift"), workload.y))
+    else:
+        inputs.append(("Target", StandardScale(), workload.y))
     return inputs
 
 
@@ -559,7 +689,11 @@ def benchmark_processors(
             operations.append(("inverse_transform", inverse_prepare))
 
         for operation, prepare in operations:
-            timing = _measure(prepare, repetitions=repetitions)
+            timing = _measure(
+                prepare,
+                repetitions=repetitions,
+                device=workload.x.device,
+            )
             results.append(
                 _result(
                     workload,
@@ -567,6 +701,7 @@ def benchmark_processors(
                     owner=name,
                     repetitions=repetitions,
                     timing=timing,
+                    recipe_variant="processor",
                 )
             )
     return results
@@ -599,68 +734,94 @@ def full_characteristics() -> Iterable[Characteristics]:
 def run(
     *,
     sizes: Iterable[str],
-    matrix: Literal["smoke", "oat", "full"],
+    matrix: Literal["smoke", "oat", "full", "large-stress"],
     repetitions: int,
     include_processors: bool,
+    devices: Sequence[str] = ("cpu",),
+    recipe_variants: Sequence[RecipeVariant] = ("default",),
 ) -> list[BenchmarkResult]:
     """Run the selected matrix and return machine-readable results."""
     results: list[BenchmarkResult] = []
-    for size in sizes:
-        for task in cast(tuple[Task, Task], ("classification", "regression")):
-            LOGGER.info(
-                "benchmarking size=%s task=%s matrix=%s",
-                size,
-                task,
-                matrix,
-            )
-            characteristics = (
-                (Characteristics(),)
-                if matrix == "smoke"
-                else detailed_characteristics()
-            )
-            for values in characteristics:
-                workload = build_workload(
-                    size=size,
-                    task=task,
-                    characteristics=values,
-                )
-                results.extend(
-                    benchmark_pipeline(
-                        workload,
-                        repetitions=repetitions,
-                        detailed=True,
-                    )
-                )
-                if include_processors and values.label in {
-                    "baseline",
-                    "categorical",
-                    "hard_outlier",
-                    "sigma_outlier",
-                }:
-                    results.extend(
-                        benchmark_processors(
-                            workload,
-                            repetitions=repetitions,
-                        )
-                    )
+    for device in devices:
+        measured_device = torch.device(device)
+        if measured_device.type == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("CUDA was requested but is not available")
 
-            if matrix == "full":
-                detailed = {value.label for value in characteristics}
-                for values in full_characteristics():
-                    if values.label in detailed:
-                        continue
+        for size in sizes:
+            for task in cast(
+                tuple[Task, Task],
+                ("classification", "regression"),
+            ):
+                LOGGER.info(
+                    "benchmarking size=%s task=%s matrix=%s device=%s",
+                    size,
+                    task,
+                    matrix,
+                    measured_device,
+                )
+                if matrix == "smoke":
+                    characteristics = (Characteristics(),)
+                elif matrix == "large-stress":
+                    characteristics = (
+                        Characteristics(**dict.fromkeys(FACTOR_NAMES, True)),
+                    )
+                else:
+                    characteristics = detailed_characteristics()
+
+                for values in characteristics:
                     workload = build_workload(
                         size=size,
                         task=task,
                         characteristics=values,
+                        device=measured_device,
                     )
-                    results.extend(
-                        benchmark_pipeline(
-                            workload,
-                            repetitions=repetitions,
-                            detailed=False,
+                    for recipe_variant in recipe_variants:
+                        results.extend(
+                            benchmark_pipeline(
+                                workload,
+                                repetitions=repetitions,
+                                detailed=True,
+                                recipe_variant=recipe_variant,
+                            )
                         )
-                    )
+                    if include_processors and (
+                        matrix == "large-stress"
+                        or values.label
+                        in {
+                            "baseline",
+                            "categorical",
+                            "hard_outlier",
+                            "sigma_outlier",
+                            "high_cardinality",
+                        }
+                    ):
+                        results.extend(
+                            benchmark_processors(
+                                workload,
+                                repetitions=repetitions,
+                            )
+                        )
+
+                if matrix == "full":
+                    detailed = {value.label for value in characteristics}
+                    for values in full_characteristics():
+                        if values.label in detailed:
+                            continue
+                        workload = build_workload(
+                            size=size,
+                            task=task,
+                            characteristics=values,
+                            device=measured_device,
+                        )
+                        for recipe_variant in recipe_variants:
+                            results.extend(
+                                benchmark_pipeline(
+                                    workload,
+                                    repetitions=repetitions,
+                                    detailed=False,
+                                    recipe_variant=recipe_variant,
+                                )
+                            )
     return results
 
 
@@ -716,11 +877,23 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--matrix",
-        choices=("smoke", "oat", "full"),
+        choices=("smoke", "oat", "full", "large-stress"),
         default="smoke",
     )
     parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument("--include-processors", action="store_true")
+    parser.add_argument(
+        "--devices",
+        nargs="+",
+        choices=("cpu", "cuda"),
+        default=("cpu",),
+    )
+    parser.add_argument(
+        "--recipe-variants",
+        nargs="+",
+        choices=("default", "power", "quantile"),
+        default=("default",),
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -740,6 +913,8 @@ def main() -> None:
         matrix=args.matrix,
         repetitions=args.repetitions,
         include_processors=args.include_processors,
+        devices=args.devices,
+        recipe_variants=args.recipe_variants,
     )
     write_results(results, args.output)
     LOGGER.info("wrote %d results to %s", len(results), args.output)

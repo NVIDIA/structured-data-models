@@ -11,7 +11,7 @@ pinned-checkpoint tests.
 | P0       | Keep one fitted deep-copied Recipe with each ensemble cache                                 | Generic pipeline correctness                                    | Member ordering, cache/non-cache replay, repeated prediction                 |
 | P0       | Map every member to canonical class/original target space before averaging; run output once | Generic pipeline correctness                                    | Class direction, logit-vs-probability averaging, nonlinear inverse placement |
 | P0       | Reconstruct classification output from fitted target categories; never call target inverse  | Current output design                                           | Obsolete TargetDispatch/class-score inverse coupling                         |
-| P0       | Add fixed HardClip after feature scaling and use Power instead of Quantile                  | TabICLv2-specific Recipe configuration using generic Processors | Reference feature-stage mismatch                                             |
+| P0       | Add fixed Clip after optional normalization and use Power instead of Quantile               | TabICLv2-specific Recipe configuration using generic Processors | Reference feature-stage mismatch                                             |
 | P0       | Use a sorted CategoricalAlign vocabulary                                                    | TabICLv2-specific Recipe configuration                          | Sklearn vocabulary-code mismatch                                             |
 
 These changes are dependency ordered: vocabulary alignment precedes
@@ -27,6 +27,12 @@ route order and does not add a generic route-ordering API for this difference.
 The parity harness compares these stages by column identity because the
 per-feature transformed values are unchanged; only their positions differ.
 
+## Completed follow-up
+
+GPU Processor and full-Recipe benchmarks now cover the combined 50,000 × 100
+stress workload on an NVIDIA L4. Fixed Clip is negligible; feature-wise
+Power fitting is the primary bottleneck. See `benchmark/REPORT.md`.
+
 ## Recommended follow-up
 
 1. **P1 — Decide whether planning parity is required.** Implement a generic
@@ -38,10 +44,9 @@ per-feature transformed values are unchanged; only their positions differ.
    FeaturePermute, and CategoryShuffle currently use the global torch CPU RNG.
    Explicit generators would improve independent plan reproduction and make
    cache metadata self-contained for future models.
-3. **P2 — Add GPU Processor benchmarks when those paths are supported.** The
-   current processing benchmark correctly reports CPU timings. Moving
-   numerical preprocessing to GPU may reduce the 241 ms Large baseline, but
-   host-backed StringTensor category metadata requires a separate design.
+3. **P2 — Optimize Power fitting.** Batch or vectorize the feature-wise
+   Yeo-Johnson lambda search and remove scalar GPU synchronization. It dominates
+   the combined Power Recipe on CPU and GPU.
 4. **P2 — Decide public user-output contracts.** SDM currently returns
    classification probabilities and all 999 regression coordinates. Label
    decoding and mean/median/quantile selection should be generic output

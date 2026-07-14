@@ -1,9 +1,8 @@
 # TabICLv2 processing benchmarks
 
 The suite measures SDM Processor and Recipe overhead without timing dataset
-creation or correctness assertions. All processing currently runs on CPU; the
-GPU name is retained in result metadata because the same host runs the pinned
-model parity checks.
+creation or correctness assertions. It supports CPU and CUDA, records
+synchronized wall-clock latency, and records incremental peak CUDA allocation.
 
 Dataset sizes are:
 
@@ -21,16 +20,32 @@ python -m benchmark.tabiclv2_processing \
   --matrix smoke --sizes tiny --repetitions 5 --include-processors
 ```
 
-Run one-factor-at-a-time and combined stress scenarios:
+Run the representative all-path 50,000 × 100 workload on CPU and GPU. Power
+and Quantile are alternatives in TabICLv2 planning, so the command materializes
+one explicit Recipe for each:
+
+```bash
+python -m benchmark.tabiclv2_processing \
+  --sizes large --matrix large-stress \
+  --devices cpu cuda --recipe-variants power quantile \
+  --repetitions 5 --include-processors \
+  --output benchmark/results/tabiclv2_processing_large_stress.json
+```
+
+The stress workload combines constant columns, numerical and categorical
+missing values, unseen query categories, 4,096-value categorical vocabularies,
+fixed-Clip outliers, and sigma-based outliers.
+
+Run one-factor-at-a-time and combined scenarios:
 
 ```bash
 python -m benchmark.tabiclv2_processing \
   --matrix oat --repetitions 5 --include-processors
 ```
 
-Run the final Cartesian product of task, size, and all six binary data
-characteristics. Detailed stage and Processor timings are retained for the
-one-factor cases; remaining combinations measure total Recipe overhead:
+Run the seven-factor Cartesian product. Detailed stage and Processor timings
+are retained for one-factor cases; remaining combinations measure total Recipe
+overhead:
 
 ```bash
 python -m benchmark.tabiclv2_processing \
@@ -39,15 +54,18 @@ python -m benchmark.tabiclv2_processing \
 ```
 
 Each run writes JSON plus a flattened CSV with median, p95, standard
-deviation, device, dtype, correctness, and peak CUDA allocation when
-available. CPU peak memory is left null to avoid perturbing the timed region
-with an allocation sampler.
+deviation, device, GPU model, dtype, correctness, repetitions, and peak CUDA
+allocation. CPU peak memory remains null to avoid perturbing timed operations.
 
-The pinned open-source reference can be measured for the same explicit
-single Identity member when the `tabicl` checkout at the documented commit is
-installed:
+Measure the pinned open-source reference on the equivalent mixed stress data:
 
 ```bash
+PYTHONPATH=/tmp/tabicl-v2-ref/src \
 python -m benchmark.tabiclv2_reference \
-  --size large --repetitions 10
+  --size large --stress --normalization-methods power quantile \
+  --repetitions 5 \
+  --output benchmark/results/tabiclv2_reference_large_stress.json
 ```
+
+The reference checkout must be at
+`f719c886a586ed4a29236345e319ac1ea596c478`.
