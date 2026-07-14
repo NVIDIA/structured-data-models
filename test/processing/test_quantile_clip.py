@@ -32,12 +32,6 @@ def test_quantile_clip_bounds_and_transform(device: torch.device) -> None:
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, expected)
     assert transformed.device == device
-    assert torch.equal(
-        processor.inverse_transform(
-            TableTensor.from_tensor(expected)
-        ).numerical,
-        expected,
-    )
 
 
 @withCUDA

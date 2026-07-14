@@ -1,17 +1,17 @@
 import torch
 
 from sdm.processing._utils import _as_float
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class QuantileClip(Processor, InvertibleMixin):
+class QuantileClip(Processor):
     """Clamp feature columns to fitted quantile bounds.
 
-    This transform is not reconstructive; ``inverse_transform`` intentionally
-    returns its input unchanged. Quantile bounds are fitted independently for
-    each feature column.
+    Values outside the fitted bounds are discarded, so this processor is not
+    invertible. Quantile bounds are fitted independently for each feature
+    column.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
@@ -51,6 +51,3 @@ class QuantileClip(Processor, InvertibleMixin):
             max=self.upper_bound,
         )
         return table.replace_blocks(numerical=numerical)
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return table
