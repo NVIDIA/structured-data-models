@@ -243,8 +243,6 @@ class RelationalData(DeviceMixin):
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
-        CPU tables use pyg-lib and CUDA tables use pylibcugraph.
-
         .. code-block:: python
 
             from sdm import RelationalData, TableTensor
