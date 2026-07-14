@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import ClassVar, cast
 
+import pytest
 import torch
-from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
+from sdm import ColumnarTensor, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
 from sdm.processing import Processor, Recipe, StandardScale, StypeDispatch
@@ -47,6 +48,10 @@ class _RecordingModel(Model):
     @classmethod
     def default_recipe(cls) -> Recipe:
         return Recipe()
+
+
+class _UnsupportedRecordingModel(_RecordingModel):
+    supports_related_tables: ClassVar[bool] = False
 
 
 def _table(
@@ -202,3 +207,108 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         model.calls[-1].related_query_tables.tables["users"].numerical,
         torch.tensor([[3.0]]),
     )
+
+
+def test_model_input_validation() -> None:
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    with pytest.raises(ValueError, match=r"num_estimators.*positive"):
+        model(x_context, y_context, x_query, num_estimators=0)
+    with pytest.raises(ValueError, match=r"num_estimators.*positive"):
+        model.fit(x_context, y_context, num_estimators=-1)
+    with pytest.raises(ValueError, match="one column"):
+        model(x_context, torch.randn(4, 2), x_query)
+    with pytest.raises(ValueError, match="batch and row dimensions"):
+        model(x_context, torch.randn(3, 1), x_query)
+    with pytest.raises(ValueError, match="same schema"):
+        model(x_context, y_context, torch.randn(2, 4))
+    with pytest.raises(ValueError, match="matching batch shapes"):
+        model(
+            torch.randn(2, 4, 3),
+            torch.randn(2, 4, 1),
+            torch.randn(3, 2, 3),
+        )
+
+
+def test_predict_validates_cached_input_schema() -> None:
+    model = _RecordingModel()
+    model.fit(torch.randn(2, 4, 3), torch.randn(2, 4, 1))
+
+    with pytest.raises(ValueError, match="same schema"):
+        model.predict(torch.randn(2, 3, 4))
+
+
+def test_related_table_validation() -> None:
+    x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
+    x_query = _table([3.0], [3], value_column="feature")
+    y_context = TableTensor.from_tensor(torch.tensor([[0.0], [1.0]]))
+    related_context = _related_tables(query=False)
+    related_query = _related_tables(query=True)
+
+    unsupported_model = _UnsupportedRecordingModel()
+    with pytest.raises(ValueError, match="does not support related tables"):
+        unsupported_model(
+            x_context,
+            y_context,
+            x_query,
+            related_context,
+            related_query,
+        )
+    with pytest.raises(ValueError, match="does not support related tables"):
+        unsupported_model.fit(x_context, y_context, related_context)
+    unsupported_model.fit(x_context, y_context)
+    with pytest.raises(ValueError, match="does not support related tables"):
+        unsupported_model.predict(x_query, related_query)
+
+    model = _RecordingModel()
+    model.fit(x_context, y_context, related_context, recipe=_recipe())
+    mismatched_query = RelatedTables(
+        tables={"users": _table([30.0], [3], value_column="different_column")},
+        relationships=related_query.relationships,
+        task_links=related_query.task_links,
+    )
+    with pytest.raises(ValueError, match="same schema"):
+        model.predict(x_query, mismatched_query)
+
+    for mismatch in (
+        RelatedTables(
+            tables=related_query.tables,
+            relationships=related_query.relationships,
+            task_links=(),
+        ),
+        RelatedTables(
+            tables=related_query.tables,
+            relationships=(),
+            task_links=related_query.task_links,
+        ),
+    ):
+        with pytest.raises(ValueError, match=r"task links|relationships"):
+            model.predict(x_query, mismatch)
+
+    relationships = (
+        *related_query.relationships,
+        Relationship.from_mapping(
+            {
+                "left_table": "users",
+                "left_column": "user_id",
+                "right_table": "orders",
+                "right_column": "user_id",
+            }
+        ),
+    )
+    reordered_query = RelatedTables(
+        tables=related_query.tables,
+        relationships=tuple(reversed(relationships)),
+        task_links=related_query.task_links,
+    )
+    reordered_context = RelatedTables(
+        tables=related_context.tables,
+        relationships=relationships,
+        task_links=related_context.task_links,
+    )
+    model.fit(x_context, y_context, reordered_context, recipe=_recipe())
+    with pytest.raises(ValueError, match="relationships"):
+        model.predict(x_query, reordered_query)

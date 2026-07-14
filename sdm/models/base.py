@@ -10,6 +10,8 @@ from torch import Tensor
 from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Processor, Recipe
+from sdm.relational.task import RelatedTablesSchema
+from sdm.tensor.table import TableSchema
 
 
 @contextlib.contextmanager
@@ -38,6 +40,96 @@ def _copy_related_feature_processors(
         name: copy.deepcopy(feature_processor)
         for name in related_tables.tables
     }
+
+
+def _related_tables_schema(
+    related_tables: RelatedTables | None,
+) -> RelatedTablesSchema | None:
+    return None if related_tables is None else related_tables.schema
+
+
+def _validate_num_estimators(num_estimators: int) -> None:
+    if num_estimators <= 0:
+        raise ValueError("'num_estimators' must be positive")
+
+
+def _validate_context(
+    x: TableTensor,
+    y: TableTensor,
+    *,
+    x_name: str,
+    y_name: str,
+) -> None:
+    if y.size(-1) != 1:
+        raise ValueError(
+            f"Expected '{y_name}' to have one column (got {y.size(-1)})"
+        )
+    if x.size()[:-1] != y.size()[:-1]:
+        raise ValueError(
+            f"Expected '{x_name}' and '{y_name}' to have matching batch and "
+            f"row dimensions (got {tuple(x.size()[:-1])} and "
+            f"{tuple(y.size()[:-1])})"
+        )
+
+
+def _validate_query(
+    x_context: TableTensor,
+    x_query: TableTensor,
+) -> None:
+    if x_context.schema != x_query.schema:
+        raise ValueError(
+            "Expected 'x_context' and 'x_query' to have the same schema"
+        )
+    if x_context.size()[:-2] != x_query.size()[:-2]:
+        raise ValueError(
+            "Expected 'x_context' and 'x_query' to have matching batch "
+            f"shapes (got {tuple(x_context.size()[:-2])} and "
+            f"{tuple(x_query.size()[:-2])})"
+        )
+
+
+def _validate_related_query_tables(
+    related_query_tables: RelatedTables | None,
+    related_context_schema: RelatedTablesSchema | None,
+) -> None:
+    if related_query_tables is None or related_context_schema is None:
+        return
+
+    query_schema = related_query_tables.schema
+    for name, table in related_query_tables.tables.items():
+        if (
+            name in related_context_schema.tables
+            and table.schema != related_context_schema.tables[name]
+        ):
+            raise ValueError(
+                f"Expected related context and query table '{name}' to have "
+                "the same schema"
+            )
+
+    if query_schema.task_links != related_context_schema.task_links:
+        raise ValueError(
+            "Expected related context and query task links to match"
+        )
+
+    common_tables = set(query_schema.tables) & set(
+        related_context_schema.tables
+    )
+    context_relationships = tuple(
+        relationship
+        for relationship in related_context_schema.relationships
+        if relationship.left_table in common_tables
+        and relationship.right_table in common_tables
+    )
+    query_relationships = tuple(
+        relationship
+        for relationship in query_schema.relationships
+        if relationship.left_table in common_tables
+        and relationship.right_table in common_tables
+    )
+    if context_relationships != query_relationships:
+        raise ValueError(
+            "Expected related context and query relationships to match"
+        )
 
 
 def _process_related_tables(
@@ -125,13 +217,29 @@ class Model(torch.nn.Module, ABC):
         Returns:
             The prediction ``[..., R_query, *]`` for all query examples.
         """
-        # TODO Add validation.
+        _validate_num_estimators(num_estimators)
+        if not self.supports_related_tables and (
+            related_context_tables is not None
+            or related_query_tables is not None
+        ):
+            raise ValueError(
+                f"'{self.__class__.__name__}' does not support related tables"
+            )
+
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(y_context, TableTensor):
             y_context = TableTensor.from_tensor(y_context)
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
+
+        _validate_context(
+            x_context,
+            y_context,
+            x_name="x_context",
+            y_name="y_context",
+        )
+        _validate_query(x_context, x_query)
 
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
@@ -142,6 +250,13 @@ class Model(torch.nn.Module, ABC):
             related_feature_processors = _copy_related_feature_processors(
                 recipe.features,
                 related_context_tables,
+            )
+            related_context_schema = _related_tables_schema(
+                related_context_tables
+            )
+            _validate_related_query_tables(
+                related_query_tables,
+                related_context_schema,
             )
             y_context_i = recipe.target.fit_transform(y_context)
             x_context_i = recipe.features.fit_transform(x_context)
@@ -196,11 +311,18 @@ class Model(torch.nn.Module, ABC):
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
         """
-        # TODO Add validation.
+        _validate_num_estimators(num_estimators)
+        if not self.supports_related_tables and related_tables is not None:
+            raise ValueError(
+                f"'{self.__class__.__name__}' does not support related tables"
+            )
+
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
+
+        _validate_context(x, y, x_name="x", y_name="y")
 
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
@@ -213,6 +335,7 @@ class Model(torch.nn.Module, ABC):
                 recipe.features,
                 related_tables,
             )
+            related_context_schema = _related_tables_schema(related_tables)
             y_i = recipe.target.fit_transform(y)
             x_i = recipe.features.fit_transform(x)
             related_tables_i = _process_related_tables(
@@ -223,6 +346,8 @@ class Model(torch.nn.Module, ABC):
             cache = Cache(
                 recipe=recipe,
                 related_feature_processors=related_feature_processors,
+                x_schema=x.schema,
+                related_context_schema=related_context_schema,
                 classes=y_i.categorical.categories[0]
                 if y_i.categorical.size(-1) > 0
                 else None,
@@ -264,7 +389,6 @@ class Model(torch.nn.Module, ABC):
         Returns:
             The prediction ``[..., R, *]`` for all query examples.
         """
-        # TODO Add validation.
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
 
@@ -273,6 +397,26 @@ class Model(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
             )
+
+        if not self.supports_related_tables and related_tables is not None:
+            raise ValueError(
+                f"'{self.__class__.__name__}' does not support related tables"
+            )
+
+        fit_cache = self._caches[0]
+        if x.schema != cast(TableSchema, fit_cache["x_schema"]):
+            raise ValueError(
+                "Expected prediction input 'x' to have the same schema as "
+                "the fitted context"
+            )
+        related_context_schema = cast(
+            RelatedTablesSchema | None,
+            fit_cache["related_context_schema"],
+        )
+        _validate_related_query_tables(
+            related_tables,
+            related_context_schema,
+        )
 
         outs: Sequence[TableTensor] = []
         for cache in self._caches:
