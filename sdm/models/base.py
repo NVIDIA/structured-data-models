@@ -256,10 +256,6 @@ class Model(torch.nn.Module, ABC):
 
     # Helpers #################################################################
 
-    # Recipe transforms can create variable-length category metadata while the
-    # public model call runs in inference mode. StringTensor does not yet
-    # support the inference-only host conversion used to read that metadata.
-    @torch.inference_mode(False)
     def _preprocess(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
@@ -413,11 +409,7 @@ class Model(torch.nn.Module, ABC):
             return None
 
         category = target.categorical.categories[0]
-        # StringTensor host conversion is intentionally outside inference mode;
-        # its variable-length storage cannot dispatch the inference-only
-        # ``aten.to`` overload used by ``tolist``.
-        with torch.inference_mode(False):
-            values = category.tolist()
+        values = category.tolist()
         labels = tuple(str(value) for value in values)
         if len(labels) != len(set(labels)):
             raise ValueError(
