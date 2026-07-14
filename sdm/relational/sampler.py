@@ -10,6 +10,7 @@ from sdm import ColumnarTensor, Stype, TableTensor
 from sdm.relational import (
     RelatedTables,
     RelationalData,
+    RelationalSample,
     Relationship,
     TaskLink,
 )
@@ -211,6 +212,10 @@ class RelationalSampler:
         seed = seed.to(task_table.device)
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
+            if bool((seed_time == torch.iinfo(torch.int64).min).any()):
+                raise ValueError(
+                    "Task sampling timestamps must not be missing"
+                )
         else:
             fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)
@@ -221,7 +226,14 @@ class RelationalSampler:
             )
 
         # Perform subgraph sampling:
-        _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
+        (
+            row_dict,
+            col_dict,
+            node_dict,
+            _,
+            num_sampled_nodes_dict,
+            num_sampled_edges_dict,
+        ) = torch.ops.pyg.hetero_neighbor_sample(
             node_types=list(self.data.tables),
             edge_types=list(self._colptr_dict),
             rowptr_dict={
@@ -249,11 +261,18 @@ class RelationalSampler:
             return_edge_id=False,
         )
 
+        batch_dict: dict[str, Tensor] = {}
+        node_hop_dict: dict[str, Tensor] = {}
         tables: dict[str, Tensor] = {}
-        for table_name, node in node_dict.items():
-            if node.numel() == 0:
-                continue
+        for table_name in self.data.tables:
+            node = node_dict[table_name]
             example, index = node.t().contiguous()
+            batch_dict[table_name] = example
+            node_hop_dict[table_name] = _expand_hops(
+                num_sampled_nodes_dict[table_name],
+                start=0,
+                device=node.device,
+            )
             tables[table_name] = torch.cat(
                 [
                     self.data.tables[table_name][index],
@@ -274,7 +293,86 @@ class RelationalSampler:
                 right_columns=(*rel.right_columns, EXAMPLE_ID),
             )
             for rel in self.data.relationships
-            if rel.left_table in tables and rel.right_table in tables
+        )
+
+        edge_indices: list[Tensor] = []
+        edge_hops: list[Tensor] = []
+        for index, relationship in enumerate(self.data.relationships):
+            forward_type = (
+                relationship.left_table,
+                str(2 * index),
+                relationship.right_table,
+            )
+            reverse_type = (
+                relationship.right_table,
+                str(2 * index + 1),
+                relationship.left_table,
+            )
+            forward_key = "__".join(forward_type)
+            reverse_key = "__".join(reverse_type)
+            forward_edge_index = torch.stack(
+                (row_dict[forward_key], col_dict[forward_key]),
+                dim=0,
+            )
+            reverse_edge_index = torch.stack(
+                (row_dict[reverse_key], col_dict[reverse_key]),
+                dim=0,
+            ).flip(0)
+            forward_hop = _expand_hops(
+                num_sampled_edges_dict[forward_key],
+                start=1,
+                device=forward_edge_index.device,
+            )
+            reverse_hop = _expand_hops(
+                num_sampled_edges_dict[reverse_key],
+                start=1,
+                device=reverse_edge_index.device,
+            )
+            edge_index, edge_hop = _coalesce_sampled_edges(
+                edge_index=torch.cat(
+                    (forward_edge_index, reverse_edge_index),
+                    dim=1,
+                ),
+                edge_hop=torch.cat((forward_hop, reverse_hop)),
+                num_dst_nodes=tables[relationship.right_table].size(0),
+            )
+            edge_indices.append(edge_index)
+            edge_hops.append(edge_hop)
+
+        entity_node = node_dict[task_link.table]
+        entity_hop = node_hop_dict[task_link.table]
+        entity_batch, entity_index = entity_node.t().contiguous()
+        hop_zero_index = (entity_hop == 0).nonzero().flatten()
+        root_index = torch.full_like(seed, -1)
+        if hop_zero_index.numel() > 0:
+            root_batch = entity_batch.index_select(0, hop_zero_index)
+            root_index[root_batch] = hop_zero_index
+        if bool((root_index < 0).any()) or not torch.equal(
+            entity_index.index_select(0, root_index), seed
+        ):
+            raise RuntimeError(
+                "Neighborhood sampler roots do not match the requested seeds"
+            )
+
+        sample = RelationalSample(
+            node_batch=batch_dict,
+            node_hops=node_hop_dict,
+            edge_indices=tuple(edge_indices),
+            edge_hops=tuple(edge_hops),
+            task_edge_indices=(
+                torch.stack(
+                    (
+                        torch.arange(seed.numel(), device=seed.device),
+                        root_index,
+                    )
+                ),
+            ),
+            num_hops=len(num_neighbors),
+            num_neighbors=tuple(num_neighbors),
+            disjoint=True,
+            temporal=bool(self.time_columns),
+            temporal_strategy="last",
+            seed_time=seed_time if task_time_column is not None else None,
         )
 
         task_link = TaskLink(
@@ -300,6 +398,7 @@ class RelationalSampler:
                 tables=cast(dict[str, TableTensor], tables),
                 relationships=relationships,
                 task_links=(task_link,),
+                sample=sample,
             ),
         )
 
@@ -324,3 +423,51 @@ def _to_csc(
     )
 
     return row, colptr
+
+
+def _expand_hops(
+    counts: Sequence[int],
+    *,
+    start: int,
+    device: torch.device,
+) -> Tensor:
+    count = torch.tensor(counts, dtype=torch.long, device=device)
+    hop = torch.arange(
+        start,
+        start + len(counts),
+        dtype=torch.long,
+        device=device,
+    )
+    return hop.repeat_interleave(count)
+
+
+def _coalesce_sampled_edges(
+    edge_index: Tensor,
+    edge_hop: Tensor,
+    num_dst_nodes: int,
+) -> tuple[Tensor, Tensor]:
+    if edge_index.size(1) == 0:
+        return edge_index, edge_hop
+
+    linear_index = edge_index[0] * num_dst_nodes + edge_index[1]
+    unique, inverse = linear_index.unique(sorted=True, return_inverse=True)
+    coalesced_hop = torch.full(
+        unique.size(),
+        fill_value=torch.iinfo(edge_hop.dtype).max,
+        dtype=edge_hop.dtype,
+        device=edge_hop.device,
+    )
+    coalesced_hop.scatter_reduce_(
+        0,
+        inverse,
+        edge_hop,
+        reduce="amin",
+        include_self=True,
+    )
+    coalesced_edge_index = torch.stack(
+        (
+            unique.div(num_dst_nodes, rounding_mode="floor"),
+            unique % num_dst_nodes,
+        )
+    )
+    return coalesced_edge_index, coalesced_hop
