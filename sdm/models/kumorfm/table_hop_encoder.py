@@ -82,6 +82,7 @@ class _TableHopEncoding:
     edge_index_dict: dict[tuple[str, str, str], Tensor]
     root_index: Tensor
     num_hops: int
+    recomputed_context: bool
 
 
 @dataclass(frozen=True)
@@ -267,18 +268,25 @@ class TableHopEncoder(torch.nn.Module):
                 cache["num_hops"] = num_hops
                 cache["tables"] = tables_cache
 
+        requires_joint_recompute = False
+        if cache is not None and cache.is_replaying:
+            assert tables_cache is not None
+            requires_joint_recompute = _requires_joint_recompute(
+                related_tables=related_tables,
+                graph=graph,
+                relationship_schema=relationship_schema,
+                relationship_matches=relationship_matches,
+                retained_relationships=retained_relationships,
+                fitted_nonempty_relationships=fitted_nonempty_relationships,
+                retained_tables=retained_tables,
+                tables_cache=tables_cache,
+                num_hops=num_hops,
+                max_keys=max_keys,
+            )
+
         x_dict: dict[str, Tensor] = {}
+        context_x_dict: dict[str, Tensor] = {}
         for table_name in retained_tables:
-            table = related_tables.tables.get(table_name)
-            if table is None:
-                x_dict[table_name] = parameter.new_empty(
-                    (0, _embedding_channels(self.row_embedding))
-                )
-                continue
-
-            batch = graph.batch_dict[table_name]
-            hop = graph.hop_dict[table_name]
-
             table_cache: Cache | None = None
             if tables_cache is not None:
                 if tables_cache.is_replaying:
@@ -286,6 +294,28 @@ class TableHopEncoder(torch.nn.Module):
                 else:
                     table_cache = Cache()
                     tables_cache[table_name] = table_cache
+
+            table = related_tables.tables.get(table_name)
+            if table is None:
+                assert table_cache is not None
+                if requires_joint_recompute:
+                    context_x_dict[table_name] = _reencode_cached_table(
+                        row_embedding=self.row_embedding,
+                        table_cache=table_cache,
+                        num_hops=num_hops,
+                        max_keys=max_keys,
+                        generator=generator,
+                    )
+                x_dict[table_name] = parameter.new_empty(
+                    (0, _embedding_channels(self.row_embedding))
+                )
+                continue
+
+            if table_cache is not None and table_cache.is_recording:
+                table_cache["context_size"] = table.size(0)
+
+            batch = graph.batch_dict[table_name]
+            hop = graph.hop_dict[table_name]
 
             categorical_align: CategoricalAlign | None = None
             if table.categorical.size(-1) > 0:
@@ -306,6 +336,8 @@ class TableHopEncoder(torch.nn.Module):
 
             row_indices: list[Tensor] = []
             embeddings: list[Tensor] = []
+            context_row_indices: list[Tensor] = []
+            context_embeddings: list[Tensor] = []
             for current_hop in range(num_hops + 1):
                 row_index = (hop == current_hop).nonzero().flatten()
                 hop_batch = batch.index_select(0, row_index)
@@ -359,13 +391,17 @@ class TableHopEncoder(torch.nn.Module):
                         )
                         table_cache[hop_key] = hop_cache
 
-                if row_index.numel() == 0:
+                if row_index.numel() == 0 and not (
+                    requires_joint_recompute and cached_context
+                ):
                     continue
 
                 row_cache: Cache | None = None
                 if cached_context:
                     assert hop_cache is not None
                     processor = cast(_FeatureProcessor, hop_cache["processor"])
+                    if processor != _ZERO_FEATURES:
+                        processor.to(parameter.device)
                     features = _transform_features(
                         feature_table,
                         processor,
@@ -383,32 +419,77 @@ class TableHopEncoder(torch.nn.Module):
                         hop_cache["row_embedding"] = row_cache
 
                 targets = y.index_select(0, hop_batch[train_mask])
+                if (
+                    hop_cache is not None
+                    and hop_cache.is_recording
+                    and has_context
+                ):
+                    hop_cache["context_features"] = features.detach().clone()
+                    hop_cache["context_targets"] = targets.detach().clone()
+                    hop_cache["context_row_index"] = row_index.detach().clone()
 
-                # KumoRFM uses all rows as column-attention context when a hop
-                # has no labeled examples, without injecting any targets.
-                context_mask = train_mask
-                if not has_context and not cached_context:
-                    context_mask = torch.ones_like(context_mask)
-
-                if row_cache is None:
-                    embedding = self.row_embedding(
-                        features,
-                        targets,
+                if requires_joint_recompute and cached_context:
+                    assert hop_cache is not None
+                    cached_features = cast(
+                        Tensor,
+                        hop_cache["context_features"],
+                    )
+                    cached_targets = cast(
+                        Tensor,
+                        hop_cache["context_targets"],
+                    )
+                    num_context_rows = cached_features.size(0)
+                    joint_features = torch.cat(
+                        (cached_features, features),
+                        dim=0,
+                    )
+                    context_mask = (
+                        torch.arange(
+                            joint_features.size(0),
+                            device=joint_features.device,
+                        )
+                        < num_context_rows
+                    )
+                    joint_embedding = self.row_embedding(
+                        joint_features,
+                        cached_targets,
                         train_mask=context_mask,
                         max_keys=max_keys,
                         generator=generator,
                     )
+                    context_embeddings.append(
+                        joint_embedding[:num_context_rows]
+                    )
+                    context_row_indices.append(
+                        cast(Tensor, hop_cache["context_row_index"])
+                    )
+                    embedding = joint_embedding[num_context_rows:]
                 else:
-                    embedding = self.row_embedding(
-                        features,
-                        targets,
-                        train_mask=context_mask,
-                        max_keys=max_keys,
-                        cache=row_cache,
-                        generator=generator,
-                    )
-                embeddings.append(embedding)
-                row_indices.append(row_index)
+                    # A hop without labels uses its own rows as column context.
+                    context_mask = train_mask
+                    if not has_context and not cached_context:
+                        context_mask = torch.ones_like(context_mask)
+
+                    if row_cache is None:
+                        embedding = self.row_embedding(
+                            features,
+                            targets,
+                            train_mask=context_mask,
+                            max_keys=max_keys,
+                            generator=generator,
+                        )
+                    else:
+                        embedding = self.row_embedding(
+                            features,
+                            targets,
+                            train_mask=context_mask,
+                            max_keys=max_keys,
+                            cache=row_cache,
+                            generator=generator,
+                        )
+                if row_index.numel() > 0:
+                    embeddings.append(embedding)
+                    row_indices.append(row_index)
 
             if embeddings:
                 row_index = torch.cat(row_indices)
@@ -423,6 +504,21 @@ class TableHopEncoder(torch.nn.Module):
             else:
                 x_dict[table_name] = parameter.new_empty(
                     (table.size(0), _embedding_channels(self.row_embedding))
+                )
+
+            if requires_joint_recompute:
+                assert table_cache is not None
+                context_row_index = torch.cat(context_row_indices)
+                context_encoded = torch.cat(context_embeddings)
+                context_x_dict[table_name] = context_encoded.new_zeros(
+                    (
+                        cast(int, table_cache["context_size"]),
+                        context_encoded.size(-1),
+                    )
+                ).index_copy(
+                    0,
+                    context_row_index,
+                    context_encoded,
                 )
 
         empty_edge_index = graph.root_index.new_empty((2, 0))
@@ -458,11 +554,40 @@ class TableHopEncoder(torch.nn.Module):
                     continue
             edge_index_dict[edge_type] = edge_index
 
+        root_index = graph.root_index
+        if cache is not None and cache.is_recording:
+            cache["context_edge_index_dict"] = {
+                edge_type: value.detach().clone()
+                for edge_type, value in edge_index_dict.items()
+            }
+            cache["context_root_index"] = root_index.detach().clone()
+        elif (
+            cache is not None
+            and cache.is_replaying
+            and requires_joint_recompute
+        ):
+            context_edge_index_dict = cast(
+                dict[tuple[str, str, str], Tensor],
+                cache["context_edge_index_dict"],
+            )
+            context_root_index = cast(Tensor, cache["context_root_index"])
+            x_dict, edge_index_dict, root_index = _prepend_context_graph(
+                x_dict=x_dict,
+                edge_index_dict=edge_index_dict,
+                root_index=root_index,
+                context_x_dict=context_x_dict,
+                context_edge_index_dict=context_edge_index_dict,
+                context_root_index=context_root_index,
+                relationship_schema=relationship_schema,
+                retained_relationships=retained_relationships,
+                entity_table=entity_table,
+            )
         return _TableHopEncoding(
             x_dict=x_dict,
             edge_index_dict=edge_index_dict,
-            root_index=graph.root_index,
+            root_index=root_index,
             num_hops=num_hops,
+            recomputed_context=requires_joint_recompute,
         )
 
 
@@ -472,6 +597,143 @@ def _embedding_channels(row_embedding: RowEmbedding) -> int:
     if isinstance(readout_token, Tensor):
         channels *= readout_token.size(-2)
     return channels
+
+
+def _requires_joint_recompute(
+    *,
+    related_tables: RelatedTables,
+    graph: _MaterializedGraph,
+    relationship_schema: tuple[_RelationshipSchema, ...],
+    relationship_matches: dict[int, int],
+    retained_relationships: tuple[int, ...],
+    fitted_nonempty_relationships: tuple[int, ...],
+    retained_tables: tuple[str, ...],
+    tables_cache: Cache,
+    num_hops: int,
+    max_keys: int | None,
+) -> bool:
+    empty_edge_index = graph.root_index.new_empty((2, 0))
+    for index in retained_relationships:
+        query_index = relationship_matches.get(index)
+        if query_index is None:
+            continue
+        relationship = relationship_schema[index]
+        edge_type = (relationship[0], str(query_index), relationship[2])
+        if (
+            index not in fitted_nonempty_relationships
+            and graph.edge_index_dict.get(edge_type, empty_edge_index).numel()
+            > 0
+        ):
+            return True
+
+    if max_keys is None:
+        return False
+    for table_name in retained_tables:
+        if table_name not in related_tables.tables:
+            continue
+        table_cache = cast(Cache, tables_cache[table_name])
+        hop = graph.hop_dict[table_name]
+        for current_hop in range(num_hops + 1):
+            hop_cache = cast(Cache, table_cache[f"hop{current_hop}"])
+            if (
+                not cast(bool, hop_cache["has_context"])
+                and int((hop == current_hop).sum()) > max_keys
+            ):
+                return True
+    return False
+
+
+def _reencode_cached_table(
+    *,
+    row_embedding: RowEmbedding,
+    table_cache: Cache,
+    num_hops: int,
+    max_keys: int | None,
+    generator: torch.Generator | None,
+) -> Tensor:
+    row_indices: list[Tensor] = []
+    embeddings: list[Tensor] = []
+    for current_hop in range(num_hops + 1):
+        hop_cache = cast(Cache, table_cache[f"hop{current_hop}"])
+        if not cast(bool, hop_cache["has_context"]):
+            continue
+        features = cast(Tensor, hop_cache["context_features"])
+        targets = cast(Tensor, hop_cache["context_targets"])
+        embeddings.append(
+            row_embedding(
+                features,
+                targets,
+                train_mask=torch.ones(
+                    features.size(0),
+                    dtype=torch.bool,
+                    device=features.device,
+                ),
+                max_keys=max_keys,
+                generator=generator,
+            )
+        )
+        row_indices.append(cast(Tensor, hop_cache["context_row_index"]))
+
+    row_index = torch.cat(row_indices)
+    encoded = torch.cat(embeddings)
+    return encoded.new_zeros(
+        (cast(int, table_cache["context_size"]), encoded.size(-1))
+    ).index_copy(0, row_index, encoded)
+
+
+def _prepend_context_graph(
+    *,
+    x_dict: dict[str, Tensor],
+    edge_index_dict: dict[tuple[str, str, str], Tensor],
+    root_index: Tensor,
+    context_x_dict: dict[str, Tensor],
+    context_edge_index_dict: dict[tuple[str, str, str], Tensor],
+    context_root_index: Tensor,
+    relationship_schema: tuple[_RelationshipSchema, ...],
+    retained_relationships: tuple[int, ...],
+    entity_table: str,
+) -> tuple[
+    dict[str, Tensor],
+    dict[tuple[str, str, str], Tensor],
+    Tensor,
+]:
+    merged_x_dict = {
+        table_name: torch.cat((context, x_dict[table_name]), dim=0)
+        for table_name, context in context_x_dict.items()
+    }
+
+    empty_edge_index = root_index.new_empty((2, 0))
+    merged_edge_index_dict: dict[tuple[str, str, str], Tensor] = {}
+    for index in retained_relationships:
+        relationship = relationship_schema[index]
+        edge_type = (relationship[0], str(index), relationship[2])
+        context_edge_index = context_edge_index_dict.get(
+            edge_type,
+            empty_edge_index,
+        )
+        query_edge_index = edge_index_dict.get(edge_type, empty_edge_index)
+        if query_edge_index.numel() > 0:
+            offset = query_edge_index.new_tensor(
+                [
+                    [context_x_dict[relationship[0]].size(0)],
+                    [context_x_dict[relationship[2]].size(0)],
+                ]
+            )
+            query_edge_index = query_edge_index + offset
+        merged_edge_index = torch.cat(
+            (context_edge_index, query_edge_index),
+            dim=1,
+        )
+        if merged_edge_index.numel() > 0:
+            merged_edge_index_dict[edge_type] = merged_edge_index
+
+    root_index = torch.cat(
+        (
+            context_root_index,
+            root_index + context_x_dict[entity_table].size(0),
+        )
+    )
+    return merged_x_dict, merged_edge_index_dict, root_index
 
 
 def _table_schema(related_tables: RelatedTables) -> _TableSchema:

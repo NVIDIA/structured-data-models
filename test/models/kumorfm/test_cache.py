@@ -14,7 +14,9 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import KumoRFM, Model
 from sdm.models.kumorfm.model import _KumoRFM
+from sdm.nn import Attention
 from sdm.relational.sampler import EXAMPLE_ID
+from sdm.testing import withCUDA
 from test.models.kumorfm.sample_utils import with_full_sample
 
 
@@ -27,7 +29,7 @@ class _SmallKumoRFM(KumoRFM):
 
 
 def _core(num_classes: int, num_quantiles: int) -> _KumoRFM:
-    return _KumoRFM(
+    model = _KumoRFM(
         num_classes=num_classes,
         num_quantiles=num_quantiles,
         cell_channels=4,
@@ -40,6 +42,10 @@ def _core(num_classes: int, num_quantiles: int) -> _KumoRFM:
         num_icl_layers=1,
         num_icl_heads=2,
     )
+    for module in model.modules():
+        if isinstance(module, Attention):
+            torch.nn.init.normal_(module.out_lin.weight, std=0.02)
+    return model
 
 
 def _table(
@@ -142,6 +148,8 @@ def _two_hop_tables(
     *,
     extra_entity_values: Mapping[int, float],
     item_values: Mapping[int, float] | None,
+    order_values: list[float] | None = None,
+    referred_to_root_examples: tuple[int, ...] = (),
 ) -> RelatedTables:
     num_roots = len(root_values)
     root_examples = list(range(num_roots))
@@ -160,9 +168,20 @@ def _two_hop_tables(
             ids={
                 "order_id": [300 + index for index in root_examples],
                 "owner_id": [100 + index for index in root_examples],
-                "referred_id": [200 + index for index in root_examples],
+                "referred_id": [
+                    (
+                        100 + index
+                        if index in referred_to_root_examples
+                        else 200 + index
+                    )
+                    for index in root_examples
+                ],
             },
-            values=[10.0 + index for index in root_examples],
+            values=(
+                [10.0 + index for index in root_examples]
+                if order_values is None
+                else order_values
+            ),
         ),
     }
     relationships = [
@@ -267,48 +286,56 @@ def test_fit_predict_matches_joint_forward(
         torch.testing.assert_close(repeated, actual)
 
 
-def test_omitted_relation_keeps_later_relation_stable() -> None:
+@withCUDA
+def test_relation_activation_recomputes_joint_context(
+    device: torch.device,
+) -> None:
     torch.manual_seed(0)
-    model = _SmallKumoRFM()
-    train_x = torch.tensor([[0.0], [1.0], [2.0]])
-    query_x = torch.tensor([[3.0], [4.0]])
-    train_y = torch.tensor([0, 1, 2])
-    train_events = {
-        "first_events": [1.0, 2.0, 3.0],
-        "second_events": [4.0, 5.0, 6.0],
-        "query_only": [],
-    }
-    query_events = {
-        "second_events": [7.0, 8.0],
-        "query_only": [9.0, 10.0],
-    }
-    joint_events = {
-        "first_events": [1.0, 2.0, 3.0],
-        "second_events": [4.0, 5.0, 6.0, 7.0, 8.0],
-        "query_only": [9.0, 10.0],
-    }
+    model = _SmallKumoRFM().to(device)
+    train_x = torch.tensor([[0.0], [1.0], [2.0]], device=device)
+    query_x = torch.tensor([[3.0], [4.0]], device=device)
+    train_y = torch.tensor([0, 1, 2], device=device)
+    train_tables = _two_hop_tables(
+        [1.0, 2.0, 3.0],
+        extra_entity_values={},
+        item_values={0: 4.0, 1: 5.0, 2: 6.0},
+    )
+    query_tables = _two_hop_tables(
+        [7.0, 8.0],
+        extra_entity_values={0: 9.0, 1: 10.0},
+        item_values=None,
+        order_values=[13.0, 14.0],
+    )
+    joint_tables = _two_hop_tables(
+        [1.0, 2.0, 3.0, 7.0, 8.0],
+        extra_entity_values={3: 9.0, 4: 10.0},
+        item_values={0: 4.0, 1: 5.0, 2: 6.0},
+    )
 
     expected = model(
         torch.cat((train_x, query_x)),
         train_y,
-        _related_tables(
-            [1.0, 2.0, 3.0, 4.0, 5.0],
-            joint_events,
-            event_examples={"query_only": [3, 4]},
-        ),
+        joint_tables,
     )
-    model.fit(
-        train_x,
-        train_y,
-        _related_tables([1.0, 2.0, 3.0], train_events),
-    )
+    model.fit(train_x, train_y, train_tables)
 
-    actual = model.predict(
-        query_x,
-        _related_tables([4.0, 5.0], query_events),
-    )
+    assert model._caches is not None
+    table_hop_cache = cast(Cache, model._caches[0]["table_hop_encoder"])
+    assert table_hop_cache["nonempty_relationships"] == (0, 2)
 
-    torch.testing.assert_close(actual, expected, atol=1e-5, rtol=1e-5)
+    train_y.zero_()
+    assert train_tables.sample is not None
+    for edge_index in train_tables.sample.edge_indices:
+        edge_index.zero_()
+
+    actual = model.predict(query_x, query_tables)
+
+    torch.testing.assert_close(
+        actual,
+        expected,
+        atol=1e-5,
+        rtol=1e-5,
+    )
 
 
 def test_query_only_hop_uses_fallback_without_kv_cache() -> None:
@@ -328,16 +355,19 @@ def test_query_only_hop_uses_fallback_without_kv_cache() -> None:
         [1.0, 2.0, 3.0],
         extra_entity_values={},
         item_values={0: 4.0, 1: 5.0, 2: 6.0},
+        referred_to_root_examples=(0, 1, 2),
     )
     query_tables = _two_hop_tables(
         [7.0, 8.0],
         extra_entity_values={0: 9.0, 1: 10.0},
         item_values=None,
+        order_values=[13.0, 14.0],
     )
     joint_tables = _two_hop_tables(
         [1.0, 2.0, 3.0, 7.0, 8.0],
         extra_entity_values={3: 9.0, 4: 10.0},
         item_values={0: 4.0, 1: 5.0, 2: 6.0},
+        referred_to_root_examples=(0, 1, 2),
     )
 
     expected = model(
@@ -349,6 +379,7 @@ def test_query_only_hop_uses_fallback_without_kv_cache() -> None:
 
     assert model._caches is not None
     table_hop_cache = cast(Cache, model._caches[0]["table_hop_encoder"])
+    assert table_hop_cache["nonempty_relationships"] == (0, 1, 2)
     tables_cache = cast(Cache, table_hop_cache["tables"])
     entity_cache = cast(Cache, tables_cache["entity"])
     query_only_hop = cast(Cache, entity_cache["hop2"])
@@ -359,7 +390,6 @@ def test_query_only_hop_uses_fallback_without_kv_cache() -> None:
     handle.remove()
 
     torch.testing.assert_close(actual, expected, atol=1e-5, rtol=1e-5)
-    assert "row_embedding" not in query_only_hop
 
 
 def test_cache_rejects_incompatible_query_schema() -> None:

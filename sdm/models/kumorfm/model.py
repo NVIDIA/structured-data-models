@@ -243,8 +243,13 @@ class _KumoRFM(torch.nn.Module):
         generator = torch.Generator(device=parameter.device).manual_seed(42)
         table_hop_cache = _cache_child(cache, "table_hop_encoder")
         icl_cache = _cache_child(cache, "icl_block")
-        if cache is not None and cache.is_replaying:
-            generator.set_state(cast(Tensor, cache["gnn_generator_state"]))
+        if cache is not None:
+            if cache.is_replaying:
+                generator.set_state(
+                    cast(Tensor, cache["table_hop_generator_state"]).cpu()
+                )
+            else:
+                cache["table_hop_generator_state"] = generator.get_state()
 
         encoded = self.table_hop_encoder(
             x=x,
@@ -254,8 +259,14 @@ class _KumoRFM(torch.nn.Module):
             max_keys=20_000,
             generator=generator,
         )
-        if cache is not None and cache.is_recording:
-            cache["gnn_generator_state"] = generator.get_state()
+        if cache is not None:
+            if cache.is_recording:
+                cache["gnn_generator_state"] = generator.get_state()
+                cache["context_targets"] = y.detach().clone()
+            elif not encoded.recomputed_context:
+                generator.set_state(
+                    cast(Tensor, cache["gnn_generator_state"]).cpu()
+                )
 
         entity_table = related_tables.task_links[0].table
         x = self.gnn(
@@ -266,7 +277,13 @@ class _KumoRFM(torch.nn.Module):
             generator=generator,
         )
         x = x.index_select(0, encoded.root_index)
-        x = self.icl_block(x=x, y=y, cache=icl_cache)
+        icl_y = y
+        active_icl_cache = icl_cache
+        if encoded.recomputed_context:
+            assert cache is not None
+            icl_y = cast(Tensor, cache["context_targets"])
+            active_icl_cache = None
+        x = self.icl_block(x=x, y=icl_y, cache=active_icl_cache)
         return self.head(x)
 
 
