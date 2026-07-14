@@ -170,13 +170,13 @@ class RelationalSampler:
             ) from e
 
         # Resolve entity table node indices:
-        left = task_table[task_link.task_columns].to_arrow()
+        left = task_table[list(task_link.task_columns)].to_arrow()
         left = left.append_column(
             LEFT_ROW_ID,
             pa.array(torch.arange(left.num_rows).numpy()),
         )
         right = self.data.tables[task_link.table][
-            task_link.table_columns
+            list(task_link.table_columns)
         ].to_arrow()
         right = right.append_column(
             RIGHT_ROW_ID,

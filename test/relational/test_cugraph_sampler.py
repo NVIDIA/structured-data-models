@@ -6,6 +6,7 @@ import torch
 from sdm import ColumnarTensor, RelationalData, Stype, TableTensor
 from sdm.relational import CuGraphRelationalSampler
 from sdm.relational.sampler import EXAMPLE_ID
+from sdm.testing import onlyCUDA
 
 
 def _require_rapids() -> None:
@@ -67,55 +68,6 @@ def _non_temporal_data() -> RelationalData:
     )
 
 
-def _temporal_data() -> RelationalData:
-    return RelationalData(
-        tables={
-            "roots": _table(
-                {"root_id": [0]},
-                {"root_id": Stype.id},
-            ),
-            "first": _table(
-                {
-                    "first_id": [10, 11, 12],
-                    "root_id": [0, 0, 0],
-                    "time": pd.to_datetime([3, 1, 2], unit="s").tolist(),
-                },
-                {
-                    "first_id": Stype.id,
-                    "root_id": Stype.id,
-                    "time": Stype.datetime,
-                },
-            ),
-            "second": _table(
-                {
-                    "second_id": [20, 21],
-                    "first_id": [10, 12],
-                    "time": pd.to_datetime([8, 9], unit="s").tolist(),
-                },
-                {
-                    "second_id": Stype.id,
-                    "first_id": Stype.id,
-                    "time": Stype.datetime,
-                },
-            ),
-        },
-        relationships=[
-            {
-                "left_table": "first",
-                "left_column": "root_id",
-                "right_table": "roots",
-                "right_column": "root_id",
-            },
-            {
-                "left_table": "second",
-                "left_column": "first_id",
-                "right_table": "first",
-                "right_column": "first_id",
-            },
-        ],
-    )
-
-
 def _rows(table: TableTensor, *columns: str) -> list[tuple[Any, ...]]:
     values = (
         cast(TableTensor, table.cpu()).to_arrow().select(columns).to_pydict()
@@ -135,6 +87,7 @@ def test_last_per_source_selects_latest_per_edge_type() -> None:
     assert selected.equal(torch.tensor([1, 2, 3, 4]))
 
 
+@onlyCUDA
 def test_cuda_data_uses_cugraph_sampler() -> None:
     _require_rapids()
 
@@ -143,6 +96,7 @@ def test_cuda_data_uses_cugraph_sampler() -> None:
     assert isinstance(sampler, CuGraphRelationalSampler)
 
 
+@onlyCUDA
 def test_cugraph_sampler_is_disjoint_and_retains_isolated_seeds() -> None:
     _require_rapids()
     data = _non_temporal_data()
@@ -170,6 +124,7 @@ def test_cugraph_sampler_is_disjoint_and_retains_isolated_seeds() -> None:
     ) == [(0, 10), (0, 11), (2, 10), (2, 11)]
 
 
+@onlyCUDA
 def test_cugraph_sampler_advances_seeded_random_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -213,6 +168,7 @@ def test_cugraph_sampler_advances_seeded_random_state(
     assert first_sequence == second_sequence
 
 
+@onlyCUDA
 def test_cugraph_sampler_retains_seed_when_relationship_is_empty() -> None:
     _require_rapids()
     data = _non_temporal_data()
@@ -237,6 +193,7 @@ def test_cugraph_sampler_retains_seed_when_relationship_is_empty() -> None:
     ) == [(0, 2)]
 
 
+@onlyCUDA
 def test_cugraph_sampler_resolves_composite_string_seed() -> None:
     _require_rapids()
     data = RelationalData(
@@ -287,6 +244,7 @@ def test_cugraph_sampler_resolves_composite_string_seed() -> None:
     ) == [(0, 11)]
 
 
+@onlyCUDA
 def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -323,6 +281,7 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
     ) == [(0, 20), (1, 30)]
 
 
+@onlyCUDA
 def test_cugraph_sampler_invalidates_mutated_numeric_seed_lookup() -> None:
     _require_rapids()
     data = RelationalData(
@@ -365,6 +324,7 @@ def test_cugraph_sampler_invalidates_mutated_numeric_seed_lookup() -> None:
     ) == [(0, 40)]
 
 
+@onlyCUDA
 def test_cugraph_sampler_invalidates_retyped_numeric_seed_lookup() -> None:
     _require_rapids()
     tables = {"users": _id_table("user_id", [-1, 1], torch.int8)}
@@ -400,9 +360,12 @@ def test_cugraph_sampler_invalidates_retyped_numeric_seed_lookup() -> None:
     ) == [(0, 255)]
 
 
-def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors() -> None:
+@onlyCUDA
+def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors(
+    temporal_data: RelationalData,
+) -> None:
     _require_rapids()
-    data = _temporal_data()
+    data = temporal_data.cuda()
     task_table = _table(
         {
             "entity": [0, 0],
@@ -432,6 +395,7 @@ def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors() -> None:
     ) == [(1, 20)]
 
 
+@onlyCUDA
 @pytest.mark.parametrize("entity", [99, 0], ids=["missing", "duplicate"])
 def test_cugraph_sampler_requires_one_seed_match(entity: int) -> None:
     _require_rapids()
@@ -456,6 +420,7 @@ def test_cugraph_sampler_requires_one_seed_match(entity: int) -> None:
         )
 
 
+@onlyCUDA
 def test_cugraph_sampler_does_not_export_rows_to_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
