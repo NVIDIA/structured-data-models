@@ -45,11 +45,11 @@ class CategoryShuffle(Processor):
             torch.zeros(1, dtype=torch.long),
         )
 
-    def _fit(self, inp: TableTensor) -> None:
-        device = inp.categorical.device
+    def _fit(self, table: TableTensor) -> None:
+        device = table.categorical.device
         permutations: list[Tensor] = []
         offsets = [0]
-        for category in inp.categorical.categories:
+        for category in table.categorical.categories:
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
@@ -74,11 +74,11 @@ class CategoryShuffle(Processor):
             device=device,
         )
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
+    def _transform(self, table: TableTensor) -> TableTensor:
         offsets = self.offsets.tolist()
-        data = inp.categorical.as_tensor().clone()
+        data = table.categorical.as_tensor().clone()
         categories: list[Tensor] = []
-        for index, category in enumerate(inp.categorical.categories):
+        for index, category in enumerate(table.categorical.categories):
             permutation = self.permutations[
                 offsets[index] : offsets[index + 1]
             ]
@@ -100,4 +100,4 @@ class CategoryShuffle(Processor):
             data=data,
             categories=categories,
         )
-        return inp.replace_blocks(categorical=categorical)
+        return table.replace_blocks(categorical=categorical)
