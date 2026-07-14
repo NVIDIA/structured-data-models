@@ -2,6 +2,7 @@ import contextlib
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from copy import deepcopy
 from typing import ClassVar, cast
 
 import torch
@@ -44,7 +45,6 @@ class Model(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
-        self._recipe: Recipe | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -80,18 +80,23 @@ class Model(torch.nn.Module, ABC):
             )
             related_tables = None
 
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+
         # Align every member output to the input target's class order before
         # aggregating the ensemble.
         original_class_labels = self._class_labels(y)
+        output_recipe: Recipe | None = None
         outs: list[Tensor] = []
-        for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
+        for member in range(num_estimators):
+            member_recipe = None if recipe is None else deepcopy(recipe)
+            if member == 0:
+                output_recipe = member_recipe
             x_i, y_i, member_class_labels = self._preprocess(
                 x,
                 y,
                 related_tables,
-                recipe=recipe,
+                recipe=member_recipe,
             )
             class_indices = self._class_indices(
                 original_class_labels,
@@ -101,16 +106,16 @@ class Model(torch.nn.Module, ABC):
             out = self._postprocess(
                 out,
                 y_i,
-                recipe,
+                member_recipe,
                 class_indices=class_indices,
             )
             outs.append(out)
 
         out = torch.stack(outs).mean(dim=0)
         table = TableTensor.from_tensor(out.clone())
-        if recipe is None:
+        if output_recipe is None:
             return table.numerical
-        return recipe.output.transform(table).numerical
+        return output_recipe.output.transform(table).numerical
 
     @torch.inference_mode()
     def fit(
@@ -144,17 +149,19 @@ class Model(torch.nn.Module, ABC):
             )
             related_tables = None
 
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+
         self.clear()
         original_class_labels = self._class_labels(y)
         caches: list[Cache] = []
         for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
+            member_recipe = None if recipe is None else deepcopy(recipe)
             x_i, y_i, member_class_labels = self._preprocess(
                 x,
                 y,
                 related_tables,
-                recipe=recipe,
+                recipe=member_recipe,
             )
             x_i = x_i[..., : y_i.size(-1), :]
             class_indices = self._class_indices(
@@ -164,6 +171,7 @@ class Model(torch.nn.Module, ABC):
 
             cache = Cache(
                 {
+                    "recipe": member_recipe,
                     "y.dtype": y_i.dtype,
                     # predict() only receives features, so retain the fitted
                     # mapping needed to restore this member's class order.
@@ -175,15 +183,10 @@ class Model(torch.nn.Module, ABC):
             caches.append(cache)
 
         self._caches = caches
-        # TODO: Once creating Recipes from a Recipe is supported, we should
-        # iterate over the recipes so that every predict call runs a consistent
-        # recipe per ensemble member.
-        self._recipe = recipe
 
     def clear(self) -> None:
         r"""Clears cached in-context examples and the fitted recipe."""
         self._caches = None
-        self._recipe = None
 
     @torch.inference_mode()
     def predict(
@@ -218,21 +221,19 @@ class Model(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        recipe = self._recipe
         outs: list[Tensor] = []
         for cache in self._caches:
+            member_recipe = cast(Recipe | None, cache["recipe"])
             y_i = torch.empty(
                 (*x.size()[:-2], 0),
                 dtype=cast(torch.dtype, cache["y.dtype"]),
                 device=x.device,
             )
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
             x_i, y_i, _ = self._preprocess(
                 x,
                 y_i,
                 related_tables,
-                recipe=recipe,
+                recipe=member_recipe,
                 fit_recipe=False,
             )
             out = self._forward(x_i, y_i, related_tables, cache)
@@ -243,16 +244,17 @@ class Model(torch.nn.Module, ABC):
             out = self._postprocess(
                 out,
                 y_i,
-                recipe,
+                member_recipe,
                 class_indices=class_indices,
             )
             outs.append(out)
 
         out = torch.stack(outs).mean(dim=0)
         table = TableTensor.from_tensor(out.clone())
-        if recipe is None:
+        output_recipe = cast(Recipe | None, self._caches[0]["recipe"])
+        if output_recipe is None:
             return table.numerical
-        return recipe.output.transform(table).numerical
+        return output_recipe.output.transform(table).numerical
 
     # Helpers #################################################################
 
