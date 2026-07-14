@@ -49,8 +49,8 @@ class SigmaClip(Processor):
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
-    def _fit(self, inp: TableTensor) -> None:
-        numerical = _as_float(inp.numerical)
+    def _fit(self, table: TableTensor) -> None:
+        numerical = _as_float(table.numerical)
         min_std = numerical.new_tensor(1e-6)
 
         mean = torch.nanmean(numerical, dim=0)
@@ -84,10 +84,10 @@ class SigmaClip(Processor):
             self._mean + self.threshold * self._std,
         )
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        """Clip ``inp`` using the fitted soft lower and upper bounds."""
-        numerical = _as_float(inp.numerical)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        """Clip ``table`` using the fitted soft lower and upper bounds."""
+        numerical = _as_float(table.numerical)
         log_abs = numerical.abs().log1p()
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
         numerical = torch.minimum(log_abs + self.upper_bound, clipped)
-        return inp.replace_blocks(numerical=numerical)
+        return table.replace_blocks(numerical=numerical)
