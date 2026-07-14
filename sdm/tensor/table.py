@@ -488,6 +488,14 @@ class TableTensor(Tensor):
         r"""Return typed column blocks per semantic type."""
         return dict(self.items())
 
+    def is_same_schema(self, other: TableTensor) -> bool:
+        r"""Whether ``other`` has the same schema layout.
+
+        Args:
+            other: The object to compare against.
+        """
+        return self._columns == other._columns
+
     def replace_blocks(
         self,
         *,

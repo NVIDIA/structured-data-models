@@ -205,6 +205,24 @@ class RelatedTables(DeviceMixin):
             )
         return next(iter(devices))
 
+    def is_same_schema(self, other: RelatedTables) -> bool:
+        r"""Whether ``other`` has the same schema layout.
+
+        Args:
+            other: The object to compare against.
+        """
+        if self.tables.keys() != other.tables.keys():
+            return False
+
+        for name, table in self.tables.items():
+            if not table.is_same_schema(other.tables[name]):
+                return False
+
+        if self.relationships != other.relationships:
+            return False
+
+        return self.task_links == other.task_links
+
     def edge_indices(
         self,
         task_table: TableTensor,
