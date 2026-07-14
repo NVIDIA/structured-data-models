@@ -736,13 +736,21 @@ def test_pin_memory() -> None:
     )
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        out = cast(TableTensor, tensor.pin_memory())
-        assert out.is_pinned()
-        assert out.numerical.is_pinned()
-        assert out.categorical is tensor.categorical
-        assert out.datetime is tensor.datetime
-        assert out.id is tensor.id
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age", "income"]},
+        numerical=torch.randn(2, 2),
+    )
+
+    out = cast(TableTensor, tensor.pin_memory())
+    assert out.is_pinned()
+    assert out.numerical.is_pinned()
+    assert out.categorical is tensor.categorical
+    assert out.datetime is tensor.datetime
+    assert out.id is tensor.id
 
 
 def test_share_memory() -> None:
