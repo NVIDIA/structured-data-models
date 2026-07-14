@@ -27,31 +27,41 @@ def test_tabiclv2(
     else:
         assert repr(model) == "TabICLv2(device=cuda:0)"
 
-    R, C, R_train = 8, 6, 5
+    R_context, R_query, C = 5, 3, 6
 
-    x = torch.randn(*batch_shape, R, C, device=device)
+    x_context = torch.randn(*batch_shape, R_context, C, device=device)
+    x_query = torch.randn(*batch_shape, R_query, C, device=device)
     if dtype.is_floating_point:
-        y = torch.randn(*batch_shape, R_train, device=device)
-        out = model(x, y)
-        assert out.size() == (*batch_shape, R - R_train, 999)
+        y_context = torch.randn((*batch_shape, R_context, 1), device=device)
+        out = model(x_context, y_context, x_query)
+        assert out.size() == (*batch_shape, R_query, 999)
     else:
         # TODO Increase max value once TabICLv2 supports 10+ classes:
-        y = torch.randint(0, 10, (*batch_shape, R_train), device=device)
-        out = model(x, y)
-        assert out.size() == (*batch_shape, R - R_train, 10)
+        y_context = torch.randint(
+            low=0,
+            high=10,
+            size=(*batch_shape, R_context, 1),
+            device=device,
+        )
+        out = model(x_context, y_context, x_query)
+        assert out.size() == (*batch_shape, R_query, 10)
 
-    assert out.dtype == x.dtype
-    assert out.device == x.device
+    assert out.dtype == x_query.dtype
+    assert out.device == x_query.device
     assert torch.is_inference(out)
 
     if len(batch_shape) > 0:
         looped = torch.stack(
-            [model(x[i], y[i]) for i in range(batch_shape[0])]
+            [
+                model(x_context[i], y_context[i], x_query[i])
+                for i in range(batch_shape[0])
+            ],
+            dim=0,
         )
         torch.testing.assert_close(out, looped)
 
-    model.fit(x[..., :R_train, :], y)
-    torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
+    model.fit(x_context, y_context)
+    torch.testing.assert_close(model.predict(x_query), out)
     model.clear()
 
 

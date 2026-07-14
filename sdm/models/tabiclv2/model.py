@@ -1,6 +1,6 @@
 # ruff: noqa: D205
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -8,7 +8,7 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
 from sdm.models.tabiclv2.icl import ICLBlock
@@ -125,27 +125,53 @@ class TabICLv2(Model):
 
         return self
 
-    def _forward(  # TODO Add multi-class support.
+    def _forward(
         self,
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
-        related_tables: RelatedTables | None,
+        x_context: TableTensor | None,  # [..., R_context, D]
+        y_context: TableTensor | None,  # [..., R_context, 1]
+        x_query: TableTensor | None,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:  # [..., R_test, num_classes or 999]
-        r"""The forward pass.
+    ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
-        Returns:
-            Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
-            and ``[..., R_test, 999]`` for floating-point ``y``.
-            Integer ``y`` return class logits.
-            Floating-point ``y`` return 999 quantiles at probability levels
-            :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
-        """
-        assert related_tables is None
+        if x_context is None and x_query is not None:
+            x = x_query.numerical
+        elif x_query is None and x_context is not None:
+            x = x_context.numerical
+        else:
+            assert x_context is not None
+            assert x_query is not None
+            x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
-        if y.is_floating_point():
-            return self.reg_model(x=x, y=y, cache=cache)
-        return self.cls_model(x=x, y=y, cache=cache)
+        y: Tensor | None = None
+        classes: Tensor | None = None
+        if y_context is not None and y_context.categorical.size(-1) > 0:
+            y = y_context.categorical.as_tensor().squeeze(-1)
+            classes = y_context.categorical.categories[0]
+        elif y_context is not None and y_context.numerical.size(-1) > 0:
+            y = y_context.numerical.squeeze(-1)
+        elif cache is not None:
+            classes = cast(Tensor, cache["classes"])
+
+        if y is None:
+            y = x.new_empty(
+                (*x.size()[:2], 0),
+                dtype=torch.int64 if classes is not None else x.dtype,
+            )
+
+        if classes is None:
+            return TableTensor(
+                columns={
+                    Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
+                },
+                numerical=self.reg_model(x, y, cache=cache),
+            )
+
+        return TableTensor(
+            columns={Stype.categorical: classes.tolist()},
+            numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
+        )
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
