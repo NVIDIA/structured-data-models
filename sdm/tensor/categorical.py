@@ -264,6 +264,10 @@ class CategoricalTensor(Tensor):
     def from_tensor(cls, tensor: Tensor) -> Self:
         r"""Create tensor from a numerical :class:`torch.Tensor`.
 
+        Each column's categories are the sorted unique non-negative values.
+        All negative values are treated as missing and are collapsed into the
+        ``-1`` missing-value sentinel.
+
         Args:
             tensor: The numerical tensor.
         """

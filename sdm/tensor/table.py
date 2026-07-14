@@ -383,6 +383,12 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Create tensor from a numerical :class:`torch.Tensor`.
 
+        Tensors with an integer dtype in
+        :attr:`CategoricalTensor.ALLOWED_DTYPES` are stored as categorical
+        columns via :meth:`CategoricalTensor.from_tensor`, where all negative
+        values are treated as missing. All other tensors are stored as
+        numerical columns.
+
         Args:
             tensor: The numerical tensor.
             columns: The column names of the tensor.
