@@ -4,7 +4,7 @@ from sdm.tensor import TableTensor
 
 
 class Identity(Processor, InvertibleMixin):
-    """Return tableuts unchanged.
+    """Return inputs unchanged.
 
     This stateless processor is useful as an explicit no-op in recipe phases.
     """
