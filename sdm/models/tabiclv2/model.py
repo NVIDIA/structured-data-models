@@ -17,8 +17,6 @@ from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import HierarchicalClassifier
 from sdm.processing import Recipe
 
-_CLASSIFICATION_TEMPERATURE = 0.9
-
 
 class TabICLv2(Model):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
@@ -213,7 +211,7 @@ class _TabICLv2(torch.nn.Module):
         if num_classes > 1:
             self.hierarchical_classifier = HierarchicalClassifier(
                 max_classes=num_classes,
-                temperature=_CLASSIFICATION_TEMPERATURE,
+                temperature=0.9,
             )
 
     def forward(
@@ -247,7 +245,11 @@ class _TabICLv2(torch.nn.Module):
             predictor=self._predict_standard,
         )
         # Convert to pseudo-logits compatible with temperature softmax:
-        return (probabilities + 1e-6).log().mul(_CLASSIFICATION_TEMPERATURE)
+        return (
+            (probabilities + 1e-6)
+            .log()
+            .mul(self.hierarchical_classifier.temperature)
+        )
 
     def _predict_standard(
         self,
