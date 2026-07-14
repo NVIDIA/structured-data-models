@@ -227,9 +227,6 @@ class _TabICLv2(torch.nn.Module):
         if self.max_classes > 0 and y.numel() > 0:
             # TODO Cache `num_classes` to avoid device synchronization.
             num_classes = int(y.max()) + 1
-            if torch.compiler.is_compiling():
-                # FIXME Don't give up on hierarchical classification.
-                torch._check(num_classes <= self.max_classes)
         if cache is not None and num_classes > self.max_classes:
             raise NotImplementedError(
                 f"Key/value caching is not supported with more than "

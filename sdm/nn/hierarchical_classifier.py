@@ -111,6 +111,7 @@ class HierarchicalClassifier(torch.nn.Module):
             )
         if y.is_floating_point() or y.is_complex():
             raise TypeError("Expected integer classification labels")
+        y = y.long()
         if not ((y >= 0) & (y < num_classes)).all():
             raise ValueError(
                 f"Expected 'y' values to be in the interval [0, {num_classes})"
@@ -118,7 +119,6 @@ class HierarchicalClassifier(torch.nn.Module):
         if not callable(predictor):
             raise TypeError("Expected 'predictor' to be callable")
 
-        y = y.long()
         *batch_shape, num_rows, channels = row_embeddings.size()
         train_size = y.size(-1)
         test_size = num_rows - train_size
@@ -203,6 +203,10 @@ class HierarchicalClassifier(torch.nn.Module):
             device=train_labels.device,
         )
         group_labels = class_groups[local_labels]
+        group_masks = group_labels == torch.arange(
+            num_groups,
+            device=group_labels.device,
+        ).unsqueeze(-1)  # [G, R_node]
         group_probs = self._predict_probabilities(
             train_rows=train_rows,
             train_labels=group_labels,
@@ -214,7 +218,7 @@ class HierarchicalClassifier(torch.nn.Module):
         child_class_ids: list[Tensor] = []
         child_probabilities: list[Tensor] = []
         for group_idx in range(num_groups):
-            mask = group_labels == group_idx
+            mask = group_masks[group_idx]
             child_ids, child_probs = self._process_node(
                 train_rows=train_rows[mask],
                 train_labels=train_labels[mask],
@@ -298,4 +302,8 @@ class HierarchicalClassifier(torch.nn.Module):
         )
         group_sizes[: num_classes % num_groups] += 1
         group_indices = torch.arange(num_groups, device=device)
-        return group_indices.repeat_interleave(group_sizes), num_groups
+        assignments = group_indices.repeat_interleave(
+            group_sizes,
+            output_size=num_classes,
+        )
+        return assignments, num_groups
