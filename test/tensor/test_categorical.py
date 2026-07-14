@@ -85,13 +85,21 @@ def test_from_arrow_all_missing_values() -> None:
 
 
 @withCUDA
-def test_from_tensor_zero_columns(device: torch.device) -> None:
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.int32, torch.int64, torch.float32],
+)
+def test_from_tensor_zero_columns(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
     tensor = CategoricalTensor.from_tensor(
-        torch.empty(5, 0, dtype=torch.long, device=device)
+        torch.empty(5, 0, dtype=dtype, device=device)
     )
 
     assert isinstance(tensor, CategoricalTensor)
     assert tensor.size() == (5, 0)
+    # Codes are `unique` inverses, so `data` is `int64` for every input dtype:
     assert tensor.dtype == torch.int64
     assert tensor.device == device
     assert tensor.categories == ()
