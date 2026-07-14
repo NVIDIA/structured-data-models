@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import warnings
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
@@ -164,11 +165,16 @@ class CategoricalTensor(Tensor):
             zero_copy_only=False,
             writable=device.type == "cpu",
         )
-        data = torch.as_tensor(
-            values,
-            dtype=dtype,
-            device=device,
-        ).unsqueeze(-1)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(  # Safe to ignore: copied to device.
+                "ignore",
+                message="The given NumPy array is not writable",
+            )
+            data = torch.as_tensor(
+                values,
+                dtype=dtype,
+                device=device,
+            ).unsqueeze(-1)
 
         dictionary = encoded.dictionary
         is_string = pa.types.is_string(dictionary.type)
@@ -182,10 +188,15 @@ class CategoricalTensor(Tensor):
                 zero_copy_only=False,
                 writable=device.type == "cpu",
             )
-            category = torch.as_tensor(
-                values,
-                device=device,
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(  # Safe to ignore: copied to device.
+                    "ignore",
+                    message="The given NumPy array is not writable",
+                )
+                category = torch.as_tensor(
+                    values,
+                    device=device,
+                )
 
         return cls(data=data, categories=(category,))
 
