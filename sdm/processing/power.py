@@ -184,8 +184,8 @@ class Power(Processor, InvertibleMixin):
             upper_bound,
         )
 
-    def _fit(self, inp: TableTensor) -> None:
-        numerical = _as_float(inp.numerical)
+    def _fit(self, table: TableTensor) -> None:
+        numerical = _as_float(table.numerical)
         n_samples, n_features = numerical.shape
 
         var = numerical.var(dim=0, correction=0)
@@ -233,15 +233,15 @@ class Power(Processor, InvertibleMixin):
             )
         return inverse
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        """Transform ``inp`` with fitted Yeo-Johnson parameters."""
-        numerical = _as_float(inp.numerical)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        """Transform ``table`` with fitted Yeo-Johnson parameters."""
+        numerical = _as_float(table.numerical)
         transformed = self._yeojohnson_transform(numerical)
         numerical = (transformed - self.mean) / self.scale
-        return inp.replace_blocks(numerical=numerical)
+        return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
-        numerical = _as_float(inp.numerical)
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        numerical = _as_float(table.numerical)
         unscaled = numerical * self.scale + self.mean
         inverse = self._yeojohnson_inverse_transform(unscaled)
 
@@ -255,4 +255,4 @@ class Power(Processor, InvertibleMixin):
             invalid = inverse.isinf()
             inverse[invalid] = torch.fmin(inverse, self.max)[invalid]
 
-        return inp.replace_blocks(numerical=inverse)
+        return table.replace_blocks(numerical=inverse)

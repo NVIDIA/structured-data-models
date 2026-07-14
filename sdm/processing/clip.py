@@ -34,13 +34,13 @@ class Clip(Processor):
         self.min_value = min_value
         self.max_value = max_value
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        """Clamp ``inp`` to the configured interval."""
-        numerical = _as_float(inp.numerical).clamp(
+    def _transform(self, table: TableTensor) -> TableTensor:
+        """Clamp ``table`` to the configured interval."""
+        numerical = _as_float(table.numerical).clamp(
             min=self.min_value,
             max=self.max_value,
         )
-        return inp.replace_blocks(numerical=numerical)
+        return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
