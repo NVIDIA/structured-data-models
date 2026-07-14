@@ -20,7 +20,6 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
         y=table[:300, "target"],
         # TODO: Re-enable once the recipe supports classification.
         # recipe=model.default_recipe(),
-        x_query=table[300:],
         num_estimators=2,
     )
 

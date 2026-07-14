@@ -1,3 +1,4 @@
+import contextlib
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -434,4 +435,4 @@ class Model(torch.nn.Module, ABC):
     @classmethod
     @abstractmethod
     def default_recipe(cls) -> Recipe:
-        r"""Return the default processing recipe for this model."""del."""
+        r"""Return the default processing recipe for this model."""
