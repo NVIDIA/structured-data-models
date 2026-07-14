@@ -360,8 +360,15 @@ def test_pin_memory() -> None:
     tensor = CategoricalTensor(data, categories)
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        assert tensor.pin_memory().is_pinned()
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    data = torch.tensor([[0, -1, 2], [2, 1, 0]])
+    categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
+    tensor = CategoricalTensor(data, categories)
+
+    assert tensor.pin_memory().is_pinned()
 
 
 def test_share_memory() -> None:

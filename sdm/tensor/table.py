@@ -1296,6 +1296,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     return tensors[0].__class__(
         size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
+        device=tensors[0].device if len(blocks) == 0 else None,
         **blocks,
     )
 
