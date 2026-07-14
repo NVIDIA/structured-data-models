@@ -121,7 +121,6 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.Attention.html">Attention</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">TransformerBlock</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.nn.InducedTransformerBlock.html">InducedTransformerBlock</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.nn.normalization_resolver.html">normalization_resolver</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../models.html">sdm.models</a><ul>
@@ -198,10 +197,9 @@ and optional <a class="reference internal" href="sdm.nn.QASSMax.html#sdm.nn.QASS
 <li><p><strong>num_key_value_heads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – The number of key/value attention heads.
 Defaults to <code class="docutils literal notranslate"><span class="pre">num_query_heads</span></code> (standard multi-head attention).</p></li>
 <li><p><strong>qassmax</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to scale queries with <a class="reference internal" href="sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-class docutils literal notranslate"><span class="pre">QASSMax</span></code></a>.</p></li>
-<li><p><strong>norm</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – The normalization name passed to
-<a class="reference internal" href="sdm.nn.normalization_resolver.html#sdm.nn.normalization_resolver" title="sdm.nn.normalization_resolver"><code class="xref py py-func docutils literal notranslate"><span class="pre">sdm.nn.normalization_resolver()</span></code></a>.</p></li>
+<li><p><strong>norm</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – The normalization layer name.</p></li>
 <li><p><strong>norm_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a><em>] </em><em>| </em><em>None</em>) – Additional keyword arguments passed to the normalization
-layer.</p></li>
+layer constructor.</p></li>
 <li><p><strong>device</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><em>device</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>) – The device.</p></li>
 <li><p><strong>dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><em>dtype</em></a><em> | </em><em>None</em>) – The dtype.</p></li>
 </ul>
@@ -278,7 +276,7 @@ Otherwise, a tuple of the output tensor and a
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=ba31763e"></script>
+      <script src="../../_static/documentation_options.js?v=17b3afeb"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

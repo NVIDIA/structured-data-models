@@ -1,6 +1,0 @@
-﻿normalization\_resolver
-=======================
-
-.. currentmodule:: sdm.nn
-
-.. autofunction:: normalization_resolver
