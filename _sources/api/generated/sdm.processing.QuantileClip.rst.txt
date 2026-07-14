@@ -1,0 +1,8 @@
+﻿QuantileClip
+============
+
+.. currentmodule:: sdm.processing
+
+.. autoclass:: QuantileClip
+   :members:
+   :show-inheritance:
