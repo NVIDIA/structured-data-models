@@ -9,7 +9,7 @@ from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
-from sdm.processing import Recipe
+from sdm.processing import InvertibleMixin, Recipe
 
 
 @contextlib.contextmanager
@@ -99,6 +99,7 @@ class Model(torch.nn.Module, ABC):
                 cache=None,
             )
             if y_context.numerical.size(-1) == 1:
+                assert isinstance(recipe.target, InvertibleMixin)
                 out = recipe.target.inverse_transform(out)
             outs.append(out)
 
@@ -149,7 +150,7 @@ class Model(torch.nn.Module, ABC):
                 if y_i.categorical.size(-1) > 0
                 else None,
             )
-            out = self._forward(
+            self._forward(
                 x_context=recipe.features.fit_transform(x),
                 y_context=y_i,
                 x_query=None,
@@ -171,7 +172,7 @@ class Model(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
-    ) -> Tensor:  # [..., R, *]
+    ) -> TableTensor:  # [..., R, *]
         r"""Predict unseen query examples.
 
         .. note::
@@ -208,6 +209,7 @@ class Model(torch.nn.Module, ABC):
                 cache=cache,
             )
             if cache["classes"] is None:
+                assert isinstance(recipe.target, InvertibleMixin)
                 out = recipe.target.inverse_transform(out)
             outs.append(out)
 

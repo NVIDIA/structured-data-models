@@ -2,9 +2,8 @@
 from typing import ClassVar
 
 import torch
-from torch import Tensor
 
-from sdm import RelatedTables
+from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
 from sdm.processing import Recipe
@@ -36,15 +35,14 @@ class KumoRFM(Model):
 
     def _forward(
         self,
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
-        related_tables: RelatedTables | None,
+        x_context: TableTensor | None,  # [..., R_context, D]
+        y_context: TableTensor | None,  # [..., R_context, 1]
+        x_query: TableTensor | None,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:  # [..., R - R_train, *]
-        return torch.empty(
-            (*x.size()[:-2], x.size(-2) - y.size(-1), 10),
-            device=x.device,
-        )
+    ) -> TableTensor:  # [..., R_query, *]
+        raise NotImplementedError
 
     @classmethod
     def default_recipe(cls) -> Recipe:
