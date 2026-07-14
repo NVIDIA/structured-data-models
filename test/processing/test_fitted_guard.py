@@ -9,7 +9,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import Clip, Processor, StandardScale
+from sdm.processing import Processor, QuantileClip, StandardScale
 from sdm.processing.base import InvertibleMixin
 
 ProcessorFactory = Callable[[], Processor]
@@ -17,7 +17,7 @@ ProcessorFactory = Callable[[], Processor]
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [Clip, StandardScale],
+    [QuantileClip, StandardScale],
 )
 def test_processor_requires_fit_for_transform(
     processor_factory: ProcessorFactory,
@@ -33,7 +33,7 @@ def test_processor_requires_fit_for_transform(
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [Clip, StandardScale],
+    [QuantileClip, StandardScale],
 )
 def test_invertible_processor_requires_fit_for_inverse_transform(
     processor_factory: ProcessorFactory,

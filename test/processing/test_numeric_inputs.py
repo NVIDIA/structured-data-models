@@ -3,10 +3,10 @@ import torch
 from sdm import TableTensor
 from sdm.processing import (
     Clip,
-    HardClip,
     MeanImpute,
     Power,
     Quantile,
+    QuantileClip,
     SigmaClip,
     SoftmaxTemperature,
     StandardScale,
@@ -16,8 +16,8 @@ from sdm.processing import (
 @pytest.mark.parametrize(
     "processor",
     [
-        Clip(),
-        HardClip(min_value=-1.0, max_value=1.0),
+        Clip(min_value=-1.0, max_value=1.0),
+        QuantileClip(),
         MeanImpute(),
         Power(),
         Quantile(n_quantiles=4, subsample=None),
