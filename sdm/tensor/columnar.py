@@ -348,8 +348,7 @@ def _to_copy(
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
 
-    # `Tensor.to(device)` fills in the placeholder wrapper dtype, so treat a
-    # same-dtype request as no dtype conversion:
+    # Wrapper dtype is a placeholder, so same dtype means no conversion:
     if dtype == inp.dtype:
         dtype = None
 
@@ -359,8 +358,7 @@ def _to_copy(
         )
 
     if device is not None:
-        # Canonicalize index-less devices such as 'cuda' to, e.g., 'cuda:0'
-        # to match the device of the copied columns:
+        # Canonicalize 'cuda' to 'cuda:0' to match the copied columns:
         device = torch.empty(0, device=device).device
 
     return inp.__class__(
@@ -393,8 +391,7 @@ def _to_dtype_layout(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-    # TODO Return `inp` when `copy` is false and no conversion is requested
-    # to preserve the zero-copy behavior of `Tensor.to`.
+    # TODO Return `inp` when `copy` is false to keep `Tensor.to` zero-copy.
     return _to_copy(
         inp,
         dtype=dtype,
@@ -414,8 +411,7 @@ def _to_dtype(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-    # TODO Return `inp` when `copy` is false and no conversion is requested
-    # to preserve the zero-copy behavior of `Tensor.to`.
+    # TODO Return `inp` when `copy` is false to keep `Tensor.to` zero-copy.
     return _to_copy(
         inp,
         dtype=dtype,
@@ -433,8 +429,7 @@ def _to_device(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-    # TODO Return `inp` when `copy` is false and no conversion is requested
-    # to preserve the zero-copy behavior of `Tensor.to`.
+    # TODO Return `inp` when `copy` is false to keep `Tensor.to` zero-copy.
     return _to_copy(
         inp,
         dtype=dtype,

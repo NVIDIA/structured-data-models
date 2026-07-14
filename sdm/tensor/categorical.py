@@ -469,8 +469,7 @@ def _to_dtype_layout(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-    # TODO Return `inp` when `copy` is false and no conversion is requested
-    # to preserve the zero-copy behavior of `Tensor.to`.
+    # TODO Return `inp` when `copy` is false to keep `Tensor.to` zero-copy.
     return _to_copy(
         inp,
         dtype=dtype,
@@ -490,8 +489,7 @@ def _to_dtype(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-    # TODO Return `inp` when `copy` is false and no conversion is requested
-    # to preserve the zero-copy behavior of `Tensor.to`.
+    # TODO Return `inp` when `copy` is false to keep `Tensor.to` zero-copy.
     return _to_copy(
         inp,
         dtype=dtype,
@@ -509,8 +507,7 @@ def _to_device(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-    # TODO Return `inp` when `copy` is false and no conversion is requested
-    # to preserve the zero-copy behavior of `Tensor.to`.
+    # TODO Return `inp` when `copy` is false to keep `Tensor.to` zero-copy.
     return _to_copy(
         inp,
         dtype=dtype,
