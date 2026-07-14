@@ -93,10 +93,15 @@ def test_from_arrow_cpu_does_not_warn_on_readonly_numpy(
 
 @onlyCUDA
 def test_from_arrow_cuda() -> None:
-    tensor = CategoricalTensor.from_arrow(
-        pa.array(["b", "a", None, "b"]),
-        device="cuda",
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(  # Safe to ignore: copied to device.
+            "ignore",
+            message="The given NumPy array is not writable",
+        )
+        tensor = CategoricalTensor.from_arrow(
+            pa.array(["b", "a", None, "b"]),
+            device="cuda",
+        )
 
     assert tensor.device.type == "cuda"
     assert tensor.as_tensor().equal(
@@ -109,10 +114,15 @@ def test_from_arrow_cuda() -> None:
     assert tensor.categories[0].device.type == "cuda"
     assert tensor.categories[0].tolist() == ["b", "a"]
 
-    tensor = CategoricalTensor.from_arrow(
-        pa.array([10, 20, None, 10], type=pa.int32()),
-        device="cuda",
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings(  # Safe to ignore: copied to device.
+            "ignore",
+            message="The given NumPy array is not writable",
+        )
+        tensor = CategoricalTensor.from_arrow(
+            pa.array([10, 20, None, 10], type=pa.int32()),
+            device="cuda",
+        )
 
     assert tensor.device.type == "cuda"
     assert tensor.as_tensor().equal(
