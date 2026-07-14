@@ -11,6 +11,7 @@ from sdm.processing.clip import Clip
 from sdm.processing.quantile_clip import QuantileClip
 from sdm.processing.category_shuffle import CategoryShuffle
 from sdm.processing.constant_filter import ConstantFilter
+from sdm.processing.datetime_features import DatetimeFeatures
 from sdm.processing.feature_permute import FeaturePermute
 from sdm.processing.identity import Identity
 from sdm.processing.impute import MeanImpute
@@ -35,6 +36,7 @@ __all__ = [
     "QuantileClip",
     "CategoryShuffle",
     "ConstantFilter",
+    "DatetimeFeatures",
     "FeaturePermute",
     "Identity",
     "MeanImpute",
