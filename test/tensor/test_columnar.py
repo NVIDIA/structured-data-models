@@ -347,8 +347,18 @@ def test_pin_memory() -> None:
     )
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        assert tensor.pin_memory().is_pinned()
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.randn(2, 3),
+            torch.arange(6).view(2, 3),
+        )
+    )
+
+    assert tensor.pin_memory().is_pinned()
 
 
 def test_share_memory() -> None:
