@@ -310,14 +310,78 @@ def test_aggregation_limits_speedups_to_matched_parity() -> None:
         row for row in matched if row["implementation"] == runner.ORIGINAL
     )
     sdm = next(row for row in matched if row["implementation"] == runner.SDM)
+    assert original["fit_time_s_mean"] == 2.0
+    assert original["fit_time_s_std"] == 0.0
     assert original["fit_speedup_vs_original"] == 1.0
+    assert original["fit_speedup_vs_original_mean"] == 1.0
+    assert original["fit_speedup_vs_original_std"] == 0.0
+    assert sdm["fit_time_s_mean"] == 1.0
+    assert sdm["fit_time_s_std"] == 0.0
     assert sdm["fit_speedup_vs_original"] == 2.0
+    assert sdm["fit_speedup_vs_original_mean"] == 2.0
+    assert sdm["fit_speedup_vs_original_std"] == 0.0
     assert all(
         row["fit_speedup_vs_original"] is None
         and row["inference_speedup_vs_original"] is None
         and row["eligible_for_fair_speedup"] is False
         for row in native
     )
+
+
+def test_aggregation_uses_sample_std_and_paired_trial_speedups() -> None:
+    trial_rows, _ = _local_results(trials=3)
+    original_fit = [2.0, 4.0, 8.0]
+    sdm_fit = [1.0, 1.0, 2.0]
+    for row in trial_rows:
+        if row["comparison_group"] != runner.MATCHED_PARITY:
+            continue
+        trial = row["trial"]
+        assert isinstance(trial, int)
+        values = (
+            original_fit
+            if row["implementation"] == runner.ORIGINAL
+            else sdm_fit
+        )
+        row["fit_time_s"] = values[trial]
+
+    summary = runner.aggregate_local_results(
+        trial_rows,
+        trials=3,
+        inference_repeats=3,
+    )
+    matched = [
+        row
+        for row in summary
+        if row["comparison_group"] == runner.MATCHED_PARITY
+        and row["implementation"] == runner.SDM
+    ]
+    sdm = next(iter(matched))
+    assert sdm["fit_time_s_mean"] == pytest.approx(4 / 3)
+    assert sdm["fit_time_s_std"] == pytest.approx(0.5773502692)
+    assert sdm["fit_time_s"] == 1.0
+    assert sdm["fit_time_s_q1"] == 1.0
+    assert sdm["fit_time_s_q3"] == 1.5
+    assert sdm["fit_speedup_vs_original_mean"] == pytest.approx(10 / 3)
+    assert sdm["fit_speedup_vs_original_std"] == pytest.approx(1.1547005384)
+    assert sdm["fit_speedup_vs_original"] == 4.0
+    assert sdm["fit_speedup_vs_original_q1"] == 3.0
+    assert sdm["fit_speedup_vs_original_q3"] == 4.0
+
+
+def test_single_trial_sample_std_is_not_claimed() -> None:
+    trial_rows, _ = _local_results(trials=1)
+    summary = runner.aggregate_local_results(
+        trial_rows,
+        trials=1,
+        inference_repeats=3,
+    )
+    assert all(row["fit_time_s_std"] is None for row in summary)
+    matched = [
+        row
+        for row in summary
+        if row["comparison_group"] == runner.MATCHED_PARITY
+    ]
+    assert all(row["fit_speedup_vs_original_std"] is None for row in matched)
 
 
 def test_historical_baseline_is_external_and_not_comparable() -> None:
@@ -368,6 +432,7 @@ def test_report_uses_three_disjoint_tables() -> None:
     report = runner.render_report(
         summary,
         checkpoint_sha256="a" * 64,
+        warmup_pairs=1,
         trials=2,
         inference_repeats=3,
     )
@@ -380,6 +445,10 @@ def test_report_uses_three_disjoint_tables() -> None:
     assert "only rows eligible for fair speedup claims" in report
     assert "must not be treated as a parity comparison" in report
     assert "excluded from every local speedup" in report
+    assert "2 measured trials after 1 discarded warm-up pair" in report
+    assert "mean ± sample SD; median [Q1, Q3]" in report
+    assert "per same-index trial" in report
+    assert "2.000000 ± 0.000000; 2.000000 [2.000000, 2.000000]" in report
     native_section = report[
         report.index(native_heading) : report.index(historical_heading)
     ]
@@ -504,9 +573,15 @@ def test_main_generates_classified_local_artifacts(
         == 1
     )
     matched = summary[summary["comparison_group"] == runner.MATCHED_PARITY]
+    local = summary[summary["execution_source"] == "local_measured"]
+    assert local["fit_time_s_mean"].notna().all()
+    assert local["fit_time_s_std"].notna().all()
     assert matched["fit_speedup_vs_original"].notna().all()
+    assert matched["fit_speedup_vs_original_mean"].notna().all()
+    assert matched["fit_speedup_vs_original_std"].notna().all()
     not_matched = summary[summary["comparison_group"] != runner.MATCHED_PARITY]
     assert not_matched["fit_speedup_vs_original"].isna().all()
+    assert not_matched["fit_speedup_vs_original_mean"].isna().all()
     assert "## 1. Matched parity" in report
     assert "## 2. Local native defaults" in report
     assert "## 3. Historical TabArena baseline" in report

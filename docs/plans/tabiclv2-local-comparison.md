@@ -41,7 +41,10 @@ Each child records:
 The runner uses time.perf_counter_ns and explicitly synchronizes CUDA before
 and after every timed GPU region. One pair per profile is discarded as a
 system warm-up, followed by 30 measured trials per implementation by default.
-The summary reports medians and interquartile ranges across trial medians.
+Each local distribution reports mean, sample standard deviation, median, and
+interquartile range across trials. Warmed inference first reduces its 20 calls
+to one median per trial. Matched speedups are computed from original/SDM
+same-index trial pairs and report the same four distribution statistics.
 
 With the defaults, the run executes four discarded child processes and 120
 measured child processes. The native-default profile is expected to take
@@ -99,7 +102,7 @@ The runner creates local artifacts only:
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | tabiclv2_local_trials.csv       | One measured row per local profile, implementation, and trial                                               |
 | tabiclv2_local_inference.csv    | Every warmed inference-call duration                                                                        |
-| tabiclv2_comparison_summary.csv | Local median/IQR rows plus one classified historical row                                                    |
+| tabiclv2_comparison_summary.csv | Local mean/SD and median/IQR rows plus one classified historical row                                        |
 | tabiclv2_comparison_report.md   | Three clearly separated human-readable result tables                                                        |
 | manifest.json                   | Environment, commits, resources, checkpoint provenance, exact configurations, protocol, and artifact hashes |
 

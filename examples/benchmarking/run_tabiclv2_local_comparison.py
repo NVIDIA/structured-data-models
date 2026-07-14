@@ -133,21 +133,41 @@ SUMMARY_COLUMNS: Final = (
     "trials",
     "inference_repeats",
     "timing_definition",
+    "metric_error_mean",
+    "metric_error_std",
     "metric_error",
     "metric_error_q1",
     "metric_error_q3",
+    "fit_time_s_mean",
+    "fit_time_s_std",
     "fit_time_s",
     "fit_time_s_q1",
     "fit_time_s_q3",
+    "first_inference_time_s_mean",
+    "first_inference_time_s_std",
     "first_inference_time_s",
     "first_inference_time_s_q1",
     "first_inference_time_s_q3",
+    "inference_time_s_mean",
+    "inference_time_s_std",
     "inference_time_s",
     "inference_time_s_q1",
     "inference_time_s_q3",
+    "fit_speedup_vs_original_mean",
+    "fit_speedup_vs_original_std",
     "fit_speedup_vs_original",
+    "fit_speedup_vs_original_q1",
+    "fit_speedup_vs_original_q3",
+    "first_inference_speedup_vs_original_mean",
+    "first_inference_speedup_vs_original_std",
     "first_inference_speedup_vs_original",
+    "first_inference_speedup_vs_original_q1",
+    "first_inference_speedup_vs_original_q3",
+    "inference_speedup_vs_original_mean",
+    "inference_speedup_vs_original_std",
     "inference_speedup_vs_original",
+    "inference_speedup_vs_original_q1",
+    "inference_speedup_vs_original_q3",
     "historical_suite",
     "historical_config",
 )
@@ -777,14 +797,24 @@ def run_local_benchmarks(
     return trial_rows, inference_rows
 
 
-def _quartiles(values: Sequence[float]) -> tuple[float, float, float]:
+def _distribution_fields(
+    values: Sequence[float], *, field: str
+) -> dict[str, float | None]:
     array = np.asarray(values, dtype=np.float64)
     if array.size == 0 or not np.isfinite(array).all():
         raise RuntimeError(
             "Cannot summarize empty or non-finite measurements."
         )
+    mean = float(np.mean(array))
+    std = float(np.std(array, ddof=1)) if array.size > 1 else None
     q1, median, q3 = np.quantile(array, [0.25, 0.5, 0.75])
-    return float(median), float(q1), float(q3)
+    return {
+        f"{field}_mean": mean,
+        f"{field}_std": std,
+        field: float(median),
+        f"{field}_q1": float(q1),
+        f"{field}_q3": float(q3),
+    }
 
 
 def aggregate_local_results(
@@ -793,8 +823,11 @@ def aggregate_local_results(
     trials: int,
     inference_repeats: int,
 ) -> list[dict[str, object]]:
-    """Aggregate trial medians and attach matched-only speedups."""
+    """Aggregate trial distributions and attach paired matched speedups."""
     summary: list[dict[str, object]] = []
+    indexed_local_rows: dict[
+        tuple[str, str], dict[int, Mapping[str, Any]]
+    ] = {}
     for profile in LOCAL_PROFILES:
         for implementation in IMPLEMENTATIONS:
             rows = [
@@ -808,14 +841,23 @@ def aggregate_local_results(
                     f"Expected {trials} rows for {profile}/{implementation}, "
                     f"got {len(rows)}."
                 )
-            metric = _quartiles([float(row["metric_error"]) for row in rows])
-            fit = _quartiles([float(row["fit_time_s"]) for row in rows])
-            first = _quartiles(
-                [float(row["first_inference_time_s"]) for row in rows]
-            )
-            inference = _quartiles(
-                [float(row["inference_time_s"]) for row in rows]
-            )
+            by_trial: dict[int, Mapping[str, Any]] = {}
+            for row in rows:
+                trial = int(row["trial"])
+                if trial in by_trial:
+                    raise RuntimeError(
+                        f"Duplicate trial {trial} for "
+                        f"{profile}/{implementation}."
+                    )
+                by_trial[trial] = row
+            expected_trials = set(range(trials))
+            if set(by_trial) != expected_trials:
+                raise RuntimeError(
+                    f"Expected trial IDs {sorted(expected_trials)!r} for "
+                    f"{profile}/{implementation}, got {sorted(by_trial)!r}."
+                )
+            rows = [by_trial[trial] for trial in range(trials)]
+            indexed_local_rows[(profile, implementation)] = by_trial
             first_row = rows[0]
             summary.append(
                 {
@@ -839,18 +881,22 @@ def aggregate_local_results(
                         "local end-to-end fit; first predict; "
                         "median warmed predict per trial"
                     ),
-                    "metric_error": metric[0],
-                    "metric_error_q1": metric[1],
-                    "metric_error_q3": metric[2],
-                    "fit_time_s": fit[0],
-                    "fit_time_s_q1": fit[1],
-                    "fit_time_s_q3": fit[2],
-                    "first_inference_time_s": first[0],
-                    "first_inference_time_s_q1": first[1],
-                    "first_inference_time_s_q3": first[2],
-                    "inference_time_s": inference[0],
-                    "inference_time_s_q1": inference[1],
-                    "inference_time_s_q3": inference[2],
+                    **_distribution_fields(
+                        [float(row["metric_error"]) for row in rows],
+                        field="metric_error",
+                    ),
+                    **_distribution_fields(
+                        [float(row["fit_time_s"]) for row in rows],
+                        field="fit_time_s",
+                    ),
+                    **_distribution_fields(
+                        [float(row["first_inference_time_s"]) for row in rows],
+                        field="first_inference_time_s",
+                    ),
+                    **_distribution_fields(
+                        [float(row["inference_time_s"]) for row in rows],
+                        field="inference_time_s",
+                    ),
                     "fit_speedup_vs_original": None,
                     "first_inference_speedup_vs_original": None,
                     "inference_speedup_vs_original": None,
@@ -864,7 +910,7 @@ def aggregate_local_results(
         for row in summary
         if row["comparison_group"] == MATCHED_PARITY
     }
-    original = matched[ORIGINAL]
+    original_rows = indexed_local_rows[(MATCHED_PARITY, ORIGINAL)]
     speedup_fields = (
         ("fit_time_s", "fit_speedup_vs_original"),
         (
@@ -873,15 +919,27 @@ def aggregate_local_results(
         ),
         ("inference_time_s", "inference_speedup_vs_original"),
     )
-    for row in matched.values():
+    for implementation, row in matched.items():
+        implementation_rows = indexed_local_rows[
+            (MATCHED_PARITY, str(implementation))
+        ]
         for timing_field, speedup_field in speedup_fields:
-            baseline = _require_finite_positive(
-                original[timing_field], field=timing_field
+            paired_speedups: list[float] = []
+            for trial in range(trials):
+                baseline = _require_finite_positive(
+                    original_rows[trial][timing_field], field=timing_field
+                )
+                duration = _require_finite_positive(
+                    implementation_rows[trial][timing_field],
+                    field=timing_field,
+                )
+                paired_speedups.append(baseline / duration)
+            row.update(
+                _distribution_fields(
+                    paired_speedups,
+                    field=speedup_field,
+                )
             )
-            duration = _require_finite_positive(
-                row[timing_field], field=timing_field
-            )
-            row[speedup_field] = baseline / duration
     return summary
 
 
@@ -971,21 +1029,41 @@ def select_historical_baseline(
         "timing_definition": (
             "archived TabArena-reported timing; hardware uncontrolled"
         ),
+        "metric_error_mean": None,
+        "metric_error_std": None,
         "metric_error": metric_error,
         "metric_error_q1": None,
         "metric_error_q3": None,
+        "fit_time_s_mean": None,
+        "fit_time_s_std": None,
         "fit_time_s": fit_time,
         "fit_time_s_q1": None,
         "fit_time_s_q3": None,
+        "first_inference_time_s_mean": None,
+        "first_inference_time_s_std": None,
         "first_inference_time_s": None,
         "first_inference_time_s_q1": None,
         "first_inference_time_s_q3": None,
+        "inference_time_s_mean": None,
+        "inference_time_s_std": None,
         "inference_time_s": inference_time,
         "inference_time_s_q1": None,
         "inference_time_s_q3": None,
+        "fit_speedup_vs_original_mean": None,
+        "fit_speedup_vs_original_std": None,
         "fit_speedup_vs_original": None,
+        "fit_speedup_vs_original_q1": None,
+        "fit_speedup_vs_original_q3": None,
+        "first_inference_speedup_vs_original_mean": None,
+        "first_inference_speedup_vs_original_std": None,
         "first_inference_speedup_vs_original": None,
+        "first_inference_speedup_vs_original_q1": None,
+        "first_inference_speedup_vs_original_q3": None,
+        "inference_speedup_vs_original_mean": None,
+        "inference_speedup_vs_original_std": None,
         "inference_speedup_vs_original": None,
+        "inference_speedup_vs_original_q1": None,
+        "inference_speedup_vs_original_q3": None,
         "historical_suite": suite,
         "historical_config": config,
     }
@@ -1039,21 +1117,33 @@ def _format_number(value: Any, *, digits: int = 6) -> str:
     return f"{float(value):.{digits}f}"
 
 
-def _format_interval(
+def _format_value(value: Any, *, digits: int, suffix: str) -> str:
+    text = _format_number(value, digits=digits)
+    return text if text == "n/a" else text + suffix
+
+
+def _format_distribution(
     row: Mapping[str, Any],
     field: str,
     *,
     digits: int = 6,
+    suffix: str = "",
 ) -> str:
-    median = _format_number(row[field], digits=digits)
+    mean = _format_value(
+        row.get(f"{field}_mean"), digits=digits, suffix=suffix
+    )
+    std = _format_value(row.get(f"{field}_std"), digits=digits, suffix=suffix)
+    median = _format_value(row[field], digits=digits, suffix=suffix)
     q1 = row.get(f"{field}_q1")
     q3 = row.get(f"{field}_q3")
     if q1 is None or q3 is None:
-        return median
-    return (
-        f"{median} [{_format_number(q1, digits=digits)}, "
-        f"{_format_number(q3, digits=digits)}]"
-    )
+        interval = median
+    else:
+        interval = (
+            f"{median} [{_format_value(q1, digits=digits, suffix=suffix)}, "
+            f"{_format_value(q3, digits=digits, suffix=suffix)}]"
+        )
+    return f"{mean} ± {std}; {interval}"
 
 
 def _markdown_table(
@@ -1071,6 +1161,7 @@ def render_report(
     summary: Sequence[Mapping[str, Any]],
     *,
     checkpoint_sha256: str,
+    warmup_pairs: int,
     trials: int,
     inference_repeats: int,
 ) -> str:
@@ -1097,21 +1188,22 @@ def render_report(
     matched_rows = [
         [
             str(row["method"]),
-            _format_interval(row, "metric_error"),
-            _format_interval(row, "fit_time_s"),
-            _format_interval(row, "first_inference_time_s"),
-            _format_interval(row, "inference_time_s"),
-            _format_number(row["fit_speedup_vs_original"], digits=2) + "x",
-            _format_number(
-                row["first_inference_speedup_vs_original"],
+            _format_distribution(row, "metric_error"),
+            _format_distribution(row, "fit_time_s"),
+            _format_distribution(row, "first_inference_time_s"),
+            _format_distribution(row, "inference_time_s"),
+            _format_distribution(
+                row, "fit_speedup_vs_original", digits=2, suffix="x"
+            ),
+            _format_distribution(
+                row,
+                "first_inference_speedup_vs_original",
                 digits=2,
-            )
-            + "x",
-            _format_number(
-                row["inference_speedup_vs_original"],
-                digits=2,
-            )
-            + "x",
+                suffix="x",
+            ),
+            _format_distribution(
+                row, "inference_speedup_vs_original", digits=2, suffix="x"
+            ),
         ]
         for row in matched
     ]
@@ -1119,10 +1211,10 @@ def render_report(
         [
             str(row["method"]),
             "8" if row["implementation"] == ORIGINAL else "1",
-            _format_interval(row, "metric_error"),
-            _format_interval(row, "fit_time_s"),
-            _format_interval(row, "first_inference_time_s"),
-            _format_interval(row, "inference_time_s"),
+            _format_distribution(row, "metric_error"),
+            _format_distribution(row, "fit_time_s"),
+            _format_distribution(row, "first_inference_time_s"),
+            _format_distribution(row, "inference_time_s"),
         ]
         for row in native
     ]
@@ -1139,6 +1231,7 @@ def render_report(
     ]
     trial_word = "trial" if trials == 1 else "trials"
     call_word = "call" if inference_repeats == 1 else "calls"
+    pair_word = "pair" if warmup_pairs == 1 else "pairs"
 
     sections = [
         "# TabICLv2 local comparison report",
@@ -1150,11 +1243,13 @@ def render_report(
         "repository. TabArena may only download its own cached historical "
         "result through its normal read-only result API.",
         "",
-        f"Local statistics use {trials} measured {trial_word} after discarded "
-        f"warm-up pairs. Each trial records first inference separately and "
+        f"Local statistics use {trials} measured {trial_word} after "
+        f"{warmup_pairs} discarded warm-up {pair_word}. Each trial records "
+        "first inference separately and "
         f"then {inference_repeats} warmed inference {call_word}. "
-        "Values are median "
-        "with [Q1, Q3]. CUDA work is synchronized around every timed region.",
+        "Each local value is mean ± sample SD; median [Q1, Q3] across trials. "
+        "Warmed inference first reduces each trial's calls to one trial "
+        "median. CUDA work is synchronized around every timed region.",
         "",
         "## 1. Matched parity — authoritative same-workload comparison",
         "",
@@ -1177,8 +1272,9 @@ def render_report(
             matched_rows,
         ),
         "",
-        "Speedups are original duration divided by row duration; values above "
-        "1x are faster than the matched original row.",
+        "Matched speedups are computed per same-index trial as original "
+        "duration divided by implementation duration, then summarized. "
+        "Values above 1x are faster than the matched original row.",
         "",
         "## 2. Local native defaults — same machine, different workloads",
         "",
@@ -1484,6 +1580,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             render_report(
                 summary,
                 checkpoint_sha256=checkpoint_sha256,
+                warmup_pairs=warmup_pairs,
                 trials=trials,
                 inference_repeats=inference_repeats,
             )
