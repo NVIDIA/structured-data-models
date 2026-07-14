@@ -1,6 +1,6 @@
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ClassShuffle
+from sdm.processing import CategoryShuffle
 from sdm.testing import withCUDA
 
 
@@ -31,13 +31,13 @@ def _table(
     )
 
 
-def test_class_shuffle_shift_maps_single_target() -> None:
+def test_category_shuffle_shift_maps_single_target() -> None:
     target = _table(
         [[0], [1], [2], [-1]],
         (("a", "b", "c"),),
     )
     torch.manual_seed(3)  # draws a cyclic offset of 1 for three classes
-    processor = ClassShuffle(method="shift")
+    processor = CategoryShuffle(method="shift")
 
     output = processor.fit_transform(target)
 
@@ -58,7 +58,7 @@ def test_class_shuffle_shift_maps_single_target() -> None:
 
 
 @withCUDA
-def test_class_shuffle_random_permutes_each_categorical_column(
+def test_category_shuffle_random_permutes_each_categorical_column(
     device: torch.device,
 ) -> None:
     features = _table(
@@ -67,7 +67,7 @@ def test_class_shuffle_random_permutes_each_categorical_column(
         device=device,
     )
     torch.manual_seed(0)
-    processor = ClassShuffle(method="random")
+    processor = CategoryShuffle(method="random")
 
     transformed = processor.fit_transform(features)
 
@@ -103,13 +103,13 @@ def test_class_shuffle_random_permutes_each_categorical_column(
     assert transformed.categorical.tolist() == features.categorical.tolist()
 
 
-def test_class_shuffle_uses_category_count_and_preserves_missing() -> None:
+def test_category_shuffle_uses_category_count_and_preserves_missing() -> None:
     target = _table(
         [[0], [1], [-1]],
         (("a", "b", "c", "d"),),
     )
 
-    processor = ClassShuffle(method="random")
+    processor = CategoryShuffle(method="random")
     output = processor.fit_transform(target)
 
     assert processor.offsets.tolist() == [0, 4]

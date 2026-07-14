@@ -56,9 +56,9 @@ class Relationship:
     """
 
     left_table: str
-    left_columns: Sequence[str]
+    left_columns: tuple[str, ...]
     right_table: str
-    right_columns: Sequence[str]
+    right_columns: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if len(self.left_columns) != len(self.right_columns):
@@ -111,9 +111,9 @@ class Relationship:
 
         return cls(
             left_table=left_table,
-            left_columns=left_columns,
+            left_columns=tuple(left_columns),
             right_table=right_table,
-            right_columns=right_columns,
+            right_columns=tuple(right_columns),
         )
 
     def _left_columns_repr(self) -> str:
