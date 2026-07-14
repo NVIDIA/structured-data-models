@@ -97,15 +97,38 @@ def test_column_names() -> None:
 
 
 def test_from_tensor() -> None:
-    tensor = TableTensor.from_tensor(torch.randn(5, 2))
+    data = torch.randn(5, 2)
+    tensor = TableTensor.from_tensor(data)
     assert tensor.size() == (5, 2)
-    assert tensor.numerical.size() == (5, 2)
     assert tensor.columns == {
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
     }
+    assert tensor.numerical.equal(data)
+
+    data = torch.tensor(
+        [
+            [0, 20],
+            [-2, 10],
+            [1, 10],
+            [-1, 20],
+        ]
+    )
+    tensor = TableTensor.from_tensor(data)
+    assert tensor.size() == (4, 2)
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: ("0", "1"),
+        Stype.datetime: (),
+        Stype.id: (),
+    }
+    assert tensor.categorical.as_tensor().equal(
+        torch.tensor([[0, 1], [-1, 0], [1, 0], [-1, 1]])
+    )
+    assert tensor.categorical.categories[0].equal(torch.tensor([0, 1]))
+    assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
 
 
 def test_inference_mode() -> None:
