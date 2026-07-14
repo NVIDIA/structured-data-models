@@ -14,7 +14,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_init() -> None:
@@ -727,6 +727,26 @@ def test_cat_stack() -> None:
 
     with pytest.raises(RuntimeError, match="Can't stack"):
         _ = torch.stack([tensor1, tensor1], dim=-1)
+
+
+@withCUDA
+def test_cat_all_column_empty(device: torch.device) -> None:
+    tensor1 = TableTensor(size=(2,), device=device)
+    tensor2 = TableTensor(size=(3,), device=device)
+
+    out = torch.cat([tensor1, tensor2], dim=0)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (5, 0)
+    assert out.device == device
+    assert out.numerical.device == device
+    assert out.columns == tensor1.columns
+
+    out = torch.cat([tensor1, tensor1], dim=-1)
+    assert isinstance(out, TableTensor)
+    assert out.size() == (2, 0)
+    assert out.device == device
+    assert out.numerical.device == device
+    assert out.columns == tensor1.columns
 
 
 def test_pin_memory() -> None:
