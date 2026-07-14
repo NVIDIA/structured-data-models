@@ -1,56 +1,49 @@
-import torch
-
 from sdm.processing._utils import _as_float
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class Clip(Processor, InvertibleMixin):
-    """Clamp feature columns to fitted quantile bounds.
+class Clip(Processor):
+    """Clamp numerical values to a fixed interval.
 
-    This transform is not reconstructive; ``inverse_transform`` intentionally
-    returns its tableut unchanged. Quantile bounds are fitted independently for
-    each feature column.
+    Values below ``min_value`` are set to ``min_value``, and values above
+    ``max_value`` are set to ``max_value``. Values within the interval are
+    unchanged. This processor is stateless, so it can transform a table
+    without being fitted first.
 
     Args:
-        q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.
-        q_high: Upper quantile in ``[0, 1]`` used as the per-column upper
-            bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
+        min_value: Inclusive lower bound for every numerical value.
+        max_value: Inclusive upper bound for every numerical value.
     """
 
     supported_stypes = frozenset({Stype.numerical})
+    requires_fit = False
 
     def __init__(
         self,
         *,
-        q_low: float = 0.0,
-        q_high: float = 1.0,
+        min_value: float,
+        max_value: float,
     ) -> None:
         super().__init__()
-        if not 0 <= q_low <= q_high <= 1:
+        if min_value > max_value:
             raise ValueError(
-                "q_low and q_high must satisfy 0 <= q_low <= q_high <= 1."
+                "min_value must be less than or equal to max_value"
             )
-        self.q_low = q_low
-        self.q_high = q_high
-        self.register_buffer("lower_bound", torch.empty(0))
-        self.register_buffer("upper_bound", torch.empty(0))
-
-    def _fit(self, table: TableTensor) -> None:
-        numerical = _as_float(table.numerical)
-        quantiles = numerical.new_tensor([self.q_low, self.q_high])
-        q_low, q_high = torch.quantile(numerical, quantiles, dim=0)
-        self.lower_bound = q_low
-        self.upper_bound = q_high
+        self.min_value = min_value
+        self.max_value = max_value
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        """Clamp ``table`` to the fitted lower and upper bounds."""
+        """Clamp ``table`` to the configured interval."""
         numerical = _as_float(table.numerical).clamp(
-            min=self.lower_bound,
-            max=self.upper_bound,
+            min=self.min_value,
+            max=self.max_value,
         )
         return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return table
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"min_value={self.min_value}, max_value={self.max_value})"
+        )
