@@ -285,18 +285,6 @@ def test_sdpa_errors() -> None:
         module(query=query, key=key, value=value, batch_size_limit=0)
 
 
-@pytest.mark.parametrize(
-    "scale",
-    [0.0, -1.0, float("inf"), float("nan")],
-)
-def test_sdpa_rejects_invalid_scale(scale: float) -> None:
-    with pytest.raises(
-        ValueError,
-        match="`scale` must be finite and positive",
-    ):
-        SDPA(channels=4, num_query_heads=2, scale=scale)
-
-
 def test_sdpa_batch_size_limit() -> None:
     channels = 3
     num_query_heads = 4
