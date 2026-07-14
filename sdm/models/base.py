@@ -45,9 +45,6 @@ class Model(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
-        # Fitted recipes live only in member caches; keep the former shared
-        # attribute empty for compatibility with existing callers.
-        self._recipe: Recipe | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -188,9 +185,8 @@ class Model(torch.nn.Module, ABC):
         self._caches = caches
 
     def clear(self) -> None:
-        r"""Clear cached in-context examples and fitted member recipes."""
+        r"""Clears cached in-context examples and the fitted recipe."""
         self._caches = None
-        self._recipe = None
 
     @torch.inference_mode()
     def predict(
@@ -262,10 +258,6 @@ class Model(torch.nn.Module, ABC):
 
     # Helpers #################################################################
 
-    # Recipe transforms can create variable-length category metadata while the
-    # public model call runs in inference mode. StringTensor does not yet
-    # support the inference-only host conversion used to read that metadata.
-    @torch.inference_mode(False)
     def _preprocess(
         self,
         x: Tensor | TableTensor,  # [..., R, C]
@@ -419,11 +411,7 @@ class Model(torch.nn.Module, ABC):
             return None
 
         category = target.categorical.categories[0]
-        # StringTensor host conversion is intentionally outside inference mode;
-        # its variable-length storage cannot dispatch the inference-only
-        # ``aten.to`` overload used by ``tolist``.
-        with torch.inference_mode(False):
-            values = category.tolist()
+        values = category.tolist()
         labels = tuple(str(value) for value in values)
         if len(labels) != len(set(labels)):
             raise ValueError(

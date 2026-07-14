@@ -51,28 +51,28 @@ class CategoricalAlign(Processor):
         self.order = order
         self._categories: tuple[Tensor, ...] = ()
 
-    def _fit(self, inp: TableTensor) -> None:
-        _check_categorical_codes(inp)
-        data = inp.categorical
-        columns = inp.columns[Stype.categorical]
+    def _fit(self, table: TableTensor) -> None:
+        _check_categorical_codes(table)
+        categorical = table.categorical
+        columns = table.columns[Stype.categorical]
         categories: list[Tensor] = []
-        for index, category in enumerate(inp.categorical.categories):
+        for index, category in enumerate(table.categorical.categories):
             if category.is_complex():
                 raise ValueError(
                     "CategoricalAlign does not support complex category "
                     f"values for categorical column '{columns[index]}'."
                 )
-            codes = data[..., index].reshape(-1)  # [num_rows]
+            codes = categorical[..., index].reshape(-1)  # [num_rows]
             positions = torch.arange(
                 end=codes.numel(),
-                device=data.device,
+                device=categorical.device,
             )  # [num_rows]
             # [num_local_categories]
             first_positions = torch.full(
                 size=(category.numel(),),
                 fill_value=codes.numel(),
                 dtype=torch.long,
-                device=data.device,
+                device=categorical.device,
             )
             observed = codes >= 0
             first_positions.scatter_reduce_(
@@ -92,17 +92,17 @@ class CategoricalAlign(Processor):
 
         self._categories = tuple(categories)
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        _check_categorical_codes(inp)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        _check_categorical_codes(table)
 
-        columns = inp.columns[Stype.categorical]
+        columns = table.columns[Stype.categorical]
         # Start from all-missing output codes; the per-column loop below only
         # overwrites observed positions, so missing and unseen values stay -1.
-        data = torch.full_like(inp.categorical, -1)
+        out = torch.full_like(table.categorical, -1)
         for index, (actual, expected) in enumerate(
-            zip(inp.categorical.categories, self._categories, strict=True)
+            zip(table.categorical.categories, self._categories, strict=True)
         ):
-            codes = inp.categorical[..., index]
+            codes = table.categorical[..., index]
             observed = codes >= 0
             if not observed.any():
                 continue
@@ -110,21 +110,20 @@ class CategoricalAlign(Processor):
             mapping = self._category_mapping(
                 actual=actual,
                 expected=expected,
-                device=data.device,
+                device=out.device,
                 column=columns[index],
             )
-            data[..., index][observed] = mapping[
+            out[..., index][observed] = mapping[
                 codes[observed].to(torch.long)
-            ].to(data.dtype)
+            ].to(out.dtype)
 
         categorical = CategoricalTensor(
-            data=data,
+            data=out,
             categories=tuple(
-                category.to(device=data.device)
-                for category in self._categories
+                category.to(device=out.device) for category in self._categories
             ),
         )
-        return inp.replace_blocks(categorical=categorical)
+        return table.replace_blocks(categorical=categorical)
 
     @staticmethod
     def _select_categories(category: Tensor, index: Tensor) -> Tensor:

@@ -8,7 +8,6 @@ from sdm.nn.attention import (
     TransformerBlock,
 )
 from sdm.nn.set_transformer import InducedTransformerBlock
-from sdm.nn.resolver import normalization_resolver
 
 
 __all__ = [
@@ -18,5 +17,4 @@ __all__ = [
     "Attention",
     "TransformerBlock",
     "InducedTransformerBlock",
-    "normalization_resolver",
 ]

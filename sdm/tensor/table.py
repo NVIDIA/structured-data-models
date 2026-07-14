@@ -5,6 +5,7 @@ import math
 import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
@@ -33,6 +34,17 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
             return fn(*args, **kwargs)
 
     return wrapper
+
+
+@dataclass(frozen=True)
+class TableSchema:
+    r"""The schema of a :class:`TableTensor`.
+
+    Args:
+        columns: Column names grouped by semantic type.
+    """
+
+    columns: Mapping[Stype, tuple[str, ...]]
 
 
 class TableTensor(Tensor):
@@ -487,6 +499,19 @@ class TableTensor(Tensor):
     def blocks(self) -> Mapping[Stype, Tensor]:
         r"""Return typed column blocks per semantic type."""
         return dict(self.items())
+
+    @property
+    def schema(self) -> TableSchema:
+        r"""The schema of this table."""
+        return TableSchema(columns=self._columns)
+
+    def is_same_schema(self, other: TableTensor) -> bool:
+        r"""Whether ``other`` has the same schema layout.
+
+        Args:
+            other: The object to compare against.
+        """
+        return self.schema == other.schema
 
     def replace_blocks(
         self,
@@ -1296,6 +1321,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
     return tensors[0].__class__(
         size=size[:-1] if size is not None else None,
         columns=cast(dict[StypeLike, tuple[str, ...]], columns),
+        device=tensors[0].device if len(blocks) == 0 else None,
         **blocks,
     )
 

@@ -4,7 +4,12 @@ from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import InvertibleMixin, Recipe, SoftmaxTemperature
+from sdm.processing import (
+    InvertibleMixin,
+    Recipe,
+    SoftmaxTemperature,
+    StandardScale,
+)
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -69,6 +74,35 @@ def test_tabiclv2_num_estimators(batch_shape: tuple[int, ...]) -> None:
     torch.testing.assert_close(model.predict(x[..., R_train:, :]), out)
     model.clear()
 
+    with pytest.raises(ValueError, match="num_estimators must be positive"):
+        model(x, y, num_estimators=0)
+    with pytest.raises(ValueError, match="num_estimators must be positive"):
+        model.fit(x[..., :R_train, :], y, num_estimators=0)
+
+
+def test_tabiclv2_member_recipes() -> None:
+    model = TabICLv2(pretrained=False)
+
+    R, C, R_train = 8, 6, 5
+    x = TableTensor.from_tensor(torch.randn(R, C))
+    y = TableTensor.from_tensor(torch.randn(R_train, 1))
+    recipe = Recipe(target=[StandardScale()])
+
+    expected = model(x, y, recipe=recipe, num_estimators=2)
+    model.fit(
+        x[:R_train],
+        y,
+        recipe=recipe,
+        num_estimators=2,
+    )
+
+    assert model._caches is not None
+    member_recipes = [cache["recipe"] for cache in model._caches]
+    assert member_recipes[0] is not recipe
+    assert member_recipes[1] is not recipe
+    assert member_recipes[0] is not member_recipes[1]
+    torch.testing.assert_close(model.predict(x[R_train:]), expected)
+
 
 def test_tabiclv2_recipe() -> None:
     model = TabICLv2(pretrained=False)
@@ -111,7 +145,7 @@ def test_tabiclv2_recipe() -> None:
     model.fit(x[:R_train], y, recipe=model.default_recipe())
     torch.testing.assert_close(model.predict(x[R_train:]), out)
     model.clear()
-    assert model._recipe is None
+    assert model._caches is None
 
 
 @pytest.mark.parametrize("task", ["classification", "regression"])
