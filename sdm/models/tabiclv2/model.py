@@ -169,7 +169,7 @@ class TabICLv2(Model):
             )
 
         return TableTensor(
-            columns={Stype.categorical: classes.tolist()},
+            columns={Stype.categorical: [str(i) for i in classes.tolist()]},
             numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
         )
 
