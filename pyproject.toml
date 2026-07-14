@@ -82,7 +82,6 @@ addopts = [
 markers = [
     "cuda: tests that require a NVIDIA GPU",
 ]
-pythonpath = ["."]
 testpaths = ["test"]
 xfail_strict = true
 

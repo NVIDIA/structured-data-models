@@ -234,7 +234,7 @@ def build_workload(
     }
     if categorical_features > 0:
         vocabulary_size = (
-            min(4_096, max(256, train_rows / 4))
+            min(4_096, max(256, train_rows // 4))
             if characteristics.high_cardinality
             else 16
         )
