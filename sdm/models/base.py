@@ -98,7 +98,7 @@ class Model(torch.nn.Module, ABC):
                 related_query_tables=None,
                 cache=None,
             )
-            if y_context.numerical.size(-1) == 1:
+            if y_context_i.numerical.size(-1) == 1:
                 assert isinstance(recipe.target, InvertibleMixin)
                 out = recipe.target.inverse_transform(out)
             outs.append(out)
