@@ -1,7 +1,6 @@
 from typing import Any
 
 import torch
-from torch.nn import Module
 
 
 def _normalize_string(value: str) -> str:
@@ -12,7 +11,7 @@ def normalization_resolver(
     query: torch.nn.Module | str,
     *args: Any,
     **kwargs: Any,
-) -> Module:
+) -> torch.nn.Module:
     """Resolve a public PyTorch normalization name to a module.
 
     Names are case-insensitive and may contain hyphens, underscores, or spaces.
@@ -26,10 +25,10 @@ def normalization_resolver(
         **kwargs: Additional keyword arguments passed to the normalization
             layer constructor.
     """
-    if isinstance(query, Module):
+    if isinstance(query, torch.nn.Module):
         return query
 
-    modules: tuple[type[Module], ...] = tuple(
+    modules: tuple[type[torch.nn.Module], ...] = tuple(
         value
         for value in vars(torch.nn).values()
         if (
