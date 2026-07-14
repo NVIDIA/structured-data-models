@@ -125,7 +125,7 @@ class TabICLv2(Model):
 
         return self
 
-    def _forward(
+    def _forward(  # TODO Add multi-class support.
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
