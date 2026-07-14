@@ -1,4 +1,4 @@
- # ruff: noqa: D205
+# ruff: noqa: D205
 from typing import ClassVar
 
 import torch
@@ -49,4 +49,4 @@ class KumoRFM(Model):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        raise NotImplementedError       raise NotImplementedError
+        raise NotImplementedError
