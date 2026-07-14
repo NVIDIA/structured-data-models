@@ -78,7 +78,7 @@ def _related_rows(
 @onlyCUDA
 @pytest.mark.parametrize(
     "num_neighbors",
-    ([0], [-1], [-1, -1]),
+    [[0], [-1], [-1, -1]],
     ids=("seed-only", "one-hop", "two-hop"),
 )
 def test_pyg_and_cugraph_match_non_temporal_samples(
@@ -219,10 +219,10 @@ def test_pyg_and_cugraph_match_temporal_last_samples(
 @onlyCUDA
 @pytest.mark.parametrize(
     ("source", "task"),
-    (
+    [
         (([1, 2], ["a", "b"]), ([9], ["missing"])),
         (([1, 1], ["a", "a"]), ([1], ["a"])),
-    ),
+    ],
     ids=("missing", "duplicate"),
 )
 def test_pyg_and_cugraph_reject_invalid_composite_seed_matches(
