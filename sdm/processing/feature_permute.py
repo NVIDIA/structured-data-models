@@ -35,9 +35,9 @@ class FeaturePermute(Processor, InvertibleMixin):
             torch.empty(0, dtype=torch.long),
         )
 
-    def _fit(self, input: TableTensor) -> None:
-        n_features = input.numerical.size(-1)
-        device = input.numerical.device
+    def _fit(self, inp: TableTensor) -> None:
+        n_features = inp.numerical.size(-1)
+        device = inp.numerical.device
         if n_features <= 1:
             self.permutation = torch.arange(n_features, device=device)
         elif self.method == "shift":
@@ -48,24 +48,24 @@ class FeaturePermute(Processor, InvertibleMixin):
         else:
             self.permutation = torch.randperm(n_features).to(device=device)
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, inp: TableTensor) -> TableTensor:
         """Reorder the numerical block with the fitted permutation."""
-        return self._permute(input, self.permutation)
+        return self._permute(inp, self.permutation)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        return self._permute(input, self.permutation.argsort())
+    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
+        return self._permute(inp, self.permutation.argsort())
 
     def _permute(
         self,
-        input: TableTensor,
+        inp: TableTensor,
         permutation: Tensor,
     ) -> TableTensor:
         indices = permutation.tolist()
-        return input.__class__(
+        return inp.__class__(
             columns={
                 Stype.numerical.value: tuple(
-                    input.columns[Stype.numerical][index] for index in indices
+                    inp.columns[Stype.numerical][index] for index in indices
                 )
             },
-            numerical=input.numerical.index_select(-1, permutation),
+            numerical=inp.numerical.index_select(-1, permutation),
         )
