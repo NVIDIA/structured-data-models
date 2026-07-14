@@ -5,6 +5,7 @@ import math
 import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from itertools import chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
@@ -33,6 +34,17 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
             return fn(*args, **kwargs)
 
     return wrapper
+
+
+@dataclass(frozen=True)
+class TableSchema:
+    r"""The schema of a :class:`TableTensor`.
+
+    Args:
+        columns: Column names grouped by semantic type.
+    """
+
+    columns: Mapping[Stype, tuple[str, ...]]
 
 
 class TableTensor(Tensor):
@@ -488,13 +500,18 @@ class TableTensor(Tensor):
         r"""Return typed column blocks per semantic type."""
         return dict(self.items())
 
+    @property
+    def schema(self) -> TableSchema:
+        r"""The schema of this table."""
+        return TableSchema(columns=self._columns)
+
     def is_same_schema(self, other: TableTensor) -> bool:
         r"""Whether ``other`` has the same schema layout.
 
         Args:
             other: The object to compare against.
         """
-        return self._columns == other._columns
+        return self.schema == other.schema
 
     def replace_blocks(
         self,

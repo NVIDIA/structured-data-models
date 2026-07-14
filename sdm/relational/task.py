@@ -12,6 +12,7 @@ from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
 from sdm.tensor.mixin import DeviceMixin
+from sdm.tensor.table import TableSchema
 
 if TYPE_CHECKING:
     import graphviz
@@ -30,9 +31,9 @@ class TaskLink:
         table_columns: Column names in ``table``.
     """
 
-    task_columns: Sequence[str]
+    task_columns: tuple[str, ...]
     table: str
-    table_columns: Sequence[str]
+    table_columns: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if len(self.task_columns) != len(self.table_columns):
@@ -81,9 +82,9 @@ class TaskLink:
             table_columns = (table_columns,)
 
         return cls(
-            task_columns=task_columns,
+            task_columns=tuple(task_columns),
             table=table,
-            table_columns=table_columns,
+            table_columns=tuple(table_columns),
         )
 
     def _task_columns_repr(self) -> str:
@@ -98,6 +99,21 @@ class TaskLink:
 
     def __repr__(self) -> str:
         return f"{self._task_columns_repr()} > {self._table_columns_repr()}"
+
+
+@dataclass(frozen=True)
+class RelatedTablesSchema:
+    r"""The schema of :class:`RelatedTables`.
+
+    Args:
+        tables: Table schema keyed by table name.
+        relationships: Join relationships among ``tables``.
+        task_links: Links from task columns to related ``tables``.
+    """
+
+    tables: Mapping[str, TableSchema]
+    relationships: tuple[Relationship, ...]
+    task_links: tuple[TaskLink, ...]
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -205,23 +221,22 @@ class RelatedTables(DeviceMixin):
             )
         return next(iter(devices))
 
+    @property
+    def schema(self) -> RelatedTablesSchema:
+        r"""The schema of this related context."""
+        return RelatedTablesSchema(
+            tables={name: table.schema for name, table in self.tables.items()},
+            relationships=self.relationships,
+            task_links=self.task_links,
+        )
+
     def is_same_schema(self, other: RelatedTables) -> bool:
         r"""Whether ``other`` has the same schema layout.
 
         Args:
             other: The object to compare against.
         """
-        if self.tables.keys() != other.tables.keys():
-            return False
-
-        for name, table in self.tables.items():
-            if not table.is_same_schema(other.tables[name]):
-                return False
-
-        if self.relationships != other.relationships:
-            return False
-
-        return self.task_links == other.task_links
+        return self.schema == other.schema
 
     def edge_indices(
         self,
