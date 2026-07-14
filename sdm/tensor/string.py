@@ -138,14 +138,14 @@ class StringTensor(VarLenTensor):
 
             tensor = self
             if not tensor.is_contiguous():
+                # Compacting a non-contiguous tensor copies both buffers on
+                # device.
                 tensor = cast(StringTensor, tensor.contiguous())
 
             # StringTensor stores variable-width strings in separate UTF-8
             # data and offset buffers. Use pylibcudf to expose them without a
             # host copy.
-            offset_column = plc.Column.from_array(  # ty: ignore[missing-argument]
-                obj=tensor._offset
-            )
+            offset_column = plc.Column.from_array(obj=tensor._offset)
             plc_column = plc.Column(
                 data_type=plc.DataType(plc.TypeId.STRING),
                 size=tensor.numel(),

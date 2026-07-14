@@ -38,5 +38,8 @@ def to_cudf(tensor: Tensor) -> cudf.Series:
                 "Converting tensors to cuDF requires cuDF"
             ) from exc
 
+        # cuDF requires flat contiguous input, so this copies non-contiguous
+        # tensors on device. `nan_as_null=False` keeps NaN values instead of
+        # converting them to cuDF nulls.
         tensor = tensor.detach().contiguous().view(-1)
-        return cudf.Series(tensor, copy=False)
+        return cudf.Series(tensor, copy=False, nan_as_null=False)

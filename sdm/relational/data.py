@@ -29,19 +29,10 @@ if TYPE_CHECKING:
 def _to_cudf(
     table: TableTensor,
     columns: Sequence[str],
-) -> cudf.DataFrame:
-    try:
-        import cudf
-    except ImportError as exc:
-        raise ImportError(
-            "CUDA-resident relational joins require cuDF"
-        ) from exc
-
+) -> dict[str, cudf.Series]:
     # Pair IDs through Python metadata to avoid a CUDA index-to-host sync.
     id_columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
-    return cudf.DataFrame(
-        {name: to_cudf(id_columns[name]) for name in columns}
-    )
+    return {name: to_cudf(id_columns[name]) for name in columns}
 
 
 @dataclass(frozen=True, repr=False)
@@ -251,10 +242,11 @@ class RelationalData(DeviceMixin):
         Raises:
             RuntimeError: If registered tables are not on the same device.
             ImportError: If CUDA tables are used without cuDF installed.
-        """
-        execution_device = self.device
-        device = execution_device if device is None else device
 
+        .. note::
+            cuDF supports a single CUDA device per process. All CUDA calls of
+            this method within one process must use tables on the same device.
+        """
         columns: dict[str, list[str]] = defaultdict(list)
         for rel in self.relationships:
             for table, rel_columns in (
@@ -268,7 +260,12 @@ class RelationalData(DeviceMixin):
         if len(columns) == 0:
             return ()
 
+        execution_device = self.device
+        device = execution_device if device is None else device
+
         if execution_device.type == "cuda":
+            # cuDF executes on the default CUDA stream; tensors produced on
+            # non-default torch streams must be synchronized by the caller.
             with torch.cuda.device(execution_device):
                 return self._edge_indices_cudf(
                     columns=columns,
@@ -318,6 +315,13 @@ class RelationalData(DeviceMixin):
         dtype: torch.dtype | None,
         device: torch.device | str | None,
     ) -> tuple[Tensor, ...]:
+        try:
+            import cudf
+        except ImportError as exc:
+            raise ImportError(
+                "CUDA-resident relational joins require cuDF"
+            ) from exc
+
         tables = {
             name: _to_cudf(table=table, columns=columns[name])
             for name, table in self.tables.items()
@@ -325,7 +329,7 @@ class RelationalData(DeviceMixin):
         }
         for name, table in tables.items():
             row_id = torch.arange(
-                len(table),
+                self.tables[name].size(-2),
                 dtype=dtype,
                 device=self.tables[name].device,
             )
@@ -333,12 +337,27 @@ class RelationalData(DeviceMixin):
 
         edge_indices: list[Tensor] = []
         for rel in self.relationships:
-            left = tables[rel.left_table][[*rel.left_columns, ROW_ID]].rename(
-                columns={ROW_ID: LEFT_ROW_ID}
+            # cuDF `DataFrame.rename` and column `__setitem__` deep-copy
+            # device buffers, so assemble the merge inputs as fresh frames
+            # over the shared column series instead.
+            left = cudf.DataFrame(
+                {
+                    **{
+                        column: tables[rel.left_table][column]
+                        for column in rel.left_columns
+                    },
+                    LEFT_ROW_ID: tables[rel.left_table][ROW_ID],
+                }
             )
-            right = tables[rel.right_table][
-                [*rel.right_columns, ROW_ID]
-            ].rename(columns={ROW_ID: RIGHT_ROW_ID})
+            right = cudf.DataFrame(
+                {
+                    **{
+                        column: tables[rel.right_table][column]
+                        for column in rel.right_columns
+                    },
+                    RIGHT_ROW_ID: tables[rel.right_table][ROW_ID],
+                }
+            )
 
             joined = left.merge(
                 right,
@@ -349,6 +368,8 @@ class RelationalData(DeviceMixin):
 
             src = torch.as_tensor(joined[LEFT_ROW_ID])
             dst = torch.as_tensor(joined[RIGHT_ROW_ID])
+            # Stack copies the cuDF-owned join outputs into a single
+            # torch-owned `[2, num_edges]` tensor.
             edge_indices.append(
                 torch.stack([src, dst], dim=0).to(device=device)
             )
