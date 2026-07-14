@@ -1,9 +1,10 @@
-# ruff: noqa: D205
+ # ruff: noqa: D205
 from typing import ClassVar
 
 import torch
+from torch import Tensor
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import RelatedTables
 from sdm.cache import Cache
 from sdm.models import Model
 from sdm.processing import Recipe
@@ -24,16 +25,6 @@ class KumoRFM(Model):
     """
 
     #:
-    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
-        {Stype.numerical}
-    )
-    #:
-    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
-        {Stype.numerical, Stype.categorical}
-    )
-    #:
-    supports_multi_target: ClassVar[bool] = False
-    #:
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(
@@ -45,18 +36,17 @@ class KumoRFM(Model):
 
     def _forward(
         self,
-        x: TableTensor,  # [..., R, C_1]
-        y: TableTensor,  # [..., R_train, C_2]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
         related_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> TableTensor:  # [..., R_test, num_classes or 999]
-        out = torch.empty(
+    ) -> Tensor:  # [..., R - R_train, *]
+        return torch.empty(
             (*x.size()[:-2], x.size(-2) - y.size(-1), 10),
             device=x.device,
         )
-        return TableTensor.from_tensor(out)
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        raise NotImplementedError
+        raise NotImplementedError       raise NotImplementedError

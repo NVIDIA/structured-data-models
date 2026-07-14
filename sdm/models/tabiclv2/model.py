@@ -8,11 +8,11 @@ from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import RelatedTables
 from sdm.cache import Cache
 from sdm.models import Model
 from sdm.models.tabiclv2.icl import ICLBlock
-from sdm.models.tabiclv2.recipe import default_regression_recipe
+from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
@@ -67,16 +67,6 @@ class TabICLv2(Model):
     """
 
     #:
-    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
-        {Stype.numerical}
-    )
-    #:
-    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
-        {Stype.numerical, Stype.categorical}
-    )
-    #:
-    supports_multi_target: ClassVar[bool] = False
-    #:
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -107,7 +97,7 @@ class TabICLv2(Model):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        return default_regression_recipe()
+        return default_recipe()
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
@@ -135,34 +125,27 @@ class TabICLv2(Model):
 
         return self
 
-    def _forward(
+    def _forward(  # TODO Add multi-class support.
         self,
-        x: TableTensor,  # [..., R, C_1]
-        y: TableTensor,  # [..., R_train, C_2]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
         related_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> TableTensor:  # [..., R_test, num_classes or 999]
+    ) -> Tensor:  # [..., R_test, num_classes or 999]
+        r"""The forward pass.
 
-        if y.categorical.size(-1) > 0:
-            return TableTensor(
-                columns={
-                    Stype.numerical: y.categorical.categories[0].tolist(),
-                },
-                numerical=self.cls_model(
-                    x=x.numerical,
-                    y=y.categorical[..., 0],
-                    cache=cache,
-                ),
-            )
+        Returns:
+            Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
+            and ``[..., R_test, 999]`` for floating-point ``y``.
+            Integer ``y`` return class logits.
+            Floating-point ``y`` return 999 quantiles at probability levels
+            :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
+        """
+        assert related_tables is None
 
-        return TableTensor(
-            columns={Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]},
-            numerical=self.reg_model(
-                x=x.numerical,
-                y=y.numerical[..., 0],
-                cache=cache,
-            ),
-        )
+        if y.is_floating_point():
+            return self.reg_model(x=x, y=y, cache=cache)
+        return self.cls_model(x=x, y=y, cache=cache)
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device

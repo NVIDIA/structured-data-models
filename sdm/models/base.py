@@ -1,8 +1,7 @@
-import contextlib
-import copy
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
+from copy import deepcopy
 from typing import ClassVar, cast
 
 import torch
@@ -32,68 +31,90 @@ def _maybe_inference_mode() -> Iterator[None]:
 class Model(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
-    :class:`Model` defines the public inferface shared among in-context
+    :class:`Model` defines the public interface shared among in-context
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
     """
 
-    supported_feature_stypes: ClassVar[frozenset[Stype]]
-    supported_target_stypes: ClassVar[frozenset[Stype]]
-    supports_multi_target: ClassVar[bool]
     supports_related_tables: ClassVar[bool]
 
     def __init__(self) -> None:
         super().__init__()
-        self._cache: Cache | None = None
+
+        # One cache per ensemble member.
+        self._caches: list[Cache] | None = None
 
     @_maybe_inference_mode()
     def forward(
         self,
-        x: TableTensor,  # [..., R, C_1]
-        y: TableTensor,  # [..., R_train, C_2]
+        x: Tensor | TableTensor,  # [..., R, C]
+        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
         related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-    ) -> TableTensor:  # [..., R - R_train, *]
+    ) -> Tensor:  # [..., R - R_train, *]
         r"""The in-context learning forward pass.
 
         Args:
-            x: The feature tensor with shape ``[..., R, C_x]`` with ``R`` rows
-                and ``C_x`` columns.
+            x: The feature tensor with shape ``[..., R, C]`` with ``R`` rows
+                and ``C`` columns.
                 The first ``R_train`` rows along ``R`` refer to the in-context
                 examples.
             y: The targets of in-context examples with shape
-                ``[..., R_train, C_y]``.
+                ``[..., R_train]`` or ``[..., R_train, 1]``.
             related_tables: Additional related context provided to the model.
-            recipe: The recipe for pre- and post-processing. If ``None``, will
-                use the default recipe of the model.
+            recipe: The recipe for pre- and post-processing. If ``None``, no
+                recipe is applied.
             num_estimators: The number of estimators for ensembling.
 
         Returns:
             The prediction for the remaining ``[..., R - R_train]`` test rows.
         """
-        recipe = self.default_recipe() if recipe is None else recipe
-        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
-
-        outs: Sequence[TableTensor] = []
-        for recipe in recipes:
-            x_i, y_i, related_tables_i = self._preprocess(
-                recipe, x, y, related_tables
+        if not self.supports_related_tables and related_tables is not None:
+            warnings.warn(
+                f"'{self.__class__.__name__}' does not support related tables",
+                stacklevel=2,
             )
-            out = self._forward(x_i, y_i, related_tables_i, cache=None)
+            related_tables = None
 
-            out = self._postprocess(out, recipe)
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+
+        # Align every member output to the input target's class order before
+        # aggregating the ensemble.
+        original_class_labels = self._class_labels(y)
+        output_recipe: Recipe | None = None
+        outs: list[Tensor] = []
+        for member in range(num_estimators):
+            member_recipe = None if recipe is None else deepcopy(recipe)
+            if member == 0:
+                output_recipe = member_recipe
+            x_i, y_i, member_class_labels = self._preprocess(
+                x,
+                y,
+                related_tables,
+                recipe=member_recipe,
+            )
+            class_indices = self._class_indices(
+                original_class_labels,
+                member_class_labels,
+            )
+            out = self._forward(x_i, y_i, related_tables, cache=None)
+            out = self._postprocess(
+                out,
+                y_i,
+                member_recipe,
+                class_indices=class_indices,
+            )
             outs.append(out)
 
-        out = torch.stack(outs, dim=0)
-
         out = torch.stack(outs).mean(dim=0)
-        table = TableTensor.from_tensor(out)
-        if recipe is None:
+        table = TableTensor.from_tensor(out.clone())
+        if output_recipe is None:
             return table.numerical
-        return recipe.output.transform(table).numerical
+        return output_recipe.output.transform(table).numerical
 
     @torch.inference_mode()
     def fit(
@@ -127,25 +148,40 @@ class Model(torch.nn.Module, ABC):
             )
             related_tables = None
 
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+
         self.clear()
+        original_class_labels = self._class_labels(y)
         caches: list[Cache] = []
         for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
+            member_recipe = None if recipe is None else deepcopy(recipe)
+            x_i, y_i, member_class_labels = self._preprocess(
+                x,
+                y,
+                related_tables,
+                recipe=member_recipe,
+            )
             x_i = x_i[..., : y_i.size(-1), :]
+            class_indices = self._class_indices(
+                original_class_labels,
+                member_class_labels,
+            )
 
-            # TODO Don't store y.dtype for every estimator.
-            cache = Cache({"y.dtype": y.dtype})
+            cache = Cache(
+                {
+                    "recipe": member_recipe,
+                    "y.dtype": y_i.dtype,
+                    # predict() only receives features, so retain the fitted
+                    # mapping needed to restore this member's class order.
+                    "target.class_indices": class_indices,
+                }
+            )
             self._forward(x_i, y_i, related_tables, cache)
             cache.freeze()
             caches.append(cache)
 
         self._caches = caches
-        # TODO: Once creating Recipes from a Recipe is supported, we should
-        # iterate over the recipes so that every predict call runs a consistent
-        # recipe per ensemble member.
-        self._recipe = recipe
 
     def clear(self) -> None:
         r"""Clears cached in-context examples and the fitted recipe."""
@@ -184,54 +220,55 @@ class Model(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}.fit()' beforehand."
             )
 
-        recipe = self._recipe
         outs: list[Tensor] = []
         for cache in self._caches:
+            member_recipe = cast(Recipe | None, cache["recipe"])
             y_i = torch.empty(
                 (*x.size()[:-2], 0),
-                dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
+                dtype=cast(torch.dtype, cache["y.dtype"]),
                 device=x.device,
             )
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(
+            x_i, y_i, _ = self._preprocess(
                 x,
                 y_i,
                 related_tables,
-                recipe=recipe,
+                recipe=member_recipe,
                 fit_recipe=False,
             )
             out = self._forward(x_i, y_i, related_tables, cache)
-            out = self._postprocess(out, recipe)
+            class_indices = cast(
+                tuple[int, ...] | None,
+                cache["target.class_indices"],
+            )
+            out = self._postprocess(
+                out,
+                y_i,
+                member_recipe,
+                class_indices=class_indices,
+            )
             outs.append(out)
 
         out = torch.stack(outs).mean(dim=0)
         table = TableTensor.from_tensor(out.clone())
-        if recipe is None:
+        output_recipe = cast(Recipe | None, self._caches[0]["recipe"])
+        if output_recipe is None:
             return table.numerical
-        return recipe.output.transform(table).numerical
+        return output_recipe.output.transform(table).numerical
 
     # Helpers #################################################################
 
     def _preprocess(
         self,
-        recipe: Recipe,
-        x: TableTensor,  # [..., R, C_1]
-        y: TableTensor,  # [..., R_train, C_2]
+        x: Tensor | TableTensor,  # [..., R, C]
+        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
         related_tables: RelatedTables | None,
-    ) -> tuple[TableTensor, TableTensor, RelatedTables | None]:
-
-        if not self.supports_related_tables and related_tables is not None:
-            warnings.warn(
-                f"'{self.__class__.__name__}' does not support related tables",
-                stacklevel=2,
-            )
+        *,
+        recipe: Recipe | None = None,
+        fit_recipe: bool = True,
+    ) -> tuple[Tensor, Tensor, tuple[str, ...] | None]:
+        if related_tables is not None:
+            # TODO Support preprocessing related tables.
             related_tables = None
-
-        if not isinstance(x, TableTensor):
-            x = TableTensor.from_tensor(x)
-        if not isinstance(y, TableTensor):
-            y = TableTensor.from_tensor(y)
 
         if recipe is not None:
             if not isinstance(x, TableTensor):
@@ -250,6 +287,10 @@ class Model(torch.nn.Module, ABC):
                 y = recipe.target.fit_transform(y)
 
             x = recipe.features.transform(x)
+
+        # A target processor may assign a different class-code order to each
+        # ensemble member; the model head follows this transformed order.
+        member_class_labels = self._class_labels(y)
 
         if isinstance(x, TableTensor):
             invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
@@ -294,42 +335,103 @@ class Model(torch.nn.Module, ABC):
                 f"(got {tuple(x.size()[:-2])} and {tuple(y.size()[:-1])}"
             )
 
-        return x, y
+        return x, y, member_class_labels
 
     def _postprocess(
         self,
         out: Tensor,  # [..., R_test, *]
+        y: Tensor,  # [..., R_train]
         recipe: Recipe | None,
+        *,
+        class_indices: tuple[int, ...] | None,
     ) -> Tensor:  # [..., R_test, *]
-        if recipe is None:
+        if y.is_floating_point():
+            if recipe is None:
+                return out
+
+            if not isinstance(recipe.target, InvertibleMixin):
+                raise ValueError(
+                    f"Expected the target steps of 'recipe' to support "
+                    f"'inverse_transform' to map predictions back to the "
+                    f"original target space "
+                    f"(got '{recipe.target.__class__.__name__}')"
+                )
+
+            table = TableTensor.from_tensor(out.clone())
+            return recipe.target.inverse_transform(table).numerical
+
+        # Raw tensor targets have no class-label metadata and therefore no
+        # recipe-induced class order to restore.
+        if class_indices is None:
             return out
 
-        if not isinstance(recipe.target, InvertibleMixin):
+        n_classes = len(class_indices)
+        required_columns = max(class_indices, default=-1) + 1
+        if out.size(-1) < required_columns:
             raise ValueError(
-                f"Expected the target steps of 'recipe' to support "
-                f"'inverse_transform' to map predictions back to the "
-                f"original target space "
-                f"(got '{recipe.target.__class__.__name__}')"
+                "Expected the classification output to contain at least "
+                f"{required_columns} columns (got {out.size(-1)})."
             )
 
-        table = TableTensor.from_tensor(out.clone())
-        table = recipe.target.inverse_transform(table)
+        if class_indices == tuple(range(n_classes)):
+            return out[..., :n_classes]
 
-        return table.numerical
+        indices = torch.tensor(
+            class_indices,
+            device=out.device,
+        )
+        return out.index_select(-1, indices)
+
+    @staticmethod
+    def _class_indices(
+        original_class_labels: tuple[str, ...] | None,
+        member_class_labels: tuple[str, ...] | None,
+    ) -> tuple[int, ...] | None:
+        if member_class_labels is None:
+            return None
+
+        assert original_class_labels is not None
+        member_indices = {
+            label: index for index, label in enumerate(member_class_labels)
+        }
+        return tuple(
+            member_indices[label]
+            for label in original_class_labels
+            if label in member_indices
+        )
+
+    @staticmethod
+    def _class_labels(
+        target: Tensor | TableTensor,
+    ) -> tuple[str, ...] | None:
+        if not isinstance(target, TableTensor):
+            return None
+        if target.categorical.size(-1) != 1:
+            return None
+
+        category = target.categorical.categories[0]
+        values = category.tolist()
+        labels = tuple(str(value) for value in values)
+        if len(labels) != len(set(labels)):
+            raise ValueError(
+                "Expected categorical targets to have unique class-label "
+                "representations."
+            )
+        return labels
 
     # Abstract Methods ########################################################
 
     @abstractmethod
     def _forward(
         self,
-        x: TableTensor,  # [..., R, C_1]
-        y: TableTensor,  # [..., R_train, C_2]
+        x: Tensor,  # [..., R, C]
+        y: Tensor,  # [..., R_train]
         related_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> TableTensor:  # [..., R - R_train, *]
+    ) -> Tensor:  # [..., R - R_train, *]
         pass
 
     @classmethod
     @abstractmethod
     def default_recipe(cls) -> Recipe:
-        r"""Return the default processing recipe for this model."""
+        r"""Return the default processing recipe for this model."""del."""
