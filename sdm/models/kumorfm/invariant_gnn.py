@@ -1,6 +1,5 @@
 # ruff: noqa: D102
 
-import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -127,8 +126,12 @@ class InvariantGNN(torch.nn.Module):
                 )
                 - h.square()
             )
-            h = h.clamp(min=1e-5).sqrt()
-            h = h.masked_fill(h <= math.sqrt(1e-5), 0.0)
+            # Zero out (near-)zero variance segments. Compare against the
+            # variance *before* taking the square root: in `float16`,
+            # `clamp(0.0, min=1e-5).sqrt()` rounds up above
+            # `math.sqrt(1e-5)`, so a post-`sqrt` comparison would fail to
+            # zero out zero-variance segments:
+            h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
             x = x + self.std_lin(h)
 
             h = torch.segment_reduce(  # Min aggregation:
