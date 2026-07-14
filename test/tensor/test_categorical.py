@@ -8,6 +8,26 @@ from sdm import CategoricalTensor, StringTensor
 from sdm.testing import onlyCUDA
 
 
+def test_to_copy_string_categories() -> None:
+    data = torch.randint(0, 2, size=(10, 2))
+    categories = (
+        StringTensor.from_list(["USA", "GERMANY"]),
+        StringTensor.from_list(["enterprise", "startup"]),
+    )
+    tensor = CategoricalTensor(data, categories)
+
+    out = tensor.clone()
+    assert isinstance(out, CategoricalTensor)
+    for out_category, category in zip(out.categories, categories):
+        assert out_category.tolist() == category.tolist()
+
+    out = tensor.to(torch.int32)
+    assert isinstance(out, CategoricalTensor)
+    assert out.dtype == torch.int32
+    for out_category, category in zip(out.categories, categories):
+        assert out_category.tolist() == category.tolist()
+
+
 def test_to_copy() -> None:
     data = torch.tensor([[0, -1, 2], [2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
