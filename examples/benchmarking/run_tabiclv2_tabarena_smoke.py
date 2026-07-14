@@ -8,6 +8,9 @@ From the repository root, in the dedicated TabArena environment:
         --checkpoint-path /path/to/tabicl-regressor-v2-20260212.ckpt \
         --checkpoint-sha256 \
         0db9cb538f114e79026bf08f45f41ad8dd7ad2de2aaca9a5ca8cd3bd9748ae7a \
+        --checkpoint-repository jingang/TabICL \
+        --checkpoint-revision \
+        4dcd344ece2c00be9e831fdd35bed57b5ad83e19 \
         --seed 0
 
 The checkpoint is verified locally before a job starts; this runner never
@@ -21,11 +24,15 @@ import argparse
 import hashlib
 import importlib
 import json
+import math
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from examples.benchmarking.tabiclv2_tabarena_model import (
     DeviceAllocation,
@@ -33,8 +40,10 @@ from examples.benchmarking.tabiclv2_tabarena_model import (
 )
 
 DATASET = "QSAR_fish_toxicity"
-CHECKPOINT_REPOSITORY = "jingang/TabICL"
-CHECKPOINT_REVISION = "4dcd344ece2c00be9e831fdd35bed57b5ad83e19"
+COMPARISON_FILENAME = "tabiclv2_comparison.csv"
+NEW_RESULT_PREFIX = "[New] "
+ORIGINAL_CONFIG_TYPE = "TABICLV2"
+ORIGINAL_METHOD_SUBTYPE = "default"
 DEFAULT_SEED = 0
 DEFAULT_OUTPUT_DIR = Path("artifacts/tabiclv2_tabarena_smoke")
 MAX_SEED = 2**63 - 1
@@ -105,6 +114,16 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--checkpoint-sha256",
         required=True,
         help="Expected SHA-256 of --checkpoint-path.",
+    )
+    parser.add_argument(
+        "--checkpoint-repository",
+        required=True,
+        help="Caller-supplied repository or source for the checkpoint.",
+    )
+    parser.add_argument(
+        "--checkpoint-revision",
+        required=True,
+        help="Caller-supplied revision for the checkpoint.",
     )
     parser.add_argument(
         "--seed",
@@ -204,6 +223,251 @@ def _validate_checkpoint(
     return checkpoint_path, actual_sha256
 
 
+def _validate_provenance(value: str, *, option: str) -> str:
+    value = value.strip()
+    if not value:
+        raise ValueError(f"{option} must not be empty.")
+    return value
+
+
+def _require_finite_value(
+    value: object,
+    *,
+    field: str,
+    non_negative: bool = True,
+) -> float:
+    if isinstance(value, bool):
+        raise RuntimeError(f"Expected finite numeric result field '{field}'.")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            f"Expected finite numeric result field '{field}'."
+        ) from error
+    if not math.isfinite(number):
+        raise RuntimeError(f"Result field '{field}' must be finite.")
+    if non_negative and number < 0:
+        raise RuntimeError(f"Result field '{field}' must be non-negative.")
+    return number
+
+
+def _validate_run_results(
+    results: Sequence[Mapping[str, Any]],
+) -> str:
+    """Validate the one raw TabArena result and return its registered name."""
+    if len(results) != 1:
+        raise RuntimeError(
+            f"Expected exactly one SDM TabICLv2 result, got {len(results)}."
+        )
+
+    result = results[0]
+    if not isinstance(result, Mapping):
+        raise RuntimeError("Expected the TabArena result to be a mapping.")
+
+    framework = result.get("framework")
+    expected_framework = f"{SDMTabICLv2Model.ag_name}_c1"
+    if not isinstance(framework, str) or not framework:
+        raise RuntimeError("TabArena result is missing its framework name.")
+    if framework != expected_framework:
+        raise RuntimeError(
+            "Expected the executed framework to be the one configured SDM "
+            f"TabICLv2 method {expected_framework!r}, got {framework!r}."
+        )
+
+    task_metadata = result.get("task_metadata")
+    if not isinstance(task_metadata, Mapping):
+        raise RuntimeError("TabArena result is missing task metadata.")
+    expected_task = {
+        "name": DATASET,
+        "fold": 0,
+        "repeat": 0,
+        "split_idx": 0,
+    }
+    for field, expected in expected_task.items():
+        actual = task_metadata.get(field)
+        if actual != expected:
+            raise RuntimeError(
+                f"Expected task metadata '{field}' to be {expected!r}, "
+                f"got {actual!r}."
+            )
+
+    if result.get("problem_type") != "regression":
+        raise RuntimeError("Expected one regression result from TabArena.")
+    if result.get("metric") != "rmse":
+        raise RuntimeError("Expected the TabArena result metric to be RMSE.")
+    for field in ("metric_error", "time_train_s", "time_infer_s"):
+        _require_finite_value(result.get(field), field=field)
+
+    return f"{NEW_RESULT_PREFIX}{framework}"
+
+
+def _require_frame_columns(
+    frame: pd.DataFrame,
+    columns: Sequence[str],
+    *,
+    frame_name: str,
+) -> None:
+    missing = [column for column in columns if column not in frame.columns]
+    if missing:
+        raise RuntimeError(
+            f"{frame_name} is missing required columns: {missing!r}."
+        )
+
+
+def _validate_new_comparison(
+    leaderboard: pd.DataFrame,
+    results: pd.DataFrame,
+    *,
+    expected_method: str,
+) -> None:
+    """Require one registered SDM leaderboard and per-split result row."""
+    import pandas as pd
+
+    if not isinstance(leaderboard, pd.DataFrame) or len(leaderboard) != 1:
+        count = (
+            len(leaderboard) if isinstance(leaderboard, pd.DataFrame) else 0
+        )
+        raise RuntimeError(
+            f"Expected exactly one new SDM leaderboard row, got {count}."
+        )
+    if "method" in leaderboard.columns:
+        leaderboard_methods = leaderboard["method"].tolist()
+    else:
+        leaderboard_methods = leaderboard.index.tolist()
+    if leaderboard_methods != [expected_method]:
+        raise RuntimeError(
+            "New leaderboard row does not match the executed SDM method: "
+            f"expected {expected_method!r}, got {leaderboard_methods!r}."
+        )
+
+    if not isinstance(results, pd.DataFrame) or len(results) != 1:
+        count = len(results) if isinstance(results, pd.DataFrame) else 0
+        raise RuntimeError(
+            f"Expected exactly one new SDM evaluated result row, got {count}."
+        )
+    _require_frame_columns(
+        results,
+        (
+            "method",
+            "dataset",
+            "fold",
+            "metric",
+            "problem_type",
+            "metric_error",
+            "time_train_s",
+            "time_infer_s",
+        ),
+        frame_name="New SDM results",
+    )
+    result = results.iloc[0]
+    expected = {
+        "method": expected_method,
+        "dataset": DATASET,
+        "fold": 0,
+        "metric": "rmse",
+        "problem_type": "regression",
+    }
+    for field, expected_value in expected.items():
+        if result[field] != expected_value:
+            raise RuntimeError(
+                f"Expected new result '{field}' to be {expected_value!r}, "
+                f"got {result[field]!r}."
+            )
+    for field in ("metric_error", "time_train_s", "time_infer_s"):
+        _require_finite_value(result[field], field=field)
+
+
+def _write_tabiclv2_comparison(
+    path: Path,
+    all_results: pd.DataFrame,
+    new_results: pd.DataFrame,
+    *,
+    expected_new_method: str,
+) -> None:
+    """Write the paired original-versus-SDM per-split comparison."""
+    import pandas as pd
+
+    if not isinstance(all_results, pd.DataFrame):
+        raise RuntimeError("Expected TabArena comparison results as a frame.")
+    required = (
+        "method",
+        "dataset",
+        "fold",
+        "metric",
+        "problem_type",
+        "metric_error",
+        "time_train_s",
+        "time_infer_s",
+        "config_type",
+        "method_subtype",
+    )
+    _require_frame_columns(
+        all_results,
+        required,
+        frame_name="Baseline-enriched results",
+    )
+
+    task_results = all_results.loc[
+        (all_results["dataset"] == DATASET) & (all_results["fold"] == 0)
+    ]
+    original = task_results.loc[
+        (task_results["config_type"] == ORIGINAL_CONFIG_TYPE)
+        & (task_results["method_subtype"] == ORIGINAL_METHOD_SUBTYPE)
+    ].copy()
+    sdm = task_results.loc[
+        task_results["method"] == expected_new_method
+    ].copy()
+    if len(original) != 1:
+        raise RuntimeError(
+            "Expected exactly one original TabArena TabICLv2 default result, "
+            f"got {len(original)}."
+        )
+    if len(sdm) != 1:
+        raise RuntimeError(
+            "Expected exactly one SDM TabICLv2 result in the full comparison, "
+            f"got {len(sdm)}."
+        )
+
+    new_result = new_results.iloc[0]
+    for field in (
+        "method",
+        "dataset",
+        "fold",
+        "metric",
+        "metric_error",
+        "time_train_s",
+        "time_infer_s",
+    ):
+        if sdm.iloc[0][field] != new_result[field]:
+            raise RuntimeError(
+                "Full and new-only SDM comparison results disagree on "
+                f"'{field}'."
+            )
+
+    for frame in (original, sdm):
+        row = frame.iloc[0]
+        if row["problem_type"] != "regression" or row["metric"] != "rmse":
+            raise RuntimeError("Expected paired TabICLv2 RMSE results.")
+        for field in ("metric_error", "time_train_s", "time_infer_s"):
+            _require_finite_value(row[field], field=field)
+
+    original.insert(0, "implementation", "original_tabarena")
+    sdm.insert(0, "implementation", "sdm")
+    columns = (
+        "implementation",
+        "method",
+        "dataset",
+        "fold",
+        "metric",
+        "metric_error",
+        "time_train_s",
+        "time_infer_s",
+    )
+    comparison = pd.concat([original, sdm], ignore_index=True).loc[:, columns]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    comparison.to_csv(path, index=False)
+
+
 def _git_commit(path: Path) -> str:
     """Return a repository commit, or a concrete unavailable marker."""
     try:
@@ -244,6 +508,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     seed = _validate_seed(args.seed)
     num_cpus = _resolve_num_cpus(args.num_cpus)
+    checkpoint_repository = _validate_provenance(
+        args.checkpoint_repository,
+        option="--checkpoint-repository",
+    )
+    checkpoint_revision = _validate_provenance(
+        args.checkpoint_revision,
+        option="--checkpoint-revision",
+    )
     checkpoint_path, checkpoint_sha256 = _validate_checkpoint(
         args.checkpoint_path,
         args.checkpoint_sha256,
@@ -270,8 +542,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "checkpoint": {
             "path": str(checkpoint_path),
             "sha256": checkpoint_sha256,
-            "repository": CHECKPOINT_REPOSITORY,
-            "revision": CHECKPOINT_REVISION,
+            "repository": checkpoint_repository,
+            "revision": checkpoint_revision,
         },
         "resources": {
             "num_cpus": num_cpus,
@@ -285,40 +557,71 @@ def main(argv: Sequence[str] | None = None) -> int:
             "model": SDMTabICLv2Model.__name__,
             "seed": seed,
             "num_estimators": NUM_ESTIMATORS,
+            "debug_mode": args.debug_mode,
         },
     }
     # This precedes TabArena job execution and therefore model timing.
     _write_manifest(manifest_path, manifest)
 
-    experiments = build_smoke_experiments(
-        checkpoint_path=checkpoint_path,
-        checkpoint_sha256=checkpoint_sha256,
-        seed=seed,
-        num_cpus=num_cpus,
-        num_gpus=args.num_gpus,
-    )
-
-    from tabarena.contexts import TabArenaContext
-
-    context = TabArenaContext()
     try:
-        context.build_and_run_jobs(
+        experiments = build_smoke_experiments(
+            checkpoint_path=checkpoint_path,
+            checkpoint_sha256=checkpoint_sha256,
+            seed=seed,
+            num_cpus=num_cpus,
+            num_gpus=args.num_gpus,
+        )
+
+        from tabarena.contexts import TabArenaContext
+
+        context = TabArenaContext()
+        run_results = context.build_and_run_jobs(
             experiments,
             expname=str(results_dir),
             build_kwargs={
                 "dataset_names": [DATASET],
                 "split_indices": "lite",
             },
-            new_result_prefix="[New] ",
+            new_result_prefix=NEW_RESULT_PREFIX,
             debug_mode=args.debug_mode,
         )
+        expected_new_method = _validate_run_results(run_results)
+
         evaluation_dir = output_dir / "evaluation"
-        leaderboard = context.compare(output_dir=evaluation_dir)
+        # The full comparison enriches the new local result with TabArena's
+        # historical baselines.  It supplies comparison context, never proof
+        # that this run completed; the raw result and new-only view provide
+        # that proof.
+        _, all_results = context.compare(
+            output_dir=evaluation_dir,
+            return_results=True,
+        )
+        leaderboard, new_results = context.compare(
+            output_dir=None,
+            new_methods_only=True,
+            return_results=True,
+        )
+        _validate_new_comparison(
+            leaderboard,
+            new_results,
+            expected_method=expected_new_method,
+        )
+
+        comparison_path = evaluation_dir / COMPARISON_FILENAME
+        _write_tabiclv2_comparison(
+            comparison_path,
+            all_results,
+            new_results,
+            expected_new_method=expected_new_method,
+        )
         leaderboard_website = context.leaderboard_to_website_format(
             leaderboard=leaderboard
         )
-        if leaderboard_website.empty:
-            raise RuntimeError("TabArena completed without a result row.")
+        if len(leaderboard_website) != 1:
+            raise RuntimeError(
+                "Expected exactly one formatted SDM leaderboard row, "
+                f"got {len(leaderboard_website)}."
+            )
 
         manifest.update(
             {
@@ -326,6 +629,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "completed_at_utc": datetime.now(UTC).isoformat(),
                 "results_dir": str(results_dir),
                 "evaluation_dir": str(evaluation_dir),
+                "comparison_path": str(comparison_path),
             }
         )
         _write_manifest(manifest_path, manifest)
@@ -340,8 +644,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         _write_manifest(manifest_path, manifest)
         raise
 
-    print("\n=== TabArena leaderboard ===")  # noqa: T201
+    print("\n=== TabArena SDM leaderboard row ===")  # noqa: T201
     print(leaderboard_website.to_markdown(index=False))  # noqa: T201
+    print(f"\nComparison: {comparison_path}")  # noqa: T201
     print(f"\nManifest: {manifest_path}")  # noqa: T201
     return 0
 

@@ -20,6 +20,7 @@ from examples.benchmarking.tabiclv2_tabarena_model import (
 from sdm import TableTensor
 from sdm.cache import Cache
 from sdm.processing import FeaturePermute, MeanImpute, Recipe, Sequential
+from sdm.testing import onlyCUDA
 
 pytestmark = pytest.mark.tabarena
 
@@ -221,6 +222,28 @@ def test_repeated_fit_replaces_cached_context(
         model.predict(_features())
 
 
+def test_failed_fit_preserves_model_attribute_and_can_recover(
+    fake_backend: list[_FakeTabICLv2],
+) -> None:
+    model = _model()
+
+    with pytest.raises(ValueError, match="only numerical"):
+        model.fit(
+            X=pd.DataFrame({"category": ["a", "b"]}),
+            y=pd.Series([0.0, 1.0]),
+            num_cpus=1,
+            num_gpus=0,
+        )
+
+    assert hasattr(model, "model")
+    assert model.model is None
+    assert model._sdm_model is None
+
+    model.fit(X=_features(), y=_target(), num_cpus=1, num_gpus=0)
+    assert model.model is fake_backend[0]
+    assert model.predict(_features()).shape == (len(_features()),)
+
+
 def _fitted_permutation(model: SDMTabICLv2Model) -> torch.Tensor:
     assert model._recipe is not None
     assert isinstance(model._recipe.features, Sequential)
@@ -267,6 +290,37 @@ def test_seeded_fit_is_deterministic_and_restores_rng(
         )
         permutations.add(tuple(_fitted_permutation(candidate).tolist()))
     assert len(permutations) > 1
+
+
+def test_cpu_seed_scope_does_not_seed_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cuda_seed_calls: list[int] = []
+    monkeypatch.setattr(torch.cuda, "manual_seed", cuda_seed_calls.append)
+
+    with adapter._fork_seed(7, torch.device("cpu")):
+        torch.rand(1)
+
+    assert cuda_seed_calls == []
+
+
+@onlyCUDA
+def test_gpu_seed_scope_restores_cpu_and_all_cuda_rng_states() -> None:
+    torch.manual_seed(1234)
+    torch.cuda.manual_seed_all(5678)
+    cpu_state = torch.random.get_rng_state().clone()
+    cuda_states = [
+        torch.cuda.get_rng_state(device).clone()
+        for device in range(torch.cuda.device_count())
+    ]
+
+    with adapter._fork_seed(7, torch.device("cuda:0")):
+        torch.rand(1)
+        torch.rand(1, device="cuda:0")
+
+    assert torch.equal(torch.random.get_rng_state(), cpu_state)
+    for device, expected_state in enumerate(cuda_states):
+        assert torch.equal(torch.cuda.get_rng_state(device), expected_state)
 
 
 @pytest.mark.parametrize(

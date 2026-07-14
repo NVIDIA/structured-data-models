@@ -81,7 +81,10 @@ def _fork_seed(seed: int, device: torch.device) -> Iterator[None]:
         devices.append(index)
 
     with torch.random.fork_rng(devices=devices):
-        torch.manual_seed(seed)
+        torch.random.default_generator.manual_seed(seed)
+        if devices:
+            with torch.cuda.device(devices[0]):
+                torch.cuda.manual_seed(seed)
         yield
 
 
@@ -402,8 +405,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
         self._recipe = None
         self._allocation = None
         self._feature_columns = None
-        if hasattr(self, "model"):
-            del self.model
+        self.model = None
 
 
 __all__ = ["DeviceAllocation", "SDMTabICLv2Model"]
