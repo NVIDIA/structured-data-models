@@ -4,6 +4,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import VarLenTensor
+from sdm.testing import onlyCUDA
 from torch import Tensor
 
 
@@ -249,6 +250,35 @@ def test_to_copy() -> None:
     assert out._offset.equal(torch.tensor([0, 1, 2]))
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
+
+
+@onlyCUDA
+def test_to_device_cuda() -> None:
+    data = torch.arange(16)
+    offset = torch.arange(data.numel() + 1)
+
+    tensor = VarLenTensor(
+        data=data,
+        offset=offset,
+        size=(4, 4),
+    )
+    out = tensor.to("cuda")
+    assert isinstance(out, VarLenTensor)
+    assert out.device.type == "cuda"
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out._data.device.type == "cuda"
+    assert out._offset.device.type == "cuda"
+    assert out._data.equal(data.to(out.device))
+    assert out._offset.equal(offset.to(out.device))
+
+    back = out.to("cpu")
+    assert isinstance(back, VarLenTensor)
+    assert back.device.type == "cpu"
+    assert back.size() == tensor.size()
+    assert back.stride() == tensor.stride()
+    assert back._data.equal(data)
+    assert back._offset.equal(offset)
 
 
 def test_data_offset() -> None:
