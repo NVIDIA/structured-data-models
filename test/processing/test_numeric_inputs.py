@@ -6,6 +6,7 @@ from sdm.processing import (
     MeanImpute,
     Power,
     Quantile,
+    QuantileClip,
     SigmaClip,
     SoftmaxTemperature,
     StandardScale,
@@ -15,7 +16,8 @@ from sdm.processing import (
 @pytest.mark.parametrize(
     "processor",
     [
-        Clip(),
+        Clip(min_value=-1.0, max_value=1.0),
+        QuantileClip(),
         MeanImpute(),
         Power(),
         Quantile(n_quantiles=4, subsample=None),
