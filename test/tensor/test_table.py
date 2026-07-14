@@ -585,6 +585,55 @@ def test_to_cuda_in_inference_mode() -> None:
     assert out._column_to_loc == tensor._column_to_loc
 
 
+@withCUDA
+def test_to_device_preserves_dtypes_in_inference_mode(
+    device: torch.device,
+) -> None:
+    # Wrapper dtype (`int32`) must not leak into the `int64` codes:
+    tensor = TableTensor(
+        columns={
+            "numerical": ("number",),
+            "categorical": ("category",),
+        },
+        numerical=torch.tensor([[1]], dtype=torch.int32),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0]], dtype=torch.int64),
+            categories=(torch.tensor([10]),),
+        ),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to(device)
+
+    assert isinstance(out, TableTensor)
+    assert out.device == device
+    assert out.numerical.dtype == torch.int32
+    assert out.categorical.dtype == torch.int64
+
+
+@withCUDA
+def test_to_device_preserves_dtypes(device: torch.device) -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ("number",),
+            "categorical": ("category",),
+        },
+        numerical=torch.tensor([[1]], dtype=torch.int32),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0]], dtype=torch.int64),
+            categories=(torch.tensor([10]),),
+        ),
+    )
+
+    # `copy=True` forces a copy for the same-device (CPU) case as well:
+    out = tensor.to(device, copy=True)
+
+    assert isinstance(out, TableTensor)
+    assert out.device == device
+    assert out.numerical.dtype == torch.int32
+    assert out.categorical.dtype == torch.int64
+
+
 def test_clone_contiguous() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},

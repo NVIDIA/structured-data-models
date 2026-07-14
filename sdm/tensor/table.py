@@ -928,6 +928,11 @@ def _to_copy(
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
+
+    # Wrapper dtype is a placeholder, so same dtype means no conversion:
+    if dtype == inp.dtype:
+        dtype = None
+
     blocks = {
         stype: aten._to_copy.default(
             tensor,
