@@ -4,7 +4,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import StringTensor
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_from_list() -> None:
@@ -173,16 +173,19 @@ def test_tolist() -> None:
         assert StringTensor.from_list(strings).tolist() == strings
 
 
-def test_sort() -> None:
-    tensor = StringTensor.from_list(["b", "aa", "a", "é", ""])
+@withCUDA
+def test_sort(device: torch.device) -> None:
+    tensor = StringTensor.from_list(["b", "aa", "a", "é", ""], device=device)
 
     out, perm = tensor.sort()
+    assert out.device == device
     assert out.tolist() == ["", "a", "aa", "b", "é"]
-    assert perm.equal(torch.tensor([4, 2, 1, 0, 3]))
+    assert perm.equal(torch.tensor([4, 2, 1, 0, 3], device=device))
 
     out, perm = torch.sort(tensor, dim=-1, descending=True)
+    assert out.device == device
     assert out.tolist() == ["é", "b", "aa", "a", ""]
-    assert perm.equal(torch.tensor([3, 0, 1, 2, 4]))
+    assert perm.equal(torch.tensor([3, 0, 1, 2, 4], device=device))
 
     perm = torch.argsort(tensor)
-    assert perm.equal(torch.tensor([4, 2, 1, 0, 3]))
+    assert perm.equal(torch.tensor([4, 2, 1, 0, 3], device=device))
