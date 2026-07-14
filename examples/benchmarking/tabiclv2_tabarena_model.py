@@ -144,7 +144,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
                 checkpoint_path,
                 checkpoint_sha256,
             )
-            recipe = model.default_recipe()
+            recipe = self._build_recipe(model)
             model_features = recipe.features.fit_transform(features)
             model_target = recipe.target.fit_transform(target)
             model.fit(
@@ -198,6 +198,15 @@ class SDMTabICLv2Model(AbstractTorchModel):
             ResourceManager.get_cpu_count(only_physical_cores=True),
             min(1, ResourceManager.get_gpu_count_torch(cuda_only=True)),
         )
+
+    def _build_recipe(self, model: TabICLv2) -> Recipe:
+        """Build the preprocessing recipe used for this fit.
+
+        The default adapter continues to use SDM's native recipe. Benchmark
+        subclasses may override this protected hook to select a fully explicit
+        comparison recipe without changing the normal smoke configuration.
+        """
+        return model.default_recipe()
 
     def get_minimum_resources(
         self,

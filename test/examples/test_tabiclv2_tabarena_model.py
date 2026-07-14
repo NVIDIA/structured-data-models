@@ -19,6 +19,7 @@ from examples.benchmarking.tabiclv2_tabarena_model import (
 )
 from sdm import TableTensor
 from sdm.cache import Cache
+from sdm.models import TabICLv2
 from sdm.processing import FeaturePermute, MeanImpute, Recipe, Sequential
 from sdm.testing import onlyCUDA
 
@@ -220,6 +221,33 @@ def test_repeated_fit_replaces_cached_context(
     assert model.predict(next_features).shape == (len(next_features),)
     with pytest.raises(ValueError, match="missing"):
         model.predict(_features())
+
+
+def test_recipe_construction_can_be_overridden(
+    fake_backend: list[_FakeTabICLv2],
+) -> None:
+    replacement = Recipe(features=[MeanImpute()])
+
+    class _RecipeModel(SDMTabICLv2Model):
+        def _build_recipe(self, model: TabICLv2) -> Recipe:
+            assert model is fake_backend[0]
+            return replacement
+
+    model = _RecipeModel(
+        path="",
+        name="RecipeModel",
+        problem_type="regression",
+        eval_metric=None,
+        hyperparameters={
+            "checkpoint_path": "/tmp/tabicl-regressor.ckpt",
+            "checkpoint_sha256": "0" * 64,
+            "seed": 0,
+            "num_estimators": 1,
+        },
+    )
+    model.fit(X=_features(), y=_target(), num_cpus=1, num_gpus=0)
+
+    assert model._recipe is replacement
 
 
 def test_failed_fit_preserves_model_attribute_and_can_recover(
