@@ -267,6 +267,12 @@ class CategoricalTensor(Tensor):
         Args:
             tensor: The numerical tensor.
         """
+        if tensor.size(-1) == 0:
+            return cls(
+                data=tensor.to(torch.int64),
+                categories=(),
+            )
+
         uniques, inverses = zip(
             *[
                 column.clamp(min=-1).unique(return_inverse=True, sorted=True)

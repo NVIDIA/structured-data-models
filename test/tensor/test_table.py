@@ -131,6 +131,20 @@ def test_from_tensor() -> None:
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
 
 
+@withCUDA
+def test_from_tensor_zero_columns(device: torch.device) -> None:
+    tensor = TableTensor.from_tensor(
+        torch.empty(5, 0, dtype=torch.long, device=device)
+    )
+
+    assert isinstance(tensor, TableTensor)
+    assert tensor.size() == (5, 0)
+    assert tensor.device == device
+    assert isinstance(tensor.categorical, CategoricalTensor)
+    assert tensor.categorical.size() == (5, 0)
+    assert tensor.categorical.categories == ()
+
+
 def test_inference_mode() -> None:
     def make_table() -> TableTensor:
         return TableTensor(
