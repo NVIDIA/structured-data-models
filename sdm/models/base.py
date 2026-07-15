@@ -84,6 +84,12 @@ class Model(torch.nn.Module, ABC):
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
 
+        if related_query_tables is not None:
+            assert related_context_tables is not None
+            related_query_tables = related_query_tables.select_tables(
+                tables=related_context_tables.tables
+            )
+
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
 
@@ -233,6 +239,14 @@ class Model(torch.nn.Module, ABC):
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
+            )
+
+        if related_tables is not None:
+            related_tables = related_tables.select_tables(
+                tables=cast(
+                    Mapping[str, Processor],
+                    self._caches[0]["related_processors"],
+                )
             )
 
         outs: Sequence[TableTensor] = []
