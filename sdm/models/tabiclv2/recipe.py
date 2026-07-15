@@ -47,7 +47,10 @@ def default_recipe() -> Recipe:
         ],
         target=[
             StypeDispatch(
-                categorical=CategoryShuffle(method="shift"),
+                categorical=[
+                    CategoricalAlign(),
+                    CategoryShuffle(method="shift"),
+                ],
                 numerical=StandardScale(),
             ),
         ],

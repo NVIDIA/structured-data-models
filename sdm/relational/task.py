@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
@@ -237,6 +237,33 @@ class RelatedTables(DeviceMixin):
             other: The object to compare against.
         """
         return self.schema == other.schema
+
+    def select_tables(self, tables: Iterable[str]) -> Self:
+        r"""Return related tables containing only ``tables``.
+
+        Args:
+            tables: The table names to select.
+        """
+        tables = set(tables)
+
+        return self.__class__(
+            tables={
+                table_name: table
+                for table_name, table in self.tables.items()
+                if table_name in tables
+            },
+            relationships=tuple(
+                relationship
+                for relationship in self.relationships
+                if relationship.left_table in tables
+                and relationship.right_table in tables
+            ),
+            task_links=tuple(
+                task_link
+                for task_link in self.task_links
+                if task_link.table in tables
+            ),
+        )
 
     def edge_indices(
         self,

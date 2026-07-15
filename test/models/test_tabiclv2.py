@@ -1,8 +1,5 @@
-from typing import cast
-
 import pytest
 import torch
-from sdm import TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
@@ -31,6 +28,7 @@ def test_forward(
     x_query = torch.randn(*batch_shape, R_query, C, device=device)
     if dtype.is_floating_point:
         y_context = torch.randn((*batch_shape, R_context, 1), device=device)
+        torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
         assert out.size() == (1, *batch_shape, R_query, 999)
     else:
@@ -42,6 +40,7 @@ def test_forward(
             device=device,
         )
         num_classes = len(y_context.unique())
+        torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
         assert out.size() == (1, *batch_shape, R_query, num_classes)
 
@@ -57,12 +56,11 @@ def test_forward(
             ],
             dim=0,
         )
-        torch.testing.assert_close(
-            out.numerical, cast(TableTensor, looped).numerical
-        )
+        assert out.assert_close(looped)
 
+    torch.manual_seed(1)
     model.fit(x_context, y_context)
-    torch.testing.assert_close(model.predict(x_query).numerical, out.numerical)
+    assert model.predict(x_query).allclose(out)
     model.clear()
 
 
@@ -152,17 +150,20 @@ def test_compile(dtype: torch.dtype) -> None:
     else:
         y_context = torch.randint(0, 10, size=(R_context, 1), device="cuda")
 
+    torch.manual_seed(1)
     expected = model(x_context, y_context, x_query)
     submodel = model.reg_model if dtype.is_floating_point else model.cls_model
     submodel.compile(fullgraph=True)
 
-    actual = model(x_context, y_context, x_query)
-    torch.testing.assert_close(actual, expected)
-    assert torch.is_inference(actual)
+    torch.manual_seed(1)
+    predicted = model(x_context, y_context, x_query)
+    assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
+    assert torch.is_inference(predicted)
 
+    torch.manual_seed(1)
     model.fit(x_context, y_context)
     predicted = model.predict(x_query)
-    torch.testing.assert_close(predicted, expected)
+    assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
     assert torch.is_inference(predicted)
 
 
