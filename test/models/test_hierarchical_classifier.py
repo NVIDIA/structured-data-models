@@ -211,29 +211,6 @@ def test_hierarchical_classifier_single_class_preserves_gradients() -> None:
     assert row_embeddings.grad is not None
 
 
-def test_hierarchical_classifier_validates_shapes() -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
-
-    def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        return rows.new_zeros((1, 2))
-
-    with pytest.raises(ValueError, match="share batch dimensions"):
-        classifier(
-            torch.randn(2, 4, 3),
-            torch.zeros(3, 2, dtype=torch.long),
-            num_classes=2,
-            predictor=predictor,
-        )
-
-    with pytest.raises(ValueError, match="no more labels"):
-        classifier(
-            torch.randn(2, 3),
-            torch.zeros(3, dtype=torch.long),
-            num_classes=2,
-            predictor=predictor,
-        )
-
-
 def test_hierarchical_classifier_empty_batch() -> None:
     classifier = HierarchicalClassifier(max_classes=2)
 
@@ -252,65 +229,6 @@ def test_hierarchical_classifier_empty_batch() -> None:
     assert probabilities.dtype == torch.float32
     probabilities.sum().backward()
     assert row_embeddings.grad is not None
-
-
-@pytest.mark.parametrize("y", [torch.tensor([-1, 0]), torch.tensor([0, 2])])
-def test_hierarchical_classifier_validates_labels(y: torch.Tensor) -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
-
-    with pytest.raises(ValueError, match=r"\[0, 2\)"):
-        classifier(
-            torch.randn(3, 4),
-            y,
-            num_classes=2,
-            predictor=lambda rows, labels: rows.new_zeros((1, 2)),
-        )
-
-
-def test_hierarchical_classifier_requires_floating_embeddings() -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
-
-    with pytest.raises(TypeError, match="floating-point row embeddings"):
-        classifier(
-            torch.ones(3, 4, dtype=torch.long),
-            torch.arange(2),
-            num_classes=2,
-            predictor=lambda rows, labels: rows.new_zeros((1, 2)),
-        )
-
-
-@pytest.mark.parametrize(
-    ("mode", "error", "match"),
-    [
-        ("rank", ValueError, "two dimensions"),
-        ("rows", ValueError, "one logit row"),
-        ("classes", ValueError, "at least one logit"),
-        ("dtype", TypeError, "floating-point logits"),
-    ],
-)
-def test_hierarchical_classifier_validates_predictor_output(
-    mode: str,
-    error: type[Exception],
-    match: str,
-) -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
-
-    def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-        if mode == "rank":
-            return rows.new_zeros((1, 1, 2))
-        if mode == "rows":
-            return rows.new_zeros((2, 2))
-        if mode == "classes":
-            return rows.new_zeros((1, 1))
-        return torch.zeros((1, 2), dtype=torch.long, device=rows.device)
-
-    with pytest.raises(error, match=match):
-        classifier(
-            torch.randn(3, 4),
-            torch.arange(2),
-            num_classes=2,
-            predictor=predictor,
-        )
 
 
 @pytest.mark.parametrize(

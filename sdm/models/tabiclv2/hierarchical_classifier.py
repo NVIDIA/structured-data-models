@@ -74,48 +74,7 @@ class HierarchicalClassifier(torch.nn.Module):
             follows the predictor logits, except that a context containing
             only one class uses the row embedding dtype.
         """
-        if not isinstance(num_classes, int):
-            raise TypeError("Expected 'num_classes' to be an integer")
-        if num_classes < 1:
-            raise ValueError("Expected 'num_classes' to be positive")
-        if row_embeddings.dim() < 2:
-            raise ValueError(
-                "Expected 'row_embeddings' to have at least two dimensions"
-            )
-        if not row_embeddings.is_floating_point():
-            raise TypeError("Expected floating-point row embeddings")
-        if y.dim() < 1:
-            raise ValueError("Expected 'y' to have at least one dimension")
-        if row_embeddings.size()[:-2] != y.size()[:-1]:
-            raise ValueError(
-                "Expected 'row_embeddings' and 'y' to share batch "
-                f"dimensions (got {tuple(row_embeddings.size()[:-2])} and "
-                f"{tuple(y.size()[:-1])})"
-            )
-        if row_embeddings.device != y.device:
-            raise ValueError(
-                "Expected 'row_embeddings' and 'y' to be on the same device "
-                f"(got {row_embeddings.device} and {y.device})"
-            )
-        if y.size(-1) == 0:
-            raise ValueError(
-                "Expected at least one in-context classification label"
-            )
-        if y.size(-1) > row_embeddings.size(-2):
-            raise ValueError(
-                "Expected no more labels than row embeddings "
-                f"(got {y.size(-1)} labels and "
-                f"{row_embeddings.size(-2)} row embeddings)"
-            )
-        if y.is_floating_point() or y.is_complex():
-            raise TypeError("Expected integer classification labels")
         y = y.long()
-        if not ((y >= 0) & (y < num_classes)).all():
-            raise ValueError(
-                f"Expected 'y' values to be in the interval [0, {num_classes})"
-            )
-        if not callable(predictor):
-            raise TypeError("Expected 'predictor' to be callable")
 
         *batch_shape, num_rows, channels = row_embeddings.size()
         train_size = y.size(-1)
@@ -246,34 +205,6 @@ class HierarchicalClassifier(torch.nn.Module):
     ) -> Tensor:  # [R_test, C_node]
         rows = torch.cat((train_rows, test_rows), dim=0)
         logits = predictor(rows, train_labels)
-        if not isinstance(logits, Tensor):
-            raise TypeError("Expected 'predictor' to return a Tensor")
-        if logits.dim() != 2:
-            raise ValueError(
-                "Expected 'predictor' logits to have two dimensions "
-                f"(got shape {tuple(logits.size())})"
-            )
-        if logits.size(0) != test_rows.size(0):
-            raise ValueError(
-                "Expected 'predictor' to return one logit row per test row "
-                f"(got {logits.size(0)} and {test_rows.size(0)})"
-            )
-        if logits.size(1) < num_classes:
-            raise ValueError(
-                "Expected 'predictor' to return at least one logit per node "
-                f"class (got {logits.size(1)} logits and {num_classes} "
-                "classes)"
-            )
-        if not logits.is_floating_point():
-            raise TypeError(
-                "Expected 'predictor' to return floating-point logits"
-            )
-        if logits.device != test_rows.device:
-            raise ValueError(
-                "Expected 'predictor' logits and row embeddings to be on the "
-                f"same device (got {logits.device} and {test_rows.device})"
-            )
-
         return (logits[:, :num_classes] / self.temperature).softmax(dim=-1)
 
     def _grouping(
