@@ -324,26 +324,38 @@ class CuGraphRelationalSampler(RelationalSampler):
         task_table: TableTensor,
         task_link: TaskLink,
     ) -> Tensor:
-        left = _to_cudf(
+        import cudf
+
+        left_columns = _to_cudf(
             table=task_table,
             columns=task_link.task_columns,
         )
-        left[LEFT_ROW_ID] = to_cudf(
-            torch.arange(
-                task_table.size(0),
-                device=task_table.device,
-            )
+        left = cudf.DataFrame(
+            {
+                **left_columns,
+                LEFT_ROW_ID: to_cudf(
+                    torch.arange(
+                        task_table.size(0),
+                        device=task_table.device,
+                    )
+                ),
+            }
         )
         right_table = self.data.tables[task_link.table]
-        right = _to_cudf(
+        right_columns = _to_cudf(
             table=right_table,
             columns=task_link.table_columns,
         )
-        right[RIGHT_ROW_ID] = to_cudf(
-            torch.arange(
-                right_table.size(0),
-                device=right_table.device,
-            )
+        right = cudf.DataFrame(
+            {
+                **right_columns,
+                RIGHT_ROW_ID: to_cudf(
+                    torch.arange(
+                        right_table.size(0),
+                        device=right_table.device,
+                    )
+                ),
+            }
         )
 
         joined = left.merge(

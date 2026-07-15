@@ -11,7 +11,7 @@ from torch import Tensor
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
-from sdm.tensor.io import to_cudf
+from sdm.tensor.io import arrow_as_tensor, to_cudf
 from sdm.tensor.mixin import DeviceMixin
 
 PREFIX = "sdm_internal"
@@ -29,19 +29,10 @@ if TYPE_CHECKING:
 def _to_cudf(
     table: TableTensor,
     columns: Sequence[str],
-) -> cudf.DataFrame:
-    try:
-        import cudf
-    except ImportError as exc:
-        raise ImportError(
-            "CUDA-resident relational joins require cuDF"
-        ) from exc
-
+) -> dict[str, cudf.Series]:
     # Pair IDs through Python metadata to avoid a CUDA index-to-host sync.
     id_columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
-    return cudf.DataFrame(
-        {name: to_cudf(id_columns[name]) for name in columns}
-    )
+    return {name: to_cudf(id_columns[name]) for name in columns}
 
 
 @dataclass(frozen=True, repr=False)
@@ -306,8 +297,8 @@ class RelationalData(DeviceMixin):
                 join_type="inner",
             )
 
-            src = torch.from_numpy(joined[LEFT_ROW_ID].to_numpy()).to(device)
-            dst = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy()).to(device)
+            src = arrow_as_tensor(joined[LEFT_ROW_ID], device=device)
+            dst = arrow_as_tensor(joined[RIGHT_ROW_ID], device=device)
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
@@ -318,6 +309,13 @@ class RelationalData(DeviceMixin):
         dtype: torch.dtype | None,
         device: torch.device | str | None,
     ) -> tuple[Tensor, ...]:
+        try:
+            import cudf
+        except ImportError as exc:
+            raise ImportError(
+                "CUDA-resident relational joins require cuDF"
+            ) from exc
+
         tables = {
             name: _to_cudf(table=table, columns=columns[name])
             for name, table in self.tables.items()
@@ -325,7 +323,7 @@ class RelationalData(DeviceMixin):
         }
         for name, table in tables.items():
             row_id = torch.arange(
-                len(table),
+                self.tables[name].size(-2),
                 dtype=dtype,
                 device=self.tables[name].device,
             )
@@ -333,12 +331,26 @@ class RelationalData(DeviceMixin):
 
         edge_indices: list[Tensor] = []
         for rel in self.relationships:
-            left = tables[rel.left_table][[*rel.left_columns, ROW_ID]].rename(
-                columns={ROW_ID: LEFT_ROW_ID}
+            # Assemble frames over shared Series with their final names. cuDF
+            # renaming and DataFrame assignment would copy device buffers.
+            left = cudf.DataFrame(
+                {
+                    **{
+                        column: tables[rel.left_table][column]
+                        for column in rel.left_columns
+                    },
+                    LEFT_ROW_ID: tables[rel.left_table][ROW_ID],
+                }
             )
-            right = tables[rel.right_table][
-                [*rel.right_columns, ROW_ID]
-            ].rename(columns={ROW_ID: RIGHT_ROW_ID})
+            right = cudf.DataFrame(
+                {
+                    **{
+                        column: tables[rel.right_table][column]
+                        for column in rel.right_columns
+                    },
+                    RIGHT_ROW_ID: tables[rel.right_table][ROW_ID],
+                }
+            )
 
             joined = left.merge(
                 right,

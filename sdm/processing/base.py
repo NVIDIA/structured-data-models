@@ -45,7 +45,12 @@ class Processor(torch.nn.Module, abc.ABC):
                 "call 'fit()' before."
             )
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         pass
 
     @abc.abstractmethod
@@ -67,18 +72,26 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         return self.transform(table)
 
-    def fit(self, table: TableTensor) -> Self:
+    def fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
         """Fit the processor on ``table`` and return it.
 
         Args:
             table: Feature table used to compute the processor state.
+            generator: Generator used for random draws while fitting.
+                Container processors pass it on to their children. If
+                ``None``, draws use the global generator.
 
         Returns:
             This processor.
         """
         self._check_supported_stypes(table)
         if self.requires_fit:
-            self._fit(table)
+            self._fit(table, generator=generator)
             self._fitted = True
         return self
 
@@ -95,16 +108,24 @@ class Processor(torch.nn.Module, abc.ABC):
         self._check_is_fitted()
         return self._transform(table)
 
-    def fit_transform(self, table: TableTensor) -> TableTensor:
+    def fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
         """Fit on ``table`` and return the transformed result.
 
         Args:
             table: Feature table to fit on and transform.
+            generator: Generator used for random draws while fitting.
+                Container processors pass it on to their children. If
+                ``None``, draws use the global generator.
 
         Returns:
             Transformed table.
         """
-        return self.fit(table).transform(table)
+        return self.fit(table, generator=generator).transform(table)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"

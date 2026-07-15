@@ -12,7 +12,7 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow
 
 if TYPE_CHECKING:
     import cudf
@@ -152,11 +152,7 @@ class ColumnarTensor(Tensor):
                 raise ValueError(
                     f"'{cls.__name__}' cannot represent null integer values"
                 )
-            values = array.to_numpy(
-                zero_copy_only=False,
-                writable=device.type == "cpu",
-            )
-            column = torch.as_tensor(values, device=device)
+            column = arrow_as_tensor(array, device=device)
 
         return cls(columns=(column,), device=device)
 
@@ -391,6 +387,40 @@ def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
         size=inp.size()[:-1],
         device=inp.device,
     )
+
+
+@ColumnarTensor.implements(aten.equal.default)
+def _equal(inp: ColumnarTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    for column1, column2 in zip(inp._columns, other._columns):
+        if not column1.equal(column2):
+            return False
+
+    return True
+
+
+@ColumnarTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: ColumnarTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    for column1, column2 in zip(inp._columns, other._columns):
+        if not column1.allclose(column2, rtol, atol, equal_nan):
+            return False
+
+    return True
 
 
 @ColumnarTensor.implements(aten.view.default)
