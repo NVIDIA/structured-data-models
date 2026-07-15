@@ -256,19 +256,20 @@ class CategoricalTensor(Tensor):
         Args:
             tensor: The numerical tensor.
         """
-        uniques, inverses = zip(
+        if tensor.size(-1) == 0:
+            return cls(
+                data=tensor.to(torch.int64),
+                categories=(),
+            )
+
+        categories, values = zip(
             *[
-                column.clamp(min=-1).unique(return_inverse=True, sorted=True)
+                column.unique(return_inverse=True)
                 for column in tensor.unbind(dim=-1)
             ]
         )
-        categories = [unique[unique >= 0] for unique in uniques]
-        inverses = [
-            inverse - 1 if unique.numel() != category.numel() else inverse
-            for inverse, unique, category in zip(inverses, uniques, categories)
-        ]
         return cls(
-            data=torch.stack(inverses, dim=-1),
+            data=torch.stack(values, dim=-1),
             categories=categories,
         )
 

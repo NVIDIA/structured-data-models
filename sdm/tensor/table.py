@@ -384,7 +384,7 @@ class TableTensor(Tensor):
         if columns is None:
             columns = [str(i) for i in range(tensor.size(-1))]
 
-        if tensor.dtype in CategoricalTensor.ALLOWED_DTYPES:
+        if not tensor.is_floating_point():
             return cls(
                 columns={Stype.categorical: columns},
                 categorical=CategoricalTensor.from_tensor(tensor),
