@@ -2,7 +2,6 @@ from typing import cast
 
 import torch
 
-from sdm.processing._utils import _draw_device
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -48,7 +47,7 @@ class Choice(Processor, InvertibleMixin):
                 len(self.options),
                 (1,),
                 generator=generator,
-                device=_draw_device(generator),
+                device=table.device,
             ).item()
         )
         self.selected.fit(table, generator=generator)

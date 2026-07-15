@@ -4,7 +4,6 @@ import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype
-from sdm.processing._utils import _draw_device
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
@@ -64,7 +63,7 @@ class CategoryShuffle(Processor):
                         n_classes,
                         (1,),
                         generator=generator,
-                        device=_draw_device(generator),
+                        device=device,
                     ).item()
                 )
                 permutation = (
@@ -74,8 +73,8 @@ class CategoryShuffle(Processor):
                 permutation = torch.randperm(
                     n_classes,
                     generator=generator,
-                    device=_draw_device(generator),
-                ).to(device=device)
+                    device=device,
+                )
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 

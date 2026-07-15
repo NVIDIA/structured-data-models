@@ -4,7 +4,6 @@ import torch
 from torch import Tensor
 
 from sdm import Stype
-from sdm.processing._utils import _draw_device
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.tensor import TableTensor
 
@@ -52,7 +51,7 @@ class FeaturePermute(Processor, InvertibleMixin):
                     n_features,
                     (1,),
                     generator=generator,
-                    device=_draw_device(generator),
+                    device=device,
                 ).item()
             )
             self.permutation = (
@@ -62,8 +61,8 @@ class FeaturePermute(Processor, InvertibleMixin):
             self.permutation = torch.randperm(
                 n_features,
                 generator=generator,
-                device=_draw_device(generator),
-            ).to(device=device)
+                device=device,
+            )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Reorder the numerical block with the fitted permutation."""

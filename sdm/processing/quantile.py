@@ -3,7 +3,7 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _as_float, _draw_device
+from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -76,12 +76,11 @@ class Quantile(Processor, InvertibleMixin):
         inp: Tensor,
         generator: torch.Generator | None,
     ) -> Tensor:
-        # Draw on the generator's device, then index on the data device:
         return torch.randperm(
             inp.shape[0],
             generator=generator,
-            device=_draw_device(generator, inp.device),
-        )[: self.subsample].to(inp.device)
+            device=inp.device,
+        )[: self.subsample]
 
     def _fit(
         self,
