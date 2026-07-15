@@ -689,7 +689,8 @@ class TransformerBlock(torch.nn.Module):
         qassmax: Whether to scale queries with :class:`QASSMax`.
         norm: The normalization layer name.
         norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor.
+            layer constructor. Takes precedence over ``device`` and
+            ``dtype``.
         device: The device.
         dtype: The dtype.
     """
@@ -708,7 +709,8 @@ class TransformerBlock(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        norm_kwargs = {**(norm_kwargs or {}), **factory_kwargs}
+        # User `norm_kwargs` win; `device`/`dtype` fill unspecified keys.
+        norm_kwargs = {**factory_kwargs, **(norm_kwargs or {})}
 
         self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
         self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)

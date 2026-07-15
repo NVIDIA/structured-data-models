@@ -856,6 +856,29 @@ def test_transformer_block(
     torch.testing.assert_close(out1, out3)
 
 
+def test_transformer_block_norm_kwargs_precedence() -> None:
+    # User-provided `norm_kwargs` win over the `device`/`dtype` arguments.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm_kwargs={"dtype": torch.float64},
+    )
+    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+        assert next(norm.parameters()).dtype == torch.float64
+
+    # The `dtype` argument still applies when `norm_kwargs` does not set it.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm_kwargs={"eps": 1e-6},
+        dtype=torch.float64,
+    )
+    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+        assert next(norm.parameters()).dtype == torch.float64
+
+
 def test_transformer_block_kv_cache() -> None:
     batch_size = 2
     query_len = 3
