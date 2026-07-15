@@ -31,18 +31,6 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-def _copy_related_feature_processors(
-    feature_processor: Processor,
-    related_tables: RelatedTables | None,
-) -> dict[str, Processor]:
-    if related_tables is None:
-        return {}
-    return {
-        name: copy.deepcopy(feature_processor)
-        for name in related_tables.tables
-    }
-
-
 def _related_tables_schema(
     related_tables: RelatedTables | None,
 ) -> RelatedTablesSchema | None:
@@ -133,44 +121,6 @@ def _validate_related_query_tables(
         )
 
 
-def _process_related_tables(
-    related_tables: RelatedTables | None,
-    feature_processors: Mapping[str, Processor],
-    *,
-    fit: bool,
-) -> RelatedTables | None:
-    if related_tables is None:
-        return None
-
-    tables: dict[str, TableTensor] = {}
-    for name, table in related_tables.tables.items():
-        # Independently sampled query graphs may contain tables with no
-        # context rows. They have no leakage-safe fitted processor.
-        if name not in feature_processors:
-            continue
-        processor = feature_processors[name]
-        tables[name] = (
-            processor.fit_transform(table)
-            if fit
-            else processor.transform(table)
-        )
-
-    return RelatedTables(
-        tables=tables,
-        relationships=tuple(
-            relationship
-            for relationship in related_tables.relationships
-            if relationship.left_table in tables
-            and relationship.right_table in tables
-        ),
-        task_links=tuple(
-            task_link
-            for task_link in related_tables.task_links
-            if task_link.table in tables
-        ),
-    )
-
-
 class Model(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
@@ -234,6 +184,12 @@ class Model(torch.nn.Module, ABC):
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
 
+        if related_query_tables is not None:
+            assert related_context_tables is not None
+            related_query_tables = related_query_tables.select_tables(
+                tables=related_context_tables.tables
+            )
+
         _validate_context(
             x_context,
             y_context,
@@ -272,7 +228,7 @@ class Model(torch.nn.Module, ABC):
                 )
 
             out = self._forward(
-                x_context=x_context_i,
+                x_context=recipe.features.fit_transform(x_context),
                 y_context=y_context_i,
                 x_query=recipe.features.transform(x_query),
                 related_context_tables=related_context_tables_i,
@@ -331,22 +287,10 @@ class Model(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            # Copy before fitting the task-table processor below.
-            related_feature_processors = _copy_related_feature_processors(
-                recipe.features,
-                related_tables,
-            )
-            related_context_schema = _related_tables_schema(related_tables)
             y_i = recipe.target.fit_transform(y)
-            x_i = recipe.features.fit_transform(x)
-            related_tables_i = _process_related_tables(
-                related_tables,
-                related_feature_processors,
-                fit=True,
-            )
+            related_context_schema = _related_tables_schema(related_tables)
             cache = Cache(
                 recipe=recipe,
-                related_feature_processors=related_feature_processors,
                 x_schema=x.schema,
                 related_context_schema=related_context_schema,
                 classes=y_i.categorical.categories[0]
@@ -369,7 +313,7 @@ class Model(torch.nn.Module, ABC):
                 )
 
             self._forward(
-                x_context=x_i,
+                x_context=recipe.features.fit_transform(x),
                 y_context=y_i,
                 x_query=None,
                 related_context_tables=related_tables_i,
@@ -433,7 +377,7 @@ class Model(torch.nn.Module, ABC):
             related_tables,
             related_context_schema,
         )
-        
+
         if related_tables is not None:
             related_tables = related_tables.select_tables(
                 tables=cast(
