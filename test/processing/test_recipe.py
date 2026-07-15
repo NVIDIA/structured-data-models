@@ -83,9 +83,14 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
         numerical=torch.randn(8, 2, device=device),
         categorical=CategoricalTensor(
             data=(
-                torch.arange(8, dtype=torch.int32, device=device) % 2
+                (torch.arange(8, dtype=torch.int32, device=device) % 2) * 2 + 1
             ).unsqueeze(-1),
-            categories=(StringTensor.from_list(["a", "b"], device=device),),
+            categories=(
+                StringTensor.from_list(
+                    ["unused-a", "a", "unused-b", "b"],
+                    device=device,
+                ),
+            ),
         ),
     )
     target = TableTensor.from_tensor(
@@ -106,3 +111,12 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert isinstance(recipe.target, InvertibleMixin)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(restored.numerical, target.numerical)
+
+    # The original categorical column uses sparse codes 1 and 3.
+    transformed = TabICLv2.default_recipe().target.fit_transform(
+        features.select_columns("kind")
+    )
+    assert (
+        transformed.categorical.as_tensor().unique().sort().values.tolist()
+        == [0, 1]
+    )
