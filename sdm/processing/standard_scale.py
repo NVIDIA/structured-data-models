@@ -39,7 +39,12 @@ class StandardScale(Processor, InvertibleMixin):
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         data_mean = numerical.mean(dim=0)
 

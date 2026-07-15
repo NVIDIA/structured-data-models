@@ -25,7 +25,12 @@ class MeanImpute(Processor):
         self.fill_value = fill_value
         self.register_buffer("_mean", torch.empty(0))
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         mean = torch.nanmean(numerical, dim=0)
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)

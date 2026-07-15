@@ -37,7 +37,12 @@ class QuantileClip(Processor):
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         quantiles = numerical.new_tensor([self.q_low, self.q_high])
         q_low, q_high = torch.quantile(numerical, quantiles, dim=0)

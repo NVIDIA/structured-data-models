@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import warnings
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -11,6 +10,7 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import VarLenTensor
+from sdm.tensor.io import arrow_as_tensor
 
 if TYPE_CHECKING:
     import cudf
@@ -113,6 +113,45 @@ class StringTensor(VarLenTensor):
             ],
             offset=int(tensor.storage_offset()),
         )
+
+    def to_cudf(self) -> cudf.Series:
+        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`.
+
+        Raises:
+            RuntimeError: If this tensor is not CUDA-resident.
+            ImportError: If cuDF is not installed.
+        """
+        if not self.is_cuda:
+            raise RuntimeError(
+                f"Expected '{self.__class__.__name__}' in 'to_cudf' to be "
+                f"CUDA-resident (got '{self.device}')"
+            )
+
+        with torch.cuda.device(self.device):
+            try:
+                import cudf
+                import pylibcudf as plc
+            except ImportError as exc:
+                raise ImportError(
+                    "Converting tensors to cuDF requires cuDF"
+                ) from exc
+
+            tensor = cast(StringTensor, self.contiguous())
+
+            # StringTensor stores variable-width strings in separate UTF-8
+            # data and offset buffers. Use pylibcudf to expose them without a
+            # host copy.
+            offset_column = plc.Column.from_array(obj=tensor._offset)
+            plc_column = plc.Column(
+                data_type=plc.DataType(plc.TypeId.STRING),
+                size=tensor.numel(),
+                data=plc.gpumemoryview(tensor._data),
+                mask=None,
+                null_count=0,
+                offset=int(tensor.storage_offset()),
+                children=[offset_column],
+            )
+            return cudf.Series.from_pylibcudf(plc_column)
 
     @classmethod
     def from_cudf(
@@ -307,11 +346,6 @@ def _sort(
             order="descending" if descending else "ascending",
         ),
     )
-    with warnings.catch_warnings():
-        warnings.filterwarnings(  # Safe to ignore.
-            "ignore",
-            message="The given NumPy array is not writable",
-        )
-        perm = torch.from_numpy(out.to_numpy()).to(inp.device, torch.int64)
+    perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
 
     return cast(StringTensor, inp[perm]), perm
