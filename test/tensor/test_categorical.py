@@ -5,7 +5,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_to_copy_string_categories() -> None:
