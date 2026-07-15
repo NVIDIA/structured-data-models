@@ -18,7 +18,7 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Embedding, Linear
+from torch.nn import Embedding, GELU, Linear, Sequential
 
 
 class CellEmbedder(torch.nn.Module):
@@ -26,13 +26,14 @@ class CellEmbedder(torch.nn.Module):
 
     Feature groups use cyclic offsets ``2**index - 1``. Numerical and
     categorical slots have separate learned Fourier projections. Classification
-    target embeddings are added only to context rows.
+    targets are embedded only into context rows.
 
     Args:
         channels: Number of output channels per cell.
         max_classes: Maximum number of classification classes.
         feature_group_size: Number of cyclically shifted features per group.
         num_frequencies: Number of Fourier frequencies per group slot.
+        is_classifier: Whether targets are class IDs instead of scalars.
         device: Device on which to create parameters and buffers.
         dtype: Dtype of parameters and buffers.
     """
@@ -46,6 +47,7 @@ class CellEmbedder(torch.nn.Module):
         max_classes: int | None = None,
         feature_group_size: int = 3,
         num_frequencies: int = 32,
+        is_classifier: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -62,6 +64,7 @@ class CellEmbedder(torch.nn.Module):
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.feature_group_size = feature_group_size
+        self.is_classifier = is_classifier
         self.register_buffer(
             "fourier_frequencies",
             torch.zeros(
@@ -88,14 +91,20 @@ class CellEmbedder(torch.nn.Module):
             channels,
             **factory_kwargs,
         )
-        self.y_embedder_lookup: Embedding | None = None
-        if max_classes is not None:
+        self.y_embedder_lookup: Embedding | Sequential | None = None
+        if is_classifier and max_classes is not None:
             if max_classes <= 0:
                 raise ValueError("max_classes must be positive")
             self.y_embedder_lookup = Embedding(
                 max_classes,
                 channels,
                 **factory_kwargs,
+            )
+        if not is_classifier:
+            self.y_embedder_lookup = Sequential(
+                Linear(1, 6, **factory_kwargs),
+                GELU(approximate="tanh"),
+                Linear(6, channels, **factory_kwargs),
             )
 
     def _group(self, x: Tensor, d: Tensor | None = None) -> Tensor:
@@ -156,12 +165,12 @@ class CellEmbedder(torch.nn.Module):
         cat_mask: Tensor | None = None,
         d: Tensor | None = None,
     ) -> Tensor:
-        """Embed cells and optionally inject classification targets.
+        """Embed cells and optionally inject context targets.
 
         Args:
             x: Feature tensor with shape ``[B, T, H]``.
-            target: Optional class targets with shape ``[B, T]``. Requires
-                ``max_classes`` to be set.
+            target: Optional targets with shape ``[B, T]``. Classification
+                targets require ``max_classes`` to be set.
             train_size: Optional context-row counts with shape ``[B]``.
                 Required when ``target`` is supplied.
             cat_mask: Optional categorical mask with shape ``[B, H]``.
@@ -198,11 +207,18 @@ class CellEmbedder(torch.nn.Module):
             ):
                 raise ValueError("train_size must be an integer [B] tensor")
 
-            target = target.long().clamp(
-                0,
-                self.y_embedder_lookup.num_embeddings - 1,
-            )
-            target_embedding = self.y_embedder_lookup(target)
+            if self.is_classifier:
+                assert isinstance(self.y_embedder_lookup, Embedding)
+                target = target.long().clamp(
+                    0,
+                    self.y_embedder_lookup.num_embeddings - 1,
+                )
+                target_embedding = self.y_embedder_lookup(target)
+            else:
+                assert isinstance(self.y_embedder_lookup, Sequential)
+                target_embedding = self.y_embedder_lookup(
+                    target[..., None].to(cell.dtype)
+                )
             row_index = torch.arange(num_rows, device=x.device)
             context = row_index[None, :] < train_size[:, None]
             output = torch.where(
