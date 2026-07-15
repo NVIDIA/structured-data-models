@@ -687,7 +687,10 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
-        norm: The normalization layer name.
+        norm: The normalization layer name or a callable returning the
+            normalization layer. The callable is invoked once per norm site,
+            so each of the three sites gets a fresh instance. A module
+            instance is shared across all three sites.
         norm_kwargs: Additional keyword arguments passed to the normalization
             layer constructor. Takes precedence over ``device`` and
             ``dtype``.
@@ -702,7 +705,7 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
-        norm: str = "layer_norm",
+        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
