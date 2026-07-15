@@ -130,6 +130,7 @@ class StringTensor(VarLenTensor):
             device: The device.
         """
         import cupy as cp
+        import pylibcudf as plc
         from cudf.api.types import is_string_dtype
 
         if size is None:
@@ -146,24 +147,38 @@ class StringTensor(VarLenTensor):
                 f"string type (got '{ser.dtype}')"
             )
 
-        column = ser._column
-        if column.null_count > 0:
+        # `Series.to_pylibcudf` returns a zero-copy Arrow-style view: base
+        # character/offset buffers plus a row offset into the offsets.
+        column, _ = ser.to_pylibcudf()
+        if column.null_count() > 0:
             raise ValueError(f"'{cls.__name__}' cannot represent null values")
 
+        # `None` or zero-length when the column holds no characters:
+        chars = column.data()
+        data = torch.from_dlpack(
+            cp.asarray(chars) if chars is not None else cp.empty(0, cp.uint8)
+        ).to(device)
+
         if len(ser) == 0:
-            data = torch.from_dlpack(cp.asarray(column.data)).to(device)
             return cls(
                 data=data,
                 offset=torch.zeros(1, dtype=torch.int32, device=data.device),
                 size=size,
             )
 
+        offsets = column.children()[0]  # (base_size + 1,) INT32/INT64 values
+        offset_dtype = (
+            cp.int32
+            if offsets.type().id() == plc.types.TypeId.INT32
+            else cp.int64
+        )
         return cls(
-            data=torch.from_dlpack(cp.asarray(column.data)).to(device),
-            offset=torch.from_dlpack(cp.asarray(column.children[0])).to(
-                device
-            ),
+            data=data,
+            offset=torch.from_dlpack(
+                cp.asarray(offsets.data()).view(offset_dtype)
+            ).to(device),
             size=size,
+            storage_offset=column.offset(),
         )
 
     @classmethod
