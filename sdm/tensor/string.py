@@ -148,13 +148,14 @@ class StringTensor(VarLenTensor):
             )
 
         # `Series.to_pylibcudf` returns a zero-copy Arrow-style view in both
-        # cudf 25.12 and 26.x (which removed `Column.children`): base
+        # cudf 25.12 and 26.x (26.4 removed `Column.children`): base
         # character/offset buffers plus a row offset into the offsets.
         column, _ = ser.to_pylibcudf()
         if column.null_count() > 0:
             raise ValueError(f"'{cls.__name__}' cannot represent null values")
 
-        chars = column.data()  # `None` when the column holds no characters.
+        # `None` or zero-length when the column holds no characters:
+        chars = column.data()
         data = torch.from_dlpack(
             cp.asarray(chars) if chars is not None else cp.empty(0, cp.uint8)
         ).to(device)
