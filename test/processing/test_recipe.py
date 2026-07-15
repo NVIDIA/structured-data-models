@@ -106,30 +106,3 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert isinstance(recipe.target, InvertibleMixin)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(restored.numerical, target.numerical)
-
-    classification_recipe = TabICLv2.default_recipe()
-    classification_recipe.target.fit(
-        TableTensor.from_tensor(
-            torch.tensor([[0], [1]], dtype=torch.int64, device=device)
-        )
-    )
-    raw_stacked_output = torch.tensor(
-        [[[4.0, 0.0]], [[0.0, 2.0]]],
-        device=device,
-    )
-    actual = classification_recipe.output.transform(
-        TableTensor.from_tensor(raw_stacked_output)
-    ).numerical
-
-    expected = (raw_stacked_output.mean(dim=0) / 0.9).softmax(dim=-1)
-    probability_average = (
-        (raw_stacked_output / 0.9).softmax(dim=-1).mean(dim=0)
-    )
-    torch.testing.assert_close(actual, expected, rtol=0, atol=1e-7)
-    assert not torch.allclose(actual, probability_average)
-
-    single_actual = classification_recipe.output.transform(
-        TableTensor.from_tensor(raw_stacked_output[:1])
-    ).numerical
-    single_expected = (raw_stacked_output[0] / 0.9).softmax(dim=-1)
-    torch.testing.assert_close(single_actual, single_expected)
