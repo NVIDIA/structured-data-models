@@ -147,8 +147,7 @@ class StringTensor(VarLenTensor):
                 f"string type (got '{ser.dtype}')"
             )
 
-        # `Series.to_pylibcudf` returns a zero-copy Arrow-style view in both
-        # cudf 25.12 and 26.x (26.4 removed `Column.children`): base
+        # `Series.to_pylibcudf` returns a zero-copy Arrow-style view: base
         # character/offset buffers plus a row offset into the offsets.
         column, _ = ser.to_pylibcudf()
         if column.null_count() > 0:
