@@ -1,16 +1,15 @@
 import contextlib
 import copy
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from typing import ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Recipe
-from sdm.stype import StypeLike
 
 
 @contextlib.contextmanager
@@ -105,8 +104,6 @@ class Model(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        # Restore the class column order of the untransformed target:
-        out = _sort_class_columns(out, _class_columns(y_context))
         return recipe.output.transform(out)
 
     @_maybe_inference_mode()
@@ -152,7 +149,6 @@ class Model(torch.nn.Module, ABC):
                 classes=y_i.categorical.categories[0]
                 if y_i.categorical.size(-1) > 0
                 else None,
-                class_columns=_class_columns(y),
             )
             self._forward(
                 x_context=recipe.features.fit_transform(x),
@@ -218,11 +214,6 @@ class Model(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        # Restore the class column order of the untransformed target:
-        out = _sort_class_columns(
-            out,
-            cast(tuple[str, ...] | None, cache.get("class_columns")),
-        )
         return recipe.output.transform(out)
 
     # Abstract Methods ########################################################
@@ -243,50 +234,3 @@ class Model(torch.nn.Module, ABC):
     @abstractmethod
     def default_recipe(cls) -> Recipe:
         r"""Return the default processing recipe for this model."""
-
-
-# Helpers #####################################################################
-
-
-def _class_columns(y: TableTensor) -> tuple[str, ...] | None:
-    # Models name classification output columns by their class values:
-    if y.categorical.size(-1) != 1:
-        return None
-    values = y.categorical.categories[0].tolist()
-    return tuple(str(value) for value in values)
-
-
-def _sort_class_columns(
-    out: TableTensor,
-    class_columns: tuple[str, ...] | None,
-) -> TableTensor:
-    # Reorder class columns shuffled by per-member target processors:
-    if class_columns is None:
-        return out
-
-    blocks: dict[Stype, Tensor] = {}
-    columns: dict[Stype, tuple[str, ...]] = {}
-    changed = False
-    for stype, stype_columns in out.columns.items():
-        block = out.blocks[stype]
-        if stype_columns != class_columns and set(stype_columns) == set(
-            class_columns
-        ):
-            index = torch.tensor(
-                [stype_columns.index(column) for column in class_columns],
-                dtype=torch.int64,
-                device=block.device,
-            )
-            block = block.index_select(-1, index)
-            stype_columns = class_columns
-            changed = True
-        blocks[stype] = block
-        columns[stype] = stype_columns
-
-    if not changed:
-        return out
-
-    return out.__class__(
-        columns=cast(Mapping[StypeLike, Sequence[str]], columns),
-        **blocks,
-    )

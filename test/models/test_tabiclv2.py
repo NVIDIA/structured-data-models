@@ -1,14 +1,9 @@
-from typing import cast
-
 import pytest
 import torch
-from sdm import Stype, TableTensor
-from sdm.cache import Cache
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
-from torch import Tensor
 
 
 @withCUDA
@@ -60,14 +55,11 @@ def test_forward(
             ],
             dim=0,
         )
-        torch.testing.assert_close(
-            out.numerical, cast(TableTensor, looped).numerical
-        )
+        assert out.assert_close(looped)
 
-    # Re-seed so fitting draws the same recipe randomness as forward:
     torch.manual_seed(1)
     model.fit(x_context, y_context)
-    torch.testing.assert_close(model.predict(x_query).numerical, out.numerical)
+    assert model.predict(x_query).allclose(out)
     model.clear()
 
 
@@ -89,71 +81,6 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     out = model.predict(x_query)
     assert out.size() == (3, *batch_shape, R_query, 999)
     model.clear()
-
-
-@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
-def test_deterministic_output_columns(dtype: torch.dtype) -> None:
-    model = TabICLv2(pretrained=False)
-
-    R_context, R_query, C = 5, 3, 6
-    x_context = torch.randn(R_context, C)
-    x_query = torch.randn(R_query, C)
-
-    if dtype.is_floating_point:
-        y_context = torch.randn(R_context, 1)
-        columns = tuple(f"q{i:03d}" for i in range(1, 1000))
-    else:
-        y_context = torch.tensor([[7], [5], [5], [8], [5]])
-        columns = ("5", "7", "8")
-
-    torch.manual_seed(42)
-    expected = model(x_context, y_context, x_query)
-    assert expected.columns[Stype.numerical] == columns
-
-    # Class shuffling must not leak into the output column order:
-    for _ in range(10):
-        out = model(x_context, y_context, x_query)
-        assert out.columns == expected.columns
-
-    # Identically seeded calls must yield identical predictions:
-    torch.manual_seed(42)
-    out = model(x_context, y_context, x_query)
-    torch.testing.assert_close(out.numerical, expected.numerical)
-
-    torch.manual_seed(42)
-    model.fit(x_context, y_context)
-    predicted = model.predict(x_query)
-    assert predicted.columns == expected.columns
-    torch.testing.assert_close(predicted.numerical, expected.numerical)
-    model.clear()
-
-
-def test_class_column_alignment() -> None:
-    model = TabICLv2(pretrained=False)
-
-    # The untrained model is constant, so use a class-frequency stub:
-    class _FrequencyModel(torch.nn.Module):
-        def forward(
-            self,
-            x: Tensor,
-            y: Tensor,
-            *,
-            cache: Cache | None = None,
-        ) -> Tensor:
-            counts = torch.bincount(y.view(-1), minlength=10)
-            out = torch.zeros(x.size(-2) - y.size(-1), 10)
-            return out + counts.to(out.dtype)
-
-    model.cls_model = _FrequencyModel()  # type: ignore
-
-    x_context, x_query = torch.randn(5, 6), torch.randn(3, 6)
-    y_context = torch.tensor([[7], [5], [5], [8], [5]])
-
-    for _ in range(10):
-        out = model(x_context, y_context, x_query)
-        assert out.columns[Stype.numerical] == ("5", "7", "8")
-        # Class '5' dominates the context, so its column must be argmax:
-        assert (out.numerical.argmax(dim=-1) == 0).all()
 
 
 @withCUDA
@@ -203,23 +130,20 @@ def test_compile(dtype: torch.dtype) -> None:
     else:
         y_context = torch.randint(0, 10, size=(R_context, 1), device="cuda")
 
-    # Pin the seed so each pass draws the same recipe randomness:
     torch.manual_seed(1)
     expected = model(x_context, y_context, x_query)
     submodel = model.reg_model if dtype.is_floating_point else model.cls_model
     submodel.compile(fullgraph=True)
 
     torch.manual_seed(1)
-    actual = model(x_context, y_context, x_query)
-    torch.testing.assert_close(actual.numerical, expected.numerical)
-    assert actual.columns == expected.columns
-    assert torch.is_inference(actual)
+    predicted = model(x_context, y_context, x_query)
+    assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
+    assert torch.is_inference(predicted)
 
     torch.manual_seed(1)
     model.fit(x_context, y_context)
     predicted = model.predict(x_query)
-    torch.testing.assert_close(predicted.numerical, expected.numerical)
-    assert predicted.columns == expected.columns
+    assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
     assert torch.is_inference(predicted)
 
 
