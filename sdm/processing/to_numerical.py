@@ -23,28 +23,28 @@ class ToNumerical(Processor):
     requires_fit = False
     supported_stypes = frozenset({Stype.numerical, Stype.categorical})
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        """Return ``inp`` with categorical columns moved to ``numerical``."""
+    def _transform(self, table: TableTensor) -> TableTensor:
+        """Return ``table`` with categorical columns moved to ``numerical``."""
         # Already numerical-only: nothing to move.
         if all(
             stype == Stype.numerical or block.size(-1) == 0
-            for stype, block in inp.items()
+            for stype, block in table.items()
         ):
-            return inp
+            return table
 
         # Casting to the (floating-point) numerical dtype also unwraps a
         # CategoricalTensor to its raw ordinal ids as a plain tensor.
-        categorical = inp.categorical.to(inp.numerical.dtype)
+        categorical = table.categorical.to(table.numerical.dtype)
         columns = (
-            *inp.columns[Stype.numerical],
-            *inp.columns[Stype.categorical],
+            *table.columns[Stype.numerical],
+            *table.columns[Stype.categorical],
         )
         numerical = (
             categorical
-            if inp.numerical.size(-1) == 0
-            else torch.cat((inp.numerical, categorical), dim=-1)
+            if table.numerical.size(-1) == 0
+            else torch.cat((table.numerical, categorical), dim=-1)
         )
-        return inp.__class__(
+        return table.__class__(
             columns={Stype.numerical: columns},
             numerical=numerical,
         )

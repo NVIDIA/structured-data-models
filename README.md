@@ -39,8 +39,9 @@ recipe = Recipe(
 # Common execution interface:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
     model(
-        x=table.drop_columns("target"),
-        y=table[:300, "target"],
+        x_context=table[:300].drop_columns("target"),
+        y_context=table[:300, "target"],
+        x_query=table[300:].drop_columns("target"),
         recipe=recipe,
         num_estimators=8,
     )
