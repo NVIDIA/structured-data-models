@@ -147,6 +147,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.StringTensor.from_cudf"><code class="docutils literal notranslate">from_cudf()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.StringTensor.from_list"><code class="docutils literal notranslate">from_list()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.StringTensor.to_arrow"><code class="docutils literal notranslate">to_arrow()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.StringTensor.to_cudf"><code class="docutils literal notranslate">to_cudf()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -286,6 +287,23 @@ data-aria-dark="Switch to auto color mode">
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.StringTensor.to_cudf">
+<span class="sig-name descname"><span class="pre">to_cudf</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><span class="pre">cudf.Series</span></a></span></span><a class="headerlink" href="#sdm.tensor.StringTensor.to_cudf" title="Link to this definition">#</a></dt>
+<dd><p>Convert this CUDA tensor to a flat <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.Series</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If this tensor is not CUDA-resident.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><strong>ImportError</strong></a> – If cuDF is not installed.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)">cudf.Series</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -314,7 +332,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=849fb76a"></script>
+      <script src="../../_static/documentation_options.js?v=69eda1a8"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
