@@ -5,7 +5,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_to_copy_string_categories() -> None:
@@ -94,8 +94,10 @@ def test_from_arrow_dtype() -> None:
     assert tensor.equal(torch.tensor([[0], [1], [-1]], dtype=torch.int64))
 
 
+@withCUDA
 @pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
-def test_from_arrow_cpu_does_not_warn_on_readonly_numpy(
+def test_from_arrow_does_not_warn_on_readonly_numpy(
+    device: torch.device,
     dtype: torch.dtype,
 ) -> None:
     with warnings.catch_warnings(record=True) as rec:
@@ -103,6 +105,7 @@ def test_from_arrow_cpu_does_not_warn_on_readonly_numpy(
         CategoricalTensor.from_arrow(
             pa.array([10, 20, None, 10], type=pa.int32()),
             dtype=dtype,
+            device=device,
         )
 
     assert not any(

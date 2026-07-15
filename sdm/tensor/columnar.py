@@ -389,6 +389,40 @@ def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
     )
 
 
+@ColumnarTensor.implements(aten.equal.default)
+def _equal(inp: ColumnarTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    for column1, column2 in zip(inp._columns, other._columns):
+        if not column1.equal(column2):
+            return False
+
+    return True
+
+
+@ColumnarTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: ColumnarTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    for column1, column2 in zip(inp._columns, other._columns):
+        if not column1.allclose(column2, rtol, atol, equal_nan):
+            return False
+
+    return True
+
+
 @ColumnarTensor.implements(aten.view.default)
 @preserve_view_inference_mode
 def _view(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
