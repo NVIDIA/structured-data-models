@@ -12,7 +12,7 @@ from torch.utils import _pytree as pytree
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow
 
 if TYPE_CHECKING:
     import cudf
@@ -160,12 +160,8 @@ class CategoricalTensor(Tensor):
                 array = array.combine_chunks()
 
         encoded = array.dictionary_encode()
-        values = encoded.indices.fill_null(-1).to_numpy(
-            zero_copy_only=False,
-            writable=device.type == "cpu",
-        )
-        data = torch.as_tensor(
-            values,
+        data = arrow_as_tensor(
+            encoded.indices.fill_null(-1),
             dtype=dtype,
             device=device,
         ).unsqueeze(-1)
@@ -178,14 +174,7 @@ class CategoricalTensor(Tensor):
         elif pa.types.is_null(dictionary.type):
             category = torch.empty(0, dtype=torch.int64, device=device)
         else:  # Use regular torch.Tensor for Tensor-compatible dictionaries:
-            values = dictionary.to_numpy(
-                zero_copy_only=False,
-                writable=device.type == "cpu",
-            )
-            category = torch.as_tensor(
-                values,
-                device=device,
-            )
+            category = arrow_as_tensor(dictionary, device=device)
 
         return cls(data=data, categories=(category,))
 

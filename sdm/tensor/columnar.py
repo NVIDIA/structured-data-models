@@ -12,7 +12,7 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow
 
 if TYPE_CHECKING:
     import cudf
@@ -152,11 +152,7 @@ class ColumnarTensor(Tensor):
                 raise ValueError(
                     f"'{cls.__name__}' cannot represent null integer values"
                 )
-            values = array.to_numpy(
-                zero_copy_only=False,
-                writable=device.type == "cpu",
-            )
-            column = torch.as_tensor(values, device=device)
+            column = arrow_as_tensor(array, device=device)
 
         return cls(columns=(column,), device=device)
 

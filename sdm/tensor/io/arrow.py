@@ -1,3 +1,5 @@
+import warnings
+
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -18,6 +20,37 @@ ARROW_TORCH_DTYPES = {
     pa.float64(): torch.float64,
 }
 TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
+
+
+def arrow_as_tensor(
+    array: pa.Array | pa.ChunkedArray,
+    *,
+    dtype: torch.dtype | None = None,
+    device: torch.device | str | None = None,
+) -> Tensor:
+    r"""Convert a :class:`pyarrow.Array` to a tensor.
+
+    Args:
+        array: The :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`.
+        dtype: The dtype.
+        device: The device.
+    """
+    device = torch.device("cpu" if device is None else device)
+
+    if isinstance(array, pa.ChunkedArray):
+        if array.num_chunks == 1:
+            array = array.chunk(0)
+        else:
+            array = array.combine_chunks()
+
+    values = array.to_numpy(zero_copy_only=False)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="The given NumPy array is not writable",
+        )
+        return torch.as_tensor(values, dtype=dtype, device=device)
 
 
 def to_arrow(tensor: Tensor) -> pa.Array:

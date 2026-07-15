@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import warnings
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -11,6 +10,7 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import VarLenTensor
+from sdm.tensor.io import arrow_as_tensor
 
 if TYPE_CHECKING:
     import cudf
@@ -307,11 +307,6 @@ def _sort(
             order="descending" if descending else "ascending",
         ),
     )
-    with warnings.catch_warnings():
-        warnings.filterwarnings(  # Safe to ignore.
-            "ignore",
-            message="The given NumPy array is not writable",
-        )
-        perm = torch.from_numpy(out.to_numpy()).to(inp.device, torch.int64)
+    perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
 
     return cast(StringTensor, inp[perm]), perm
