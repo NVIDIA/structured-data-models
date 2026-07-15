@@ -17,7 +17,7 @@ class StypeDispatch(Processor, InvertibleMixin):
     :class:`TableTensor` and passed to that processor. A route may change
     column values, names, count, or order. Route outputs are concatenated in
     semantic type order. With the default passthrough behavior, unconfigured
-    semantic types follow in tableut order.
+    semantic types follow in input order.
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible. Tracking transformed ownership for routes
@@ -75,7 +75,7 @@ class StypeDispatch(Processor, InvertibleMixin):
 
         names = ", ".join(f"'{stype.value}'" for stype in remainder_stypes)
         raise ValueError(
-            f"Found non-empty tableut columns for semantic types {names}, but "
+            f"Found non-empty input columns for semantic types {names}, but "
             f"'{self.__class__.__name__}' has no route for them. Configure "
             "a processor for each semantic type or set "
             "remainder='passthrough' or remainder='drop'."
@@ -90,10 +90,10 @@ class StypeDispatch(Processor, InvertibleMixin):
         self._check_remainder(remainder_stypes)
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_tableut = table.select_stypes(stype)
-            if route_tableut.size(-1) == 0:
+            route_input = table.select_stypes(stype)
+            if route_input.size(-1) == 0:
                 continue
-            processor.fit(route_tableut)
+            processor.fit(route_input)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         remainder_stypes = [
@@ -106,10 +106,10 @@ class StypeDispatch(Processor, InvertibleMixin):
         outputs: list[TableTensor] = []
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_tableut = table.select_stypes(stype)
-            if route_tableut.size(-1) == 0:
+            route_input = table.select_stypes(stype)
+            if route_input.size(-1) == 0:
                 continue
-            outputs.append(processor.transform(route_tableut))
+            outputs.append(processor.transform(route_input))
         if self.remainder == "passthrough":
             outputs.extend(
                 table.select_stypes(stype) for stype in remainder_stypes
@@ -132,15 +132,15 @@ class StypeDispatch(Processor, InvertibleMixin):
         # change stype or share an output stype.
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_tableut = table.select_stypes(stype)
-            if route_tableut.size(-1) == 0:
+            route_input = table.select_stypes(stype)
+            if route_input.size(-1) == 0:
                 continue
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
                     f"Route '{stype}' uses non-invertible processor "
                     f"'{processor.__class__.__name__}'"
                 )
-            outputs.append(processor.inverse_transform(route_tableut))
+            outputs.append(processor.inverse_transform(route_input))
 
         remainder_stypes = [
             stype
