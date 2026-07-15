@@ -90,7 +90,6 @@ class Model(torch.nn.Module, ABC):
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
             y_context_i = recipe.target.fit_transform(y_context)
-            x_context_i = recipe.features.fit_transform(x_context)
 
             related_context_tables_i = related_query_tables_i = None
             if related_context_tables is not None:
@@ -115,7 +114,7 @@ class Model(torch.nn.Module, ABC):
                 )
 
             out = self._forward(
-                x_context=x_context_i,
+                x_context=recipe.features.fit_transform(x_context),
                 y_context=y_context_i,
                 x_query=recipe.features.transform(x_query),
                 related_context_tables=related_context_tables_i,
@@ -168,7 +167,6 @@ class Model(torch.nn.Module, ABC):
         caches: list[Cache] = []
         for recipe in recipes:
             y_i = recipe.target.fit_transform(y)
-
             cache = Cache(
                 recipe=recipe,
                 classes=y_i.categorical.categories[0]
