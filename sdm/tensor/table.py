@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import math
-import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow
 
 if TYPE_CHECKING:
     import cudf
@@ -296,22 +295,17 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 array = table.column(column)
                 if stype == Stype.numerical:
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings(  # Safe to ignore.
-                            "ignore",
-                            message="The given NumPy array is not writable",
-                        )
-                        tensor = torch.from_numpy(
-                            array.to_numpy(zero_copy_only=False)
-                        )
-                    tensor = tensor.to(torch.get_default_dtype()).unsqueeze(-1)
+                    tensor = arrow_as_tensor(
+                        array,
+                        dtype=torch.get_default_dtype(),
+                    ).unsqueeze(-1)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
                     array = array.cast(pa.timestamp("us"))
-                    tensor = torch.from_numpy(
-                        array.to_numpy(zero_copy_only=False).astype("int64")
-                    ).unsqueeze(-1)
+                    values = array.to_numpy(zero_copy_only=False)
+                    values = values.astype("int64")
+                    tensor = torch.from_numpy(values).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
                 else:
@@ -916,6 +910,44 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
     )
 
 
+@TableTensor.implements(aten.equal.default)
+def _equal(inp: TableTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+    if inp.stypes != other.stypes:
+        return False
+
+    for stype, block in _align_like(inp, other).items():
+        if not block.equal(other.blocks[stype]):
+            return False
+
+    return True
+
+
+@TableTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: TableTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+    if inp.stypes != other.stypes:
+        return False
+
+    for stype, block in _align_like(inp, other).items():
+        if not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
+            return False
+
+    return True
+
+
 @TableTensor.implements(aten.view.default)
 @preserve_view_inference_mode
 def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
@@ -1392,25 +1424,25 @@ def _align_like(inp: TableTensor, ref: TableTensor) -> TableTensor:
 
     if inp.stypes != ref.stypes:
         raise ValueError(
-            "Expected all tensors to have the same column names and stypes"
+            "Expected tensors to have the same column names and stypes"
         )
 
     blocks: dict[Stype, Tensor] = {}
-    columns: dict[StypeLike, tuple[str, ...]] = {}
-
     for stype, ref_columns in ref._columns.items():
-        if len(ref_columns) == 0:
+        if len(ref_columns) > 0:
+            column_to_index = {
+                column: i for i, column in enumerate(inp._columns[stype])
+            }
+            index = torch.tensor(
+                [column_to_index[column] for column in ref_columns],
+                dtype=torch.int64,
+                device=inp.blocks[stype].device,
+            )
+            blocks[stype] = inp.blocks[stype].index_select(-1, index)
+        else:
             blocks[stype] = inp.blocks[stype]
-            columns[stype] = ref_columns
-            continue
 
-        inp_columns = inp._columns[stype]
-        index = torch.tensor(
-            [inp_columns.index(column) for column in ref_columns],
-            dtype=torch.int64,
-            device=inp.blocks[stype].device,
-        )
-        blocks[stype] = inp.blocks[stype].index_select(-1, index)
-        columns[stype] = ref_columns
-
-    return inp.__class__(columns=columns, **blocks)
+    return inp.__class__(
+        columns=cast(Mapping[StypeLike, Sequence[str]], ref._columns),
+        **blocks,
+    )

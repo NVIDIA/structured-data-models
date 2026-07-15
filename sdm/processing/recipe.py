@@ -75,7 +75,7 @@ class Recipe:
     A recipe bundles three processing pipelines, one per role the data plays
     relative to the model:
 
-    - ``features``: model tableuts, transformed before the model.
+    - ``features``: model inputs, transformed before the model.
     - ``target``: labels transformed forward before the model. Regression
       predictions are inverted through this pipeline; classification outputs
       are reconstructed from the fitted target categories instead.
@@ -92,7 +92,7 @@ class Recipe:
     output dispatchers.
 
     Args:
-        features: Steps applied to model tableuts before the model.
+        features: Steps applied to model inputs before the model.
         target: Steps applied to labels. Invertible numerical target steps map
             regression output back to the original space.
         output: Steps applied after member outputs have been mapped to a
