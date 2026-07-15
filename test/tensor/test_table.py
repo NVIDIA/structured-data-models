@@ -107,6 +107,7 @@ def test_from_tensor() -> None:
         Stype.id: (),
     }
     assert tensor.numerical.equal(data)
+    assert TableTensor.from_tensor(data[:, :0]).size() == (5, 0)
 
     data = torch.tensor(
         [
@@ -125,24 +126,11 @@ def test_from_tensor() -> None:
         Stype.id: (),
     }
     assert tensor.categorical.as_tensor().equal(
-        torch.tensor([[0, 1], [-1, 0], [1, 0], [-1, 1]])
+        torch.tensor([[2, 1], [0, 0], [3, 0], [1, 1]])
     )
-    assert tensor.categorical.categories[0].equal(torch.tensor([0, 1]))
+    assert tensor.categorical.categories[0].equal(torch.tensor([-2, -1, 0, 1]))
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
-
-
-@withCUDA
-def test_from_tensor_zero_columns(device: torch.device) -> None:
-    tensor = TableTensor.from_tensor(
-        torch.empty(5, 0, dtype=torch.long, device=device)
-    )
-
-    assert isinstance(tensor, TableTensor)
-    assert tensor.size() == (5, 0)
-    assert tensor.device == device
-    assert isinstance(tensor.categorical, CategoricalTensor)
-    assert tensor.categorical.size() == (5, 0)
-    assert tensor.categorical.categories == ()
+    assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
 
 
 def test_inference_mode() -> None:

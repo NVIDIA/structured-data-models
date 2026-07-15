@@ -264,10 +264,6 @@ class CategoricalTensor(Tensor):
     def from_tensor(cls, tensor: Tensor) -> Self:
         r"""Create tensor from a numerical :class:`torch.Tensor`.
 
-        Each column's categories are the sorted unique non-negative values.
-        All negative values are treated as missing and are collapsed into the
-        ``-1`` missing-value sentinel.
-
         Args:
             tensor: The numerical tensor.
         """
@@ -277,19 +273,14 @@ class CategoricalTensor(Tensor):
                 categories=(),
             )
 
-        uniques, inverses = zip(
+        categories, values = zip(
             *[
-                column.clamp(min=-1).unique(return_inverse=True, sorted=True)
+                column.unique(return_inverse=True)
                 for column in tensor.unbind(dim=-1)
             ]
         )
-        categories = [unique[unique >= 0] for unique in uniques]
-        inverses = [
-            inverse - 1 if unique.numel() != category.numel() else inverse
-            for inverse, unique, category in zip(inverses, uniques, categories)
-        ]
         return cls(
-            data=torch.stack(inverses, dim=-1),
+            data=torch.stack(values, dim=-1),
             categories=categories,
         )
 

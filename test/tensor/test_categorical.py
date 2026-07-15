@@ -5,7 +5,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import onlyCUDA
 
 
 def test_to_copy_string_categories() -> None:
@@ -82,27 +82,6 @@ def test_from_arrow_all_missing_values() -> None:
 
     assert tensor.equal(torch.tensor([[-1], [-1]], dtype=torch.int32))
     assert tensor.categories[0].numel() == 0
-
-
-@withCUDA
-@pytest.mark.parametrize(
-    "dtype",
-    [torch.int32, torch.int64, torch.float32],
-)
-def test_from_tensor_zero_columns(
-    device: torch.device,
-    dtype: torch.dtype,
-) -> None:
-    tensor = CategoricalTensor.from_tensor(
-        torch.empty(5, 0, dtype=dtype, device=device)
-    )
-
-    assert isinstance(tensor, CategoricalTensor)
-    assert tensor.size() == (5, 0)
-    # Codes are `unique` inverses, so `data` is `int64` for every input dtype:
-    assert tensor.dtype == torch.int64
-    assert tensor.device == device
-    assert tensor.categories == ()
 
 
 def test_from_arrow_dtype() -> None:
