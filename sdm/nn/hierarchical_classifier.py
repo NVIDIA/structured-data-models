@@ -8,7 +8,7 @@ _Predictor = Callable[[Tensor, Tensor], Tensor]
 
 
 class HierarchicalClassifier(torch.nn.Module):
-    r"""Hierarchical classifier from the TabICLv2_ paper.
+    r"""Classifier from `TabICLv2 <https://arxiv.org/abs/2602.11139>`_.
 
     This module supports predictors with a fixed native class capacity.
 
@@ -19,8 +19,6 @@ class HierarchicalClassifier(torch.nn.Module):
     probabilities are combined along the tree using the probability chain
     rule. Batched tables are processed independently because their tree nodes
     can contain different numbers of training rows.
-
-    .. _TabICLv2: https://arxiv.org/abs/2602.11139
 
     Args:
         max_classes: Maximum number of classes supported natively by the
