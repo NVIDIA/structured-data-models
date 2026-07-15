@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import functools
-import warnings
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
