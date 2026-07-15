@@ -118,11 +118,11 @@ class StringTensor(VarLenTensor):
         r"""Convert this CUDA tensor to a flat :class:`cudf.Series`.
 
         Raises:
-            ValueError: If this tensor is not CUDA-resident.
+            RuntimeError: If this tensor is not CUDA-resident.
             ImportError: If cuDF is not installed.
         """
         if not self.is_cuda:
-            raise ValueError(
+            raise RuntimeError(
                 f"Expected '{self.__class__.__name__}' in 'to_cudf' to be "
                 f"CUDA-resident (got '{self.device}')"
             )
