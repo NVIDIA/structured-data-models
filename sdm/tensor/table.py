@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import math
-import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow
 
 if TYPE_CHECKING:
     import cudf
@@ -296,22 +295,17 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 array = table.column(column)
                 if stype == Stype.numerical:
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings(  # Safe to ignore.
-                            "ignore",
-                            message="The given NumPy array is not writable",
-                        )
-                        tensor = torch.from_numpy(
-                            array.to_numpy(zero_copy_only=False)
-                        )
-                    tensor = tensor.to(torch.get_default_dtype()).unsqueeze(-1)
+                    tensor = arrow_as_tensor(
+                        array,
+                        dtype=torch.get_default_dtype(),
+                    ).unsqueeze(-1)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
                     array = array.cast(pa.timestamp("us"))
-                    tensor = torch.from_numpy(
-                        array.to_numpy(zero_copy_only=False).astype("int64")
-                    ).unsqueeze(-1)
+                    values = array.to_numpy(zero_copy_only=False)
+                    values = values.astype("int64")
+                    tensor = torch.from_numpy(values).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
                 else:
