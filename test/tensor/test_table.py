@@ -96,6 +96,52 @@ def test_column_names() -> None:
         )
 
 
+def test_equal() -> None:
+    numerical = torch.randn(2, 2)
+    categorical = CategoricalTensor(
+        data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+        categories=(torch.arange(2), torch.arange(2)),
+    )
+    id = ColumnarTensor(
+        (
+            torch.arange(2),
+            StringTensor.from_list(["A", "B"]),
+        )
+    )
+
+    tensor1 = TableTensor(
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country", "segment"],
+            "id": ["user_id", "id"],
+        },
+        numerical=numerical,
+        categorical=categorical,
+        id=id,
+    )
+    tensor2 = TableTensor(
+        columns={
+            "numerical": ["income", "age"],
+            "categorical": ["segment", "country"],
+            "id": ["id", "user_id"],
+        },
+        numerical=numerical.flip(-1),
+        categorical=cast(
+            CategoricalTensor,
+            torch.cat([categorical[:, 1:], categorical[:, :1]], dim=-1),
+        ),
+        id=cast(
+            ColumnarTensor,
+            torch.cat([id[:, 1:], id[:, :1]], dim=-1),
+        ),
+    )
+
+    assert tensor1.equal(tensor1)
+    assert tensor1.equal(tensor2)
+    assert tensor1.allclose(tensor1)
+    assert tensor1.allclose(tensor2)
+
+
 def test_from_tensor() -> None:
     data = torch.randn(5, 2)
     tensor = TableTensor.from_tensor(data)
@@ -107,6 +153,7 @@ def test_from_tensor() -> None:
         Stype.id: (),
     }
     assert tensor.numerical.equal(data)
+    assert TableTensor.from_tensor(data[:, :0]).size() == (5, 0)
 
     data = torch.tensor(
         [
@@ -125,10 +172,11 @@ def test_from_tensor() -> None:
         Stype.id: (),
     }
     assert tensor.categorical.as_tensor().equal(
-        torch.tensor([[0, 1], [-1, 0], [1, 0], [-1, 1]])
+        torch.tensor([[2, 1], [0, 0], [3, 0], [1, 1]])
     )
-    assert tensor.categorical.categories[0].equal(torch.tensor([0, 1]))
+    assert tensor.categorical.categories[0].equal(torch.tensor([-2, -1, 0, 1]))
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
+    assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
 
 
 def test_inference_mode() -> None:
