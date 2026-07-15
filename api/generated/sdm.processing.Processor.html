@@ -6,7 +6,7 @@
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
-    <link rel="stylesheet" type="text/css" href="../../_static/shibuya.css?v=9454f7d5" />
+    <link rel="stylesheet" type="text/css" href="../../_static/shibuya.css?v=70423902" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
     <link media="print" rel="stylesheet" type="text/css" href="../../_static/print.css?v=20ff2c19" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -184,10 +184,10 @@ data-aria-dark="Switch to auto color mode">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
           <section id="processor">
-<h1>Processor<a class="headerlink" href="#processor" title="Link to this heading">¶</a></h1>
+<h1>Processor<a class="headerlink" href="#processor" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.Processor">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Processor</span></span><a class="headerlink" href="#sdm.processing.Processor" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Processor</span></span><a class="headerlink" href="#sdm.processing.Processor" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
 <p>Fittable, table-in/table-out transform.</p>
 <p>Subclass and implement <code class="docutils literal notranslate"><span class="pre">_transform</span></code> (the transform operation). Override
@@ -200,7 +200,7 @@ processors that can safely run without a prior <code class="docutils literal not
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.Processor.fit">
-<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.processing.Processor.fit" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.processing.Processor.fit" title="Link to this definition">#</a></dt>
 <dd><p>Fit the processor on <code class="docutils literal notranslate"><span class="pre">table</span></code> and return it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -217,7 +217,7 @@ processors that can safely run without a prior <code class="docutils literal not
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.Processor.fit_transform">
-<span class="sig-name descname"><span class="pre">fit_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.fit_transform" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">fit_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.fit_transform" title="Link to this definition">#</a></dt>
 <dd><p>Fit on <code class="docutils literal notranslate"><span class="pre">table</span></code> and return the transformed result.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -234,7 +234,7 @@ processors that can safely run without a prior <code class="docutils literal not
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.Processor.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.forward" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.forward" title="Link to this definition">#</a></dt>
 <dd><p>Alias of <a class="reference internal" href="#sdm.processing.Processor.transform" title="sdm.processing.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>.</p>
 <p>This is the <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> entry point, so
 <code class="docutils literal notranslate"><span class="pre">processor(table)</span></code> and <code class="docutils literal notranslate"><span class="pre">processor.transform(table)</span></code> share the same
@@ -254,7 +254,7 @@ fitted-state checks.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.Processor.transform">
-<span class="sig-name descname"><span class="pre">transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.transform" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Processor.transform" title="Link to this definition">#</a></dt>
 <dd><p>Transform <code class="docutils literal notranslate"><span class="pre">table</span></code> using the fitted processor.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -297,7 +297,7 @@ fitted-state checks.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=e4e24e66"></script>
+      <script src="../../_static/documentation_options.js?v=d8915e9b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
