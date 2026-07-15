@@ -8,6 +8,26 @@ from sdm import CategoricalTensor, StringTensor
 from sdm.testing import onlyCUDA
 
 
+def test_to_copy_string_categories() -> None:
+    data = torch.randint(0, 2, size=(10, 2))
+    categories = (
+        StringTensor.from_list(["USA", "GERMANY"]),
+        StringTensor.from_list(["enterprise", "startup"]),
+    )
+    tensor = CategoricalTensor(data, categories)
+
+    out = tensor.clone()
+    assert isinstance(out, CategoricalTensor)
+    for out_category, category in zip(out.categories, categories):
+        assert out_category.tolist() == category.tolist()
+
+    out = tensor.to(torch.int32)
+    assert isinstance(out, CategoricalTensor)
+    assert out.dtype == torch.int32
+    for out_category, category in zip(out.categories, categories):
+        assert out_category.tolist() == category.tolist()
+
+
 def test_to_copy() -> None:
     data = torch.tensor([[0, -1, 2], [2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
@@ -88,6 +108,53 @@ def test_from_arrow_cpu_does_not_warn_on_readonly_numpy(
     assert not any(
         "NumPy array is not writable" in str(warning.message)
         for warning in rec
+    )
+
+
+@onlyCUDA
+def test_from_arrow_cuda() -> None:
+    with warnings.catch_warnings():
+        warnings.filterwarnings(  # Safe to ignore: copied to device.
+            "ignore",
+            message="The given NumPy array is not writable",
+        )
+        tensor = CategoricalTensor.from_arrow(
+            pa.array(["b", "a", None, "b"]),
+            device="cuda",
+        )
+
+    assert tensor.device.type == "cuda"
+    assert tensor.as_tensor().equal(
+        torch.tensor(
+            [[0], [1], [-1], [0]],
+            dtype=torch.int32,
+            device=tensor.device,
+        )
+    )
+    assert tensor.categories[0].device.type == "cuda"
+    assert tensor.categories[0].tolist() == ["b", "a"]
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(  # Safe to ignore: copied to device.
+            "ignore",
+            message="The given NumPy array is not writable",
+        )
+        tensor = CategoricalTensor.from_arrow(
+            pa.array([10, 20, None, 10], type=pa.int32()),
+            device="cuda",
+        )
+
+    assert tensor.device.type == "cuda"
+    assert tensor.as_tensor().equal(
+        torch.tensor(
+            [[0], [1], [-1], [0]],
+            dtype=torch.int32,
+            device=tensor.device,
+        )
+    )
+    assert tensor.categories[0].device.type == "cuda"
+    assert tensor.categories[0].equal(
+        torch.tensor([10, 20], dtype=torch.int32, device=tensor.device)
     )
 
 
@@ -360,8 +427,15 @@ def test_pin_memory() -> None:
     tensor = CategoricalTensor(data, categories)
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        assert tensor.pin_memory().is_pinned()
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    data = torch.tensor([[0, -1, 2], [2, 1, 0]])
+    categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
+    tensor = CategoricalTensor(data, categories)
+
+    assert tensor.pin_memory().is_pinned()
 
 
 def test_share_memory() -> None:

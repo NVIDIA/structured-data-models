@@ -11,7 +11,7 @@ def test_sigma_clip_preserves_nan_positions_and_ignores_nan_in_fit(
     device: torch.device,
     dtype: torch.dtype | None,
 ) -> None:
-    input = torch.tensor(
+    inp = torch.tensor(
         [
             [1.0, torch.nan, 3.0, torch.nan],
             [3.0, 5.0, 3.0, torch.nan],
@@ -21,8 +21,8 @@ def test_sigma_clip_preserves_nan_positions_and_ignores_nan_in_fit(
         device=device,
     )
 
-    processor = SigmaClip().fit(TableTensor.from_tensor(input))
-    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
+    processor = SigmaClip().fit(TableTensor.from_tensor(inp))
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
         processor._mean[:3],
@@ -48,7 +48,7 @@ def test_sigma_clip_preserves_nan_positions_and_ignores_nan_in_fit(
     # All-NaN columns get a NaN mean and ±inf bounds, so values pass through.
     assert torch.isneginf(processor.lower_bound[3])
     assert torch.isposinf(processor.upper_bound[3])
-    assert torch.equal(torch.isnan(transformed), torch.isnan(input))
+    assert torch.equal(torch.isnan(transformed), torch.isnan(inp))
     assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
 
 
@@ -57,14 +57,14 @@ def test_sigma_clip_two_stage_outlier_behavior(
     device: torch.device,
 ) -> None:
     dtype = torch.float64
-    input = torch.tensor(
+    inp = torch.tensor(
         [[0.0], [1.0], [2.0], [100.0]],
         dtype=dtype,
         device=device,
     )
 
-    processor = SigmaClip(threshold=1.0).fit(TableTensor.from_tensor(input))
-    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
+    processor = SigmaClip(threshold=1.0).fit(TableTensor.from_tensor(inp))
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
         processor._mean,
@@ -82,7 +82,7 @@ def test_sigma_clip_two_stage_outlier_behavior(
         processor.upper_bound,
         torch.tensor([2.0], dtype=dtype, device=device),
     )
-    assert transformed[-1, 0] < input[-1, 0]
+    assert transformed[-1, 0] < inp[-1, 0]
     assert torch.allclose(
         transformed[-1, 0],
         torch.log1p(torch.tensor(100.0, dtype=dtype, device=device)) + 2.0,
@@ -91,7 +91,7 @@ def test_sigma_clip_two_stage_outlier_behavior(
 
 def test_sigma_clip_matches_tabicl_reference_values() -> None:
     dtype = torch.float64
-    input = torch.tensor(
+    inp = torch.tensor(
         [
             [-8.0, 1.0],
             [-1.0, torch.nan],
@@ -102,8 +102,8 @@ def test_sigma_clip_matches_tabicl_reference_values() -> None:
         dtype=dtype,
     )
 
-    processor = SigmaClip(threshold=1.5).fit(TableTensor.from_tensor(input))
-    transformed = processor.transform(TableTensor.from_tensor(input)).numerical
+    processor = SigmaClip(threshold=1.5).fit(TableTensor.from_tensor(inp))
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
         processor._mean,
