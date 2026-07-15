@@ -35,14 +35,6 @@ def arrow_as_tensor(
         dtype: The dtype.
         device: The device.
     """
-    device = torch.device("cpu" if device is None else device)
-
-    if isinstance(array, pa.ChunkedArray):
-        if array.num_chunks == 1:
-            array = array.chunk(0)
-        else:
-            array = array.combine_chunks()
-
     values = array.to_numpy(zero_copy_only=False)
 
     with warnings.catch_warnings():

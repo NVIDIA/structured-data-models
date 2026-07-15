@@ -302,9 +302,10 @@ class TableTensor(Tensor):
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
-                    tensor = arrow_as_tensor(
-                        array.cast(pa.timestamp("us")).cast(pa.int64()),
-                    ).unsqueeze(-1)
+                    array = array.cast(pa.timestamp("us"))
+                    values = array.to_numpy(zero_copy_only=False)
+                    values = values.astype("int64")
+                    tensor = torch.from_numpy(values).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
                 else:
