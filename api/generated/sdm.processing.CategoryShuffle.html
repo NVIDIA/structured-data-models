@@ -184,12 +184,11 @@ data-aria-dark="Switch to auto color mode">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">CategoryShuffle</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'shift'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'random'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'shift'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.CategoryShuffle" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
 <p>Independently permute the integer codes of categorical columns.</p>
-<p>One permutation per categorical column is drawn from the global CPU
-generator when the processor is fitted; seed with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.manual_seed()</span></code></a> to make the draws reproducible. Codes and their
-corresponding category vectors are permuted together so decoded values
-remain unchanged. Negative codes represent missing values and are
-preserved unchanged. Only categorical columns are supported; use
+<p>One permutation per categorical column is drawn when the processor is
+fitted; pass <code class="docutils literal notranslate"><span class="pre">generator</span></code> to <code class="docutils literal notranslate"><span class="pre">fit()</span></code> to make the draws reproducible.
+Codes and their corresponding category vectors are permuted together so
+decoded values remain unchanged. Negative codes represent missing values
+and are preserved unchanged. Only categorical columns are supported; use
 <a class="reference internal" href="sdm.processing.StypeDispatch.html#sdm.processing.StypeDispatch" title="sdm.processing.StypeDispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a> to apply this processor to the
 categorical block of a mixed feature table.</p>
 <dl class="field-list simple">
@@ -227,7 +226,7 @@ a drawn permutation.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=69eda1a8"></script>
+      <script src="../../_static/documentation_options.js?v=1917bd6d"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

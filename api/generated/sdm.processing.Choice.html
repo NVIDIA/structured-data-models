@@ -189,9 +189,10 @@ data-aria-dark="Switch to auto color mode">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Choice</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.Choice" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
 <p>Delegate to one option drawn uniformly at random.</p>
-<p>The option is drawn from the global CPU generator when the processor
-is fitted; seed with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.manual_seed()</span></code></a> to make it
-reproducible. Only the drawn option is fitted; refitting draws again.</p>
+<p>The option is drawn when the processor is fitted; pass <code class="docutils literal notranslate"><span class="pre">generator</span></code>
+to <code class="docutils literal notranslate"><span class="pre">fit()</span></code> to make it reproducible. The generator is also passed on
+to fit the drawn option. Only the drawn option is fitted; refitting
+draws again.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>args</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Sequence of candidate processors.</p>
@@ -270,7 +271,7 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=69eda1a8"></script>
+      <script src="../../_static/documentation_options.js?v=1917bd6d"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

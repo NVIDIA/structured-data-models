@@ -188,6 +188,8 @@ data-aria-dark="Switch to auto color mode">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Sequential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.Sequential" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
 <p>Apply a number of <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> instances in sequence.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">generator</span></code> passed to <code class="docutils literal notranslate"><span class="pre">fit()</span></code> or <code class="docutils literal notranslate"><span class="pre">fit_transform()</span></code> is passed on
+to every step.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>args</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Sequence of <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> instances.</p>
@@ -195,11 +197,16 @@ data-aria-dark="Switch to auto color mode">
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.Sequential.fit">
-<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.processing.Sequential" title="sdm.processing.sequential.Sequential"><span class="pre">Sequential</span></a></span></span><a class="headerlink" href="#sdm.processing.Sequential.fit" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.processing.Sequential" title="sdm.processing.sequential.Sequential"><span class="pre">Sequential</span></a></span></span><a class="headerlink" href="#sdm.processing.Sequential.fit" title="Link to this definition">#</a></dt>
 <dd><p>Fit the processor on <code class="docutils literal notranslate"><span class="pre">table</span></code> and return it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>table</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Feature table used to compute the processor state.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Feature table used to compute the processor state.</p></li>
+<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><em>Generator</em></a><em> | </em><em>None</em>) – Generator used for random draws while fitting.
+Container processors pass it on to their children. If
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, draws use the global generator.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>This processor.</p>
@@ -212,11 +219,16 @@ data-aria-dark="Switch to auto color mode">
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.Sequential.fit_transform">
-<span class="sig-name descname"><span class="pre">fit_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Sequential.fit_transform" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">fit_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.processing.Sequential.fit_transform" title="Link to this definition">#</a></dt>
 <dd><p>Fit on <code class="docutils literal notranslate"><span class="pre">table</span></code> and return the transformed result.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>table</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Feature table to fit on and transform.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Feature table to fit on and transform.</p></li>
+<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><em>Generator</em></a><em> | </em><em>None</em>) – Generator used for random draws while fitting.
+Container processors pass it on to their children. If
+<code class="docutils literal notranslate"><span class="pre">None</span></code>, draws use the global generator.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Transformed table.</p>
@@ -255,7 +267,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=69eda1a8"></script>
+      <script src="../../_static/documentation_options.js?v=1917bd6d"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
