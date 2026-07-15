@@ -243,7 +243,7 @@ class Model(torch.nn.Module, ABC):
             if related_tables is not None:
                 related_processors = cast(
                     Mapping[str, Processor],
-                    cache["related_feature_processors"],
+                    cache["related_processors"],
                 )
                 related_tables_i = replace(
                     related_tables,
