@@ -93,6 +93,25 @@ def test_from_cudf_sliced_values() -> None:
 
     assert tensor.is_cuda
     assert tensor.tolist() == ["hi", "é", ""]
+    # The slice anchors into the base offsets instead of copying:
+    assert int(tensor.storage_offset()) == 1
+    assert tensor._offset.equal(
+        torch.tensor([0, 1, 3, 5, 5], device=tensor.device)
+    )
+
+
+@onlyCUDA
+def test_from_cudf_all_empty_values() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = StringTensor.from_cudf(
+        cudf.Series(["", ""]),
+    )
+
+    assert tensor.is_cuda
+    assert tensor.tolist() == ["", ""]
+    assert tensor._data.numel() == 0
+    assert tensor._offset.equal(torch.tensor([0, 0, 0], device=tensor.device))
 
 
 @onlyCUDA
