@@ -139,10 +139,12 @@ def test_result_comparison_checks_workload_and_exhaustive_parity() -> None:
         },
         "latency_ms": {"median": 2.0},
         "sampled_rows": {"median": 8.0},
+        "output_to_host_ms_excluded": {"median": 0.1},
+        "validation_fingerprint_ms_excluded": {"median": 0.2},
         "invariants": {"canonical_output_sha256": "same"},
     }
     cpu = {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "cpu",
         "workload": workload,
         "random_state": 123,
@@ -151,7 +153,7 @@ def test_result_comparison_checks_workload_and_exhaustive_parity() -> None:
         "runs": [run],
     }
     cuda = {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "cuda",
         "workload": workload,
         "random_state": 123,
@@ -181,10 +183,10 @@ def test_result_comparison_rejects_measurement_count_mismatch() -> None:
         "invariants": {},
     }
     common = {
-        "schema_version": 1,
+        "schema_version": 2,
         "workload": {"dataset": "rel-f1"},
         "random_state": 123,
-        "environment": {},
+        "environment": {"versions": {}},
         "initialization": {},
     }
     cpu = {**common, "mode": "cpu", "runs": [run]}
@@ -195,6 +197,29 @@ def test_result_comparison_rejects_measurement_count_mismatch() -> None:
     }
 
     with pytest.raises(ValueError, match="measurement counts"):
+        compare_results(cpu, cuda)
+
+
+def test_result_comparison_rejects_runtime_version_mismatch() -> None:
+    common = {
+        "schema_version": 2,
+        "workload": {"dataset": "rel-f1"},
+        "random_state": 123,
+        "initialization": {},
+        "runs": [],
+    }
+    cpu = {
+        **common,
+        "mode": "cpu",
+        "environment": {"versions": {"torch": "2.11.0+cu130"}},
+    }
+    cuda = {
+        **common,
+        "mode": "cuda",
+        "environment": {"versions": {"torch": "nightly"}},
+    }
+
+    with pytest.raises(ValueError, match="runtime versions differ"):
         compare_results(cpu, cuda)
 
 
@@ -252,10 +277,21 @@ def test_checked_in_final_results_retain_recomputable_evidence() -> None:
 
     for result in results.values():
         for run in result["runs"]:
+            assert run["warmups"] == 10
+            assert run["repetitions"] == 50
             raw = run["raw_samples"]
             _assert_summary(raw["latency_ms"], run["latency_ms"])
             _assert_summary(raw["sampled_rows"], run["sampled_rows"])
+            _assert_summary(
+                raw["output_to_host_ms"],
+                run["output_to_host_ms_excluded"],
+            )
+            _assert_summary(
+                raw["validation_fingerprint_ms"],
+                run["validation_fingerprint_ms_excluded"],
+            )
             assert len(raw["output_sha256"]) == run["repetitions"]
+            assert run["invariants"]["source_multiplicity_inflation_rows"] == 0
             if result["mode"] == "cuda":
                 _assert_summary(
                     raw["profiled_latency_ms"],
@@ -263,10 +299,18 @@ def test_checked_in_final_results_retain_recomputable_evidence() -> None:
                 )
                 for phase, values in raw["phases_ms"].items():
                     _assert_summary(values, run["phases_ms"][phase])
+                if run["kind"] == "finite_stochastic":
+                    observations = run["finite_fanout_observations"]
+                    assert observations["groups_checked"] > 0
+                    assert observations["violations"] == 0
+                    assert observations["max_selected_per_group"] <= max(
+                        run["fanout"]
+                    )
 
     cpu = results["rel_arxiv_cpu_pyg_lib_t4_final.json"]
     cuda = results["rel_arxiv_cuda_cugraph_t4_final.json"]
     assert cpu["workload"] == cuda["workload"]
+    assert cpu["environment"]["versions"] == cuda["environment"]["versions"]
 
     cpu_two_hop = results["rel_arxiv_cpu_pyg_lib_t4_two_hop_exhaustive.json"]
     cuda_two_hop = results["rel_arxiv_cuda_cugraph_t4_two_hop_exhaustive.json"]

@@ -2,17 +2,21 @@
   "comparisons": [
     {
       "batch_size": 8,
-      "cpu_median_ms": 27.940617500000002,
+      "cpu_median_ms": 14.590881,
+      "cpu_output_to_host_median_ms_excluded": 0.0863955,
       "cpu_sampled_rows_median": 277.0,
-      "cpu_sampled_rows_per_second": 9913.882540355451,
-      "cuda_median_ms": 25.2484155,
-      "cuda_profiled_median_ms": 25.089971,
-      "cuda_profiled_minus_public_ms": -0.15844450000000165,
-      "cuda_sampled_row_throughput_ratio": 1.1066285525917456,
+      "cpu_sampled_rows_per_second": 18984.460225534018,
+      "cpu_validation_fingerprint_median_ms_excluded": 7.598511,
+      "cuda_median_ms": 26.2008055,
+      "cuda_output_to_host_median_ms_excluded": 220.292431,
+      "cuda_profiled_median_ms": 26.973824999999998,
+      "cuda_profiled_minus_public_ms": 0.7730194999999966,
+      "cuda_sampled_row_throughput_ratio": 0.5568867338830479,
       "cuda_sampled_rows_median": 277.0,
-      "cuda_sampled_rows_per_second": 10970.985486198133,
-      "cuda_speedup": 1.1066285525917459,
-      "cuda_task_to_device_ms_excluded": 0.379976,
+      "cuda_sampled_rows_per_second": 10572.19404953027,
+      "cuda_speedup": 0.556886733883048,
+      "cuda_task_to_device_ms_excluded": 0.361598,
+      "cuda_validation_fingerprint_median_ms_excluded": 7.983981,
       "equal_sampled_row_count": true,
       "exact_output_parity": true,
       "fanout": [
@@ -27,12 +31,59 @@
       "cpu": {
         "architecture": "x86_64",
         "cores_per_socket": "16",
+        "load_average_1m_5m_15m": [
+          13.98291015625,
+          14.9833984375,
+          15.4267578125
+        ],
         "logical_cpu_count": 32,
         "model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
+        "process_cpu_affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
         "sockets": "1",
         "threads_per_core": "2",
         "torch_num_interop_threads": 16,
         "torch_num_threads": 16
+      },
+      "distribution_versions": {
+        "cudf-cu13": "26.6.0",
+        "cupy-cuda13x": "14.1.1",
+        "pyg-lib": "0.7.0+pt211cu130",
+        "pylibcugraph-cu13": "26.6.0",
+        "relbench": "2.1.2",
+        "torch": "2.11.0+cu130"
       },
       "gpu": {
         "capability": [
@@ -44,36 +95,83 @@
       },
       "nvidia_driver": "580.159.03",
       "versions": {
-        "cudf": "26.02.01",
+        "cudf": "26.06.00",
         "cupy": "14.1.1",
-        "numpy": "2.2.6",
+        "numpy": "2.4.6",
         "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.35",
-        "pyarrow": "24.0.0",
-        "pyg_lib": "0.7.0+pt212cu130",
-        "pylibcugraph": "not_installed",
-        "python": "3.10.12",
+        "pyarrow": "23.0.1",
+        "pyg_lib": "0.7.0+pt211cu130",
+        "pylibcugraph": "26.06.00",
+        "python": "3.12.13",
         "relbench": "2.1.2",
-        "torch": "2.12.1+cu130",
+        "torch": "2.11.0+cu130",
         "torch_cuda": "13.0"
       }
     },
     "initialization": {
       "data_to_cuda_ms_excluded_from_init": null,
-      "sampler_topology_build_ms": 443.60303
+      "sampler_topology_build_ms": 420.04566
     }
   },
-  "created_at_utc": "2026-07-11T01:59:08.150828+00:00",
+  "created_at_utc": "2026-07-15T01:14:43.132059+00:00",
   "cuda": {
     "environment": {
       "cpu": {
         "architecture": "x86_64",
         "cores_per_socket": "16",
+        "load_average_1m_5m_15m": [
+          14.74755859375,
+          15.04736328125,
+          15.42822265625
+        ],
         "logical_cpu_count": 32,
         "model": "Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz",
+        "process_cpu_affinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
         "sockets": "1",
         "threads_per_core": "2",
         "torch_num_interop_threads": 16,
         "torch_num_threads": 16
+      },
+      "distribution_versions": {
+        "cudf-cu13": "26.6.0",
+        "cupy-cuda13x": "14.1.1",
+        "pyg-lib": "0.7.0+pt211cu130",
+        "pylibcugraph-cu13": "26.6.0",
+        "relbench": "2.1.2",
+        "torch": "2.11.0+cu130"
       },
       "gpu": {
         "capability": [
@@ -85,29 +183,30 @@
       },
       "nvidia_driver": "580.159.03",
       "versions": {
-        "cudf": "26.08.00a882",
+        "cudf": "26.06.00",
         "cupy": "14.1.1",
         "numpy": "2.4.6",
-        "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.39",
-        "pyarrow": "24.0.0",
-        "pyg_lib": "not_installed",
-        "pylibcugraph": "26.08.00a39",
-        "python": "3.11.15",
+        "platform": "Linux-6.8.0-1055-aws-x86_64-with-glibc2.35",
+        "pyarrow": "23.0.1",
+        "pyg_lib": "0.7.0+pt211cu130",
+        "pylibcugraph": "26.06.00",
+        "python": "3.12.13",
         "relbench": "2.1.2",
-        "torch": "2.14.0.dev20260710+cu130",
+        "torch": "2.11.0+cu130",
         "torch_cuda": "13.0"
       }
     },
     "initialization": {
-      "data_to_cuda_ms_excluded_from_init": 86.773052,
-      "sampler_topology_build_ms": 876.904535
+      "data_to_cuda_ms_excluded_from_init": 85.926461,
+      "sampler_topology_build_ms": 448.832239
     }
   },
   "exhaustive_parity_checked": true,
   "exhaustive_parity_failures": [],
   "exhaustive_parity_passed": true,
   "random_state": 20260711,
-  "schema_version": 1,
+  "runtime_versions_match": true,
+  "schema_version": 2,
   "workload": {
     "dataset": "rel-arxiv",
     "relationships": [

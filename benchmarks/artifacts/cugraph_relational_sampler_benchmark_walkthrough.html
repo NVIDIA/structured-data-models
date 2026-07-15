@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How the relational sampler benchmark works</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17212b;
+      --muted: #56616d;
+      --line: #d8dee4;
+      --surface: #ffffff;
+      --surface-alt: #f5f7f8;
+      --teal: #087f72;
+      --teal-soft: #e5f4f1;
+      --amber: #9a6700;
+      --amber-soft: #fff3cd;
+      --red: #b42318;
+      --red-soft: #feeceb;
+      --blue: #175cd3;
+      --blue-soft: #eaf2ff;
+      --code: #101820;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      letter-spacing: 0;
+    }
+
+    a { color: var(--blue); text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+
+    header, main, footer {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    header {
+      padding: 52px 0 30px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    header p { max-width: 780px; margin: 12px 0 0; color: var(--muted); }
+
+    h1, h2, h3 { line-height: 1.25; letter-spacing: 0; }
+    h1 { margin: 0; font-size: 38px; }
+    h2 { margin: 0 0 18px; font-size: 26px; }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+
+    section { padding: 38px 0; border-bottom: 1px solid var(--line); }
+    section > p { max-width: 860px; }
+
+    .eyebrow {
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      padding: 7px 10px;
+      border: 1px solid #9fd6ce;
+      border-radius: 6px;
+      background: var(--teal-soft);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
+
+    .grid-2, .grid-3 {
+      display: grid;
+      gap: 18px;
+      margin-top: 20px;
+    }
+
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 18px;
+      background: var(--surface);
+    }
+
+    .panel p:last-child { margin-bottom: 0; }
+    .panel.good { border-top: 4px solid var(--teal); }
+    .panel.scope { border-top: 4px solid var(--blue); }
+    .panel.caution { border-top: 4px solid var(--amber); }
+
+    pre {
+      overflow-x: auto;
+      margin: 16px 0 0;
+      padding: 18px;
+      border-radius: 7px;
+      background: var(--code);
+      color: #f1f5f9;
+      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 18px;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { background: var(--surface-alt); font-weight: 700; }
+    td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge.included { color: #05685d; background: var(--teal-soft); }
+    .badge.separate { color: #7a5200; background: var(--amber-soft); }
+    .badge.deferred { color: var(--red); background: var(--red-soft); }
+
+    .steps { counter-reset: step; margin: 20px 0 0; padding: 0; list-style: none; }
+    .steps li {
+      position: relative;
+      min-height: 52px;
+      padding: 0 0 22px 54px;
+      border-left: 2px solid var(--line);
+      margin-left: 18px;
+    }
+    .steps li:last-child { border-left-color: transparent; padding-bottom: 0; }
+    .steps li::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      left: -18px;
+      top: -2px;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 800;
+    }
+
+    .callout {
+      margin-top: 20px;
+      padding: 16px 18px;
+      border-left: 4px solid var(--amber);
+      background: var(--amber-soft);
+    }
+
+    .result-note {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-left: 4px solid var(--teal);
+      background: var(--teal-soft);
+    }
+
+    .bar-track {
+      width: 150px;
+      height: 9px;
+      margin-top: 5px;
+      background: #e6eaee;
+      overflow: hidden;
+      border-radius: 4px;
+    }
+    .bar { height: 100%; background: var(--blue); }
+    .bar.cuda { background: var(--teal); }
+
+    ul.clean { padding-left: 20px; }
+    ul.clean li { margin: 7px 0; }
+
+    footer { padding: 28px 0 50px; color: var(--muted); font-size: 14px; }
+
+    @media (max-width: 760px) {
+      header, main, footer { width: min(100% - 24px, 1120px); }
+      header { padding-top: 34px; }
+      h1 { font-size: 30px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+      .bar-track { width: 90px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">PR #258 benchmark walkthrough</div>
+    <h1>How we compare PyG and cuGraph relational sampling</h1>
+    <p>
+      This report explains what is timed, what is kept outside the headline
+      latency, how both implementations receive the same request, and which
+      conclusions the evidence supports.
+    </p>
+    <div class="status"><span class="dot"></span>Stable RAPIDS 26.06 evidence complete</div>
+  </header>
+
+  <main>
+    <section id="question">
+      <h2>Start with one request</h2>
+      <p>
+        The serving question is simple: given task rows that identify papers
+        and cutoff times, how long does the public sampler call take to return
+        the related rows needed by the model?
+      </p>
+      <pre>task rows
+  paper 20 at cutoff 2024-01-01
+  paper 35 at cutoff 2024-02-01
+        |
+        v
+sample up to 16 neighbors for one hop
+        |
+        v
+related paper, citation, author, and category rows</pre>
+      <p>
+        The CPU and CUDA runs use the same two task positions, relationship
+        definitions, fanout, and timestamps. Only the execution path changes.
+      </p>
+    </section>
+
+    <section id="glossary">
+      <h2>Small glossary</h2>
+      <div class="grid-3">
+        <div class="panel">
+          <h3>PyG</h3>
+          <p>PyTorch Geometric. Its native operation samples the CPU graph.</p>
+        </div>
+        <div class="panel">
+          <h3>CUDA and cuGraph</h3>
+          <p>CUDA executes tensors on the NVIDIA GPU; cuGraph samples its graph.</p>
+        </div>
+        <div class="panel">
+          <h3>CSC</h3>
+          <p>
+            Compressed sparse column storage. A flat neighbor array plus offsets
+            lets the CPU sampler find a node's neighbors without Python lists.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="construction">
+      <h2>The graph is built before request timing</h2>
+      <p>
+        Both variants first join relational keys into edges. That one-time work
+        belongs to sampler construction, not to an individual request, so it is
+        measured and reported separately.
+      </p>
+      <div class="grid-2">
+        <div class="panel scope">
+          <h3>CPU construction</h3>
+          <pre>RelationalData
+└─ edge_indices()
+   └─ Arrow key joins
+└─ _to_csc()
+   └─ row + column-pointer arrays
+└─ RelationalSampler</pre>
+        </div>
+        <div class="panel good">
+          <h3>CUDA construction</h3>
+          <pre>CUDA RelationalData
+└─ edge_indices()
+   └─ cuDF key joins from PR #233
+└─ global vertex IDs + reverse edges
+└─ persistent cuGraph SGGraph
+└─ CuGraphRelationalSampler from PR #256</pre>
+        </div>
+      </div>
+      <p>
+        Reusing one sampler across request batches reuses this graph. A service
+        that constructs a new sampler for every request would pay setup cost
+        repeatedly and is outside the measured serving design.
+      </p>
+    </section>
+
+    <section id="passes">
+      <h2>Three passes keep measurement work separate</h2>
+      <ol class="steps">
+        <li>
+          <h3>Headline latency pass</h3>
+          <p>
+            Warm up the sampler, synchronize CUDA, time only the public sampler
+            call, synchronize again, and retain every raw duration.
+          </p>
+        </li>
+        <li>
+          <h3>Correctness and output-boundary pass</h3>
+          <p>
+            Run the same request again without mixing checks into headline
+            latency. Measure CUDA output transfer to host separately, then check
+            seed retention, cutoff compliance, sampled row counts, and canonical
+            output fingerprints.
+          </p>
+        </li>
+        <li>
+          <h3>CUDA phase pass</h3>
+          <p>
+            Use CUDA events to separate task-to-seed lookup, neighbor sampling,
+            latest-neighbor selection, and output assembly. These phase medians
+            describe where time is spent; they are not one literal request trace.
+          </p>
+        </li>
+      </ol>
+    </section>
+
+    <section id="boundary">
+      <h2>What the headline latency includes</h2>
+      <table>
+        <thead>
+          <tr><th>Work</th><th>Status</th><th>Reason</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Task key to seed-row lookup</td>
+            <td><span class="badge included">Included</span></td>
+            <td>It happens on every public sampler request.</td>
+          </tr>
+          <tr>
+            <td>Neighbor sampling and temporal selection</td>
+            <td><span class="badge included">Included</span></td>
+            <td>This is the main operation being compared.</td>
+          </tr>
+          <tr>
+            <td>Assembly of returned TableTensors</td>
+            <td><span class="badge included">Included</span></td>
+            <td>The public call is not complete until its device-resident output exists.</td>
+          </tr>
+          <tr>
+            <td>Relational data transfer and graph construction</td>
+            <td><span class="badge separate">Separate</span></td>
+            <td>These are one-time sampler costs reused by later requests.</td>
+          </tr>
+          <tr>
+            <td>Task-table transfer to CUDA</td>
+            <td><span class="badge separate">Separate</span></td>
+            <td>The headline models a CUDA-primary service with device-resident inputs.</td>
+          </tr>
+          <tr>
+            <td>Returned output transfer to host</td>
+            <td><span class="badge separate">Separate</span></td>
+            <td>
+              A GPU model does not need this transfer. It is measured separately
+              for callers that consume the sampled rows on the CPU.
+            </td>
+          </tr>
+          <tr>
+            <td>Correctness hashing and profile instrumentation</td>
+            <td><span class="badge separate">Separate</span></td>
+            <td>Measurement machinery must not make either public call appear slower.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>Scope matters:</strong> the headline comparison answers the
+        GPU-primary serving question. A host consumer must add the separately
+        reported output-transfer cost before comparing end-to-end latency.
+      </div>
+    </section>
+
+    <section id="fairness">
+      <h2>Why the comparison is fair</h2>
+      <div class="grid-2">
+        <div class="panel good">
+          <h3>Same input contract</h3>
+          <p>
+            Both result files must match on dataset fingerprints, schemas,
+            relationships, task positions, timestamps, fanout, random seed,
+            warmups, and measurement count.
+          </p>
+        </div>
+        <div class="panel good">
+          <h3>Same stable runtime</h3>
+          <p>
+            The refreshed comparison rejects CPU and CUDA files unless Python,
+            PyTorch, PyG, cuDF, cuGraph, Arrow, NumPy, and RelBench versions match.
+          </p>
+        </div>
+        <div class="panel good">
+          <h3>Same public operation</h3>
+          <p>
+            Both headline timers surround the public sampler call. CUDA adds
+            synchronization before and after because GPU operations are otherwise
+            asynchronous relative to the Python process.
+          </p>
+        </div>
+        <div class="panel caution">
+          <h3>Different random choices</h3>
+          <p>
+            Finite fanout can select different valid neighbors. The report compares
+            request shape and sampled-row throughput, while exhaustive cases check
+            exact output identity through one and two hops.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="results">
+      <h2>Stable-stack result</h2>
+      <p>
+        Both modes ran in one Python 3.12 environment with PyTorch
+        2.11.0+cu130, PyG 0.7.0, cuDF 26.06, and pylibcugraph 26.06. Each shape
+        used 10 warmups and 50 measured requests. The ratio is CPU median divided
+        by CUDA median, so a value above 1.0 favors CUDA.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Fanout</th><th class="number">Batch</th>
+            <th class="number">CPU median</th><th class="number">CUDA median</th>
+            <th class="number">CPU/CUDA</th><th>Reading</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>[16]</code></td><td class="number">1</td><td class="number">14.886 ms</td><td class="number">16.146 ms</td><td class="number">0.92x</td><td>CPU lower</td></tr>
+          <tr><td><code>[16]</code></td><td class="number">128</td><td class="number">14.245 ms</td><td class="number">17.592 ms</td><td class="number">0.81x</td><td>CPU lower</td></tr>
+          <tr><td><code>[16]</code></td><td class="number">1,024</td><td class="number">19.212 ms</td><td class="number">19.969 ms</td><td class="number">0.96x</td><td>Too close for a routing threshold</td></tr>
+          <tr><td><code>[16]</code></td><td class="number">4,096</td><td class="number">24.785 ms</td><td class="number">23.002 ms</td><td class="number">1.08x</td><td>Too close for a routing threshold</td></tr>
+          <tr><td><code>[16]</code></td><td class="number">8,192</td><td class="number">34.042 ms</td><td class="number">27.797 ms</td><td class="number">1.22x</td><td>CUDA lower in this run</td></tr>
+          <tr><td><code>[16, 16]</code></td><td class="number">1</td><td class="number">13.885 ms</td><td class="number">29.429 ms</td><td class="number">0.47x</td><td>CPU lower</td></tr>
+          <tr><td><code>[16, 16]</code></td><td class="number">128</td><td class="number">16.989 ms</td><td class="number">33.391 ms</td><td class="number">0.51x</td><td>CPU lower</td></tr>
+          <tr><td><code>[16, 16]</code></td><td class="number">1,024</td><td class="number">29.378 ms</td><td class="number">45.560 ms</td><td class="number">0.64x</td><td>CPU lower</td></tr>
+          <tr><td><code>[16, 16]</code></td><td class="number">4,096</td><td class="number">54.130 ms</td><td class="number">71.500 ms</td><td class="number">0.76x</td><td>CPU lower</td></tr>
+          <tr><td><code>[16, 16]</code></td><td class="number">8,192</td><td class="number">102.513 ms</td><td class="number">113.508 ms</td><td class="number">0.90x</td><td>CPU lower</td></tr>
+        </tbody>
+      </table>
+      <div class="result-note">
+        <strong>Measured conclusion:</strong> one-hop CUDA becomes clearly lower
+        only at batch 8,192 on this host. Two-hop CUDA remains slower at every
+        tested batch because temporal neighbor gathering dominates its request.
+      </div>
+      <h3 style="margin-top: 28px;">Exact exhaustive checks</h3>
+      <table>
+        <thead>
+          <tr><th>Fanout</th><th class="number">Rows</th><th class="number">CPU median</th><th class="number">CUDA median</th><th>Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>[-1]</code></td><td class="number">143</td><td class="number">13.490 ms</td><td class="number">14.516 ms</td><td>Same digest, zero cutoff violations</td></tr>
+          <tr><td><code>[-1, -1]</code></td><td class="number">277</td><td class="number">14.591 ms</td><td class="number">26.201 ms</td><td>Same digest, zero cutoff violations</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="review">
+      <h2>What independent review changed</h2>
+      <table>
+        <thead>
+          <tr><th>Review concern</th><th>Response in this refresh</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Old CPU and CUDA runs used different Python and PyTorch versions, plus RAPIDS alpha packages.</td>
+            <td><span class="badge included">Addressed</span> One pinned stable environment and an automatic version-equality check.</td>
+          </tr>
+          <tr>
+            <td>CUDA output remained on the device, so host consumers had an unreported cost.</td>
+            <td><span class="badge included">Addressed</span> Host output materialization is timed and reported separately.</td>
+          </tr>
+          <tr>
+            <td>Three warmups and ten measurements were weak support for small differences.</td>
+            <td><span class="badge included">Addressed</span> Final evidence uses ten warmups and fifty measurements.</td>
+          </tr>
+          <tr>
+            <td>Exhaustive equality does not exercise finite random selection.</td>
+            <td><span class="badge separate">Partly addressed</span> Exact exhaustive checks remain, targeted finite checks live in PR #256, and this benchmark found no duplicate inflation or temporal fanout overflow across the profiled groups.</td>
+          </tr>
+          <tr>
+            <td>CPU phases, thread settings, memory, and GPU clock behavior need broader study.</td>
+            <td><span class="badge deferred">Deferred</span> Useful follow-up work, but not required to answer this PR's T4 serving comparison.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="opportunities">
+      <h2>Practical opportunities found by review</h2>
+      <div class="grid-2">
+        <div class="panel good">
+          <h3>Keep sampled output on CUDA</h3>
+          <p>
+            Copying a returned result to this host took 219.8-228.6 ms median,
+            much longer than the sampler call. A GPU model should consume the
+            returned TableTensors directly instead of moving them to the CPU.
+          </p>
+        </div>
+        <div class="panel scope">
+          <h3>Reuse the sampler</h3>
+          <p>
+            CUDA data transfer took 150.3 ms and cuGraph setup took 455.9 ms.
+            Keeping one sampler for many query batches prevents this setup from
+            being repeated per request.
+          </p>
+        </div>
+        <div class="panel caution">
+          <h3>Reduce temporal graph calls</h3>
+          <p>
+            At two-hop batch 8,192, temporal neighbor gathering consumed about
+            107 ms of a 114 ms profiled request. Fewer per-hop calls or a native
+            grouped latest-neighbor operation targets the measured cost directly.
+          </p>
+        </div>
+        <div class="panel">
+          <h3>Do not tune seed lookup further</h3>
+          <p>
+            Task-to-seed lookup is about 0.3 ms in the profile. More work there
+            cannot explain or close the two-hop gap.
+          </p>
+        </div>
+      </div>
+      <div class="callout">
+        CPU phase timing, thread and affinity sweeps, peak memory, concurrency,
+        a second dataset, and a second GPU remain useful follow-up studies. They
+        are not silently generalized from this single-host result.
+      </div>
+    </section>
+
+    <section id="interpretation">
+      <h2>How to read the conclusion</h2>
+      <ul class="clean">
+        <li>A small ratio near 1.0 is not called a win unless it remains stable across repeated runs.</li>
+        <li>Two-hop finite sampling is normalized by sampled rows because the two random implementations can return different valid row counts.</li>
+        <li>Exact exhaustive output equality checks graph construction and temporal filtering, not performance.</li>
+        <li>Results apply to this Tesla T4, dataset, task, fanout, and software stack. Production hardware needs its own measurement.</li>
+      </ul>
+    </section>
+
+    <section id="evidence">
+      <h2>Evidence and reproduction</h2>
+      <ul class="clean">
+        <li><a href="../relational_sampler.py">Benchmark runner</a></li>
+        <li><a href="../results/rel_arxiv_cpu_pyg_lib_t4_final.json">Raw CPU result</a></li>
+        <li><a href="../results/rel_arxiv_cuda_cugraph_t4_final.json">Raw CUDA result</a></li>
+        <li><a href="../results/rel_arxiv_comparison_t4_final.json">Derived CPU/CUDA comparison</a></li>
+        <li><a href="rel_arxiv_cuda_cugraph_t4_final_profile.html">CUDA phase profile</a></li>
+        <li><a href="../../docs/benchmarks/cugraph_relational_sampler.md">Detailed methodology and reproduction commands</a></li>
+        <li><a href="https://github.com/NVIDIA/structured-data-models/pull/233">PR #233: CUDA edge construction</a></li>
+        <li><a href="https://github.com/NVIDIA/structured-data-models/pull/256">PR #256: CUDA relational sampler</a></li>
+        <li><a href="https://github.com/NVIDIA/structured-data-models/pull/258">PR #258: benchmark and evidence</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    Generated from checked-in raw measurements. Headline timing, validation,
+    and phase profiling are separate passes by design.
+  </footer>
+</body>
+</html>

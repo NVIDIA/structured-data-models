@@ -33,7 +33,7 @@ from sdm import RelationalData, Stype, TableTensor, infer_stypes
 from sdm.relational import CuGraphRelationalSampler, RelationalSampler
 from sdm.relational.sampler import EXAMPLE_ID, RelationalSamplerOutput
 
-RESULT_SCHEMA_VERSION = 1
+RESULT_SCHEMA_VERSION = 2
 DEFAULT_DATASET = "rel-arxiv"
 DEFAULT_TASK = "paper-citation"
 DEFAULT_BATCH_SIZES = (1, 128, 1024)
@@ -58,6 +58,7 @@ class Workload:
     time_columns: dict[str, str]
     task_time_column: str
     identity_columns: dict[str, tuple[str, ...]]
+    identity_multiplicities: dict[str, Counter[Any]]
     contract: dict[str, Any]
 
 
@@ -300,6 +301,13 @@ def build_relbench_workload(
         time_columns=time_columns,
         task_time_column=task.time_col,
         identity_columns=identity_columns,
+        identity_multiplicities={
+            name: _rows_from_arrow(
+                table.to_arrow(),
+                identity_columns[name],
+            )
+            for name, table in data.tables.items()
+        },
         contract=contract,
     )
 
@@ -387,6 +395,10 @@ def output_invariants(
 
     temporal_rows_checked = 0
     temporal_violations = 0
+    repeated_identity_rows = 0
+    repeated_identities_by_table: dict[str, int] = {}
+    source_multiplicity_inflation_rows = 0
+    source_multiplicity_inflation_by_table: dict[str, int] = {}
     table_hashes: dict[str, str] = {}
     rows_by_table: dict[str, int] = {}
     digest = hashlib.sha256()
@@ -394,6 +406,17 @@ def output_invariants(
         rows_by_table[name] = table.size(0)
         identity = workload.identity_columns[name]
         columns = (EXAMPLE_ID, *identity)
+        identity_counts = _rows_from_arrow(table.to_arrow(), columns)
+        repeated = sum(count - 1 for count in identity_counts.values())
+        repeated_identities_by_table[name] = repeated
+        repeated_identity_rows += repeated
+        source_counts = workload.identity_multiplicities[name]
+        inflation = sum(
+            max(0, count - source_counts[identity[1:]])
+            for identity, count in identity_counts.items()
+        )
+        source_multiplicity_inflation_by_table[name] = inflation
+        source_multiplicity_inflation_rows += inflation
         table_hash = _canonical_table_hash(table, columns)
         table_hashes[name] = table_hash
         digest.update(name.encode())
@@ -412,6 +435,11 @@ def output_invariants(
 
     if temporal_violations:
         errors.append(f"{temporal_violations} temporal cutoff violations")
+    if source_multiplicity_inflation_rows:
+        errors.append(
+            f"{source_multiplicity_inflation_rows} rows exceed source "
+            "identity multiplicity"
+        )
     return {
         "valid": not errors,
         "errors": errors,
@@ -422,6 +450,14 @@ def output_invariants(
         "canonical_output_sha256": digest.hexdigest(),
         "temporal_rows_checked": temporal_rows_checked,
         "temporal_violations": temporal_violations,
+        "repeated_identity_rows": repeated_identity_rows,
+        "repeated_identities_by_table": repeated_identities_by_table,
+        "source_multiplicity_inflation_rows": (
+            source_multiplicity_inflation_rows
+        ),
+        "source_multiplicity_inflation_by_table": (
+            source_multiplicity_inflation_by_table
+        ),
     }
 
 
@@ -461,7 +497,7 @@ def sample_cuda_with_phases(
     task_link: Mapping[str, str],
     fanout: Sequence[int],
     task_time_column: str,
-) -> tuple[RelationalSamplerOutput, dict[str, float], float]:
+) -> tuple[RelationalSamplerOutput, dict[str, float], float, dict[str, int]]:
     """Sample once and separate CUDA join, sampling, top-k, and assembly.
 
     The temporal top-k is timed by wrapping the sampler's existing selection
@@ -484,12 +520,25 @@ def sample_cuda_with_phases(
     seed_time = task_table[task_time_column].datetime.squeeze(-1)
 
     original_last_per_source = sampler._last_per_source
+    selected_groups: list[
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]
+    ] = []
 
     def timed_last_per_source(**kwargs: Any) -> torch.Tensor:
-        return timer.measure(
+        selected = timer.measure(
             "temporal_top_k_ms",
             lambda: original_last_per_source(**kwargs),
         )
+        selected_groups.append(
+            (
+                kwargs["batch"],
+                kwargs["major"],
+                kwargs["edge_type"],
+                selected,
+                kwargs["count"],
+            )
+        )
+        return selected
 
     sampler._last_per_source = timed_last_per_source
     try:
@@ -528,7 +577,33 @@ def sample_cuda_with_phases(
         phases["neighbor_sampling_ms"] = max(0.0, total - top_k)
     device_ms = sum(phases.values())
     phases["synchronization_other_ms"] = max(0.0, total_ms - device_ms)
-    return output, phases, total_ms
+    groups_checked = 0
+    max_selected_per_group = 0
+    fanout_violations = 0
+    for batch, major, edge_type, selected, count in selected_groups:
+        if selected.numel() == 0:
+            continue
+        groups = torch.stack(
+            (batch[selected], major[selected], edge_type[selected]),
+            dim=1,
+        )
+        counts = groups.unique(dim=0, return_counts=True)[1]
+        groups_checked += counts.numel()
+        max_selected_per_group = max(
+            max_selected_per_group,
+            int(counts.max().item()),
+        )
+        fanout_violations += int((counts > count).sum().item())
+    return (
+        output,
+        phases,
+        total_ms,
+        {
+            "groups_checked": groups_checked,
+            "max_selected_per_group": max_selected_per_group,
+            "violations": fanout_violations,
+        },
+    )
 
 
 def _sample_cuda_once(
@@ -616,10 +691,18 @@ def _cpu_environment() -> dict[str, Any]:
     ):
         pass
 
+    affinity = (
+        sorted(os.sched_getaffinity(0))
+        if hasattr(os, "sched_getaffinity")
+        else None
+    )
+    load_average = list(os.getloadavg()) if hasattr(os, "getloadavg") else None
     return {
         "model": fields.get("Model name", platform.processor() or "unknown"),
         "architecture": fields.get("Architecture", platform.machine()),
         "logical_cpu_count": os.cpu_count(),
+        "process_cpu_affinity": affinity,
+        "load_average_1m_5m_15m": load_average,
         "sockets": fields.get("Socket(s)"),
         "cores_per_socket": fields.get("Core(s) per socket"),
         "threads_per_core": fields.get("Thread(s) per core"),
@@ -657,6 +740,21 @@ def _environment() -> dict[str, Any]:
                 except importlib.metadata.PackageNotFoundError:
                     version = "unknown"
             versions[module_name] = version
+    distribution_versions = {}
+    for package_name in (
+        "cudf-cu13",
+        "cupy-cuda13x",
+        "pyg-lib",
+        "pylibcugraph-cu13",
+        "relbench",
+        "torch",
+    ):
+        try:
+            distribution_versions[package_name] = importlib.metadata.version(
+                package_name
+            )
+        except importlib.metadata.PackageNotFoundError:
+            distribution_versions[package_name] = "not_installed"
     gpu: dict[str, Any] | None = None
     if torch.cuda.is_available():
         properties = torch.cuda.get_device_properties(0)
@@ -678,6 +776,7 @@ def _environment() -> dict[str, Any]:
         driver = "unavailable"
     return {
         "versions": versions,
+        "distribution_versions": distribution_versions,
         "cpu": _cpu_environment(),
         "gpu": gpu,
         "nvidia_driver": driver,
@@ -753,6 +852,8 @@ def _run_variant(
         latencies.append(latency)
 
     sampled_rows: list[float] = []
+    output_to_host_ms: list[float] = []
+    validation_fingerprint_ms: list[float] = []
     output_digests: list[str] = []
     invariant: dict[str, Any] | None = None
     for _ in range(repetitions):
@@ -774,7 +875,16 @@ def _run_variant(
                 fanout,
                 workload.task_time_column,
             )
-        invariant = output_invariants(output, workload)
+        materialization_started = time.perf_counter_ns()
+        materialized_output = output.cpu()
+        output_to_host_ms.append(
+            (time.perf_counter_ns() - materialization_started) / 1_000_000
+        )
+        validation_started = time.perf_counter_ns()
+        invariant = output_invariants(materialized_output, workload)
+        validation_fingerprint_ms.append(
+            (time.perf_counter_ns() - validation_started) / 1_000_000
+        )
         if not invariant["valid"]:
             raise RuntimeError(
                 f"Sampled-output invariant failed: {invariant['errors']}"
@@ -784,11 +894,12 @@ def _run_variant(
 
     profiled_latencies: list[float] = []
     phase_samples: dict[str, list[float]] = {}
+    fanout_observations: list[dict[str, int]] = []
     profiled_invariant: dict[str, Any] | None = None
     if mode == "cuda":
         assert isinstance(sampler, CuGraphRelationalSampler)
         for _ in range(repetitions):
-            profiled_output, phases, profiled_latency = (
+            profiled_output, phases, profiled_latency, fanout_observation = (
                 sample_cuda_with_phases(
                     sampler,
                     task_table,
@@ -798,6 +909,7 @@ def _run_variant(
                 )
             )
             profiled_latencies.append(profiled_latency)
+            fanout_observations.append(fanout_observation)
             for name, value in phases.items():
                 phase_samples.setdefault(name, []).append(value)
 
@@ -806,6 +918,13 @@ def _run_variant(
             raise RuntimeError(
                 "Profiled sampled-output invariant failed: "
                 f"{profiled_invariant['errors']}"
+            )
+        fanout_violations = sum(
+            observation["violations"] for observation in fanout_observations
+        )
+        if fanout_violations:
+            raise RuntimeError(
+                f"Observed {fanout_violations} finite fanout violations"
             )
 
     latency = summarize(latencies)
@@ -824,6 +943,10 @@ def _run_variant(
             / float(latency["median"]),
         },
         "task_to_device_ms_excluded": task_to_device_ms,
+        "output_to_host_ms_excluded": summarize(output_to_host_ms),
+        "validation_fingerprint_ms_excluded": summarize(
+            validation_fingerprint_ms
+        ),
         "sampled_rows": summarize(sampled_rows),
         "invariants": invariant,
         "phases_ms": {
@@ -834,6 +957,8 @@ def _run_variant(
             "latency_ms": latencies,
             "sampled_rows": sampled_rows,
             "output_sha256": output_digests,
+            "output_to_host_ms": output_to_host_ms,
+            "validation_fingerprint_ms": validation_fingerprint_ms,
         },
     }
     if profiled_latencies:
@@ -843,8 +968,26 @@ def _run_variant(
             {
                 "profiled_latency_ms": profiled_latencies,
                 "phases_ms": phase_samples,
+                "finite_fanout_observations": fanout_observations,
             }
         )
+        groups_checked = sum(
+            observation["groups_checked"]
+            for observation in fanout_observations
+        )
+        if groups_checked:
+            result["finite_fanout_observations"] = {
+                "scope": (
+                    "CUDA temporal latest-k groups observed during the "
+                    "separate profiled pass"
+                ),
+                "groups_checked": groups_checked,
+                "max_selected_per_group": max(
+                    observation["max_selected_per_group"]
+                    for observation in fanout_observations
+                ),
+                "violations": 0,
+            }
     return result
 
 
@@ -910,6 +1053,14 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 "Separate CUDA pass with event instrumentation; "
                 "phases are independent medians"
             ),
+            "output_to_host_ms_excluded": (
+                "Separate validation pass; materializes the returned output "
+                "on the host after the sampler call"
+            ),
+            "validation_fingerprint_ms_excluded": (
+                "Separate validation pass after host materialization; checks "
+                "correctness and computes canonical output fingerprints"
+            ),
         },
         "initialization": {
             "sampler_topology_build_ms": initialization_ms,
@@ -934,6 +1085,18 @@ def compare_results(
         raise ValueError("CPU and CUDA workload contracts differ")
     if cpu_result["random_state"] != cuda_result["random_state"]:
         raise ValueError("CPU and CUDA random-state seeds differ")
+    cpu_versions = cpu_result["environment"]["versions"]
+    cuda_versions = cuda_result["environment"]["versions"]
+    if cpu_versions != cuda_versions:
+        raise ValueError("CPU and CUDA runtime versions differ")
+    cpu_distributions = cpu_result["environment"].get(
+        "distribution_versions", {}
+    )
+    cuda_distributions = cuda_result["environment"].get(
+        "distribution_versions", {}
+    )
+    if cpu_distributions != cuda_distributions:
+        raise ValueError("CPU and CUDA distribution versions differ")
     cpu_runs = {_run_key(run): run for run in cpu_result["runs"]}
     cuda_runs = {_run_key(run): run for run in cuda_result["runs"]}
     common = sorted(cpu_runs.keys() & cuda_runs.keys())
@@ -979,6 +1142,18 @@ def compare_results(
             "cuda_task_to_device_ms_excluded": cuda_run.get(
                 "task_to_device_ms_excluded"
             ),
+            "cpu_output_to_host_median_ms_excluded": cpu_run[
+                "output_to_host_ms_excluded"
+            ]["median"],
+            "cuda_output_to_host_median_ms_excluded": cuda_run[
+                "output_to_host_ms_excluded"
+            ]["median"],
+            "cpu_validation_fingerprint_median_ms_excluded": cpu_run[
+                "validation_fingerprint_ms_excluded"
+            ]["median"],
+            "cuda_validation_fingerprint_median_ms_excluded": cuda_run[
+                "validation_fingerprint_ms_excluded"
+            ]["median"],
         }
         if "profiled_latency_ms" in cuda_run:
             profiled = float(cuda_run["profiled_latency_ms"]["median"])
@@ -999,6 +1174,7 @@ def compare_results(
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "workload": cpu_result["workload"],
         "random_state": cpu_result["random_state"],
+        "runtime_versions_match": True,
         "cpu": {
             "environment": cpu_result["environment"],
             "initialization": cpu_result["initialization"],
@@ -1134,7 +1310,7 @@ payload.runs.forEach((run) => {{
   }}); item.append(bar, legend); root.appendChild(item);
 }});</script></body></html>"""
     html_path.parent.mkdir(parents=True, exist_ok=True)
-    html_path.write_text(html)
+    html_path.write_text(html + "\n")
 
 
 def _load_json(path: Path) -> dict[str, Any]:

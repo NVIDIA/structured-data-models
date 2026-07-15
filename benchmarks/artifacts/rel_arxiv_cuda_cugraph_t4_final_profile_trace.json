@@ -7,133 +7,133 @@
         {
           "label": "fanout=[16], batch=1",
           "phases_ms": {
-            "neighbor_sampling_ms": 12.647696405649185,
-            "output_assembly_ms": 1.042896032333374,
-            "synchronization_other_ms": 0.3039910556621548,
-            "task_to_seed_join_ms": 0.2783679962158203,
-            "temporal_top_k_ms": 0.6913920044898987
+            "neighbor_sampling_ms": 13.978639960289001,
+            "output_assembly_ms": 1.1328799724578857,
+            "synchronization_other_ms": 0.3697733636550904,
+            "task_to_seed_join_ms": 0.33243200182914734,
+            "temporal_top_k_ms": 0.7291519939899445
           },
-          "profiled_latency_ms": 14.977655500000001,
-          "public_latency_ms": 14.724972
+          "profiled_latency_ms": 16.5409595,
+          "public_latency_ms": 16.146061500000002
         },
         {
           "label": "fanout=[16], batch=128",
           "phases_ms": {
-            "neighbor_sampling_ms": 13.216448187828064,
-            "output_assembly_ms": 1.7234400510787964,
-            "synchronization_other_ms": 0.29519492987537355,
-            "task_to_seed_join_ms": 0.27427199482917786,
-            "temporal_top_k_ms": 0.6759519875049591
+            "neighbor_sampling_ms": 14.652896016836166,
+            "output_assembly_ms": 1.8835359811782837,
+            "synchronization_other_ms": 0.36113307494163394,
+            "task_to_seed_join_ms": 0.32844799757003784,
+            "temporal_top_k_ms": 0.7409279942512512
           },
-          "profiled_latency_ms": 16.1957235,
-          "public_latency_ms": 16.1331685
+          "profiled_latency_ms": 18.0115135,
+          "public_latency_ms": 17.5924235
         },
         {
           "label": "fanout=[16], batch=1024",
           "phases_ms": {
-            "neighbor_sampling_ms": 16.635328203439713,
-            "output_assembly_ms": 2.167472004890442,
-            "synchronization_other_ms": 0.3729040851717009,
-            "task_to_seed_join_ms": 0.319472000002861,
-            "temporal_top_k_ms": 1.0784319639205933
+            "neighbor_sampling_ms": 16.635919839143753,
+            "output_assembly_ms": 1.8361279964447021,
+            "synchronization_other_ms": 0.3514598509178164,
+            "task_to_seed_join_ms": 0.3078079968690872,
+            "temporal_top_k_ms": 0.9199199974536896
           },
-          "profiled_latency_ms": 20.585156,
-          "public_latency_ms": 18.247204500000002
+          "profiled_latency_ms": 20.0784135,
+          "public_latency_ms": 19.969457
         },
         {
           "label": "fanout=[16], batch=4096",
           "phases_ms": {
-            "neighbor_sampling_ms": 19.083983421325684,
-            "output_assembly_ms": 2.0728800296783447,
-            "synchronization_other_ms": 0.36862582755374973,
-            "task_to_seed_join_ms": 0.33164799213409424,
-            "temporal_top_k_ms": 1.1202239990234375
+            "neighbor_sampling_ms": 19.089568614959717,
+            "output_assembly_ms": 1.8826079964637756,
+            "synchronization_other_ms": 0.34813530388069047,
+            "task_to_seed_join_ms": 0.31596799194812775,
+            "temporal_top_k_ms": 1.1143360137939453
           },
-          "profiled_latency_ms": 23.1096165,
-          "public_latency_ms": 21.603437999999997
+          "profiled_latency_ms": 22.768735999999997,
+          "public_latency_ms": 23.0021345
         },
         {
           "label": "fanout=[16], batch=8192",
           "phases_ms": {
-            "neighbor_sampling_ms": 23.767568588256836,
-            "output_assembly_ms": 1.96971195936203,
-            "synchronization_other_ms": 0.36397724348259075,
-            "task_to_seed_join_ms": 0.31281599402427673,
-            "temporal_top_k_ms": 1.5545920133590698
+            "neighbor_sampling_ms": 24.627967178821564,
+            "output_assembly_ms": 1.999184012413025,
+            "synchronization_other_ms": 0.40569196495246906,
+            "task_to_seed_join_ms": 0.36027200520038605,
+            "temporal_top_k_ms": 1.5106720328330994
           },
-          "profiled_latency_ms": 28.013916000000002,
-          "public_latency_ms": 26.188493
+          "profiled_latency_ms": 28.89046,
+          "public_latency_ms": 27.797179999999997
         },
         {
           "label": "fanout=[16, 16], batch=1",
           "phases_ms": {
-            "neighbor_sampling_ms": 24.184927344322205,
-            "output_assembly_ms": 1.0827839970588684,
-            "synchronization_other_ms": 0.30733736995220085,
-            "task_to_seed_join_ms": 0.29227200150489807,
-            "temporal_top_k_ms": 1.3669599890708923
+            "neighbor_sampling_ms": 27.106527417898178,
+            "output_assembly_ms": 1.1935360431671143,
+            "synchronization_other_ms": 0.3993149350376122,
+            "task_to_seed_join_ms": 0.35624000430107117,
+            "temporal_top_k_ms": 1.4857759773731232
           },
-          "profiled_latency_ms": 27.224187,
-          "public_latency_ms": 27.235341
+          "profiled_latency_ms": 30.482704,
+          "public_latency_ms": 29.4289375
         },
         {
           "label": "fanout=[16, 16], batch=128",
           "phases_ms": {
-            "neighbor_sampling_ms": 26.67924788594246,
-            "output_assembly_ms": 2.4901280403137207,
-            "synchronization_other_ms": 0.3184357407875087,
-            "task_to_seed_join_ms": 0.29492799937725067,
-            "temporal_top_k_ms": 1.3840160071849823
+            "neighbor_sampling_ms": 29.270303428173065,
+            "output_assembly_ms": 2.6675360202789307,
+            "synchronization_other_ms": 0.3943554766511923,
+            "task_to_seed_join_ms": 0.3502559959888458,
+            "temporal_top_k_ms": 1.49713596701622
           },
-          "profiled_latency_ms": 31.1428185,
-          "public_latency_ms": 30.65495
+          "profiled_latency_ms": 34.057165,
+          "public_latency_ms": 33.3907825
         },
         {
           "label": "fanout=[16, 16], batch=1024",
           "phases_ms": {
-            "neighbor_sampling_ms": 38.20358419418335,
-            "output_assembly_ms": 2.4605120420455933,
-            "synchronization_other_ms": 0.31413645928287437,
-            "task_to_seed_join_ms": 0.29923200607299805,
-            "temporal_top_k_ms": 1.7794079780578613
+            "neighbor_sampling_ms": 40.377103835344315,
+            "output_assembly_ms": 2.58843195438385,
+            "synchronization_other_ms": 0.3859885443897255,
+            "task_to_seed_join_ms": 0.3437120020389557,
+            "temporal_top_k_ms": 1.877407968044281
           },
-          "profiled_latency_ms": 43.066631,
-          "public_latency_ms": 44.0226335
+          "profiled_latency_ms": 45.5736555,
+          "public_latency_ms": 45.559512
         },
         {
           "label": "fanout=[16, 16], batch=4096",
           "phases_ms": {
-            "neighbor_sampling_ms": 62.682399690151215,
-            "output_assembly_ms": 2.5173280239105225,
-            "synchronization_other_ms": 0.32616299927520487,
-            "task_to_seed_join_ms": 0.3056959956884384,
-            "temporal_top_k_ms": 2.3209919929504395
+            "neighbor_sampling_ms": 65.22534281015396,
+            "output_assembly_ms": 2.6645439863204956,
+            "synchronization_other_ms": 0.3925426561384242,
+            "task_to_seed_join_ms": 0.3530239909887314,
+            "temporal_top_k_ms": 2.4196799993515015
           },
-          "profiled_latency_ms": 68.15409650000001,
-          "public_latency_ms": 67.609656
+          "profiled_latency_ms": 70.97250600000001,
+          "public_latency_ms": 71.500347
         },
         {
           "label": "fanout=[16, 16], batch=8192",
           "phases_ms": {
-            "neighbor_sampling_ms": 104.65947550535202,
-            "output_assembly_ms": 2.6013599634170532,
-            "synchronization_other_ms": 0.33367940040684374,
-            "task_to_seed_join_ms": 0.3209120035171509,
-            "temporal_top_k_ms": 3.540783941745758
+            "neighbor_sampling_ms": 107.16655719280243,
+            "output_assembly_ms": 2.724128007888794,
+            "synchronization_other_ms": 0.40194114874839926,
+            "task_to_seed_join_ms": 0.3628479987382889,
+            "temporal_top_k_ms": 3.551024079322815
           },
-          "profiled_latency_ms": 111.44543250000001,
-          "public_latency_ms": 110.79262299999999
+          "profiled_latency_ms": 114.2208325,
+          "public_latency_ms": 113.50797299999999
         },
         {
           "label": "fanout=[-1], batch=8",
           "phases_ms": {
-            "neighbor_sampling_ms": 11.28556776046753,
-            "output_assembly_ms": 1.7687039971351624,
-            "synchronization_other_ms": 0.30986991380786844,
-            "task_to_seed_join_ms": 0.2760639935731888
+            "neighbor_sampling_ms": 12.280687808990479,
+            "output_assembly_ms": 1.8280960321426392,
+            "synchronization_other_ms": 0.34557299793529506,
+            "task_to_seed_join_ms": 0.318448007106781
           },
-          "profiled_latency_ms": 13.6292475,
-          "public_latency_ms": 13.401505
+          "profiled_latency_ms": 14.800389,
+          "public_latency_ms": 14.51644
         }
       ]
     },
@@ -145,7 +145,7 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1"
       },
-      "dur": 278.3679962158203,
+      "dur": 332.43200182914734,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 0,
@@ -157,55 +157,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1"
       },
-      "dur": 12647.696405649185,
+      "dur": 13978.639960289001,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 0,
       "tid": 0,
-      "ts": 278.3679962158203
+      "ts": 332.43200182914734
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1"
       },
-      "dur": 691.3920044898987,
+      "dur": 729.1519939899445,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 0,
       "tid": 0,
-      "ts": 12926.064401865005
+      "ts": 14311.071962118149
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1"
       },
-      "dur": 1042.896032333374,
+      "dur": 1132.8799724578857,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 0,
       "tid": 0,
-      "ts": 13617.456406354904
+      "ts": 15040.223956108093
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1"
       },
-      "dur": 303.9910556621548,
+      "dur": 369.7733636550904,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 0,
       "tid": 0,
-      "ts": 14660.352438688278
+      "ts": 16173.103928565979
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=128"
       },
-      "dur": 274.27199482917786,
+      "dur": 328.44799757003784,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 1,
@@ -217,55 +217,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=128"
       },
-      "dur": 13216.448187828064,
+      "dur": 14652.896016836166,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 1,
       "tid": 0,
-      "ts": 274.27199482917786
+      "ts": 328.44799757003784
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=128"
       },
-      "dur": 675.9519875049591,
+      "dur": 740.9279942512512,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 1,
       "tid": 0,
-      "ts": 13490.720182657242
+      "ts": 14981.344014406204
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=128"
       },
-      "dur": 1723.4400510787964,
+      "dur": 1883.5359811782837,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 1,
       "tid": 0,
-      "ts": 14166.672170162201
+      "ts": 15722.272008657455
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=128"
       },
-      "dur": 295.19492987537353,
+      "dur": 361.13307494163394,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 1,
       "tid": 0,
-      "ts": 15890.112221240997
+      "ts": 17605.80798983574
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1024"
       },
-      "dur": 319.472000002861,
+      "dur": 307.8079968690872,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 2,
@@ -277,55 +277,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1024"
       },
-      "dur": 16635.328203439713,
+      "dur": 16635.919839143753,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 2,
       "tid": 0,
-      "ts": 319.472000002861
+      "ts": 307.8079968690872
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1024"
       },
-      "dur": 1078.4319639205933,
+      "dur": 919.9199974536896,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 2,
       "tid": 0,
-      "ts": 16954.800203442574
+      "ts": 16943.72783601284
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1024"
       },
-      "dur": 2167.472004890442,
+      "dur": 1836.1279964447021,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 2,
       "tid": 0,
-      "ts": 18033.232167363167
+      "ts": 17863.64783346653
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=1024"
       },
-      "dur": 372.9040851717009,
+      "dur": 351.4598509178164,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 2,
       "tid": 0,
-      "ts": 20200.70417225361
+      "ts": 19699.775829911232
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=4096"
       },
-      "dur": 331.64799213409424,
+      "dur": 315.96799194812775,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 3,
@@ -337,55 +337,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=4096"
       },
-      "dur": 19083.983421325684,
+      "dur": 19089.568614959717,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 3,
       "tid": 0,
-      "ts": 331.64799213409424
+      "ts": 315.96799194812775
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=4096"
       },
-      "dur": 1120.2239990234375,
+      "dur": 1114.3360137939453,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 3,
       "tid": 0,
-      "ts": 19415.631413459778
+      "ts": 19405.536606907845
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=4096"
       },
-      "dur": 2072.8800296783447,
+      "dur": 1882.6079964637756,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 3,
       "tid": 0,
-      "ts": 20535.855412483215
+      "ts": 20519.87262070179
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=4096"
       },
-      "dur": 368.62582755374973,
+      "dur": 348.13530388069046,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 3,
       "tid": 0,
-      "ts": 22608.73544216156
+      "ts": 22402.480617165565
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=8192"
       },
-      "dur": 312.81599402427673,
+      "dur": 360.27200520038605,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 4,
@@ -397,55 +397,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=8192"
       },
-      "dur": 23767.568588256836,
+      "dur": 24627.967178821564,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 4,
       "tid": 0,
-      "ts": 312.81599402427673
+      "ts": 360.27200520038605
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=8192"
       },
-      "dur": 1554.5920133590698,
+      "dur": 1510.6720328330994,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 4,
       "tid": 0,
-      "ts": 24080.384582281113
+      "ts": 24988.23918402195
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=8192"
       },
-      "dur": 1969.71195936203,
+      "dur": 1999.184012413025,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 4,
       "tid": 0,
-      "ts": 25634.976595640182
+      "ts": 26498.91121685505
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16], batch=8192"
       },
-      "dur": 363.9772434825908,
+      "dur": 405.69196495246905,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 4,
       "tid": 0,
-      "ts": 27604.688555002213
+      "ts": 28498.095229268074
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1"
       },
-      "dur": 292.27200150489807,
+      "dur": 356.24000430107117,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 5,
@@ -457,55 +457,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1"
       },
-      "dur": 24184.927344322205,
+      "dur": 27106.527417898178,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 5,
       "tid": 0,
-      "ts": 292.27200150489807
+      "ts": 356.24000430107117
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1"
       },
-      "dur": 1366.9599890708923,
+      "dur": 1485.7759773731232,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 5,
       "tid": 0,
-      "ts": 24477.199345827103
+      "ts": 27462.76742219925
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1"
       },
-      "dur": 1082.7839970588684,
+      "dur": 1193.5360431671143,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 5,
       "tid": 0,
-      "ts": 25844.159334897995
+      "ts": 28948.543399572372
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1"
       },
-      "dur": 307.33736995220085,
+      "dur": 399.31493503761214,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 5,
       "tid": 0,
-      "ts": 26926.943331956863
+      "ts": 30142.079442739487
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=128"
       },
-      "dur": 294.92799937725067,
+      "dur": 350.2559959888458,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 6,
@@ -517,55 +517,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=128"
       },
-      "dur": 26679.24788594246,
+      "dur": 29270.303428173065,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 6,
       "tid": 0,
-      "ts": 294.92799937725067
+      "ts": 350.2559959888458
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=128"
       },
-      "dur": 1384.0160071849823,
+      "dur": 1497.13596701622,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 6,
       "tid": 0,
-      "ts": 26974.17588531971
+      "ts": 29620.55942416191
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=128"
       },
-      "dur": 2490.1280403137207,
+      "dur": 2667.5360202789307,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 6,
       "tid": 0,
-      "ts": 28358.191892504692
+      "ts": 31117.69539117813
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=128"
       },
-      "dur": 318.4357407875087,
+      "dur": 394.3554766511923,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 6,
       "tid": 0,
-      "ts": 30848.319932818413
+      "ts": 33785.23141145706
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1024"
       },
-      "dur": 299.23200607299805,
+      "dur": 343.7120020389557,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 7,
@@ -577,55 +577,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1024"
       },
-      "dur": 38203.58419418335,
+      "dur": 40377.103835344315,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 7,
       "tid": 0,
-      "ts": 299.23200607299805
+      "ts": 343.7120020389557
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1024"
       },
-      "dur": 1779.4079780578613,
+      "dur": 1877.407968044281,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 7,
       "tid": 0,
-      "ts": 38502.81620025635
+      "ts": 40720.81583738327
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1024"
       },
-      "dur": 2460.5120420455933,
+      "dur": 2588.43195438385,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 7,
       "tid": 0,
-      "ts": 40282.22417831421
+      "ts": 42598.22380542755
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=1024"
       },
-      "dur": 314.1364592828744,
+      "dur": 385.9885443897255,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 7,
       "tid": 0,
-      "ts": 42742.7362203598
+      "ts": 45186.6557598114
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=4096"
       },
-      "dur": 305.6959956884384,
+      "dur": 353.0239909887314,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 8,
@@ -637,55 +637,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=4096"
       },
-      "dur": 62682.399690151215,
+      "dur": 65225.34281015396,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 8,
       "tid": 0,
-      "ts": 305.6959956884384
+      "ts": 353.0239909887314
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=4096"
       },
-      "dur": 2320.9919929504395,
+      "dur": 2419.6799993515015,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 8,
       "tid": 0,
-      "ts": 62988.09568583965
+      "ts": 65578.36680114269
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=4096"
       },
-      "dur": 2517.3280239105225,
+      "dur": 2664.5439863204956,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 8,
       "tid": 0,
-      "ts": 65309.08767879009
+      "ts": 67998.0468004942
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=4096"
       },
-      "dur": 326.16299927520487,
+      "dur": 392.5426561384242,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 8,
       "tid": 0,
-      "ts": 67826.41570270061
+      "ts": 70662.59078681469
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=8192"
       },
-      "dur": 320.9120035171509,
+      "dur": 362.8479987382889,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 9,
@@ -697,55 +697,55 @@
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=8192"
       },
-      "dur": 104659.47550535202,
+      "dur": 107166.55719280243,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 9,
       "tid": 0,
-      "ts": 320.9120035171509
+      "ts": 362.8479987382889
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=8192"
       },
-      "dur": 3540.783941745758,
+      "dur": 3551.024079322815,
       "name": "temporal_top_k_ms",
       "ph": "X",
       "pid": 9,
       "tid": 0,
-      "ts": 104980.38750886917
+      "ts": 107529.40519154072
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=8192"
       },
-      "dur": 2601.359963417053,
+      "dur": 2724.128007888794,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 9,
       "tid": 0,
-      "ts": 108521.17145061493
+      "ts": 111080.42927086353
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[16, 16], batch=8192"
       },
-      "dur": 333.67940040684374,
+      "dur": 401.94114874839926,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 9,
       "tid": 0,
-      "ts": 111122.53141403198
+      "ts": 113804.55727875233
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[-1], batch=8"
       },
-      "dur": 276.0639935731888,
+      "dur": 318.448007106781,
       "name": "task_to_seed_join_ms",
       "ph": "X",
       "pid": 10,
@@ -757,36 +757,36 @@
         "aggregation": "independent phase median",
         "request": "fanout=[-1], batch=8"
       },
-      "dur": 11285.56776046753,
+      "dur": 12280.687808990479,
       "name": "neighbor_sampling_ms",
       "ph": "X",
       "pid": 10,
       "tid": 0,
-      "ts": 276.0639935731888
+      "ts": 318.448007106781
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[-1], batch=8"
       },
-      "dur": 1768.7039971351624,
+      "dur": 1828.0960321426392,
       "name": "output_assembly_ms",
       "ph": "X",
       "pid": 10,
       "tid": 0,
-      "ts": 11561.631754040718
+      "ts": 12599.13581609726
     },
     {
       "args": {
         "aggregation": "independent phase median",
         "request": "fanout=[-1], batch=8"
       },
-      "dur": 309.86991380786844,
+      "dur": 345.57299793529506,
       "name": "synchronization_other_ms",
       "ph": "X",
       "pid": 10,
       "tid": 0,
-      "ts": 13330.33575117588
+      "ts": 14427.231848239899
     }
   ]
 }
