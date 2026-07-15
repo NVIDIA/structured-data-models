@@ -146,6 +146,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.relational.RelatedTables.edge_indices"><code class="docutils literal notranslate">edge_indices()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.relational.RelatedTables.is_same_schema"><code class="docutils literal notranslate">is_same_schema()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.relational.RelatedTables.schema"><code class="docutils literal notranslate">schema</span></code></a></li>
+<li><a class="reference internal" href="#sdm.relational.RelatedTables.select_tables"><code class="docutils literal notranslate">select_tables()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.relational.RelatedTables.to_graphviz"><code class="docutils literal notranslate">to_graphviz()</span></code></a></li>
 </ul>
 </li>
@@ -274,6 +275,20 @@ second row.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.relational.RelatedTables.select_tables">
+<span class="sig-name descname"><span class="pre">select_tables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.relational.RelatedTables.select_tables" title="Link to this definition">#</a></dt>
+<dd><p>Return related tables containing only <code class="docutils literal notranslate"><span class="pre">tables</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tables</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – The table names to select.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Self</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.relational.RelatedTables.to_graphviz">
 <span class="sig-name descname"><span class="pre">to_graphviz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hide_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://graphviz.readthedocs.io/en/stable/api.html#graphviz.Graph" title="(in graphviz)"><span class="pre">graphviz.Graph</span></a></span></span><a class="headerlink" href="#sdm.relational.RelatedTables.to_graphviz" title="Link to this definition">#</a></dt>
 <dd><p>Return a task visualization of the relational schema.</p>
@@ -319,7 +334,7 @@ second row.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=72f3bd33"></script>
+      <script src="../../_static/documentation_options.js?v=849fb76a"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
