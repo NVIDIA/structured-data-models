@@ -19,9 +19,6 @@ class TaskDispatch(Processor):
     because output processing has no fitting data of its own. Configure
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
-    This dispatcher does not change the output shape contract: compatibility
-    with stacked or reduced outputs is determined by the selected route.
-
     Args:
         classification: Output processor for categorical targets. An iterable
             is normalized to :class:`~sdm.processing.Sequential`.

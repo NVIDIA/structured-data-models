@@ -32,6 +32,7 @@ class ReduceEstimators(Processor):
         method: Literal["mean"] = "mean",
     ) -> None:
         super().__init__()
+        # TODO: Support `method="median"` when required by a model recipe.
         if method != "mean":
             raise ValueError("method must be 'mean'")
         self.method = method
