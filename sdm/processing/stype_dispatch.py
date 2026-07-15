@@ -17,7 +17,8 @@ class StypeDispatch(Processor, InvertibleMixin):
     :class:`TableTensor` and passed to that processor. A route may change
     column values, names, count, or order. Route outputs are concatenated in
     semantic type order. With the default passthrough behavior, unconfigured
-    semantic types follow in input order.
+    semantic types follow in input order. A ``generator`` passed to ``fit()``
+    or ``fit_transform()`` is passed on to every route.
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible. Tracking transformed ownership for routes
@@ -81,7 +82,12 @@ class StypeDispatch(Processor, InvertibleMixin):
             "remainder='passthrough' or remainder='drop'."
         )
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         remainder_stypes = [
             stype
             for stype, columns in table.columns.items()
@@ -93,7 +99,7 @@ class StypeDispatch(Processor, InvertibleMixin):
             route_input = table.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
-            processor.fit(route_input)
+            processor.fit(route_input, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         remainder_stypes = [

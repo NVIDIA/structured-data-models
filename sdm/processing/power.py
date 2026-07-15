@@ -184,7 +184,12 @@ class Power(Processor, InvertibleMixin):
             upper_bound,
         )
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         n_samples, n_features = numerical.shape
 

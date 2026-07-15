@@ -229,17 +229,37 @@ def test_quantile_normal_distribution_preserves_nan_positions(
     assert inverse.device == device
 
 
-@withCUDA
-def test_quantile_subsample_is_reproducible_by_default(
-    device: torch.device,
-) -> None:
-    inp = torch.arange(60.0, device=device).view(30, 2)
+def test_quantile_subsample_is_reproducible_with_generator() -> None:
+    # Distinct values: any other row subset changes the quantiles.
+    inp = torch.arange(200.0).view(100, 2)
 
-    first = Quantile(n_quantiles=4, subsample=12).fit(
-        TableTensor.from_tensor(inp)
+    first = Quantile(n_quantiles=6, subsample=32).fit(
+        TableTensor.from_tensor(inp),
+        generator=torch.Generator().manual_seed(0),
     )
-    second = Quantile(n_quantiles=4, subsample=12).fit(
-        TableTensor.from_tensor(inp)
+    second = Quantile(n_quantiles=6, subsample=32).fit(
+        TableTensor.from_tensor(inp),
+        generator=torch.Generator().manual_seed(0),
     )
 
     assert torch.equal(first.quantiles, second.quantiles)
+
+
+@withCUDA
+def test_quantile_subsample_honors_cpu_generator_on_any_device(
+    device: torch.device,
+) -> None:
+    # Distinct values: any other row subset changes the quantiles.
+    inp = torch.arange(200.0).view(100, 2)
+
+    reference = Quantile(n_quantiles=6, subsample=32).fit(
+        TableTensor.from_tensor(inp),
+        generator=torch.Generator().manual_seed(0),
+    )
+    fitted = Quantile(n_quantiles=6, subsample=32).fit(
+        TableTensor.from_tensor(inp.to(device)),
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert fitted.quantiles.device == device
+    assert torch.allclose(fitted.quantiles.cpu(), reference.quantiles)

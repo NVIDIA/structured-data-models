@@ -45,7 +45,12 @@ class CategoricalImpute(Processor):
             torch.empty(0, dtype=torch.long),
         )
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         data = table.categorical
         _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []

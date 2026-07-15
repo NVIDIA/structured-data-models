@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype
+from sdm.processing._utils import _draw_device
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
@@ -11,12 +12,11 @@ from sdm.tensor import TableTensor
 class CategoryShuffle(Processor):
     """Independently permute the integer codes of categorical columns.
 
-    One permutation per categorical column is drawn from the global CPU
-    generator when the processor is fitted; seed with
-    :func:`torch.manual_seed` to make the draws reproducible. Codes and their
-    corresponding category vectors are permuted together so decoded values
-    remain unchanged. Negative codes represent missing values and are
-    preserved unchanged. Only categorical columns are supported; use
+    One permutation per categorical column is drawn when the processor is
+    fitted; pass ``generator`` to ``fit()`` to make the draws reproducible.
+    Codes and their corresponding category vectors are permuted together so
+    decoded values remain unchanged. Negative codes represent missing values
+    and are preserved unchanged. Only categorical columns are supported; use
     :class:`~sdm.processing.StypeDispatch` to apply this processor to the
     categorical block of a mixed feature table.
 
@@ -45,7 +45,12 @@ class CategoryShuffle(Processor):
             torch.zeros(1, dtype=torch.long),
         )
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         device = table.categorical.device
         permutations: list[Tensor] = []
         offsets = [0]
@@ -54,12 +59,23 @@ class CategoryShuffle(Processor):
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
             elif self.method == "shift":
-                offset = int(torch.randint(n_classes, (1,)).item())
+                offset = int(
+                    torch.randint(
+                        n_classes,
+                        (1,),
+                        generator=generator,
+                        device=_draw_device(generator),
+                    ).item()
+                )
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
             else:
-                permutation = torch.randperm(n_classes).to(device=device)
+                permutation = torch.randperm(
+                    n_classes,
+                    generator=generator,
+                    device=_draw_device(generator),
+                ).to(device=device)
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 
