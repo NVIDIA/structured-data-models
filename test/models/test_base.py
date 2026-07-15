@@ -181,7 +181,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
     )
     assert model._caches is not None
     processors = [
-        cast(dict[str, Processor], cache["related_feature_processors"])
+        cast(dict[str, Processor], cache["related_processors"])
         for cache in model._caches
     ]
     assert (
