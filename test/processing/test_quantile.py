@@ -231,7 +231,7 @@ def test_quantile_normal_distribution_preserves_nan_positions(
 
 @onlyCUDA
 def test_quantile_rejects_mismatched_generator_device() -> None:
-    table = _table(torch.rand(8, 2, device="cuda"))
+    table = TableTensor.from_tensor(torch.rand(8, 2, device="cuda"))
 
     with pytest.raises(RuntimeError, match="device type for generator"):
         Quantile(subsample=4).fit(
