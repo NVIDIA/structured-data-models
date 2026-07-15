@@ -2,7 +2,7 @@ import pytest
 import torch
 from sdm import TableTensor
 from sdm.processing import Quantile
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_quantile_rejects_nonpositive_n_quantiles() -> None:
@@ -227,6 +227,17 @@ def test_quantile_normal_distribution_preserves_nan_positions(
     assert torch.allclose(inverse[finite], inp[finite])
     assert transformed.device == device
     assert inverse.device == device
+
+
+@onlyCUDA
+def test_quantile_rejects_mismatched_generator_device() -> None:
+    table = _table(torch.rand(8, 2, device="cuda"))
+
+    with pytest.raises(RuntimeError, match="device type for generator"):
+        Quantile(subsample=4).fit(
+            table,
+            generator=torch.Generator().manual_seed(0),
+        )
 
 
 def test_quantile_subsample_is_reproducible_with_generator() -> None:
