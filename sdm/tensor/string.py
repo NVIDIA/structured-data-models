@@ -137,8 +137,7 @@ class StringTensor(VarLenTensor):
                 ) from exc
 
             tensor = self
-            if not tensor.is_contiguous():
-                tensor = cast(StringTensor, tensor.contiguous())
+            tensor = tensor.contiguous()
 
             # StringTensor stores variable-width strings in separate UTF-8
             # data and offset buffers. Use pylibcudf to expose them without a
