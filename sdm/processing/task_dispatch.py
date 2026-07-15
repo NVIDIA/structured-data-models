@@ -92,14 +92,14 @@ class TaskDispatch(Processor):
     def _reset(self) -> None:
         self._task = None
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
+    def _transform(self, table: TableTensor) -> TableTensor:
         if self._task is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
         processor = cast(Processor, self.processors[self._task])
-        return processor.transform(inp)
+        return processor.transform(table)
 
     def get_extra_state(self) -> str | None:  # noqa: D102
         return self._task

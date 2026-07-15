@@ -260,6 +260,29 @@ class CategoricalTensor(Tensor):
 
         return cls(data=data, categories=(category,))
 
+    @classmethod
+    def from_tensor(cls, tensor: Tensor) -> Self:
+        r"""Create tensor from a numerical :class:`torch.Tensor`.
+
+        Args:
+            tensor: The numerical tensor.
+        """
+        uniques, inverses = zip(
+            *[
+                column.clamp(min=-1).unique(return_inverse=True, sorted=True)
+                for column in tensor.unbind(dim=-1)
+            ]
+        )
+        categories = [unique[unique >= 0] for unique in uniques]
+        inverses = [
+            inverse - 1 if unique.numel() != category.numel() else inverse
+            for inverse, unique, category in zip(inverses, uniques, categories)
+        ]
+        return cls(
+            data=torch.stack(inverses, dim=-1),
+            categories=categories,
+        )
+
     # Properties ##############################################################
 
     def as_tensor(self) -> Tensor:

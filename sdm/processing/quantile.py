@@ -83,8 +83,8 @@ class Quantile(Processor, InvertibleMixin):
             generator=generator,
         )[: self.subsample]
 
-    def _fit(self, inp: TableTensor) -> None:
-        numerical = _as_float(inp.numerical)
+    def _fit(self, table: TableTensor) -> None:
+        numerical = _as_float(table.numerical)
         n_samples = numerical.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
@@ -178,9 +178,9 @@ class Quantile(Processor, InvertibleMixin):
 
         return input_col
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        """Transform ``inp`` into the configured output distribution."""
-        numerical = _as_float(inp.numerical)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        """Transform ``table`` into the configured output distribution."""
+        numerical = _as_float(table.numerical)
         transformed = torch.empty_like(numerical)
         for i in range(numerical.shape[1]):
             transformed[:, i] = self._transform_col(
@@ -188,10 +188,10 @@ class Quantile(Processor, InvertibleMixin):
                 self.quantiles[:, i],
                 inverse=False,
             )
-        return inp.replace_blocks(numerical=transformed)
+        return table.replace_blocks(numerical=transformed)
 
-    def _inverse_transform(self, inp: TableTensor) -> TableTensor:
-        numerical = _as_float(inp.numerical)
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        numerical = _as_float(table.numerical)
         inverse = numerical.clone()
         for i in range(numerical.shape[1]):
             inverse[:, i] = self._transform_col(
@@ -199,4 +199,4 @@ class Quantile(Processor, InvertibleMixin):
                 self.quantiles[:, i],
                 inverse=True,
             )
-        return inp.replace_blocks(numerical=inverse)
+        return table.replace_blocks(numerical=inverse)
