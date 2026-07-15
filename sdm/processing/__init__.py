@@ -16,6 +16,7 @@ from sdm.processing.identity import Identity
 from sdm.processing.impute import MeanImpute
 from sdm.processing.postprocess import SoftmaxTemperature
 from sdm.processing.power import Power
+from sdm.processing.reduce_estimators import ReduceEstimators
 from sdm.processing.quantile import Quantile
 from sdm.processing.recipe import Recipe
 from sdm.processing.sigma_clip import SigmaClip
@@ -41,6 +42,7 @@ __all__ = [
     "Power",
     "Quantile",
     "SigmaClip",
+    "ReduceEstimators",
     "SoftmaxTemperature",
     "StandardScale",
     "ToNumerical",

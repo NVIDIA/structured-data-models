@@ -9,6 +9,7 @@ from sdm.processing import (
     MeanImpute,
     Power,
     Recipe,
+    ReduceEstimators,
     SigmaClip,
     SoftmaxTemperature,
     StandardScale,
@@ -52,6 +53,7 @@ def default_recipe() -> Recipe:
             ),
         ],
         output=[
+            ReduceEstimators(method="mean"),
             TaskDispatch(
                 classification=SoftmaxTemperature(temperature=0.9),
                 regression=Identity(),

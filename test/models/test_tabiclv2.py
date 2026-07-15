@@ -31,7 +31,7 @@ def test_forward(
     if dtype.is_floating_point:
         y_context = torch.randn((*batch_shape, R_context, 1), device=device)
         out = model(x_context, y_context, x_query)
-        assert out.size() == (1, *batch_shape, R_query, 999)
+        assert out.size() == (*batch_shape, R_query, 999)
     else:
         # TODO Increase max value once TabICLv2 supports 10+ classes:
         y_context = torch.randint(
@@ -42,7 +42,7 @@ def test_forward(
         )
         num_classes = len(y_context.unique())
         out = model(x_context, y_context, x_query)
-        assert out.size() == (1, *batch_shape, R_query, num_classes)
+        assert out.size() == (*batch_shape, R_query, num_classes)
 
     assert out.dtype == x_query.dtype
     assert out.device == x_query.device
@@ -77,12 +77,34 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     y_context = torch.randn(*batch_shape, R_context, 1)
 
     out = model(x_context, y_context, x_query, num_estimators=2)
-    assert out.size() == (2, *batch_shape, R_query, 999)
+    assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
     out = model.predict(x_query)
-    assert out.size() == (3, *batch_shape, R_query, 999)
+    assert out.size() == (*batch_shape, R_query, 999)
     model.clear()
+
+
+@withCUDA
+def test_default_recipe_reduces_logits_before_softmax(
+    device: torch.device,
+) -> None:
+    recipe = TabICLv2.default_recipe()
+    target = TableTensor.from_tensor(
+        torch.tensor([[0], [1]], dtype=torch.int64, device=device)
+    )
+    recipe.target.fit(target)
+    logits = torch.tensor(
+        [[[4.0, 0.0]], [[0.0, 2.0]]],
+        device=device,
+    )
+
+    actual = recipe.output.transform(TableTensor.from_tensor(logits)).numerical
+
+    expected = (logits.mean(dim=0) / 0.9).softmax(dim=-1)
+    probability_average = (logits / 0.9).softmax(dim=-1).mean(dim=0)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=1e-7)
+    assert not torch.allclose(actual, probability_average)
 
 
 @withCUDA

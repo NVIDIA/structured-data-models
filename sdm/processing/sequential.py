@@ -6,6 +6,9 @@ from sdm.tensor import TableTensor
 class Sequential(Processor, InvertibleMixin):
     r"""Apply a number of :class:`Processor` instances in sequence.
 
+    Each step receives the exact output shape of the preceding step;
+    ``Sequential`` does not implicitly insert or remove dimensions.
+
     Args:
         args: Sequence of :class:`Processor` instances.
     """
