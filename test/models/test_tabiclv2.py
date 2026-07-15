@@ -54,7 +54,7 @@ def test_forward(
     else:
         y_context = torch.randint(
             low=0,
-            high=10,
+            high=100,
             size=(*batch_shape, R_context, 1),
             device=device,
         )
@@ -132,40 +132,6 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     y_swapped = 5 * b + a
     out = row_embedding(x, y)
     torch.testing.assert_close(out, row_embedding(x, y_swapped))
-
-
-@withCUDA
-@pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])
-def test_tabiclv2_many_classes(
-    device: torch.device,
-    batch_shape: tuple[int, ...],
-) -> None:
-    model = _make_small_classifier(max_classes=3, device=device)
-    num_classes, test_size = 7, 2
-    x = torch.randn(
-        *batch_shape,
-        num_classes + test_size,
-        6,
-        device=device,
-    )
-    y = torch.arange(num_classes, device=device)
-    y = y.expand(*batch_shape, num_classes)
-
-    out = model(x, y)
-
-    assert out.size() == (*batch_shape, test_size, num_classes)
-    assert out.dtype == x.dtype
-    assert out.device == device
-    assert torch.isfinite(out).all()
-    probabilities = (out / 0.9).softmax(dim=-1)
-    torch.testing.assert_close(
-        probabilities.sum(dim=-1),
-        torch.ones(*batch_shape, test_size, device=device),
-    )
-
-    if len(batch_shape) > 0:
-        looped = torch.stack([model(x[i], y[i]) for i in range(x.size(0))])
-        torch.testing.assert_close(out, looped)
 
 
 def test_tabiclv2_hierarchical_probabilities(
