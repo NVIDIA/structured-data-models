@@ -70,7 +70,6 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
-exclude-newer-package = { torch = "1 hour" }
 
 [tool.pytest.ini_options]
 addopts = [
