@@ -11,6 +11,7 @@ from torch import Tensor
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
+from sdm.tensor.io import arrow_as_tensor
 from sdm.tensor.mixin import DeviceMixin
 
 PREFIX = "sdm_internal"
@@ -264,8 +265,8 @@ class RelationalData(DeviceMixin):
                 join_type="inner",
             )
 
-            src = torch.from_numpy(joined[LEFT_ROW_ID].to_numpy()).to(device)
-            dst = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy()).to(device)
+            src = arrow_as_tensor(joined[LEFT_ROW_ID], device=device)
+            dst = arrow_as_tensor(joined[RIGHT_ROW_ID], device=device)
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
