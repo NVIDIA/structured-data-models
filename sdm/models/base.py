@@ -1,7 +1,7 @@
 import contextlib
 import copy
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from typing import ClassVar, cast
 
 import torch
@@ -9,7 +9,7 @@ from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin, Recipe
+from sdm.processing import InvertibleMixin, Recipe, RecipeContext
 
 
 @contextlib.contextmanager
@@ -83,28 +83,45 @@ class Model(torch.nn.Module, ABC):
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
 
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
+        original_class_labels = self._class_labels(y_context)
 
-        outs: Sequence[TableTensor] = []
-        for recipe in recipes:
+        outs: list[TableTensor] = []
+        contexts: list[RecipeContext] = []
+        for estimator_index, member_recipe in enumerate(recipes):
             # TODO Transform related tables.
-            y_context_i = recipe.target.fit_transform(y_context)
+            y_context_i = member_recipe.target.fit_transform(y_context)
             out = self._forward(
-                x_context=recipe.features.fit_transform(x_context),
+                x_context=member_recipe.features.fit_transform(x_context),
                 y_context=y_context_i,
-                x_query=recipe.features.transform(x_query),
+                x_query=member_recipe.features.transform(x_query),
                 related_context_tables=None,
                 related_query_tables=None,
                 cache=None,
             )
-            if y_context_i.numerical.size(-1) == 1:
-                assert isinstance(recipe.target, InvertibleMixin)
-                out = recipe.target.inverse_transform(out)
+            contexts.append(
+                self._recipe_context(
+                    estimator_index=estimator_index,
+                    target=y_context_i,
+                    recipe=member_recipe,
+                    class_indices=self._class_indices(
+                        original_class_labels,
+                        self._class_labels(y_context_i),
+                    ),
+                )
+            )
             outs.append(out)
 
-        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        return recipe.output.transform(out)
+        # [..., estimators, rows, outputs]
+        out = cast(
+            TableTensor,
+            torch.stack(cast(list[Tensor], outs), dim=-3),
+        )
+        return recipes[0].output.transform(out, context=contexts)
 
     @_maybe_inference_mode()
     def fit(
@@ -137,21 +154,35 @@ class Model(torch.nn.Module, ABC):
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
 
+        if num_estimators <= 0:
+            raise ValueError("num_estimators must be positive")
+
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
+        original_class_labels = self._class_labels(y)
 
         self.clear()
         caches: list[Cache] = []
-        for recipe in recipes:
-            y_i = recipe.target.fit_transform(y)
+        for estimator_index, member_recipe in enumerate(recipes):
+            y_i = member_recipe.target.fit_transform(y)
+            context = self._recipe_context(
+                estimator_index=estimator_index,
+                target=y_i,
+                recipe=member_recipe,
+                class_indices=self._class_indices(
+                    original_class_labels,
+                    self._class_labels(y_i),
+                ),
+            )
             cache = Cache(
-                recipe=recipe,
+                recipe=member_recipe,
+                context=context,
                 classes=y_i.categorical.categories[0]
                 if y_i.categorical.size(-1) > 0
                 else None,
             )
             self._forward(
-                x_context=recipe.features.fit_transform(x),
+                x_context=member_recipe.features.fit_transform(x),
                 y_context=y_i,
                 x_query=None,
                 related_context_tables=None,
@@ -197,24 +228,98 @@ class Model(torch.nn.Module, ABC):
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
-        outs: Sequence[TableTensor] = []
+        outs: list[TableTensor] = []
+        contexts: list[RecipeContext] = []
         for cache in self._caches:
-            recipe = cast(Recipe, cache["recipe"])
+            member_recipe = cast(Recipe, cache["recipe"])
             out = self._forward(
                 x_context=None,
                 y_context=None,
-                x_query=recipe.features.transform(x),
+                x_query=member_recipe.features.transform(x),
                 related_context_tables=None,
                 related_query_tables=None,
                 cache=cache,
             )
-            if cache["classes"] is None:
-                assert isinstance(recipe.target, InvertibleMixin)
-                out = recipe.target.inverse_transform(out)
+            contexts.append(cast(RecipeContext, cache["context"]))
             outs.append(out)
 
-        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        return recipe.output.transform(out)
+        # [..., estimators, rows, outputs]
+        out = cast(
+            TableTensor,
+            torch.stack(cast(list[Tensor], outs), dim=-3),
+        )
+        output_recipe = cast(Recipe, self._caches[0]["recipe"])
+        return output_recipe.output.transform(out, context=contexts)
+
+    # Helpers #################################################################
+
+    @staticmethod
+    def _recipe_context(
+        *,
+        estimator_index: int,
+        target: TableTensor,
+        recipe: Recipe,
+        class_indices: tuple[int, ...] | None,
+    ) -> RecipeContext:
+        if target.numerical.size(-1) == 1:
+            if not isinstance(recipe.target, InvertibleMixin):
+                raise ValueError(
+                    "Expected Recipe target processing to support "
+                    "inverse_transform for regression."
+                )
+            return RecipeContext(
+                estimator_index=estimator_index,
+                task="regression",
+                target_inverse=recipe.target,
+            )
+        if target.categorical.size(-1) == 1:
+            return RecipeContext(
+                estimator_index=estimator_index,
+                task="classification",
+                class_indices=class_indices,
+            )
+        raise ValueError(
+            "Expected the transformed target to contain one numerical or "
+            "categorical column."
+        )
+
+    @staticmethod
+    def _class_indices(
+        original_class_labels: tuple[str, ...] | None,
+        member_class_labels: tuple[str, ...] | None,
+    ) -> tuple[int, ...] | None:
+        if member_class_labels is None:
+            return None
+        if original_class_labels is None:
+            raise ValueError(
+                "Cannot map estimator classes without original class labels."
+            )
+
+        member_indices = {
+            label: index for index, label in enumerate(member_class_labels)
+        }
+        try:
+            return tuple(
+                member_indices[label] for label in original_class_labels
+            )
+        except KeyError as exc:
+            raise ValueError(
+                f"Estimator output is missing original class {exc.args[0]!r}."
+            ) from exc
+
+    @staticmethod
+    def _class_labels(target: TableTensor) -> tuple[str, ...] | None:
+        if target.categorical.size(-1) != 1:
+            return None
+
+        values = target.categorical.categories[0].tolist()
+        labels = tuple(str(value) for value in values)
+        if len(labels) != len(set(labels)):
+            raise ValueError(
+                "Expected categorical targets to have unique class-label "
+                "representations."
+            )
+        return labels
 
     # Abstract Methods ########################################################
 

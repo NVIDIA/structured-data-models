@@ -1,4 +1,7 @@
+from collections.abc import Sequence
+
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.context import RecipeContext
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -36,6 +39,16 @@ class Sequential(Processor, InvertibleMixin):
         out = table
         for step in self.steps:
             out = step.transform(out)
+        return out
+
+    def _transform_with_context(
+        self,
+        table: TableTensor,
+        context: Sequence[RecipeContext] | None,
+    ) -> TableTensor:
+        out = table
+        for step in self.steps:
+            out = step.transform(out, context=context)
         return out
 
     def fit_transform(self, table: TableTensor) -> TableTensor:  # noqa: D102

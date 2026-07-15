@@ -1,9 +1,10 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Literal, cast
 
 import torch
 
 from sdm.processing.base import Processor
+from sdm.processing.context import RecipeContext
 from sdm.processing.sequential import Sequential
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -100,6 +101,22 @@ class TaskDispatch(Processor):
             )
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(table)
+
+    def _transform_with_context(
+        self,
+        table: TableTensor,
+        context: Sequence[RecipeContext] | None,
+    ) -> TableTensor:
+        if self._task is None:
+            raise RuntimeError(
+                f"'{self.__class__.__name__}' has no resolved task; call "
+                "'recipe.target.fit()' before transforming model output."
+            )
+        processor = cast(Processor, self.processors[self._task])
+        return processor.transform(
+            table,
+            context=context,
+        )
 
     def get_extra_state(self) -> str | None:  # noqa: D102
         return self._task

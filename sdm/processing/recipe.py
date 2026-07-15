@@ -77,9 +77,12 @@ class Recipe:
 
     - ``features``: model inputs, transformed before the model.
     - ``target``: labels transformed forward before the model. Regression
-      predictions are inverted through this pipeline; classification outputs
-      are reconstructed from the fitted target categories instead.
-    - ``output``: shape-preserving cleanup of the model output.
+      output Processors may use its fitted inverse through a
+      :class:`~sdm.processing.RecipeContext`.
+    - ``output``: complete post-model flow over raw outputs stacked as
+      ``[..., estimators, rows, outputs]``. It maps every estimator to a
+      common class or target space, reduces estimators, and applies final
+      output processing in one linear Processor sequence.
 
     Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
     steps are invertible, ``inverse_transform``. Call them directly, e.g.
@@ -93,10 +96,9 @@ class Recipe:
 
     Args:
         features: Steps applied to model inputs before the model.
-        target: Steps applied to labels. Invertible numerical target steps map
-            regression output back to the original space.
-        output: Steps applied after member outputs have been mapped to a
-            common class or target space and aggregated.
+        target: Steps applied to labels before each estimator model.
+        output: Ordered post-model steps, including estimator output mapping,
+            estimator reduction, and final output processing.
     """
 
     features: Processor

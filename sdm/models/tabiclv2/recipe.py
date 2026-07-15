@@ -2,8 +2,10 @@ from sdm.processing import (
     CategoricalAlign,
     CategoryShuffle,
     Choice,
+    ClassDecode,
     Clip,
     ConstantFilter,
+    EstimatorMean,
     FeaturePermute,
     Identity,
     MeanImpute,
@@ -13,6 +15,7 @@ from sdm.processing import (
     SoftmaxTemperature,
     StandardScale,
     StypeDispatch,
+    TargetDecode,
     TaskDispatch,
     ToNumerical,
 )
@@ -52,6 +55,11 @@ def default_recipe() -> Recipe:
             ),
         ],
         output=[
+            TaskDispatch(
+                classification=ClassDecode(),
+                regression=TargetDecode(),
+            ),
+            EstimatorMean(),
             TaskDispatch(
                 classification=SoftmaxTemperature(temperature=0.9),
                 regression=Identity(),

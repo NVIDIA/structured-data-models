@@ -6,7 +6,19 @@ import torch
 from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
-from sdm.processing import Recipe
+from sdm.processing import (
+    CategoryShuffle,
+    ClassDecode,
+    EstimatorMean,
+    Identity,
+    QuantileDecode,
+    Recipe,
+    SoftmaxTemperature,
+    StandardScale,
+    StypeDispatch,
+    TargetDecode,
+    TaskDispatch,
+)
 
 
 class KumoRFM(Model):
@@ -46,5 +58,32 @@ class KumoRFM(Model):
 
     @classmethod
     def default_recipe(cls) -> Recipe:
-        r""":meta private:"""  # noqa: D415
-        raise NotImplementedError
+        """Return the minimal task-aware KumoRFM output Recipe.
+
+        Regression follows KumoRFM v2.1's median path: sort and select the
+        model quantile head, invert each estimator's fitted target transform,
+        and then average estimators. Binary classification restores shuffled
+        class columns before averaging logits and applying softmax.
+        """
+        return Recipe(
+            target=[
+                StypeDispatch(
+                    categorical=CategoryShuffle(method="random"),
+                    numerical=StandardScale(),
+                ),
+            ],
+            output=[
+                TaskDispatch(
+                    classification=ClassDecode(),
+                    regression=[
+                        QuantileDecode(method="median"),
+                        TargetDecode(),
+                    ],
+                ),
+                EstimatorMean(),
+                TaskDispatch(
+                    classification=SoftmaxTemperature(),
+                    regression=Identity(),
+                ),
+            ],
+        )
