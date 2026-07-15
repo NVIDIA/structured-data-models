@@ -910,6 +910,44 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
     )
 
 
+@TableTensor.implements(aten.equal.default)
+def _equal(inp: TableTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+    if inp.stypes != other.stypes:
+        return False
+
+    for stype, block in _align_like(inp, other).items():
+        if not block.equal(other.blocks[stype]):
+            return False
+
+    return True
+
+
+@TableTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: TableTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+    if inp.stypes != other.stypes:
+        return False
+
+    for stype, block in _align_like(inp, other).items():
+        if not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
+            return False
+
+    return True
+
+
 @TableTensor.implements(aten.view.default)
 @preserve_view_inference_mode
 def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
