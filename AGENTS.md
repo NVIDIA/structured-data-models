@@ -14,6 +14,7 @@ Do not add platform or serving abstractions unless explicitly requested.
 # PR / GitHub Metadata
 
 - Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions, commit messages, or review replies unless explicitly requested.
+- Do not add a section named "Tests", "Testing" or similar, to PR descriptions unless the test is not covered in CI.
 - PR metadata should describe the code change only.
 
 # Project Structure
