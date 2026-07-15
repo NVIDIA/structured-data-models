@@ -38,7 +38,12 @@ class CategoricalAlign(Processor):
         super().__init__()
         self._categories: tuple[Tensor, ...] = ()
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         _check_categorical_codes(table)
         categorical = table.categorical
         columns = table.columns[Stype.categorical]

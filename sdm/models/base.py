@@ -1,7 +1,8 @@
 import contextlib
 import copy
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from typing import ClassVar, cast
 
 import torch
@@ -9,7 +10,7 @@ from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin, Recipe
+from sdm.processing import InvertibleMixin, Processor, Recipe
 
 
 @contextlib.contextmanager
@@ -83,19 +84,47 @@ class Model(torch.nn.Module, ABC):
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
 
+        if related_query_tables is not None:
+            assert related_context_tables is not None
+            related_query_tables = related_query_tables.select_tables(
+                tables=related_context_tables.tables
+            )
+
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
 
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
-            # TODO Transform related tables.
             y_context_i = recipe.target.fit_transform(y_context)
+
+            related_context_tables_i = related_query_tables_i = None
+            if related_context_tables is not None:
+                related_processors = {
+                    table_name: copy.deepcopy(recipe.features)
+                    for table_name in related_context_tables.tables
+                }
+                related_context_tables_i = replace(
+                    related_context_tables,
+                    tables={
+                        name: related_processors[name].fit_transform(t)
+                        for name, t in related_context_tables.tables.items()
+                    },
+                )
+                assert related_query_tables is not None
+                related_query_tables_i = replace(
+                    related_query_tables,
+                    tables={
+                        name: related_processors[name].transform(t)
+                        for name, t in related_query_tables.tables.items()
+                    },
+                )
+
             out = self._forward(
                 x_context=recipe.features.fit_transform(x_context),
                 y_context=y_context_i,
                 x_query=recipe.features.transform(x_query),
-                related_context_tables=None,
-                related_query_tables=None,
+                related_context_tables=related_context_tables_i,
+                related_query_tables=related_query_tables_i,
                 cache=None,
             )
             if y_context_i.numerical.size(-1) == 1:
@@ -150,11 +179,26 @@ class Model(torch.nn.Module, ABC):
                 if y_i.categorical.size(-1) > 0
                 else None,
             )
+
+            related_tables_i = None
+            if related_tables is not None:
+                related_processors = cache["related_processors"] = {
+                    table_name: copy.deepcopy(recipe.features)
+                    for table_name in related_tables.tables
+                }
+                related_tables_i = replace(
+                    related_tables,
+                    tables={
+                        name: related_processors[name].fit_transform(t)
+                        for name, t in related_tables.tables.items()
+                    },
+                )
+
             self._forward(
                 x_context=recipe.features.fit_transform(x),
                 y_context=y_i,
                 x_query=None,
-                related_context_tables=None,
+                related_context_tables=related_tables_i,
                 related_query_tables=None,
                 cache=cache,
             )
@@ -197,15 +241,38 @@ class Model(torch.nn.Module, ABC):
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
+        if related_tables is not None:
+            related_tables = related_tables.select_tables(
+                tables=cast(
+                    Mapping[str, Processor],
+                    self._caches[0]["related_processors"],
+                )
+            )
+
         outs: Sequence[TableTensor] = []
         for cache in self._caches:
             recipe = cast(Recipe, cache["recipe"])
+
+            related_tables_i = None
+            if related_tables is not None:
+                related_processors = cast(
+                    Mapping[str, Processor],
+                    cache["related_processors"],
+                )
+                related_tables_i = replace(
+                    related_tables,
+                    tables={
+                        name: related_processors[name].transform(t)
+                        for name, t in related_tables.tables.items()
+                    },
+                )
+
             out = self._forward(
                 x_context=None,
                 y_context=None,
                 x_query=recipe.features.transform(x),
                 related_context_tables=None,
-                related_query_tables=None,
+                related_query_tables=related_tables_i,
                 cache=cache,
             )
             if cache["classes"] is None:

@@ -1,3 +1,6 @@
+from typing import Literal
+
+import pytest
 import torch
 from sdm import (
     CategoricalTensor,
@@ -46,3 +49,24 @@ def test_feature_permute_shift_rotates_numerical_block() -> None:
         output.numerical,
         table.numerical.index_select(-1, torch.tensor([1, 2, 0])),
     )
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_feature_permute_is_reproducible_with_generator(
+    method: Literal["shift", "random"],
+) -> None:
+    table = _table()
+
+    first = FeaturePermute(method=method)
+    first_output = first.fit_transform(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+    second = FeaturePermute(method=method)
+    second_output = second.fit_transform(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert torch.equal(first.permutation, second.permutation)
+    assert torch.equal(first_output.numerical, second_output.numerical)

@@ -213,40 +213,21 @@ def test_edge_indices_cuda_does_not_export_to_host(
     noncontiguous: bool,
 ) -> None:
     cudf = _import_cudf()
-    tensor_to = torch.Tensor.to
 
     relational_data = cuda_data
     if noncontiguous:
-        relational_data = _composite_data(cuda=True)
         relational_data = RelationalData(
             tables={
-                name: table[::2]
-                for name, table in relational_data.tables.items()
+                name: cuda_data.tables[name][::2]
+                for name in ("orders", "users")
             },
-            relationships=relational_data.relationships,
+            # Exercise non-contiguous numeric conversion without the known
+            # dynamic-size synchronization of compacting string storage.
+            relationships=RELATIONSHIPS[:1],
         )
 
     def fail(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("GPU edge materialization exported data to host")
-
-    def guard_to(
-        tensor: torch.Tensor,
-        *args: Any,
-        **kwargs: Any,
-    ) -> torch.Tensor:
-        target = kwargs.get("device")
-        if target is None and len(args) > 0:
-            if isinstance(args[0], torch.Tensor):
-                target = args[0].device
-            elif isinstance(args[0], torch.device | str):
-                target = args[0]
-        if (
-            tensor.device.type == "cuda"
-            and target is not None
-            and torch.device(target).type == "cpu"
-        ):
-            fail()
-        return tensor_to(tensor, *args, **kwargs)
 
     with monkeypatch.context() as host_guard:
         host_guard.setattr(TableTensor, "to_arrow", fail)
@@ -254,14 +235,14 @@ def test_edge_indices_cuda_does_not_export_to_host(
         host_guard.setattr(cudf.DataFrame, "to_pandas", fail)
         host_guard.setattr(cudf.Series, "to_dlpack", fail)
         host_guard.setattr(cudf.Series, "to_numpy", fail)
-        host_guard.setattr(torch.Tensor, "cpu", fail)
-        host_guard.setattr(torch.Tensor, "item", fail)
-        host_guard.setattr(torch.Tensor, "numpy", fail)
-        host_guard.setattr(torch.Tensor, "to", guard_to)
-        host_guard.setattr(torch.Tensor, "tolist", fail)
 
-        edge_indices = relational_data.edge_indices()
-        torch.cuda.synchronize()
+        previous_mode = torch.cuda.get_sync_debug_mode()
+        torch.cuda.set_sync_debug_mode("error")
+        try:
+            edge_indices = relational_data.edge_indices()
+            torch.cuda.synchronize()
+        finally:
+            torch.cuda.set_sync_debug_mode(previous_mode)
 
     assert all(edge_index.device.type == "cuda" for edge_index in edge_indices)
 

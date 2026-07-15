@@ -14,6 +14,7 @@ from sdm.relational import (
     TaskLink,
 )
 from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID
+from sdm.tensor.io import arrow_as_tensor
 from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
@@ -196,8 +197,7 @@ class RelationalSampler:
                 f"'{task_link.table}'"
             )
 
-        seed = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy())
-        seed = seed.to(task_table.device)
+        seed = arrow_as_tensor(joined[RIGHT_ROW_ID], device=task_table.device)
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
         else:
