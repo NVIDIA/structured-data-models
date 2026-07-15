@@ -232,10 +232,8 @@ def test_row_embedding() -> None:
 
 
 @onlyFullTest
-@onlyFullTest
 @withCUDA
 def test_tabiclv2_fit_predict_compile(device: torch.device) -> None:
-    torch.manual_seed(0)
     torch._dynamo.reset()
     model = TabICLv2(pretrained=False, device=device)
 
@@ -258,10 +256,8 @@ def test_tabiclv2_fit_predict_compile(device: torch.device) -> None:
 
 
 @onlyFullTest
-@onlyFullTest
 @withCUDA
 def test_tabiclv2_autocast_compile(device: torch.device) -> None:
-    torch.manual_seed(0)
     torch._dynamo.reset()
     model = TabICLv2(pretrained=False, device=device)
 
