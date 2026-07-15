@@ -11,10 +11,12 @@ from torch.nn import GELU, Linear, Sequential
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
+from sdm.models.tabiclv2.hierarchical_classifier import (
+    HierarchicalClassifier,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.nn import HierarchicalClassifier
 from sdm.processing import Recipe
 
 

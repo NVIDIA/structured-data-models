@@ -1,6 +1,8 @@
 import pytest
 import torch
-from sdm.nn import HierarchicalClassifier
+from sdm.models.tabiclv2.hierarchical_classifier import (
+    HierarchicalClassifier,
+)
 from sdm.testing import withCUDA
 
 
