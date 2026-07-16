@@ -33,7 +33,6 @@ class KumoRFM(Model):
         {Stype.numerical, Stype.categorical}
     )
     #:
-    #:
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(
