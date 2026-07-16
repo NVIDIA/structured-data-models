@@ -9,6 +9,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 BOUNDS_THRESH = 1e-7
+_TRANSFORM_BATCH_SIZE = 32
 
 
 def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
@@ -27,6 +28,26 @@ def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
 
     result = torch.where(x <= xp[0], fp[0], result)
     return torch.where(x >= xp[-1], fp[-1], result)
+
+
+def _torch_interp_batch(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
+    n = xp.shape[1]
+    if n == 1:
+        return fp[0].expand_as(x)
+
+    idx = torch.searchsorted(xp, x, right=True).clamp(1, n - 1)
+
+    x0 = xp.gather(1, idx - 1)
+    x1 = xp.gather(1, idx)
+    y0 = fp[idx - 1]
+    y1 = fp[idx]
+
+    denom = x1 - x0
+    weight = torch.where(denom != 0, (x - x0) / denom, torch.zeros_like(x))
+    result = torch.lerp(y0, y1, weight)
+
+    result = torch.where(x <= xp[:, :1], fp[0], result)
+    return torch.where(x >= xp[:, -1:], fp[-1], result)
 
 
 class Quantile(Processor, InvertibleMixin):
@@ -183,15 +204,61 @@ class Quantile(Processor, InvertibleMixin):
 
         return input_col
 
+    def _transform_batch(self, inp: Tensor, quantiles: Tensor) -> Tensor:
+        # Searchsorted batches over the innermost dimension, so columns become
+        # the batch dimension: input ``[N, F]`` -> ``[F, N]``.
+        input_batch = inp.T.contiguous()
+        quantile_batch = quantiles.T.contiguous()
+        zero = input_batch.new_zeros(())
+        one = input_batch.new_ones(())
+
+        lower_bound_x = quantile_batch[:, :1]
+        upper_bound_x = quantile_batch[:, -1:]
+        if self.output_distribution == "normal":
+            bounds_thresh = input_batch.new_tensor(BOUNDS_THRESH)
+            lower_bounds_idx = input_batch - bounds_thresh < lower_bound_x
+            upper_bounds_idx = input_batch + bounds_thresh > upper_bound_x
+        else:
+            lower_bounds_idx = input_batch == lower_bound_x
+            upper_bounds_idx = input_batch == upper_bound_x
+
+        finite = input_batch.isfinite()
+        forward = _torch_interp_batch(
+            input_batch,
+            quantile_batch,
+            self.references,
+        )
+        backward = _torch_interp_batch(
+            -input_batch,
+            -quantile_batch.flip(1),
+            -self.references.flip(0),
+        )
+        interpolated = 0.5 * (forward - backward)
+
+        output = torch.where(finite, interpolated, input_batch)
+        output = torch.where(upper_bounds_idx, one, output)
+        output = torch.where(lower_bounds_idx, zero, output)
+
+        if self.output_distribution == "normal":
+            eps = input_batch.new_tensor(
+                BOUNDS_THRESH - torch.finfo(torch.float64).eps
+            )
+            output = torch.special.ndtri(output)
+            clip_min = torch.special.ndtri(eps)
+            clip_max = torch.special.ndtri(one - eps)
+            output = output.clamp(clip_min, clip_max)
+
+        return output.T.contiguous()
+
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` into the configured output distribution."""
         numerical = _as_float(table.numerical)
         transformed = torch.empty_like(numerical)
-        for i in range(numerical.shape[1]):
-            transformed[:, i] = self._transform_col(
-                numerical[:, i],
-                self.quantiles[:, i],
-                inverse=False,
+        for start in range(0, numerical.shape[1], _TRANSFORM_BATCH_SIZE):
+            end = min(start + _TRANSFORM_BATCH_SIZE, numerical.shape[1])
+            transformed[:, start:end] = self._transform_batch(
+                numerical[:, start:end],
+                self.quantiles[:, start:end],
             )
         return table.replace_blocks(numerical=transformed)
 
