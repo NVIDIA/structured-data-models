@@ -236,7 +236,7 @@ def test_quantile_rejects_mismatched_generator_device() -> None:
     with pytest.raises(RuntimeError, match="device type for generator"):
         Quantile(subsample=4).fit(
             table,
-            generator=torch.Generator().manual_seed(0),
+            generator=torch.Generator(),
         )
 
 
