@@ -37,7 +37,7 @@ def default_recipe() -> Recipe:
                     ToNumerical(),
                 ],
             ),
-            StypeDispatch(
+            StypeDispatch(  # TODO Support `id` as passthrough.
                 numerical=[
                     MeanImpute(),
                     ConstantFilter(),

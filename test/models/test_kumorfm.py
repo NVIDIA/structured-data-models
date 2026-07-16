@@ -1,4 +1,6 @@
 import torch
+from sdm import ColumnarTensor, Stype, TableTensor
+from sdm.models import KumoRFM
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.testing import withCUDA
 
@@ -63,3 +65,19 @@ def test_invariant_gnn_half_zero_variance_std(device: torch.device) -> None:
     assert len(std_inputs) == 2
     for h in std_inputs:  # One captured input per hop:
         assert (h == 0.0).all()
+
+
+def test_default_recipe_preserves_ids() -> None:
+    table = TableTensor(
+        columns={
+            Stype.numerical: ("value",),
+            Stype.id: ("entity_id",),
+        },
+        numerical=torch.tensor([[1.0], [2.0]]),
+        id=ColumnarTensor((torch.tensor([10, 11]),)),
+    )
+
+    transformed = KumoRFM.default_recipe().features.fit_transform(table)
+
+    assert transformed.columns[Stype.id] == ("entity_id",)
+    assert transformed.id is table.id
