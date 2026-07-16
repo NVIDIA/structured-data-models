@@ -6,7 +6,7 @@ import torch
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
-from sdm.models.tabiclv2.recipe import default_recipe
+from sdm.models.kumorfm.recipe import default_recipe
 from sdm.processing import Recipe
 
 

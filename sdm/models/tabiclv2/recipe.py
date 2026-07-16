@@ -4,7 +4,6 @@ from sdm.processing import (
     Choice,
     Clip,
     ConstantFilter,
-    DatetimeFeatures,
     FeaturePermute,
     Identity,
     MeanImpute,
@@ -37,7 +36,6 @@ def default_recipe() -> Recipe:
                     CategoricalAlign(),
                     ToNumerical(),
                 ],
-                datetime=DatetimeFeatures(preserve_datetime=True),
             ),
             StypeDispatch(  # TODO Support `id` as passthrough.
                 numerical=[
