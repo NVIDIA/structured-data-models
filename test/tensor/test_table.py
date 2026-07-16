@@ -153,6 +153,7 @@ def test_from_tensor() -> None:
         Stype.id: (),
     }
     assert tensor.numerical.equal(data)
+    assert TableTensor.from_tensor(data[:, :0]).size() == (5, 0)
 
     data = torch.tensor(
         [
@@ -171,10 +172,11 @@ def test_from_tensor() -> None:
         Stype.id: (),
     }
     assert tensor.categorical.as_tensor().equal(
-        torch.tensor([[0, 1], [-1, 0], [1, 0], [-1, 1]])
+        torch.tensor([[2, 1], [0, 0], [3, 0], [1, 1]])
     )
-    assert tensor.categorical.categories[0].equal(torch.tensor([0, 1]))
+    assert tensor.categorical.categories[0].equal(torch.tensor([-2, -1, 0, 1]))
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
+    assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
 
 
 def test_inference_mode() -> None:

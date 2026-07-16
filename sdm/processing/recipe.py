@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+import torch
 from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
@@ -29,11 +30,21 @@ class _TaskResolver(Processor, InvertibleMixin):
         self.processor = processor
         self._task_dispatchers = task_dispatchers
 
-    def fit(self, table: TableTensor) -> Self:
-        self.fit_transform(table)
+    def fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        self.fit_transform(table, generator=generator)
         return self
 
-    def fit_transform(self, table: TableTensor) -> TableTensor:
+    def fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
         self._check_supported_stypes(table)
         self._fitted = False
         for task_dispatcher in self._task_dispatchers:
@@ -41,7 +52,10 @@ class _TaskResolver(Processor, InvertibleMixin):
 
         succeeded = False
         try:
-            target = self.processor.fit_transform(table)
+            target = self.processor.fit_transform(
+                table,
+                generator=generator,
+            )
             for task_dispatcher in self._task_dispatchers:
                 task_dispatcher._resolve(target)
             self._fitted = True

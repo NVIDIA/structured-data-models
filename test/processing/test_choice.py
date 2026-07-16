@@ -63,6 +63,24 @@ def test_choice_inverse_requires_invertible_selected() -> None:
         choice.inverse_transform(table)
 
 
+def test_choice_is_reproducible_with_generator() -> None:
+    table = _table()
+
+    # Seed 1 draws the second option, whose fit consumes the generator.
+    first = Choice(Identity(), Quantile(n_quantiles=6, subsample=16)).fit(
+        table,
+        generator=torch.Generator().manual_seed(1),
+    )
+    second = Choice(Identity(), Quantile(n_quantiles=6, subsample=16)).fit(
+        table,
+        generator=torch.Generator().manual_seed(1),
+    )
+
+    assert isinstance(first.selected, Quantile)
+    assert type(first.selected) is type(second.selected)
+    assert torch.equal(first.selected.quantiles, second.selected.quantiles)
+
+
 def test_choice_repr_shows_all_options() -> None:
     choice = Choice(Identity(), StandardScale())
 

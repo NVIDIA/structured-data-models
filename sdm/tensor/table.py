@@ -384,7 +384,7 @@ class TableTensor(Tensor):
         if columns is None:
             columns = [str(i) for i in range(tensor.size(-1))]
 
-        if tensor.dtype in CategoricalTensor.ALLOWED_DTYPES:
+        if not tensor.is_floating_point():
             return cls(
                 columns={Stype.categorical: columns},
                 categorical=CategoricalTensor.from_tensor(tensor),
@@ -467,6 +467,13 @@ class TableTensor(Tensor):
             column: The column name.
         """
         return self._column_to_loc[column][0]
+
+    @property
+    def active_stypes(self) -> frozenset[Stype]:
+        r"""Semantic types with at least one column."""
+        return frozenset(
+            stype for stype, tensor in self.items() if tensor.size(-1) > 0
+        )
 
     @property
     def numerical(self) -> Tensor:

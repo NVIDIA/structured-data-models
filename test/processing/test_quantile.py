@@ -2,7 +2,7 @@ import pytest
 import torch
 from sdm import TableTensor
 from sdm.processing import Quantile
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_quantile_rejects_nonpositive_n_quantiles() -> None:
@@ -229,17 +229,28 @@ def test_quantile_normal_distribution_preserves_nan_positions(
     assert inverse.device == device
 
 
-@withCUDA
-def test_quantile_subsample_is_reproducible_by_default(
-    device: torch.device,
-) -> None:
-    inp = torch.arange(60.0, device=device).view(30, 2)
+@onlyCUDA
+def test_quantile_rejects_mismatched_generator_device() -> None:
+    table = TableTensor.from_tensor(torch.rand(8, 2, device="cuda"))
 
-    first = Quantile(n_quantiles=4, subsample=12).fit(
-        TableTensor.from_tensor(inp)
+    with pytest.raises(RuntimeError, match="device type for generator"):
+        Quantile(subsample=4).fit(
+            table,
+            generator=torch.Generator().manual_seed(0),
+        )
+
+
+def test_quantile_subsample_is_reproducible_with_generator() -> None:
+    # Distinct values: any other row subset changes the quantiles.
+    inp = torch.arange(200.0).view(100, 2)
+
+    first = Quantile(n_quantiles=6, subsample=32).fit(
+        TableTensor.from_tensor(inp),
+        generator=torch.Generator().manual_seed(0),
     )
-    second = Quantile(n_quantiles=4, subsample=12).fit(
-        TableTensor.from_tensor(inp)
+    second = Quantile(n_quantiles=6, subsample=32).fit(
+        TableTensor.from_tensor(inp),
+        generator=torch.Generator().manual_seed(0),
     )
 
     assert torch.equal(first.quantiles, second.quantiles)

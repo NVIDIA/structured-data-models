@@ -36,12 +36,13 @@ class Quantile(Processor, InvertibleMixin):
     ``subsample`` is set, by ``20%`` of the subsample size to keep dense grids
     tractable.
 
+    The subsample rows are drawn from the ``generator`` passed to ``fit()``;
+    without one, they are drawn from the data device's global generator.
+
     Args:
         n_quantiles: Maximum number of quantiles to compute.
         subsample: Maximum number of rows to use for quantile computation.
         output_distribution: Distribution to map the empirical quantiles to.
-        random_state: Seed for deterministic subsampling. If ``None``, use the
-            global PyTorch generator.
     """
 
     supported_stypes = frozenset({Stype.numerical})
@@ -52,7 +53,6 @@ class Quantile(Processor, InvertibleMixin):
         n_quantiles: int = 1000,
         subsample: int | None = 10_000,
         output_distribution: Literal["uniform", "normal"] = "uniform",
-        random_state: int | None = 0,
     ) -> None:
         super().__init__()
         if n_quantiles <= 0:
@@ -66,24 +66,28 @@ class Quantile(Processor, InvertibleMixin):
         self._n_quantiles = n_quantiles
         self.subsample = subsample
         self.output_distribution = output_distribution
-        self.random_state = random_state
         self.n_quantiles = 0
 
         self.register_buffer("quantiles", torch.empty(0))
         self.register_buffer("references", torch.empty(0))
 
-    def _subsample_indices(self, inp: Tensor) -> Tensor:
-        generator = None
-        if self.random_state is not None:
-            generator = torch.Generator(device=inp.device)
-            generator.manual_seed(self.random_state)
+    def _subsample_indices(
+        self,
+        inp: Tensor,
+        generator: torch.Generator | None,
+    ) -> Tensor:
         return torch.randperm(
             inp.shape[0],
-            device=inp.device,
             generator=generator,
+            device=inp.device,
         )[: self.subsample]
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         n_samples = numerical.shape[0]
         quantile_limit = n_samples
@@ -102,7 +106,8 @@ class Quantile(Processor, InvertibleMixin):
         )
 
         if self.subsample is not None and self.subsample < n_samples:
-            input_sample = numerical[self._subsample_indices(numerical)]
+            indices = self._subsample_indices(numerical, generator)
+            input_sample = numerical[indices]
         else:
             input_sample = numerical
 

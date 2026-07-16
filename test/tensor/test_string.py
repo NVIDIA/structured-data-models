@@ -128,6 +128,58 @@ def test_from_cudf_empty_values() -> None:
     assert tensor._offset.equal(torch.tensor([0], device=tensor.device))
 
 
+@pytest.mark.parametrize(
+    "offset_dtype",
+    [torch.int32, torch.int64],
+    ids=["int32", "int64"],
+)
+@onlyCUDA
+def test_to_cudf(offset_dtype: torch.dtype) -> None:
+    pytest.importorskip("cudf")
+    values = ["é", "東京", "🙂", ""]
+    tensor = StringTensor.from_list(
+        values,
+        device="cuda",
+        offset_dtype=offset_dtype,
+    )
+
+    series = tensor.to_cudf()
+
+    assert tensor._offset.dtype == offset_dtype
+    assert series.to_arrow().to_pylist() == values
+
+
+@pytest.mark.parametrize(
+    "offset_dtype",
+    [torch.int32, torch.int64],
+    ids=["int32", "int64"],
+)
+@onlyCUDA
+def test_to_cudf_empty(offset_dtype: torch.dtype) -> None:
+    cudf = pytest.importorskip("cudf")
+    tensor = StringTensor.from_list(
+        [],
+        device="cuda",
+        offset_dtype=offset_dtype,
+    )
+
+    series = tensor.to_cudf()
+
+    assert tensor._data.numel() == 0
+    assert tensor._offset.equal(
+        torch.zeros(1, dtype=offset_dtype, device=tensor.device)
+    )
+    assert cudf.api.types.is_string_dtype(series.dtype)
+    assert series.to_arrow().to_pylist() == []
+
+
+def test_to_cudf_requires_cuda() -> None:
+    tensor = StringTensor.from_list(["a"])
+
+    with pytest.raises(RuntimeError, match="CUDA-resident"):
+        tensor.to_cudf()
+
+
 @onlyCUDA
 def test_from_cudf_errors() -> None:
     cudf = pytest.importorskip("cudf")
