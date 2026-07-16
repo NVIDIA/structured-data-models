@@ -110,6 +110,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Power.html">Power</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Quantile.html">Quantile</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SigmaClip.html">SigmaClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.EnsembleReduce.html">EnsembleReduce</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.StandardScale.html">StandardScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ToNumerical.html">ToNumerical</a></li>
@@ -266,7 +267,9 @@ columns.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The prediction <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R_query,</span> <span class="pre">*]</span></code> for all query examples.</p>
+<dd class="field-even"><p>The processed prediction. Member outputs enter <code class="docutils literal notranslate"><span class="pre">recipe.output</span></code>
+stacked as <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R_query,</span> <span class="pre">*]</span></code>; the output processors
+determine whether the leading estimator dimension remains.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a></p>
@@ -291,7 +294,9 @@ columns.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The prediction <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R,</span> <span class="pre">*]</span></code> for all query examples.</p>
+<dd class="field-even"><p>The processed prediction. Member outputs enter <code class="docutils literal notranslate"><span class="pre">recipe.output</span></code>
+stacked as <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R,</span> <span class="pre">*]</span></code>; the output processors determine
+whether the leading estimator dimension remains.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a></p>
@@ -327,7 +332,7 @@ columns.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=45b698cd"></script>
+      <script src="../../_static/documentation_options.js?v=c36feb7e"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

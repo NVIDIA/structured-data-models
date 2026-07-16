@@ -110,6 +110,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Power.html">Power</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Quantile.html">Quantile</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SigmaClip.html">SigmaClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.EnsembleReduce.html">EnsembleReduce</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.StandardScale.html">StandardScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ToNumerical.html">ToNumerical</a></li>
@@ -185,7 +186,9 @@ data-aria-dark="Switch to auto color mode">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Identity</span></span><a class="headerlink" href="#sdm.processing.Identity" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
 <p>Return inputs unchanged.</p>
-<p>This stateless processor is useful as an explicit no-op in recipe phases.</p>
+<p>This stateless processor is useful as an explicit no-op in recipe phases.
+It preserves every dimension, so output tables may be either stacked or
+already reduced across estimators.</p>
 <dl class="field-list simple">
 </dl>
 </dd></dl>
@@ -216,7 +219,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=45b698cd"></script>
+      <script src="../../_static/documentation_options.js?v=c36feb7e"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

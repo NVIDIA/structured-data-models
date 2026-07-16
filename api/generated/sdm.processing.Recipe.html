@@ -110,6 +110,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Power.html">Power</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Quantile.html">Quantile</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SigmaClip.html">SigmaClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.EnsembleReduce.html">EnsembleReduce</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.StandardScale.html">StandardScale</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ToNumerical.html">ToNumerical</a></li>
@@ -192,7 +193,12 @@ relative to the model:</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">target</span></code>: labels transformed forward before the model. Regression
 predictions are inverted through this pipeline; classification outputs
 are reconstructed from the fitted target categories instead.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">output</span></code>: shape-preserving cleanup of the model output.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">output</span></code>: transforms member outputs after they have been mapped to a
+common class or target space and stacked as <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code>. An
+explicit dimension-changing step such as
+<a class="reference internal" href="sdm.processing.EnsembleReduce.html#sdm.processing.EnsembleReduce" title="sdm.processing.EnsembleReduce"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleReduce</span></code></a> removes <code class="docutils literal notranslate"><span class="pre">E</span></code>; without one,
+the output remains stacked. Steps before the reducer must support
+stacked outputs, while steps after it receive already-reduced outputs.</p></li>
 </ul>
 <p>Each pipeline exposes <code class="docutils literal notranslate"><span class="pre">fit</span></code>/<code class="docutils literal notranslate"><span class="pre">transform</span></code>/<code class="docutils literal notranslate"><span class="pre">fit_transform</span></code> and, when its
 steps are invertible, <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code>. Call them directly, e.g.
@@ -208,8 +214,9 @@ output dispatchers.</p>
 <li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to model inputs before the model.</p></li>
 <li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to labels. Invertible numerical target steps map
 regression output back to the original space.</p></li>
-<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied after member outputs have been mapped to a
-common class or target space and aggregated.</p></li>
+<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to stacked member outputs after member-local
+mappings. Estimator reduction, when desired, is an explicit step
+in this pipeline.</p></li>
 </ul>
 </dd>
 </dl>
@@ -241,7 +248,7 @@ common class or target space and aggregated.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=45b698cd"></script>
+      <script src="../../_static/documentation_options.js?v=c36feb7e"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
