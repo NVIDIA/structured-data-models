@@ -39,7 +39,7 @@ def default_recipe() -> Recipe:
                 ],
                 datetime=DatetimeFeatures(preserve_datetime=True),
             ),
-            StypeDispatch(
+            StypeDispatch(  # TODO Support `id` as passthrough.
                 numerical=[
                     MeanImpute(),
                     ConstantFilter(),
@@ -53,7 +53,10 @@ def default_recipe() -> Recipe:
         ],
         target=[
             StypeDispatch(
-                categorical=CategoryShuffle(method="shift"),
+                categorical=[
+                    CategoricalAlign(),
+                    CategoryShuffle(method="shift"),
+                ],
                 numerical=StandardScale(),
             ),
         ],

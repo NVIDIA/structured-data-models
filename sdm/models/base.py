@@ -2,12 +2,13 @@ import contextlib
 import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from typing import ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, TableTensor
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Processor, Recipe
 from sdm.relational.task import RelatedTablesSchema
@@ -30,146 +31,6 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-def _copy_related_feature_processors(
-    feature_processor: Processor,
-    related_tables: RelatedTables | None,
-) -> dict[str, Processor]:
-    if related_tables is None:
-        return {}
-    return {
-        name: copy.deepcopy(feature_processor)
-        for name in related_tables.tables
-    }
-
-
-def _related_tables_schema(
-    related_tables: RelatedTables | None,
-) -> RelatedTablesSchema | None:
-    return None if related_tables is None else related_tables.schema
-
-
-def _validate_num_estimators(num_estimators: int) -> None:
-    if num_estimators <= 0:
-        raise ValueError("'num_estimators' must be positive")
-
-
-def _validate_context(
-    x: TableTensor,
-    y: TableTensor,
-    *,
-    x_name: str,
-    y_name: str,
-) -> None:
-    if y.size(-1) != 1:
-        raise ValueError(
-            f"Expected '{y_name}' to have one column (got {y.size(-1)})"
-        )
-    if x.size()[:-1] != y.size()[:-1]:
-        raise ValueError(
-            f"Expected '{x_name}' and '{y_name}' to have matching batch and "
-            f"row dimensions (got {tuple(x.size()[:-1])} and "
-            f"{tuple(y.size()[:-1])})"
-        )
-
-
-def _validate_query(
-    x_context: TableTensor,
-    x_query: TableTensor,
-) -> None:
-    if x_context.schema != x_query.schema:
-        raise ValueError(
-            "Expected 'x_context' and 'x_query' to have the same schema"
-        )
-    if x_context.size()[:-2] != x_query.size()[:-2]:
-        raise ValueError(
-            "Expected 'x_context' and 'x_query' to have matching batch "
-            f"shapes (got {tuple(x_context.size()[:-2])} and "
-            f"{tuple(x_query.size()[:-2])})"
-        )
-
-
-def _validate_related_query_tables(
-    related_query_tables: RelatedTables | None,
-    related_context_schema: RelatedTablesSchema | None,
-) -> None:
-    if related_query_tables is None or related_context_schema is None:
-        return
-
-    query_schema = related_query_tables.schema
-    for name, table in related_query_tables.tables.items():
-        if (
-            name in related_context_schema.tables
-            and table.schema != related_context_schema.tables[name]
-        ):
-            raise ValueError(
-                f"Expected related context and query table '{name}' to have "
-                "the same schema"
-            )
-
-    if query_schema.task_links != related_context_schema.task_links:
-        raise ValueError(
-            "Expected related context and query task links to match"
-        )
-
-    common_tables = set(query_schema.tables) & set(
-        related_context_schema.tables
-    )
-    context_relationships = tuple(
-        relationship
-        for relationship in related_context_schema.relationships
-        if relationship.left_table in common_tables
-        and relationship.right_table in common_tables
-    )
-    query_relationships = tuple(
-        relationship
-        for relationship in query_schema.relationships
-        if relationship.left_table in common_tables
-        and relationship.right_table in common_tables
-    )
-    if context_relationships != query_relationships:
-        raise ValueError(
-            "Expected related context and query relationships to match"
-        )
-
-
-def _process_related_tables(
-    related_tables: RelatedTables | None,
-    feature_processors: Mapping[str, Processor],
-    *,
-    fit: bool,
-) -> RelatedTables | None:
-    if related_tables is None:
-        return None
-
-    tables: dict[str, TableTensor] = {}
-    for name, table in related_tables.tables.items():
-        # Independently sampled query graphs may contain tables with no
-        # context rows. They have no leakage-safe fitted processor.
-        if name not in feature_processors:
-            continue
-        processor = feature_processors[name]
-        tables[name] = (
-            processor.fit_transform(table)
-            if fit
-            else processor.transform(table)
-        )
-
-    return RelatedTables(
-        tables=tables,
-        relationships=tuple(
-            relationship
-            for relationship in related_tables.relationships
-            if relationship.left_table in tables
-            and relationship.right_table in tables
-        ),
-        task_links=tuple(
-            task_link
-            for task_link in related_tables.task_links
-            if task_link.table in tables
-        ),
-    )
-
-
 class Model(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
@@ -179,6 +40,8 @@ class Model(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
+    supported_feature_stypes: ClassVar[frozenset[Stype]]
+    supported_target_stypes: ClassVar[frozenset[Stype]]
     supports_related_tables: ClassVar[bool]
 
     def __init__(self) -> None:
@@ -217,15 +80,8 @@ class Model(torch.nn.Module, ABC):
         Returns:
             The prediction ``[..., R_query, *]`` for all query examples.
         """
-        _validate_num_estimators(num_estimators)
-        if not self.supports_related_tables and (
-            related_context_tables is not None
-            or related_query_tables is not None
-        ):
-            raise ValueError(
-                f"'{self.__class__.__name__}' does not support related tables"
-            )
-
+        if num_estimators < 1:
+            raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(y_context, TableTensor):
@@ -233,53 +89,74 @@ class Model(torch.nn.Module, ABC):
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
 
-        _validate_context(
-            x_context,
-            y_context,
-            x_name="x_context",
-            y_name="y_context",
-        )
-        _validate_query(x_context, x_query)
+        if (related_context_tables is None) != (related_query_tables is None):
+            raise ValueError(
+                "Expected 'related_context_tables' and 'related_query_tables' "
+                "to be provided together"
+            )
+
+        if related_query_tables is not None:
+            assert related_context_tables is not None
+            related_query_tables = related_query_tables.select_tables(
+                tables=related_context_tables.tables
+            )
 
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
 
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
-            # Each table learns its own context statistics.
-            related_feature_processors = _copy_related_feature_processors(
-                recipe.features,
-                related_context_tables,
-            )
-            related_context_schema = _related_tables_schema(
-                related_context_tables
-            )
-            _validate_related_query_tables(
-                related_query_tables,
-                related_context_schema,
-            )
-            y_context_i = recipe.target.fit_transform(y_context)
             x_context_i = recipe.features.fit_transform(x_context)
-            related_context_tables_i = _process_related_tables(
-                related_context_tables,
-                related_feature_processors,
-                fit=True,
+            y_context_i = recipe.target.fit_transform(y_context)
+            x_query_i = recipe.features.transform(x_query)
+
+            related_context_tables_i = related_query_tables_i = None
+            if related_context_tables is not None:
+                related_processors = {
+                    table_name: copy.deepcopy(recipe.features)
+                    for table_name in related_context_tables.tables
+                }
+                related_context_tables_i = replace(
+                    related_context_tables,
+                    tables={
+                        name: related_processors[name].fit_transform(t)
+                        for name, t in related_context_tables.tables.items()
+                    },
+                )
+                assert related_query_tables is not None
+                related_query_tables_i = replace(
+                    related_query_tables,
+                    tables={
+                        name: related_processors[name].transform(t)
+                        for name, t in related_query_tables.tables.items()
+                    },
+                )
+
+            self._validate_context(
+                x=x_context_i,
+                y=y_context_i,
+                related_tables=related_context_tables_i,
             )
-            related_query_tables_i = _process_related_tables(
-                related_query_tables,
-                related_feature_processors,
-                fit=False,
+            self._validate_query(
+                x_context=x_context_i.schema,
+                x_query=x_query_i,
+                related_context_tables=related_context_tables_i.schema
+                if related_context_tables_i is not None
+                else None,
+                related_query_tables=related_query_tables_i,
             )
+
             out = self._forward(
                 x_context=x_context_i,
                 y_context=y_context_i,
-                x_query=recipe.features.transform(x_query),
+                x_query=x_query_i,
                 related_context_tables=related_context_tables_i,
                 related_query_tables=related_query_tables_i,
                 cache=None,
             )
             if y_context_i.numerical.size(-1) == 1:
-                assert isinstance(recipe.target, InvertibleMixin)
+                if not isinstance(recipe.target, InvertibleMixin):
+                    raise RuntimeError("Target recipe is not invertible")
                 out = recipe.target.inverse_transform(out)
             outs.append(out)
 
@@ -311,18 +188,12 @@ class Model(torch.nn.Module, ABC):
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
         """
-        _validate_num_estimators(num_estimators)
-        if not self.supports_related_tables and related_tables is not None:
-            raise ValueError(
-                f"'{self.__class__.__name__}' does not support related tables"
-            )
-
+        if num_estimators < 1:
+            raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
-
-        _validate_context(x, y, x_name="x", y_name="y")
 
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
@@ -330,28 +201,42 @@ class Model(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            # Copy before fitting the task-table processor below.
-            related_feature_processors = _copy_related_feature_processors(
-                recipe.features,
-                related_tables,
-            )
-            related_context_schema = _related_tables_schema(related_tables)
-            y_i = recipe.target.fit_transform(y)
             x_i = recipe.features.fit_transform(x)
-            related_tables_i = _process_related_tables(
-                related_tables,
-                related_feature_processors,
-                fit=True,
+            y_i = recipe.target.fit_transform(y)
+
+            related_tables_i = None
+            related_processors = None
+            if related_tables is not None:
+                related_processors = {
+                    table_name: copy.deepcopy(recipe.features)
+                    for table_name in related_tables.tables
+                }
+                related_tables_i = replace(
+                    related_tables,
+                    tables={
+                        name: related_processors[name].fit_transform(t)
+                        for name, t in related_tables.tables.items()
+                    },
+                )
+
+            self._validate_context(
+                x=x_i,
+                y=y_i,
+                related_tables=related_tables_i,
             )
+
             cache = Cache(
                 recipe=recipe,
-                related_feature_processors=related_feature_processors,
-                x_schema=x.schema,
-                related_context_schema=related_context_schema,
+                x_schema=x_i.schema,
+                related_processors=related_processors,
+                related_tables_schema=related_tables_i.schema
+                if related_tables_i is not None
+                else None,
                 classes=y_i.categorical.categories[0]
                 if y_i.categorical.size(-1) > 0
                 else None,
             )
+
             self._forward(
                 x_context=x_i,
                 y_context=y_i,
@@ -398,47 +283,58 @@ class Model(torch.nn.Module, ABC):
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
-        if not self.supports_related_tables and related_tables is not None:
-            raise ValueError(
-                f"'{self.__class__.__name__}' does not support related tables"
+        if related_tables is not None:
+            if self._caches[0]["related_tables_schema"] is None:
+                raise ValueError(
+                    "Expected related tables to be provided together"
+                )
+            related_tables = related_tables.select_tables(
+                tables=cast(
+                    RelatedTablesSchema,
+                    self._caches[0]["related_tables_schema"],
+                ).tables,
             )
-
-        fit_cache = self._caches[0]
-        if x.schema != cast(TableSchema, fit_cache["x_schema"]):
-            raise ValueError(
-                "Expected prediction input 'x' to have the same schema as "
-                "the fitted context"
-            )
-        related_context_schema = cast(
-            RelatedTablesSchema | None,
-            fit_cache["related_context_schema"],
-        )
-        _validate_related_query_tables(
-            related_tables,
-            related_context_schema,
-        )
 
         outs: Sequence[TableTensor] = []
         for cache in self._caches:
             recipe = cast(Recipe, cache["recipe"])
-            related_feature_processors = cast(
-                dict[str, Processor],
-                cache["related_feature_processors"],
+            x_i = recipe.features.transform(x)
+
+            related_tables_i = None
+            if related_tables is not None:
+                related_processors = cast(
+                    Mapping[str, Processor],
+                    cache["related_processors"],
+                )
+                related_tables_i = replace(
+                    related_tables,
+                    tables={
+                        name: related_processors[name].transform(t)
+                        for name, t in related_tables.tables.items()
+                    },
+                )
+
+            self._validate_query(
+                x_context=cast(TableSchema, cache["x_schema"]),
+                x_query=x_i,
+                related_context_tables=cast(
+                    RelatedTablesSchema,
+                    cache["related_tables_schema"],
+                ),
+                related_query_tables=related_tables_i,
             )
+
             out = self._forward(
                 x_context=None,
                 y_context=None,
-                x_query=recipe.features.transform(x),
+                x_query=x_i,
                 related_context_tables=None,
-                related_query_tables=_process_related_tables(
-                    related_tables,
-                    related_feature_processors,
-                    fit=False,
-                ),
+                related_query_tables=related_tables_i,
                 cache=cache,
             )
             if cache["classes"] is None:
-                assert isinstance(recipe.target, InvertibleMixin)
+                if not isinstance(recipe.target, InvertibleMixin):
+                    raise RuntimeError("Target recipe is not invertible")
                 out = recipe.target.inverse_transform(out)
             outs.append(out)
 
@@ -463,3 +359,78 @@ class Model(torch.nn.Module, ABC):
     @abstractmethod
     def default_recipe(cls) -> Recipe:
         r"""Return the default processing recipe for this model."""
+
+    # Helpers #################################################################
+
+    def _validate_context(
+        self,
+        x: TableTensor,
+        y: TableTensor,
+        related_tables: RelatedTables | None,
+    ) -> None:
+
+        if y.size(-1) != 1:
+            raise ValueError(
+                f"Expected target to have exactly one column "
+                f"(got {y.size(-1)})"
+            )
+        if x.size()[:-1] != y.size()[:-1]:
+            raise ValueError(
+                f"Expected features and targets to have matching row "
+                f"dimensions (got {tuple(x.size()[:-1])} and "
+                f"{tuple(y.size()[:-1])})"
+            )
+        invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
+        if len(invalid) > 0:
+            raise ValueError(
+                f"'{self.__class__.__name__}' received unsupported feature "
+                f"stypes: {', '.join(stype.value for stype in invalid)}"
+            )
+        invalid = y.active_stypes - self.supported_target_stypes
+        if len(invalid) > 0:
+            raise ValueError(
+                f"'{self.__class__.__name__}' received unsupported target "
+                f"stypes: {', '.join(stype.value for stype in invalid)}"
+            )
+
+        if related_tables is not None:
+            if not self.supports_related_tables:
+                raise ValueError(
+                    f"'{self.__class__.__name__}' does not support related "
+                    f"tables"
+                )
+            for table_name, table in related_tables.tables.items():
+                invalid = table.active_stypes - self.supported_feature_stypes
+                invalid = invalid - {Stype.id}
+                if len(invalid) > 0:
+                    raise ValueError(
+                        f"'{self.__class__.__name__}' received unsupported "
+                        f"feature stypes in related table '{table_name}': "
+                        f"{', '.join(stype.value for stype in invalid)}"
+                    )
+
+    def _validate_query(
+        self,
+        x_context: TableSchema,
+        x_query: TableTensor,
+        related_context_tables: RelatedTablesSchema | None,
+        related_query_tables: RelatedTables | None,
+    ) -> None:
+
+        if x_context != x_query.schema:
+            raise ValueError(
+                "Expected context and query features to share the same schema"
+            )
+
+        if (related_context_tables is None) != (related_query_tables is None):
+            raise ValueError("Expected related tables to be provided together")
+
+        if related_context_tables is not None:
+            assert related_query_tables is not None
+            if not related_query_tables.schema.is_subset_of(
+                related_context_tables
+            ):
+                raise ValueError(
+                    "Expected related context and query tables to share the "
+                    "same schema"
+                )

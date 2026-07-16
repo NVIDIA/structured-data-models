@@ -1,6 +1,5 @@
 # ruff: noqa: D102
 
-import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -127,8 +126,8 @@ class InvariantGNN(torch.nn.Module):
                 )
                 - h.square()
             )
-            h = h.clamp(min=1e-5).sqrt()
-            h = h.masked_fill(h <= math.sqrt(1e-5), 0.0)
+            # Compare in the original scale to avoid low-precision rounding:
+            h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
             x = x + self.std_lin(h)
 
             h = torch.segment_reduce(  # Min aggregation:
