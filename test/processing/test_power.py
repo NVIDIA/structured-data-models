@@ -178,3 +178,57 @@ def test_power_is_nan_aware(device: torch.device) -> None:
     assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
     assert transformed.device == device
     assert inverse.device == device
+
+
+@withCUDA
+def test_power_transform_supports_exact_special_lambdas(
+    device: torch.device,
+) -> None:
+    inp = torch.tensor(
+        [
+            [-0.5, -0.5, -0.5, -0.5],
+            [0.0, 0.0, 0.0, 0.0],
+            [3.0, 3.0, 3.0, 3.0],
+            [torch.nan, torch.nan, torch.nan, torch.nan],
+        ],
+        dtype=torch.float64,
+        device=device,
+    )
+    lambdas = torch.tensor([0.0, 2.0, 0.5, 1.5], device=device)
+
+    processor = Power(standardize=False)
+    processor.lambdas = lambdas
+    processor.mean = torch.zeros_like(lambdas)
+    processor.scale = torch.ones_like(lambdas)
+    processor._fitted = True
+
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
+
+    expected = torch.empty_like(inp)
+    positive = inp[:, 0] >= 0
+    expected[:, 0] = torch.where(
+        positive,
+        inp[:, 0].log1p(),
+        -((2 * (-inp[:, 0]).log1p()).expm1() / 2),
+    )
+
+    positive = inp[:, 1] >= 0
+    expected[:, 1] = torch.where(
+        positive,
+        (2 * inp[:, 1].log1p()).expm1() / 2,
+        -(-inp[:, 1]).log1p(),
+    )
+
+    expected[:, 2] = torch.where(
+        inp[:, 2] >= 0,
+        (0.5 * inp[:, 2].log1p()).expm1() / 0.5,
+        -((1.5 * (-inp[:, 2]).log1p()).expm1() / 1.5),
+    )
+    expected[:, 3] = torch.where(
+        inp[:, 3] >= 0,
+        (1.5 * inp[:, 3].log1p()).expm1() / 1.5,
+        -((0.5 * (-inp[:, 3]).log1p()).expm1() / 0.5),
+    )
+
+    assert torch.allclose(transformed, expected, equal_nan=True)
+    assert transformed.device == device

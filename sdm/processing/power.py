@@ -31,6 +31,26 @@ def _yeojohnson_transform(inp: Tensor, lmbda: float) -> Tensor:
     return output
 
 
+def _yeojohnson_transform_batch(inp: Tensor, lambdas: Tensor) -> Tensor:
+    lambdas = lambdas.to(dtype=inp.dtype).unsqueeze(0)
+    eps = torch.finfo(inp.dtype).eps
+
+    positive_log = inp.clamp_min(0).log1p()
+    positive = (lambdas * positive_log).expm1() / lambdas
+    positive = torch.where(lambdas.abs() < eps, positive_log, positive)
+
+    two_minus_lambda = 2 - lambdas
+    negative_log = (-inp).clamp_min(0).log1p()
+    negative = -((two_minus_lambda * negative_log).expm1() / two_minus_lambda)
+    negative = torch.where(
+        two_minus_lambda.abs() < eps,
+        -negative_log,
+        negative,
+    )
+
+    return torch.where(inp >= 0, positive, negative)
+
+
 def _yeojohnson_inverse_transform(inp: Tensor, lmbda: float) -> Tensor:
     inverse = torch.zeros_like(inp)
     positive = inp >= 0
@@ -221,13 +241,7 @@ class Power(Processor, InvertibleMixin):
             self.scale = numerical.new_ones(n_features)
 
     def _yeojohnson_transform(self, inp: Tensor) -> Tensor:
-        transformed = inp.clone()
-        for i, lmbda in enumerate(self.lambdas):
-            transformed[:, i] = _yeojohnson_transform(
-                transformed[:, i],
-                float(lmbda),
-            )
-        return transformed
+        return _yeojohnson_transform_batch(inp, self.lambdas)
 
     def _yeojohnson_inverse_transform(self, inp: Tensor) -> Tensor:
         inverse = inp.clone()
