@@ -1,8 +1,10 @@
 import pytest
 import torch
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
+from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -83,6 +85,56 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     model.clear()
 
 
+def _categorical_target(codes: list[int], vocab: list[str]) -> TableTensor:
+    return TableTensor(
+        columns={"categorical": ("target",)},
+        categorical=CategoricalTensor(
+            data=torch.tensor(codes, dtype=torch.int64).view(-1, 1),
+            categories=(StringTensor.from_list(vocab),),
+        ),
+    )
+
+
+def test_forward_unobserved_categories() -> None:
+    model = TabICLv2(pretrained=False)
+
+    R_context, R_query, C = 5, 3, 6
+    x_context = torch.randn(R_context, C)
+    x_query = torch.randn(R_query, C)
+    # A pre-encoded target whose vocabulary holds unobserved categories:
+    y_context = _categorical_target(
+        codes=[0, 1, 2, 0, 1],
+        vocab=["a", "b", "c", "d", "e"],
+    )
+
+    out = model(x_context, y_context, x_query, recipe=Recipe())
+    assert out.size() == (1, R_query, 5)
+    assert out.columns[Stype.numerical] == ("a", "b", "c", "d", "e")
+
+    model.fit(x_context, y_context, recipe=Recipe())
+    out = model.predict(x_query)
+    assert out.size() == (1, R_query, 5)
+    assert out.columns[Stype.numerical] == ("a", "b", "c", "d", "e")
+    model.clear()
+
+
+def test_forward_too_many_classes() -> None:
+    model = TabICLv2(pretrained=False)
+
+    R_context, R_query, C = 5, 3, 6
+    x_context = torch.randn(R_context, C)
+    x_query = torch.randn(R_query, C)
+    y_context = _categorical_target(
+        codes=[0, 1, 2, 0, 1],
+        vocab=[f"c{i}" for i in range(12)],
+    )
+
+    with pytest.raises(NotImplementedError, match="at most 10 classes"):
+        model(x_context, y_context, x_query, recipe=Recipe())
+    with pytest.raises(NotImplementedError, match="at most 10 classes"):
+        model.fit(x_context, y_context, recipe=Recipe())
+
+
 @withCUDA
 def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     row_embedding = RowEmbedding(
@@ -112,6 +164,35 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     y_swapped = 5 * b + a
     out = row_embedding(x, y)
     torch.testing.assert_close(out, row_embedding(x, y_swapped))
+
+
+def test_row_embedding_num_classes_fallback() -> None:
+    row_embedding = RowEmbedding(
+        num_classes=10,
+        channels=8,
+        num_layers=2,
+        num_heads=2,
+        group_size=3,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+    )
+    for module in row_embedding.modules():
+        # Randomly initialize to return non-zero output
+        if isinstance(module, Attention):
+            torch.nn.init.normal_(module.out_lin.weight, std=0.02)
+
+    x = torch.randn(8, 6)
+
+    # A vocabulary-derived count matches the data-derived fallback:
+    y = torch.tensor([0, 1, 2, 0, 1])
+    out = row_embedding(x, y)
+    torch.testing.assert_close(out, row_embedding(x, y, num_classes=5))
+
+    # Mixed-radix labels above the class capacity:
+    y = torch.tensor([14, 0, 21, 7, 3])
+    out = row_embedding(x, y)
+    torch.testing.assert_close(out, row_embedding(x, y, num_classes=22))
 
 
 @onlyCUDA

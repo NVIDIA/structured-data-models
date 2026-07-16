@@ -176,9 +176,24 @@ class TabICLv2(Model):
                 numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
             )
 
+        # The vocabulary defines the class count, so that categories
+        # unobserved in the context still receive output columns.
+        num_classes = len(classes)
+        max_classes = self.cls_model.row_embedding.max_classes
+        if num_classes > max_classes:
+            raise NotImplementedError(
+                f"'{self.__class__.__name__}' supports at most "
+                f"{max_classes} classes (got {num_classes})"
+            )
+
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
+            numerical=self.cls_model(
+                x,
+                y,
+                num_classes=num_classes,
+                cache=cache,
+            )[..., :num_classes],
         )
 
     def __repr__(self) -> str:
@@ -245,9 +260,15 @@ class _TabICLv2(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
+        num_classes: int | None = None,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x=x, y=y, cache=cache)
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+        )
         x = self.icl_block(x=x, y=y, cache=cache)
         return self.head(x)
 

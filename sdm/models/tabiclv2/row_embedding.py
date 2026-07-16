@@ -84,6 +84,7 @@ class RowEmbedding(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
+        num_classes: int | None = None,
         train_mask: Tensor | None = None,  # [R],
         max_keys: int | None = None,
         cache: Cache | None = None,
@@ -106,8 +107,9 @@ class RowEmbedding(torch.nn.Module):
         num_digits = 1
         if y.numel() > 0:
             if self.y_emb is not None:
-                # TODO Cache `num_classes` to avoid device synchronization.
-                num_classes = int(y.max()) + 1
+                if num_classes is None:
+                    # Data-derived fallback; `int(...)` syncs the device.
+                    num_classes = int(y.max()) + 1
                 if torch.compiler.is_compiling():
                     # FIXME Don't give up on hierarchical classification.
                     torch._check(num_classes <= self.max_classes)
