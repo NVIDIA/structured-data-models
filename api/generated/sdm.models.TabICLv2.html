@@ -143,6 +143,8 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.models.TabICLv2"><code class="docutils literal notranslate"><span class="pre">TabICLv2</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.models.TabICLv2.supported_feature_stypes"><code class="docutils literal notranslate">supported_feature_stypes</span></code></a></li>
+<li><a class="reference internal" href="#sdm.models.TabICLv2.supported_target_stypes"><code class="docutils literal notranslate">supported_target_stypes</span></code></a></li>
 <li><a class="reference internal" href="#sdm.models.TabICLv2.supports_related_tables"><code class="docutils literal notranslate">supports_related_tables</span></code></a></li>
 </ul>
 </li>
@@ -232,6 +234,16 @@ quantile predictions for regression.</p></li>
 </dd>
 </dl>
 <dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.models.TabICLv2.supported_feature_stypes">
+<span class="sig-name descname"><span class="pre">supported_feature_stypes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">frozenset({Stype.numerical})</span></em><a class="headerlink" href="#sdm.models.TabICLv2.supported_feature_stypes" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="sdm.models.TabICLv2.supported_target_stypes">
+<span class="sig-name descname"><span class="pre">supported_target_stypes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">frozenset({Stype.categorical,</span> <span class="pre">Stype.numerical})</span></em><a class="headerlink" href="#sdm.models.TabICLv2.supported_target_stypes" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="sdm.models.TabICLv2.supports_related_tables">
 <span class="sig-name descname"><span class="pre">supports_related_tables</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.ClassVar" title="(in Python v3.14)"><span class="pre">ClassVar</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#sdm.models.TabICLv2.supports_related_tables" title="Link to this definition">#</a></dt>
 <dd></dd></dl>
@@ -264,7 +276,7 @@ quantile predictions for regression.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=60f170a5"></script>
+      <script src="../../_static/documentation_options.js?v=2d1f863c"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
