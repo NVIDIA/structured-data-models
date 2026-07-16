@@ -171,9 +171,18 @@ class TabICLv2(Model):
                 numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
             )
 
+        num_classes = len(classes)
+        if cache is not None and cache.is_recording:
+            cache["num_classes"] = num_classes
+
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
+            numerical=self.cls_model(
+                x,
+                y,
+                num_classes=num_classes,
+                cache=cache,
+            )[..., :num_classes],
         )
 
     def __repr__(self) -> str:
@@ -247,11 +256,14 @@ class _TabICLv2(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
+        num_classes: int | None = None,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        num_classes = 0
-        if self.max_classes > 0 and y.numel() > 0:
-            # TODO Cache `num_classes` to avoid device synchronization.
+        if self.max_classes == 0 or y.numel() == 0:
+            num_classes = 0
+        elif cache is not None:
+            num_classes = cast(int, cache["num_classes"])
+        elif num_classes is None:
             num_classes = int(y.max()) + 1
         if cache is not None and num_classes > self.max_classes:
             raise NotImplementedError(
@@ -259,7 +271,12 @@ class _TabICLv2(torch.nn.Module):
                 f"{self.max_classes} classes (got {num_classes})"
             )
 
-        x = self.row_embedding(x=x, y=y, cache=cache)
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+        )
 
         if num_classes <= self.max_classes:
             x = self.icl_block(x=x, y=y, cache=cache)

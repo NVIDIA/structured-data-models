@@ -1,5 +1,6 @@
 import pytest
 import torch
+from sdm.cache import Cache
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -79,6 +80,9 @@ def test_forward(
 
     torch.manual_seed(1)
     model.fit(x_context, y_context)
+    if not dtype.is_floating_point:
+        assert model._caches is not None
+        assert model._caches[0]["num_classes"] == num_classes
     assert model.predict(x_query).allclose(out)
     model.clear()
 
@@ -143,6 +147,7 @@ def test_tabiclv2_hierarchical_probabilities(
             x: torch.Tensor,
             y: torch.Tensor,
             *,
+            num_classes: int | None = None,
             cache: object | None = None,
         ) -> torch.Tensor:
             return x
@@ -195,6 +200,51 @@ def test_tabiclv2_heterogeneous_class_batch(device: torch.device) -> None:
         torch.ones(2, 2, device=device),
     )
     assert (probabilities[0, :, 3] < 1e-5).all()
+
+
+def test_tabiclv2_num_classes_skips_label_reduction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_max(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Did not expect a label reduction")
+
+    monkeypatch.setattr(torch.Tensor, "max", fail_max)
+
+    model = _make_small_classifier(
+        max_classes=3,
+        device=torch.device("cpu"),
+    )
+    out = model(
+        torch.randn(6, 6),
+        torch.tensor([0, 1, 2, 0]),
+        num_classes=3,
+    )
+
+    assert out.size() == (2, 3)
+
+
+def test_tabiclv2_accesses_cached_num_classes_only_with_context() -> None:
+    class TrackingCache(Cache):
+        def __init__(self, **kwargs: object) -> None:
+            super().__init__(**kwargs)
+            self.accessed_keys: list[str] = []
+
+        def __getitem__(self, key: str) -> object:
+            self.accessed_keys.append(key)
+            return super().__getitem__(key)
+
+    model = _make_small_classifier(
+        max_classes=3,
+        device=torch.device("cpu"),
+    )
+    cache = TrackingCache(num_classes=3)
+    model(torch.randn(4, 6), torch.tensor([0, 1, 2, 0]), cache=cache)
+    assert cache.accessed_keys == ["num_classes"]
+
+    cache.freeze()
+    cache.accessed_keys.clear()
+    model(torch.randn(2, 6), torch.empty(0, dtype=torch.long), cache=cache)
+    assert "num_classes" not in cache.accessed_keys
 
 
 @pytest.mark.parametrize("num_classes", [10, 11])
@@ -253,6 +303,32 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         probabilities.sum(dim=-1),
         torch.ones(1, test_size, device=device),
     )
+
+
+@onlyCUDA
+@onlyFullTest
+def test_row_embedding_mixed_radix_compile() -> None:
+    torch._dynamo.reset()
+    row_embedding = RowEmbedding(
+        num_classes=10,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+        group_size=3,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+        device="cuda",
+    ).eval()
+    num_classes = 11
+    x = torch.randn(num_classes + 2, 6, device="cuda")
+    y = torch.arange(num_classes, device="cuda")
+
+    expected = row_embedding(x, y, num_classes=num_classes)
+    row_embedding.compile(fullgraph=True)
+    actual = row_embedding(x, y, num_classes=num_classes)
+
+    torch.testing.assert_close(actual, expected)
 
 
 @onlyCUDA
