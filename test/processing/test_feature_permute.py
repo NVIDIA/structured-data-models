@@ -39,23 +39,15 @@ def _mixed_table() -> TableTensor:
 
 def test_feature_permute_shift_rotates_numerical_block() -> None:
     table = _table()
-    processor = FeaturePermute(method="shift")
+    torch.manual_seed(3)  # draws a cyclic offset of 1 for three columns
 
-    output = processor.fit_transform(table)
+    output = FeaturePermute(method="shift").fit_transform(table)
 
     assert isinstance(output, TableTensor)
-    permutation = processor.permutation
-    offset = permutation[0]
-    assert torch.equal(
-        permutation,
-        (torch.arange(3) + offset) % 3,
-    )
-    assert output.columns[Stype.numerical] == tuple(
-        table.columns[Stype.numerical][index] for index in permutation.tolist()
-    )
+    assert output.columns[Stype.numerical] == ("x1", "x2", "x0")
     assert torch.equal(
         output.numerical,
-        table.numerical.index_select(-1, permutation),
+        table.numerical.index_select(-1, torch.tensor([1, 2, 0])),
     )
 
 
