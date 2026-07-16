@@ -8,7 +8,7 @@ from sdm.testing import withCUDA
 
 @withCUDA
 def test_hierarchical_classifier_grouping(device: torch.device) -> None:
-    classifier = HierarchicalClassifier(max_classes=10)
+    classifier = HierarchicalClassifier(num_classes=10)
 
     assignments, num_groups = classifier._grouping(
         num_classes=5,
@@ -45,13 +45,13 @@ def test_hierarchical_classifier_grouping(device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("num_classes", "max_classes", "expected_calls"),
+    ("total_num_classes", "num_classes", "expected_calls"),
     [(3, 10, 1), (3, 2, 2), (25, 10, 4), (101, 10, 13)],
 )
 def test_hierarchical_classifier_probabilities(
     device: torch.device,
+    total_num_classes: int,
     num_classes: int,
-    max_classes: int,
     expected_calls: int,
 ) -> None:
     calls = 0
@@ -60,25 +60,25 @@ def test_hierarchical_classifier_probabilities(
         nonlocal calls
         calls += 1
         test_size = rows.size(0) - labels.size(0)
-        return rows.new_zeros((test_size, max_classes))
+        return rows.new_zeros((test_size, num_classes))
 
     test_size = 2
     row_embeddings = torch.randn(
-        num_classes + test_size,
+        total_num_classes + test_size,
         4,
         device=device,
     )
-    y = torch.arange(num_classes, device=device)
-    classifier = HierarchicalClassifier(max_classes=max_classes)
+    y = torch.arange(total_num_classes, device=device)
+    classifier = HierarchicalClassifier(num_classes=num_classes)
 
     probabilities = classifier(
         row_embeddings,
         y,
-        num_classes=num_classes,
+        num_classes=total_num_classes,
         predictor=predictor,
     )
 
-    assert probabilities.size() == (test_size, num_classes)
+    assert probabilities.size() == (test_size, total_num_classes)
     assert probabilities.dtype == row_embeddings.dtype
     assert probabilities.device == device
     assert calls == expected_calls
@@ -88,16 +88,16 @@ def test_hierarchical_classifier_probabilities(
     )
 
     expected = torch.full(
-        (num_classes,),
-        1 / num_classes,
+        (total_num_classes,),
+        1 / total_num_classes,
         device=device,
     )
-    if (num_classes, max_classes) == (3, 2):
+    if (total_num_classes, num_classes) == (3, 2):
         expected = torch.tensor([0.25, 0.25, 0.5], device=device)
-    elif num_classes == 25:
+    elif total_num_classes == 25:
         expected[:9] = 1 / 27
         expected[9:] = 1 / 24
-    elif num_classes == 101:
+    elif total_num_classes == 101:
         expected[:6] = 1 / 120
         expected[6:] = 1 / 100
     torch.testing.assert_close(probabilities[0], expected)
@@ -107,7 +107,7 @@ def test_hierarchical_classifier_probabilities(
 def test_hierarchical_classifier_nonuniform_probabilities(
     device: torch.device,
 ) -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
+    classifier = HierarchicalClassifier(num_classes=2)
 
     def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         test_size = rows.size(0) - labels.size(0)
@@ -133,7 +133,7 @@ def test_hierarchical_classifier_nonuniform_probabilities(
 def test_hierarchical_classifier_batched_absent_classes(
     device: torch.device,
 ) -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
+    classifier = HierarchicalClassifier(num_classes=2)
 
     def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         classes = labels.unique(sorted=True)
@@ -169,7 +169,7 @@ def test_hierarchical_classifier_batched_absent_classes(
 
 def test_hierarchical_classifier_preserves_gradients() -> None:
     classifier = HierarchicalClassifier(
-        max_classes=2,
+        num_classes=2,
         temperature=1.0,
     )
     logits = torch.nn.Parameter(torch.tensor([0.2, -0.1]))
@@ -193,7 +193,7 @@ def test_hierarchical_classifier_preserves_gradients() -> None:
 
 
 def test_hierarchical_classifier_single_class_preserves_gradients() -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
+    classifier = HierarchicalClassifier(num_classes=2)
     row_embeddings = torch.randn(3, 4, requires_grad=True)
 
     def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -212,7 +212,7 @@ def test_hierarchical_classifier_single_class_preserves_gradients() -> None:
 
 
 def test_hierarchical_classifier_empty_batch() -> None:
-    classifier = HierarchicalClassifier(max_classes=2)
+    classifier = HierarchicalClassifier(num_classes=2)
 
     def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         raise AssertionError("The predictor must not run for an empty batch")
@@ -231,20 +231,6 @@ def test_hierarchical_classifier_empty_batch() -> None:
     assert row_embeddings.grad is not None
 
 
-@pytest.mark.parametrize(
-    ("max_classes", "temperature", "match"),
-    [
-        (1, 0.9, "'max_classes' to be at least two"),
-        (2, 0.0, "'temperature' to be finite and positive"),
-    ],
-)
-def test_hierarchical_classifier_rejects_invalid_init(
-    max_classes: int,
-    temperature: float,
-    match: str,
-) -> None:
-    with pytest.raises(ValueError, match=match):
-        HierarchicalClassifier(
-            max_classes=max_classes,
-            temperature=temperature,
-        )
+def test_hierarchical_classifier_rejects_invalid_num_classes() -> None:
+    with pytest.raises(ValueError, match="'num_classes' to be at least two"):
+        HierarchicalClassifier(num_classes=1)

@@ -1,3 +1,5 @@
+# ruff: noqa: D101, D102
+
 import math
 from collections.abc import Callable
 
@@ -8,41 +10,15 @@ _Predictor = Callable[[Tensor, Tensor], Tensor]
 
 
 class HierarchicalClassifier(torch.nn.Module):
-    r"""Classifier from `TabICLv2 <https://arxiv.org/abs/2602.11139>`_.
-
-    This module supports predictors with a fixed native class capacity.
-
-    The classifier recursively partitions ordered class indices into balanced
-    groups until every leaf fits within the native class capacity of the
-    predictor. Each node receives only the training rows assigned to that node,
-    while every test row is evaluated at every relevant node. Node
-    probabilities are combined along the tree using the probability chain
-    rule. Batched tables are processed independently because their tree nodes
-    can contain different numbers of training rows.
-
-    Args:
-        max_classes: Maximum number of classes supported natively by the
-            predictor. Must be at least two.
-        temperature: Positive softmax temperature applied to predictor logits
-            at every node.
-    """
-
     def __init__(
         self,
-        max_classes: int,
+        num_classes: int,
         temperature: float = 1.0,
     ) -> None:
         super().__init__()
-        if not isinstance(max_classes, int):
-            raise TypeError("Expected 'max_classes' to be an integer")
-        if max_classes < 2:
-            raise ValueError("Expected 'max_classes' to be at least two")
-        if not math.isfinite(temperature) or temperature <= 0:
-            raise ValueError(
-                "Expected 'temperature' to be finite and positive"
-            )
-
-        self.max_classes = max_classes
+        if num_classes < 2:
+            raise ValueError("Expected 'num_classes' to be at least two")
+        self.num_classes = num_classes
         self.temperature = temperature
 
     def forward(
@@ -53,27 +29,6 @@ class HierarchicalClassifier(torch.nn.Module):
         num_classes: int,
         predictor: _Predictor,
     ) -> Tensor:  # [..., R_test, C]
-        """Predict class probabilities from row embeddings.
-
-        Args:
-            row_embeddings: Row embeddings with shape ``[..., R, D]``. The
-                first ``R_train`` rows are the in-context training rows and the
-                remaining ``R_test`` rows are test rows.
-            y: Integer class indices in ``[0, num_classes)`` with shape
-                ``[..., R_train]``. Classes absent from a table's context
-                receive zero probability.
-            num_classes: Number of classes ``C`` in the global output space.
-            predictor: Callable receiving node rows with shape
-                ``[R_node + R_test, D]`` and remapped node labels with shape
-                ``[R_node]``. It must return floating-point logits with shape
-                ``[R_test, C_node]``, where ``C_node`` may be larger than the
-                number of classes at the node but must not be smaller.
-
-        Returns:
-            Class probabilities with shape ``[..., R_test, C]``. Their dtype
-            follows the predictor logits, except that a context containing
-            only one class uses the row embedding dtype.
-        """
         y = y.long()
 
         *batch_shape, num_rows, channels = row_embeddings.size()
@@ -141,7 +96,7 @@ class HierarchicalClassifier(torch.nn.Module):
         )
         node_num_classes = class_ids.numel()
 
-        if node_num_classes <= self.max_classes:
+        if node_num_classes <= self.num_classes:
             if node_num_classes == 1:
                 local_probs = test_rows.sum(dim=-1, keepdim=True).mul(0).add(1)
             else:
@@ -212,7 +167,7 @@ class HierarchicalClassifier(torch.nn.Module):
         num_classes: int,
         device: torch.device,
     ) -> tuple[Tensor, int]:
-        if num_classes <= self.max_classes:
+        if num_classes <= self.num_classes:
             assignments = torch.zeros(
                 num_classes,
                 dtype=torch.long,
@@ -220,8 +175,8 @@ class HierarchicalClassifier(torch.nn.Module):
             )
             return assignments, 1
         num_groups = min(
-            (num_classes + self.max_classes - 1) // self.max_classes,
-            self.max_classes,
+            (num_classes + self.num_classes - 1) // self.num_classes,
+            self.num_classes,
         )
         group_sizes = torch.full(
             (num_groups,),

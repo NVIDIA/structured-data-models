@@ -30,7 +30,7 @@ class RowEmbedding(torch.nn.Module):
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
 
-        self.max_classes = num_classes
+        self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
         if num_classes > 0:
@@ -110,17 +110,17 @@ class RowEmbedding(torch.nn.Module):
                 num_classes = int(y.max()) + 1
                 if torch.compiler.is_compiling():
                     # FIXME Don't give up on hierarchical classification.
-                    torch._check(num_classes <= self.max_classes)
-                if num_classes > self.max_classes:
+                    torch._check(num_classes <= self.num_classes)
+                if num_classes > self.num_classes:
                     # TODO Support KV cache
                     if cache is not None:
                         raise NotImplementedError(
                             f"Key/value caching is not supported with more "
-                            f"than {self.max_classes} classes "
+                            f"than {self.num_classes} classes "
                             f"(got {num_classes})"
                         )
 
-                    bases = _mixed_radix_bases(num_classes, self.max_classes)
+                    bases = _mixed_radix_bases(num_classes, self.num_classes)
                     num_digits = len(bases)
                     y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
                     x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
@@ -185,15 +185,21 @@ class RowEmbedding(torch.nn.Module):
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]
 
 
-def _mixed_radix_bases(num_classes: int, max_classes: int) -> list[int]:
-    num_digits = math.ceil(math.log(num_classes) / math.log(max_classes))
-    base = min(math.ceil(num_classes ** (1.0 / num_digits)), max_classes)
+def _mixed_radix_bases(
+    total_num_classes: int,
+    num_classes: int,
+) -> list[int]:
+    num_digits = math.ceil(math.log(total_num_classes) / math.log(num_classes))
+    base = min(
+        math.ceil(total_num_classes ** (1.0 / num_digits)),
+        num_classes,
+    )
     bases = [base] * num_digits
     product = base**num_digits
     for i in range(num_digits):
-        if product >= num_classes:
+        if product >= total_num_classes:
             break
-        if bases[i] < max_classes:
+        if bases[i] < num_classes:
             product = product // bases[i] * (bases[i] + 1)
             bases[i] += 1
 

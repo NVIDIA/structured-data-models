@@ -8,11 +8,11 @@ from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
 def _make_small_classifier(
-    max_classes: int,
+    num_classes: int,
     device: torch.device,
 ) -> _TabICLv2:
     return _TabICLv2(
-        num_classes=max_classes,
+        num_classes=num_classes,
         num_quantiles=0,
         channels=8,
         num_embedding_layers=1,
@@ -161,7 +161,7 @@ def test_tabiclv2_hierarchical_probabilities(
             return probabilities.log().mul(0.9).expand(test_size, -1)
 
     model = _make_small_classifier(
-        max_classes=2,
+        num_classes=2,
         device=torch.device("cpu"),
     )
     monkeypatch.setattr(model, "row_embedding", IdentityRowEmbedding())
@@ -179,7 +179,7 @@ def test_tabiclv2_hierarchical_probabilities(
 
 @withCUDA
 def test_tabiclv2_heterogeneous_class_batch(device: torch.device) -> None:
-    model = _make_small_classifier(max_classes=3, device=device)
+    model = _make_small_classifier(num_classes=3, device=device)
     x = torch.randn(2, 6, 6, device=device)
     y = torch.tensor(
         [[0, 1, 2, 0], [0, 1, 2, 3]],
@@ -200,7 +200,7 @@ def test_tabiclv2_heterogeneous_class_batch(device: torch.device) -> None:
 @pytest.mark.parametrize("num_classes", [10, 11])
 def test_tabiclv2_native_class_boundary(num_classes: int) -> None:
     model = _make_small_classifier(
-        max_classes=10,
+        num_classes=10,
         device=torch.device("cpu"),
     )
     test_size = 2
