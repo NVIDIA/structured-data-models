@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import LayerNorm, Linear
 
+from sdm.models.kumorfm.graph import _make_homogeneous_graph
+
 
 class InvariantGNN(torch.nn.Module):
     r"""Schema-agnostic message passing over heterogeneous graphs.
@@ -55,44 +57,15 @@ class InvariantGNN(torch.nn.Module):
         if num_hops == 0 or len(edge_index_dict) == 0:
             return x_dict[readout_table]
 
-        start = 0
-        offset_dict: dict[str, tuple[int, int]] = {}
-        for table_name, table_x in x_dict.items():
-            end = start + table_x.size(0)
-            offset_dict[table_name] = (start, end)
-            start = end
-
         if len(x_dict) == 1:
             x = next(iter(x_dict.values()))
         else:
             x = torch.cat(list(x_dict.values()), dim=0)
 
-        rows: list[Tensor] = []
-        cols: list[Tensor] = []
-        edge_types: list[Tensor] = []
-        for i, (edge_type, edge_index) in enumerate(edge_index_dict.items()):
-            src, _, dst = edge_type
-            row = edge_index[0] + offset_dict[src][0]
-            col = edge_index[1] + offset_dict[dst][0]
-            edge_type = edge_index.new_full((edge_index.size(1),), 2 * i)
-            rows.extend([row, col])
-            cols.extend([col, row])
-            edge_types.extend([edge_type, edge_type + 1])
-        row = torch.cat(rows, dim=0)
-        col = torch.cat(cols, dim=0)
-        edge_type = torch.cat(edge_types, dim=0)
-        del rows
-        del cols
-        del edge_types
-
-        col, perm = col.sort()
-        colptr = torch._convert_indices_from_coo_to_csr(
-            col, x.size(0), out_int32=col.dtype != torch.int64
-        )
-        row = row[perm]
-        edge_type = edge_type[perm]
-        del col
-        del perm
+        graph = _make_homogeneous_graph(x_dict, edge_index_dict)
+        row = graph.edge_index[0]
+        edge_type = graph.edge_type
+        colptr = graph.colptr
 
         edge_type_emb = torch.randn(
             (2 * len(edge_index_dict), x.size(-1)),
@@ -146,7 +119,7 @@ class InvariantGNN(torch.nn.Module):
             del src_x
 
             if i == num_hops - 1:
-                start, end = offset_dict[readout_table]
+                start, end = graph.offset_dict[readout_table]
                 x = x[start:end]
 
             x = F.gelu(self.norm(x))
