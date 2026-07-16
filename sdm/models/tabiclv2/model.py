@@ -283,7 +283,7 @@ class _TabICLv2(torch.nn.Module):
 
         x = self.row_embedding(x=x, y=y, num_classes=num_classes, cache=cache)
 
-        if num_classes is not None and num_classes <= self.num_classes:
+        if num_classes is None or num_classes <= self.num_classes:
             x = self.icl_block(x=x, y=y, cache=cache)
             return self.head(x)
 

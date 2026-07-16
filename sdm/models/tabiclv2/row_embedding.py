@@ -107,9 +107,7 @@ class RowEmbedding(torch.nn.Module):
         num_digits = 1
         if y.numel() > 0:
             if self.y_emb is not None:
-                if num_classes is None:
-                    pass  # TODO: cleanup before merging
-                elif num_classes > self.num_classes:
+                if num_classes is not None and num_classes > self.num_classes:
                     # TODO Support KV cache
                     if cache is not None:
                         raise NotImplementedError(
