@@ -6,6 +6,7 @@ import torch
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
+from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.processing import Recipe
 
 
@@ -56,4 +57,4 @@ class KumoRFM(Model):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        raise NotImplementedError
+        return default_recipe()
