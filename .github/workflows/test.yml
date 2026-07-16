@@ -33,7 +33,7 @@ jobs:
 
       - name: Run tests
         env:
-          FULL_TEST: ${{ ((github.event_name == 'push' && github.ref_name == 'main') || contains(github.event.pull_request.labels.*.name, 'full-test')) && '1' || '0' }}
+          FULL_TEST: ${{ ((github.event_name == 'push' && github.ref_name == 'main') || contains(github.event.pull_request.labels.*.name, 'ci-full-test')) && '1' || '0' }}
         run: |
           pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
 

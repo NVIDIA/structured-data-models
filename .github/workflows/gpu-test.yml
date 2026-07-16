@@ -24,8 +24,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check for full-test label
-        id: full-test-label
+      - name: Check for ci-full-test label
+        id: ci-full-test-label
         if: startsWith(github.ref_name, 'pull-request/')
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         with:
@@ -36,7 +36,7 @@ jobs:
               ...context.repo,
               pull_number: pullNumber,
             });
-            return pull.labels.some(({ name }) => name === 'full-test');
+            return pull.labels.some(({ name }) => name === 'ci-full-test');
 
       - name: Set up proxy cache
         uses: nv-gha-runners/setup-proxy-cache@main
@@ -66,6 +66,6 @@ jobs:
 
       - name: Run tests
         env:
-          FULL_TEST: ${{ (github.ref_name == 'main' || steps.full-test-label.outputs.result == 'true') && '1' || '0' }}
+          FULL_TEST: ${{ (github.ref_name == 'main' || steps.ci-full-test-label.outputs.result == 'true') && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25
