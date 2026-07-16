@@ -1,3 +1,6 @@
+from typing import Literal
+
+import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import CategoryShuffle
@@ -101,6 +104,27 @@ def test_category_shuffle_random_permutes_each_categorical_column(
     assert processor.permutations.device == device
     assert processor.offsets.device == device
     assert transformed.categorical.tolist() == features.categorical.tolist()
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_category_shuffle_is_reproducible_with_generator(
+    method: Literal["shift", "random"],
+) -> None:
+    features = _table(
+        [[0, 0], [1, 1], [2, -1], [1, 0]],
+        (("a", "b", "c"), ("x", "y")),
+    )
+
+    first = CategoryShuffle(method=method).fit(
+        features,
+        generator=torch.Generator().manual_seed(0),
+    )
+    second = CategoryShuffle(method=method).fit(
+        features,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert torch.equal(first.permutations, second.permutations)
 
 
 def test_category_shuffle_uses_category_count_and_preserves_missing() -> None:

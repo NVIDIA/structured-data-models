@@ -4,8 +4,10 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
+    FeaturePermute,
     MeanImpute,
     Power,
+    Quantile,
     Sequential,
     SoftmaxTemperature,
     StandardScale,
@@ -50,6 +52,25 @@ def test_pipeline_transforms_numerical() -> None:
     output = Sequential(StandardScale()).fit_transform(table)
 
     assert not torch.equal(output.numerical, table.numerical)
+
+
+def test_pipeline_passes_generator_to_steps() -> None:
+    table = _table(torch.arange(200.0).view(100, 2))
+
+    def _fit(seed: int) -> tuple[FeaturePermute, Quantile]:
+        permute = FeaturePermute(method="random")
+        quantile = Quantile(n_quantiles=6, subsample=32)
+        Sequential(permute, quantile).fit(
+            table,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        return permute, quantile
+
+    first_permute, first_quantile = _fit(0)
+    second_permute, second_quantile = _fit(0)
+
+    assert torch.equal(first_permute.permutation, second_permute.permutation)
+    assert torch.equal(first_quantile.quantiles, second_quantile.quantiles)
 
 
 def test_repr() -> None:
