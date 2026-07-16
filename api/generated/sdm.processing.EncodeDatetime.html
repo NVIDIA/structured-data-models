@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Clip - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="QuantileClip" href="sdm.processing.QuantileClip.html" /><link rel="prev" title="TaskDispatch" href="sdm.processing.TaskDispatch.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>EncodeDatetime - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="FeaturePermute" href="sdm.processing.FeaturePermute.html" /><link rel="prev" title="ConstantFilter" href="sdm.processing.ConstantFilter.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -19,7 +19,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="Clip"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="EncodeDatetime"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -99,11 +99,11 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.CategoricalAlign.html">CategoricalAlign</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.CategoricalImpute.html">CategoricalImpute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.TaskDispatch.html">TaskDispatch</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Clip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.QuantileClip.html">QuantileClip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.CategoryShuffle.html">CategoryShuffle</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ConstantFilter.html">ConstantFilter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.EncodeDatetime.html">EncodeDatetime</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">EncodeDatetime</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.FeaturePermute.html">FeaturePermute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.MeanImpute.html">MeanImpute</a></li>
@@ -143,7 +143,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.Clip"><code class="docutils literal notranslate"><span class="pre">Clip</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.EncodeDatetime"><code class="docutils literal notranslate"><span class="pre">EncodeDatetime</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -165,7 +165,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">Clip</strong>
+        <strong itemprop="name">EncodeDatetime</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -178,23 +178,16 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="clip">
-<h1>Clip<a class="headerlink" href="#clip" title="Link to this heading">#</a></h1>
+          <section id="encodedatetime">
+<h1>EncodeDatetime<a class="headerlink" href="#encodedatetime" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.Clip">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">Clip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.Clip" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="sdm.processing.EncodeDatetime">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.</span></span><span class="sig-name descname"><span class="pre">EncodeDatetime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'minute'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'hour'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'weekday'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'day_of_month'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'month'</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.EncodeDatetime" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Clamp numerical values to a fixed interval.</p>
-<p>Values below <code class="docutils literal notranslate"><span class="pre">min_value</span></code> are set to <code class="docutils literal notranslate"><span class="pre">min_value</span></code>, and values above
-<code class="docutils literal notranslate"><span class="pre">max_value</span></code> are set to <code class="docutils literal notranslate"><span class="pre">max_value</span></code>. Values within the interval are
-unchanged. This processor is stateless, so it can transform a table
-without being fitted first.</p>
+<p>Separate timestamps into numerical calendar features.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>min_value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Inclusive lower bound for every numerical value.</p></li>
-<li><p><strong>max_value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Inclusive upper bound for every numerical value.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>features</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'minute'</em><em>, </em><em>'hour'</em><em>, </em><em>'weekday'</em><em>, </em><em>'day_of_month'</em><em>, </em><em>'month'</em><em>]</em><em>]</em>) – The datetime features to extract.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -207,16 +200,16 @@ without being fitted first.</p>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.TaskDispatch.html">
+    <a href="sdm.processing.ConstantFilter.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">TaskDispatch</div></div>
+        <span>Previous</span><div class="title">ConstantFilter</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.QuantileClip.html">
+    <a href="sdm.processing.FeaturePermute.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">QuantileClip</div>
+        <div class="title">FeaturePermute</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
