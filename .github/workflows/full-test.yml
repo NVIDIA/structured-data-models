@@ -1,0 +1,27 @@
+name: Full Test Label
+
+on:  # yamllint disable-line rule:truthy
+  pull_request_target:
+    types:
+      - labeled
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-gpu-test:
+    if: github.event.label.name == 'full-test'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Run full GPU tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: pull-request/${{ github.event.pull_request.number }}
+        run: |
+          gh workflow run gpu-test.yml \
+            --repo "${GH_REPO}" \
+            --ref "${REF}" \
+            --field full_test=true
