@@ -179,9 +179,15 @@ class TabICLv2(Model):
                 numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
             )
 
+        num_classes = len(classes)
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
+            numerical=self.cls_model(
+                x,
+                y,
+                num_classes=num_classes,
+                cache=cache,
+            )[..., : len(classes)],
         )
 
     def __repr__(self) -> str:
@@ -256,20 +262,28 @@ class _TabICLv2(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
-    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        num_classes = 0
-        if self.num_classes > 0 and y.numel() > 0:
-            # TODO Cache `num_classes` to avoid device synchronization.
+        num_classes: int | None = None,
+    ) -> Tensor:  # [..., R_test, self.num_classes or self.num_quantiles]
+        is_classification = not y.is_floating_point()
+        if is_classification and num_classes is None:
+            # For classification, num_classes is necessary to determine the
+            # number of classes to predict for since it's data-dependent.
             num_classes = int(y.max()) + 1
-        if cache is not None and num_classes > self.num_classes:
+
+        if (
+            cache is not None
+            and num_classes is not None
+            and num_classes > self.num_classes
+        ):
+            # TODO Support KV cache
             raise NotImplementedError(
                 f"Key/value caching is not supported with more than "
                 f"{self.num_classes} classes (got {num_classes})"
             )
 
-        x = self.row_embedding(x=x, y=y, cache=cache)
+        x = self.row_embedding(x=x, y=y, num_classes=num_classes, cache=cache)
 
-        if num_classes <= self.num_classes:
+        if num_classes is not None and num_classes <= self.num_classes:
             x = self.icl_block(x=x, y=y, cache=cache)
             return self.head(x)
 

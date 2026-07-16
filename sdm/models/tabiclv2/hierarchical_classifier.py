@@ -2,11 +2,12 @@
 
 import math
 from collections.abc import Callable
+from typing import TypeAlias
 
 import torch
 from torch import Tensor
 
-_Predictor = Callable[[Tensor, Tensor], Tensor]
+_Predictor: TypeAlias = Callable[[Tensor, Tensor], Tensor]
 
 
 class HierarchicalClassifier(torch.nn.Module):
@@ -29,8 +30,6 @@ class HierarchicalClassifier(torch.nn.Module):
         num_classes: int,
         predictor: _Predictor,
     ) -> Tensor:  # [..., R_test, C]
-        y = y.long()
-
         *batch_shape, num_rows, channels = row_embeddings.size()
         train_size = y.size(-1)
         test_size = num_rows - train_size
