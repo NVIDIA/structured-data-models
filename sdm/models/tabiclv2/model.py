@@ -70,6 +70,14 @@ class TabICLv2(Model):
     """
 
     #:
+    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical}
+    )
+    #:
+    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical, Stype.categorical}
+    )
+    #:
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -159,7 +167,7 @@ class TabICLv2(Model):
 
         if y is None:
             y = x.new_empty(
-                (*x.size()[:2], 0),
+                (*x.size()[:-2], 0),
                 dtype=torch.int64 if classes is not None else x.dtype,
             )
 
