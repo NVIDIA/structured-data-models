@@ -31,10 +31,10 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-class Model(torch.nn.Module, ABC):
+class ICLModel(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
-    :class:`Model` defines the public interface shared among in-context
+    :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
