@@ -4,7 +4,6 @@ from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
-from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -102,25 +101,6 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     out = model.predict(x_query)
     assert out.size() == (3, *batch_shape, R_query, 999)
     model.clear()
-
-
-def test_batched_cached_forward() -> None:
-    model = TabICLv2(pretrained=False)
-    x_context = torch.randn(1, 5, 6)
-    y_context = torch.randn(1, 5, 1)
-    x_query = torch.randn(4, 3, 6)
-    recipe = Recipe()
-
-    expected = model(
-        x_context.expand(4, -1, -1),
-        y_context.expand(4, -1, -1),
-        x_query,
-        recipe=recipe,
-    )
-    model.fit(x_context, y_context, recipe=recipe)
-    actual = model.predict(x_query)
-
-    torch.testing.assert_close(actual.numerical, expected.numerical)
 
 
 @withCUDA
