@@ -452,6 +452,32 @@ def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(inp._data.pin_memory(), inp._categories)
 
 
+@CategoricalTensor.implements(aten.equal.default)
+def _equal(inp: CategoricalTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    for category1, category2 in zip(inp._categories, other._categories):
+        if not category1.equal(category2):
+            return False
+
+    return inp._data.equal(other._data)
+
+
+@CategoricalTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: CategoricalTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    # Codes and categories are discrete, so tolerances do not apply:
+    return _equal(inp, other)
+
+
 @CategoricalTensor.implements(aten.view.default)
 @preserve_view_inference_mode
 def _view(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
