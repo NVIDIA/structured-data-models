@@ -5,11 +5,6 @@ on:  # yamllint disable-line rule:truthy
     branches:
       - main
   pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - labeled
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ startsWith(github.ref, 'refs/pull/') || github.run_number }}  # yamllint disable-line
@@ -38,13 +33,7 @@ jobs:
 
       - name: Run tests
         env:
-          FULL_TEST: >-
-            ${{
-              (
-                (github.event_name == 'push' && github.ref_name == 'main') ||
-                contains(github.event.pull_request.labels.*.name, 'full-test')
-              ) && '1' || '0'
-            }}
+          FULL_TEST: ${{ ((github.event_name == 'push' && github.ref_name == 'main') || contains(github.event.pull_request.labels.*.name, 'full-test')) && '1' || '0' }}
         run: |
           pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
 

@@ -5,13 +5,6 @@ on:  # yamllint disable-line rule:truthy
     branches:
       - main
       - 'pull-request/[0-9]+'
-  workflow_dispatch:
-    inputs:
-      full_test:
-        description: Run the full test suite
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -73,13 +66,6 @@ jobs:
 
       - name: Run tests
         env:
-          FULL_TEST: >-
-            ${{
-              (
-                github.ref_name == 'main' ||
-                inputs.full_test ||
-                steps.full-test-label.outputs.result == 'true'
-              ) && '1' || '0'
-            }}
+          FULL_TEST: ${{ (github.ref_name == 'main' || steps.full-test-label.outputs.result == 'true') && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25
