@@ -179,9 +179,9 @@ class _FixedRangeClip(Processor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
-    def _transform(self, inp: TableTensor) -> TableTensor:
-        numerical = inp.numerical.clamp(min=-100.0, max=100.0)
-        return inp.replace_blocks(numerical=numerical)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        numerical = table.numerical.clamp(min=-100.0, max=100.0)
+        return table.replace_blocks(numerical=numerical)
 
 
 def matched_parity_recipe() -> Recipe:

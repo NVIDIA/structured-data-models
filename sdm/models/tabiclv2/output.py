@@ -10,7 +10,7 @@ _NUM_REGRESSION_QUANTILES = 999
 
 
 class _TargetInverseTransform(Protocol):
-    def inverse_transform(self, inp: TableTensor) -> TableTensor: ...
+    def inverse_transform(self, table: TableTensor) -> TableTensor: ...
 
 
 def decode_regression_quantiles(
