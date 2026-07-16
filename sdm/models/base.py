@@ -80,6 +80,8 @@ class Model(torch.nn.Module, ABC):
         Returns:
             The prediction ``[..., R_query, *]`` for all query examples.
         """
+        if num_estimators < 1:
+            raise ValueError("'num_estimators' need to be positive")
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(y_context, TableTensor):
@@ -186,6 +188,8 @@ class Model(torch.nn.Module, ABC):
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
         """
+        if num_estimators < 1:
+            raise ValueError("'num_estimators' need to be positive")
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
@@ -415,7 +419,7 @@ class Model(torch.nn.Module, ABC):
 
         if x_context != x_query.schema:
             raise ValueError(
-                "Expected context and query features to have the same schema"
+                "Expected context and query features to share the same schema"
             )
 
         if (related_context_tables is None) != (related_query_tables is None):
@@ -427,6 +431,6 @@ class Model(torch.nn.Module, ABC):
                 related_context_tables
             ):
                 raise ValueError(
-                    "Expected related query tables to only contain schemas "
-                    "seen in related context tables"
+                    "Expected related context and query tables to share the "
+                    "same schema"
                 )

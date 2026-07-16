@@ -264,5 +264,5 @@ def test_related_table_validation() -> None:
         relationships=related_query.relationships,
         task_links=related_query.task_links,
     )
-    with pytest.raises(ValueError, match="contain schemas seen in related"):
+    with pytest.raises(ValueError, match="share the same schema"):
         model.predict(x_query, mismatched_query)
