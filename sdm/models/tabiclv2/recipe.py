@@ -4,6 +4,7 @@ from sdm.processing import (
     Choice,
     Clip,
     ConstantFilter,
+    EnsembleReduce,
     FeaturePermute,
     Identity,
     MeanImpute,
@@ -59,6 +60,7 @@ def default_recipe() -> Recipe:
             ),
         ],
         output=[
+            EnsembleReduce(method="mean"),
             TaskDispatch(
                 classification=SoftmaxTemperature(temperature=0.9),
                 regression=Identity(),

@@ -29,7 +29,7 @@ def test_forward(
         y_context = torch.randn((*batch_shape, R_context, 1), device=device)
         torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
-        assert out.size() == (1, *batch_shape, R_query, 999)
+        assert out.size() == (*batch_shape, R_query, 999)
     else:
         # TODO Increase max value once TabICLv2 supports 10+ classes:
         y_context = torch.randint(
@@ -41,7 +41,7 @@ def test_forward(
         num_classes = len(y_context.unique())
         torch.manual_seed(1)
         out = model(x_context, y_context, x_query)
-        assert out.size() == (1, *batch_shape, R_query, num_classes)
+        assert out.size() == (*batch_shape, R_query, num_classes)
 
     assert out.dtype == x_query.dtype
     assert out.device == x_query.device
@@ -75,11 +75,11 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     y_context = torch.randn(*batch_shape, R_context, 1)
 
     out = model(x_context, y_context, x_query, num_estimators=2)
-    assert out.size() == (2, *batch_shape, R_query, 999)
+    assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
     out = model.predict(x_query)
-    assert out.size() == (3, *batch_shape, R_query, 999)
+    assert out.size() == (*batch_shape, R_query, 999)
     model.clear()
 
 
