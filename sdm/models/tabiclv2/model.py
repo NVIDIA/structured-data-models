@@ -179,9 +179,15 @@ class TabICLv2(Model):
                 numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
             )
 
+        num_classes = len(classes)
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
+            numerical=self.cls_model(
+                x,
+                y,
+                num_classes=num_classes,
+                cache=cache,
+            )[..., :num_classes],
         )
 
     def __repr__(self) -> str:
@@ -255,12 +261,12 @@ class _TabICLv2(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
+        num_classes: int = 0,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        num_classes = 0
-        if self.max_classes > 0 and y.numel() > 0:
-            # TODO Cache `num_classes` to avoid device synchronization.
-            num_classes = int(y.max()) + 1
+        # `num_classes` is the host-side size of the class vocabulary.
+        # Deriving it from `y` would sync with the device and introduce
+        # data-dependent control flow that `fullgraph=True` cannot trace.
         if cache is not None and num_classes > self.max_classes:
             raise NotImplementedError(
                 f"Key/value caching is not supported with more than "

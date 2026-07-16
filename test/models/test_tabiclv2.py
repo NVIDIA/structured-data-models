@@ -169,7 +169,7 @@ def test_tabiclv2_hierarchical_probabilities(
     monkeypatch.setattr(model, "head", torch.nn.Identity())
 
     y = torch.tensor([[0, 1, 0], [0, 1, 2]])
-    out = model(torch.randn(2, 5, 4), y)
+    out = model(torch.randn(2, 5, 4), y, num_classes=3)
 
     probabilities = torch.tensor([[0.6, 0.4, 0.0], [0.15, 0.45, 0.4]])
     probabilities = probabilities.unsqueeze(1).expand(-1, 2, -1)
@@ -186,7 +186,7 @@ def test_tabiclv2_heterogeneous_class_batch(device: torch.device) -> None:
         device=device,
     )
 
-    out = model(x, y)
+    out = model(x, y, num_classes=4)
 
     assert out.size() == (2, 2, 4)
     probabilities = (out / 0.9).softmax(dim=-1)
@@ -207,7 +207,7 @@ def test_tabiclv2_native_class_boundary(num_classes: int) -> None:
     x = torch.randn(num_classes + test_size, 6)
     y = torch.arange(num_classes)
 
-    out = model(x, y)
+    out = model(x, y, num_classes=num_classes)
 
     assert out.size() == (test_size, num_classes)
 
