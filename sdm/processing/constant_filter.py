@@ -70,7 +70,12 @@ class ConstantFilter(Processor):
         self.tolerance = 1e-6 if tolerance is None else tolerance
         self._columns_to_keep: tuple[str, ...] = ()
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         data = table.numerical
 
         if self.method == "variance":
