@@ -4,12 +4,11 @@ from typing import Any, cast
 
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     FeaturePermute,
     MeanImpute,
     Power,
-    Processor,
     Quantile,
     Sequential,
     SoftmaxTemperature,
@@ -45,18 +44,6 @@ def _add_one(table: TableTensor) -> TableTensor:
     return table.replace_blocks(numerical=table.numerical + 1)
 
 
-def _multiply_by_two(table: TableTensor) -> TableTensor:
-    return table.replace_blocks(numerical=table.numerical * 2)
-
-
-class _AddOne(Processor):
-    supported_stypes = frozenset(Stype)
-    requires_fit = False
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return _add_one(table)
-
-
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
@@ -89,30 +76,45 @@ def test_pipeline_accepts_regular_callable() -> None:
     table = _table()
     pipeline = Sequential(_add_one)
 
+    assert pipeline.fit(table) is pipeline
     restored = pickle.loads(pickle.dumps(pipeline))
 
     assert torch.equal(
-        restored.fit_transform(table).numerical,
+        restored.transform(table).numerical,
         table.numerical + 1,
     )
 
 
 def test_pipeline_mixes_processors_and_callables() -> None:
     table = _table()
-    pipeline = Sequential(StandardScale(), _add_one)
+    pipeline = Sequential(
+        lambda table: table.replace_blocks(numerical=table.numerical.square()),
+        StandardScale(),
+    )
 
-    output = pipeline.fit_transform(table)
+    assert pipeline.fit(table) is pipeline
+    scale = pipeline.steps[1]
+    assert isinstance(scale, StandardScale)
+    torch.testing.assert_close(
+        scale.mean,
+        table.numerical.square().mean(dim=0),
+    )
 
-    assert pipeline.requires_fit
+    output = pipeline.transform(table)
     torch.testing.assert_close(
         output.numerical.mean(dim=0),
-        torch.ones(2),
+        torch.zeros(2),
     )
 
 
 def test_pipeline_accepts_nested_sequential_with_callable() -> None:
     table = _table()
-    pipeline = Sequential(_add_one, Sequential(_multiply_by_two))
+    pipeline = Sequential(
+        lambda table: table.replace_blocks(numerical=table.numerical + 1),
+        Sequential(
+            lambda table: table.replace_blocks(numerical=table.numerical * 2)
+        ),
+    )
 
     output = pipeline.transform(table)
 
@@ -125,30 +127,6 @@ def test_pipeline_rejects_invalid_step() -> None:
         match=r"step 0.*Processor or callable.*object",
     ):
         Sequential(cast(Any, object()))
-
-
-def test_callable_has_parity_with_stateless_processor() -> None:
-    table = _table()
-    callable_pipeline = Sequential(_add_one, StandardScale())
-    processor_pipeline = Sequential(_AddOne(), StandardScale())
-
-    callable_output = callable_pipeline.fit_transform(table)
-    processor_output = processor_pipeline.fit_transform(table)
-
-    torch.testing.assert_close(
-        callable_output.numerical,
-        processor_output.numerical,
-    )
-    assert set(callable_pipeline.state_dict()) == set(
-        processor_pipeline.state_dict()
-    )
-
-    for pipeline, output in (
-        (callable_pipeline, callable_output),
-        (processor_pipeline, processor_output),
-    ):
-        with pytest.raises(AttributeError, match="inverse_transform"):
-            pipeline.inverse_transform(output)
 
 
 def test_pipeline_passes_generator_to_steps() -> None:
@@ -177,9 +155,9 @@ def test_repr() -> None:
           StandardScale(),
           Power(),
         )""")
-    assert repr(Sequential(_add_one)) == dedent("""\
+    assert repr(Sequential(lambda table: table)) == dedent("""\
         Sequential(
-          _add_one,
+          <lambda>,
         )""")
 
 
