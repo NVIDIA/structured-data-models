@@ -6,11 +6,11 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class ReduceEstimators(Processor):
-    """Reduce the leading estimator dimension of model outputs.
+class EnsembleReduce(Processor):
+    """Reduce the leading ensemble dimension of model outputs.
 
     Input must be a numerical output table with shape ``[E, ..., R, O]``.
-    ``E`` is the non-empty leading estimator dimension, ``R`` is the row
+    ``E`` is the non-empty leading ensemble dimension, ``R`` is the row
     dimension, and ``O`` is the output-column dimension. The result has shape
     ``[..., R, O]`` and retains the input column schema, device, and floating
     dtype.
@@ -19,7 +19,7 @@ class ReduceEstimators(Processor):
     Processors after it receive an already-reduced output table.
 
     Args:
-        method: Reduction applied across estimators. Currently only
+        method: Reduction applied across ensemble members. Currently only
             ``"mean"`` is supported.
     """
 
@@ -40,11 +40,11 @@ class ReduceEstimators(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         if table.dim() < 3:
             raise ValueError(
-                "Expected a leading estimator dimension in an output table "
+                "Expected a leading ensemble dimension in an output table "
                 f"with at least 3 dimensions (got {table.dim()}D)."
             )
         if table.size(0) == 0:
-            raise ValueError("Expected at least one estimator.")
+            raise ValueError("Expected at least one ensemble member.")
 
         numerical = _as_float(table.numerical).mean(dim=0)
         return table.__class__(
