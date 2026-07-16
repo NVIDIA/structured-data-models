@@ -115,6 +115,17 @@ class RelatedTablesSchema:
     relationships: tuple[Relationship, ...]
     task_links: tuple[TaskLink, ...]
 
+    def is_subset_of(self, other: RelatedTablesSchema) -> bool:
+        r"""Whether this schema is a subset of ``other``."""
+        for table_name, schema in self.tables.items():
+            if schema != other.tables.get(table_name):
+                return False
+
+        if not set(self.relationships) <= set(other.relationships):
+            return False
+
+        return set(self.task_links) <= set(other.task_links)
+
 
 @dataclass(frozen=True, init=False, repr=False)
 class RelatedTables(DeviceMixin):

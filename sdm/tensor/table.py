@@ -469,6 +469,13 @@ class TableTensor(Tensor):
         return self._column_to_loc[column][0]
 
     @property
+    def active_stypes(self) -> frozenset[Stype]:
+        r"""Semantic types with at least one column."""
+        return frozenset(
+            stype for stype, tensor in self.items() if tensor.size(-1) > 0
+        )
+
+    @property
     def numerical(self) -> Tensor:
         r"""Return the numerical column block."""
         return self._numerical
