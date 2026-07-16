@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import math
-import warnings
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -16,7 +15,7 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow
 
 if TYPE_CHECKING:
     import cudf
@@ -296,22 +295,17 @@ class TableTensor(Tensor):
             for column in columns[stype]:
                 array = table.column(column)
                 if stype == Stype.numerical:
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings(  # Safe to ignore.
-                            "ignore",
-                            message="The given NumPy array is not writable",
-                        )
-                        tensor = torch.from_numpy(
-                            array.to_numpy(zero_copy_only=False)
-                        )
-                    tensor = tensor.to(torch.get_default_dtype()).unsqueeze(-1)
+                    tensor = arrow_as_tensor(
+                        array,
+                        dtype=torch.get_default_dtype(),
+                    ).unsqueeze(-1)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
                     array = array.cast(pa.timestamp("us"))
-                    tensor = torch.from_numpy(
-                        array.to_numpy(zero_copy_only=False).astype("int64")
-                    ).unsqueeze(-1)
+                    values = array.to_numpy(zero_copy_only=False)
+                    values = values.astype("int64")
+                    tensor = torch.from_numpy(values).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
                 else:
@@ -390,7 +384,7 @@ class TableTensor(Tensor):
         if columns is None:
             columns = [str(i) for i in range(tensor.size(-1))]
 
-        if tensor.dtype in CategoricalTensor.ALLOWED_DTYPES:
+        if not tensor.is_floating_point():
             return cls(
                 columns={Stype.categorical: columns},
                 categorical=CategoricalTensor.from_tensor(tensor),
@@ -473,6 +467,13 @@ class TableTensor(Tensor):
             column: The column name.
         """
         return self._column_to_loc[column][0]
+
+    @property
+    def active_stypes(self) -> frozenset[Stype]:
+        r"""Semantic types with at least one column."""
+        return frozenset(
+            stype for stype, tensor in self.items() if tensor.size(-1) > 0
+        )
 
     @property
     def numerical(self) -> Tensor:
@@ -914,6 +915,44 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
+
+
+@TableTensor.implements(aten.equal.default)
+def _equal(inp: TableTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+    if inp.stypes != other.stypes:
+        return False
+
+    for stype, block in _align_like(inp, other).items():
+        if not block.equal(other.blocks[stype]):
+            return False
+
+    return True
+
+
+@TableTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: TableTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+    if inp.stypes != other.stypes:
+        return False
+
+    for stype, block in _align_like(inp, other).items():
+        if not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
+            return False
+
+    return True
 
 
 @TableTensor.implements(aten.view.default)

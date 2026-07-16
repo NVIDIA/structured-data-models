@@ -49,7 +49,12 @@ class SigmaClip(Processor):
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         min_std = numerical.new_tensor(1e-6)
 

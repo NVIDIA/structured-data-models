@@ -10,9 +10,10 @@ from sdm.tensor import TableTensor
 class Choice(Processor, InvertibleMixin):
     """Delegate to one option drawn uniformly at random.
 
-    The option is drawn from the global CPU generator when the processor
-    is fitted; seed with :func:`torch.manual_seed` to make it
-    reproducible. Only the drawn option is fitted; refitting draws again.
+    The option is drawn when the processor is fitted; pass ``generator``
+    to ``fit()`` to make it reproducible. The generator is also passed on
+    to fit the drawn option. Only the drawn option is fitted; refitting
+    draws again.
 
     Args:
         args: Sequence of candidate processors.
@@ -35,9 +36,21 @@ class Choice(Processor, InvertibleMixin):
             )
         return cast(Processor, self.options[self._index])
 
-    def _fit(self, table: TableTensor) -> None:
-        self._index = int(torch.randint(len(self.options), (1,)).item())
-        self.selected.fit(table)
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self._index = int(
+            torch.randint(
+                len(self.options),
+                (1,),
+                generator=generator,
+                device=table.device,
+            ).item()
+        )
+        self.selected.fit(table, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         return self.selected.transform(table)

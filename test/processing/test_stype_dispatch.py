@@ -2,6 +2,7 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
+    CategoryShuffle,
     MeanImpute,
     StandardScale,
     StypeDispatch,
@@ -46,6 +47,29 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     assert torch.equal(
         restored.categorical.as_tensor(), table.categorical.as_tensor()
     )
+
+
+def test_stype_dispatch_passes_generator_to_routes() -> None:
+    table = TableTensor(
+        columns={"categorical": ("kind",)},
+        categorical=CategoricalTensor(
+            data=torch.arange(6, dtype=torch.int32).unsqueeze(1),
+            categories=(StringTensor.from_list(list("abcdef")),),
+        ),
+    )
+
+    first = CategoryShuffle(method="random")
+    StypeDispatch(categorical=first).fit(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+    second = CategoryShuffle(method="random")
+    StypeDispatch(categorical=second).fit(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert torch.equal(first.permutations, second.permutations)
 
 
 def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:

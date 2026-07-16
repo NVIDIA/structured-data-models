@@ -11,6 +11,9 @@ from torch.nn import GELU, Linear, Sequential
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
+from sdm.models.tabiclv2.hierarchical_classifier import (
+    HierarchicalClassifier,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -66,6 +69,14 @@ class TabICLv2(Model):
         device: The device.
     """
 
+    #:
+    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical}
+    )
+    #:
+    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical, Stype.categorical}
+    )
     #:
     supports_related_tables: ClassVar[bool] = False
 
@@ -125,7 +136,7 @@ class TabICLv2(Model):
 
         return self
 
-    def _forward(  # TODO Add multi-class support.
+    def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
@@ -231,6 +242,13 @@ class _TabICLv2(torch.nn.Module):
                 **factory_kwargs,
             ),
         )
+        self.max_classes = num_classes
+        self.hierarchical_classifier: HierarchicalClassifier | None = None
+        if num_classes > 1:
+            self.hierarchical_classifier = HierarchicalClassifier(
+                max_classes=num_classes,
+                temperature=0.9,
+            )
 
     def forward(
         self,
@@ -239,9 +257,42 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
+        num_classes = 0
+        if self.max_classes > 0 and y.numel() > 0:
+            # TODO Cache `num_classes` to avoid device synchronization.
+            num_classes = int(y.max()) + 1
+        if cache is not None and num_classes > self.max_classes:
+            raise NotImplementedError(
+                f"Key/value caching is not supported with more than "
+                f"{self.max_classes} classes (got {num_classes})"
+            )
+
         x = self.row_embedding(x=x, y=y, cache=cache)
-        x = self.icl_block(x=x, y=y, cache=cache)
-        return self.head(x)
+
+        if num_classes <= self.max_classes:
+            x = self.icl_block(x=x, y=y, cache=cache)
+            return self.head(x)
+
+        assert self.hierarchical_classifier is not None
+        probabilities = self.hierarchical_classifier(
+            row_embeddings=x,
+            y=y,
+            num_classes=num_classes,
+            predictor=self._predict_standard,
+        )
+        # Convert to pseudo-logits compatible with temperature softmax:
+        return (
+            (probabilities + 1e-6)
+            .log()
+            .mul(self.hierarchical_classifier.temperature)
+        )
+
+    def _predict_standard(
+        self,
+        row_embeddings: Tensor,  # [R_node + R_test, D]
+        y: Tensor,  # [R_node]
+    ) -> Tensor:  # [R_test, max_classes]
+        return self.head(self.icl_block(x=row_embeddings, y=y))
 
 
 # Helpers #####################################################################
