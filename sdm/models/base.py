@@ -178,7 +178,9 @@ class Model(torch.nn.Module, ABC):
         r"""Fit and cache in-context examples.
 
         Repeated calls to :meth:`predict` can then reuse the same in-context
-        examples while only providing new query examples.
+        examples while only providing new query examples. Cached key/value
+        entries are kept in CPU memory between calls and staged on the
+        prediction device when used.
 
         Args:
             x: The feature tensor of in-context examples with shape
@@ -248,8 +250,8 @@ class Model(torch.nn.Module, ABC):
                 cache=cache,
             )
             cache.freeze()
+            cache = cache.cpu()
             caches.append(cache)
-
         self._caches = caches
 
     def clear(self) -> None:
@@ -328,14 +330,16 @@ class Model(torch.nn.Module, ABC):
                 related_query_tables=related_tables_i,
             )
 
+            device_cache = cache.to(x_i.device)
             out = self._forward(
                 x_context=None,
                 y_context=None,
                 x_query=x_i,
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
-                cache=cache,
+                cache=device_cache,
             )
+            del device_cache
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
