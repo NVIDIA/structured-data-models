@@ -1,8 +1,10 @@
+from collections.abc import Callable
 from typing import cast
 
 import torch
 
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.sequential import _as_processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -16,14 +18,21 @@ class Choice(Processor, InvertibleMixin):
     draws again.
 
     Args:
-        args: Sequence of candidate processors.
+        args: Sequence of candidate processors or stateless callables. Each
+            callable accepts and returns a :class:`~sdm.tensor.TableTensor`.
     """
 
     supported_stypes = frozenset(Stype)
 
-    def __init__(self, *args: Processor) -> None:
+    def __init__(
+        self,
+        *args: Processor | Callable[[TableTensor], TableTensor],
+    ) -> None:
         super().__init__()
-        self.options = torch.nn.ModuleList(args)
+        self.options = torch.nn.ModuleList(
+            _as_processor(option, label=f"Choice option {index}")
+            for index, option in enumerate(args)
+        )
         self._index: int | None = None
 
     @property

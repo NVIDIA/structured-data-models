@@ -32,6 +32,21 @@ class _CallableProcessor(Processor):
         return f"{' ' * indent}{name}"
 
 
+def _as_processor(
+    step: Processor | Callable[[TableTensor], TableTensor],
+    *,
+    label: str,
+) -> Processor:
+    if isinstance(step, Processor):
+        return step
+    if callable(step):
+        return _CallableProcessor(step)
+    raise TypeError(
+        f"{label} must be a Processor or callable, got "
+        f"{step.__class__.__name__}."
+    )
+
+
 class Sequential(Processor, InvertibleMixin):
     r"""Apply processors and stateless callables in sequence.
 
@@ -51,19 +66,10 @@ class Sequential(Processor, InvertibleMixin):
         *args: Processor | Callable[[TableTensor], TableTensor],
     ) -> None:
         super().__init__()
-        steps: list[Processor] = []
-        for index, step in enumerate(args):
-            if isinstance(step, Processor):
-                steps.append(step)
-            elif callable(step):
-                steps.append(_CallableProcessor(step))
-            else:
-                raise TypeError(
-                    f"Sequential step {index} must be a Processor or "
-                    f"callable, got {step.__class__.__name__}."
-                )
-
-        self.steps = tuple(steps)
+        self.steps = tuple(
+            _as_processor(step, label=f"Sequential step {index}")
+            for index, step in enumerate(args)
+        )
         for i, step in enumerate(self.steps):
             self.add_module(str(i), step)
         self.requires_fit = any(step.requires_fit for step in self.steps)
