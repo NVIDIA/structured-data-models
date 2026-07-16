@@ -3,9 +3,10 @@ from typing import ClassVar
 
 import torch
 
-from sdm import RelatedTables, TableTensor
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import Model
+from sdm.models.kumorfm.recipe import default_recipe
 from sdm.processing import Recipe
 
 
@@ -23,6 +24,14 @@ class KumoRFM(Model):
         device: The device.
     """
 
+    #:
+    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical}
+    )
+    #:
+    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical, Stype.categorical}
+    )
     #:
     supports_related_tables: ClassVar[bool] = True
 
@@ -47,4 +56,4 @@ class KumoRFM(Model):
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        raise NotImplementedError
+        return default_recipe()

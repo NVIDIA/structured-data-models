@@ -37,13 +37,17 @@ def default_recipe() -> Recipe:
                     ToNumerical(),
                 ],
             ),
-            MeanImpute(),
-            ConstantFilter(),
-            StandardScale(epsilon=1e-6),
-            Clip(min_value=-100.0, max_value=100.0),
-            Choice(Identity(), Power()),
-            SigmaClip(threshold=4.0),
-            FeaturePermute(method="shift"),
+            StypeDispatch(  # TODO Support `id` as passthrough.
+                numerical=[
+                    MeanImpute(),
+                    ConstantFilter(),
+                    StandardScale(epsilon=1e-6),
+                    Clip(min_value=-100.0, max_value=100.0),
+                    Choice(Identity(), Power()),
+                    SigmaClip(threshold=4.0),
+                    FeaturePermute(method="shift"),
+                ],
+            ),
         ],
         target=[
             StypeDispatch(
