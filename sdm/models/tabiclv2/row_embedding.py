@@ -181,21 +181,15 @@ class RowEmbedding(torch.nn.Module):
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]
 
 
-def _mixed_radix_bases(
-    total_num_classes: int,
-    num_classes: int,
-) -> list[int]:
-    num_digits = math.ceil(math.log(total_num_classes) / math.log(num_classes))
-    base = min(
-        math.ceil(total_num_classes ** (1.0 / num_digits)),
-        num_classes,
-    )
+def _mixed_radix_bases(num_classes: int, max_classes: int) -> list[int]:
+    num_digits = math.ceil(math.log(num_classes) / math.log(max_classes))
+    base = min(math.ceil(num_classes ** (1.0 / num_digits)), max_classes)
     bases = [base] * num_digits
     product = base**num_digits
     for i in range(num_digits):
-        if product >= total_num_classes:
+        if product >= num_classes:
             break
-        if bases[i] < num_classes:
+        if bases[i] < max_classes:
             product = product // bases[i] * (bases[i] + 1)
             bases[i] += 1
 
