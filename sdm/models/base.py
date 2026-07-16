@@ -81,7 +81,7 @@ class Model(torch.nn.Module, ABC):
             The prediction ``[..., R_query, *]`` for all query examples.
         """
         if num_estimators < 1:
-            raise ValueError("'num_estimators' need to be positive")
+            raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(y_context, TableTensor):
@@ -189,7 +189,7 @@ class Model(torch.nn.Module, ABC):
             num_estimators: The number of estimators for ensembling.
         """
         if num_estimators < 1:
-            raise ValueError("'num_estimators' need to be positive")
+            raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
