@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import torch
 
 from sdm.processing.base import InvertibleMixin, Processor
@@ -5,21 +7,63 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
+class _CallableProcessor(Processor):
+    """Adapt a stateless callable to the :class:`Processor` interface."""
+
+    supported_stypes = frozenset(Stype)
+    requires_fit = False
+
+    def __init__(
+        self,
+        function: Callable[[TableTensor], TableTensor],
+    ) -> None:
+        super().__init__()
+        self.function = function
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return self.function(table)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        name = getattr(
+            self.function,
+            "__name__",
+            self.function.__class__.__name__,
+        )
+        return f"{' ' * indent}{name}"
+
+
 class Sequential(Processor, InvertibleMixin):
-    r"""Apply a number of :class:`Processor` instances in sequence.
+    r"""Apply processors and stateless callables in sequence.
 
     A ``generator`` passed to ``fit()`` or ``fit_transform()`` is passed on
     to every step.
 
     Args:
-        args: Sequence of :class:`Processor` instances.
+        args: Sequence of :class:`Processor` instances or callables. Each
+            callable accepts and returns a :class:`~sdm.tensor.TableTensor`
+            and is treated as a stateless, non-invertible processor.
     """
 
     supported_stypes = frozenset(Stype)
 
-    def __init__(self, *args: Processor) -> None:
+    def __init__(
+        self,
+        *args: Processor | Callable[[TableTensor], TableTensor],
+    ) -> None:
         super().__init__()
-        self.steps: tuple[Processor, ...] = args
+        steps: list[Processor] = []
+        for index, step in enumerate(args):
+            if isinstance(step, Processor):
+                steps.append(step)
+            elif callable(step):
+                steps.append(_CallableProcessor(step))
+            else:
+                raise TypeError(
+                    f"Sequential step {index} must be a Processor or "
+                    f"callable, got {step.__class__.__name__}."
+                )
+
+        self.steps = tuple(steps)
         for i, step in enumerate(self.steps):
             self.add_module(str(i), step)
         self.requires_fit = any(step.requires_fit for step in self.steps)
