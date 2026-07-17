@@ -96,23 +96,25 @@ def join_index(
             arrow_as_tensor(joined[RIGHT_ROW_ID], device=device),
         )
 
-    left = left_table.to_cudf()
-    left[LEFT_ROW_ID] = to_cudf(
-        torch.arange(left_rows, dtype=dtype, device=left_table.device)
-    )
-    right = right_table.to_cudf()
-    right[RIGHT_ROW_ID] = to_cudf(
-        torch.arange(right_rows, dtype=dtype, device=right_table.device)
-    )
+    assert backend == "cudf"
+    with torch.cuda.device(left_table.device):
+        left = left_table.to_cudf()
+        left[LEFT_ROW_ID] = to_cudf(
+            torch.arange(left_rows, dtype=dtype, device=left_table.device)
+        )
+        right = right_table.to_cudf()
+        right[RIGHT_ROW_ID] = to_cudf(
+            torch.arange(right_rows, dtype=dtype, device=right_table.device)
+        )
 
-    joined = left.merge(
-        right,
-        left_on=left_keys,
-        right_on=right_keys,
-        how=how,
-    )
+        joined = left.merge(
+            right,
+            left_on=left_keys,
+            right_on=right_keys,
+            how=how,
+        )
 
-    return (
-        torch.as_tensor(joined[LEFT_ROW_ID]).to(device),
-        torch.as_tensor(joined[RIGHT_ROW_ID]).to(device),
-    )
+        return (
+            torch.as_tensor(joined[LEFT_ROW_ID]).to(device),
+            torch.as_tensor(joined[RIGHT_ROW_ID]).to(device),
+        )
