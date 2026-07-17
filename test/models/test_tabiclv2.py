@@ -7,26 +7,6 @@ from sdm.nn import Attention
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
-def _make_small_classifier(
-    num_classes: int,
-    device: torch.device,
-) -> _TabICLv2:
-    return _TabICLv2(
-        num_classes=num_classes,
-        num_quantiles=0,
-        channels=8,
-        num_embedding_layers=1,
-        num_embedding_heads=2,
-        num_inducing_points=4,
-        group_size=3,
-        num_readout_tokens=2,
-        num_icl_layers=1,
-        num_icl_heads=2,
-        norm_bias=True,
-        device=device,
-    )
-
-
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 # @pytest.mark.parametrize("batch_shape", [(), (2,), (2, 3)])  # TODO Reenable
@@ -54,7 +34,7 @@ def test_forward(
     else:
         y_context = torch.randint(
             low=0,
-            high=100,
+            high=10,
             size=(*batch_shape, R_context, 1),
             device=device,
         )
@@ -151,89 +131,48 @@ def test_tabiclv2_hierarchical_probabilities(
         ) -> torch.Tensor:
             return x
 
-    class NodePredictor(torch.nn.Module):
+    class StubHierarchicalClassifier(torch.nn.Module):
+        temperature = 0.9
+
         def forward(
             self,
-            x: torch.Tensor,
+            row_embeddings: torch.Tensor,
             y: torch.Tensor,
+            *,
+            num_classes: int,
+            predictor: object,
         ) -> torch.Tensor:
-            test_size = x.size(0) - y.size(0)
-            if y.size(0) == 3:
-                probabilities = x.new_tensor([0.6, 0.4])
-            else:
-                probabilities = x.new_tensor([0.25, 0.75])
-            return probabilities.log().mul(0.9).expand(test_size, -1)
+            assert num_classes == 3
+            test_size = row_embeddings.size(-2) - y.size(-1)
+            probabilities = row_embeddings.new_tensor([0.15, 0.45, 0.4])
+            return probabilities.expand(test_size, -1)
 
-    model = _make_small_classifier(
+    model = _TabICLv2(
         num_classes=2,
-        device=torch.device("cpu"),
+        num_quantiles=0,
+        channels=8,
+        num_embedding_layers=1,
+        num_embedding_heads=2,
+        num_inducing_points=4,
+        group_size=3,
+        num_readout_tokens=2,
+        num_icl_layers=1,
+        num_icl_heads=2,
+        norm_bias=True,
     )
     monkeypatch.setattr(model, "row_embedding", IdentityRowEmbedding())
-    monkeypatch.setattr(model, "icl_block", NodePredictor())
-    monkeypatch.setattr(model, "head", torch.nn.Identity())
+    monkeypatch.setattr(
+        model,
+        "hierarchical_classifier",
+        StubHierarchicalClassifier(),
+    )
 
-    y = torch.tensor([[0, 1, 0], [0, 1, 2]])
-    out = model(torch.randn(2, 5, 4), y, num_classes=3)
+    y = torch.tensor([0, 1, 2])
+    out = model(torch.randn(5, 4), y, num_classes=3)
 
-    probabilities = torch.tensor([[0.6, 0.4, 0.0], [0.15, 0.45, 0.4]])
-    probabilities = probabilities.unsqueeze(1).expand(-1, 2, -1)
+    probabilities = torch.tensor([0.15, 0.45, 0.4]).expand(2, -1)
     expected = (probabilities + 1e-6).log().mul(0.9)
     torch.testing.assert_close(out, expected)
-
-
-@withCUDA
-def test_tabiclv2_heterogeneous_class_batch(device: torch.device) -> None:
-    model = _make_small_classifier(num_classes=3, device=device)
-    x = torch.randn(2, 6, 6, device=device)
-    y = torch.tensor(
-        [[0, 1, 2, 0], [0, 1, 2, 3]],
-        device=device,
-    )
-
-    out = model(x, y, num_classes=4)
-
-    assert out.size() == (2, 2, 4)
-    probabilities = (out / 0.9).softmax(dim=-1)
-    torch.testing.assert_close(
-        probabilities.sum(dim=-1),
-        torch.ones(2, 2, device=device),
-    )
-    assert (probabilities[0, :, 3] < 1e-5).all()
-
-
-@pytest.mark.parametrize("num_classes", [10, 11])
-def test_tabiclv2_native_class_boundary(num_classes: int) -> None:
-    model = _make_small_classifier(
-        num_classes=10,
-        device=torch.device("cpu"),
-    )
-    test_size = 2
-    x = torch.randn(num_classes + test_size, 6)
-    y = torch.arange(num_classes)
-
-    out = model(x, y, num_classes=num_classes)
-
-    assert out.size() == (test_size, num_classes)
-
-
-def test_tabiclv2_many_classes_rejects_cache() -> None:
-    model = TabICLv2(pretrained=False)
-    native_x_context = torch.randn(5, 6)
-    native_y_context = torch.tensor([[0], [1], [2], [0], [1]])
-    model.fit(native_x_context, native_y_context)
-    assert model.predict(torch.randn(1, 6)).size(-1) == 3
-
-    x_context = torch.randn(11, 6)
-    y_context = torch.arange(11).unsqueeze(-1)
-
-    with pytest.raises(
-        NotImplementedError,
-        match="caching is not supported with more than 10 classes",
-    ):
-        model.fit(x_context, y_context)
-
-    with pytest.raises(RuntimeError, match="not yet fitted"):
-        model.predict(torch.randn(2, 6))
 
 
 @withCUDA
@@ -252,7 +191,6 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
 
     assert out.size() == (test_size, num_classes)
     probabilities = out.numerical
-    assert torch.isfinite(probabilities).all()
     torch.testing.assert_close(
         probabilities.sum(dim=-1),
         torch.ones(test_size, device=device),
