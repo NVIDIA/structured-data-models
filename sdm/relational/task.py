@@ -10,7 +10,7 @@ from typing_extensions import Self
 
 from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
-from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
 from sdm.tensor.mixin import DeviceMixin
 from sdm.tensor.table import TableSchema
 
@@ -49,7 +49,7 @@ class TaskLink:
             )
 
         for column in (*self.task_columns, *self.table_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
                         f"Column name '{column}' is reserved for internal "

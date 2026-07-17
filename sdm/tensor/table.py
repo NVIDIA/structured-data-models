@@ -464,9 +464,9 @@ class TableTensor(Tensor):
                 tensor = tensor.movedim(-1, 0).contiguous()
                 df = cudf.DataFrame(
                     {
-                        name: to_cudf(data)
-                        .astype("datetime64[us]", copy=False)
-                        ._column.set_mask(to_cudf(mask)._column.as_mask())
+                        name: to_cudf(data, mask).astype(
+                            "datetime64[us]", copy=False
+                        )
                         for name, data, mask in zip(
                             self._columns[stype],
                             tensor,
@@ -493,6 +493,11 @@ class TableTensor(Tensor):
     def columns(self) -> Mapping[Stype, tuple[str, ...]]:
         r"""Return column names grouped by semantic type."""
         return self._columns.copy()
+
+    @property
+    def column_names(self) -> frozenset[str]:
+        r"""The column names of this tensor."""
+        return frozenset(self._column_to_loc)
 
     @property
     def stypes(self) -> Mapping[str, Stype]:
@@ -671,9 +676,13 @@ class TableTensor(Tensor):
                 blocks[stype] = tensor.narrow(-1, 0, 0)
             elif len(indices) == len(self._columns[stype]):
                 blocks[stype] = tensor
+            elif len(indices) == 1:
+                blocks[stype] = tensor.narrow(-1, indices[0], 1)
             else:
-                index = torch.tensor(indices, device=tensor.device)
-                blocks[stype] = tensor.index_select(-1, index)
+                blocks[stype] = torch.cat(
+                    [tensor.narrow(-1, index, 1) for index in indices],
+                    dim=-1,
+                )
 
         return self.__class__(columns=columns_dict, **blocks)
 
@@ -988,7 +997,10 @@ def _allclose(
         return False
 
     for stype, block in _align_like(inp, other).items():
-        if not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
+        if stype != Stype.numerical:  # Tolerance only applies for numerical:
+            if not block.equal(other.blocks[stype]):
+                return False
+        elif not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
             return False
 
     return True
@@ -1479,12 +1491,17 @@ def _align_like(inp: TableTensor, ref: TableTensor) -> TableTensor:
             column_to_index = {
                 column: i for i, column in enumerate(inp._columns[stype])
             }
-            index = torch.tensor(
-                [column_to_index[column] for column in ref_columns],
-                dtype=torch.int64,
-                device=inp.blocks[stype].device,
-            )
-            blocks[stype] = inp.blocks[stype].index_select(-1, index)
+            indices = [column_to_index[column] for column in ref_columns]
+            block = inp.blocks[stype]
+            if indices == list(range(len(inp._columns[stype]))):
+                blocks[stype] = block
+            elif len(indices) == 1:
+                blocks[stype] = block.narrow(-1, indices[0], 1)
+            else:
+                blocks[stype] = torch.cat(
+                    [block.narrow(-1, index, 1) for index in indices],
+                    dim=-1,
+                )
         else:
             blocks[stype] = inp.blocks[stype]
 

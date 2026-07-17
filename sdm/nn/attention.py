@@ -1,7 +1,7 @@
 """Attention modules for structured tensor models."""
 
 from collections.abc import Callable
-from math import prod
+from math import isfinite, prod
 from typing import Any, Literal, cast, overload
 
 import torch
@@ -300,6 +300,9 @@ class SDPA(torch.nn.Module):
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries via :class:`QASSMax`.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses the default value of ``1 / sqrt(channels)``.
         device: The device.
         dtype: The dtype.
     """
@@ -310,6 +313,7 @@ class SDPA(torch.nn.Module):
         num_query_heads: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -321,11 +325,14 @@ class SDPA(torch.nn.Module):
                 f"`num_query_heads` ({num_query_heads}) must be divisible by "
                 f"`num_key_value_heads` ({num_key_value_heads})"
             )
+        if scale is not None and (not isfinite(scale) or scale <= 0):
+            raise ValueError("`scale` must be finite and positive")
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_query_heads = num_query_heads
         self.num_key_value_heads = num_key_value_heads
+        self.scale = scale
         self.qassmax: QASSMax | None = None
         if qassmax:
             self.qassmax = QASSMax(
@@ -459,6 +466,7 @@ class SDPA(torch.nn.Module):
             if attn_mask is not None
             else None,
             enable_gqa=self.num_query_heads != self.num_key_value_heads,
+            scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]

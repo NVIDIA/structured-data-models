@@ -27,6 +27,20 @@ def test_to_cudf_noncontiguous() -> None:
     assert torch.as_tensor(series).equal(tensor.contiguous().view(-1))
 
 
+@onlyCUDA
+def test_to_cudf_valid_mask() -> None:
+    pytest.importorskip("cudf")
+    tensor = torch.arange(3, device="cuda")
+    valid_mask = torch.tensor([True, False, True], device="cuda")
+
+    ser = to_cudf(tensor, valid_mask)
+
+    assert ser.null_count == 1
+    assert ser.to_arrow().to_pylist() == [0, None, 2]
+
+
+@onlyCUDA
 def test_to_cudf_requires_cuda() -> None:
+    pytest.importorskip("cudf")
     with pytest.raises(ValueError, match="on a CUDA device"):
         to_cudf(torch.arange(3))
