@@ -464,9 +464,9 @@ class TableTensor(Tensor):
                 tensor = tensor.movedim(-1, 0).contiguous()
                 df = cudf.DataFrame(
                     {
-                        name: to_cudf(data)
-                        .astype("datetime64[us]", copy=False)
-                        ._column.set_mask(to_cudf(mask)._column.as_mask())
+                        name: to_cudf(data, mask).astype(
+                            "datetime64[us]", copy=False
+                        )
                         for name, data, mask in zip(
                             self._columns[stype],
                             tensor,

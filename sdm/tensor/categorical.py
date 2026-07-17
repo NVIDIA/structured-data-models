@@ -271,9 +271,7 @@ class CategoricalTensor(Tensor):
             (data_t >= 0).unbind(0),
         ):
             columns[name] = cudf.CategoricalIndex.from_codes(
-                codes=to_cudf(data)._column.set_mask(
-                    to_cudf(mask)._column.as_mask()
-                ),
+                codes=to_cudf(data, mask)._column,
                 categories=to_cudf(category),
                 ordered=False,
             )
