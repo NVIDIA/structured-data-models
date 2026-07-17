@@ -9,6 +9,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 BOUNDS_THRESH = 1e-7
+_TRANSFORM_BATCH_SIZE = 32
 
 
 def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
@@ -29,24 +30,34 @@ def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
     return torch.where(x >= xp[-1], fp[-1], result)
 
 
-def _torch_interp_columns(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
-    n = xp.shape[1]
+def _batched_interp(
+    values: Tensor,
+    boundaries: Tensor,
+    references: Tensor,
+) -> Tensor:
+    # Batched 1D linear interpolation over independent feature grids:
+    # values ``[F, N]``, boundaries ``[F, Q]``, references ``[Q]``.
+    n = boundaries.shape[1]
     if n == 1:
-        return fp[0].expand_as(x)
+        return references[0].expand_as(values)
 
-    idx = torch.searchsorted(xp, x, right=True).clamp(1, n - 1)
+    idx = torch.searchsorted(boundaries, values, right=True).clamp(1, n - 1)
 
-    x0 = xp.gather(1, idx - 1)
-    x1 = xp.gather(1, idx)
-    y0 = fp[idx - 1]
-    y1 = fp[idx]
+    x0 = boundaries.gather(1, idx - 1)
+    x1 = boundaries.gather(1, idx)
+    y0 = references[idx - 1]
+    y1 = references[idx]
 
     denom = x1 - x0
-    weight = torch.where(denom != 0, (x - x0) / denom, torch.zeros_like(x))
+    weight = torch.where(
+        denom != 0,
+        (values - x0) / denom,
+        torch.zeros_like(values),
+    )
     result = torch.lerp(y0, y1, weight)
 
-    result = torch.where(x <= xp[:, :1], fp[0], result)
-    return torch.where(x >= xp[:, -1:], fp[-1], result)
+    result = torch.where(values <= boundaries[:, :1], references[0], result)
+    return torch.where(values >= boundaries[:, -1:], references[-1], result)
 
 
 class Quantile(Processor, InvertibleMixin):
@@ -175,6 +186,7 @@ class Quantile(Processor, InvertibleMixin):
         return input_col
 
     def _transform_columns(self, inp: Tensor, quantiles: Tensor) -> Tensor:
+        # Keep the empirical-CDF mapping separate from TableTensor plumbing.
         # Searchsorted works over the innermost dimension, so columns become
         # independent rows: input ``[N, F]`` -> ``[F, N]``.
         input_columns = inp.T.contiguous()
@@ -193,12 +205,12 @@ class Quantile(Processor, InvertibleMixin):
             upper_bounds_idx = input_columns == upper_bound_x
 
         finite = input_columns.isfinite()
-        forward = _torch_interp_columns(
+        forward = _batched_interp(
             input_columns,
             quantile_columns,
             self.references,
         )
-        backward = _torch_interp_columns(
+        backward = _batched_interp(
             -input_columns,
             -quantile_columns.flip(1),
             -self.references.flip(0),
@@ -223,7 +235,13 @@ class Quantile(Processor, InvertibleMixin):
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` into the configured output distribution."""
         numerical = _as_float(table.numerical)
-        transformed = self._transform_columns(numerical, self.quantiles)
+        transformed = torch.empty_like(numerical)
+        for start in range(0, numerical.shape[1], _TRANSFORM_BATCH_SIZE):
+            end = min(start + _TRANSFORM_BATCH_SIZE, numerical.shape[1])
+            transformed[:, start:end] = self._transform_columns(
+                numerical[:, start:end],
+                self.quantiles[:, start:end],
+            )
         return table.replace_blocks(numerical=transformed)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
