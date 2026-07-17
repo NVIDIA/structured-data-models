@@ -46,14 +46,8 @@ class CategoricalAlign(Processor):
     ) -> None:
         _check_categorical_codes(table)
         categorical = table.categorical
-        columns = table.columns[Stype.categorical]
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
-            if category.is_complex():
-                raise ValueError(
-                    "CategoricalAlign does not support complex category "
-                    f"values for categorical column '{columns[index]}'."
-                )
             codes = categorical[..., index].reshape(-1)  # [num_rows]
             positions = torch.arange(
                 end=codes.numel(),
