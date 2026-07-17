@@ -11,7 +11,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-def _yeojohnson_transform(inp: Tensor, lmbda: float) -> Tensor:
+def _yeojohnson_transform_col(inp: Tensor, lmbda: float) -> Tensor:
     output = torch.zeros_like(inp)
     positive = inp >= 0
     eps = torch.finfo(inp.dtype).eps
@@ -31,7 +31,7 @@ def _yeojohnson_transform(inp: Tensor, lmbda: float) -> Tensor:
     return output
 
 
-def _yeojohnson_transform_batch(inp: Tensor, lambdas: Tensor) -> Tensor:
+def _yeojohnson_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
     lambdas = lambdas.to(dtype=inp.dtype).unsqueeze(0)
     eps = torch.finfo(inp.dtype).eps
 
@@ -72,7 +72,7 @@ def _yeojohnson_inverse_transform(inp: Tensor, lmbda: float) -> Tensor:
 
 
 def _yeojohnson_log_likelihood(inp: Tensor, lmbda: float) -> float:
-    transformed = _yeojohnson_transform(inp, lmbda)
+    transformed = _yeojohnson_transform_col(inp, lmbda)
     variance = transformed.var(correction=0)
     if not variance.isfinite() or variance < torch.finfo(variance.dtype).tiny:
         return -math.inf
@@ -241,7 +241,7 @@ class Power(Processor, InvertibleMixin):
             self.scale = numerical.new_ones(n_features)
 
     def _yeojohnson_transform(self, inp: Tensor) -> Tensor:
-        return _yeojohnson_transform_batch(inp, self.lambdas)
+        return _yeojohnson_transform(inp, self.lambdas)
 
     def _yeojohnson_inverse_transform(self, inp: Tensor) -> Tensor:
         inverse = inp.clone()
