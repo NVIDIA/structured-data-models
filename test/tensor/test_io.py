@@ -39,6 +39,8 @@ def test_to_cudf_valid_mask() -> None:
     assert ser.to_arrow().to_pylist() == [0, None, 2]
 
 
+@onlyCUDA
 def test_to_cudf_requires_cuda() -> None:
+    pytest.importorskip("cudf")
     with pytest.raises(ValueError, match="on a CUDA device"):
         to_cudf(torch.arange(3))
