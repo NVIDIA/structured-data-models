@@ -16,7 +16,6 @@ from typing_extensions import Self, override
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.io.cudf import _set_cudf_mask
 
 if TYPE_CHECKING:
     import cudf
@@ -469,17 +468,10 @@ class TableTensor(Tensor):
                     tensor,
                     tensor != torch.iinfo(tensor.dtype).min,
                 ):
-                    null_count = int(mask.numel() - mask.sum().item())
-                    column = (
-                        to_cudf(data)
-                        .astype("datetime64[us]", copy=False)
-                        ._column
-                    )
-                    columns[name] = _set_cudf_mask(
-                        column,
-                        to_cudf(mask)._column.as_mask(),
-                        null_count,
-                    )
+                    columns[name] = to_cudf(
+                        data,
+                        valid_mask=mask,
+                    ).astype("datetime64[us]", copy=False)
 
                 df = cudf.DataFrame(columns)
                 dfs.append(df)

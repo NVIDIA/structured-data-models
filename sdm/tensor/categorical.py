@@ -13,7 +13,6 @@ from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.io.cudf import _set_cudf_mask
 
 if TYPE_CHECKING:
     import cudf
@@ -271,13 +270,8 @@ class CategoricalTensor(Tensor):
             self.categories,
             (data_t >= 0).unbind(0),
         ):
-            null_count = int(mask.numel() - mask.sum().item())
             columns[name] = cudf.CategoricalIndex.from_codes(
-                codes=_set_cudf_mask(
-                    to_cudf(data)._column,
-                    to_cudf(mask)._column.as_mask(),
-                    null_count,
-                ),
+                codes=to_cudf(data, valid_mask=mask)._column,
                 categories=to_cudf(category),
                 ordered=False,
             )
