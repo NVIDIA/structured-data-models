@@ -123,3 +123,43 @@ def test_sampler(data: RelationalData) -> None:
     )
     assert len(task_links) == 1
     assert task_links[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))
+
+
+def test_sampler_rejects_missing_task_link(data: RelationalData) -> None:
+    pytest.importorskip("pyg_lib")
+
+    task_table = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.tensor([3, 9]),)),
+    )
+
+    with pytest.raises(ValueError, match="match exactly one row"):
+        data.sampler()(
+            task_table=task_table,
+            task_link={
+                "task_column": "user_id",
+                "table": "users",
+                "table_columns": "user_id",
+            },
+            num_neighbors=[10, 10],
+        )
+
+
+def test_sampler_rejects_duplicate_task_link(data: RelationalData) -> None:
+    pytest.importorskip("pyg_lib")
+
+    task_table = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.tensor([3]),)),
+    )
+
+    with pytest.raises(ValueError, match="match exactly one row"):
+        data.sampler()(
+            task_table=task_table,
+            task_link={
+                "task_column": "user_id",
+                "table": "orders",
+                "table_columns": "user_id",
+            },
+            num_neighbors=[10, 10],
+        )

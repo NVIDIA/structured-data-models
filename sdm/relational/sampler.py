@@ -1,5 +1,5 @@
-from collections.abc import Mapping, Sequence
 import math
+from collections.abc import Mapping, Sequence
 from typing import NamedTuple, cast
 
 import torch
@@ -180,6 +180,11 @@ class RelationalSampler:
                 "'https://github.com/pyg-team/pyg-lib' for more information)"
             ) from e
 
+        if not task_table.is_cpu or not self.data.is_cpu:
+            raise NotImplementedError(
+                f"'{self.__class__.__name__}' requires input data on CPU"
+            )
+
         # Resolve entity table node indices:
         task_rows = math.prod(task_table.size()[:-1])
         task_index, seed = join_index(
@@ -209,11 +214,6 @@ class RelationalSampler:
         else:
             fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)
-
-        if not seed.is_cpu or not self.data.is_cpu:
-            raise NotImplementedError(
-                f"'{self.__class__.__name__}' requires input data on CPU"
-            )
 
         # Perform subgraph sampling:
         _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
