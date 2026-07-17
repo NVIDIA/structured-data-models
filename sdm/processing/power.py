@@ -32,7 +32,7 @@ def _yeojohnson_transform_col(inp: Tensor, lmbda: float) -> Tensor:
 
 
 def _yeojohnson_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
-    lambdas = lambdas.to(dtype=inp.dtype).unsqueeze(0)
+    lambdas = lambdas.unsqueeze(0)
     eps = torch.finfo(inp.dtype).eps
 
     positive_log = inp.clamp_min(0).log1p()
