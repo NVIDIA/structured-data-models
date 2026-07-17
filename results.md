@@ -60,6 +60,18 @@ Then outside TabICL: argmax over the logits → predicted class, compared to y_t
 
 ### Summary:
 
+### Concise summary:
+| method | mean lift | median | >0 on | best on |
+| --- | --- | --- | --- | --- |
+| pls | +0.168 | +0.142 | 26/27 | 12 |
+| pca | +0.157 | +0.141 | 25/27 | 12 |
+| randproj | +0.130 | +0.114 | 25 | 1 |
+| truncate | +0.115 | +0.097 | 24 | 0 |
+| umap | +0.102 | +0.090 | 22 | 1 |
+| none (full) | +0.108 | +0.097 | 11 | 0 |
+| lda | +0.093 | +0.077 | 19 | 1 |
+
+#### Full Data
 ![Summary](reducer_comparison_nemotron.png)
 
 ### Code:
