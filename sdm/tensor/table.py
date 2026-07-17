@@ -495,6 +495,11 @@ class TableTensor(Tensor):
         return self._columns.copy()
 
     @property
+    def column_names(self) -> frozenset[str]:
+        r"""The column names of this tensor."""
+        return frozenset(self._column_to_loc)
+
+    @property
     def stypes(self) -> Mapping[str, Stype]:
         r"""Return the semantic type for each column."""
         return {key: stype for key, (stype, _) in self._column_to_loc.items()}
@@ -671,9 +676,13 @@ class TableTensor(Tensor):
                 blocks[stype] = tensor.narrow(-1, 0, 0)
             elif len(indices) == len(self._columns[stype]):
                 blocks[stype] = tensor
+            elif len(indices) == 1:
+                blocks[stype] = tensor.narrow(-1, indices[0], 1)
             else:
-                index = torch.tensor(indices, device=tensor.device)
-                blocks[stype] = tensor.index_select(-1, index)
+                blocks[stype] = torch.cat(
+                    [tensor.narrow(-1, index, 1) for index in indices],
+                    dim=-1,
+                )
 
         return self.__class__(columns=columns_dict, **blocks)
 
