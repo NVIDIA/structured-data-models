@@ -12,18 +12,20 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib
 import json
 import math
+import os
+import signal
 import subprocess
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from examples.benchmarking import run_tabiclv2_local_comparison as local
 from examples.benchmarking.run_tabiclv2_tabarena_smoke import (
     _git_commit,
     _tabarena_commit,
@@ -31,7 +33,6 @@ from examples.benchmarking.run_tabiclv2_tabarena_smoke import (
     _validate_provenance,
     _validate_seed,
 )
-from examples.benchmarking.tabiclv2_tabarena_model import DeviceAllocation
 
 DEFAULT_OUTCOME_MARGIN = 1e-4
 DEFAULT_BOOTSTRAP_RESAMPLES = 10_000
@@ -41,6 +42,11 @@ DEFAULT_WARM_INFERENCE_REPEATS = 20
 DEFAULT_WORKER_TIMEOUT_S = 1_800.0
 REGRESSION_SUBSET_ALL = "all"
 REGRESSION_SUBSET_LITE = "lite"
+MATCHED_PARITY = "matched_parity"
+ORIGINAL = "original_tabicl"
+SDM = "sdm_tabicl"
+IMPLEMENTATIONS = (ORIGINAL, SDM)
+
 TASK_GRID_FILENAME = "regression_task_grid.json"
 CORRECTNESS_FILENAME = "regression_correctness.csv"
 OUTCOME_SUMMARY_FILENAME = "regression_outcome_summary.csv"
@@ -138,8 +144,32 @@ TIMING_SUMMARY_COLUMNS = (
 )
 
 
+class _QualificationInterrupted(Exception):
+    """Represent a termination signal inside normal control flow."""
+
+    def __init__(self, signum: int) -> None:
+        super().__init__(f"Qualification interrupted by signal {signum}.")
+        self.signum = signum
+
+
+def _termination_handler(signum: int, frame: Any) -> None:
+    """Convert SIGTERM into an exception so the manifest can be finalized."""
+    del frame
+
+    raise _QualificationInterrupted(signum)
+
+
 def _write_json(path: Path, value: Mapping[str, Any] | Sequence[Any]) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    temporary_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary_path.open("w") as file:
+            json.dump(value, file, indent=2, sort_keys=True)
+            file.write("\n")
+            file.flush()
+            os.fsync(file.fileno())
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def _write_csv(
@@ -161,11 +191,82 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _source_tree_inventory(root: Path) -> dict[str, object]:
+    """Return a content-addressed inventory of one runtime source tree."""
+    root = root.resolve()
+    if not root.is_dir():
+        raise RuntimeError(f"Runtime source tree is missing: {root}")
+    files = []
+    for path in sorted(root.rglob("*")):
+        if (
+            not path.is_file()
+            or "__pycache__" in path.parts
+            or path.suffix in {".pyc", ".pyo"}
+        ):
+            continue
+        files.append(
+            {
+                "path": str(path.relative_to(root)),
+                "sha256": _sha256(path),
+            }
+        )
+    if not files:
+        raise RuntimeError(f"Runtime source tree is empty: {root}")
+    return {"root": str(root), "files": files}
+
+
+def _tabarena_package_root() -> Path:
+    tabarena = importlib.import_module("tabarena")
+    module_file = getattr(tabarena, "__file__", None)
+    if module_file is None:
+        raise RuntimeError("Cannot locate the imported TabArena package.")
+    return Path(module_file).resolve().parent
+
+
+def _runtime_source_state(repository_root: Path) -> dict[str, object]:
+    """Fingerprint every SDM and TabArena file that may affect a run."""
+    return {
+        "schema_version": 1,
+        "sdm": {
+            "commit": _git_commit(repository_root),
+            "trees": [
+                _source_tree_inventory(repository_root / "sdm"),
+                _source_tree_inventory(repository_root / "examples"),
+            ],
+        },
+        "tabarena": {
+            "commit": _tabarena_commit(),
+            "trees": [_source_tree_inventory(_tabarena_package_root())],
+        },
+    }
+
+
+def _assert_runtime_source_state(
+    expected: Mapping[str, object],
+    repository_root: Path,
+) -> None:
+    """Fail when code or packaged metadata changed after run start."""
+    current = _runtime_source_state(repository_root)
+    if current == expected:
+        return
+    changed = [
+        name
+        for name in ("sdm", "tabarena")
+        if current.get(name) != expected.get(name)
+    ]
+    detail = ", ".join(changed) if changed else "runtime sources"
+    raise RuntimeError(
+        f"Runtime source drift detected in {detail}; refusing mixed-source "
+        "qualification results. Start a new run after source changes finish."
+    )
+
+
 def _write_source_snapshot(
     repository_root: Path,
     output_dir: Path,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, dict[str, object]]:
     """Write the exact runtime-source and working-tree snapshot for a run."""
+    runtime_source_state = _runtime_source_state(repository_root)
     snapshot_directory = output_dir / SOURCE_SNAPSHOT_DIRECTORY
     snapshot_directory.mkdir()
     runtime_sources: list[dict[str, str]] = []
@@ -214,9 +315,10 @@ def _write_source_snapshot(
                 "sha256": _sha256(patch_path),
             },
             "runtime_sources": runtime_sources,
+            "runtime_source_guard": runtime_source_state,
         },
     )
-    return snapshot_path, patch_path
+    return snapshot_path, patch_path, runtime_source_state
 
 
 def _ensure_output_dir(path: Path) -> Path:
@@ -245,6 +347,29 @@ def _validate_timeout(value: float) -> float:
     if not math.isfinite(value) or value <= 0:
         raise ValueError("--worker-timeout-s must be finite and positive.")
     return value
+
+
+def _local_comparison_module() -> Any:
+    """Load optional benchmark integrations only when executing a run."""
+    from examples.benchmarking import (
+        run_tabiclv2_local_comparison as local_runtime,
+    )
+
+    return local_runtime
+
+
+def _device_allocation(num_gpus: int) -> Any:
+    """Resolve devices without importing AutoGluon during test collection."""
+    from examples.benchmarking.tabiclv2_tabarena_model import DeviceAllocation
+
+    return DeviceAllocation.from_num_gpus(num_gpus)
+
+
+def _execution_order(job_index: int, trial_index: int) -> tuple[str, str]:
+    """Alternate implementation order to reduce systematic order bias."""
+    if (job_index + trial_index) % 2 == 0:
+        return IMPLEMENTATIONS
+    return IMPLEMENTATIONS[1], IMPLEMENTATIONS[0]
 
 
 def _task_grid_records(*, subset: str) -> list[dict[str, object]]:
@@ -342,7 +467,7 @@ def _base_worker_spec(
         "fold": int(task["fold"]),
         "sample": int(task["sample"]),
         "inference_repeats": inference_repeats,
-        "profile": local.MATCHED_PARITY,
+        "profile": MATCHED_PARITY,
     }
 
 
@@ -506,6 +631,7 @@ def run_correctness_qualification(
     output_dir: Path,
     scratch_dir: Path,
     worker_timeout_s: float,
+    source_guard: Callable[[], None],
 ) -> list[dict[str, object]]:
     """Run one alternating paired prediction capture for every frozen split."""
     predictions_dir = output_dir / PREDICTIONS_DIRNAME
@@ -514,7 +640,7 @@ def run_correctness_qualification(
     for job_index, task in enumerate(task_grid):
         results: dict[str, dict[str, Any]] = {}
         for order_index, implementation in enumerate(
-            local.execution_order(job_index, 0)
+            _execution_order(job_index, 0)
         ):
             artifact_path = predictions_dir / _artifact_stem(
                 task, implementation
@@ -534,18 +660,20 @@ def run_correctness_qualification(
                 "execution_order": order_index,
                 "prediction_path": str(artifact_path),
             }
-            result = local.run_worker_subprocess(
+            source_guard()
+            result = _local_comparison_module().run_worker_subprocess(
                 spec,
                 scratch_dir=scratch_dir,
                 worker_timeout_s=worker_timeout_s,
             )
+            source_guard()
             _validate_task_identity(result, task)
             results[implementation] = result
         rows.append(
             _correctness_row(
                 task,
-                original=results[local.ORIGINAL],
-                sdm=results[local.SDM],
+                original=results[ORIGINAL],
+                sdm=results[SDM],
                 outcome_margin=outcome_margin,
                 output_dir=output_dir,
             )
@@ -592,6 +720,8 @@ def summarize_outcomes(
         by_dataset[str(row["dataset"])].append(row)
     summary: list[dict[str, object]] = []
     dataset_deltas: list[float] = []
+    dataset_original_nrmse: list[float] = []
+    dataset_sdm_nrmse: list[float] = []
     all_split_passed = all(bool(row["outcome_gate_passed"]) for row in rows)
     all_dataset_passed = True
     for dataset in sorted(by_dataset):
@@ -604,7 +734,11 @@ def summarize_outcomes(
             [float(row["sdm_nrmse"]) for row in dataset_rows],
             dtype=np.float64,
         )
-        delta = float(np.mean(sdm - original))
+        mean_original = float(np.mean(original))
+        mean_sdm = float(np.mean(sdm))
+        delta = mean_sdm - mean_original
+        dataset_original_nrmse.append(mean_original)
+        dataset_sdm_nrmse.append(mean_sdm)
         dataset_deltas.append(delta)
         passed = delta <= outcome_margin
         all_dataset_passed = all_dataset_passed and passed
@@ -613,8 +747,8 @@ def summarize_outcomes(
                 "scope": "dataset",
                 "dataset": dataset,
                 "splits": len(dataset_rows),
-                "mean_original_nrmse": float(np.mean(original)),
-                "mean_sdm_nrmse": float(np.mean(sdm)),
+                "mean_original_nrmse": mean_original,
+                "mean_sdm_nrmse": mean_sdm,
                 "mean_nrmse_delta_sdm_minus_original": delta,
                 "outcome_margin": outcome_margin,
                 "outcome_gate_passed": passed,
@@ -628,19 +762,17 @@ def summarize_outcomes(
         resamples=bootstrap_resamples,
         seed=seed,
     )
-    overall_delta = float(np.mean(dataset_delta_array))
+    overall_original = float(np.mean(dataset_original_nrmse))
+    overall_sdm = float(np.mean(dataset_sdm_nrmse))
+    overall_delta = overall_sdm - overall_original
     aggregate_passed = bootstrap_upper <= outcome_margin
     summary.append(
         {
             "scope": "all_regression_datasets",
             "dataset": "all",
             "splits": len(rows),
-            "mean_original_nrmse": float(
-                np.mean([float(row["original_nrmse"]) for row in rows])
-            ),
-            "mean_sdm_nrmse": float(
-                np.mean([float(row["sdm_nrmse"]) for row in rows])
-            ),
+            "mean_original_nrmse": overall_original,
+            "mean_sdm_nrmse": overall_sdm,
             "mean_nrmse_delta_sdm_minus_original": overall_delta,
             "outcome_margin": outcome_margin,
             "outcome_gate_passed": aggregate_passed,
@@ -703,6 +835,7 @@ def run_timing_qualification(
     warm_inference_repeats: int,
     scratch_dir: Path,
     worker_timeout_s: float,
+    source_guard: Callable[[], None],
 ) -> list[dict[str, object]]:
     """Run fresh-process original/original and original/SDM timing pairs."""
     rows: list[dict[str, object]] = []
@@ -720,15 +853,17 @@ def run_timing_qualification(
             for execution_order in range(2):
                 spec = {
                     **base_spec,
-                    "implementation": local.ORIGINAL,
+                    "implementation": ORIGINAL,
                     "trial": f"calibration_{job_index}_{trial}",
                     "execution_order": execution_order,
                 }
-                result = local.run_worker_subprocess(
+                source_guard()
+                result = _local_comparison_module().run_worker_subprocess(
                     spec,
                     scratch_dir=scratch_dir,
                     worker_timeout_s=worker_timeout_s,
                 )
+                source_guard()
                 _validate_task_identity(result, task)
                 rows.append(
                     _timing_row(
@@ -736,13 +871,13 @@ def run_timing_qualification(
                         phase="calibration",
                         trial=trial,
                         execution_order=execution_order,
-                        implementation=local.ORIGINAL,
+                        implementation=ORIGINAL,
                         result=result,
                     )
                 )
         for trial in range(timing_trials):
             for execution_order, implementation in enumerate(
-                local.execution_order(job_index, trial)
+                _execution_order(job_index, trial)
             ):
                 spec = {
                     **base_spec,
@@ -750,11 +885,13 @@ def run_timing_qualification(
                     "trial": f"timing_{job_index}_{trial}",
                     "execution_order": execution_order,
                 }
-                result = local.run_worker_subprocess(
+                source_guard()
+                result = _local_comparison_module().run_worker_subprocess(
                     spec,
                     scratch_dir=scratch_dir,
                     worker_timeout_s=worker_timeout_s,
                 )
+                source_guard()
                 _validate_task_identity(result, task)
                 rows.append(
                     _timing_row(
@@ -803,6 +940,41 @@ def _paired_ratio_summary(
     upper = float(np.exp(np.quantile(log_ratios[indices].mean(axis=1), 0.95)))
     geometric_mean = float(np.exp(np.mean(log_ratios)))
     return geometric_mean, upper
+
+
+def _paired_symmetric_ratio_summary(
+    numerators: Sequence[float],
+    denominators: Sequence[float],
+    *,
+    bootstrap_resamples: int,
+    seed: int,
+) -> tuple[float, float]:
+    """Return a direction-invariant paired timing deviation and bound."""
+    numerator_array = np.asarray(numerators, dtype=np.float64)
+    denominator_array = np.asarray(denominators, dtype=np.float64)
+    if (
+        numerator_array.ndim != 1
+        or numerator_array.shape != denominator_array.shape
+        or numerator_array.size == 0
+        or not np.isfinite(numerator_array).all()
+        or not np.isfinite(denominator_array).all()
+        or (numerator_array <= 0).any()
+        or (denominator_array <= 0).any()
+    ):
+        raise RuntimeError(
+            "Timing ratios require finite positive paired values."
+        )
+    log_ratios = np.log(numerator_array / denominator_array)
+    generator = np.random.default_rng(seed)
+    indices = generator.integers(
+        low=0,
+        high=log_ratios.size,
+        size=(bootstrap_resamples, log_ratios.size),
+    )
+    bootstrap_deviations = np.abs(log_ratios[indices].mean(axis=1))
+    upper = float(np.exp(np.quantile(bootstrap_deviations, 0.95)))
+    geometric_deviation = float(np.exp(abs(np.mean(log_ratios))))
+    return geometric_deviation, upper
 
 
 def summarize_timing(
@@ -863,18 +1035,18 @@ def summarize_timing(
             sdm_values: list[float] = []
             for trial in range(timing_trials):
                 pair = paired_by_trial[trial]
-                if set(pair) != {local.ORIGINAL, local.SDM}:
+                if set(pair) != {ORIGINAL, SDM}:
                     raise RuntimeError("Paired timing trial is incomplete.")
-                original_values.append(
-                    float(pair[local.ORIGINAL][timing_field])
-                )
-                sdm_values.append(float(pair[local.SDM][timing_field]))
+                original_values.append(float(pair[ORIGINAL][timing_field]))
+                sdm_values.append(float(pair[SDM][timing_field]))
 
-            calibration_mean, calibration_upper = _paired_ratio_summary(
-                calibration_second,
-                calibration_first,
-                bootstrap_resamples=bootstrap_resamples,
-                seed=seed + task_index * 31 + field_index,
+            calibration_mean, calibration_upper = (
+                _paired_symmetric_ratio_summary(
+                    calibration_second,
+                    calibration_first,
+                    bootstrap_resamples=bootstrap_resamples,
+                    seed=seed + task_index * 31 + field_index,
+                )
             )
             sdm_mean, sdm_upper = _paired_ratio_summary(
                 sdm_values,
@@ -1025,8 +1197,8 @@ def render_report(
             "",
             "Every timing value is measured in a fresh process. For each "
             f"split and timing mode, the configured {calibration_trials} "
-            "original-vs-original pairs estimate the one-sided 95% "
-            "hardware-noise bound. The allowed SDM slowdown "
+            "original-vs-original pairs estimate a symmetric two-sided 95% "
+            "hardware-instability bound. The allowed SDM slowdown "
             "is max(0.5%, that bound), capped at 2%; a noise bound above 2% "
             "invalidates the environment for that measurement.",
             "",
@@ -1053,9 +1225,24 @@ def render_report(
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint-path", required=True, type=Path)
-    parser.add_argument("--checkpoint-sha256", required=True)
-    parser.add_argument("--checkpoint-repository", required=True)
-    parser.add_argument("--checkpoint-revision", required=True)
+    parser.add_argument(
+        "--checkpoint-sha256",
+        required=True,
+        help="Digest verified against the local checkpoint before execution.",
+    )
+    parser.add_argument(
+        "--checkpoint-repository",
+        required=True,
+        help=("Caller-asserted source repository; recorded but not verified."),
+    )
+    parser.add_argument(
+        "--checkpoint-revision",
+        required=True,
+        help=(
+            "Caller-asserted source revision; recorded but not independently "
+            "verified."
+        ),
+    )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--num-cpus", required=True, type=int)
     parser.add_argument("--num-gpus", required=True, type=int, choices=(0, 1))
@@ -1154,21 +1341,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.checkpoint_path,
         args.checkpoint_sha256,
     )
-    allocation = DeviceAllocation.from_num_gpus(args.num_gpus)
+    local_runtime = _local_comparison_module()
+    allocation = _device_allocation(args.num_gpus)
     output_dir = _ensure_output_dir(args.output_dir)
+    repository_root = Path(__file__).resolve().parents[2]
+    source_snapshot_path, source_patch_path, runtime_source_state = (
+        _write_source_snapshot(repository_root, output_dir)
+    )
+
+    def source_guard() -> None:
+        _assert_runtime_source_state(runtime_source_state, repository_root)
+
+    source_guard()
     task_grid = _task_grid_records(subset=args.subset)
+    source_guard()
     task_grid_path = output_dir / TASK_GRID_FILENAME
     _write_json(task_grid_path, task_grid)
-
-    repository_root = Path(__file__).resolve().parents[2]
-    source_snapshot_path, source_patch_path = _write_source_snapshot(
-        repository_root,
-        output_dir,
-    )
     manifest_path = output_dir / MANIFEST_FILENAME
     manifest: dict[str, Any] = {
         "status": "started",
-        "started_at_utc": datetime.now(UTC).isoformat(),
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "sdm": {"commit": _git_commit(repository_root)},
         "source_snapshot": {
             "path": str(source_snapshot_path.relative_to(output_dir)),
@@ -1184,6 +1376,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "sha256": checkpoint_sha256,
             "repository": checkpoint_repository,
             "revision": checkpoint_revision,
+            "artifact_verification": "local_sha256_verified",
+            "source_metadata_verification": "caller_asserted_unverified",
         },
         "resources": {
             "num_cpus": num_cpus,
@@ -1198,16 +1392,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             "sha256": task_grid_fingerprint(task_grid),
         },
         "configuration": {
-            "profile": local.MATCHED_PARITY,
-            "original": local.resolved_configuration(
-                profile=local.MATCHED_PARITY,
-                implementation=local.ORIGINAL,
+            "profile": MATCHED_PARITY,
+            "original": local_runtime.resolved_configuration(
+                profile=MATCHED_PARITY,
+                implementation=ORIGINAL,
                 checkpoint_path=checkpoint_path,
                 seed=seed,
             ),
-            "sdm": local.resolved_configuration(
-                profile=local.MATCHED_PARITY,
-                implementation=local.SDM,
+            "sdm": local_runtime.resolved_configuration(
+                profile=MATCHED_PARITY,
+                implementation=SDM,
                 checkpoint_path=checkpoint_path,
                 seed=seed,
             ),
@@ -1227,9 +1421,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             "warm_inference_repeats": warm_inference_repeats,
             "minimum_allowed_slowdown_ratio": 1.005,
             "maximum_allowed_slowdown_ratio": 1.02,
-            "statistic": "paired log-ratio bootstrap upper one-sided 95%",
+            "statistic": (
+                "symmetric original/original absolute-log bootstrap upper "
+                "two-sided 95%; SDM/original log-ratio upper one-sided 95%"
+            ),
         },
-        "environment": local.environment_manifest(num_gpus=args.num_gpus),
+        "environment": local_runtime.environment_manifest(
+            num_gpus=args.num_gpus
+        ),
     }
     _write_json(manifest_path, manifest)
 
@@ -1243,6 +1442,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         source_snapshot_path,
         source_patch_path,
     ]
+    previous_sigterm_handler = signal.getsignal(signal.SIGTERM)
+    signal.signal(signal.SIGTERM, _termination_handler)
     try:
         scratch_dir = output_dir / ".workers"
         scratch_dir.mkdir(exist_ok=False)
@@ -1257,6 +1458,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=output_dir,
             scratch_dir=scratch_dir,
             worker_timeout_s=worker_timeout_s,
+            source_guard=source_guard,
         )
         outcome_summary, outcome_passed = summarize_outcomes(
             correctness,
@@ -1298,10 +1500,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest["prediction_artifacts"] = prediction_artifacts
         manifest["outcome_gate"]["passed"] = outcome_passed
         if not outcome_passed:
+            source_guard()
             manifest.update(
                 {
                     "status": "outcome_gate_failed",
-                    "completed_at_utc": datetime.now(UTC).isoformat(),
+                    "completed_at_utc": datetime.now(timezone.utc).isoformat(),
                     "artifacts": _artifact_entries(artifact_paths),
                 }
             )
@@ -1309,10 +1512,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
 
         if not args.run_timing:
+            source_guard()
             manifest.update(
                 {
                     "status": "outcome_qualified",
-                    "completed_at_utc": datetime.now(UTC).isoformat(),
+                    "completed_at_utc": datetime.now(timezone.utc).isoformat(),
                     "artifacts": _artifact_entries(artifact_paths),
                 }
             )
@@ -1331,6 +1535,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             warm_inference_repeats=warm_inference_repeats,
             scratch_dir=scratch_dir,
             worker_timeout_s=worker_timeout_s,
+            source_guard=source_guard,
         )
         timing_summary, timing_passed = summarize_timing(
             timing_rows,
@@ -1352,17 +1557,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         manifest["timing_gate"]["passed"] = timing_passed
+        source_guard()
         manifest.update(
             {
                 "status": "completed"
                 if timing_passed
                 else "timing_gate_failed",
-                "completed_at_utc": datetime.now(UTC).isoformat(),
+                "completed_at_utc": datetime.now(timezone.utc).isoformat(),
                 "artifacts": _artifact_entries(artifact_paths),
             }
         )
         _write_json(manifest_path, manifest)
         return 0 if timing_passed else 3
+    except (KeyboardInterrupt, _QualificationInterrupted) as error:
+        if isinstance(error, _QualificationInterrupted):
+            signal_name = signal.Signals(error.signum).name
+            exit_code = 128 + error.signum
+        else:
+            signal_name = signal.Signals(signal.SIGINT).name
+            exit_code = 128 + signal.SIGINT
+        existing_paths = [
+            path
+            for path in output_dir.rglob("*")
+            if path.is_file() and path != manifest_path
+        ]
+        manifest.update(
+            {
+                "status": "interrupted",
+                "interrupted_at_utc": datetime.now(timezone.utc).isoformat(),
+                "interruption": {
+                    "signal": signal_name,
+                    "exit_code": exit_code,
+                },
+                "artifacts": _artifact_entries(existing_paths),
+            }
+        )
+        _write_json(manifest_path, manifest)
+        return exit_code
     except Exception as error:
         existing_paths = [
             path
@@ -1372,13 +1603,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest.update(
             {
                 "status": "failed",
-                "failed_at_utc": datetime.now(UTC).isoformat(),
+                "failed_at_utc": datetime.now(timezone.utc).isoformat(),
                 "error": f"{type(error).__name__}: {error}",
                 "artifacts": _artifact_entries(existing_paths),
             }
         )
         _write_json(manifest_path, manifest)
         raise
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm_handler)
 
 
 if __name__ == "__main__":

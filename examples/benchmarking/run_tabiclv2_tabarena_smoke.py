@@ -27,17 +27,12 @@ import json
 import math
 import subprocess
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import pandas as pd
-
-from examples.benchmarking.tabiclv2_tabarena_model import (
-    DeviceAllocation,
-    SDMTabICLv2Model,
-)
 
 DATASET = "QSAR_fish_toxicity"
 COMPARISON_FILENAME = "tabiclv2_comparison.csv"
@@ -50,6 +45,16 @@ MAX_SEED = 2**63 - 1
 NUM_ESTIMATORS = 1
 
 
+def _adapter_classes() -> tuple[type[Any], type[Any]]:
+    """Load optional AutoGluon adapter types only for benchmark execution."""
+    from examples.benchmarking.tabiclv2_tabarena_model import (
+        DeviceAllocation,
+        SDMTabICLv2Model,
+    )
+
+    return DeviceAllocation, SDMTabICLv2Model
+
+
 def build_smoke_experiments(
     *,
     checkpoint_path: Path,
@@ -59,12 +64,13 @@ def build_smoke_experiments(
     num_gpus: int,
 ):
     """Build the one outer/no-preprocessing experiment without executing it."""
+    _, model_cls = _adapter_classes()
     from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
     from tabarena.utils.config_utils import ConfigGenerator
 
     config = ConfigGenerator(
         search_space={},
-        model_cls=SDMTabICLv2Model,
+        model_cls=model_cls,
         manual_configs=[
             {
                 "checkpoint_path": str(checkpoint_path),
@@ -265,7 +271,8 @@ def _validate_run_results(
         raise RuntimeError("Expected the TabArena result to be a mapping.")
 
     framework = result.get("framework")
-    expected_framework = f"{SDMTabICLv2Model.ag_name}_c1"
+    _, model_cls = _adapter_classes()
+    expected_framework = f"{model_cls.ag_name}_c1"
     if not isinstance(framework, str) or not framework:
         raise RuntimeError("TabArena result is missing its framework name.")
     if framework != expected_framework:
@@ -520,7 +527,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.checkpoint_path,
         args.checkpoint_sha256,
     )
-    allocation = DeviceAllocation.from_num_gpus(args.num_gpus)
+    device_allocation_cls, model_cls = _adapter_classes()
+    allocation = device_allocation_cls.from_num_gpus(args.num_gpus)
 
     output_dir = args.output_dir.expanduser().resolve()
     results_dir = output_dir / "results"
@@ -535,7 +543,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     manifest_path = output_dir / "manifest.json"
     manifest: dict[str, Any] = {
         "status": "started",
-        "started_at_utc": datetime.now(UTC).isoformat(),
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "task": DATASET,
         "sdm": {"commit": _git_commit(repo_root)},
         "tabarena": {"commit": _tabarena_commit()},
@@ -554,7 +562,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "outer_experiments": True,
             "model_agnostic_preprocessing": False,
             "preprocess_data": False,
-            "model": SDMTabICLv2Model.__name__,
+            "model": model_cls.__name__,
             "seed": seed,
             "num_estimators": NUM_ESTIMATORS,
             "debug_mode": args.debug_mode,
@@ -626,7 +634,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest.update(
             {
                 "status": "completed",
-                "completed_at_utc": datetime.now(UTC).isoformat(),
+                "completed_at_utc": datetime.now(timezone.utc).isoformat(),
                 "results_dir": str(results_dir),
                 "evaluation_dir": str(evaluation_dir),
                 "comparison_path": str(comparison_path),
@@ -637,7 +645,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest.update(
             {
                 "status": "failed",
-                "failed_at_utc": datetime.now(UTC).isoformat(),
+                "failed_at_utc": datetime.now(timezone.utc).isoformat(),
                 "error": f"{type(error).__name__}: {error}",
             }
         )

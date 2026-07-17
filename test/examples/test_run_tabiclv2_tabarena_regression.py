@@ -2,19 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import signal
 from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pytest
-
-pytest.importorskip("autogluon")
-pytest.importorskip("tabarena")
-
 from examples.benchmarking import run_tabiclv2_tabarena_regression as runner
-
-pytestmark = pytest.mark.tabarena
 
 
 def _outcome_row(
@@ -179,6 +175,39 @@ def _main_args(checkpoint: Path, output_dir: Path) -> list[str]:
     ]
 
 
+def _patch_main_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    worker: Any,
+) -> None:
+    runtime = SimpleNamespace(
+        run_worker_subprocess=worker,
+        resolved_configuration=lambda **kwargs: {
+            "implementation": kwargs["implementation"]
+        },
+        environment_manifest=lambda **_kwargs: {"test": True},
+    )
+    runtime_state = {
+        "schema_version": 1,
+        "sdm": {"commit": "sdm-commit", "trees": []},
+        "tabarena": {"commit": "ta-commit", "trees": []},
+    }
+    monkeypatch.setattr(runner, "_local_comparison_module", lambda: runtime)
+    monkeypatch.setattr(
+        runner,
+        "_device_allocation",
+        lambda _num_gpus: SimpleNamespace(device="cpu"),
+    )
+    monkeypatch.setattr(
+        runner, "_runtime_source_state", lambda _root: runtime_state
+    )
+    monkeypatch.setattr(
+        runner, "_task_grid_records", lambda **_kwargs: _task_grid()
+    )
+    monkeypatch.setattr(runner, "_git_commit", lambda _path: "sdm-commit")
+    monkeypatch.setattr(runner, "_tabarena_commit", lambda: "ta-commit")
+
+
 def test_task_grid_fingerprint_is_order_sensitive_and_stable() -> None:
     grid = _task_grid()
     assert runner.task_grid_fingerprint(grid) == runner.task_grid_fingerprint(
@@ -220,6 +249,36 @@ def test_outcome_summary_requires_split_dataset_and_bootstrap_gates() -> None:
     assert passed is False
 
 
+def test_outcome_aggregate_uses_dataset_weighting_for_every_mean() -> None:
+    rows = [
+        _outcome_row(dataset="a", original_nrmse=0.0, sdm_nrmse=0.1),
+        _outcome_row(dataset="a", original_nrmse=0.0, sdm_nrmse=0.1),
+        _outcome_row(dataset="b", original_nrmse=1.0, sdm_nrmse=1.0),
+    ]
+    summary, _ = runner.summarize_outcomes(
+        rows,
+        outcome_margin=0.2,
+        bootstrap_resamples=100,
+        seed=0,
+    )
+    overall = next(
+        row for row in summary if row["scope"] == "all_regression_datasets"
+    )
+
+    mean_original = overall["mean_original_nrmse"]
+    mean_sdm = overall["mean_sdm_nrmse"]
+    assert isinstance(mean_original, float)
+    assert isinstance(mean_sdm, float)
+    assert mean_original == pytest.approx(0.5)
+    assert mean_sdm == pytest.approx(0.55)
+    assert overall["mean_nrmse_delta_sdm_minus_original"] == pytest.approx(
+        mean_sdm - mean_original
+    )
+    assert overall["mean_nrmse_delta_sdm_minus_original"] == pytest.approx(
+        0.05
+    )
+
+
 def test_timing_summary_calibrates_noise_and_caps_slowdown() -> None:
     summary, passed = runner.summarize_timing(
         _timing_rows(sdm_ratio=1.004, calibration_ratio=1.001),
@@ -243,6 +302,20 @@ def test_timing_summary_calibrates_noise_and_caps_slowdown() -> None:
     )
     assert passed is False
 
+    summary, passed = runner.summarize_timing(
+        _timing_rows(sdm_ratio=1.0, calibration_ratio=0.8),
+        timing_trials=3,
+        calibration_trials=3,
+        bootstrap_resamples=100,
+        seed=0,
+    )
+    assert passed is False
+    assert all(row["hardware_qualified"] is False for row in summary)
+    assert all(
+        row["original_vs_original_upper_95_ratio"] == pytest.approx(1.25)
+        for row in summary
+    )
+
 
 def test_main_writes_complete_outcome_artifacts(
     tmp_path: Path,
@@ -251,17 +324,7 @@ def test_main_writes_complete_outcome_artifacts(
     checkpoint = tmp_path / "checkpoint.ckpt"
     checkpoint.write_bytes(b"checkpoint")
     output_dir = tmp_path / "outcome"
-    monkeypatch.setattr(
-        runner, "_task_grid_records", lambda **_kwargs: _task_grid()
-    )
-    monkeypatch.setattr(runner.local, "run_worker_subprocess", _fake_worker())
-    monkeypatch.setattr(runner, "_git_commit", lambda _path: "sdm-commit")
-    monkeypatch.setattr(runner, "_tabarena_commit", lambda: "ta-commit")
-    monkeypatch.setattr(
-        runner.local,
-        "environment_manifest",
-        lambda **_kwargs: {"test": True},
-    )
+    _patch_main_runtime(monkeypatch, worker=_fake_worker())
 
     assert runner.main(_main_args(checkpoint, output_dir)) == 0
 
@@ -270,6 +333,14 @@ def test_main_writes_complete_outcome_artifacts(
     report = (output_dir / runner.REPORT_FILENAME).read_text()
     assert manifest["status"] == "outcome_qualified"
     assert manifest["outcome_gate"]["passed"] is True
+    assert (
+        manifest["checkpoint"]["source_metadata_verification"]
+        == "caller_asserted_unverified"
+    )
+    assert (
+        manifest["checkpoint"]["artifact_verification"]
+        == "local_sha256_verified"
+    )
     snapshot_path = output_dir / runner.SOURCE_SNAPSHOT_FILENAME
     snapshot = json.loads(snapshot_path.read_text())
     assert manifest["source_snapshot"]["sha256"] == runner._sha256(
@@ -296,20 +367,9 @@ def test_main_blocks_timing_when_outcome_gate_fails(
     checkpoint = tmp_path / "checkpoint.ckpt"
     checkpoint.write_bytes(b"checkpoint")
     output_dir = tmp_path / "failing"
-    monkeypatch.setattr(
-        runner, "_task_grid_records", lambda **_kwargs: _task_grid()
-    )
-    monkeypatch.setattr(
-        runner.local,
-        "run_worker_subprocess",
-        _fake_worker(failing_outcome=True),
-    )
-    monkeypatch.setattr(runner, "_git_commit", lambda _path: "sdm-commit")
-    monkeypatch.setattr(runner, "_tabarena_commit", lambda: "ta-commit")
-    monkeypatch.setattr(
-        runner.local,
-        "environment_manifest",
-        lambda **_kwargs: {"test": True},
+    _patch_main_runtime(
+        monkeypatch,
+        worker=_fake_worker(failing_outcome=True),
     )
 
     args = [*_main_args(checkpoint, output_dir), "--run-timing"]
@@ -327,17 +387,7 @@ def test_main_runs_timing_only_after_passing_outcomes(
     checkpoint = tmp_path / "checkpoint.ckpt"
     checkpoint.write_bytes(b"checkpoint")
     output_dir = tmp_path / "timing"
-    monkeypatch.setattr(
-        runner, "_task_grid_records", lambda **_kwargs: _task_grid()
-    )
-    monkeypatch.setattr(runner.local, "run_worker_subprocess", _fake_worker())
-    monkeypatch.setattr(runner, "_git_commit", lambda _path: "sdm-commit")
-    monkeypatch.setattr(runner, "_tabarena_commit", lambda: "ta-commit")
-    monkeypatch.setattr(
-        runner.local,
-        "environment_manifest",
-        lambda **_kwargs: {"test": True},
-    )
+    _patch_main_runtime(monkeypatch, worker=_fake_worker())
 
     args = [
         *_main_args(checkpoint, output_dir),
@@ -356,3 +406,72 @@ def test_main_runs_timing_only_after_passing_outcomes(
     assert manifest["timing_gate"]["passed"] is True
     assert (output_dir / runner.TIMING_TRIALS_FILENAME).is_file()
     assert (output_dir / runner.TIMING_SUMMARY_FILENAME).is_file()
+
+
+def test_runtime_source_guard_rejects_source_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_root = tmp_path / "runtime"
+    source_root.mkdir()
+    source_file = source_root / "module.py"
+    source_file.write_text("value = 1\n")
+
+    def runtime_state(_repository_root: Path) -> dict[str, object]:
+        inventory = runner._source_tree_inventory(source_root)
+        return {
+            "schema_version": 1,
+            "sdm": {"trees": [inventory]},
+            "tabarena": {"trees": []},
+        }
+
+    monkeypatch.setattr(runner, "_runtime_source_state", runtime_state)
+    expected = runtime_state(tmp_path)
+    source_file.write_text("value = 2\n")
+
+    with pytest.raises(RuntimeError, match="Runtime source drift"):
+        runner._assert_runtime_source_state(expected, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("signum", "expected_signal", "expected_exit_code"),
+    [
+        (None, "SIGINT", 130),
+        (signal.SIGTERM, "SIGTERM", 143),
+    ],
+)
+def test_main_records_interruption_and_restores_signal_handler(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    signum: int | None,
+    expected_signal: str,
+    expected_exit_code: int,
+) -> None:
+    checkpoint = tmp_path / "checkpoint.ckpt"
+    checkpoint.write_bytes(b"checkpoint")
+    output_dir = tmp_path / "interrupted"
+
+    def interrupting_worker(
+        _spec: Mapping[str, Any],
+        *,
+        scratch_dir: Path,
+        worker_timeout_s: float,
+    ) -> dict[str, Any]:
+        del scratch_dir, worker_timeout_s
+        if signum is None:
+            raise KeyboardInterrupt
+        runner._termination_handler(signum, None)
+        raise AssertionError("The termination handler must raise.")
+
+    previous_handler = signal.getsignal(signal.SIGTERM)
+    _patch_main_runtime(monkeypatch, worker=interrupting_worker)
+    assert (
+        runner.main(_main_args(checkpoint, output_dir)) == expected_exit_code
+    )
+
+    manifest = json.loads((output_dir / runner.MANIFEST_FILENAME).read_text())
+    assert manifest["status"] == "interrupted"
+    assert manifest["interruption"]["signal"] == expected_signal
+    assert manifest["interruption"]["exit_code"] == expected_exit_code
+    assert signal.getsignal(signal.SIGTERM) == previous_handler
+    assert not list(output_dir.glob(".manifest.json.*.tmp"))
