@@ -44,6 +44,7 @@ from sdm.processing import (
     Processor,
     Recipe,
     SigmaClip,
+    SoftmaxTemperature,
     StandardScale,
 )
 
@@ -56,6 +57,7 @@ from examples.benchmarking.run_tabiclv2_tabarena_smoke import (
 )
 from examples.benchmarking.tabiclv2_tabarena_model import (
     DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
+    DEFAULT_PREDICTION_BATCH_SIZE,
     DeviceAllocation,
     SDMTabICLv2Model,
 )
@@ -63,6 +65,7 @@ from examples.benchmarking.tabiclv2_tabarena_model import (
 DEFAULT_DATASET = "QSAR_fish_toxicity"
 DEFAULT_TASK_ID = 363698
 DEFAULT_SEED = 0
+BINARY_ATTENTION_BATCH_SIZE_LIMIT = 32
 DEFAULT_WARMUP_PAIRS = 1
 DEFAULT_TRIALS = 30
 DEFAULT_INFERENCE_REPEATS = 20
@@ -232,7 +235,7 @@ class _ReferenceCategoricalEncoding(Processor):
         )
 
 
-def matched_parity_recipe() -> Recipe:
+def matched_parity_recipe(*, problem_type: str = "regression") -> Recipe:
     """Return the deterministic single-estimator parity recipe."""
     return Recipe(
         features=[
@@ -245,8 +248,16 @@ def matched_parity_recipe() -> Recipe:
             SigmaClip(threshold=4.0),
             Identity(),
         ],
-        target=[StandardScale()],
-        output=[Identity()],
+        target=(
+            [StandardScale()]
+            if problem_type == "regression"
+            else [CategoricalAlign(category_order="sorted")]
+        ),
+        output=(
+            [Identity()]
+            if problem_type == "regression"
+            else [SoftmaxTemperature(temperature=0.9)]
+        ),
     )
 
 
@@ -255,7 +266,7 @@ class MatchedParitySDMTabICLv2Model(SDMTabICLv2Model):
 
     def _build_recipe(self, model: TabICLv2) -> Recipe:
         del model
-        return matched_parity_recipe()
+        return matched_parity_recipe(problem_type=self.problem_type)
 
 
 def comparison_labels(profile: str) -> dict[str, object]:
@@ -285,6 +296,7 @@ def resolved_configuration(
     implementation: str,
     checkpoint_path: Path,
     seed: int,
+    problem_type: str = "regression",
 ) -> dict[str, object]:
     """Describe the complete algorithm configuration shown in the manifest."""
     if implementation == ORIGINAL:
@@ -299,9 +311,26 @@ def resolved_configuration(
         }
     else:
         raise ValueError(f"Unknown implementation: {implementation!r}.")
+
+    classification = (
+        {
+            "class_shuffle_method": "shift",
+            "softmax_temperature": 0.9,
+            "average_logits": True,
+        }
+        if implementation == ORIGINAL and problem_type == "binary"
+        else {}
+    )
+    attention_batch_size_limit = (
+        BINARY_ATTENTION_BATCH_SIZE_LIMIT
+        if problem_type == "binary"
+        else DEFAULT_ATTENTION_BATCH_SIZE_LIMIT
+    )
+
     if implementation == ORIGINAL and profile == MATCHED_PARITY:
         return {
             **artifact,
+            **classification,
             "n_estimators": 1,
             "norm_methods": "none",
             "feat_shuffle_method": "none",
@@ -314,27 +343,39 @@ def resolved_configuration(
             "offload_mode": False,
         }
     if implementation == SDM and profile == MATCHED_PARITY:
+        recipe = [
+            "ordinal_encode_sorted_categories_then_numerical",
+            "mean_impute",
+            "constant_filter",
+            "standard_scale_epsilon_1e-6",
+            "fixed_clip_-100_100",
+            "identity_normalization",
+            "sigma_clip_4",
+            "identity_feature_permutation",
+        ]
+        if problem_type == "binary":
+            recipe.extend(
+                [
+                    "target_sorted_categorical_align",
+                    "target_identity_class_permutation_single_estimator",
+                    "softmax_temperature_0.9",
+                ]
+            )
+        else:
+            recipe.append("target_standard_scale")
         return {
             **artifact,
             "num_estimators": 1,
             "seed": seed,
             "cache": True,
-            "attention_batch_size_limit": DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
-            "recipe": [
-                "ordinal_encode_sorted_categories_then_numerical",
-                "mean_impute",
-                "constant_filter",
-                "standard_scale_epsilon_1e-6",
-                "fixed_clip_-100_100",
-                "identity_normalization",
-                "sigma_clip_4",
-                "identity_feature_permutation",
-                "target_standard_scale",
-            ],
+            "attention_batch_size_limit": attention_batch_size_limit,
+            "prediction_batch_size": DEFAULT_PREDICTION_BATCH_SIZE,
+            "recipe": recipe,
         }
     if implementation == ORIGINAL and profile == LOCAL_NATIVE_DEFAULT:
         return {
             **artifact,
+            **classification,
             "n_estimators": 8,
             "norm_methods": ["none", "power"],
             "feat_shuffle_method": "latin",
@@ -352,7 +393,8 @@ def resolved_configuration(
             "num_estimators": 1,
             "seed": seed,
             "cache": True,
-            "attention_batch_size_limit": DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
+            "attention_batch_size_limit": attention_batch_size_limit,
+            "prediction_batch_size": DEFAULT_PREDICTION_BATCH_SIZE,
             "recipe": "sdm_tabiclv2_default_recipe",
         }
     raise ValueError(
@@ -368,6 +410,7 @@ def model_hyperparameters(
     checkpoint_path: Path,
     checkpoint_sha256: str,
     seed: int,
+    problem_type: str = "regression",
 ) -> dict[str, object]:
     """Return hyperparameters passed to the two AutoGluon adapters."""
     config = resolved_configuration(
@@ -375,18 +418,25 @@ def model_hyperparameters(
         implementation=implementation,
         checkpoint_path=checkpoint_path,
         seed=seed,
+        problem_type=problem_type,
     )
     if implementation == ORIGINAL:
         result = dict(config)
         result.pop("recipe", None)
         result.pop("cache", None)
         return result
+    attention_batch_size_limit = config["attention_batch_size_limit"]
+    if not isinstance(attention_batch_size_limit, int):
+        raise RuntimeError(
+            "Resolved attention batch size limit must be an integer."
+        )
     return {
         "checkpoint_path": str(checkpoint_path),
         "checkpoint_sha256": checkpoint_sha256,
         "seed": seed,
         "num_estimators": 1,
-        "attention_batch_size_limit": DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
+        "attention_batch_size_limit": attention_batch_size_limit,
+        "prediction_batch_size": DEFAULT_PREDICTION_BATCH_SIZE,
     }
 
 
@@ -483,9 +533,10 @@ def _load_split(spec: Mapping[str, Any]) -> tuple[Any, Any, Any, Any, int]:
     from tabarena.benchmark.task.utils import get_split_idx
 
     task = OpenMLTaskWrapper.from_task_id(task_id=int(spec["task_id"]))
-    if task.problem_type != "regression":
+    problem_type = str(spec.get("problem_type", "regression"))
+    if task.problem_type != problem_type:
         raise RuntimeError(
-            f"Expected a regression task, got {task.problem_type!r}."
+            f"Expected a {problem_type!r} task, got {task.problem_type!r}."
         )
     dataset_name = task.dataset_name
     if dataset_name != spec["dataset"]:
@@ -520,6 +571,7 @@ def _load_split(spec: Mapping[str, Any]) -> tuple[Any, Any, Any, Any, int]:
 def _construct_model(spec: Mapping[str, Any]) -> Any:
     implementation = str(spec["implementation"])
     profile = str(spec["profile"])
+    problem_type = str(spec.get("problem_type", "regression"))
     if implementation == ORIGINAL:
         from tabarena.models.tabicl.model import TabICLv2Model
 
@@ -537,28 +589,152 @@ def _construct_model(spec: Mapping[str, Any]) -> Any:
         checkpoint_path=Path(spec["checkpoint_path"]),
         checkpoint_sha256=str(spec["checkpoint_sha256"]),
         seed=int(spec["seed"]),
+        problem_type=problem_type,
     )
     return model_cls(
         path="",
         name=f"{profile}_{implementation}",
-        problem_type="regression",
+        problem_type=str(spec.get("problem_type", "regression")),
         eval_metric=None,
         hyperparameters=hyperparameters,
     )
 
 
 def _validate_predictions(
-    predictions: Any, *, expected_rows: int
+    predictions: Any,
+    *,
+    expected_rows: int,
+    problem_type: str,
 ) -> np.ndarray:
     values = np.asarray(predictions, dtype=np.float64)
-    if values.shape != (expected_rows,):
+    expected_shape = (expected_rows,)
+    if problem_type == "binary":
+        expected_shape = (expected_rows, 2)
+    if values.shape != expected_shape:
         raise RuntimeError(
-            f"Expected {expected_rows} scalar predictions, got "
-            f"shape {values.shape}."
+            f"Expected prediction shape {expected_shape}, got {values.shape}."
         )
     if not np.isfinite(values).all():
         raise RuntimeError("Model produced non-finite predictions.")
+    if problem_type == "binary" and (
+        (values < 0).any()
+        or not np.allclose(
+            values.sum(axis=1),
+            1.0,
+            rtol=1e-6,
+            atol=1e-6,
+        )
+    ):
+        raise RuntimeError(
+            "Binary classifier did not produce normalized probabilities."
+        )
     return values
+
+
+def _binary_probability_matrix(
+    positive_probabilities: Any,
+    *,
+    expected_rows: int,
+) -> np.ndarray:
+    """Canonicalize binary outputs into sorted class-probability columns."""
+    probabilities = np.asarray(positive_probabilities, dtype=np.float64)
+    if probabilities.shape == (expected_rows, 2):
+        return _validate_predictions(
+            probabilities,
+            expected_rows=expected_rows,
+            problem_type="binary",
+        )
+    if probabilities.shape != (expected_rows,):
+        raise RuntimeError(
+            "Expected binary probabilities with shape "
+            f"({expected_rows},) or ({expected_rows}, 2), got "
+            f"{probabilities.shape}."
+        )
+    if (
+        not np.isfinite(probabilities).all()
+        or (probabilities < 0).any()
+        or (probabilities > 1).any()
+    ):
+        raise RuntimeError(
+            "Binary classifier did not produce finite probabilities in [0, 1]."
+        )
+    return np.column_stack((1.0 - probabilities, probabilities))
+
+
+def _validate_binary_label_encoding(
+    model: Any,
+    y_train: Any,
+    *,
+    target: np.ndarray,
+) -> None:
+    """Verify the source wrapper positive class matches the target encoding."""
+    label_cleaner = getattr(model, "label_cleaner", None)
+    if label_cleaner is None:
+        return
+    encoded = np.asarray(label_cleaner.transform(y_train), dtype=np.int64)
+    if encoded.shape != target.shape or not np.array_equal(encoded, target):
+        raise RuntimeError(
+            "Source binary label encoding disagrees with the benchmark sorted "
+            "class order."
+        )
+
+
+def _binary_targets(
+    y_train: Any,
+    y_test: Any,
+) -> tuple[np.ndarray, tuple[str, str]]:
+    classes = np.unique(np.asarray(y_train))
+    if classes.shape != (2,):
+        raise RuntimeError(
+            "Binary benchmark split does not contain exactly two train "
+            f"classes (got {classes.size})."
+        )
+    targets = np.searchsorted(classes, np.asarray(y_test))
+    if not np.array_equal(classes[targets], np.asarray(y_test)):
+        raise RuntimeError("Test labels are not represented in train classes.")
+    return targets.astype(np.int64, copy=False), (
+        str(classes[0]),
+        str(classes[1]),
+    )
+
+
+def _binary_log_loss(
+    probabilities: np.ndarray,
+    targets: np.ndarray,
+) -> float:
+    positive = np.clip(probabilities[:, 1], 1e-15, 1 - 1e-15)
+    loss = -np.mean(
+        targets * np.log(positive) + (1 - targets) * np.log1p(-positive)
+    )
+    if not math.isfinite(float(loss)):
+        raise RuntimeError("Binary log loss must be finite.")
+    return float(loss)
+
+
+def _binary_roc_auc(
+    probabilities: np.ndarray,
+    targets: np.ndarray,
+) -> float:
+    positives = targets == 1
+    num_positive = int(positives.sum())
+    num_negative = int((~positives).sum())
+    if num_positive == 0 or num_negative == 0:
+        raise RuntimeError("Binary ROC-AUC requires both test classes.")
+    scores = probabilities[:, 1]
+    order = scores.argsort(kind="mergesort")
+    sorted_scores = scores[order]
+    ranks = np.empty_like(scores, dtype=np.float64)
+    start = 0
+    while start < scores.size:
+        end = start + 1
+        while end < scores.size and sorted_scores[end] == sorted_scores[start]:
+            end += 1
+        ranks[order[start:end]] = (start + end + 1) / 2
+        start = end
+    return float(
+        (ranks[positives].sum() - num_positive * (num_positive + 1) / 2)
+        / (num_positive * num_negative)
+    )
 
 
 def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
@@ -567,6 +743,11 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         option="worker num_cpus",
     )
     num_gpus = int(spec["num_gpus"])
+    problem_type = str(spec.get("problem_type", "regression"))
+    if problem_type not in {"binary", "regression"}:
+        raise ValueError(
+            f"Unsupported benchmark problem type: {problem_type!r}."
+        )
     DeviceAllocation.from_num_gpus(num_gpus)
     torch.set_num_threads(num_cpus)
     with contextlib.suppress(RuntimeError):
@@ -584,40 +765,80 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         )
         return model
 
+    target: np.ndarray | None = None
+    class_labels: tuple[str, str] | None = None
+    if problem_type == "binary":
+        target, class_labels = _binary_targets(y_train, y_test)
+
+    def predict(model: Any) -> Any:
+        if problem_type == "binary":
+            return model.predict_proba(X_test)
+        return model.predict(X_test)
+
     model, fit_time_s = _timed_call(
         construct_and_fit,
         num_gpus=num_gpus,
     )
     first_raw, first_time_s = _timed_call(
-        lambda: model.predict(X_test),
+        lambda: predict(model),
         num_gpus=num_gpus,
     )
-    predictions = _validate_predictions(first_raw, expected_rows=len(X_test))
+    if problem_type == "binary":
+        if target is None:
+            raise RuntimeError("Binary benchmark target encoding is missing.")
+        _validate_binary_label_encoding(model, y_train, target=target)
+        predictions = _binary_probability_matrix(
+            first_raw,
+            expected_rows=len(X_test),
+        )
+    else:
+        predictions = _validate_predictions(
+            first_raw,
+            expected_rows=len(X_test),
+            problem_type=problem_type,
+        )
 
     inference_times: list[float] = []
     for _ in range(int(spec["inference_repeats"])):
         repeated_raw, duration = _timed_call(
-            lambda: model.predict(X_test),
+            lambda: predict(model),
             num_gpus=num_gpus,
         )
-        repeated = _validate_predictions(
-            repeated_raw,
-            expected_rows=len(X_test),
-        )
+        if problem_type == "binary":
+            repeated = _binary_probability_matrix(
+                repeated_raw,
+                expected_rows=len(X_test),
+            )
+        else:
+            repeated = _validate_predictions(
+                repeated_raw,
+                expected_rows=len(X_test),
+                problem_type=problem_type,
+            )
         if not np.allclose(repeated, predictions, rtol=1e-6, atol=1e-6):
             raise RuntimeError("Repeated inference changed model predictions.")
         inference_times.append(duration)
 
-    target = np.asarray(y_test, dtype=np.float64)
-    train_target = np.asarray(y_train, dtype=np.float64)
-    train_target_std = float(np.std(train_target, ddof=0))
-    metric_error = float(np.sqrt(np.mean(np.square(predictions - target))))
-    if not math.isfinite(metric_error):
-        raise RuntimeError("RMSE must be finite.")
-    if not math.isfinite(train_target_std) or train_target_std < 0:
-        raise RuntimeError(
-            "Training target standard deviation must be finite."
-        )
+    train_target_std: float | None = None
+    roc_auc: float | None = None
+    if problem_type == "binary":
+        if target is None or class_labels is None:
+            raise RuntimeError("Binary benchmark target encoding is missing.")
+        metric_error = _binary_log_loss(predictions, target)
+        roc_auc = _binary_roc_auc(predictions, target)
+        metric = "log_loss"
+    else:
+        target = np.asarray(y_test, dtype=np.float64)
+        train_target = np.asarray(y_train, dtype=np.float64)
+        train_target_std = float(np.std(train_target, ddof=0))
+        metric_error = float(np.sqrt(np.mean(np.square(predictions - target))))
+        if not math.isfinite(metric_error):
+            raise RuntimeError("RMSE must be finite.")
+        if not math.isfinite(train_target_std) or train_target_std < 0:
+            raise RuntimeError(
+                "Training target standard deviation must be finite."
+            )
+        metric = "rmse"
 
     prediction_path = spec.get("prediction_path")
     prediction_sha256 = None
@@ -632,12 +853,18 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
                 f"Refusing to overwrite prediction artifact: {artifact_path}"
             )
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
-            artifact_path,
-            predictions=predictions,
-            targets=target,
-            train_target_std=np.asarray([train_target_std], dtype=np.float64),
-        )
+        artifact: dict[str, Any] = {
+            "predictions": predictions,
+            "targets": target,
+        }
+        if train_target_std is not None:
+            artifact["train_target_std"] = np.asarray(
+                [train_target_std],
+                dtype=np.float64,
+            )
+        if class_labels is not None:
+            artifact["class_labels"] = np.asarray(class_labels)
+        np.savez_compressed(artifact_path, **artifact)
         prediction_sha256 = _sha256(artifact_path)
 
     return {
@@ -655,9 +882,11 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         "train_rows": len(X_train),
         "test_rows": len(X_test),
         "features": X_train.shape[1],
-        "metric": "rmse",
+        "metric": metric,
         "metric_error": metric_error,
         "train_target_std": train_target_std,
+        "roc_auc": roc_auc,
+        "class_labels": class_labels,
         "prediction_path": prediction_path,
         "prediction_sha256": prediction_sha256,
         "fit_time_s": fit_time_s,

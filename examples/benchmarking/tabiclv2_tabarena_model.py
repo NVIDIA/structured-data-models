@@ -1,4 +1,4 @@
-"""Regression-only AutoGluon adapter for the SDM TabICLv2 smoke benchmark.
+"""Regression and binary-classification AutoGluon adapter for SDM TabICLv2.
 
 This module deliberately lives under :mod:`examples` rather than an SDM public
 integration package.  It keeps TabArena and AutoGluon optional while giving
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import torch
@@ -30,6 +30,7 @@ _DEFAULT_SEED = 0
 _MAX_SEED = 2**63 - 1
 _NUM_ESTIMATORS = 1
 DEFAULT_ATTENTION_BATCH_SIZE_LIMIT = 128
+DEFAULT_PREDICTION_BATCH_SIZE = 512
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,7 @@ class DeviceAllocation:
 
 
 class SDMTabICLv2Model(AbstractTorchModel):
-    """Run one locally verified SDM TabICLv2 regression estimator.
+    """Run one locally verified SDM TabICLv2 regression or binary estimator.
 
     TabArena supplies raw pandas data.  This wrapper validates it, converts it
     directly to SDM :class:`~sdm.TableTensor` values, and applies SDM's recipe.
@@ -85,6 +86,8 @@ class SDMTabICLv2Model(AbstractTorchModel):
     _recipe: Recipe | None
     _allocation: DeviceAllocation | None
     _feature_columns: tuple[object, ...] | None
+    _class_labels: tuple[str, ...] | None
+    _prediction_batch_size: int | None
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -92,11 +95,13 @@ class SDMTabICLv2Model(AbstractTorchModel):
         self._recipe = None
         self._allocation = None
         self._feature_columns = None
+        self._class_labels = None
+        self._prediction_batch_size = None
 
     @classmethod
     def supported_problem_types(cls) -> list[str]:
-        """Advertise the phase-one regression-only contract."""
-        return ["regression"]
+        """Advertise the supported TabArena problem types."""
+        return ["binary", "regression"]
 
     def _fit(
         self,
@@ -108,12 +113,16 @@ class SDMTabICLv2Model(AbstractTorchModel):
     ) -> None:
         """Fit SDM preprocessing and cache the in-context training rows."""
         del num_cpus, kwargs
-        self._require_regression()
+        problem_type = self._require_supported_problem_type()
         self._reset_fitted_state()
 
         allocation = DeviceAllocation.from_num_gpus(num_gpus)
         features, columns = self._to_feature_table(X, device=allocation.device)
-        target = self._to_target_table(y, device=allocation.device)
+        target, class_labels = self._to_target_table(
+            y,
+            device=allocation.device,
+            problem_type=problem_type,
+        )
 
         (
             checkpoint_path,
@@ -121,6 +130,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
             seed,
             num_estimators,
             batch_size_limit,
+            prediction_batch_size,
         ) = self._model_config()
         generator = torch.Generator(device=allocation.device)
         generator.manual_seed(seed)
@@ -129,10 +139,16 @@ class SDMTabICLv2Model(AbstractTorchModel):
             device=allocation.device,
             batch_size_limit=batch_size_limit,
         )
-        model.load_regression_checkpoint(
-            checkpoint_path,
-            checkpoint_sha256,
-        )
+        if problem_type == "regression":
+            model.load_regression_checkpoint(
+                checkpoint_path,
+                checkpoint_sha256,
+            )
+        else:
+            model.load_classifier_checkpoint(
+                checkpoint_path,
+                checkpoint_sha256,
+            )
         recipe = self._build_recipe(model)
         model.fit(
             x=features,
@@ -151,36 +167,94 @@ class SDMTabICLv2Model(AbstractTorchModel):
         self._recipe = fitted_recipe
         self._allocation = allocation
         self._feature_columns = columns
+        self._class_labels = class_labels
+        self._prediction_batch_size = prediction_batch_size
 
     def _predict_proba(self, X: pd.DataFrame, **kwargs) -> np.ndarray:
-        """Return one regression scalar per row through AutoGluon's API."""
+        """Return regression predictions or binary probabilities for ``X``."""
         del kwargs
-        model, _, allocation, _ = self._require_fitted()
+        model, _, allocation, _, prediction_batch_size = self._require_fitted()
         features, _ = self._to_feature_table(
             X,
             device=allocation.device,
             expected_columns=self._feature_columns,
         )
-        quantiles = model.predict(features).numerical
-        member_predictions = reduce_regression_quantiles(quantiles)
-        if member_predictions.ndim != 2:
-            raise RuntimeError(
-                "SDM TabICLv2 returned an invalid regression prediction "
-                f"shape {tuple(member_predictions.shape)}."
+        output = self._predict_in_chunks(
+            model,
+            features,
+            prediction_batch_size=prediction_batch_size,
+        )
+        if self.problem_type == "regression":
+            member_predictions = reduce_regression_quantiles(output.numerical)
+            if member_predictions.ndim != 2:
+                raise RuntimeError(
+                    "SDM TabICLv2 returned an invalid regression prediction "
+                    f"shape {tuple(member_predictions.shape)}."
+                )
+            predictions = member_predictions.mean(dim=0)
+            if predictions.ndim != 1 or predictions.size(0) != len(X):
+                raise RuntimeError(
+                    "SDM TabICLv2 regression decoder returned an invalid "
+                    f"prediction shape {tuple(predictions.shape)} "
+                    f"for {len(X)} rows."
+                )
+            if not torch.isfinite(predictions).all():
+                raise RuntimeError(
+                    "SDM TabICLv2 produced non-finite predictions."
+                )
+            return (
+                predictions.detach()
+                .to(
+                    device="cpu",
+                    dtype=torch.float32,
+                )
+                .numpy()
             )
-        predictions = member_predictions.mean(dim=0)
 
-        if predictions.ndim != 1 or predictions.size(0) != len(X):
+        class_labels = self._class_labels
+        if class_labels is None:
             raise RuntimeError(
-                "SDM TabICLv2 regression decoder returned an invalid "
-                f"prediction shape {tuple(predictions.shape)} "
-                f"for {len(X)} rows."
+                "Binary adapter is missing its fitted class labels."
             )
-        if not torch.isfinite(predictions).all():
-            raise RuntimeError("SDM TabICLv2 produced non-finite predictions.")
-
+        probabilities = output.numerical
+        if probabilities.ndim != 3 or probabilities.size(1) != len(X):
+            raise RuntimeError(
+                "SDM TabICLv2 binary decoder returned an invalid prediction "
+                f"shape {tuple(probabilities.shape)} for {len(X)} rows."
+            )
+        column_positions = {
+            column: index
+            for index, column in enumerate(output.columns[Stype.numerical])
+        }
+        try:
+            positions = [column_positions[label] for label in class_labels]
+        except KeyError as error:
+            raise RuntimeError(
+                "SDM TabICLv2 binary output columns do not match the "
+                f"fitted classes {class_labels!r}."
+            ) from error
+        if len(positions) != 2 or probabilities.size(-1) != 2:
+            raise RuntimeError(
+                "SDM TabICLv2 binary decoder requires exactly two classes."
+            )
+        probabilities = probabilities[..., positions].mean(dim=0)
+        totals = probabilities.sum(dim=-1, keepdim=True)
+        if (
+            not torch.isfinite(probabilities).all()
+            or not torch.isfinite(totals).all()
+            or (totals <= 0).any()
+        ):
+            raise RuntimeError(
+                "SDM TabICLv2 produced invalid binary probabilities."
+            )
+        probabilities = probabilities / totals
         return (
-            predictions.detach().to(device="cpu", dtype=torch.float32).numpy()
+            probabilities.detach()
+            .to(
+                device="cpu",
+                dtype=torch.float32,
+            )
+            .numpy()
         )
 
     def _get_default_resources(self) -> tuple[int, int]:
@@ -209,12 +283,12 @@ class SDMTabICLv2Model(AbstractTorchModel):
 
     def get_device(self) -> str:
         """Return the device selected during fitting."""
-        _, _, allocation, _ = self._require_fitted()
+        _, _, allocation, _, _ = self._require_fitted()
         return allocation.device.type
 
     def _set_device(self, device: str) -> None:
         """Move SDM model, recipes, and cache for AutoGluon save/load hooks."""
-        model, _, _, _ = self._require_fitted()
+        model, _, _, _, _ = self._require_fitted()
         device_obj = torch.device(device)
         model.to(device_obj)
         if model._caches is not None:
@@ -277,31 +351,49 @@ class SDMTabICLv2Model(AbstractTorchModel):
         y: pd.Series,
         *,
         device: torch.device,
-    ) -> TableTensor:
+        problem_type: Literal["binary", "regression"],
+    ) -> tuple[TableTensor, tuple[str, ...] | None]:
         import pandas as pd
 
         if not isinstance(y, pd.Series):
             raise TypeError(
-                "Expected regression target 'y' to be a pandas Series "
+                "Expected target 'y' to be a pandas Series "
                 f"(got {type(y).__name__})."
             )
-        if pd.api.types.is_bool_dtype(y) or not pd.api.types.is_numeric_dtype(
-            y
-        ):
-            raise ValueError(
-                "SDM TabICLv2 requires a numerical regression target."
-            )
         if y.isna().any():
-            raise ValueError(
-                "SDM TabICLv2 does not accept missing regression targets."
-            )
+            raise ValueError("SDM TabICLv2 does not accept missing targets.")
 
         target_name = "__sdm_target__"
         target = y.to_frame(name=target_name)
-        return TableTensor.from_pandas(
-            df=target,
-            stypes={target_name: Stype.numerical},
-            device=device,
+        if problem_type == "regression":
+            if pd.api.types.is_bool_dtype(
+                y
+            ) or not pd.api.types.is_numeric_dtype(y):
+                raise ValueError(
+                    "SDM TabICLv2 requires a numerical regression target."
+                )
+            return (
+                TableTensor.from_pandas(
+                    df=target,
+                    stypes={target_name: Stype.numerical},
+                    device=device,
+                ),
+                None,
+            )
+
+        class_values = np.unique(y.to_numpy())
+        if class_values.size != 2:
+            raise ValueError(
+                "SDM TabICLv2 binary classification requires exactly two "
+                f"training classes (got {class_values.size})."
+            )
+        return (
+            TableTensor.from_pandas(
+                df=target,
+                stypes={target_name: Stype.categorical},
+                device=device,
+            ),
+            tuple(str(value) for value in class_values.tolist()),
         )
 
     @staticmethod
@@ -337,14 +429,33 @@ class SDMTabICLv2Model(AbstractTorchModel):
 
     # Adapter state ##########################################################
 
-    def _require_regression(self) -> None:
-        if self.problem_type != "regression":
+    def _require_supported_problem_type(
+        self,
+    ) -> Literal["binary", "regression"]:
+        if self.problem_type not in {"binary", "regression"}:
             raise ValueError(
-                "SDMTabICLv2Model supports regression only "
-                f"(got problem_type={self.problem_type!r})."
+                "SDMTabICLv2Model supports binary classification and "
+                f"regression (got problem_type={self.problem_type!r})."
             )
+        return cast(Literal["binary", "regression"], self.problem_type)
 
-    def _model_config(self) -> tuple[Path, str, int, int, int]:
+    @staticmethod
+    def _predict_in_chunks(
+        model: TabICLv2,
+        features: TableTensor,
+        *,
+        prediction_batch_size: int,
+    ) -> TableTensor:
+        """Predict ordered test-row chunks against one fitted cache."""
+        if len(features) <= prediction_batch_size:
+            return model.predict(features)
+        outputs: list[torch.Tensor] = []
+        for start in range(0, len(features), prediction_batch_size):
+            stop = min(start + prediction_batch_size, len(features))
+            outputs.append(model.predict(features[start:stop]))
+        return cast(TableTensor, torch.cat(outputs, dim=1))
+
+    def _model_config(self) -> tuple[Path, str, int, int, int, int]:
         params = self._get_model_params()
         checkpoint_path = params.get("checkpoint_path")
         checkpoint_sha256 = params.get("checkpoint_sha256")
@@ -355,10 +466,15 @@ class SDMTabICLv2Model(AbstractTorchModel):
             DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
         )
 
+        prediction_batch_size = params.get(
+            "prediction_batch_size",
+            DEFAULT_PREDICTION_BATCH_SIZE,
+        )
+
         if not isinstance(checkpoint_path, (str, Path)):
             raise ValueError(
                 "Set the required 'checkpoint_path' model hyperparameter to "
-                "a local TabICLv2 regression checkpoint."
+                "a local TabICLv2 checkpoint."
             )
         if not isinstance(checkpoint_sha256, str):
             raise ValueError(
@@ -391,22 +507,34 @@ class SDMTabICLv2Model(AbstractTorchModel):
                 "Expected attention_batch_size_limit to be a positive "
                 f"integer (got {batch_size_limit!r})."
             )
+        if (
+            isinstance(prediction_batch_size, bool)
+            or not isinstance(prediction_batch_size, int)
+            or prediction_batch_size < 1
+        ):
+            raise ValueError(
+                "Expected prediction_batch_size to be a positive integer "
+                f"(got {prediction_batch_size!r})."
+            )
+
         return (
             Path(checkpoint_path),
             checkpoint_sha256,
             seed,
             num_estimators,
             batch_size_limit,
+            prediction_batch_size,
         )
 
     def _require_fitted(
         self,
-    ) -> tuple[TabICLv2, Recipe, DeviceAllocation, tuple[object, ...]]:
+    ) -> tuple[TabICLv2, Recipe, DeviceAllocation, tuple[object, ...], int]:
         if (
             self._sdm_model is None
             or self._recipe is None
             or self._allocation is None
             or self._feature_columns is None
+            or self._prediction_batch_size is None
         ):
             raise RuntimeError(
                 "SDMTabICLv2Model is not fitted; call fit before predicting."
@@ -416,6 +544,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
             self._recipe,
             self._allocation,
             self._feature_columns,
+            self._prediction_batch_size,
         )
 
     def _reset_fitted_state(self) -> None:
@@ -425,6 +554,8 @@ class SDMTabICLv2Model(AbstractTorchModel):
         self._recipe = None
         self._allocation = None
         self._feature_columns = None
+        self._class_labels = None
+        self._prediction_batch_size = None
         self.model = None
 
 

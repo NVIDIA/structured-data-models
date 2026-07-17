@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -25,6 +26,60 @@ from sdm.processing import (
 )
 
 pytestmark = pytest.mark.tabarena
+
+
+def test_binary_probability_matrix_reconstructs_autogluon_class_order() -> (
+    None
+):
+    probabilities = runner._binary_probability_matrix(
+        np.asarray([0.2, 0.75]),
+        expected_rows=2,
+    )
+
+    np.testing.assert_allclose(
+        runner._binary_probability_matrix(probabilities, expected_rows=2),
+        probabilities,
+    )
+
+    np.testing.assert_allclose(
+        probabilities,
+        np.asarray([[0.8, 0.2], [0.25, 0.75]]),
+    )
+
+
+@pytest.mark.parametrize(
+    ("positive_probabilities", "expected_rows", "match"),
+    [
+        (np.asarray([[0.2, 0.8, 0.0]]), 1, "shape"),
+        (np.asarray([1.1]), 1, "[0, 1]"),
+    ],
+)
+def test_binary_probability_matrix_rejects_invalid_values(
+    positive_probabilities: np.ndarray,
+    expected_rows: int,
+    match: str,
+) -> None:
+    with pytest.raises(RuntimeError, match=match):
+        runner._binary_probability_matrix(
+            positive_probabilities,
+            expected_rows=expected_rows,
+        )
+
+
+class _BinaryLabelCleaner:
+    def transform(self, y: pd.Series) -> pd.Series:
+        return y
+
+
+def test_binary_label_encoding_rejects_noncanonical_source_order() -> None:
+    model = type("Model", (), {"label_cleaner": _BinaryLabelCleaner()})()
+
+    with pytest.raises(RuntimeError, match="sorted class order"):
+        runner._validate_binary_label_encoding(
+            model,
+            pd.Series([1, 0]),
+            target=np.asarray([0, 1]),
+        )
 
 
 def _fake_worker(spec: Mapping[str, Any]) -> dict[str, Any]:
@@ -241,6 +296,15 @@ def test_matched_recipe_has_reference_single_estimator_steps() -> None:
         clipped.numerical,
         runner.torch.tensor([[-100.0, 100.0]]),
     )
+
+
+def test_binary_matched_recipe_keeps_the_single_estimator_class_order() -> (
+    None
+):
+    recipe = runner.matched_parity_recipe(problem_type="binary")
+    assert isinstance(recipe.target, Sequential)
+    assert [type(step) for step in recipe.target.steps] == [CategoricalAlign]
+    assert recipe.target.steps[0].category_order == "sorted"
 
 
 def test_timer_synchronizes_before_and_after_call(

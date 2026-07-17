@@ -161,6 +161,46 @@ class TabICLv2(Model):
         self._load_checkpoint(path, is_classifier=False)
         return self
 
+    def load_classifier_checkpoint(
+        self,
+        checkpoint_path: str | Path,
+        checkpoint_sha256: str,
+    ) -> "TabICLv2":
+        r"""Load and verify a local classifier checkpoint.
+
+        Unlike ``pretrained=True``, this method never resolves an artifact
+        through Hugging Face. It is intended for reproducible benchmark runs
+        that pin the classifier checkpoint and its SHA-256 digest.
+
+        Args:
+            checkpoint_path: Path to a local published classifier checkpoint.
+            checkpoint_sha256: Expected SHA-256 digest of the checkpoint.
+
+        Returns:
+            This model with its classifier network loaded.
+
+        Raises:
+            FileNotFoundError: If ``checkpoint_path`` does not name a file.
+            ValueError: If the digest is invalid or does not match the local
+                checkpoint.
+        """
+        path = Path(checkpoint_path)
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"Checkpoint file does not exist: '{path}'."
+            )
+
+        expected_hash = _validate_sha256(checkpoint_sha256)
+        actual_hash = _sha256(path)
+        if actual_hash != expected_hash:
+            raise ValueError(
+                f"SHA-256 mismatch for checkpoint '{path}': expected "
+                f"{expected_hash}, got {actual_hash}."
+            )
+
+        self._load_checkpoint(path, is_classifier=True)
+        return self
+
     def _load_from_pretrained(self) -> "TabICLv2":
         for variant, is_classifier in [
             ("classifier", True),

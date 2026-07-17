@@ -50,12 +50,21 @@ class _FakeTabICLv2:
         self.received_fit_x: TableTensor | None = None
         self.received_fit_y: TableTensor | None = None
         self.received_predict_x: TableTensor | None = None
+        self.received_predict_xs: list[TableTensor] = []
         self.fit_x: TableTensor | None = None
         self.fit_y: TableTensor | None = None
         self.fit_num_estimators: int | None = None
         self._caches: list[Cache] | None = None
         self.cleared = False
         self.__class__.instances.append(self)
+
+    def load_classifier_checkpoint(
+        self,
+        path: Path,
+        sha256: str,
+    ) -> _FakeTabICLv2:
+        self.loaded = (Path(path), sha256)
+        return self
 
     def load_regression_checkpoint(
         self,
@@ -103,9 +112,21 @@ class _FakeTabICLv2:
     def predict(self, x: TableTensor) -> TableTensor:
         assert self._caches is not None
         self.received_predict_x = x
+        self.received_predict_xs.append(x)
         recipe = self._caches[0]["recipe"]
         assert isinstance(recipe, Recipe)
         model_features = recipe.features.transform(x)
+        if self.fit_y is not None and self.fit_y.categorical.size(-1) == 1:
+            classes = tuple(
+                str(value)
+                for value in self.fit_y.categorical.categories[0].tolist()
+            )
+            probabilities = model_features.numerical.new_tensor([0.25, 0.75])
+            probabilities = probabilities.repeat(len(x), 1)
+            return TableTensor.from_tensor(
+                probabilities.unsqueeze(0),
+                columns=classes,
+            )
         point = model_features.numerical.sum(dim=-1)
         quantiles = TableTensor.from_tensor(
             point.unsqueeze(-1).repeat(1, 999),
@@ -119,6 +140,7 @@ class _FakeTabICLv2:
         )
 
     def clear(self) -> None:
+
         self.cleared = True
         self._caches = None
 
@@ -213,10 +235,82 @@ def test_regression_contract_is_sdm_owned(
     np.testing.assert_allclose(predictions, model.predict(_features()))
 
 
-def test_regression_only_guard(fake_backend: list[_FakeTabICLv2]) -> None:
-    model = _model(problem_type="binary")
-    with pytest.raises(ValueError, match="regression only"):
+def test_unsupported_problem_type_is_rejected(
+    fake_backend: list[_FakeTabICLv2],
+) -> None:
+    model = _model(problem_type="multiclass")
+    with pytest.raises(
+        ValueError, match="binary classification and regression"
+    ):
         model._fit(X=_features(), y=_target(), num_cpus=1, num_gpus=0)
+    assert not fake_backend
+
+
+def test_binary_contract_preserves_sorted_class_probability_columns(
+    fake_backend: list[_FakeTabICLv2],
+) -> None:
+    model = _model(problem_type="binary")
+    target = pd.Series(["yes", "no", "yes", "no"], name="target")
+
+    model.fit(X=_features(), y=target, num_cpus=1, num_gpus=0)
+    probabilities = model._predict_proba(_features())
+
+    assert len(fake_backend) == 1
+    assert fake_backend[0].loaded == (
+        Path("/tmp/tabicl-regressor.ckpt"),
+        "0" * 64,
+    )
+    assert model._class_labels == ("no", "yes")
+    assert probabilities.shape == (len(_features()), 2)
+    assert np.isfinite(probabilities).all()
+    np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+
+
+@pytest.mark.parametrize("problem_type", ["binary", "regression"])
+@pytest.mark.parametrize(
+    ("prediction_batch_size", "expected_calls"),
+    [(1, [1, 1, 1, 1]), (3, [3, 1]), (8, [4])],
+)
+def test_prediction_chunking_preserves_order_and_outputs(
+    fake_backend: list[_FakeTabICLv2],
+    problem_type: str,
+    prediction_batch_size: int,
+    expected_calls: list[int],
+) -> None:
+    target: pd.Series
+    if problem_type == "binary":
+        target = pd.Series(["yes", "no", "yes", "no"], name="target")
+    else:
+        target = _target()
+
+    one_shot = _model(problem_type=problem_type)
+    one_shot.fit(X=_features(), y=target, num_cpus=1, num_gpus=0)
+    expected = one_shot._predict_proba(_features())
+
+    chunked = _model(
+        problem_type=problem_type,
+        prediction_batch_size=prediction_batch_size,
+    )
+    chunked.fit(X=_features(), y=target, num_cpus=1, num_gpus=0)
+    actual = chunked._predict_proba(_features())
+
+    np.testing.assert_allclose(actual, expected)
+    assert [
+        len(features) for features in fake_backend[-1].received_predict_xs
+    ] == expected_calls
+
+
+def test_binary_target_requires_exactly_two_train_classes(
+    fake_backend: list[_FakeTabICLv2],
+) -> None:
+    model = _model(problem_type="binary")
+    with pytest.raises(AssertionError, match="exactly 2"):
+        model.fit(
+            X=_features(),
+            y=pd.Series(["a", "b", "c", "a"]),
+            num_cpus=1,
+            num_gpus=0,
+        )
     assert not fake_backend
 
 
@@ -460,6 +554,7 @@ def test_seeded_fit_is_deterministic_and_restores_rng(
         ({"seed": 2**63}, "seed"),
         ({"num_estimators": True}, "exactly one estimator"),
         ({"num_estimators": 2}, "exactly one estimator"),
+        ({"prediction_batch_size": 0}, "prediction_batch_size"),
     ],
 )
 def test_invalid_reproducibility_config_is_rejected(

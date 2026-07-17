@@ -235,6 +235,26 @@ def test_load_regression_checkpoint_uses_only_local_checked_artifact(
     assert model.loaded == (checkpoint, False)
 
 
+def test_load_classifier_checkpoint_uses_only_local_checked_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkpoint = tmp_path / "classifier.ckpt"
+    checkpoint.write_bytes(b"local classifier checkpoint")
+    digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    model = _LocalCheckpointProbe()
+
+    def fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError(
+            "local checkpoint loading must not call Hugging Face"
+        )
+
+    monkeypatch.setattr(tabiclv2_model, "hf_hub_download", fail_if_called)
+
+    assert model.load_classifier_checkpoint(checkpoint, digest) is model
+    assert model.loaded == (checkpoint, True)
+
+
 def test_load_regression_checkpoint_rejects_bad_or_missing_artifacts(
     tmp_path: Path,
 ) -> None:
