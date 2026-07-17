@@ -148,6 +148,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.active_stypes"><code class="docutils literal notranslate">active_stypes</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.blocks"><code class="docutils literal notranslate">blocks</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.categorical"><code class="docutils literal notranslate">categorical</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.column_names"><code class="docutils literal notranslate">column_names</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.columns"><code class="docutils literal notranslate">columns</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.datetime"><code class="docutils literal notranslate">datetime</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor.drop_columns"><code class="docutils literal notranslate">drop_columns()</span></code></a></li>
@@ -293,6 +294,12 @@ The last dimension represents named columns.</p>
 <dt class="sig sig-object py" id="sdm.tensor.TableTensor.categorical">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">categorical</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.categorical.CategoricalTensor"><span class="pre">CategoricalTensor</span></a></em><a class="headerlink" href="#sdm.tensor.TableTensor.categorical" title="Link to this definition">#</a></dt>
 <dd><p>Return the categorical column block.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.tensor.TableTensor.column_names">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">column_names</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)"><span class="pre">frozenset</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#sdm.tensor.TableTensor.column_names" title="Link to this definition">#</a></dt>
+<dd><p>The column names of this tensor.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -615,7 +622,7 @@ constructor.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=1214a68f"></script>
+      <script src="../../_static/documentation_options.js?v=d406ee0b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
