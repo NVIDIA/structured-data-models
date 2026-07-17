@@ -459,11 +459,14 @@ def _equal(inp: CategoricalTensor, other: Tensor) -> bool:
     if inp.size() != other.size():
         return False
 
+    if not inp._data.equal(other._data):
+        return False
+
     for category1, category2 in zip(inp._categories, other._categories):
         if not category1.equal(category2):
             return False
 
-    return inp._data.equal(other._data)
+    return True
 
 
 @CategoricalTensor.implements(aten.allclose.default)
@@ -474,7 +477,6 @@ def _allclose(
     atol: float = 1e-08,
     equal_nan: bool = False,
 ) -> bool:
-    # Codes and categories are discrete, so tolerances do not apply:
     return _equal(inp, other)
 
 

@@ -162,38 +162,33 @@ def test_equal_categorical_categories() -> None:
     assert tensor1.equal(tensor1.clone())
     assert tensor1.allclose(tensor1.clone())
 
-    # Same codes but different categories are not equal:
     assert not tensor1.equal(tensor2)
     assert not tensor1.allclose(tensor2)
 
 
 def test_allclose_discrete_blocks() -> None:
-    datetime = torch.tensor(
-        [[1_700_000_000_000_000], [1_700_000_000_000_001]],
-        dtype=torch.int64,
+    datetime = torch.tensor([[1_700_000_000_000_000], [1_700_000_000_000_001]])
+    tensor1 = TableTensor(
+        columns={"datetime": ["time"]},
+        datetime=datetime,
     )
-    tensor1 = TableTensor(columns={"datetime": ["time"]}, datetime=datetime)
     tensor2 = TableTensor(
         columns={"datetime": ["time"]},
         datetime=datetime + 60 * 1_000_000,  # 60 seconds later.
     )
-
     assert tensor1.allclose(tensor1.clone())
-    # Tolerances do not apply to microsecond epochs:
     assert not tensor1.allclose(tensor2)
 
-    tensor3 = TableTensor(
+    tensor1 = TableTensor(
         columns={"id": ["user_id"]},
         id=ColumnarTensor((torch.tensor([1_000_000, 2_000_000]),)),
     )
-    tensor4 = TableTensor(
+    tensor2 = TableTensor(
         columns={"id": ["user_id"]},
         id=ColumnarTensor((torch.tensor([1_000_001, 2_000_001]),)),
     )
-
-    assert tensor3.allclose(tensor3.clone())
-    # Off-by-one identifiers are never close:
-    assert not tensor3.allclose(tensor4)
+    assert tensor1.allclose(tensor1.clone())
+    assert not tensor1.allclose(tensor2)
 
 
 def test_allclose_numerical_tolerances() -> None:

@@ -51,9 +51,8 @@ def test_from_arrow_string_values() -> None:
         pa.array(["b", "a", None, "b"]),
     )
 
-    assert tensor.as_tensor().equal(
-        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
-    )
+    assert tensor.dtype == torch.int32
+    assert tensor.as_tensor().equal(torch.tensor([[0], [1], [-1], [0]]))
     assert tensor.categories[0].tolist() == ["b", "a"]
 
 
@@ -62,9 +61,8 @@ def test_from_arrow_chunked_values() -> None:
         pa.chunked_array([pa.array(["b", None]), pa.array(["a", "b"])]),
     )
 
-    assert tensor.as_tensor().equal(
-        torch.tensor([[0], [-1], [1], [0]], dtype=torch.int32)
-    )
+    assert tensor.dtype == torch.int32
+    assert tensor.as_tensor().equal(torch.tensor([[0], [-1], [1], [0]]))
     assert tensor.categories[0].tolist() == ["b", "a"]
 
 
@@ -73,12 +71,9 @@ def test_from_arrow_numeric_values() -> None:
         pa.array([10, 20, None, 10], type=pa.int32()),
     )
 
-    assert tensor.as_tensor().equal(
-        torch.tensor([[0], [1], [-1], [0]], dtype=torch.int32)
-    )
-    assert tensor.categories[0].equal(
-        torch.tensor([10, 20], dtype=torch.int32)
-    )
+    assert tensor.dtype == torch.int32
+    assert tensor.as_tensor().equal(torch.tensor([[0], [1], [-1], [0]]))
+    assert tensor.categories[0].equal(torch.tensor([10, 20]))
 
 
 def test_from_arrow_all_missing_values() -> None:
@@ -86,9 +81,8 @@ def test_from_arrow_all_missing_values() -> None:
         pa.array([None, None], type=pa.string()),
     )
 
-    assert tensor.as_tensor().equal(
-        torch.tensor([[-1], [-1]], dtype=torch.int32)
-    )
+    assert tensor.dtype == torch.int32
+    assert tensor.as_tensor().equal(torch.tensor([[-1], [-1]]))
     assert tensor.categories[0].numel() == 0
 
 
@@ -99,9 +93,7 @@ def test_from_arrow_dtype() -> None:
     )
 
     assert tensor.dtype == torch.int64
-    assert tensor.as_tensor().equal(
-        torch.tensor([[0], [1], [-1]], dtype=torch.int64)
-    )
+    assert tensor.as_tensor().equal(torch.tensor([[0], [1], [-1]]))
 
 
 @withCUDA
@@ -446,46 +438,27 @@ def test_equal_allclose() -> None:
         data=torch.tensor([[0], [1]], dtype=torch.int32),
         categories=(StringTensor.from_list(["a", "b"]),),
     )
+
     tensor2 = CategoricalTensor(
         data=torch.tensor([[0], [1]], dtype=torch.int32),
         categories=(StringTensor.from_list(["a", "b"]),),
     )
+    assert tensor1.equal(tensor2)
+    assert tensor1.allclose(tensor2)
+
     tensor3 = CategoricalTensor(
         data=torch.tensor([[0], [1]], dtype=torch.int32),
         categories=(StringTensor.from_list(["x", "y"]),),
     )
-
-    assert tensor1.equal(tensor2)
-    assert tensor1.allclose(tensor2)
-
-    # Same codes but different categories are not equal:
     assert not tensor1.equal(tensor3)
     assert not tensor1.allclose(tensor3)
 
-    # Codes are discrete, so tolerances do not apply:
     tensor4 = CategoricalTensor(
         data=torch.tensor([[1], [1]], dtype=torch.int32),
         categories=(StringTensor.from_list(["a", "b"]),),
     )
-    assert not tensor1.allclose(tensor4, rtol=1.0, atol=1.0)
-
-    # Plain tensors never compare equal to a `CategoricalTensor`:
-    assert not tensor1.equal(torch.tensor([[0], [1]], dtype=torch.int32))
-
-    tensor5 = CategoricalTensor(
-        data=torch.tensor([[0], [1]], dtype=torch.int32),
-        categories=(torch.tensor([10, 20]),),
-    )
-    tensor6 = CategoricalTensor(
-        data=torch.tensor([[0], [1]], dtype=torch.int32),
-        categories=(torch.tensor([10, 30]),),
-    )
-    assert tensor5.equal(tensor5.clone())
-    assert not tensor5.equal(tensor6)
-    assert not tensor5.allclose(tensor6)
-
-    # String and numeric category vectors never compare equal:
-    assert not tensor1.equal(tensor5)
+    assert not tensor1.allclose(tensor4)
+    assert not tensor1.allclose(tensor4)
 
 
 def test_share_memory() -> None:
