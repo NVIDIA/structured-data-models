@@ -247,6 +247,35 @@ def test_from_cudf_all_missing_values() -> None:
     assert tensor.categories[0].numel() == 0
 
 
+@onlyCUDA
+def test_to_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = CategoricalTensor(
+        data=torch.tensor(
+            [
+                [[0, 1], [-1, 0]],
+                [[1, -1], [0, 1]],
+            ],
+            dtype=torch.int32,
+            device="cuda",
+        ),
+        categories=(
+            StringTensor.from_list(["US", "CA"], device="cuda"),
+            torch.tensor([10, 20], device="cuda"),
+        ),
+    )
+
+    df = tensor.to_cudf()
+    assert df.columns.tolist() == ["0", "1"]
+    assert isinstance(df["0"].dtype, cudf.CategoricalDtype)
+    assert isinstance(df["1"].dtype, cudf.CategoricalDtype)
+    assert df.to_arrow().to_pydict() == {
+        "0": ["US", None, "CA", "US"],
+        "1": [20, 10, None, 20],
+    }
+
+
 def test_view_ops() -> None:
     data = torch.randint(0, 4, (2, 3, 4))
     categories = tuple(torch.arange(4) for _ in range(data.size(-1)))

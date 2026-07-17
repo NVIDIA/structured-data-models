@@ -5,12 +5,12 @@ import torch
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import Model
+from sdm.models import ICLModel
 from sdm.models.kumorfm.recipe import default_recipe
 from sdm.processing import Recipe
 
 
-class KumoRFM(Model):
+class KumoRFM(ICLModel):
     r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
     Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.

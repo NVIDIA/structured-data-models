@@ -1060,7 +1060,7 @@ def test_from_pandas() -> None:
 
 
 @onlyCUDA
-def test_from_cudf() -> None:
+def test_cudf() -> None:
     cudf = pytest.importorskip("cudf")
 
     data = {
@@ -1122,6 +1122,9 @@ def test_from_cudf() -> None:
     assert tensor.id[:, 1].equal(
         StringTensor.from_list(["a", "b", "c", "d"], device=tensor.device)
     )
+
+    df = tensor.to_cudf()
+    assert df.to_arrow().to_pydict() == data
 
 
 @onlyCUDA

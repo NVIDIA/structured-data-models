@@ -10,14 +10,17 @@ from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import Model
+from sdm.models import ICLModel
+from sdm.models.tabiclv2.hierarchical_classifier import (
+    HierarchicalClassifier,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
 
-class TabICLv2(Model):
+class TabICLv2(ICLModel):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
@@ -133,7 +136,7 @@ class TabICLv2(Model):
 
         return self
 
-    def _forward(  # TODO Add multi-class support.
+    def _forward(
         self,
         x_context: TableTensor | None,  # [..., R_context, D]
         y_context: TableTensor | None,  # [..., R_context, 1]
@@ -176,9 +179,15 @@ class TabICLv2(Model):
                 numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
             )
 
+        num_classes = len(classes)
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
+            numerical=self.cls_model(
+                x,
+                y,
+                num_classes=num_classes,
+                cache=cache,
+            )[..., : len(classes)],
         )
 
     def __repr__(self) -> str:
@@ -239,6 +248,13 @@ class _TabICLv2(torch.nn.Module):
                 **factory_kwargs,
             ),
         )
+        self.num_classes = num_classes
+        self.hierarchical_classifier: HierarchicalClassifier | None = None
+        if num_classes > 1:
+            self.hierarchical_classifier = HierarchicalClassifier(
+                num_classes=num_classes,
+                temperature=0.9,
+            )
 
     def forward(
         self,
@@ -246,10 +262,48 @@ class _TabICLv2(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
-    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x=x, y=y, cache=cache)
-        x = self.icl_block(x=x, y=y, cache=cache)
-        return self.head(x)
+        num_classes: int | None = None,
+    ) -> Tensor:  # [..., R_test, self.num_classes or self.num_quantiles]
+        is_classification = not y.is_floating_point()
+        if is_classification and num_classes is None:
+            # For classification, num_classes is necessary to determine the
+            # number of classes to predict for since it's data-dependent.
+            num_classes = int(y.max()) + 1
+
+        if (
+            cache is not None
+            and num_classes is not None
+            and num_classes > self.num_classes
+        ):
+            # TODO Support KV cache
+            raise NotImplementedError(
+                f"Key/value caching is not supported with more than "
+                f"{self.num_classes} classes (got {num_classes})"
+            )
+
+        x = self.row_embedding(x=x, y=y, num_classes=num_classes, cache=cache)
+
+        if num_classes is None or num_classes <= self.num_classes:
+            x = self.icl_block(x=x, y=y, cache=cache)
+            return self.head(x)
+
+        assert self.hierarchical_classifier is not None
+        log_probs = self.hierarchical_classifier(
+            row_embeddings=x,
+            y=y,
+            num_classes=num_classes,
+            predictor=self._predict_standard,
+        )
+        # Scale the log-probabilities so the output processor's matching
+        # temperature cancels while converting them to probabilities.
+        return log_probs.mul(self.hierarchical_classifier.temperature)
+
+    def _predict_standard(
+        self,
+        row_embeddings: Tensor,  # [R_node + R_test, D]
+        y: Tensor,  # [R_node]
+    ) -> Tensor:  # [R_test, num_classes]
+        return self.head(self.icl_block(x=row_embeddings, y=y))
 
 
 # Helpers #####################################################################
