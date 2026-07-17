@@ -11,9 +11,6 @@ from sdm.tensor import TableTensor
 class MeanImpute(Processor):
     """Replace NaN feature values with fitted per-column means.
 
-    ``MeanImpute`` handles NaN values. Numerical processors that do not
-    explicitly document non-finite support assume finite input.
-
     Args:
         fill_value: Finite value used for columns whose fitted mean is
             undefined (e.g. all-NaN columns).
