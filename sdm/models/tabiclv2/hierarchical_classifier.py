@@ -47,7 +47,7 @@ class HierarchicalClassifier(torch.nn.Module):
 
         # Node contexts have different row counts, so tables and recursive
         # model calls cannot be represented by one dense tensor operation.
-        log_probabilities = torch.stack(
+        log_probs = torch.stack(
             [
                 self._predict_table(
                     train_rows=rows[:train_size],
@@ -59,7 +59,7 @@ class HierarchicalClassifier(torch.nn.Module):
                 for rows, labels in zip(flat_rows, flat_y)
             ]
         )
-        return log_probabilities.reshape(
+        return log_probs.reshape(
             *batch_shape,
             test_size,
             num_classes,
@@ -80,11 +80,11 @@ class HierarchicalClassifier(torch.nn.Module):
             test_rows=test_rows,
             predictor=predictor,
         )
-        log_probabilities = local_log_probs.new_full(
+        log_probs = local_log_probs.new_full(
             (test_rows.size(-2), num_classes),
             -torch.inf,
         )
-        return log_probabilities.index_copy(
+        return log_probs.index_copy(
             -1,
             class_ids,
             local_log_probs,
@@ -111,7 +111,7 @@ class HierarchicalClassifier(torch.nn.Module):
                     keepdim=True,
                 ).mul(0)
             else:
-                local_log_probs = self._predict_log_probabilities(
+                local_log_probs = self._predict_log_probs(
                     train_rows=train_rows,
                     train_labels=local_labels,
                     test_rows=test_rows,
@@ -130,7 +130,7 @@ class HierarchicalClassifier(torch.nn.Module):
             num_groups,
             device=group_labels.device,
         ).unsqueeze(-1)  # [G, R_node]
-        group_log_probs = self._predict_log_probabilities(
+        group_log_probs = self._predict_log_probs(
             train_rows=train_rows,
             train_labels=group_labels,
             test_rows=test_rows,
@@ -139,7 +139,7 @@ class HierarchicalClassifier(torch.nn.Module):
         )
 
         child_class_ids: list[Tensor] = []
-        child_log_probabilities: list[Tensor] = []
+        children_log_probs: list[Tensor] = []
         for group_idx in range(num_groups):
             mask = group_masks[group_idx]
             child_ids, child_log_probs = self._process_node(
@@ -149,7 +149,7 @@ class HierarchicalClassifier(torch.nn.Module):
                 predictor=predictor,
             )
             child_class_ids.append(child_ids)
-            child_log_probabilities.append(
+            children_log_probs.append(
                 child_log_probs + group_log_probs[:, group_idx : group_idx + 1]
             )
 
@@ -157,10 +157,10 @@ class HierarchicalClassifier(torch.nn.Module):
         # child outputs retain the node's sorted class order.
         return (
             torch.cat(child_class_ids),
-            torch.cat(child_log_probabilities, dim=-1),
+            torch.cat(children_log_probs, dim=-1),
         )
 
-    def _predict_log_probabilities(
+    def _predict_log_probs(
         self,
         train_rows: Tensor,  # [R_node, D]
         train_labels: Tensor,  # [R_node]

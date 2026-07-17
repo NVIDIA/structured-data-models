@@ -68,7 +68,7 @@ def test_hierarchical_classifier_grouping() -> None:
         ),
     ],
 )
-def test_hierarchical_classifier_log_probabilities(
+def test_hierarchical_classifier_log_probs(
     device: torch.device,
     total_num_classes: int,
     num_classes: int,
@@ -92,7 +92,7 @@ def test_hierarchical_classifier_log_probabilities(
     y = torch.arange(total_num_classes, device=device)
     classifier = HierarchicalClassifier(num_classes=num_classes)
 
-    log_probabilities = classifier(
+    log_probs = classifier(
         row_embeddings,
         y,
         num_classes=total_num_classes,
@@ -101,14 +101,14 @@ def test_hierarchical_classifier_log_probabilities(
 
     assert calls == expected_calls
     torch.testing.assert_close(
-        log_probabilities,
+        log_probs,
         row_embeddings.new_tensor(expected_probabilities)
         .log()
         .expand(test_size, -1),
     )
 
 
-def test_hierarchical_classifier_nonuniform_log_probabilities() -> None:
+def test_hierarchical_classifier_nonuniform_log_probs() -> None:
     classifier = HierarchicalClassifier(num_classes=2)
 
     def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -120,7 +120,7 @@ def test_hierarchical_classifier_nonuniform_log_probabilities() -> None:
         return probabilities.log().expand(test_size, -1)
 
     row_embeddings = torch.randn(5, 4)
-    log_probabilities = classifier(
+    log_probs = classifier(
         row_embeddings,
         torch.arange(3),
         num_classes=3,
@@ -128,7 +128,7 @@ def test_hierarchical_classifier_nonuniform_log_probabilities() -> None:
     )
 
     expected = torch.tensor([0.15, 0.45, 0.4]).log().expand(2, -1)
-    torch.testing.assert_close(log_probabilities, expected)
+    torch.testing.assert_close(log_probs, expected)
 
 
 def test_hierarchical_classifier_batched_absent_classes() -> None:
@@ -146,7 +146,7 @@ def test_hierarchical_classifier_batched_absent_classes() -> None:
     row_embeddings = torch.randn(2, 5, 4)
     y = torch.tensor([[1, 3, 4], [0, 2, 5]])
 
-    log_probabilities = classifier(
+    log_probs = classifier(
         row_embeddings,
         y,
         num_classes=6,
@@ -160,7 +160,7 @@ def test_hierarchical_classifier_batched_absent_classes() -> None:
         ],
     )
     torch.testing.assert_close(
-        log_probabilities,
+        log_probs,
         expected_probabilities.log().unsqueeze(1).expand(-1, 2, -1),
     )
 
@@ -176,13 +176,13 @@ def test_hierarchical_classifier_preserves_gradients() -> None:
         return logits + rows[labels.size(0) :, :2]
 
     row_embeddings = torch.randn(5, 4, requires_grad=True)
-    log_probabilities = classifier(
+    log_probs = classifier(
         row_embeddings,
         torch.arange(3),
         num_classes=3,
         predictor=predictor,
     )
-    log_probabilities[:, 0].sum().backward()
+    log_probs[:, 0].sum().backward()
 
     assert logits.grad is not None
     assert logits.grad.abs().sum() > 0
@@ -197,15 +197,15 @@ def test_hierarchical_classifier_empty_batch() -> None:
         raise AssertionError("The predictor must not run for an empty batch")
 
     row_embeddings = torch.randn(0, 4, 3)
-    log_probabilities = classifier(
+    log_probs = classifier(
         row_embeddings,
         torch.zeros(0, 2, dtype=torch.long),
         num_classes=5,
         predictor=predictor,
     )
 
-    assert log_probabilities.size() == (0, 2, 5)
-    assert log_probabilities.dtype == torch.float32
+    assert log_probs.size() == (0, 2, 5)
+    assert log_probs.dtype == torch.float32
 
 
 def test_hierarchical_classifier_rejects_invalid_num_classes() -> None:

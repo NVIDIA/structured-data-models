@@ -288,7 +288,7 @@ class _TabICLv2(torch.nn.Module):
             return self.head(x)
 
         assert self.hierarchical_classifier is not None
-        log_probabilities = self.hierarchical_classifier(
+        log_probs = self.hierarchical_classifier(
             row_embeddings=x,
             y=y,
             num_classes=num_classes,
@@ -296,7 +296,7 @@ class _TabICLv2(torch.nn.Module):
         )
         # Scale the log-probabilities so the output processor's matching
         # temperature cancels while converting them to probabilities.
-        return log_probabilities.mul(self.hierarchical_classifier.temperature)
+        return log_probs.mul(self.hierarchical_classifier.temperature)
 
     def _predict_standard(
         self,
