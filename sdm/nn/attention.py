@@ -300,8 +300,8 @@ class SDPA(torch.nn.Module):
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries via :class:`QASSMax`.
-        scale: Scaling factor passed to PyTorch's
-            `scaled_dot_product_attention <https://docs.pytorch.org/docs/2.13/generated/torch.nn.functional.scaled_dot_product_attention.html>`_.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
             ``None`` uses the default value of ``1 / sqrt(channels)``.
         device: The device.
         dtype: The dtype.
