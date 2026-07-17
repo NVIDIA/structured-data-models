@@ -1,50 +1,9 @@
-from collections.abc import Callable
-
 import torch
 
+from sdm.processing._callable import ProcessorLike, as_processor
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
-
-
-class _CallableProcessor(Processor):
-    """Adapt a stateless callable to the :class:`Processor` interface."""
-
-    supported_stypes = frozenset(Stype)
-    requires_fit = False
-
-    def __init__(
-        self,
-        function: Callable[[TableTensor], TableTensor],
-    ) -> None:
-        super().__init__()
-        self.function = function
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self.function(table)
-
-    def __repr__(self, *, indent: int = 0) -> str:
-        name = getattr(
-            self.function,
-            "__name__",
-            self.function.__class__.__name__,
-        )
-        return f"{' ' * indent}{name}"
-
-
-def _as_processor(
-    step: Processor | Callable[[TableTensor], TableTensor],
-    *,
-    label: str,
-) -> Processor:
-    if isinstance(step, Processor):
-        return step
-    if callable(step):
-        return _CallableProcessor(step)
-    raise TypeError(
-        f"{label} must be a Processor or callable, got "
-        f"{step.__class__.__name__}."
-    )
 
 
 class Sequential(Processor, InvertibleMixin):
@@ -63,11 +22,11 @@ class Sequential(Processor, InvertibleMixin):
 
     def __init__(
         self,
-        *args: Processor | Callable[[TableTensor], TableTensor],
+        *args: ProcessorLike,
     ) -> None:
         super().__init__()
         self.steps = tuple(
-            _as_processor(step, label=f"Sequential step {index}")
+            as_processor(step, label=f"Sequential step {index}")
             for index, step in enumerate(args)
         )
         for i, step in enumerate(self.steps):
