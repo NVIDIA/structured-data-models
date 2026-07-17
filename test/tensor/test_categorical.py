@@ -172,6 +172,31 @@ def test_tolist() -> None:
     ]
 
 
+def test_to_arrow() -> None:
+    tensor = CategoricalTensor(
+        data=torch.tensor(
+            [
+                [[0, 1], [-1, 0]],
+                [[1, -1], [0, 1]],
+            ],
+            dtype=torch.int32,
+        ),
+        categories=(
+            StringTensor.from_list(["US", "CA"]),
+            torch.tensor([10, 20]),
+        ),
+    )
+
+    table = tensor.to_arrow()
+    assert table.column_names == ["0", "1"]
+    assert pa.types.is_dictionary(table["0"].type)
+    assert pa.types.is_dictionary(table["1"].type)
+    assert table.to_pydict() == {
+        "0": ["US", None, "CA", "US"],
+        "1": [20, 10, None, 20],
+    }
+
+
 @onlyCUDA
 def test_from_cudf_string_values() -> None:
     cudf = pytest.importorskip("cudf")
