@@ -15,7 +15,6 @@ PREFIX = "sdm_internal"
 LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
-
 _warned = False
 
 
