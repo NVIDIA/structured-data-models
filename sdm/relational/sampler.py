@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import NamedTuple, cast
 
-import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import Self
@@ -13,7 +12,7 @@ from sdm.relational import (
     Relationship,
     TaskLink,
 )
-from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID
+from sdm.relational.join import join_index
 from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
@@ -32,14 +31,16 @@ class RelationalSamplerOutput(_RelationalSamplerOutput, DeviceMixin):
         related_tables: The related tables for the task table.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             task_table=cast(TableTensor, self.task_table.to(device)),
             related_tables=self.related_tables.to(device),
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = list({self.task_table.device, self.related_tables.device})
         if len(devices) > 1:
             raise RuntimeError(
@@ -178,45 +179,38 @@ class RelationalSampler:
                 "'https://github.com/pyg-team/pyg-lib' for more information)"
             ) from e
 
+        if not task_table.is_cpu or not self.data.is_cpu:
+            raise NotImplementedError(
+                f"'{self.__class__.__name__}' requires input data on CPU"
+            )
+
         # Resolve entity table node indices:
-        left = task_table[task_link.task_columns].to_arrow()
-        left = left.append_column(
-            LEFT_ROW_ID,
-            pa.array(torch.arange(left.num_rows).numpy()),
+        task_index, seed = join_index(
+            left_table=task_table,
+            right_table=self.data.tables[task_link.table],
+            left_keys=task_link.task_columns,
+            right_keys=task_link.table_columns,
+            device=task_table.device,
         )
-        right = self.data.tables[task_link.table][
-            task_link.table_columns
-        ].to_arrow()
-        right = right.append_column(
-            RIGHT_ROW_ID,
-            pa.array(torch.arange(right.num_rows).numpy()),
+        task_index, perm = task_index.sort()
+        seed = seed[perm]
+
+        expected = torch.arange(
+            task_table.size(-2),
+            dtype=task_index.dtype,
+            device=task_index.device,
         )
-        joined = left.join(
-            right,
-            keys=list(task_link.task_columns),
-            right_keys=list(task_link.table_columns),
-            join_type="left outer",
-        )
-        joined = joined.select([LEFT_ROW_ID, RIGHT_ROW_ID])
-        joined = joined.sort_by([(LEFT_ROW_ID, "ascending")])
-        if len(joined) != left.num_rows or joined[RIGHT_ROW_ID].null_count > 0:
+        if not task_index.equal(expected):
             raise ValueError(
                 f"Expected each task row to match exactly one row in "
                 f"'{task_link.table}'"
             )
 
-        seed = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy())
-        seed = seed.to(task_table.device)
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
         else:
             fill_value = torch.iinfo(torch.int64).max
             seed_time = torch.full_like(seed, fill_value)
-
-        if not seed.is_cpu or not self.data.is_cpu:
-            raise NotImplementedError(
-                f"'{self.__class__.__name__}' requires input data on CPU"
-            )
 
         # Perform subgraph sampling:
         _, _, node_dict, *_ = torch.ops.pyg.hetero_neighbor_sample(
@@ -254,11 +248,11 @@ class RelationalSampler:
             example, index = node.t().contiguous()
             tables[table_name] = torch.cat(
                 [
+                    self.data.tables[table_name][index],
                     TableTensor(
                         columns={"id": (EXAMPLE_ID,)},
                         id=ColumnarTensor((example,)),
                     ),
-                    self.data.tables[table_name][index],
                 ],
                 dim=-1,
             )
@@ -267,27 +261,27 @@ class RelationalSampler:
         relationships = tuple(
             Relationship(
                 left_table=rel.left_table,
-                left_columns=(EXAMPLE_ID, *rel.left_columns),
+                left_columns=(*rel.left_columns, EXAMPLE_ID),
                 right_table=rel.right_table,
-                right_columns=(EXAMPLE_ID, *rel.right_columns),
+                right_columns=(*rel.right_columns, EXAMPLE_ID),
             )
             for rel in self.data.relationships
             if rel.left_table in tables and rel.right_table in tables
         )
 
         task_link = TaskLink(
-            task_columns=(EXAMPLE_ID, *task_link.task_columns),
+            task_columns=(*task_link.task_columns, EXAMPLE_ID),
             table=task_link.table,
-            table_columns=(EXAMPLE_ID, *task_link.table_columns),
+            table_columns=(*task_link.table_columns, EXAMPLE_ID),
         )
 
         task_table: Tensor = torch.cat(
             [
+                task_table,
                 TableTensor(
                     columns={"id": (EXAMPLE_ID,)},
                     id=ColumnarTensor((torch.arange(task_table.size(0)),)),
                 ),
-                task_table,
             ],
             dim=-1,
         )

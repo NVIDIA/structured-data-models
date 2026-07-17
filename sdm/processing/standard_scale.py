@@ -39,8 +39,13 @@ class StandardScale(Processor, InvertibleMixin):
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
-    def _fit(self, input: TableTensor) -> None:
-        numerical = _as_float(input.numerical)
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        numerical = _as_float(table.numerical)
         data_mean = numerical.mean(dim=0)
 
         if self.with_mean:
@@ -68,11 +73,11 @@ class StandardScale(Processor, InvertibleMixin):
         else:
             self.scale = numerical.new_ones(numerical.shape[1])
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        """Transform ``input`` using the fitted mean and scale."""
-        numerical = (_as_float(input.numerical) - self.mean) / self.scale
-        return input.replace_blocks(numerical=numerical)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        """Transform ``table`` using the fitted mean and scale."""
+        numerical = (_as_float(table.numerical) - self.mean) / self.scale
+        return table.replace_blocks(numerical=numerical)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        numerical = _as_float(input.numerical) * self.scale + self.mean
-        return input.replace_blocks(numerical=numerical)
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        numerical = _as_float(table.numerical) * self.scale + self.mean
+        return table.replace_blocks(numerical=numerical)

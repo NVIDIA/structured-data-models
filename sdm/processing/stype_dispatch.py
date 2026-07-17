@@ -17,7 +17,8 @@ class StypeDispatch(Processor, InvertibleMixin):
     :class:`TableTensor` and passed to that processor. A route may change
     column values, names, count, or order. Route outputs are concatenated in
     semantic type order. With the default passthrough behavior, unconfigured
-    semantic types follow in input order.
+    semantic types follow in input order. A ``generator`` passed to ``fit()``
+    or ``fit_transform()`` is passed on to every route.
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible. Tracking transformed ownership for routes
@@ -81,24 +82,29 @@ class StypeDispatch(Processor, InvertibleMixin):
             "remainder='passthrough' or remainder='drop'."
         )
 
-    def _fit(self, input: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         remainder_stypes = [
             stype
-            for stype, columns in input.columns.items()
+            for stype, columns in table.columns.items()
             if stype.value not in self.processors and len(columns) > 0
         ]
         self._check_remainder(remainder_stypes)
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_input = input.select_stypes(stype)
+            route_input = table.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
-            processor.fit(route_input)
+            processor.fit(route_input, generator=generator)
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, table: TableTensor) -> TableTensor:
         remainder_stypes = [
             stype
-            for stype, columns in input.columns.items()
+            for stype, columns in table.columns.items()
             if stype.value not in self.processors and len(columns) > 0
         ]
         self._check_remainder(remainder_stypes)
@@ -106,22 +112,22 @@ class StypeDispatch(Processor, InvertibleMixin):
         outputs: list[TableTensor] = []
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_input = input.select_stypes(stype)
+            route_input = table.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             outputs.append(processor.transform(route_input))
         if self.remainder == "passthrough":
             outputs.extend(
-                input.select_stypes(stype) for stype in remainder_stypes
+                table.select_stypes(stype) for stype in remainder_stypes
             )
         if len(outputs) == 0:
-            return input.select_columns(())
+            return table.select_columns(())
         return cast(
             TableTensor,
             torch.cat(cast(list[Tensor], outputs), dim=-1),
         )
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
         if self.remainder == "drop":
             raise ValueError(
                 "'StypeDispatch' with remainder='drop' is not invertible"
@@ -132,7 +138,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         # change stype or share an output stype.
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_input = input.select_stypes(stype)
+            route_input = table.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
             if not isinstance(processor, InvertibleMixin):
@@ -144,15 +150,15 @@ class StypeDispatch(Processor, InvertibleMixin):
 
         remainder_stypes = [
             stype
-            for stype, columns in input.columns.items()
+            for stype, columns in table.columns.items()
             if stype.value not in self.processors and len(columns) > 0
         ]
         self._check_remainder(remainder_stypes)
         outputs.extend(
-            input.select_stypes(stype) for stype in remainder_stypes
+            table.select_stypes(stype) for stype in remainder_stypes
         )
         if len(outputs) == 0:
-            return input.select_columns(())
+            return table.select_columns(())
 
         return cast(
             TableTensor,

@@ -4,7 +4,7 @@ import pyarrow as pa
 import pytest
 import torch
 from sdm import StringTensor
-from sdm.testing import onlyCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_from_list() -> None:
@@ -93,6 +93,25 @@ def test_from_cudf_sliced_values() -> None:
 
     assert tensor.is_cuda
     assert tensor.tolist() == ["hi", "é", ""]
+    # The slice anchors into the base offsets instead of copying:
+    assert int(tensor.storage_offset()) == 1
+    assert tensor._offset.equal(
+        torch.tensor([0, 1, 3, 5, 5], device=tensor.device)
+    )
+
+
+@onlyCUDA
+def test_from_cudf_all_empty_values() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = StringTensor.from_cudf(
+        cudf.Series(["", ""]),
+    )
+
+    assert tensor.is_cuda
+    assert tensor.tolist() == ["", ""]
+    assert tensor._data.numel() == 0
+    assert tensor._offset.equal(torch.tensor([0, 0, 0], device=tensor.device))
 
 
 @onlyCUDA
@@ -107,6 +126,58 @@ def test_from_cudf_empty_values() -> None:
     assert tensor.tolist() == []
     assert tensor._data.numel() == 0
     assert tensor._offset.equal(torch.tensor([0], device=tensor.device))
+
+
+@pytest.mark.parametrize(
+    "offset_dtype",
+    [torch.int32, torch.int64],
+    ids=["int32", "int64"],
+)
+@onlyCUDA
+def test_to_cudf(offset_dtype: torch.dtype) -> None:
+    pytest.importorskip("cudf")
+    values = ["é", "東京", "🙂", ""]
+    tensor = StringTensor.from_list(
+        values,
+        device="cuda",
+        offset_dtype=offset_dtype,
+    )
+
+    series = tensor.to_cudf()
+
+    assert tensor._offset.dtype == offset_dtype
+    assert series.to_arrow().to_pylist() == values
+
+
+@pytest.mark.parametrize(
+    "offset_dtype",
+    [torch.int32, torch.int64],
+    ids=["int32", "int64"],
+)
+@onlyCUDA
+def test_to_cudf_empty(offset_dtype: torch.dtype) -> None:
+    cudf = pytest.importorskip("cudf")
+    tensor = StringTensor.from_list(
+        [],
+        device="cuda",
+        offset_dtype=offset_dtype,
+    )
+
+    series = tensor.to_cudf()
+
+    assert tensor._data.numel() == 0
+    assert tensor._offset.equal(
+        torch.zeros(1, dtype=offset_dtype, device=tensor.device)
+    )
+    assert cudf.api.types.is_string_dtype(series.dtype)
+    assert series.to_arrow().to_pylist() == []
+
+
+def test_to_cudf_requires_cuda() -> None:
+    tensor = StringTensor.from_list(["a"])
+
+    with pytest.raises(RuntimeError, match="on a CUDA device"):
+        tensor.to_cudf()
 
 
 @onlyCUDA
@@ -127,6 +198,33 @@ def test_allowed_dtype() -> None:
         tensor.to(torch.float32)
 
 
+def test_to_dtype_layout_copy() -> None:
+    tensor = StringTensor.from_list(["hi", "é", ""])
+
+    out = tensor.to(torch.uint8, copy=True)
+    assert isinstance(out, StringTensor)
+    assert out.tolist() == tensor.tolist()
+
+    out = tensor.clone()
+    assert isinstance(out, StringTensor)
+    assert out.tolist() == tensor.tolist()
+
+
+@pytest.mark.parametrize("create_in_inference_mode", [False, True])
+def test_to_list_in_inference_mode(
+    create_in_inference_mode: bool,
+) -> None:
+    values = ["hi", "é", ""]
+    if create_in_inference_mode:
+        with torch.inference_mode():
+            tensor = StringTensor.from_list(values)
+    else:
+        tensor = StringTensor.from_list(values)
+
+    with torch.inference_mode():
+        assert tensor.tolist() == values
+
+
 def test_item() -> None:
     assert StringTensor.from_list("é").item() == "é"
     assert StringTensor.from_list(["hi", "é"])[1].item() == "é"
@@ -144,3 +242,21 @@ def test_tolist() -> None:
         [["a", "bb", "c"], ["dd", "e", "ff"]],
     ]:
         assert StringTensor.from_list(strings).tolist() == strings
+
+
+@withCUDA
+def test_sort(device: torch.device) -> None:
+    tensor = StringTensor.from_list(["b", "aa", "a", "é", ""], device=device)
+
+    out, perm = tensor.sort()
+    assert out.device == device
+    assert out.tolist() == ["", "a", "aa", "b", "é"]
+    assert perm.equal(torch.tensor([4, 2, 1, 0, 3], device=device))
+
+    out, perm = torch.sort(tensor, dim=-1, descending=True)
+    assert out.device == device
+    assert out.tolist() == ["é", "b", "aa", "a", ""]
+    assert perm.equal(torch.tensor([3, 0, 1, 2, 4], device=device))
+
+    perm = torch.argsort(tensor)
+    assert perm.equal(torch.tensor([4, 2, 1, 0, 3], device=device))

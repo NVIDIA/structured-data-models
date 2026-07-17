@@ -754,10 +754,12 @@ def test_return_key_value_positional_compatibility() -> None:
 
 
 @withCUDA
+@pytest.mark.parametrize("norm", ["layer_norm", "rms_norm"])
 @pytest.mark.parametrize("qassmax", [False, True])
 @pytest.mark.parametrize("rope", [False, True])
 def test_transformer_block(
     device: torch.device,
+    norm: str,
     qassmax: bool,
     rope: bool,
 ) -> None:
@@ -772,6 +774,7 @@ def test_transformer_block(
         num_query_heads=num_heads,
         feedforward_channels=feedforward_channels,
         qassmax=qassmax,
+        norm=norm,
         device=device,
     )
     query = torch.randn(batch_size, query_len, channels, device=device)

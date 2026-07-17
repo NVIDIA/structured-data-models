@@ -1,3 +1,5 @@
+import warnings
+
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -20,6 +22,29 @@ ARROW_TORCH_DTYPES = {
 TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 
+def arrow_as_tensor(
+    array: pa.Array | pa.ChunkedArray,
+    *,
+    dtype: torch.dtype | None = None,
+    device: torch.device | str | None = None,
+) -> Tensor:
+    r"""Convert a :class:`pyarrow.Array` to a tensor.
+
+    Args:
+        array: The :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`.
+        dtype: The dtype.
+        device: The device.
+    """
+    values = array.to_numpy(zero_copy_only=False)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="The given NumPy array is not writable",
+        )
+        return torch.as_tensor(values, dtype=dtype, device=device)
+
+
 def to_arrow(tensor: Tensor) -> pa.Array:
     r"""Convert a tensor to a flat :class:`pyarrow.Array`.
 
@@ -33,12 +58,12 @@ def to_arrow(tensor: Tensor) -> pa.Array:
 
     tensor = tensor.detach().contiguous().view(-1).cpu()
 
-    type = TORCH_ARROW_DTYPES.get(tensor.dtype)
-    if type is None:
+    arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
+    if arrow_type is None:
         raise TypeError(f"Unsupported data type '{tensor.dtype}'")
 
     return pa.Array.from_buffers(
-        type=type,
+        type=arrow_type,
         length=tensor.numel(),
         buffers=[None, pa.py_buffer(tensor.numpy())],
     )

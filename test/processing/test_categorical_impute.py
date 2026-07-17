@@ -4,7 +4,7 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import CategoricalImpute, StypeDispatch, ToNumerical
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def _table(
@@ -61,7 +61,7 @@ def test_categorical_impute_most_frequent(
         assert torch.equal(actual, expected)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+@onlyCUDA
 def test_categorical_impute_moves_fitted_processor_to_cuda() -> None:
     processor = CategoricalImpute().fit(_table([[0, 1], [0, -1], [1, 0]]))
     processor = processor.to("cuda")
@@ -121,7 +121,7 @@ def test_categorical_impute_rejects_changed_vocabulary(
 
     with pytest.raises(
         ValueError,
-        match=r"vocabulary.*kind.*fitted values",
+        match=r"vocabulary.*kind.*fitted values.*CategoricalAlign",
     ):
         processor.transform(query)
 

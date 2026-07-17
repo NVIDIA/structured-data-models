@@ -11,10 +11,10 @@ from sdm.tensor import TableTensor
 class FeaturePermute(Processor, InvertibleMixin):
     """Permute the numerical feature columns.
 
-    The permutation is drawn from the global CPU generator when the
-    processor is fitted; seed with :func:`torch.manual_seed` to make it
-    reproducible. Convert non-numerical feature stypes before this step,
-    for example with :class:`~sdm.processing.ToNumerical`.
+    The permutation is drawn when the processor is fitted; pass
+    ``generator`` to ``fit()`` to make it reproducible. Convert
+    non-numerical feature stypes before this step, for example with
+    :class:`~sdm.processing.ToNumerical`.
 
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
@@ -35,37 +35,53 @@ class FeaturePermute(Processor, InvertibleMixin):
             torch.empty(0, dtype=torch.long),
         )
 
-    def _fit(self, input: TableTensor) -> None:
-        n_features = input.numerical.size(-1)
-        device = input.numerical.device
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        n_features = table.numerical.size(-1)
+        device = table.numerical.device
         if n_features <= 1:
             self.permutation = torch.arange(n_features, device=device)
         elif self.method == "shift":
-            offset = int(torch.randint(n_features, (1,)).item())
+            offset = int(
+                torch.randint(
+                    n_features,
+                    (1,),
+                    generator=generator,
+                    device=device,
+                ).item()
+            )
             self.permutation = (
                 torch.arange(n_features, device=device) + offset
             ) % n_features
         else:
-            self.permutation = torch.randperm(n_features).to(device=device)
+            self.permutation = torch.randperm(
+                n_features,
+                generator=generator,
+                device=device,
+            )
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, table: TableTensor) -> TableTensor:
         """Reorder the numerical block with the fitted permutation."""
-        return self._permute(input, self.permutation)
+        return self._permute(table, self.permutation)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
-        return self._permute(input, self.permutation.argsort())
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return self._permute(table, self.permutation.argsort())
 
     def _permute(
         self,
-        input: TableTensor,
+        table: TableTensor,
         permutation: Tensor,
     ) -> TableTensor:
         indices = permutation.tolist()
-        return input.__class__(
+        return table.__class__(
             columns={
                 Stype.numerical.value: tuple(
-                    input.columns[Stype.numerical][index] for index in indices
+                    table.columns[Stype.numerical][index] for index in indices
                 )
             },
-            numerical=input.numerical.index_select(-1, permutation),
+            numerical=table.numerical.index_select(-1, permutation),
         )

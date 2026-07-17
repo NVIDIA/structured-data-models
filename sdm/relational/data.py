@@ -1,22 +1,20 @@
-from collections import defaultdict
+from __future__ import annotations
+
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
-import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID, join_index
 from sdm.tensor.mixin import DeviceMixin
 
-PREFIX = "sdm_internal"
-ROW_ID = f"__{PREFIX}_row_id__"
-LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
-RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
-
 if TYPE_CHECKING:
+    import graphviz
+
     from sdm.relational import RelationalSampler
 
 
@@ -32,9 +30,9 @@ class Relationship:
     """
 
     left_table: str
-    left_columns: Sequence[str]
+    left_columns: tuple[str, ...]
     right_table: str
-    right_columns: Sequence[str]
+    right_columns: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if len(self.left_columns) != len(self.right_columns):
@@ -50,7 +48,7 @@ class Relationship:
             )
 
         for column in (*self.left_columns, *self.right_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
                         f"Column name '{column}' is reserved for internal "
@@ -87,23 +85,23 @@ class Relationship:
 
         return cls(
             left_table=left_table,
-            left_columns=left_columns,
+            left_columns=tuple(left_columns),
             right_table=right_table,
-            right_columns=right_columns,
+            right_columns=tuple(right_columns),
         )
 
     def _left_columns_repr(self) -> str:
         if len(self.left_columns) == 1:
             return f"{self.left_table}.{self.left_columns[0]}"
-        return f"{self.left_table}.[{', '.join(self.left_columns)}]"
+        return f"{self.left_table}.[{','.join(self.left_columns)}]"
 
     def _right_columns_repr(self) -> str:
         if len(self.right_columns) == 1:
             return f"{self.right_table}.{self.right_columns[0]}"
-        return f"{self.right_table}.[{', '.join(self.right_columns)}]"
+        return f"{self.right_table}.[{','.join(self.right_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._left_columns_repr()}<>{self._right_columns_repr()}"
+        return f"{self._left_columns_repr()} <> {self._right_columns_repr()}"
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -181,7 +179,8 @@ class RelationalData(DeviceMixin):
                             f"(got '{stype.value}')"
                         )
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
@@ -191,7 +190,8 @@ class RelationalData(DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
         if len(devices) == 0:
             raise RuntimeError(
@@ -221,45 +221,17 @@ class RelationalData(DeviceMixin):
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
         """
-        device = self.device if device is None else device
-
-        columns: dict[str, list[str]] = defaultdict(list)
-        for rel in self.relationships:
-            columns[rel.left_table].extend(rel.left_columns)
-            columns[rel.right_table].extend(rel.right_columns)
-
-        tables = {
-            name: table[..., columns[name]].to_arrow()
-            for name, table in self.tables.items()
-            if name in columns
-        }
-
-        tables = {
-            name: table.append_column(
-                ROW_ID,
-                pa.array(torch.arange(table.num_rows, dtype=dtype).numpy()),
-            )
-            for name, table in tables.items()
-        }
-
         edge_indices: list[Tensor] = []
         for rel in self.relationships:
-            left = tables[rel.left_table]
-            left = left.select((*rel.left_columns, ROW_ID))
-            left = left.rename_columns({ROW_ID: LEFT_ROW_ID})
-            right = tables[rel.right_table]
-            right = right.select((*rel.right_columns, ROW_ID))
-            right = right.rename_columns({ROW_ID: RIGHT_ROW_ID})
-
-            joined = left.join(
-                right,
-                keys=list(rel.left_columns),
-                right_keys=list(rel.right_columns),
-                join_type="inner",
+            src, dst = join_index(
+                left_table=self.tables[rel.left_table],
+                right_table=self.tables[rel.right_table],
+                left_keys=rel.left_columns,
+                right_keys=rel.right_columns,
+                how="inner",
+                dtype=dtype,
+                device=device,
             )
-
-            src = torch.from_numpy(joined[LEFT_ROW_ID].to_numpy()).to(device)
-            dst = torch.from_numpy(joined[RIGHT_ROW_ID].to_numpy()).to(device)
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
@@ -267,7 +239,7 @@ class RelationalData(DeviceMixin):
     def sampler(
         self,
         time_columns: Mapping[str, str] | None = None,
-    ) -> "RelationalSampler":
+    ) -> RelationalSampler:
         r"""Create a subgraph sampler over this relational data.
 
         .. code-block:: python
@@ -305,6 +277,56 @@ class RelationalData(DeviceMixin):
             data=self,
             time_columns=time_columns,
         )
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+        **kwargs: Any,
+    ) -> graphviz.Graph:
+        r"""Return a graph visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
+        """
+        import graphviz
+
+        def left_align(keys: list[str]) -> str:
+            if len(keys) == 0:
+                return ""
+            return "\\l".join(keys) + "\\l"
+
+        graph = graphviz.Graph(**kwargs)
+
+        for table_name, table in self.tables.items():
+            if hide_columns:
+                label = f"{{{table_name}}}"
+            else:
+                columns = [
+                    f"{column}: {stype.value}"
+                    for stype, columns in table._columns.items()
+                    for column in columns
+                ]
+                label = f"{{{table_name}|{left_align(columns)}}}"
+            graph.node(table_name, shape="record", label=label)
+
+        for rel in self.relationships:
+            label = "\\n".join(
+                f" {left_column} <> {right_column} "
+                for left_column, right_column in zip(
+                    rel.left_columns, rel.right_columns
+                )
+            )
+            graph.edge(
+                rel.left_table,
+                rel.right_table,
+                label=label,
+                fontsize="11pt",
+            )
+
+        return graph
 
     def __repr__(self) -> str:
         out = f"{self.__class__.__name__}(\n"

@@ -1,15 +1,18 @@
 import contextlib
-import warnings
+import copy
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from typing import ClassVar, cast
 
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin, Recipe
+from sdm.processing import InvertibleMixin, Processor, Recipe
+from sdm.relational.task import RelatedTablesSchema
+from sdm.tensor.table import TableSchema
 
 
 @contextlib.contextmanager
@@ -28,15 +31,17 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-class BaseModel(torch.nn.Module, ABC):
+class ICLModel(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
-    :class:`BaseModel` defines the public inferface shared among in-context
+    :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
     """
 
+    supported_feature_stypes: ClassVar[frozenset[Stype]]
+    supported_target_stypes: ClassVar[frozenset[Stype]]
     supports_related_tables: ClassVar[bool]
 
     def __init__(self) -> None:
@@ -44,64 +49,127 @@ class BaseModel(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
-        self._recipe: Recipe | None = None
 
     @_maybe_inference_mode()
     def forward(
         self,
-        x: Tensor | TableTensor,  # [..., R, C]
-        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
-        related_tables: RelatedTables | None = None,
+        x_context: Tensor | TableTensor,  # [..., R_context, D]
+        y_context: Tensor | TableTensor,  # [..., R_context, 1]
+        x_query: Tensor | TableTensor,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-    ) -> Tensor:  # [..., R - R_train, *]
+    ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
 
         Args:
-            x: The feature tensor with shape ``[..., R, C]`` with ``R`` rows
-                and ``C`` columns.
-                The first ``R_train`` rows along ``R`` refer to the in-context
-                examples.
-            y: The targets of in-context examples with shape
-                ``[..., R_train]`` or ``[..., R_train, 1]``.
-            related_tables: Additional related context provided to the model.
-            recipe: The recipe for pre- and post-processing. If ``None``, no
-                recipe is applied.
+            x_context: The feature tensor of in-context examples with shape
+                ``[..., R_context, D]`` with ``R_context`` rows and ``D``
+                columns.
+            y_context: The targets of in-context examples with shape
+                ``[..., R_context, 1]``.
+            x_query: The feature tensor of query examples with shape
+                ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
+            related_context_tables: Related context for in-context examples.
+            related_query_tables: Related context for query examples.
+            recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators for ensembling.
 
         Returns:
-            The prediction for the remaining ``[..., R - R_train]`` test rows.
+            The processed prediction. Member outputs enter ``recipe.output``
+            stacked as ``[E, ..., R_query, *]``; the output processors
+            determine whether the leading estimator dimension remains.
         """
-        if not self.supports_related_tables and related_tables is not None:
-            warnings.warn(
-                f"'{self.__class__.__name__}' does not support related tables",
-                stacklevel=2,
-            )
-            related_tables = None
+        if num_estimators < 1:
+            raise ValueError("'num_estimators' needs to be positive")
+        if not isinstance(x_context, TableTensor):
+            x_context = TableTensor.from_tensor(x_context)
+        if not isinstance(y_context, TableTensor):
+            y_context = TableTensor.from_tensor(y_context)
+        if not isinstance(x_query, TableTensor):
+            x_query = TableTensor.from_tensor(x_query)
 
-        # TODO Create an ensemble dimension to process across ensemble
-        # members for better efficiency.
-        outs: list[Tensor] = []
-        for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
-            out = self._forward(x_i, y_i, related_tables, cache=None)
-            out = self._postprocess(out, recipe)
+        if (related_context_tables is None) != (related_query_tables is None):
+            raise ValueError(
+                "Expected 'related_context_tables' and 'related_query_tables' "
+                "to be provided together"
+            )
+
+        if related_query_tables is not None:
+            assert related_context_tables is not None
+            related_query_tables = related_query_tables.select_tables(
+                tables=related_context_tables.tables
+            )
+
+        recipe = self.default_recipe() if recipe is None else recipe
+        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
+
+        outs: Sequence[TableTensor] = []
+        for recipe in recipes:
+            x_context_i = recipe.features.fit_transform(x_context)
+            y_context_i = recipe.target.fit_transform(y_context)
+            x_query_i = recipe.features.transform(x_query)
+
+            related_context_tables_i = related_query_tables_i = None
+            if related_context_tables is not None:
+                related_processors = {
+                    table_name: copy.deepcopy(recipe.features)
+                    for table_name in related_context_tables.tables
+                }
+                related_context_tables_i = replace(
+                    related_context_tables,
+                    tables={
+                        name: related_processors[name].fit_transform(t)
+                        for name, t in related_context_tables.tables.items()
+                    },
+                )
+                assert related_query_tables is not None
+                related_query_tables_i = replace(
+                    related_query_tables,
+                    tables={
+                        name: related_processors[name].transform(t)
+                        for name, t in related_query_tables.tables.items()
+                    },
+                )
+
+            self._validate_context(
+                x=x_context_i,
+                y=y_context_i,
+                related_tables=related_context_tables_i,
+            )
+            self._validate_query(
+                x_context=x_context_i.schema,
+                x_query=x_query_i,
+                related_context_tables=related_context_tables_i.schema
+                if related_context_tables_i is not None
+                else None,
+                related_query_tables=related_query_tables_i,
+            )
+
+            out = self._forward(
+                x_context=x_context_i,
+                y_context=y_context_i,
+                x_query=x_query_i,
+                related_context_tables=related_context_tables_i,
+                related_query_tables=related_query_tables_i,
+                cache=None,
+            )
+            if y_context_i.numerical.size(-1) == 1:
+                if not isinstance(recipe.target, InvertibleMixin):
+                    raise RuntimeError("Target recipe is not invertible")
+                out = recipe.target.inverse_transform(out)
             outs.append(out)
 
-        out = torch.stack(outs).mean(dim=0)
-        table = TableTensor.from_tensor(out.clone())
-        if recipe is None:
-            return table.numerical
-        return recipe.output.transform(table).numerical
+        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        return recipe.output.transform(out)
 
-    @torch.inference_mode()
+    @_maybe_inference_mode()
     def fit(
         self,
-        x: Tensor | TableTensor,  # [..., R_train, C]
-        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
+        x: Tensor | TableTensor,  # [..., R, D]
+        y: Tensor | TableTensor,  # [..., R, 1]
         related_tables: RelatedTables | None = None,
         *,
         recipe: Recipe | None = None,
@@ -110,222 +178,263 @@ class BaseModel(torch.nn.Module, ABC):
         r"""Fit and cache in-context examples.
 
         Repeated calls to :meth:`predict` can then reuse the same in-context
-        examples while only providing new test rows.
+        examples while only providing new query examples.
 
         Args:
-            x: The feature tensor with shape ``[..., R_train, C]`` with
-                ``R_train`` rows and ``C`` columns.
+            x: The feature tensor of in-context examples with shape
+                ``[..., R, D]`` with ``R`` rows and ``C`` columns.
             y: The targets of in-context examples with shape
-                ``[..., R_train]`` or ``[..., R_train, 1]``.
-            related_tables: Additional related context provided to the model.
+                ``[..., R, 1]``.
+            related_tables: Related context for in-context examples.
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
         """
-        if not self.supports_related_tables and related_tables is not None:
-            warnings.warn(
-                f"'{self.__class__.__name__}' does not support related tables",
-                stacklevel=2,
-            )
-            related_tables = None
+        if num_estimators < 1:
+            raise ValueError("'num_estimators' needs to be positive")
+        if not isinstance(x, TableTensor):
+            x = TableTensor.from_tensor(x)
+        if not isinstance(y, TableTensor):
+            y = TableTensor.from_tensor(y)
+
+        recipe = self.default_recipe() if recipe is None else recipe
+        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
 
         self.clear()
         caches: list[Cache] = []
-        for _ in range(num_estimators):
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(x, y, related_tables, recipe=recipe)
-            x_i = x_i[..., : y_i.size(-1), :]
+        for recipe in recipes:
+            x_i = recipe.features.fit_transform(x)
+            y_i = recipe.target.fit_transform(y)
 
-            # TODO Don't store y.dtype for every estimator.
-            cache = Cache({"y.dtype": y.dtype})
-            self._forward(x_i, y_i, related_tables, cache)
+            related_tables_i = None
+            related_processors = None
+            if related_tables is not None:
+                related_processors = {
+                    table_name: copy.deepcopy(recipe.features)
+                    for table_name in related_tables.tables
+                }
+                related_tables_i = replace(
+                    related_tables,
+                    tables={
+                        name: related_processors[name].fit_transform(t)
+                        for name, t in related_tables.tables.items()
+                    },
+                )
+
+            self._validate_context(
+                x=x_i,
+                y=y_i,
+                related_tables=related_tables_i,
+            )
+
+            cache = Cache(
+                recipe=recipe,
+                x_schema=x_i.schema,
+                related_processors=related_processors,
+                related_tables_schema=related_tables_i.schema
+                if related_tables_i is not None
+                else None,
+                classes=y_i.categorical.categories[0]
+                if y_i.categorical.size(-1) > 0
+                else None,
+            )
+
+            self._forward(
+                x_context=x_i,
+                y_context=y_i,
+                x_query=None,
+                related_context_tables=related_tables_i,
+                related_query_tables=None,
+                cache=cache,
+            )
             cache.freeze()
             caches.append(cache)
 
         self._caches = caches
-        # TODO: Once creating Recipes from a Recipe is supported, we should
-        # iterate over the recipes so that every predict call runs a consistent
-        # recipe per ensemble member.
-        self._recipe = recipe
 
     def clear(self) -> None:
         r"""Clears cached in-context examples and the fitted recipe."""
         self._caches = None
-        self._recipe = None
 
-    @torch.inference_mode()
+    @_maybe_inference_mode()
     def predict(
         self,
-        x: Tensor | TableTensor,  # [..., R_test, C]
+        x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
-    ) -> Tensor:  # [..., R_test, *]
-        r"""Predict unseen test examples.
+    ) -> TableTensor:  # Recipe-defined output shape.
+        r"""Predict unseen query examples.
 
         .. note::
 
             This method requires a prior call to :meth:`fit`.
 
         Args:
-            x: The feature tensor with shape ``[..., R_test, C]`` with
-                ``R_test`` rows and ``C`` columns.
-            related_tables: Additional related context provided to the model.
+            x: The feature tensor of query examples with shape
+                ``[..., R, D]`` with ``R`` rows and ``D`` columns.
+            related_tables: Related context for query examples.
 
         Returns:
-            The prediction for ``[..., R_test]`` test rows.
+            The processed prediction. Member outputs enter ``recipe.output``
+            stacked as ``[E, ..., R, *]``; the output processors determine
+            whether the leading estimator dimension remains.
         """
-        if not self.supports_related_tables and related_tables is not None:
-            warnings.warn(
-                f"'{self.__class__.__name__}' does not support related tables",
-                stacklevel=2,
-            )
-            related_tables = None
+        if not isinstance(x, TableTensor):
+            x = TableTensor.from_tensor(x)
 
         if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
-                f"'{self.__class__.__name__}.fit()' beforehand."
+                f"call '{self.__class__.__name__}.fit()' before."
             )
 
-        recipe = self._recipe
-        outs: list[Tensor] = []
+        if related_tables is not None:
+            if self._caches[0]["related_tables_schema"] is None:
+                raise ValueError(
+                    "Expected related tables to be provided together"
+                )
+            related_tables = related_tables.select_tables(
+                tables=cast(
+                    RelatedTablesSchema,
+                    self._caches[0]["related_tables_schema"],
+                ).tables,
+            )
+
+        outs: Sequence[TableTensor] = []
         for cache in self._caches:
-            y_i = torch.empty(
-                (*x.size()[:-2], 0),
-                dtype=cast(torch.dtype, self._caches[0]["y.dtype"]),
-                device=x.device,
+            recipe = cast(Recipe, cache["recipe"])
+            x_i = recipe.features.transform(x)
+
+            related_tables_i = None
+            if related_tables is not None:
+                related_processors = cast(
+                    Mapping[str, Processor],
+                    cache["related_processors"],
+                )
+                related_tables_i = replace(
+                    related_tables,
+                    tables={
+                        name: related_processors[name].transform(t)
+                        for name, t in related_tables.tables.items()
+                    },
+                )
+
+            self._validate_query(
+                x_context=cast(TableSchema, cache["x_schema"]),
+                x_query=x_i,
+                related_context_tables=cast(
+                    RelatedTablesSchema,
+                    cache["related_tables_schema"],
+                ),
+                related_query_tables=related_tables_i,
             )
-            # TODO Iterate over Recipes instead of using a single recipe once
-            # Recipe adds support for multiple recipes.
-            x_i, y_i = self._preprocess(
-                x,
-                y_i,
-                related_tables,
-                recipe=recipe,
-                fit_recipe=False,
+
+            out = self._forward(
+                x_context=None,
+                y_context=None,
+                x_query=x_i,
+                related_context_tables=None,
+                related_query_tables=related_tables_i,
+                cache=cache,
             )
-            out = self._forward(x_i, y_i, related_tables, cache)
-            out = self._postprocess(out, recipe)
+            if cache["classes"] is None:
+                if not isinstance(recipe.target, InvertibleMixin):
+                    raise RuntimeError("Target recipe is not invertible")
+                out = recipe.target.inverse_transform(out)
             outs.append(out)
 
-        out = torch.stack(outs).mean(dim=0)
-        table = TableTensor.from_tensor(out.clone())
-        if recipe is None:
-            return table.numerical
-        return recipe.output.transform(table).numerical
-
-    # Helpers #################################################################
-
-    def _preprocess(
-        self,
-        x: Tensor | TableTensor,  # [..., R, C]
-        y: Tensor | TableTensor,  # [..., R_train] or [..., R_train, 1]
-        related_tables: RelatedTables | None,
-        *,
-        recipe: Recipe | None = None,
-        fit_recipe: bool = True,
-    ) -> tuple[Tensor, Tensor]:
-        if related_tables is not None:
-            # TODO Support preprocessing related tables.
-            related_tables = None
-
-        if recipe is not None:
-            if not isinstance(x, TableTensor):
-                raise ValueError(
-                    f"Expected 'x' to be a 'TableTensor' when 'recipe' is "
-                    f"given (got '{type(x).__name__}')"
-                )
-            if fit_recipe:
-                if not isinstance(y, TableTensor):
-                    raise ValueError(
-                        f"Expected 'y' to be a 'TableTensor' when "
-                        f"'recipe' is given (got '{type(y).__name__}')"
-                    )
-                # Fit on the in-context rows only to avoid leakage:
-                recipe.features.fit(x[..., : y.size(-2), :])
-                y = recipe.target.fit_transform(y)
-
-            x = recipe.features.transform(x)
-
-        if isinstance(x, TableTensor):
-            invalid_columns = x.size(-1) - x.numerical.size(-1) - x.id.size(-1)
-            if invalid_columns > 0:
-                invalid_stypes = [
-                    stype.value
-                    for stype, tensor in x.items()
-                    if tensor.size(-1) > 0
-                    and stype not in (Stype.numerical, Stype.id)
-                ]
-                warnings.warn(
-                    f"Expected 'x' to only hold numerical columns but also "
-                    f"found {'/'.join(invalid_stypes)} data. "
-                    f"This data will be ignored. "
-                    f"Make sure that your recipe converts such types to "
-                    f"numerical data to include them as features.",
-                    stacklevel=2,
-                )
-            x = x.numerical
-
-        if isinstance(y, TableTensor):
-            if y.size(-1) != 1:
-                raise ValueError(
-                    f"Expected 'y' to refer to a single column "
-                    f"(got {y.size(-1)} columns)"
-                )
-
-            if y.categorical.numel() > 0:
-                y = y.categorical
-                if isinstance(y, CategoricalTensor):
-                    y = y.as_tensor()
-            else:
-                assert y.numerical.numel() > 0
-                y = y.numerical
-
-        if x.dim() == y.dim() and y.size(-1) == 1:
-            y = y.squeeze(-1)
-
-        if x.size()[:-2] != y.size()[:-1]:
-            raise ValueError(
-                f"Expected 'x' and 'y' to share the same batch dimensions "
-                f"(got {tuple(x.size()[:-2])} and {tuple(y.size()[:-1])}"
-            )
-
-        return x, y
-
-    def _postprocess(
-        self,
-        out: Tensor,  # [..., R_test, *]
-        recipe: Recipe | None,
-    ) -> Tensor:  # [..., R_test, *]
-        if recipe is None:
-            return out
-
-        if not isinstance(recipe.target, InvertibleMixin):
-            raise ValueError(
-                f"Expected the target steps of 'recipe' to support "
-                f"'inverse_transform' to map predictions back to the "
-                f"original target space "
-                f"(got '{recipe.target.__class__.__name__}')"
-            )
-
-        table = TableTensor.from_tensor(out.clone())
-        table = recipe.target.inverse_transform(table)
-
-        return table.numerical
+        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        return recipe.output.transform(out)
 
     # Abstract Methods ########################################################
 
     @abstractmethod
     def _forward(
         self,
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
-        related_tables: RelatedTables | None,
+        x_context: TableTensor | None,  # [..., R_context, D]
+        y_context: TableTensor | None,  # [..., R_context, 1]
+        x_query: TableTensor | None,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:  # [..., R - R_train, *]
+    ) -> TableTensor:  # [..., R_query, *]
         pass
 
     @classmethod
     @abstractmethod
     def default_recipe(cls) -> Recipe:
         r"""Return the default processing recipe for this model."""
+
+    # Helpers #################################################################
+
+    def _validate_context(
+        self,
+        x: TableTensor,
+        y: TableTensor,
+        related_tables: RelatedTables | None,
+    ) -> None:
+
+        if y.size(-1) != 1:
+            raise ValueError(
+                f"Expected target to have exactly one column "
+                f"(got {y.size(-1)})"
+            )
+        if x.size()[:-1] != y.size()[:-1]:
+            raise ValueError(
+                f"Expected features and targets to have matching row "
+                f"dimensions (got {tuple(x.size()[:-1])} and "
+                f"{tuple(y.size()[:-1])})"
+            )
+        invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
+        if len(invalid) > 0:
+            raise ValueError(
+                f"'{self.__class__.__name__}' received unsupported feature "
+                f"stypes: {', '.join(stype.value for stype in invalid)}"
+            )
+        invalid = y.active_stypes - self.supported_target_stypes
+        if len(invalid) > 0:
+            raise ValueError(
+                f"'{self.__class__.__name__}' received unsupported target "
+                f"stypes: {', '.join(stype.value for stype in invalid)}"
+            )
+
+        if related_tables is not None:
+            if not self.supports_related_tables:
+                raise ValueError(
+                    f"'{self.__class__.__name__}' does not support related "
+                    f"tables"
+                )
+            for table_name, table in related_tables.tables.items():
+                invalid = table.active_stypes - self.supported_feature_stypes
+                invalid = invalid - {Stype.id}
+                if len(invalid) > 0:
+                    raise ValueError(
+                        f"'{self.__class__.__name__}' received unsupported "
+                        f"feature stypes in related table '{table_name}': "
+                        f"{', '.join(stype.value for stype in invalid)}"
+                    )
+
+    def _validate_query(
+        self,
+        x_context: TableSchema,
+        x_query: TableTensor,
+        related_context_tables: RelatedTablesSchema | None,
+        related_query_tables: RelatedTables | None,
+    ) -> None:
+
+        if x_context != x_query.schema:
+            raise ValueError(
+                "Expected context and query features to share the same schema"
+            )
+
+        if (related_context_tables is None) != (related_query_tables is None):
+            raise ValueError("Expected related tables to be provided together")
+
+        if related_context_tables is not None:
+            assert related_query_tables is not None
+            if not related_query_tables.schema.is_subset_of(
+                related_context_tables
+            ):
+                raise ValueError(
+                    "Expected related context and query tables to share the "
+                    "same schema"
+                )

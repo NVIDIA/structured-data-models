@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+import torch
 from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
@@ -29,19 +30,32 @@ class _TaskResolver(Processor, InvertibleMixin):
         self.processor = processor
         self._task_dispatchers = task_dispatchers
 
-    def fit(self, input: TableTensor) -> Self:
-        self.fit_transform(input)
+    def fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        self.fit_transform(table, generator=generator)
         return self
 
-    def fit_transform(self, input: TableTensor) -> TableTensor:
-        self._check_supported_stypes(input)
+    def fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        self._check_supported_stypes(table)
         self._fitted = False
         for task_dispatcher in self._task_dispatchers:
             task_dispatcher._reset()
 
         succeeded = False
         try:
-            target = self.processor.fit_transform(input)
+            target = self.processor.fit_transform(
+                table,
+                generator=generator,
+            )
             for task_dispatcher in self._task_dispatchers:
                 task_dispatcher._resolve(target)
             self._fitted = True
@@ -52,17 +66,17 @@ class _TaskResolver(Processor, InvertibleMixin):
                 for task_dispatcher in self._task_dispatchers:
                     task_dispatcher._reset()
 
-    def _transform(self, input: TableTensor) -> TableTensor:
-        return self.processor.transform(input)
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return self.processor.transform(table)
 
-    def _inverse_transform(self, input: TableTensor) -> TableTensor:
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
         fn = getattr(self.processor, "inverse_transform", None)
         if not callable(fn):
             raise AttributeError(
                 f"'{self.processor.__class__.__name__}' object has no "
                 "attribute 'inverse_transform'"
             )
-        return fn(input)
+        return fn(table)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.processor.__repr__(indent=indent)
@@ -76,9 +90,15 @@ class Recipe:
     relative to the model:
 
     - ``features``: model inputs, transformed before the model.
-    - ``target``: labels, transformed forward before the model and inverted
-      after it (predictions back to the original space).
-    - ``output``: shape-preserving cleanup of the model output.
+    - ``target``: labels transformed forward before the model. Regression
+      predictions are inverted through this pipeline; classification outputs
+      are reconstructed from the fitted target categories instead.
+    - ``output``: transforms member outputs after they have been mapped to a
+      common class or target space and stacked as ``[E, ..., R, O]``. An
+      explicit dimension-changing step such as
+      :class:`~sdm.processing.EnsembleReduce` removes ``E``; without one,
+      the output remains stacked. Steps before the reducer must support
+      stacked outputs, while steps after it receive already-reduced outputs.
 
     Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
     steps are invertible, ``inverse_transform``. Call them directly, e.g.
@@ -92,9 +112,11 @@ class Recipe:
 
     Args:
         features: Steps applied to model inputs before the model.
-        target: Steps applied to labels; transformed forward before the model
-            and inverted after it.
-        output: Steps applied to model output after the target inverse.
+        target: Steps applied to labels. Invertible numerical target steps map
+            regression output back to the original space.
+        output: Steps applied to stacked member outputs after member-local
+            mappings. Estimator reduction, when desired, is an explicit step
+            in this pipeline.
     """
 
     features: Processor

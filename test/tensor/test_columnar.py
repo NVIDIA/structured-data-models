@@ -109,6 +109,24 @@ def test_to_arrow() -> None:
     }
 
 
+@onlyCUDA
+def test_to_cudf() -> None:
+    pytest.importorskip("cudf")
+
+    column1 = torch.arange(6, device="cuda").view(2, 3)
+    column2 = StringTensor.from_list(
+        [["a", "b", "c"], ["d", "e", "f"]], device="cuda"
+    )
+    tensor = ColumnarTensor((column1, column2))
+
+    df = tensor.to_cudf()
+    assert df.columns.tolist() == ["0", "1"]
+    assert df.to_arrow().to_pydict() == {
+        "0": [0, 1, 2, 3, 4, 5],
+        "1": ["a", "b", "c", "d", "e", "f"],
+    }
+
+
 def test_save_load() -> None:
     tensor = ColumnarTensor((torch.arange(3),))
 
@@ -347,8 +365,18 @@ def test_pin_memory() -> None:
     )
 
     assert not tensor.is_pinned()
-    if torch.cuda.is_available():
-        assert tensor.pin_memory().is_pinned()
+
+
+@onlyCUDA
+def test_pin_memory_cuda() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.randn(2, 3),
+            torch.arange(6).view(2, 3),
+        )
+    )
+
+    assert tensor.pin_memory().is_pinned()
 
 
 def test_share_memory() -> None:

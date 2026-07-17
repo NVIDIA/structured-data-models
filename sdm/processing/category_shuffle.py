@@ -8,15 +8,14 @@ from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
 
-class ClassShuffle(Processor):
+class CategoryShuffle(Processor):
     """Independently permute the integer codes of categorical columns.
 
-    One permutation per categorical column is drawn from the global CPU
-    generator when the processor is fitted; seed with
-    :func:`torch.manual_seed` to make the draws reproducible. Codes and their
-    corresponding category vectors are permuted together so decoded values
-    remain unchanged. Negative codes represent missing values and are
-    preserved unchanged. Only categorical columns are supported; use
+    One permutation per categorical column is drawn when the processor is
+    fitted; pass ``generator`` to ``fit()`` to make the draws reproducible.
+    Codes and their corresponding category vectors are permuted together so
+    decoded values remain unchanged. Negative codes represent missing values
+    and are preserved unchanged. Only categorical columns are supported; use
     :class:`~sdm.processing.StypeDispatch` to apply this processor to the
     categorical block of a mixed feature table.
 
@@ -45,21 +44,37 @@ class ClassShuffle(Processor):
             torch.zeros(1, dtype=torch.long),
         )
 
-    def _fit(self, input: TableTensor) -> None:
-        device = input.categorical.device
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        device = table.categorical.device
         permutations: list[Tensor] = []
         offsets = [0]
-        for category in input.categorical.categories:
+        for category in table.categorical.categories:
             n_classes = category.numel()
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
             elif self.method == "shift":
-                offset = int(torch.randint(n_classes, (1,)).item())
+                offset = int(
+                    torch.randint(
+                        n_classes,
+                        (1,),
+                        generator=generator,
+                        device=device,
+                    ).item()
+                )
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
             else:
-                permutation = torch.randperm(n_classes).to(device=device)
+                permutation = torch.randperm(
+                    n_classes,
+                    generator=generator,
+                    device=device,
+                )
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 
@@ -74,11 +89,11 @@ class ClassShuffle(Processor):
             device=device,
         )
 
-    def _transform(self, input: TableTensor) -> TableTensor:
+    def _transform(self, table: TableTensor) -> TableTensor:
         offsets = self.offsets.tolist()
-        data = input.categorical.as_tensor().clone()
+        data = table.categorical.as_tensor().clone()
         categories: list[Tensor] = []
-        for index, category in enumerate(input.categorical.categories):
+        for index, category in enumerate(table.categorical.categories):
             permutation = self.permutations[
                 offsets[index] : offsets[index + 1]
             ]
@@ -100,4 +115,4 @@ class ClassShuffle(Processor):
             data=data,
             categories=categories,
         )
-        return input.replace_blocks(categorical=categorical)
+        return table.replace_blocks(categorical=categorical)

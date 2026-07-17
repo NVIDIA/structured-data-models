@@ -6,12 +6,16 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pyarrow as pa
 import torch
+from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import VarLenTensor
+from sdm.tensor.io import arrow_as_tensor
 
 if TYPE_CHECKING:
     import cudf
+
+aten = torch.ops.aten
 
 
 class StringTensor(VarLenTensor):
@@ -110,6 +114,34 @@ class StringTensor(VarLenTensor):
             offset=int(tensor.storage_offset()),
         )
 
+    def to_cudf(self) -> cudf.Series:
+        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`."""
+        if not self.is_cuda:
+            raise RuntimeError(
+                f"Expected tensor to be on a CUDA device (got '{self.device}')"
+            )
+
+        tensor = cast(StringTensor, self.contiguous())
+
+        with torch.cuda.device(self.device):
+            import cudf
+            import pylibcudf as plc
+
+            # StringTensor stores variable-width strings in separate UTF-8
+            # data and offset buffers. Use pylibcudf to expose them without a
+            # host copy.
+            offset_column = plc.Column.from_array(obj=tensor._offset)
+            plc_column = plc.Column(
+                data_type=plc.DataType(plc.TypeId.STRING),
+                size=tensor.numel(),
+                data=plc.gpumemoryview(tensor._data),
+                mask=None,
+                null_count=0,
+                offset=int(tensor.storage_offset()),
+                children=[offset_column],
+            )
+            return cudf.Series.from_pylibcudf(plc_column)
+
     @classmethod
     def from_cudf(
         cls,
@@ -126,6 +158,7 @@ class StringTensor(VarLenTensor):
             device: The device.
         """
         import cupy as cp
+        import pylibcudf as plc
         from cudf.api.types import is_string_dtype
 
         if size is None:
@@ -142,24 +175,38 @@ class StringTensor(VarLenTensor):
                 f"string type (got '{ser.dtype}')"
             )
 
-        column = ser._column
-        if column.null_count > 0:
+        # `Series.to_pylibcudf` returns a zero-copy Arrow-style view: base
+        # character/offset buffers plus a row offset into the offsets.
+        column, _ = ser.to_pylibcudf()
+        if column.null_count() > 0:
             raise ValueError(f"'{cls.__name__}' cannot represent null values")
 
+        # `None` or zero-length when the column holds no characters:
+        chars = column.data()
+        data = torch.from_dlpack(
+            cp.asarray(chars) if chars is not None else cp.empty(0, cp.uint8)
+        ).to(device)
+
         if len(ser) == 0:
-            data = torch.from_dlpack(cp.asarray(column.data)).to(device)
             return cls(
                 data=data,
                 offset=torch.zeros(1, dtype=torch.int32, device=data.device),
                 size=size,
             )
 
+        offsets = column.children()[0]  # (base_size + 1,) INT32/INT64 values
+        offset_dtype = (
+            cp.int32
+            if offsets.type().id() == plc.types.TypeId.INT32
+            else cp.int64
+        )
         return cls(
-            data=torch.from_dlpack(cp.asarray(column.data)).to(device),
-            offset=torch.from_dlpack(cp.asarray(column.children[0])).to(
-                device
-            ),
+            data=data,
+            offset=torch.from_dlpack(
+                cp.asarray(offsets.data()).view(offset_dtype)
+            ).to(device),
             size=size,
+            storage_offset=column.offset(),
         )
 
     @classmethod
@@ -259,3 +306,35 @@ class StringTensor(VarLenTensor):
             out += f", device={self.device}"
         out += ")"
         return out
+
+
+@StringTensor.implements(aten.sort.default)
+@StringTensor.implements(aten.sort.stable)
+def _sort(
+    inp: StringTensor,
+    dim: int = -1,
+    descending: bool = False,
+    *,
+    stable: bool | None = None,
+) -> tuple[StringTensor, Tensor]:
+    if dim < -inp.dim() or dim >= inp.dim():
+        raise IndexError(
+            f"Dimension out of range (expected to be in range of "
+            f"[{-inp.dim()}, {inp.dim() - 1}], but got {dim})"
+        )
+
+    if inp.dim() != 1:
+        raise NotImplementedError("'sort' only supports one-dimensional input")
+
+    import pyarrow.compute as pc
+
+    out = pc.call_function(  # TODO Add GPU implementation
+        "array_sort_indices",
+        [inp.to_arrow()],
+        options=pc.ArraySortOptions(
+            order="descending" if descending else "ascending",
+        ),
+    )
+    perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
+
+    return cast(StringTensor, inp[perm]), perm

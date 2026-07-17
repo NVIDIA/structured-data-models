@@ -1,14 +1,24 @@
-from collections.abc import Collection, Mapping, Sequence
+from __future__ import annotations
+
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
+from torch import Tensor
 from typing_extensions import Self
 
 from sdm import TableTensor
-from sdm.relational import Relationship
-from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
+from sdm.relational import RelationalData, Relationship
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
 from sdm.tensor.mixin import DeviceMixin
+from sdm.tensor.table import TableSchema
+
+if TYPE_CHECKING:
+    import graphviz
+
+
+TASK_TABLE = "__task_table__"
 
 
 @dataclass(frozen=True, repr=False)
@@ -21,9 +31,9 @@ class TaskLink:
         table_columns: Column names in ``table``.
     """
 
-    task_columns: Sequence[str]
+    task_columns: tuple[str, ...]
     table: str
-    table_columns: Sequence[str]
+    table_columns: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if len(self.task_columns) != len(self.table_columns):
@@ -39,7 +49,7 @@ class TaskLink:
             )
 
         for column in (*self.task_columns, *self.table_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
                         f"Column name '{column}' is reserved for internal "
@@ -72,23 +82,60 @@ class TaskLink:
             table_columns = (table_columns,)
 
         return cls(
-            task_columns=task_columns,
+            task_columns=tuple(task_columns),
             table=table,
-            table_columns=table_columns,
+            table_columns=tuple(table_columns),
         )
 
     def _task_columns_repr(self) -> str:
         if len(self.task_columns) == 1:
             return self.task_columns[0]
-        return f"[{', '.join(self.task_columns)}]"
+        return f"[{','.join(self.task_columns)}]"
 
     def _table_columns_repr(self) -> str:
         if len(self.table_columns) == 1:
             return f"{self.table}.{self.table_columns[0]}"
-        return f"{self.table}.[{', '.join(self.table_columns)}]"
+        return f"{self.table}.[{','.join(self.table_columns)}]"
 
     def __repr__(self) -> str:
-        return f"{self._task_columns_repr()}->{self._table_columns_repr()}"
+        return f"{self._task_columns_repr()} > {self._table_columns_repr()}"
+
+
+@dataclass(frozen=True)
+class RelatedTablesSchema:
+    r"""The schema of :class:`RelatedTables`.
+
+    Args:
+        tables: Table schema keyed by table name.
+        relationships: Join relationships among ``tables``.
+        task_links: Links from task columns to related ``tables``.
+    """
+
+    tables: Mapping[str, TableSchema]
+    relationships: tuple[Relationship, ...]
+    task_links: tuple[TaskLink, ...]
+
+    def is_subset_of(self, other: RelatedTablesSchema) -> bool:
+        r"""Whether this schema is an induced subset of ``other``."""
+        for table_name, schema in self.tables.items():
+            if schema != other.tables.get(table_name):
+                return False
+
+        other_relationships = {
+            relationship
+            for relationship in other.relationships
+            if relationship.left_table in self.tables
+            and relationship.right_table in self.tables
+        }
+        if set(self.relationships) != other_relationships:
+            return False
+
+        other_task_links = {
+            task_link
+            for task_link in other.task_links
+            if task_link.table in self.tables
+        }
+        return set(self.task_links) == other_task_links
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -98,7 +145,7 @@ class RelatedTables(DeviceMixin):
     :class:`RelatedTables` store the relational context provided to a model
     for a particular task table.
     It may contain a sampled subset of a larger :class:`RelationalData`.
-    The ``task_link`` describes how rows in the model input match rows in
+    The ``task_links`` describe how rows in the model input match to rows in
     the related tables.
 
     .. code-block:: python
@@ -169,7 +216,8 @@ class RelatedTables(DeviceMixin):
             if table.dim() != 2:
                 raise ValueError("Tables need to be two-dimensional")
 
-    def to(self, device: torch.device | str | None) -> Self:  # noqa: D102
+    def to(self, device: torch.device | str | None) -> Self:
+        r""":meta private:"""  # noqa: D415
         return self.__class__(
             tables={
                 table_name: cast(TableTensor, table.to(device))
@@ -180,7 +228,8 @@ class RelatedTables(DeviceMixin):
         )
 
     @property
-    def device(self) -> torch.device:  # noqa: D102
+    def device(self) -> torch.device:
+        r""":meta private:"""  # noqa: D415
         devices = {table.device for table in self.tables.values()}
         if len(devices) == 0:
             raise RuntimeError(
@@ -193,6 +242,127 @@ class RelatedTables(DeviceMixin):
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
+
+    @property
+    def schema(self) -> RelatedTablesSchema:
+        r"""The schema of this related context."""
+        return RelatedTablesSchema(
+            tables={name: table.schema for name, table in self.tables.items()},
+            relationships=self.relationships,
+            task_links=self.task_links,
+        )
+
+    def is_same_schema(self, other: RelatedTables) -> bool:
+        r"""Whether ``other`` has the same schema layout.
+
+        Args:
+            other: The object to compare against.
+        """
+        return self.schema == other.schema
+
+    def select_tables(self, tables: Iterable[str]) -> Self:
+        r"""Return related tables containing only ``tables``.
+
+        Args:
+            tables: The table names to select.
+        """
+        tables = set(tables)
+
+        return self.__class__(
+            tables={
+                table_name: table
+                for table_name, table in self.tables.items()
+                if table_name in tables
+            },
+            relationships=tuple(
+                relationship
+                for relationship in self.relationships
+                if relationship.left_table in tables
+                and relationship.right_table in tables
+            ),
+            task_links=tuple(
+                task_link
+                for task_link in self.task_links
+                if task_link.table in tables
+            ),
+        )
+
+    def edge_indices(
+        self,
+        task_table: TableTensor,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+    ) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...]]:
+        r"""Materialize heterogeneous graph edges for table relationships.
+
+        Args:
+            task_table: The task table.
+            dtype: The dtype.
+            device: The device.
+
+        Returns:
+            A ``(relationships, task_links)`` pair, each holding edge indices
+            for each relationship and task link in order.
+            Each edge index has shape ``[2, num_edges]`` and stores left/task
+            table indices in the first row and right table indices in the
+            second row.
+        """
+        edge_indices = RelationalData(
+            tables={**self.tables, TASK_TABLE: task_table},
+            relationships=(
+                *self.relationships,
+                *(
+                    Relationship(
+                        left_table=TASK_TABLE,
+                        left_columns=link.task_columns,
+                        right_table=link.table,
+                        right_columns=link.table_columns,
+                    )
+                    for link in self.task_links
+                ),
+            ),
+        ).edge_indices(dtype=dtype, device=device)
+
+        return (
+            edge_indices[: len(self.relationships)],
+            edge_indices[len(self.relationships) :],
+        )
+
+    def to_graphviz(
+        self,
+        *,
+        hide_columns: bool = False,
+        **kwargs: Any,
+    ) -> graphviz.Graph:
+        r"""Return a task visualization of the relational schema.
+
+        Args:
+            hide_columns: Whether to hide column name descriptions.
+            **kwargs: Additional keyword arguments passed to
+                :class:`graphviz.Graph`.
+        """
+        graph = RelationalData(
+            tables=self.tables,
+            relationships=self.relationships,
+        ).to_graphviz(hide_columns=hide_columns, **kwargs)
+
+        graph.node(TASK_TABLE, label="", shape="point")
+
+        for link in self.task_links:
+            label = "\\n".join(
+                f" {task_column} > {table_column} "
+                for task_column, table_column in zip(
+                    link.task_columns, link.table_columns
+                )
+            )
+            graph.edge(
+                TASK_TABLE,
+                link.table,
+                label=label,
+                fontsize="11pt",
+            )
+
+        return graph
 
     def __repr__(self) -> str:
         out = f"{self.__class__.__name__}(\n"

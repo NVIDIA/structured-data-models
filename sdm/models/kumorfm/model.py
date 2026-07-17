@@ -2,15 +2,15 @@
 from typing import ClassVar
 
 import torch
-from torch import Tensor
 
-from sdm import RelatedTables
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import BaseModel
+from sdm.models import ICLModel
+from sdm.models.kumorfm.recipe import default_recipe
 from sdm.processing import Recipe
 
 
-class KumoRFM(BaseModel):
+class KumoRFM(ICLModel):
     r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
     Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
@@ -25,6 +25,14 @@ class KumoRFM(BaseModel):
     """
 
     #:
+    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical}
+    )
+    #:
+    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical, Stype.categorical}
+    )
+    #:
     supports_related_tables: ClassVar[bool] = True
 
     def __init__(
@@ -36,17 +44,16 @@ class KumoRFM(BaseModel):
 
     def _forward(
         self,
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
-        related_tables: RelatedTables | None,
+        x_context: TableTensor | None,  # [..., R_context, D]
+        y_context: TableTensor | None,  # [..., R_context, 1]
+        x_query: TableTensor | None,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:  # [..., R - R_train, *]
-        return torch.empty(
-            (*x.size()[:-2], x.size(-2) - y.size(-1), 10),
-            device=x.device,
-        )
+    ) -> TableTensor:  # [..., R_query, *]
+        raise NotImplementedError
 
     @classmethod
     def default_recipe(cls) -> Recipe:
         r""":meta private:"""  # noqa: D415
-        raise NotImplementedError
+        return default_recipe()
