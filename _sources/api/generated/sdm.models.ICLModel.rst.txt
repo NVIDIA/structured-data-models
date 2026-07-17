@@ -1,8 +1,8 @@
-﻿Model
-=====
+﻿ICLModel
+========
 
 .. currentmodule:: sdm.models
 
-.. autoclass:: Model
+.. autoclass:: ICLModel
    :members:
    :show-inheritance:
