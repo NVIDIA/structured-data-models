@@ -98,9 +98,11 @@ class Recipe:
     Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
     steps are invertible, ``inverse_transform``. Call them directly, e.g.
     ``recipe.features.transform(table)`` or
-    ``recipe.target.inverse_transform(prediction)``. When ``output`` contains
-    :class:`~sdm.processing.TaskDispatch`, fitting ``target`` also selects its
-    task-specific output route.
+    ``recipe.target.inverse_transform(prediction)``. Recipes do not infer each
+    step's non-finite input contract; order steps so values are imputed before
+    processors that do not explicitly document non-finite support. When
+    ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
+    ``target`` also selects its task-specific output route.
 
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
