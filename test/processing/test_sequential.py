@@ -1,3 +1,4 @@
+import inspect
 import pickle
 from textwrap import dedent
 from typing import Any, cast
@@ -155,9 +156,26 @@ def test_repr() -> None:
           StandardScale(),
           Power(),
         )""")
+    pipeline = Sequential(
+        lambda x: x.squeeze(-1),  # ty: ignore[invalid-argument-type]
+    )
+    assert repr(pipeline) == dedent("""\
+        Sequential(
+          lambda x: x.squeeze(-1),
+        )""")
+
+
+def test_lambda_repr_falls_back_when_source_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable_source(_: object) -> str:
+        raise OSError
+
+    monkeypatch.setattr(inspect, "getsource", unavailable_source)
+
     assert repr(Sequential(lambda table: table)) == dedent("""\
         Sequential(
-          <lambda>,
+          lambda,
         )""")
 
 

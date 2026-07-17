@@ -42,7 +42,7 @@ def test_choice_accepts_callable_option() -> None:
 
     assert not choice.selected.requires_fit
     assert torch.equal(output.numerical, table.numerical.square())
-    assert "<lambda>" in repr(choice)
+    assert "lambda table: table.replace_blocks" in repr(choice)
 
     with pytest.raises(AttributeError, match="inverse_transform"):
         choice.inverse_transform(output)
