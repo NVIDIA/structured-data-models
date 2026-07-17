@@ -231,7 +231,7 @@ class Power(Processor, InvertibleMixin):
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
-            transformed = self._yeojohnson_transform(numerical)
+            transformed = _yeojohnson_transform(numerical, self.lambdas)
             self.mean, var = _nan_mean_var(transformed)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
@@ -239,9 +239,6 @@ class Power(Processor, InvertibleMixin):
         else:
             self.mean = numerical.new_zeros(n_features)
             self.scale = numerical.new_ones(n_features)
-
-    def _yeojohnson_transform(self, inp: Tensor) -> Tensor:
-        return _yeojohnson_transform(inp, self.lambdas)
 
     def _yeojohnson_inverse_transform(self, inp: Tensor) -> Tensor:
         inverse = inp.clone()
@@ -255,7 +252,7 @@ class Power(Processor, InvertibleMixin):
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
         numerical = _as_float(table.numerical)
-        transformed = self._yeojohnson_transform(numerical)
+        transformed = _yeojohnson_transform(numerical, self.lambdas)
         numerical = (transformed - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical)
 
