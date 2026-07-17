@@ -5,7 +5,7 @@ import pytest
 import torch
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import Model
+from sdm.models import ICLModel
 from sdm.processing import Processor, Recipe, StandardScale, StypeDispatch
 
 
@@ -17,7 +17,7 @@ class _Call:
     related_query_tables: RelatedTables | None
 
 
-class _RecordingModel(Model):
+class _RecordingModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables: ClassVar[bool] = True

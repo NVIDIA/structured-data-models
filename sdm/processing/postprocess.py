@@ -11,6 +11,9 @@ from sdm.tensor import TableTensor
 class SoftmaxTemperature(Processor):
     """Apply softmax to logits after temperature scaling.
 
+    Softmax acts on the final class dimension and preserves all leading
+    dimensions, so it supports both stacked and reduced estimator outputs.
+
     Args:
         temperature: Positive divisor applied to logits before softmax;
             higher values produce a softer distribution.

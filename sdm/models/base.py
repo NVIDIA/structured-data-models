@@ -31,10 +31,10 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-class Model(torch.nn.Module, ABC):
+class ICLModel(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
-    :class:`Model` defines the public interface shared among in-context
+    :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
@@ -61,7 +61,7 @@ class Model(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-    ) -> TableTensor:  # [..., R_query, *]
+    ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
 
         Args:
@@ -78,7 +78,9 @@ class Model(torch.nn.Module, ABC):
             num_estimators: The number of estimators for ensembling.
 
         Returns:
-            The prediction ``[..., R_query, *]`` for all query examples.
+            The processed prediction. Member outputs enter ``recipe.output``
+            stacked as ``[E, ..., R_query, *]``; the output processors
+            determine whether the leading estimator dimension remains.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -259,7 +261,7 @@ class Model(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
-    ) -> TableTensor:  # [..., R, *]
+    ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
 
         .. note::
@@ -272,7 +274,9 @@ class Model(torch.nn.Module, ABC):
             related_tables: Related context for query examples.
 
         Returns:
-            The prediction ``[..., R, *]`` for all query examples.
+            The processed prediction. Member outputs enter ``recipe.output``
+            stacked as ``[E, ..., R, *]``; the output processors determine
+            whether the leading estimator dimension remains.
         """
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)

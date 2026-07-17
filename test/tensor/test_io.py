@@ -28,5 +28,5 @@ def test_to_cudf_noncontiguous() -> None:
 
 
 def test_to_cudf_requires_cuda() -> None:
-    with pytest.raises(ValueError, match="CUDA-resident"):
+    with pytest.raises(ValueError, match="on a CUDA device"):
         to_cudf(torch.arange(3))
