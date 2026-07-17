@@ -111,7 +111,7 @@ class Quantile(Processor, InvertibleMixin):
         else:
             input_sample = numerical
 
-        self.quantiles = torch.nanquantile(
+        self.quantiles = torch.quantile(
             input_sample,
             self.references,
             dim=0,
