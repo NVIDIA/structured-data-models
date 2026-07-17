@@ -1488,12 +1488,17 @@ def _align_like(inp: TableTensor, ref: TableTensor) -> TableTensor:
             column_to_index = {
                 column: i for i, column in enumerate(inp._columns[stype])
             }
-            index = torch.tensor(
-                [column_to_index[column] for column in ref_columns],
-                dtype=torch.int64,
-                device=inp.blocks[stype].device,
-            )
-            blocks[stype] = inp.blocks[stype].index_select(-1, index)
+            indices = [column_to_index[column] for column in ref_columns]
+            block = inp.blocks[stype]
+            if indices == list(range(len(inp._columns[stype]))):
+                blocks[stype] = block
+            elif len(indices) == 1:
+                blocks[stype] = block.narrow(-1, indices[0], 1)
+            else:
+                blocks[stype] = torch.cat(
+                    [block.narrow(-1, index, 1) for index in indices],
+                    dim=-1,
+                )
         else:
             blocks[stype] = inp.blocks[stype]
 
