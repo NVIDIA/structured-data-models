@@ -14,14 +14,16 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from sdm import Stype
+from sdm import Stype, TableTensor
 from sdm.processing import (
     CategoricalAlign,
     CategoryShuffle,
     Clip,
+    FeaturePermute,
     Power,
     Quantile,
     SigmaClip,
+    SoftmaxTemperature,
     StandardScale,
 )
 from sdm.processing.sigma_clip import _nanstd
@@ -273,17 +275,25 @@ def _nan_mean_var(inp: Tensor) -> tuple[Tensor, Tensor]:
     )
 
 
-def _standard_scale_fit_transform(
+def _standard_scale_fit_state(
     inp: Tensor,
     *,
     epsilon: float,
-) -> tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor]:
     mean = inp.mean(dim=0)
     if inp.size(0) > 1:
         scale = inp.var(dim=0, correction=0).sqrt()
     else:
         scale = inp.new_zeros(inp.shape[1])
-    scale = scale + epsilon
+    return mean, scale + epsilon
+
+
+def _standard_scale_fit_transform(
+    inp: Tensor,
+    *,
+    epsilon: float,
+) -> tuple[Tensor, Tensor, Tensor]:
+    mean, scale = _standard_scale_fit_state(inp, epsilon=epsilon)
     return (inp - mean) / scale, mean, scale
 
 
@@ -295,11 +305,11 @@ def _standard_scale_inverse(
     return inp * scale + mean
 
 
-def _sigma_clip_fit_transform(
+def _sigma_clip_fit_state(
     inp: Tensor,
     *,
     threshold: float,
-) -> Tensor:
+) -> tuple[Tensor, Tensor]:
     min_std = inp.new_tensor(1e-6)
     mean = torch.nanmean(inp, dim=0)
     std = _nanstd(inp, dim=0)
@@ -318,10 +328,44 @@ def _sigma_clip_fit_transform(
     std = torch.maximum(std, min_std)
     lower = torch.where(mean.isnan(), -inf, mean - threshold * std)
     upper = torch.where(mean.isnan(), inf, mean + threshold * std)
+    return lower, upper
 
+
+def _sigma_clip_transform(
+    inp: Tensor,
+    lower: Tensor,
+    upper: Tensor,
+) -> Tensor:
     log_abs = inp.abs().log1p()
     clipped = torch.maximum(-log_abs + lower, inp)
     return torch.minimum(log_abs + upper, clipped)
+
+
+def _sigma_clip_fit_transform(
+    inp: Tensor,
+    *,
+    threshold: float,
+) -> Tensor:
+    lower, upper = _sigma_clip_fit_state(inp, threshold=threshold)
+    return _sigma_clip_transform(inp, lower, upper)
+
+
+def _feature_shift_permutation(
+    n_features: int,
+    offset: int,
+    *,
+    device: torch.device,
+) -> Tensor:
+    return (torch.arange(n_features, device=device) + offset) % n_features
+
+
+def _category_shift_permutation(
+    n_classes: int,
+    offset: int,
+    *,
+    device: torch.device,
+) -> Tensor:
+    return (torch.arange(n_classes, device=device) - offset) % n_classes
 
 
 def _categorical_observed_mask(
@@ -345,6 +389,32 @@ def _categorical_observed_mask(
         include_self=True,
     )
     return observed.bool()
+
+
+def _categorical_dense_sorted_mapping(
+    codes: Tensor,
+    *,
+    category_count: int,
+) -> Tensor:
+    observed = _categorical_observed_mask(
+        codes,
+        category_count=category_count,
+    )
+    ranks = observed.to(torch.long).cumsum(dim=1) - 1
+    missing = torch.full_like(ranks, -1)
+    return torch.where(observed, ranks, missing)
+
+
+def _categorical_dense_sorted_fit_transform(
+    codes: Tensor,
+    *,
+    category_count: int,
+) -> Tensor:
+    mapping = _categorical_dense_sorted_mapping(
+        codes,
+        category_count=category_count,
+    )
+    return _categorical_lookup_transform(codes, mapping)
 
 
 def _categorical_lookup_transform(codes: Tensor, mapping: Tensor) -> Tensor:
@@ -373,6 +443,15 @@ def _quantile_fit_preindexed(
     return torch.nanquantile(inp[indices], references, dim=0)
 
 
+def _quantile_fit_transform_preindexed(
+    inp: Tensor,
+    references: Tensor,
+    indices: Tensor,
+) -> Tensor:
+    quantiles = _quantile_fit_preindexed(inp, references, indices)
+    return _vectorized_quantile_row_major(inp, quantiles, references)
+
+
 def _batched_power_fit(
     inp: Tensor,
     likelihood: Callable[[Tensor, Tensor], Tensor],
@@ -384,6 +463,24 @@ def _batched_power_fit(
     scale = variance.sqrt()
     scale = torch.where(scale == 0, torch.ones_like(scale), scale)
     return lambdas, mean, scale
+
+
+def _batched_power_fit_transform(
+    inp: Tensor,
+    likelihood: Callable[[Tensor, Tensor], Tensor],
+    transform: Callable[[Tensor, Tensor], Tensor],
+) -> Tensor:
+    lambdas, mean, scale = _batched_power_fit(inp, likelihood, transform)
+    return (transform(inp, lambdas) - mean) / scale
+
+
+def _power_fit_transform_from_state(
+    inp: Tensor,
+    state: tuple[Tensor, Tensor, Tensor],
+    transform: Callable[[Tensor, Tensor], Tensor],
+) -> Tensor:
+    lambdas, mean, scale = state
+    return (transform(inp, lambdas) - mean) / scale
 
 
 def _power_value_derivatives(
@@ -494,6 +591,103 @@ def _newton_power_fit(inp: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     scale = variance.sqrt()
     scale = torch.where(scale == 0, torch.ones_like(scale), scale)
     return lambdas, mean, scale
+
+
+def _vectorized_yeojohnson_inverse(inp: Tensor, lambdas: Tensor) -> Tensor:
+    lambdas = lambdas.to(dtype=inp.dtype).unsqueeze(0)
+    eps = torch.finfo(inp.dtype).eps
+
+    positive = inp >= 0
+    positive_log = (inp.clamp_min(0) * lambdas + 1).log() / lambdas
+    positive_value = positive_log.expm1()
+    positive_value = torch.where(
+        lambdas.abs() < eps,
+        inp.clamp_min(0).expm1(),
+        positive_value,
+    )
+
+    two_minus_lambda = 2 - lambdas
+    negative_input = inp.clamp_max(0)
+    negative_log = (-(two_minus_lambda) * negative_input + 1).log()
+    negative_value = -(negative_log / two_minus_lambda).expm1()
+    negative_value = torch.where(
+        two_minus_lambda.abs() < eps,
+        -(-negative_input).expm1(),
+        negative_value,
+    )
+    return torch.where(positive, positive_value, negative_value)
+
+
+def _vectorized_power_inverse(
+    inp: Tensor,
+    lambdas: Tensor,
+    mean: Tensor,
+    scale: Tensor,
+    upper_bound: Tensor,
+    maximum: Tensor,
+) -> Tensor:
+    unscaled = inp * scale + mean
+    inverse = _vectorized_yeojohnson_inverse(unscaled, lambdas)
+    eps = torch.finfo(inp.dtype).eps
+    bounded = torch.minimum(unscaled, upper_bound - eps)
+    repaired = _vectorized_yeojohnson_inverse(bounded, lambdas)
+    inverse = torch.where(inverse.isinf(), repaired, inverse)
+    return torch.where(
+        inverse.isinf(),
+        torch.fmin(inverse, maximum),
+        inverse,
+    )
+
+
+def _batched_inverse_quantile_row_major(
+    inp: Tensor,
+    quantiles: Tensor,
+    references: Tensor,
+    *,
+    normal: bool,
+) -> Tensor:
+    values = inp.T.contiguous()
+    if normal:
+        values = torch.special.ndtr(values)
+
+    quantile_columns = quantiles.T.contiguous()
+    n = references.numel()
+    if n == 1:
+        output = quantile_columns[:, :1].expand_as(values)
+    else:
+        indices = torch.searchsorted(references, values, right=True)
+        indices = indices.clamp(1, n - 1)
+        x0 = references[indices - 1]
+        x1 = references[indices]
+        y0 = quantile_columns.gather(1, indices - 1)
+        y1 = quantile_columns.gather(1, indices)
+        denominator = x1 - x0
+        weight = torch.where(
+            denominator != 0,
+            (values - x0) / denominator,
+            torch.zeros_like(values),
+        )
+        output = torch.lerp(y0, y1, weight)
+        output = torch.where(
+            values <= references[0], quantile_columns[:, :1], output
+        )
+        output = torch.where(
+            values >= references[-1], quantile_columns[:, -1:], output
+        )
+
+    zero = values.new_zeros(())
+    one = values.new_ones(())
+    if normal:
+        bounds_thresh = values.new_tensor(1e-7)
+        lower = values - bounds_thresh < zero
+        upper = values + bounds_thresh > one
+    else:
+        lower = values == zero
+        upper = values == one
+    output = torch.where(upper, quantile_columns[:, -1:], output)
+    output = torch.where(lower, quantile_columns[:, :1], output)
+    output = torch.where(values.isfinite(), output, values)
+    return output.T.contiguous()
 
 
 def _batched_interp(
@@ -1259,6 +1453,1023 @@ def _append_other_processor_results(
         )
     )
 
+    scale_processor = StandardScale(epsilon=1e-6).fit(fit_table)
+    scale_mean, scale_scale = _standard_scale_fit_state(
+        fit_input,
+        epsilon=1e-6,
+    )
+    timing = _measure_cuda(
+        lambda: StandardScale(epsilon=1e-6).fit(fit_table),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="StandardScale",
+            operation="fit",
+            candidate="current",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _standard_scale_fit_state(fit_input, epsilon=1e-6),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    state_error = max(
+        _max_abs_error(scale_mean, scale_processor.mean),
+        _max_abs_error(scale_scale, scale_processor.scale),
+    )
+    results.append(
+        _result(
+            processor="StandardScale",
+            operation="fit",
+            candidate="direct_reduce_state",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=state_error,
+            correct=(
+                torch.allclose(
+                    scale_mean,
+                    scale_processor.mean,
+                    rtol=1e-6,
+                    atol=1e-6,
+                    equal_nan=True,
+                )
+                and torch.allclose(
+                    scale_scale,
+                    scale_processor.scale,
+                    rtol=1e-6,
+                    atol=1e-6,
+                    equal_nan=True,
+                )
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    scale_transform_expected = scale_processor.transform(numeric).numerical
+    timing = _measure_cuda(
+        lambda: scale_processor.transform(numeric).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="StandardScale",
+            operation="transform",
+            candidate="current",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: (
+            (transform_input - scale_processor.mean) / scale_processor.scale
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    scale_transform_direct = (
+        transform_input - scale_processor.mean
+    ) / scale_processor.scale
+    error = _max_abs_error(scale_transform_direct, scale_transform_expected)
+    results.append(
+        _result(
+            processor="StandardScale",
+            operation="transform",
+            candidate="direct_affine",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                scale_transform_direct,
+                scale_transform_expected,
+                rtol=1e-6,
+                atol=1e-6,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    scale_inverse_expected = scale_processor.inverse_transform(
+        numeric
+    ).numerical
+    timing = _measure_cuda(
+        lambda: scale_processor.inverse_transform(numeric).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="StandardScale",
+            operation="inverse_transform",
+            candidate="current",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _standard_scale_inverse(
+            transform_input,
+            scale_processor.mean,
+            scale_processor.scale,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    scale_inverse_direct = _standard_scale_inverse(
+        transform_input,
+        scale_processor.mean,
+        scale_processor.scale,
+    )
+    error = _max_abs_error(scale_inverse_direct, scale_inverse_expected)
+    results.append(
+        _result(
+            processor="StandardScale",
+            operation="inverse_transform",
+            candidate="direct_affine",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                scale_inverse_direct,
+                scale_inverse_expected,
+                rtol=1e-6,
+                atol=1e-6,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    sigma_processor = SigmaClip(threshold=4.0).fit(fit_table)
+    sigma_lower, sigma_upper = _sigma_clip_fit_state(
+        fit_input,
+        threshold=4.0,
+    )
+    timing = _measure_cuda(
+        lambda: SigmaClip(threshold=4.0).fit(fit_table),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="SigmaClip",
+            operation="fit",
+            candidate="current",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _sigma_clip_fit_state(fit_input, threshold=4.0),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    state_error = max(
+        _max_abs_error(sigma_lower, sigma_processor.lower_bound),
+        _max_abs_error(sigma_upper, sigma_processor.upper_bound),
+    )
+    results.append(
+        _result(
+            processor="SigmaClip",
+            operation="fit",
+            candidate="direct_two_pass_bounds",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=state_error,
+            correct=(
+                torch.allclose(
+                    sigma_lower,
+                    sigma_processor.lower_bound,
+                    rtol=1e-6,
+                    atol=1e-6,
+                    equal_nan=True,
+                )
+                and torch.allclose(
+                    sigma_upper,
+                    sigma_processor.upper_bound,
+                    rtol=1e-6,
+                    atol=1e-6,
+                    equal_nan=True,
+                )
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    sigma_transform_expected = sigma_processor.transform(numeric).numerical
+    timing = _measure_cuda(
+        lambda: sigma_processor.transform(numeric).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="SigmaClip",
+            operation="transform",
+            candidate="current",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _sigma_clip_transform(
+            transform_input,
+            sigma_processor.lower_bound,
+            sigma_processor.upper_bound,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    sigma_transform_direct = _sigma_clip_transform(
+        transform_input,
+        sigma_processor.lower_bound,
+        sigma_processor.upper_bound,
+    )
+    error = _max_abs_error(sigma_transform_direct, sigma_transform_expected)
+    results.append(
+        _result(
+            processor="SigmaClip",
+            operation="transform",
+            candidate="direct_soft_clip",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                sigma_transform_direct,
+                sigma_transform_expected,
+                rtol=1e-6,
+                atol=1e-6,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    torch.manual_seed(0)
+    feature_permute = FeaturePermute(method="shift").fit(fit_table)
+    feature_offset = int(feature_permute.permutation[0].item())
+    feature_direct_permutation = _feature_shift_permutation(
+        fit_input.shape[1],
+        feature_offset,
+        device=device,
+    )
+    timing = _measure_cuda(
+        lambda: FeaturePermute(method="shift").fit(fit_table),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="fit",
+            candidate="current",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _feature_shift_permutation(
+            fit_input.shape[1],
+            feature_offset,
+            device=device,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    permutation_error = _max_abs_error(
+        feature_direct_permutation.float(),
+        feature_permute.permutation.float(),
+    )
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="fit",
+            candidate="direct_shift_permutation",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=permutation_error,
+            correct=torch.equal(
+                feature_direct_permutation,
+                feature_permute.permutation,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    feature_fit_transform_expected = feature_permute.transform(
+        fit_table
+    ).numerical
+    timing = _measure_cuda(
+        lambda: (
+            FeaturePermute(method="shift").fit_transform(fit_table).numerical
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="fit_transform",
+            candidate="current",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: fit_input.index_select(-1, feature_direct_permutation),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    feature_fit_transform_direct = fit_input.index_select(
+        -1,
+        feature_direct_permutation,
+    )
+    error = _max_abs_error(
+        feature_fit_transform_direct,
+        feature_fit_transform_expected,
+    )
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="fit_transform",
+            candidate="direct_index_select",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                feature_fit_transform_direct,
+                feature_fit_transform_expected,
+                rtol=0,
+                atol=0,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    feature_transform_expected = feature_permute.transform(numeric).numerical
+    timing = _measure_cuda(
+        lambda: feature_permute.transform(numeric).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="transform",
+            candidate="current",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: transform_input.index_select(-1, feature_permute.permutation),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    feature_transform_direct = transform_input.index_select(
+        -1,
+        feature_permute.permutation,
+    )
+    error = _max_abs_error(
+        feature_transform_direct, feature_transform_expected
+    )
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="transform",
+            candidate="direct_index_select",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                feature_transform_direct,
+                feature_transform_expected,
+                rtol=0,
+                atol=0,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    feature_inverse_input = feature_permute.transform(numeric)
+    feature_inverse_expected = feature_permute.inverse_transform(
+        feature_inverse_input
+    ).numerical
+    inverse_permutation = feature_permute.permutation.argsort()
+    timing = _measure_cuda(
+        lambda: (
+            feature_permute.inverse_transform(feature_inverse_input).numerical
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="inverse_transform",
+            candidate="current",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: feature_inverse_input.numerical.index_select(
+            -1,
+            inverse_permutation,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    feature_inverse_direct = feature_inverse_input.numerical.index_select(
+        -1,
+        inverse_permutation,
+    )
+    error = _max_abs_error(feature_inverse_direct, feature_inverse_expected)
+    results.append(
+        _result(
+            processor="FeaturePermute",
+            operation="inverse_transform",
+            candidate="direct_index_select",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                feature_inverse_direct,
+                feature_inverse_expected,
+                rtol=0,
+                atol=0,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    logits = torch.zeros(
+        workload.rows,
+        10,
+        dtype=transform_input.dtype,
+        device=device,
+    )
+    logits_table = TableTensor(
+        columns={"numerical": tuple(f"logit_{i}" for i in range(10))},
+        numerical=logits,
+    )
+    softmax = SoftmaxTemperature(temperature=0.9)
+    softmax_expected = softmax.transform(logits_table).numerical
+    timing = _measure_cuda(
+        lambda: softmax.transform(logits_table).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="SoftmaxTemperature",
+            operation="transform",
+            candidate="current",
+            dtype=logits.dtype,
+            shape=tuple(logits.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: torch.softmax(logits / 0.9, dim=-1),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    softmax_direct = torch.softmax(logits / 0.9, dim=-1)
+    error = _max_abs_error(softmax_direct, softmax_expected)
+    results.append(
+        _result(
+            processor="SoftmaxTemperature",
+            operation="transform",
+            candidate="direct_softmax",
+            dtype=logits.dtype,
+            shape=tuple(logits.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(softmax_direct, softmax_expected),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    categorical = workload.x.select_stypes(Stype.categorical)
+    if categorical.size(-1) > 0:
+        categorical_fit = categorical[: workload.train_rows]
+        fit_codes = categorical_fit.categorical.as_tensor()
+        category_count = max(
+            category.numel() for category in categorical.categorical.categories
+        )
+        align = CategoricalAlign(order="sorted").fit(categorical_fit)
+        fit_aligned_expected = align.transform(
+            categorical_fit
+        ).categorical.as_tensor()
+        timing = _measure_cuda(
+            lambda: (
+                CategoricalAlign(order="sorted")
+                .fit_transform(categorical_fit)
+                .categorical.as_tensor()
+            ),
+            device=device,
+            repetitions=repetitions,
+            warmups=warmups,
+        )
+        results.append(
+            _result(
+                processor="CategoricalAlign",
+                operation="fit_transform",
+                candidate="current",
+                dtype=fit_codes.dtype,
+                shape=tuple(fit_codes.shape),
+                characteristics=characteristics,
+                timing=timing,
+                error=0.0,
+                correct=True,
+                repetitions=repetitions,
+                warmups=warmups,
+                device=device,
+            )
+        )
+        timing = _measure_cuda(
+            lambda: _categorical_dense_sorted_fit_transform(
+                fit_codes,
+                category_count=category_count,
+            ),
+            device=device,
+            repetitions=repetitions,
+            warmups=warmups,
+        )
+        fit_aligned_direct = _categorical_dense_sorted_fit_transform(
+            fit_codes,
+            category_count=category_count,
+        )
+        error = _max_abs_error(
+            fit_aligned_direct.float(),
+            fit_aligned_expected.float(),
+        )
+        results.append(
+            _result(
+                processor="CategoricalAlign",
+                operation="fit_transform",
+                candidate="dense_observed_lookup",
+                dtype=fit_codes.dtype,
+                shape=tuple(fit_codes.shape),
+                characteristics=characteristics,
+                timing=timing,
+                error=error,
+                correct=torch.equal(fit_aligned_direct, fit_aligned_expected),
+                repetitions=repetitions,
+                warmups=warmups,
+                device=device,
+            )
+        )
+
+    target_codes = workload.y.categorical.as_tensor()
+    torch.manual_seed(0)
+    target_shuffle = CategoryShuffle(method="shift").fit(workload.y)
+    target_offset = int((-target_shuffle.permutations[0]).remainder(2).item())
+    timing = _measure_cuda(
+        lambda: CategoryShuffle(method="shift").fit(workload.y),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="ClassificationTarget",
+            operation="fit",
+            candidate="current",
+            dtype=target_codes.dtype,
+            shape=tuple(target_codes.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _category_shift_permutation(
+            2,
+            target_offset,
+            device=device,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    target_fit_direct = _category_shift_permutation(
+        2,
+        target_offset,
+        device=device,
+    )
+    error = _max_abs_error(
+        target_fit_direct.float(),
+        target_shuffle.permutations.float(),
+    )
+    results.append(
+        _result(
+            processor="ClassificationTarget",
+            operation="fit",
+            candidate="direct_shift_permutation",
+            dtype=target_codes.dtype,
+            shape=tuple(target_codes.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.equal(
+                target_fit_direct, target_shuffle.permutations
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    target_transform_expected = target_shuffle.transform(
+        workload.y
+    ).categorical.as_tensor()
+    timing = _measure_cuda(
+        lambda: target_shuffle.transform(workload.y).categorical.as_tensor(),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="ClassificationTarget",
+            operation="transform",
+            candidate="current",
+            dtype=target_codes.dtype,
+            shape=tuple(target_codes.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _category_permutation_transform(
+            target_codes,
+            target_shuffle.permutations,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    target_transform_direct = _category_permutation_transform(
+        target_codes,
+        target_shuffle.permutations,
+    )
+    error = _max_abs_error(
+        target_transform_direct.float(),
+        target_transform_expected.float(),
+    )
+    results.append(
+        _result(
+            processor="ClassificationTarget",
+            operation="transform",
+            candidate="direct_permutation_gather",
+            dtype=target_codes.dtype,
+            shape=tuple(target_codes.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.equal(
+                target_transform_direct, target_transform_expected
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    regression = build_workload(
+        size="large",
+        task="regression",
+        characteristics=workload.characteristics,
+        device=device,
+    )
+    regression_input = regression.y.numerical
+    regression_target = StandardScale().fit(regression.y)
+    regression_mean, regression_scale = _standard_scale_fit_state(
+        regression_input,
+        epsilon=0.0,
+    )
+    timing = _measure_cuda(
+        lambda: StandardScale().fit(regression.y),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="RegressionTarget",
+            operation="fit",
+            candidate="current",
+            dtype=regression_input.dtype,
+            shape=tuple(regression_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _standard_scale_fit_state(regression_input, epsilon=0.0),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    state_error = max(
+        _max_abs_error(regression_mean, regression_target.mean),
+        _max_abs_error(regression_scale, regression_target.scale),
+    )
+    results.append(
+        _result(
+            processor="RegressionTarget",
+            operation="fit",
+            candidate="direct_reduce_state",
+            dtype=regression_input.dtype,
+            shape=tuple(regression_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=state_error,
+            correct=(
+                torch.allclose(regression_mean, regression_target.mean)
+                and torch.allclose(regression_scale, regression_target.scale)
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    regression_fit_transform_expected = regression_target.transform(
+        regression.y
+    ).numerical
+    timing = _measure_cuda(
+        lambda: StandardScale().fit_transform(regression.y).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="RegressionTarget",
+            operation="fit_transform",
+            candidate="current",
+            dtype=regression_input.dtype,
+            shape=tuple(regression_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _standard_scale_fit_transform(
+            regression_input,
+            epsilon=0.0,
+        )[0],
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    regression_fit_transform_direct = _standard_scale_fit_transform(
+        regression_input,
+        epsilon=0.0,
+    )[0]
+    error = _max_abs_error(
+        regression_fit_transform_direct,
+        regression_fit_transform_expected,
+    )
+    results.append(
+        _result(
+            processor="RegressionTarget",
+            operation="fit_transform",
+            candidate="direct_reduce_affine",
+            dtype=regression_input.dtype,
+            shape=tuple(regression_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                regression_fit_transform_direct,
+                regression_fit_transform_expected,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    regression_transform_expected = regression_target.transform(
+        regression.y
+    ).numerical
+    timing = _measure_cuda(
+        lambda: regression_target.transform(regression.y).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="RegressionTarget",
+            operation="transform",
+            candidate="current",
+            dtype=regression_input.dtype,
+            shape=tuple(regression_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: (
+            (regression_input - regression_target.mean)
+            / regression_target.scale
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    regression_transform_direct = (
+        regression_input - regression_target.mean
+    ) / regression_target.scale
+    error = _max_abs_error(
+        regression_transform_direct,
+        regression_transform_expected,
+    )
+    results.append(
+        _result(
+            processor="RegressionTarget",
+            operation="transform",
+            candidate="direct_affine",
+            dtype=regression_input.dtype,
+            shape=tuple(regression_input.shape),
+            characteristics=characteristics,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                regression_transform_direct,
+                regression_transform_expected,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
 
 def run(
     *,
@@ -1514,6 +2725,168 @@ def run(
         )
 
     timing = _measure_cuda(
+        lambda: Power().fit_transform(fit_table).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="Power",
+            operation="fit_transform",
+            candidate="current",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    timing = _measure_cuda(
+        lambda: _batched_power_fit_transform(
+            fit_input,
+            _power_log_likelihood,
+            _vectorized_yeojohnson,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    fit_transform_output = _batched_power_fit_transform(
+        fit_input,
+        _power_log_likelihood,
+        _vectorized_yeojohnson,
+    )
+    output_error = _max_abs_error(fit_transform_output, current_power_output)
+    results.append(
+        _result(
+            processor="Power",
+            operation="fit_transform",
+            candidate="batched_golden_eager",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=output_error,
+            correct=output_error <= POWER_OUTPUT_ATOL,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    timing = _measure_cuda(
+        lambda: _power_fit_transform_from_state(
+            fit_input,
+            _newton_power_fit(fit_input),
+            _vectorized_yeojohnson,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    newton_fit_transform = (
+        _vectorized_yeojohnson(fit_input, newton_state[0]) - newton_state[1]
+    ) / newton_state[2]
+    output_error = _max_abs_error(newton_fit_transform, current_power_output)
+    results.append(
+        _result(
+            processor="Power",
+            operation="fit_transform",
+            candidate="batched_newton_eager",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=output_error,
+            correct=output_error <= POWER_OUTPUT_ATOL,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
+    if compile_candidates:
+        timing = _measure_cuda(
+            lambda: _batched_power_fit_transform(
+                fit_input,
+                compiled_likelihood,
+                compiled_transform_preserve_nan,
+            ),
+            device=device,
+            repetitions=repetitions,
+            warmups=warmups,
+        )
+        compiled_fit_transform = _batched_power_fit_transform(
+            fit_input,
+            compiled_likelihood,
+            compiled_transform_preserve_nan,
+        )
+        output_error = _max_abs_error(
+            compiled_fit_transform,
+            current_power_output,
+        )
+        results.append(
+            _result(
+                processor="Power",
+                operation="fit_transform",
+                candidate="batched_golden_compiled",
+                dtype=fit_input.dtype,
+                shape=tuple(fit_input.shape),
+                characteristics=label,
+                timing=timing,
+                error=output_error,
+                correct=output_error <= POWER_OUTPUT_ATOL,
+                repetitions=repetitions,
+                warmups=warmups,
+                device=device,
+            )
+        )
+
+        timing = _measure_cuda(
+            lambda: _power_fit_transform_from_state(
+                fit_input,
+                compiled_newton_fit(fit_input),
+                compiled_transform_preserve_nan,
+            ),
+            device=device,
+            repetitions=repetitions,
+            warmups=warmups,
+        )
+        compiled_newton_fit_transform = (
+            compiled_transform_preserve_nan(
+                fit_input,
+                compiled_newton_state[0],
+            )
+            - compiled_newton_state[1]
+        ) / compiled_newton_state[2]
+        output_error = _max_abs_error(
+            compiled_newton_fit_transform,
+            current_power_output,
+        )
+        results.append(
+            _result(
+                processor="Power",
+                operation="fit_transform",
+                candidate="batched_newton_compiled",
+                dtype=fit_input.dtype,
+                shape=tuple(fit_input.shape),
+                characteristics=label,
+                timing=timing,
+                error=output_error,
+                correct=output_error <= POWER_OUTPUT_ATOL,
+                repetitions=repetitions,
+                warmups=warmups,
+                device=device,
+            )
+        )
+
+    timing = _measure_cuda(
         lambda: current_power.transform(numeric).numerical,
         device=device,
         repetitions=repetitions,
@@ -1616,7 +2989,217 @@ def run(
             )
         )
 
+    power_inverse_input = numeric.replace_blocks(numerical=current_transform)
+    current_power_inverse = current_power.inverse_transform(
+        power_inverse_input
+    ).numerical
+    timing = _measure_cuda(
+        lambda: current_power.inverse_transform(power_inverse_input).numerical,
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="Power",
+            operation="inverse_transform",
+            candidate="current",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _vectorized_power_inverse(
+            power_inverse_input.numerical,
+            current_power.lambdas,
+            current_power.mean,
+            current_power.scale,
+            current_power.upper_bound,
+            current_power.max,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    power_inverse = _vectorized_power_inverse(
+        power_inverse_input.numerical,
+        current_power.lambdas,
+        current_power.mean,
+        current_power.scale,
+        current_power.upper_bound,
+        current_power.max,
+    )
+    error = _max_abs_error(power_inverse, current_power_inverse)
+    results.append(
+        _result(
+            processor="Power",
+            operation="inverse_transform",
+            candidate="vectorized_eager",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                power_inverse,
+                current_power_inverse,
+                rtol=1e-3,
+                atol=POWER_OUTPUT_ATOL,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    if compile_candidates:
+        compiled_power_inverse = torch.compile(
+            _vectorized_power_inverse,
+            fullgraph=True,
+        )
+        compiled_power_inverse(
+            power_inverse_input.numerical,
+            current_power.lambdas,
+            current_power.mean,
+            current_power.scale,
+            current_power.upper_bound,
+            current_power.max,
+        )
+        torch.cuda.synchronize(device)
+        timing = _measure_cuda(
+            lambda: compiled_power_inverse(
+                power_inverse_input.numerical,
+                current_power.lambdas,
+                current_power.mean,
+                current_power.scale,
+                current_power.upper_bound,
+                current_power.max,
+            ),
+            device=device,
+            repetitions=repetitions,
+            warmups=warmups,
+        )
+        compiled_power_inverse_output = compiled_power_inverse(
+            power_inverse_input.numerical,
+            current_power.lambdas,
+            current_power.mean,
+            current_power.scale,
+            current_power.upper_bound,
+            current_power.max,
+        )
+        error = _max_abs_error(
+            compiled_power_inverse_output,
+            current_power_inverse,
+        )
+        results.append(
+            _result(
+                processor="Power",
+                operation="inverse_transform",
+                candidate="vectorized_compiled",
+                dtype=transform_input.dtype,
+                shape=tuple(transform_input.shape),
+                characteristics=label,
+                timing=timing,
+                error=error,
+                correct=torch.allclose(
+                    compiled_power_inverse_output,
+                    current_power_inverse,
+                    rtol=1e-3,
+                    atol=POWER_OUTPUT_ATOL,
+                    equal_nan=True,
+                ),
+                repetitions=repetitions,
+                warmups=warmups,
+                device=device,
+            )
+        )
+
     quantile = Quantile(output_distribution="normal").fit(fit_table)
+    timing = _measure_cuda(
+        lambda: (
+            Quantile(output_distribution="normal")
+            .fit_transform(fit_table)
+            .numerical
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    current_quantile_fit_transform = (
+        Quantile(output_distribution="normal")
+        .fit_transform(fit_table)
+        .numerical
+    )
+    results.append(
+        _result(
+            processor="Quantile",
+            operation="fit_transform",
+            candidate="current",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    torch.manual_seed(0)
+    quantile_fit_indices = torch.randperm(
+        fit_input.shape[0],
+        device=device,
+    )[:10_000]
+    timing = _measure_cuda(
+        lambda: _quantile_fit_transform_preindexed(
+            fit_input,
+            quantile.references,
+            quantile_fit_indices,
+        ),
+        device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    quantile_fit_transform = _quantile_fit_transform_preindexed(
+        fit_input,
+        quantile.references,
+        quantile_fit_indices,
+    )
+    error = _max_abs_error(
+        quantile_fit_transform,
+        current_quantile_fit_transform,
+    )
+    results.append(
+        _result(
+            processor="Quantile",
+            operation="fit_transform",
+            candidate="direct_nanquantile_searchsorted_preindexed",
+            dtype=fit_input.dtype,
+            shape=tuple(fit_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                quantile_fit_transform,
+                current_quantile_fit_transform,
+                rtol=1e-6,
+                atol=QUANTILE_OUTPUT_ATOL,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+
     current_quantile_output = quantile.transform(numeric).numerical
     timing = _measure_cuda(
         lambda: quantile.transform(numeric).numerical,
@@ -1875,24 +3458,172 @@ def run(
             )
         )
 
-    _append_transfer_results(
-        results,
-        processor="Power",
-        operation="fit",
-        input_shape=tuple(fit_input.shape),
-        output_shape=(5, fit_input.shape[1]),
-        characteristics=label,
+    quantile_inverse_input = numeric.replace_blocks(
+        numerical=current_quantile_output
+    )
+    current_quantile_inverse = quantile.inverse_transform(
+        quantile_inverse_input
+    ).numerical
+    timing = _measure_cuda(
+        lambda: quantile.inverse_transform(quantile_inverse_input).numerical,
+        device=device,
         repetitions=repetitions,
         warmups=warmups,
+    )
+    results.append(
+        _result(
+            processor="Quantile",
+            operation="inverse_transform",
+            candidate="current",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=0.0,
+            correct=True,
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    timing = _measure_cuda(
+        lambda: _batched_inverse_quantile_row_major(
+            quantile_inverse_input.numerical,
+            quantile.quantiles,
+            quantile.references,
+            normal=True,
+        ),
         device=device,
+        repetitions=repetitions,
+        warmups=warmups,
+    )
+    quantile_inverse = _batched_inverse_quantile_row_major(
+        quantile_inverse_input.numerical,
+        quantile.quantiles,
+        quantile.references,
+        normal=True,
+    )
+    error = _max_abs_error(quantile_inverse, current_quantile_inverse)
+    results.append(
+        _result(
+            processor="Quantile",
+            operation="inverse_transform",
+            candidate="batched_searchsorted_row_major",
+            dtype=transform_input.dtype,
+            shape=tuple(transform_input.shape),
+            characteristics=label,
+            timing=timing,
+            error=error,
+            correct=torch.allclose(
+                quantile_inverse,
+                current_quantile_inverse,
+                rtol=1e-6,
+                atol=QUANTILE_OUTPUT_ATOL,
+                equal_nan=True,
+            ),
+            repetitions=repetitions,
+            warmups=warmups,
+            device=device,
+        )
+    )
+    if compile_candidates:
+        compiled_quantile_inverse = torch.compile(
+            _batched_inverse_quantile_row_major,
+            fullgraph=True,
+        )
+        compiled_quantile_inverse(
+            quantile_inverse_input.numerical,
+            quantile.quantiles,
+            quantile.references,
+            normal=True,
+        )
+        torch.cuda.synchronize(device)
+        timing = _measure_cuda(
+            lambda: compiled_quantile_inverse(
+                quantile_inverse_input.numerical,
+                quantile.quantiles,
+                quantile.references,
+                normal=True,
+            ),
+            device=device,
+            repetitions=repetitions,
+            warmups=warmups,
+        )
+        compiled_quantile_inverse_output = compiled_quantile_inverse(
+            quantile_inverse_input.numerical,
+            quantile.quantiles,
+            quantile.references,
+            normal=True,
+        )
+        error = _max_abs_error(
+            compiled_quantile_inverse_output,
+            current_quantile_inverse,
+        )
+        results.append(
+            _result(
+                processor="Quantile",
+                operation="inverse_transform",
+                candidate="batched_searchsorted_compiled",
+                dtype=transform_input.dtype,
+                shape=tuple(transform_input.shape),
+                characteristics=label,
+                timing=timing,
+                error=error,
+                correct=torch.allclose(
+                    compiled_quantile_inverse_output,
+                    current_quantile_inverse,
+                    rtol=1e-6,
+                    atol=QUANTILE_OUTPUT_ATOL,
+                    equal_nan=True,
+                ),
+                repetitions=repetitions,
+                warmups=warmups,
+                device=device,
+            )
+        )
+
+    transfer_specs = (
+        (
+            "Power",
+            "fit",
+            tuple(fit_input.shape),
+            (5, fit_input.shape[1]),
+        ),
+        (
+            "Quantile",
+            "fit",
+            tuple(fit_input.shape),
+            (quantile.references.numel(), fit_input.shape[1]),
+        ),
     )
     for processor in ("Power", "Quantile"):
+        transfer_specs += (
+            (
+                processor,
+                "fit_transform",
+                tuple(fit_input.shape),
+                tuple(fit_input.shape),
+            ),
+            (
+                processor,
+                "transform",
+                tuple(transform_input.shape),
+                tuple(transform_input.shape),
+            ),
+            (
+                processor,
+                "inverse_transform",
+                tuple(transform_input.shape),
+                tuple(transform_input.shape),
+            ),
+        )
+    for processor, operation, input_shape, output_shape in transfer_specs:
         _append_transfer_results(
             results,
             processor=processor,
-            operation="transform",
-            input_shape=tuple(transform_input.shape),
-            output_shape=tuple(transform_input.shape),
+            operation=operation,
+            input_shape=input_shape,
+            output_shape=output_shape,
             characteristics=label,
             repetitions=repetitions,
             warmups=warmups,
@@ -1921,7 +3652,11 @@ def _write_results(results: Sequence[Result], output: Path) -> None:
     output.write_text(json.dumps(payload, indent=2) + "\n")
     csv_path = output.with_suffix(".csv")
     with csv_path.open("w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=asdict(results[0]).keys())
+        writer = csv.DictWriter(
+            file,
+            fieldnames=asdict(results[0]).keys(),
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(asdict(result) for result in results)
 

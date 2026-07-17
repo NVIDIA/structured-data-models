@@ -3,19 +3,25 @@ from benchmark.processor_speed_of_light import (
     POWER_LAMBDA_ATOL,
     POWER_OUTPUT_ATOL,
     QUANTILE_OUTPUT_ATOL,
+    _batched_inverse_quantile_row_major,
     _batched_power_fit,
+    _categorical_dense_sorted_fit_transform,
     _categorical_lookup_transform,
     _categorical_observed_mask,
     _category_permutation_transform,
     _feature_batched_quantile_row_major,
     _newton_power_fit,
+    _power_fit_transform_from_state,
     _power_log_likelihood,
     _quantile_fit_preindexed,
+    _quantile_fit_transform_preindexed,
     _sigma_clip_fit_transform,
     _standard_scale_fit_transform,
     _standard_scale_inverse,
+    _vectorized_power_inverse,
     _vectorized_quantile_row_major,
     _vectorized_yeojohnson,
+    _vectorized_yeojohnson_inverse,
 )
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
@@ -26,7 +32,34 @@ from sdm.processing import (
     SigmaClip,
     StandardScale,
 )
-from sdm.processing.power import _yeojohnson_transform
+from sdm.processing.power import (
+    _yeojohnson_inverse_transform,
+    _yeojohnson_transform,
+)
+
+
+def test_vectorized_yeojohnson_inverse_matches_feature_loop() -> None:
+    inp = torch.tensor(
+        [
+            [-2.0, -2.0, -2.0, -2.0],
+            [-1.0, -1.0, -1.0, -1.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0, 1.0],
+            [torch.nan, 2.0, 2.0, 2.0],
+        ]
+    )
+    lambdas = torch.tensor([0.0, 2.0, 0.5, 1.5])
+    expected = torch.stack(
+        [
+            _yeojohnson_inverse_transform(inp[:, index], float(lmbda))
+            for index, lmbda in enumerate(lambdas)
+        ],
+        dim=1,
+    )
+
+    actual = _vectorized_yeojohnson_inverse(inp, lambdas)
+
+    assert torch.allclose(actual, expected, equal_nan=True)
 
 
 def test_vectorized_yeojohnson_matches_feature_loop() -> None:
@@ -71,8 +104,13 @@ def test_batched_power_candidates_match_current_float32_output() -> None:
         ),
         _newton_power_fit(inp),
     )
-    for lambdas, mean, scale in states:
-        actual = (_vectorized_yeojohnson(inp, lambdas) - mean) / scale
+    for state in states:
+        lambdas, _, _ = state
+        actual = _power_fit_transform_from_state(
+            inp,
+            state,
+            _vectorized_yeojohnson,
+        )
 
         assert torch.allclose(
             lambdas,
@@ -87,6 +125,26 @@ def test_batched_power_candidates_match_current_float32_output() -> None:
             atol=POWER_OUTPUT_ATOL,
             equal_nan=True,
         )
+
+    inverse_expected = current.inverse_transform(
+        TableTensor.from_tensor(expected)
+    ).numerical
+    inverse_actual = _vectorized_power_inverse(
+        expected,
+        current.lambdas,
+        current.mean,
+        current.scale,
+        current.upper_bound,
+        current.max,
+    )
+
+    assert torch.allclose(
+        inverse_actual,
+        inverse_expected,
+        rtol=1e-3,
+        atol=POWER_OUTPUT_ATOL,
+        equal_nan=True,
+    )
 
 
 def test_batched_quantile_candidates_preserve_duplicates_and_nans() -> None:
@@ -131,6 +189,36 @@ def test_batched_quantile_candidates_preserve_duplicates_and_nans() -> None:
         actual,
         rtol=0,
         atol=0,
+        equal_nan=True,
+    )
+
+    inverse_expected = processor.inverse_transform(
+        TableTensor.from_tensor(expected)
+    ).numerical
+    inverse_actual = _batched_inverse_quantile_row_major(
+        expected,
+        processor.quantiles,
+        processor.references,
+        normal=True,
+    )
+    fit_transform_actual = _quantile_fit_transform_preindexed(
+        inp,
+        processor.references,
+        torch.arange(inp.shape[0]),
+    )
+
+    assert torch.allclose(
+        inverse_actual,
+        inverse_expected,
+        rtol=1e-6,
+        atol=QUANTILE_OUTPUT_ATOL,
+        equal_nan=True,
+    )
+    assert torch.allclose(
+        fit_transform_actual,
+        expected,
+        rtol=1e-6,
+        atol=QUANTILE_OUTPUT_ATOL,
         equal_nan=True,
     )
 
@@ -233,8 +321,16 @@ def test_direct_categorical_candidates_match_processors() -> None:
     )
     actual = _categorical_lookup_transform(transform_codes, mappings)
     expected = processor.transform(transform_table).categorical.as_tensor()
+    fit_transform_actual = _categorical_dense_sorted_fit_transform(
+        fit_codes,
+        category_count=4,
+    )
+    fit_transform_expected = processor.fit_transform(
+        fit_table
+    ).categorical.as_tensor()
 
     assert torch.equal(actual, expected)
+    assert torch.equal(fit_transform_actual, fit_transform_expected)
 
 
 def test_direct_category_permutation_matches_shift_shuffle() -> None:
