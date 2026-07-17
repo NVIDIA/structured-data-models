@@ -49,9 +49,7 @@ def to_cudf(
         try:
             column = ser._column.set_mask(column_mask)
         except TypeError:
-            column = ser._column.set_mask(
-                column_mask,
-                null_count=valid_mask.numel() - int(valid_mask.sum()),
-            )
+            null_count = valid_mask.numel() - int(valid_mask.sum())
+            column = ser._column.set_mask(column_mask, null_count)
 
         return cudf.Series._from_column(column)
