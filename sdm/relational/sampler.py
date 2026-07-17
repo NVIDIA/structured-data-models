@@ -1,7 +1,7 @@
 from collections.abc import Mapping, Sequence
+import math
 from typing import NamedTuple, cast
 
-import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import Self
@@ -13,8 +13,7 @@ from sdm.relational import (
     Relationship,
     TaskLink,
 )
-from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID
-from sdm.tensor.io import arrow_as_tensor
+from sdm.relational.join import join_index
 from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
@@ -182,33 +181,29 @@ class RelationalSampler:
             ) from e
 
         # Resolve entity table node indices:
-        left = task_table[task_link.task_columns].to_arrow()
-        left = left.append_column(
-            LEFT_ROW_ID,
-            pa.array(torch.arange(left.num_rows).numpy()),
+        task_rows = math.prod(task_table.size()[:-1])
+        task_index, seed = join_index(
+            left_table=task_table,
+            right_table=self.data.tables[task_link.table],
+            left_keys=task_link.task_columns,
+            right_keys=task_link.table_columns,
+            device=task_table.device,
         )
-        right = self.data.tables[task_link.table][
-            task_link.table_columns
-        ].to_arrow()
-        right = right.append_column(
-            RIGHT_ROW_ID,
-            pa.array(torch.arange(right.num_rows).numpy()),
+        index = task_index.argsort()
+        task_index = task_index[index]
+        seed = seed[index]
+
+        expected = torch.arange(
+            task_rows,
+            dtype=task_index.dtype,
+            device=task_index.device,
         )
-        joined = left.join(
-            right,
-            keys=list(task_link.task_columns),
-            right_keys=list(task_link.table_columns),
-            join_type="left outer",
-        )
-        joined = joined.select([LEFT_ROW_ID, RIGHT_ROW_ID])
-        joined = joined.sort_by([(LEFT_ROW_ID, "ascending")])
-        if len(joined) != left.num_rows or joined[RIGHT_ROW_ID].null_count > 0:
+        if not task_index.equal(expected):
             raise ValueError(
                 f"Expected each task row to match exactly one row in "
                 f"'{task_link.table}'"
             )
 
-        seed = arrow_as_tensor(joined[RIGHT_ROW_ID], device=task_table.device)
         if task_time_column is not None:
             seed_time = task_table[task_time_column].datetime.squeeze(-1)
         else:
