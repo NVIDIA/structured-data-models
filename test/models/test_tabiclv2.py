@@ -117,7 +117,7 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     )
 
 
-def test_tabiclv2_hierarchical_probabilities(
+def test_tabiclv2_hierarchical_log_probabilities(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class IdentityRowEmbedding(torch.nn.Module):
@@ -144,8 +144,10 @@ def test_tabiclv2_hierarchical_probabilities(
         ) -> torch.Tensor:
             assert num_classes == 3
             test_size = row_embeddings.size(-2) - y.size(-1)
-            probabilities = row_embeddings.new_tensor([0.15, 0.45, 0.4])
-            return probabilities.expand(test_size, -1)
+            log_probabilities = row_embeddings.new_tensor(
+                [0.15, 0.45, 0.4]
+            ).log()
+            return log_probabilities.expand(test_size, -1)
 
     model = _TabICLv2(
         num_classes=2,
@@ -171,7 +173,7 @@ def test_tabiclv2_hierarchical_probabilities(
     out = model(torch.randn(5, 4), y, num_classes=3)
 
     probabilities = torch.tensor([0.15, 0.45, 0.4]).expand(2, -1)
-    expected = (probabilities + 1e-6).log().mul(0.9)
+    expected = probabilities.log().mul(0.9)
     torch.testing.assert_close(out, expected)
 
 

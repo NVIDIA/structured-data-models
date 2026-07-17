@@ -45,7 +45,12 @@ def test_hierarchical_classifier_grouping() -> None:
 
 @withCUDA
 @pytest.mark.parametrize(
-    ("total_num_classes", "num_classes", "expected_calls", "expected"),
+    (
+        "total_num_classes",
+        "num_classes",
+        "expected_calls",
+        "expected_probabilities",
+    ),
     [
         pytest.param(
             3,
@@ -63,12 +68,12 @@ def test_hierarchical_classifier_grouping() -> None:
         ),
     ],
 )
-def test_hierarchical_classifier_probabilities(
+def test_hierarchical_classifier_log_probabilities(
     device: torch.device,
     total_num_classes: int,
     num_classes: int,
     expected_calls: int,
-    expected: list[float],
+    expected_probabilities: list[float],
 ) -> None:
     calls = 0
 
@@ -87,7 +92,7 @@ def test_hierarchical_classifier_probabilities(
     y = torch.arange(total_num_classes, device=device)
     classifier = HierarchicalClassifier(num_classes=num_classes)
 
-    probabilities = classifier(
+    log_probabilities = classifier(
         row_embeddings,
         y,
         num_classes=total_num_classes,
@@ -96,12 +101,14 @@ def test_hierarchical_classifier_probabilities(
 
     assert calls == expected_calls
     torch.testing.assert_close(
-        probabilities,
-        row_embeddings.new_tensor(expected).expand(test_size, -1),
+        log_probabilities,
+        row_embeddings.new_tensor(expected_probabilities)
+        .log()
+        .expand(test_size, -1),
     )
 
 
-def test_hierarchical_classifier_nonuniform_probabilities() -> None:
+def test_hierarchical_classifier_nonuniform_log_probabilities() -> None:
     classifier = HierarchicalClassifier(num_classes=2)
 
     def predictor(rows: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -113,15 +120,15 @@ def test_hierarchical_classifier_nonuniform_probabilities() -> None:
         return probabilities.log().expand(test_size, -1)
 
     row_embeddings = torch.randn(5, 4)
-    probabilities = classifier(
+    log_probabilities = classifier(
         row_embeddings,
         torch.arange(3),
         num_classes=3,
         predictor=predictor,
     )
 
-    expected = torch.tensor([0.15, 0.45, 0.4]).expand(2, -1)
-    torch.testing.assert_close(probabilities, expected)
+    expected = torch.tensor([0.15, 0.45, 0.4]).log().expand(2, -1)
+    torch.testing.assert_close(log_probabilities, expected)
 
 
 def test_hierarchical_classifier_batched_absent_classes() -> None:
@@ -139,22 +146,22 @@ def test_hierarchical_classifier_batched_absent_classes() -> None:
     row_embeddings = torch.randn(2, 5, 4)
     y = torch.tensor([[1, 3, 4], [0, 2, 5]])
 
-    probabilities = classifier(
+    log_probabilities = classifier(
         row_embeddings,
         y,
         num_classes=6,
         predictor=predictor,
     )
 
-    expected = torch.tensor(
+    expected_probabilities = torch.tensor(
         [
             [0.0, 0.25, 0.0, 0.25, 0.5, 0.0],
             [0.25, 0.0, 0.25, 0.0, 0.0, 0.5],
         ],
     )
     torch.testing.assert_close(
-        probabilities,
-        expected.unsqueeze(1).expand(-1, 2, -1),
+        log_probabilities,
+        expected_probabilities.log().unsqueeze(1).expand(-1, 2, -1),
     )
 
 
@@ -169,13 +176,13 @@ def test_hierarchical_classifier_preserves_gradients() -> None:
         return logits + rows[labels.size(0) :, :2]
 
     row_embeddings = torch.randn(5, 4, requires_grad=True)
-    probabilities = classifier(
+    log_probabilities = classifier(
         row_embeddings,
         torch.arange(3),
         num_classes=3,
         predictor=predictor,
     )
-    probabilities[:, 0].sum().backward()
+    log_probabilities[:, 0].sum().backward()
 
     assert logits.grad is not None
     assert logits.grad.abs().sum() > 0
@@ -190,15 +197,15 @@ def test_hierarchical_classifier_empty_batch() -> None:
         raise AssertionError("The predictor must not run for an empty batch")
 
     row_embeddings = torch.randn(0, 4, 3)
-    probabilities = classifier(
+    log_probabilities = classifier(
         row_embeddings,
         torch.zeros(0, 2, dtype=torch.long),
         num_classes=5,
         predictor=predictor,
     )
 
-    assert probabilities.size() == (0, 2, 5)
-    assert probabilities.dtype == torch.float32
+    assert log_probabilities.size() == (0, 2, 5)
+    assert log_probabilities.dtype == torch.float32
 
 
 def test_hierarchical_classifier_rejects_invalid_num_classes() -> None:

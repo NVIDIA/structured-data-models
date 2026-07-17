@@ -288,18 +288,15 @@ class _TabICLv2(torch.nn.Module):
             return self.head(x)
 
         assert self.hierarchical_classifier is not None
-        probabilities = self.hierarchical_classifier(
+        log_probabilities = self.hierarchical_classifier(
             row_embeddings=x,
             y=y,
             num_classes=num_classes,
             predictor=self._predict_standard,
         )
-        # Convert to pseudo-logits compatible with temperature softmax:
-        return (
-            (probabilities + 1e-6)
-            .log()
-            .mul(self.hierarchical_classifier.temperature)
-        )
+        # Scale the log-probabilities so the output processor's matching
+        # temperature cancels while converting them to probabilities.
+        return log_probabilities.mul(self.hierarchical_classifier.temperature)
 
     def _predict_standard(
         self,
