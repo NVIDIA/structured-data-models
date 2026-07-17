@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import signal
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +12,14 @@ from typing import Any
 
 import numpy as np
 import pytest
-from examples.benchmarking import run_tabiclv2_tabarena_regression as runner
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
+
+runner = importlib.import_module(
+    "examples.benchmarking.run_tabiclv2_tabarena_regression"
+)
 
 
 def _outcome_row(
