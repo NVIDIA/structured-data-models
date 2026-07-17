@@ -57,6 +57,7 @@ class Model(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        generator: torch.Generator | None = None,
     ) -> TableTensor:  # [..., R_query, *]
         r"""The in-context learning forward pass.
 
@@ -72,6 +73,7 @@ class Model(torch.nn.Module, ABC):
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators for ensembling.
+            generator: Generator used to fit stochastic recipe steps.
 
         Returns:
             The prediction ``[..., R_query, *]`` for all query examples.
@@ -95,7 +97,10 @@ class Model(torch.nn.Module, ABC):
 
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
-            y_context_i = recipe.target.fit_transform(y_context)
+            y_context_i = recipe.target.fit_transform(
+                y_context,
+                generator=generator,
+            )
 
             related_context_tables_i = related_query_tables_i = None
             if related_context_tables is not None:
@@ -106,7 +111,10 @@ class Model(torch.nn.Module, ABC):
                 related_context_tables_i = replace(
                     related_context_tables,
                     tables={
-                        name: related_processors[name].fit_transform(t)
+                        name: related_processors[name].fit_transform(
+                            t,
+                            generator=generator,
+                        )
                         for name, t in related_context_tables.tables.items()
                     },
                 )
@@ -120,7 +128,10 @@ class Model(torch.nn.Module, ABC):
                 )
 
             out = self._forward(
-                x_context=recipe.features.fit_transform(x_context),
+                x_context=recipe.features.fit_transform(
+                    x_context,
+                    generator=generator,
+                ),
                 y_context=y_context_i,
                 x_query=recipe.features.transform(x_query),
                 related_context_tables=related_context_tables_i,
@@ -144,6 +155,7 @@ class Model(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        generator: torch.Generator | None = None,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -156,9 +168,10 @@ class Model(torch.nn.Module, ABC):
             y: The targets of in-context examples with shape
                 ``[..., R, 1]``.
             related_tables: Related context for in-context examples.
-            recipe: The recipe for pre- and post-processing. If ``None``, no
-                recipe is applied.
+            recipe: The recipe for pre- and post-processing. If ``None``, the
+                model default recipe is used.
             num_estimators: The number of estimators for ensembling.
+            generator: Generator used to fit stochastic recipe steps.
         """
         # TODO Add validation.
         if not isinstance(x, TableTensor):
@@ -172,7 +185,7 @@ class Model(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            y_i = recipe.target.fit_transform(y)
+            y_i = recipe.target.fit_transform(y, generator=generator)
             cache = Cache(
                 recipe=recipe,
                 classes=y_i.categorical.categories[0]
@@ -189,13 +202,19 @@ class Model(torch.nn.Module, ABC):
                 related_tables_i = replace(
                     related_tables,
                     tables={
-                        name: related_processors[name].fit_transform(t)
+                        name: related_processors[name].fit_transform(
+                            t,
+                            generator=generator,
+                        )
                         for name, t in related_tables.tables.items()
                     },
                 )
 
             self._forward(
-                x_context=recipe.features.fit_transform(x),
+                x_context=recipe.features.fit_transform(
+                    x,
+                    generator=generator,
+                ),
                 y_context=y_i,
                 x_query=None,
                 related_context_tables=related_tables_i,

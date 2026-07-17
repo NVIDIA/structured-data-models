@@ -72,6 +72,9 @@ class TabICLv2(Model):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        batch_size_limit: Maximum number of independent feature or row
+            attention batches processed at once. ``None`` disables attention
+            batch chunking.
     """
 
     #:
@@ -81,8 +84,19 @@ class TabICLv2(Model):
         self,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        batch_size_limit: int | None = None,
     ) -> None:
         super().__init__()
+
+        if batch_size_limit is not None and (
+            isinstance(batch_size_limit, bool)
+            or not isinstance(batch_size_limit, int)
+            or batch_size_limit < 1
+        ):
+            raise ValueError(
+                "batch_size_limit must be a positive integer or None."
+            )
+        self.batch_size_limit = batch_size_limit
 
         self.cls_model = _TabICLv2(
             num_classes=10,
@@ -234,12 +248,22 @@ class TabICLv2(Model):
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
+                numerical=self.reg_model(
+                    x,
+                    y,
+                    cache=cache,
+                    batch_size_limit=self.batch_size_limit,
+                ).sort(dim=-1)[0],
             )
 
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=self.cls_model(x, y, cache=cache)[..., : len(classes)],
+            numerical=self.cls_model(
+                x,
+                y,
+                cache=cache,
+                batch_size_limit=self.batch_size_limit,
+            )[..., : len(classes)],
         )
 
     def __repr__(self) -> str:
@@ -307,9 +331,20 @@ class _TabICLv2(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x=x, y=y, cache=cache)
-        x = self.icl_block(x=x, y=y, cache=cache)
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            cache=cache,
+            batch_size_limit=batch_size_limit,
+        )
+        x = self.icl_block(
+            x=x,
+            y=y,
+            cache=cache,
+            batch_size_limit=batch_size_limit,
+        )
         return self.head(x)
 
 

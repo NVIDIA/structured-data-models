@@ -6,7 +6,10 @@ import pytest
 import torch
 from sdm import TableTensor
 from sdm.models import TabICLv2
-from sdm.models.tabiclv2 import decode_regression_quantiles
+from sdm.models.tabiclv2 import (
+    decode_regression_quantiles,
+    reduce_regression_quantiles,
+)
 from sdm.models.tabiclv2 import model as tabiclv2_model
 from sdm.models.tabiclv2 import output as tabiclv2_output
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -55,6 +58,10 @@ def test_forward(
     assert out.dtype == x_query.dtype
     assert out.device == x_query.device
     assert torch.is_inference(out)
+
+    model.batch_size_limit = 1
+    chunked = model(x_context, y_context, x_query)
+    torch.testing.assert_close(chunked.numerical, out.numerical)
 
     if len(batch_shape) > 0:
         looped = torch.stack(
@@ -347,6 +354,23 @@ def test_decode_regression_quantiles_repairs_crossing(
     assert decoded.dtype == dtype
     assert decoded.device == quantiles.device
     torch.testing.assert_close(decoded, expected)
+
+
+def test_reduce_regression_quantiles_repairs_crossing() -> None:
+    quantiles = torch.arange(2 * 3 * 999, dtype=torch.float64).reshape(
+        2,
+        3,
+        999,
+    )
+    quantiles[..., 0] = 10_000
+    quantiles[..., -1] = -10_000
+
+    reduced = reduce_regression_quantiles(quantiles)
+
+    torch.testing.assert_close(
+        reduced,
+        quantiles.sort(dim=-1).values.mean(dim=-1),
+    )
 
 
 def test_decode_regression_quantiles_applies_target_inverse() -> None:

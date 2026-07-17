@@ -86,6 +86,22 @@ def test_categorical_align_joint_vocabulary_uses_context_order() -> None:
     assert query.categorical.as_tensor().squeeze(-1).tolist() == [1]
 
 
+def test_categorical_align_sorted_category_order() -> None:
+    table = TableTensor.from_pandas(
+        pd.DataFrame({"kind": ["zebra", "apple", "mango"]}),
+        stypes={"kind": "categorical"},
+    )
+
+    output = CategoricalAlign(category_order="sorted").fit_transform(table)
+
+    assert output.categorical.categories[0].tolist() == [
+        "apple",
+        "mango",
+        "zebra",
+    ]
+    assert output.categorical.as_tensor().squeeze(-1).tolist() == [2, 0, 1]
+
+
 @withCUDA
 def test_categorical_align_numeric_values(device: torch.device) -> None:
     context = TableTensor(

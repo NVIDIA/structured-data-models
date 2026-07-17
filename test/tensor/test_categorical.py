@@ -55,6 +55,19 @@ def test_from_arrow_string_values() -> None:
     assert tensor.categories[0].tolist() == ["b", "a"]
 
 
+def test_from_arrow_widens_dictionary_codes() -> None:
+    array = pa.DictionaryArray.from_arrays(
+        pa.array([0, 1, 0], type=pa.int8()),
+        pa.array(["basic", "premium"]),
+    )
+
+    tensor = CategoricalTensor.from_arrow(array)
+
+    assert tensor.dtype == torch.int32
+    assert tensor.equal(torch.tensor([[0], [1], [0]], dtype=torch.int32))
+    assert tensor.categories[0].tolist() == ["basic", "premium"]
+
+
 def test_from_arrow_chunked_values() -> None:
     tensor = CategoricalTensor.from_arrow(
         pa.chunked_array([pa.array(["b", None]), pa.array(["a", "b"])]),

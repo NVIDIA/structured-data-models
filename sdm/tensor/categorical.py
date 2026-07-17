@@ -160,6 +160,8 @@ class CategoricalTensor(Tensor):
                 array = array.combine_chunks()
 
         encoded = array.dictionary_encode()
+        if dtype is None:
+            dtype = torch.int32
         data = arrow_as_tensor(
             encoded.indices.fill_null(-1),
             dtype=dtype,

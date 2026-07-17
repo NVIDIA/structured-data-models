@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 from torch import Tensor
 
@@ -30,12 +32,25 @@ class CategoricalAlign(Processor):
     because their required tensor operations are unavailable on every device.
     This path performs linear Python work in the vocabulary size; a vectorized
     implementation may be preferable if these category types need to scale.
+
+    Args:
+        category_order: Determines category code order. ``"appearance"``
+            preserves first-observed order. ``"sorted"`` uses value order
+            compatible with sklearn's
+            :class:`~sklearn.preprocessing.OrdinalEncoder`.
     """
 
     supported_stypes = frozenset({Stype.categorical})
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        category_order: Literal["appearance", "sorted"] = "appearance",
+    ) -> None:
         super().__init__()
+        if category_order not in {"appearance", "sorted"}:
+            raise ValueError("Invalid category_order.")
+        self.category_order = category_order
         self._categories: tuple[Tensor, ...] = ()
 
     def _fit(
@@ -76,7 +91,10 @@ class CategoricalAlign(Processor):
             )
             # [num_observed_categories]
             observed = (first_positions < codes.numel()).nonzero().view(-1)
-            observed = observed[first_positions[observed].argsort()]
+            if self.category_order == "appearance":
+                observed = observed[first_positions[observed].argsort()]
+            else:
+                observed = self._sorted_observed(category, observed)
             categories.append(self._select_categories(category, observed))
 
         self._categories = tuple(categories)
@@ -113,6 +131,22 @@ class CategoricalAlign(Processor):
             ),
         )
         return table.replace_blocks(categorical=categorical)
+
+    @staticmethod
+    def _sorted_observed(category: Tensor, observed: Tensor) -> Tensor:
+        if (
+            isinstance(category, StringTensor)
+            or category.dtype in _HOST_MAPPED_DTYPES
+        ):
+            values = category.tolist()
+            return torch.tensor(
+                data=sorted(
+                    observed.tolist(), key=lambda index: values[index]
+                ),
+                dtype=torch.long,
+                device=category.device,
+            )
+        return observed[category[observed].argsort()]
 
     @staticmethod
     def _select_categories(category: Tensor, index: Tensor) -> Tensor:

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import copy
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import numpy as np
 import pandas as pd
@@ -20,8 +21,14 @@ from examples.benchmarking.tabiclv2_tabarena_model import (
 from sdm import TableTensor
 from sdm.cache import Cache
 from sdm.models import TabICLv2
-from sdm.processing import FeaturePermute, MeanImpute, Recipe, Sequential
-from sdm.testing import onlyCUDA
+from sdm.processing import (
+    FeaturePermute,
+    InvertibleMixin,
+    MeanImpute,
+    Recipe,
+    Sequential,
+    StandardScale,
+)
 
 pytestmark = pytest.mark.tabarena
 
@@ -29,10 +36,20 @@ pytestmark = pytest.mark.tabarena
 class _FakeTabICLv2:
     instances: ClassVar[list[_FakeTabICLv2]] = []
 
-    def __init__(self, *, pretrained: bool, device: torch.device) -> None:
+    def __init__(
+        self,
+        *,
+        pretrained: bool,
+        device: torch.device,
+        batch_size_limit: int | None = None,
+    ) -> None:
         assert pretrained is False
         self.device = torch.device(device)
+        self.batch_size_limit = batch_size_limit
         self.loaded: tuple[Path, str] | None = None
+        self.received_fit_x: TableTensor | None = None
+        self.received_fit_y: TableTensor | None = None
+        self.received_predict_x: TableTensor | None = None
         self.fit_x: TableTensor | None = None
         self.fit_y: TableTensor | None = None
         self.fit_num_estimators: int | None = None
@@ -50,25 +67,56 @@ class _FakeTabICLv2:
 
     @classmethod
     def default_recipe(cls) -> Recipe:
-        return Recipe(features=[MeanImpute(), FeaturePermute(method="random")])
+        return TabICLv2.default_recipe()
 
     def fit(
         self,
         x: TableTensor,
         y: TableTensor,
         *,
+        recipe: Recipe,
         num_estimators: int,
+        generator: torch.Generator | None,
     ) -> None:
-        self.fit_x = x
-        self.fit_y = y
+        self.received_fit_x = x
+        self.received_fit_y = y
         self.fit_num_estimators = num_estimators
-        cache = Cache({"probe": torch.ones(1, device=self.device)})
+        fitted_recipe = copy.deepcopy(recipe)
+        self.fit_x = fitted_recipe.features.fit_transform(
+            x,
+            generator=generator,
+        )
+        self.fit_y = fitted_recipe.target.fit_transform(
+            y,
+            generator=generator,
+        )
+        cache = Cache(
+            {
+                "probe": torch.ones(1, device=self.device),
+                "recipe": fitted_recipe,
+                "classes": None,
+            }
+        )
         cache.freeze()
         self._caches = [cache]
 
-    def predict(self, x: TableTensor) -> torch.Tensor:
-        point = x.numerical.sum(dim=-1)
-        return point.unsqueeze(-1).repeat(1, 999)
+    def predict(self, x: TableTensor) -> TableTensor:
+        assert self._caches is not None
+        self.received_predict_x = x
+        recipe = self._caches[0]["recipe"]
+        assert isinstance(recipe, Recipe)
+        model_features = recipe.features.transform(x)
+        point = model_features.numerical.sum(dim=-1)
+        quantiles = TableTensor.from_tensor(
+            point.unsqueeze(-1).repeat(1, 999),
+            columns=tuple(f"quantile_{index}" for index in range(999)),
+        )
+        target = cast(InvertibleMixin, recipe.target)
+        restored = target.inverse_transform(quantiles)
+        return TableTensor.from_tensor(
+            torch.stack([restored.numerical], dim=0),
+            columns=tuple(f"quantile_{index}" for index in range(999)),
+        )
 
     def clear(self) -> None:
         self.cleared = True
@@ -83,11 +131,6 @@ class _FakeTabICLv2:
 def fake_backend(monkeypatch: pytest.MonkeyPatch) -> list[_FakeTabICLv2]:
     _FakeTabICLv2.instances = []
     monkeypatch.setattr(adapter, "TabICLv2", _FakeTabICLv2)
-    monkeypatch.setattr(
-        adapter,
-        "decode_regression_quantiles",
-        lambda quantiles, _target: quantiles.mean(dim=-1),
-    )
     return _FakeTabICLv2.instances
 
 
@@ -121,6 +164,15 @@ def _features() -> pd.DataFrame:
     )
 
 
+def _mixed_features() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "amount": [1.0, 2.0, 3.0, 4.0],
+            "segment": ["basic", "premium", "basic", "premium"],
+        }
+    )
+
+
 def _target() -> pd.Series:
     return pd.Series([0.1, 0.2, 0.3, 0.4], name="target")
 
@@ -144,12 +196,20 @@ def test_regression_contract_is_sdm_owned(
         Path("/tmp/tabicl-regressor.ckpt"),
         "0" * 64,
     )
+    assert fake_backend[0].received_fit_x is not None
+    assert torch.isnan(fake_backend[0].received_fit_x.numerical).any()
     assert fake_backend[0].fit_x is not None
     assert not torch.isnan(fake_backend[0].fit_x.numerical).any()
     assert fake_backend[0].fit_num_estimators == 1
+    assert (
+        fake_backend[0].batch_size_limit
+        == adapter.DEFAULT_ATTENTION_BATCH_SIZE_LIMIT
+    )
     assert len(fake_backend[0]._caches or []) == 1
     assert predictions.shape == (len(_features()),)
     assert np.isfinite(predictions).all()
+    assert fake_backend[0].received_predict_x is not None
+    assert torch.isnan(fake_backend[0].received_predict_x.numerical).any()
     np.testing.assert_allclose(predictions, model.predict(_features()))
 
 
@@ -163,20 +223,43 @@ def test_regression_only_guard(fake_backend: list[_FakeTabICLv2]) -> None:
 @pytest.mark.parametrize(
     "X",
     [
-        pd.DataFrame({"category": ["a", "b"]}),
-        pd.DataFrame({"is_active": [True, False]}),
         pd.DataFrame({"when": pd.to_datetime(["2025-01-01", "2025-01-02"])}),
         pd.DataFrame({"customer_id": [1, 2]}),
     ],
 )
-def test_non_numerical_feature_schema_is_rejected(
+def test_unsupported_feature_schema_is_rejected(
     fake_backend: list[_FakeTabICLv2],
     X: pd.DataFrame,
 ) -> None:
     model = _model()
-    with pytest.raises(ValueError, match="only numerical"):
+    with pytest.raises(ValueError, match="only numerical and categorical"):
         model._fit(X=X, y=pd.Series([0.0, 1.0]), num_cpus=1, num_gpus=0)
     assert not fake_backend
+
+
+def test_mixed_feature_schema_is_train_fitted_and_allows_unseen_categories(
+    fake_backend: list[_FakeTabICLv2],
+) -> None:
+    model = _model()
+    model.fit(X=_mixed_features(), y=_target(), num_cpus=1, num_gpus=0)
+    predictions = model.predict(
+        pd.DataFrame(
+            {
+                "amount": [1.5, 2.5],
+                "segment": ["premium", "unseen"],
+            }
+        )
+    )
+
+    backend = fake_backend[0]
+    assert backend.received_fit_x is not None
+    assert backend.received_fit_x.categorical.size(-1) == 1
+    assert backend.fit_x is not None
+    assert backend.fit_x.categorical.size(-1) == 0
+    assert backend.received_predict_x is not None
+    assert backend.received_predict_x.categorical.size(-1) == 1
+    assert predictions.shape == (2,)
+    assert np.isfinite(predictions).all()
 
 
 def test_prediction_requires_fit_and_same_feature_schema(
@@ -247,7 +330,56 @@ def test_recipe_construction_can_be_overridden(
     )
     model.fit(X=_features(), y=_target(), num_cpus=1, num_gpus=0)
 
-    assert model._recipe is replacement
+    assert model._recipe is not replacement
+    assert fake_backend[0]._caches is not None
+    assert model._recipe is fake_backend[0]._caches[0]["recipe"]
+
+
+def test_regression_prediction_is_not_inverse_transformed_twice(
+    fake_backend: list[_FakeTabICLv2],
+) -> None:
+    class _ScaledTargetModel(SDMTabICLv2Model):
+        def _build_recipe(self, model: TabICLv2) -> Recipe:
+            return Recipe(
+                features=[MeanImpute()],
+                target=[StandardScale()],
+            )
+
+    model = _ScaledTargetModel(
+        path="",
+        name="ScaledTargetModel",
+        problem_type="regression",
+        eval_metric=None,
+        hyperparameters={
+            "checkpoint_path": "/tmp/tabicl-regressor.ckpt",
+            "checkpoint_sha256": "0" * 64,
+            "seed": 0,
+            "num_estimators": 1,
+        },
+    )
+    model.fit(X=_features(), y=_target(), num_cpus=1, num_gpus=0)
+    predictions = model.predict(_features())
+
+    backend = fake_backend[0]
+    assert backend.received_predict_x is not None
+    assert model._recipe is not None
+    transformed = model._recipe.features.transform(backend.received_predict_x)
+    point = transformed.numerical.sum(dim=-1, keepdim=True)
+    target = cast(InvertibleMixin, model._recipe.target)
+    expected = target.inverse_transform(
+        TableTensor.from_tensor(point, columns=("target",))
+    ).numerical.squeeze(-1)
+    twice_inverted = target.inverse_transform(
+        TableTensor.from_tensor(expected.unsqueeze(-1), columns=("target",))
+    ).numerical.squeeze(-1)
+
+    np.testing.assert_allclose(
+        predictions,
+        expected.numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    assert not torch.allclose(expected, twice_inverted)
 
 
 def test_failed_fit_preserves_model_attribute_and_can_recover(
@@ -255,9 +387,11 @@ def test_failed_fit_preserves_model_attribute_and_can_recover(
 ) -> None:
     model = _model()
 
-    with pytest.raises(ValueError, match="only numerical"):
+    with pytest.raises(ValueError, match="only numerical and categorical"):
         model.fit(
-            X=pd.DataFrame({"category": ["a", "b"]}),
+            X=pd.DataFrame(
+                {"when": pd.to_datetime(["2025-01-01", "2025-01-02"])}
+            ),
             y=pd.Series([0.0, 1.0]),
             num_cpus=1,
             num_gpus=0,
@@ -285,9 +419,6 @@ def test_seeded_fit_is_deterministic_and_restores_rng(
 ) -> None:
     torch.manual_seed(1234)
     initial_state = torch.random.get_rng_state().clone()
-    with adapter._fork_seed(7, torch.device("cpu")):
-        torch.rand(1)
-    assert torch.equal(torch.random.get_rng_state(), initial_state)
 
     first = _model(seed=7)
     first.fit(
@@ -297,6 +428,7 @@ def test_seeded_fit_is_deterministic_and_restores_rng(
         num_gpus=0,
     )
     first_permutation = _fitted_permutation(first)
+    assert torch.equal(torch.random.get_rng_state(), initial_state)
 
     second = _model(seed=7)
     second.fit(
@@ -318,37 +450,6 @@ def test_seeded_fit_is_deterministic_and_restores_rng(
         )
         permutations.add(tuple(_fitted_permutation(candidate).tolist()))
     assert len(permutations) > 1
-
-
-def test_cpu_seed_scope_does_not_seed_cuda(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    cuda_seed_calls: list[int] = []
-    monkeypatch.setattr(torch.cuda, "manual_seed", cuda_seed_calls.append)
-
-    with adapter._fork_seed(7, torch.device("cpu")):
-        torch.rand(1)
-
-    assert cuda_seed_calls == []
-
-
-@onlyCUDA
-def test_gpu_seed_scope_restores_cpu_and_all_cuda_rng_states() -> None:
-    torch.manual_seed(1234)
-    torch.cuda.manual_seed_all(5678)
-    cpu_state = torch.random.get_rng_state().clone()
-    cuda_states = [
-        torch.cuda.get_rng_state(device).clone()
-        for device in range(torch.cuda.device_count())
-    ]
-
-    with adapter._fork_seed(7, torch.device("cuda:0")):
-        torch.rand(1)
-        torch.rand(1, device="cuda:0")
-
-    assert torch.equal(torch.random.get_rng_state(), cpu_state)
-    for device, expected_state in enumerate(cuda_states):
-        assert torch.equal(torch.cuda.get_rng_state(device), expected_state)
 
 
 @pytest.mark.parametrize(

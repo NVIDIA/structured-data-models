@@ -7,11 +7,9 @@ subprocess and Ray workers a stable import path.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import torch
@@ -21,17 +19,17 @@ from autogluon.tabular.models.abstract.abstract_torch_model import (
 )
 from sdm import Stype, TableTensor, infer_stypes
 from sdm.models import TabICLv2
-from sdm.models.tabiclv2.output import decode_regression_quantiles
-from sdm.processing import InvertibleMixin
+from sdm.models.tabiclv2.output import reduce_regression_quantiles
+from sdm.processing import Recipe
 
 if TYPE_CHECKING:
     import pandas as pd
-    from sdm.processing import Recipe
 
 
 _DEFAULT_SEED = 0
 _MAX_SEED = 2**63 - 1
 _NUM_ESTIMATORS = 1
+DEFAULT_ATTENTION_BATCH_SIZE_LIMIT = 128
 
 
 @dataclass(frozen=True)
@@ -68,24 +66,6 @@ class DeviceAllocation:
                 "Request num_gpus=0 to run on CPU."
             )
         return cls(device=torch.device("cuda:0"))
-
-
-@contextmanager
-def _fork_seed(seed: int, device: torch.device) -> Iterator[None]:
-    """Seed fit-time randomness without perturbing caller RNG state."""
-    devices: list[int] = []
-    if device.type == "cuda":
-        index = device.index
-        if index is None:
-            index = torch.cuda.current_device()
-        devices.append(index)
-
-    with torch.random.fork_rng(devices=devices):
-        torch.random.default_generator.manual_seed(seed)
-        if devices:
-            with torch.cuda.device(devices[0]):
-                torch.cuda.manual_seed(seed)
-        yield
 
 
 class SDMTabICLv2Model(AbstractTorchModel):
@@ -135,49 +115,60 @@ class SDMTabICLv2Model(AbstractTorchModel):
         features, columns = self._to_feature_table(X, device=allocation.device)
         target = self._to_target_table(y, device=allocation.device)
 
-        checkpoint_path, checkpoint_sha256, seed, num_estimators = (
-            self._model_config()
+        (
+            checkpoint_path,
+            checkpoint_sha256,
+            seed,
+            num_estimators,
+            batch_size_limit,
+        ) = self._model_config()
+        generator = torch.Generator(device=allocation.device)
+        generator.manual_seed(seed)
+        model = TabICLv2(
+            pretrained=False,
+            device=allocation.device,
+            batch_size_limit=batch_size_limit,
         )
-        with _fork_seed(seed, allocation.device):
-            model = TabICLv2(pretrained=False, device=allocation.device)
-            model.load_regression_checkpoint(
-                checkpoint_path,
-                checkpoint_sha256,
-            )
-            recipe = self._build_recipe(model)
-            model_features = recipe.features.fit_transform(features)
-            model_target = recipe.target.fit_transform(target)
-            model.fit(
-                x=model_features,
-                y=model_target,
-                num_estimators=num_estimators,
-            )
+        model.load_regression_checkpoint(
+            checkpoint_path,
+            checkpoint_sha256,
+        )
+        recipe = self._build_recipe(model)
+        model.fit(
+            x=features,
+            y=target,
+            recipe=recipe,
+            num_estimators=num_estimators,
+            generator=generator,
+        )
+        if model._caches is None:
+            raise RuntimeError("SDM TabICLv2 did not cache the fitted recipe.")
+        fitted_recipe = cast(Recipe, model._caches[0]["recipe"])
 
         self._sdm_model = model
         # ``AbstractTorchModel`` and some AutoGluon tooling expect this name.
         self.model = model
-        self._recipe = recipe
+        self._recipe = fitted_recipe
         self._allocation = allocation
         self._feature_columns = columns
 
     def _predict_proba(self, X: pd.DataFrame, **kwargs) -> np.ndarray:
         """Return one regression scalar per row through AutoGluon's API."""
         del kwargs
-        model, recipe, allocation, _ = self._require_fitted()
+        model, _, allocation, _ = self._require_fitted()
         features, _ = self._to_feature_table(
             X,
             device=allocation.device,
             expected_columns=self._feature_columns,
         )
-        model_features = recipe.features.transform(features)
-        quantiles = model.predict(model_features)
-        target_transform = recipe.target
-        if not isinstance(target_transform, InvertibleMixin):
+        quantiles = model.predict(features).numerical
+        member_predictions = reduce_regression_quantiles(quantiles)
+        if member_predictions.ndim != 2:
             raise RuntimeError(
-                "The TabICLv2 regression target recipe must support inverse "
-                "transformation."
+                "SDM TabICLv2 returned an invalid regression prediction "
+                f"shape {tuple(member_predictions.shape)}."
             )
-        predictions = decode_regression_quantiles(quantiles, target_transform)
+        predictions = member_predictions.mean(dim=0)
 
         if predictions.ndim != 1 or predictions.size(0) != len(X):
             raise RuntimeError(
@@ -223,13 +214,19 @@ class SDMTabICLv2Model(AbstractTorchModel):
 
     def _set_device(self, device: str) -> None:
         """Move SDM model, recipes, and cache for AutoGluon save/load hooks."""
-        model, recipe, _, _ = self._require_fitted()
+        model, _, _, _ = self._require_fitted()
         device_obj = torch.device(device)
         model.to(device_obj)
         if model._caches is not None:
             model._caches = [cache.to(device_obj) for cache in model._caches]
-        for processor in (recipe.features, recipe.target, recipe.output):
-            processor.to(device_obj)
+            for cache in model._caches:
+                cached_recipe = cast(Recipe, cache["recipe"])
+                for processor in (
+                    cached_recipe.features,
+                    cached_recipe.target,
+                    cached_recipe.output,
+                ):
+                    processor.to(device_obj)
         self._allocation = DeviceAllocation(device=device_obj)
 
     # SDM conversion and schema guards ######################################
@@ -259,14 +256,14 @@ class SDMTabICLv2Model(AbstractTorchModel):
         unsupported = {
             str(column): stype.value
             for column, stype in stypes.items()
-            if stype is not Stype.numerical
+            if stype not in {Stype.numerical, Stype.categorical}
         }
         if unsupported:
             formatted = ", ".join(
                 f"{name} ({stype})" for name, stype in unsupported.items()
             )
             raise ValueError(
-                "SDM TabICLv2 smoke currently accepts only numerical "
+                "SDM TabICLv2 supports only numerical and categorical "
                 f"features; found {formatted}."
             )
 
@@ -335,7 +332,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
             )
         raise ValueError(
             "Feature column order differs from fit. SDM TabICLv2 requires "
-            "the original numerical feature order."
+            "the original feature order."
         )
 
     # Adapter state ##########################################################
@@ -347,12 +344,16 @@ class SDMTabICLv2Model(AbstractTorchModel):
                 f"(got problem_type={self.problem_type!r})."
             )
 
-    def _model_config(self) -> tuple[Path, str, int, int]:
+    def _model_config(self) -> tuple[Path, str, int, int, int]:
         params = self._get_model_params()
         checkpoint_path = params.get("checkpoint_path")
         checkpoint_sha256 = params.get("checkpoint_sha256")
         seed = params.get("seed", _DEFAULT_SEED)
         num_estimators = params.get("num_estimators", _NUM_ESTIMATORS)
+        batch_size_limit = params.get(
+            "attention_batch_size_limit",
+            DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
+        )
 
         if not isinstance(checkpoint_path, (str, Path)):
             raise ValueError(
@@ -381,11 +382,21 @@ class SDMTabICLv2Model(AbstractTorchModel):
                 "The phase-one SDM TabICLv2 smoke requires exactly one "
                 f"estimator (got {num_estimators!r})."
             )
+        if (
+            isinstance(batch_size_limit, bool)
+            or not isinstance(batch_size_limit, int)
+            or batch_size_limit < 1
+        ):
+            raise ValueError(
+                "Expected attention_batch_size_limit to be a positive "
+                f"integer (got {batch_size_limit!r})."
+            )
         return (
             Path(checkpoint_path),
             checkpoint_sha256,
             seed,
             num_estimators,
+            batch_size_limit,
         )
 
     def _require_fitted(

@@ -15,6 +15,7 @@ pytest.importorskip("tabarena")
 
 from examples.benchmarking import run_tabiclv2_local_comparison as runner
 from sdm.processing import (
+    CategoricalAlign,
     ConstantFilter,
     Identity,
     MeanImpute,
@@ -171,6 +172,7 @@ def test_matched_and_native_configurations_are_explicit() -> None:
     assert matched_sdm["cache"] is True
     recipe = matched_sdm["recipe"]
     assert isinstance(recipe, list)
+    assert "ordinal_encode_sorted_categories_then_numerical" in recipe
     assert "fixed_clip_-100_100" in recipe
 
     native_sdm = runner.resolved_configuration(
@@ -187,6 +189,7 @@ def test_matched_recipe_has_reference_single_estimator_steps() -> None:
     recipe = runner.matched_parity_recipe()
     assert isinstance(recipe.features, Sequential)
     assert [type(step) for step in recipe.features.steps] == [
+        runner._ReferenceCategoricalEncoding,
         MeanImpute,
         ConstantFilter,
         StandardScale,
@@ -195,17 +198,45 @@ def test_matched_recipe_has_reference_single_estimator_steps() -> None:
         SigmaClip,
         Identity,
     ]
-    standard = recipe.features.steps[2]
+    categorical = recipe.features.steps[0]
+    assert isinstance(categorical, runner._ReferenceCategoricalEncoding)
+    assert isinstance(categorical.categorical_align, CategoricalAlign)
+    assert categorical.categorical_align.category_order == "sorted"
+
+    encoded = categorical.fit_transform(
+        runner.TableTensor.from_pandas(
+            pd.DataFrame(
+                {
+                    "numerical": [2.0, 4.0],
+                    "categorical": ["zebra", "apple"],
+                }
+            ),
+            stypes={
+                "numerical": "numerical",
+                "categorical": "categorical",
+            },
+        )
+    )
+    assert encoded.columns[runner.Stype.numerical] == (
+        "categorical",
+        "numerical",
+    )
+    runner.torch.testing.assert_close(
+        encoded.numerical,
+        runner.torch.tensor([[1.0, 2.0], [0.0, 4.0]]),
+    )
+
+    standard = recipe.features.steps[3]
     assert isinstance(standard, StandardScale)
     assert standard.epsilon == 1e-6
-    sigma = recipe.features.steps[5]
+    sigma = recipe.features.steps[6]
     assert isinstance(sigma, SigmaClip)
     assert sigma.threshold == 4.0
 
     table = runner.TableTensor.from_tensor(
         runner.torch.tensor([[-200.0, 200.0]])
     )
-    clipped = recipe.features.steps[3].transform(table)
+    clipped = recipe.features.steps[4].transform(table)
     runner.torch.testing.assert_close(
         clipped.numerical,
         runner.torch.tensor([[-100.0, 100.0]]),

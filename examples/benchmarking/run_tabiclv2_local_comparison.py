@@ -37,6 +37,7 @@ import torch
 from sdm import Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.processing import (
+    CategoricalAlign,
     ConstantFilter,
     Identity,
     MeanImpute,
@@ -54,6 +55,7 @@ from examples.benchmarking.run_tabiclv2_tabarena_smoke import (
     _validate_seed,
 )
 from examples.benchmarking.tabiclv2_tabarena_model import (
+    DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
     DeviceAllocation,
     SDMTabICLv2Model,
 )
@@ -184,10 +186,57 @@ class _FixedRangeClip(Processor):
         return table.replace_blocks(numerical=numerical)
 
 
+class _ReferenceCategoricalEncoding(Processor):
+    """Encode features exactly as the original TabICL sklearn boundary.
+
+    The original ``TransformToNumerical`` fits an ``OrdinalEncoder`` on
+    categorical columns, which sorts observed values and emits all categorical
+    columns before numerical columns. This processor preserves that contract
+    while keeping SDM processing tensor-native.
+    """
+
+    supported_stypes = frozenset({Stype.numerical, Stype.categorical})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.categorical_align = CategoricalAlign(category_order="sorted")
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self.categorical_align.fit(
+            table.select_stypes(Stype.categorical),
+            generator=generator,
+        )
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        categorical = self.categorical_align.transform(
+            table.select_stypes(Stype.categorical)
+        ).categorical.to(table.numerical.dtype)
+        columns = (
+            *table.columns[Stype.categorical],
+            *table.columns[Stype.numerical],
+        )
+        if table.numerical.size(-1) == 0:
+            numerical = categorical
+        elif categorical.size(-1) == 0:
+            numerical = table.numerical
+        else:
+            numerical = torch.cat((categorical, table.numerical), dim=-1)
+        return TableTensor(
+            columns={Stype.numerical: columns},
+            numerical=numerical,
+        )
+
+
 def matched_parity_recipe() -> Recipe:
     """Return the deterministic single-estimator parity recipe."""
     return Recipe(
         features=[
+            _ReferenceCategoricalEncoding(),
             MeanImpute(),
             ConstantFilter(),
             StandardScale(epsilon=1e-6),
@@ -270,7 +319,9 @@ def resolved_configuration(
             "num_estimators": 1,
             "seed": seed,
             "cache": True,
+            "attention_batch_size_limit": DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
             "recipe": [
+                "ordinal_encode_sorted_categories_then_numerical",
                 "mean_impute",
                 "constant_filter",
                 "standard_scale_epsilon_1e-6",
@@ -301,6 +352,7 @@ def resolved_configuration(
             "num_estimators": 1,
             "seed": seed,
             "cache": True,
+            "attention_batch_size_limit": DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
             "recipe": "sdm_tabiclv2_default_recipe",
         }
     raise ValueError(
@@ -334,6 +386,7 @@ def model_hyperparameters(
         "checkpoint_sha256": checkpoint_sha256,
         "seed": seed,
         "num_estimators": 1,
+        "attention_batch_size_limit": DEFAULT_ATTENTION_BATCH_SIZE_LIMIT,
     }
 
 
@@ -556,9 +609,36 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         inference_times.append(duration)
 
     target = np.asarray(y_test, dtype=np.float64)
+    train_target = np.asarray(y_train, dtype=np.float64)
+    train_target_std = float(np.std(train_target, ddof=0))
     metric_error = float(np.sqrt(np.mean(np.square(predictions - target))))
     if not math.isfinite(metric_error):
         raise RuntimeError("RMSE must be finite.")
+    if not math.isfinite(train_target_std) or train_target_std < 0:
+        raise RuntimeError(
+            "Training target standard deviation must be finite."
+        )
+
+    prediction_path = spec.get("prediction_path")
+    prediction_sha256 = None
+    if prediction_path is not None:
+        if not isinstance(prediction_path, str) or not prediction_path:
+            raise RuntimeError(
+                "Prediction artifact path must be a non-empty string."
+            )
+        artifact_path = Path(prediction_path)
+        if artifact_path.exists():
+            raise FileExistsError(
+                f"Refusing to overwrite prediction artifact: {artifact_path}"
+            )
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            artifact_path,
+            predictions=predictions,
+            targets=target,
+            train_target_std=np.asarray([train_target_std], dtype=np.float64),
+        )
+        prediction_sha256 = _sha256(artifact_path)
 
     return {
         "profile": spec["profile"],
@@ -577,6 +657,9 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         "features": X_train.shape[1],
         "metric": "rmse",
         "metric_error": metric_error,
+        "train_target_std": train_target_std,
+        "prediction_path": prediction_path,
+        "prediction_sha256": prediction_sha256,
         "fit_time_s": fit_time_s,
         "first_inference_time_s": first_time_s,
         "inference_times_s": inference_times,
@@ -699,6 +782,28 @@ def _validate_worker_result(
         or float(metric_error) < 0
     ):
         raise RuntimeError("Worker field 'metric_error' must be finite.")
+    prediction_path = result.get("prediction_path")
+    prediction_sha256 = result.get("prediction_sha256")
+    if prediction_path is not None:
+        if not isinstance(prediction_path, str) or not prediction_path:
+            raise RuntimeError(
+                "Worker prediction path must be a non-empty string."
+            )
+        if (
+            not isinstance(prediction_sha256, str)
+            or len(prediction_sha256) != 64
+        ):
+            raise RuntimeError(
+                "Worker prediction artifact is missing SHA-256."
+            )
+        if not Path(prediction_path).is_file():
+            raise RuntimeError("Worker prediction artifact was not written.")
+        if _sha256(Path(prediction_path)) != prediction_sha256:
+            raise RuntimeError("Worker prediction artifact SHA-256 mismatch.")
+    train_target_std = result.get("train_target_std")
+    if train_target_std is not None:
+        _require_finite_positive(train_target_std, field="train_target_std")
+
     inference_times = result.get("inference_times_s")
     if not isinstance(inference_times, list) or len(inference_times) != int(
         spec["inference_repeats"]
