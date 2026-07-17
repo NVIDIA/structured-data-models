@@ -10,7 +10,7 @@ from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import Model
+from sdm.models import ICLModel
 from sdm.models.tabiclv2.hierarchical_classifier import (
     HierarchicalClassifier,
 )
@@ -20,7 +20,7 @@ from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
 
-class TabICLv2(Model):
+class TabICLv2(ICLModel):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
