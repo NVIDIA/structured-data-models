@@ -1,4 +1,3 @@
-import math
 from collections.abc import Mapping, Sequence
 from typing import NamedTuple, cast
 
@@ -186,7 +185,6 @@ class RelationalSampler:
             )
 
         # Resolve entity table node indices:
-        task_rows = math.prod(task_table.size()[:-1])
         task_index, seed = join_index(
             left_table=task_table,
             right_table=self.data.tables[task_link.table],
@@ -194,12 +192,11 @@ class RelationalSampler:
             right_keys=task_link.table_columns,
             device=task_table.device,
         )
-        index = task_index.argsort()
-        task_index = task_index[index]
-        seed = seed[index]
+        task_index, perm = task_index.sort()
+        seed = seed[perm]
 
         expected = torch.arange(
-            task_rows,
+            task_table.size(-2),
             dtype=task_index.dtype,
             device=task_index.device,
         )
