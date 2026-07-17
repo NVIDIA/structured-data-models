@@ -69,3 +69,19 @@ python -m benchmark.tabiclv2_reference \
 
 The reference checkout must be at
 `f719c886a586ed4a29236345e319ac1ea596c478`.
+
+Establish the GPU speed of light for representative Processor operations:
+
+```bash
+python -m benchmark.processor_speed_of_light \
+  --warmups 5 --repetitions 20 \
+  --output benchmark/results/processor_gpu_speed_of_light.json
+```
+
+This CUDA-only run compares the current Processors with direct tensor, eager
+batched, compiled, layout, batching, algorithm, and dtype candidates. It records host
+wall and CUDA-event medians/p95s, incremental peak allocation, throughput,
+correctness error, pinned H2D/D2H copies, and idle synchronization overhead.
+Compilation, data creation, fitted-state preparation, and correctness checks
+remain outside timed regions. See `REPORT.md` for profiler kernel counts and
+the production recommendation.
