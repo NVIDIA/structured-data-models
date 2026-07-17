@@ -166,12 +166,14 @@ def _sha256(path: Path) -> str:
 def _write_source_snapshot(
     repository_root: Path,
     output_dir: Path,
+    *,
+    runtime_source_paths: Sequence[str] = RUNTIME_SOURCE_PATHS,
 ) -> tuple[Path, Path]:
     """Write the exact runtime-source and working-tree snapshot for a run."""
     snapshot_directory = output_dir / SOURCE_SNAPSHOT_DIRECTORY
     snapshot_directory.mkdir()
     runtime_sources: list[dict[str, str]] = []
-    for relative_path in RUNTIME_SOURCE_PATHS:
+    for relative_path in runtime_source_paths:
         source_path = repository_root / relative_path
         if not source_path.is_file():
             raise RuntimeError(

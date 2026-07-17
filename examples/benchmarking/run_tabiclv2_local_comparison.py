@@ -318,12 +318,12 @@ def resolved_configuration(
             "softmax_temperature": 0.9,
             "average_logits": True,
         }
-        if implementation == ORIGINAL and problem_type == "binary"
+        if implementation == ORIGINAL and problem_type != "regression"
         else {}
     )
     attention_batch_size_limit = (
         BINARY_ATTENTION_BATCH_SIZE_LIMIT
-        if problem_type == "binary"
+        if problem_type != "regression"
         else DEFAULT_ATTENTION_BATCH_SIZE_LIMIT
     )
 
@@ -353,7 +353,7 @@ def resolved_configuration(
             "sigma_clip_4",
             "identity_feature_permutation",
         ]
-        if problem_type == "binary":
+        if problem_type != "regression":
             recipe.extend(
                 [
                     "target_sorted_categorical_align",
@@ -605,18 +605,24 @@ def _validate_predictions(
     *,
     expected_rows: int,
     problem_type: str,
+    num_classes: int | None = None,
 ) -> np.ndarray:
     values = np.asarray(predictions, dtype=np.float64)
     expected_shape = (expected_rows,)
-    if problem_type == "binary":
-        expected_shape = (expected_rows, 2)
+    if problem_type != "regression":
+        if num_classes is None or num_classes < 2:
+            raise RuntimeError(
+                "Classification prediction validation requires at least two "
+                "classes."
+            )
+        expected_shape = (expected_rows, num_classes)
     if values.shape != expected_shape:
         raise RuntimeError(
             f"Expected prediction shape {expected_shape}, got {values.shape}."
         )
     if not np.isfinite(values).all():
         raise RuntimeError("Model produced non-finite predictions.")
-    if problem_type == "binary" and (
+    if problem_type != "regression" and (
         (values < 0).any()
         or not np.allclose(
             values.sum(axis=1),
@@ -626,9 +632,24 @@ def _validate_predictions(
         )
     ):
         raise RuntimeError(
-            "Binary classifier did not produce normalized probabilities."
+            "Classifier did not produce normalized probabilities."
         )
     return values
+
+
+def _classification_probability_matrix(
+    probabilities: Any,
+    *,
+    expected_rows: int,
+    num_classes: int,
+) -> np.ndarray:
+    """Validate multiclass outputs in fitted class-column order."""
+    return _validate_predictions(
+        probabilities,
+        expected_rows=expected_rows,
+        problem_type="multiclass",
+        num_classes=num_classes,
+    )
 
 
 def _binary_probability_matrix(
@@ -643,6 +664,7 @@ def _binary_probability_matrix(
             probabilities,
             expected_rows=expected_rows,
             problem_type="binary",
+            num_classes=2,
         )
     if probabilities.shape != (expected_rows,):
         raise RuntimeError(
@@ -661,41 +683,72 @@ def _binary_probability_matrix(
     return np.column_stack((1.0 - probabilities, probabilities))
 
 
-def _validate_binary_label_encoding(
+def _validate_classification_label_encoding(
     model: Any,
     y_train: Any,
     *,
     target: np.ndarray,
 ) -> None:
-    """Verify the source wrapper positive class matches the target encoding."""
+    """Verify the source wrapper uses the benchmark fitted class order."""
     label_cleaner = getattr(model, "label_cleaner", None)
     if label_cleaner is None:
         return
     encoded = np.asarray(label_cleaner.transform(y_train), dtype=np.int64)
     if encoded.shape != target.shape or not np.array_equal(encoded, target):
         raise RuntimeError(
-            "Source binary label encoding disagrees with the benchmark sorted "
+            "Source classification label encoding disagrees with the sorted "
             "class order."
         )
+
+
+def _validate_binary_label_encoding(
+    model: Any,
+    y_train: Any,
+    *,
+    target: np.ndarray,
+) -> None:
+    """Preserve the binary-specific validation entrypoint."""
+    _validate_classification_label_encoding(model, y_train, target=target)
+
+
+def _classification_targets(
+    y_train: Any,
+    y_test: Any,
+    *,
+    problem_type: str,
+) -> tuple[np.ndarray, tuple[str, ...]]:
+    classes = np.unique(np.asarray(y_train))
+    expected = (
+        classes.size == 2
+        if problem_type == "binary"
+        else 3 <= classes.size <= 10
+    )
+    if not expected:
+        class_requirement = (
+            "exactly two" if problem_type == "binary" else "3 to 10"
+        )
+        raise RuntimeError(
+            f"{problem_type.capitalize()} benchmark split does not contain "
+            f"{class_requirement} train classes (got {classes.size})."
+        )
+    targets = np.searchsorted(classes, np.asarray(y_test))
+    if not np.array_equal(classes[targets], np.asarray(y_test)):
+        raise RuntimeError("Test labels are not represented in train classes.")
+    return targets.astype(np.int64, copy=False), tuple(
+        str(value) for value in classes.tolist()
+    )
 
 
 def _binary_targets(
     y_train: Any,
     y_test: Any,
 ) -> tuple[np.ndarray, tuple[str, str]]:
-    classes = np.unique(np.asarray(y_train))
-    if classes.shape != (2,):
-        raise RuntimeError(
-            "Binary benchmark split does not contain exactly two train "
-            f"classes (got {classes.size})."
-        )
-    targets = np.searchsorted(classes, np.asarray(y_test))
-    if not np.array_equal(classes[targets], np.asarray(y_test)):
-        raise RuntimeError("Test labels are not represented in train classes.")
-    return targets.astype(np.int64, copy=False), (
-        str(classes[0]),
-        str(classes[1]),
+    targets, classes = _classification_targets(
+        y_train,
+        y_test,
+        problem_type="binary",
     )
+    return targets, (classes[0], classes[1])
 
 
 def _binary_log_loss(
@@ -709,6 +762,32 @@ def _binary_log_loss(
     if not math.isfinite(float(loss)):
         raise RuntimeError("Binary log loss must be finite.")
     return float(loss)
+
+
+def _multiclass_log_loss(
+    probabilities: np.ndarray,
+    targets: np.ndarray,
+) -> float:
+    if (
+        probabilities.ndim != 2
+        or targets.shape != (probabilities.shape[0],)
+        or not np.isin(targets, np.arange(probabilities.shape[1])).all()
+    ):
+        raise RuntimeError("Multiclass log loss received invalid targets.")
+    selected = probabilities[np.arange(targets.size), targets]
+    loss = -np.mean(np.log(np.clip(selected, 1e-15, 1.0)))
+    if not math.isfinite(float(loss)):
+        raise RuntimeError("Multiclass log loss must be finite.")
+    return float(loss)
+
+
+def _classification_accuracy(
+    probabilities: np.ndarray,
+    targets: np.ndarray,
+) -> float:
+    if probabilities.ndim != 2 or targets.shape != (probabilities.shape[0],):
+        raise RuntimeError("Classification accuracy received invalid inputs.")
+    return float(np.mean(probabilities.argmax(axis=1) == targets))
 
 
 def _binary_roc_auc(
@@ -744,7 +823,7 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
     )
     num_gpus = int(spec["num_gpus"])
     problem_type = str(spec.get("problem_type", "regression"))
-    if problem_type not in {"binary", "regression"}:
+    if problem_type not in {"binary", "multiclass", "regression"}:
         raise ValueError(
             f"Unsupported benchmark problem type: {problem_type!r}."
         )
@@ -766,12 +845,16 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         return model
 
     target: np.ndarray | None = None
-    class_labels: tuple[str, str] | None = None
-    if problem_type == "binary":
-        target, class_labels = _binary_targets(y_train, y_test)
+    class_labels: tuple[str, ...] | None = None
+    if problem_type != "regression":
+        target, class_labels = _classification_targets(
+            y_train,
+            y_test,
+            problem_type=problem_type,
+        )
 
     def predict(model: Any) -> Any:
-        if problem_type == "binary":
+        if problem_type != "regression":
             return model.predict_proba(X_test)
         return model.predict(X_test)
 
@@ -783,14 +866,23 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         lambda: predict(model),
         num_gpus=num_gpus,
     )
-    if problem_type == "binary":
-        if target is None:
-            raise RuntimeError("Binary benchmark target encoding is missing.")
-        _validate_binary_label_encoding(model, y_train, target=target)
-        predictions = _binary_probability_matrix(
-            first_raw,
-            expected_rows=len(X_test),
-        )
+    if problem_type != "regression":
+        if target is None or class_labels is None:
+            raise RuntimeError(
+                "Classification benchmark target encoding is missing."
+            )
+        _validate_classification_label_encoding(model, y_train, target=target)
+        if problem_type == "binary":
+            predictions = _binary_probability_matrix(
+                first_raw,
+                expected_rows=len(X_test),
+            )
+        else:
+            predictions = _classification_probability_matrix(
+                first_raw,
+                expected_rows=len(X_test),
+                num_classes=len(class_labels),
+            )
     else:
         predictions = _validate_predictions(
             first_raw,
@@ -804,11 +896,22 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
             lambda: predict(model),
             num_gpus=num_gpus,
         )
-        if problem_type == "binary":
-            repeated = _binary_probability_matrix(
-                repeated_raw,
-                expected_rows=len(X_test),
-            )
+        if problem_type != "regression":
+            if class_labels is None:
+                raise RuntimeError(
+                    "Classification benchmark class labels are missing."
+                )
+            if problem_type == "binary":
+                repeated = _binary_probability_matrix(
+                    repeated_raw,
+                    expected_rows=len(X_test),
+                )
+            else:
+                repeated = _classification_probability_matrix(
+                    repeated_raw,
+                    expected_rows=len(X_test),
+                    num_classes=len(class_labels),
+                )
         else:
             repeated = _validate_predictions(
                 repeated_raw,
@@ -821,11 +924,20 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
 
     train_target_std: float | None = None
     roc_auc: float | None = None
-    if problem_type == "binary":
+    accuracy: float | None = None
+    if problem_type != "regression":
         if target is None or class_labels is None:
-            raise RuntimeError("Binary benchmark target encoding is missing.")
-        metric_error = _binary_log_loss(predictions, target)
-        roc_auc = _binary_roc_auc(predictions, target)
+            raise RuntimeError(
+                "Classification benchmark target encoding is missing."
+            )
+        metric_error = (
+            _binary_log_loss(predictions, target)
+            if problem_type == "binary"
+            else _multiclass_log_loss(predictions, target)
+        )
+        if problem_type == "binary":
+            roc_auc = _binary_roc_auc(predictions, target)
+        accuracy = _classification_accuracy(predictions, target)
         metric = "log_loss"
     else:
         target = np.asarray(y_test, dtype=np.float64)
@@ -886,6 +998,7 @@ def _worker_run(spec: Mapping[str, Any]) -> dict[str, object]:
         "metric_error": metric_error,
         "train_target_std": train_target_std,
         "roc_auc": roc_auc,
+        "accuracy": accuracy,
         "class_labels": class_labels,
         "prediction_path": prediction_path,
         "prediction_sha256": prediction_sha256,

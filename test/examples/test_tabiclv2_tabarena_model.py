@@ -121,7 +121,13 @@ class _FakeTabICLv2:
                 str(value)
                 for value in self.fit_y.categorical.categories[0].tolist()
             )
-            probabilities = model_features.numerical.new_tensor([0.25, 0.75])
+            probabilities = torch.arange(
+                1,
+                len(classes) + 1,
+                device=model_features.device,
+                dtype=model_features.numerical.dtype,
+            )
+            probabilities = probabilities / probabilities.sum()
             probabilities = probabilities.repeat(len(x), 1)
             return TableTensor.from_tensor(
                 probabilities.unsqueeze(0),
@@ -238,9 +244,9 @@ def test_regression_contract_is_sdm_owned(
 def test_unsupported_problem_type_is_rejected(
     fake_backend: list[_FakeTabICLv2],
 ) -> None:
-    model = _model(problem_type="multiclass")
+    model = _model(problem_type="quantile")
     with pytest.raises(
-        ValueError, match="binary classification and regression"
+        ValueError, match="multiclass classification, and regression"
     ):
         model._fit(X=_features(), y=_target(), num_cpus=1, num_gpus=0)
     assert not fake_backend
@@ -263,10 +269,51 @@ def test_binary_contract_preserves_sorted_class_probability_columns(
     assert model._class_labels == ("no", "yes")
     assert probabilities.shape == (len(_features()), 2)
     assert np.isfinite(probabilities).all()
-    np.testing.assert_allclose(probabilities.sum(axis=1), 1.0)
+    np.testing.assert_allclose(
+        probabilities.sum(axis=1),
+        1.0,
+        rtol=1e-6,
+        atol=1e-6,
+    )
 
 
-@pytest.mark.parametrize("problem_type", ["binary", "regression"])
+@pytest.mark.parametrize("num_classes", [3, 5, 8])
+def test_multiclass_contract_preserves_fitted_probability_columns(
+    fake_backend: list[_FakeTabICLv2],
+    num_classes: int,
+) -> None:
+    model = _model(problem_type="multiclass")
+    labels = [f"class_{index}" for index in range(num_classes)]
+    target = pd.Series(
+        [labels[index % num_classes] for index in range(num_classes * 2)],
+        name="target",
+    )
+    features = pd.DataFrame(
+        {
+            "feature_a": np.arange(len(target), dtype=np.float64),
+            "feature_b": np.arange(len(target), dtype=np.float64) / 2,
+        }
+    )
+
+    model.fit(X=features, y=target, num_cpus=1, num_gpus=0)
+    probabilities = model._predict_proba(features)
+
+    assert len(fake_backend) == 1
+    assert model._class_labels == tuple(labels)
+    assert probabilities.shape == (len(features), num_classes)
+    assert np.isfinite(probabilities).all()
+    np.testing.assert_allclose(
+        probabilities.sum(axis=1),
+        1.0,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+@pytest.mark.parametrize(
+    "problem_type",
+    ["binary", "multiclass", "regression"],
+)
 @pytest.mark.parametrize(
     ("prediction_batch_size", "expected_calls"),
     [(1, [1, 1, 1, 1]), (3, [3, 1]), (8, [4])],
@@ -280,6 +327,8 @@ def test_prediction_chunking_preserves_order_and_outputs(
     target: pd.Series
     if problem_type == "binary":
         target = pd.Series(["yes", "no", "yes", "no"], name="target")
+    elif problem_type == "multiclass":
+        target = pd.Series(["a", "b", "c", "a"], name="target")
     else:
         target = _target()
 

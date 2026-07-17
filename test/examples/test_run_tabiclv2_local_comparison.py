@@ -66,6 +66,37 @@ def test_binary_probability_matrix_rejects_invalid_values(
         )
 
 
+@pytest.mark.parametrize("num_classes", [3, 5, 8])
+def test_multiclass_probability_matrix_accepts_observed_class_counts(
+    num_classes: int,
+) -> None:
+    probabilities = np.full((2, num_classes), 1 / num_classes)
+    actual = runner._classification_probability_matrix(
+        probabilities,
+        expected_rows=2,
+        num_classes=num_classes,
+    )
+
+    np.testing.assert_allclose(actual, probabilities)
+
+
+def test_multiclass_metrics_use_complete_probability_matrix() -> None:
+    probabilities = np.asarray(
+        [
+            [0.8, 0.1, 0.1],
+            [0.1, 0.7, 0.2],
+            [0.2, 0.2, 0.6],
+        ]
+    )
+    targets = np.asarray([0, 1, 2])
+
+    assert runner._multiclass_log_loss(
+        probabilities,
+        targets,
+    ) == pytest.approx(-np.log([0.8, 0.7, 0.6]).mean())
+    assert runner._classification_accuracy(probabilities, targets) == 1.0
+
+
 class _BinaryLabelCleaner:
     def transform(self, y: pd.Series) -> pd.Series:
         return y
@@ -298,13 +329,41 @@ def test_matched_recipe_has_reference_single_estimator_steps() -> None:
     )
 
 
-def test_binary_matched_recipe_keeps_the_single_estimator_class_order() -> (
-    None
-):
-    recipe = runner.matched_parity_recipe(problem_type="binary")
+@pytest.mark.parametrize("problem_type", ["binary", "multiclass"])
+def test_classification_matched_recipe_keeps_fitted_class_order(
+    problem_type: str,
+) -> None:
+    recipe = runner.matched_parity_recipe(problem_type=problem_type)
     assert isinstance(recipe.target, Sequential)
     assert [type(step) for step in recipe.target.steps] == [CategoricalAlign]
     assert recipe.target.steps[0].category_order == "sorted"
+
+
+def test_multiclass_matched_configuration_uses_classifier_contract() -> None:
+    checkpoint = Path("/tmp/classifier.ckpt")
+    original = runner.resolved_configuration(
+        profile=runner.MATCHED_PARITY,
+        implementation=runner.ORIGINAL,
+        checkpoint_path=checkpoint,
+        seed=0,
+        problem_type="multiclass",
+    )
+    sdm = runner.resolved_configuration(
+        profile=runner.MATCHED_PARITY,
+        implementation=runner.SDM,
+        checkpoint_path=checkpoint,
+        seed=0,
+        problem_type="multiclass",
+    )
+
+    assert original["class_shuffle_method"] == "shift"
+    assert original["softmax_temperature"] == 0.9
+    assert original["average_logits"] is True
+    assert sdm["attention_batch_size_limit"] == 32
+    recipe = sdm["recipe"]
+    assert isinstance(recipe, list)
+    assert "target_sorted_categorical_align" in recipe
+    assert "softmax_temperature_0.9" in recipe
 
 
 def test_timer_synchronizes_before_and_after_call(

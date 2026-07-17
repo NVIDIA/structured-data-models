@@ -70,7 +70,7 @@ class DeviceAllocation:
 
 
 class SDMTabICLv2Model(AbstractTorchModel):
-    """Run one locally verified SDM TabICLv2 regression or binary estimator.
+    """Run one locally verified SDM TabICLv2 regression or classifier.
 
     TabArena supplies raw pandas data.  This wrapper validates it, converts it
     directly to SDM :class:`~sdm.TableTensor` values, and applies SDM's recipe.
@@ -101,7 +101,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
     @classmethod
     def supported_problem_types(cls) -> list[str]:
         """Advertise the supported TabArena problem types."""
-        return ["binary", "regression"]
+        return ["binary", "multiclass", "regression"]
 
     def _fit(
         self,
@@ -171,7 +171,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
         self._prediction_batch_size = prediction_batch_size
 
     def _predict_proba(self, X: pd.DataFrame, **kwargs) -> np.ndarray:
-        """Return regression predictions or binary probabilities for ``X``."""
+        """Return regression predictions or class probabilities for ``X``."""
         del kwargs
         model, _, allocation, _, prediction_batch_size = self._require_fitted()
         features, _ = self._to_feature_table(
@@ -214,12 +214,12 @@ class SDMTabICLv2Model(AbstractTorchModel):
         class_labels = self._class_labels
         if class_labels is None:
             raise RuntimeError(
-                "Binary adapter is missing its fitted class labels."
+                "Classification adapter is missing its fitted class labels."
             )
         probabilities = output.numerical
         if probabilities.ndim != 3 or probabilities.size(1) != len(X):
             raise RuntimeError(
-                "SDM TabICLv2 binary decoder returned an invalid prediction "
+                "SDM TabICLv2 classifier returned an invalid prediction "
                 f"shape {tuple(probabilities.shape)} for {len(X)} rows."
             )
         column_positions = {
@@ -230,12 +230,15 @@ class SDMTabICLv2Model(AbstractTorchModel):
             positions = [column_positions[label] for label in class_labels]
         except KeyError as error:
             raise RuntimeError(
-                "SDM TabICLv2 binary output columns do not match the "
+                "SDM TabICLv2 classifier output columns do not match the "
                 f"fitted classes {class_labels!r}."
             ) from error
-        if len(positions) != 2 or probabilities.size(-1) != 2:
+        if len(positions) != len(class_labels) or probabilities.size(
+            -1
+        ) != len(class_labels):
             raise RuntimeError(
-                "SDM TabICLv2 binary decoder requires exactly two classes."
+                "SDM TabICLv2 classifier output width does not match its "
+                f"{len(class_labels)} fitted classes."
             )
         probabilities = probabilities[..., positions].mean(dim=0)
         totals = probabilities.sum(dim=-1, keepdim=True)
@@ -245,7 +248,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
             or (totals <= 0).any()
         ):
             raise RuntimeError(
-                "SDM TabICLv2 produced invalid binary probabilities."
+                "SDM TabICLv2 produced invalid classification probabilities."
             )
         probabilities = probabilities / totals
         return (
@@ -351,7 +354,7 @@ class SDMTabICLv2Model(AbstractTorchModel):
         y: pd.Series,
         *,
         device: torch.device,
-        problem_type: Literal["binary", "regression"],
+        problem_type: Literal["binary", "multiclass", "regression"],
     ) -> tuple[TableTensor, tuple[str, ...] | None]:
         import pandas as pd
 
@@ -382,10 +385,16 @@ class SDMTabICLv2Model(AbstractTorchModel):
             )
 
         class_values = np.unique(y.to_numpy())
-        if class_values.size != 2:
+        expected_class_range = (
+            class_values.size == 2
+            if problem_type == "binary"
+            else 3 <= class_values.size <= 10
+        )
+        if not expected_class_range:
+            expected = "exactly two" if problem_type == "binary" else "3 to 10"
             raise ValueError(
-                "SDM TabICLv2 binary classification requires exactly two "
-                f"training classes (got {class_values.size})."
+                f"SDM TabICLv2 {problem_type} classification requires "
+                f"{expected} training classes (got {class_values.size})."
             )
         return (
             TableTensor.from_pandas(
@@ -431,13 +440,17 @@ class SDMTabICLv2Model(AbstractTorchModel):
 
     def _require_supported_problem_type(
         self,
-    ) -> Literal["binary", "regression"]:
-        if self.problem_type not in {"binary", "regression"}:
+    ) -> Literal["binary", "multiclass", "regression"]:
+        if self.problem_type not in {"binary", "multiclass", "regression"}:
             raise ValueError(
-                "SDMTabICLv2Model supports binary classification and "
-                f"regression (got problem_type={self.problem_type!r})."
+                "SDMTabICLv2Model supports binary classification, multiclass "
+                f"classification, and regression (got "
+                f"problem_type={self.problem_type!r})."
             )
-        return cast(Literal["binary", "regression"], self.problem_type)
+        return cast(
+            Literal["binary", "multiclass", "regression"],
+            self.problem_type,
+        )
 
     @staticmethod
     def _predict_in_chunks(
