@@ -148,6 +148,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.ColumnarTensor.from_arrow"><code class="docutils literal notranslate">from_arrow()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.ColumnarTensor.from_cudf"><code class="docutils literal notranslate">from_cudf()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.ColumnarTensor.to_arrow"><code class="docutils literal notranslate">to_arrow()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.ColumnarTensor.to_cudf"><code class="docutils literal notranslate">to_cudf()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -244,14 +245,28 @@ tensor subclass or dtype.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.ColumnarTensor.to_arrow">
-<span class="sig-name descname"><span class="pre">to_arrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></span><a class="headerlink" href="#sdm.tensor.ColumnarTensor.to_arrow" title="Link to this definition">#</a></dt>
-<dd><p>Convert this tensor to a flat <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Table</span></code></a>.</p>
+<span class="sig-name descname"><span class="pre">to_arrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></span><a class="headerlink" href="#sdm.tensor.ColumnarTensor.to_arrow" title="Link to this definition">#</a></dt>
+<dd><p>Convert this tensor to a two-dimensional <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Table</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>columns</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – The column names.</p>
+<dd class="field-odd"><p><strong>names</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – The column names.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><em>Table</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.ColumnarTensor.to_cudf">
+<span class="sig-name descname"><span class="pre">to_cudf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)"><span class="pre">cudf.DataFrame</span></a></span></span><a class="headerlink" href="#sdm.tensor.ColumnarTensor.to_cudf" title="Link to this definition">#</a></dt>
+<dd><p>Convert this tensor to a two-dimensional <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.DataFrame</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>names</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – The column names.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)">cudf.DataFrame</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -284,7 +299,7 @@ tensor subclass or dtype.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=b6240254"></script>
+      <script src="../../_static/documentation_options.js?v=1214a68f"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
