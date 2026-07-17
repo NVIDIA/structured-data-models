@@ -2,7 +2,7 @@
 ## Experiment details
 
 ### Embedding and dimension reduction: 
-The current approach was to concatenate all text rows into a single text col. That column then gets embedded by the sentence transformer.
+**The current approach was to concatenate all text rows into a single text col.** That column then gets embedded by the sentence transformer.
 After the embedding is reduced and concatenated with the numeric columns into a feature matrix, each CV fold does three TabICL calls:
 ```
 with torch.amp.autocast(device.type, torch.bfloat16):
@@ -11,6 +11,9 @@ with torch.amp.autocast(device.type, torch.bfloat16):
     tabiclv2.clear()                     # 3. free the cached context
 preds = logits.argmax(dim=-1)            # class = highest logit
 ```
+
+**As initial analysis, reduction to 16 and 30 dimensions was performed.**
+
 <details>
 <summary>More details</summary>
 1. fit(x_train, y_train) — for an in-context model this is not training/gradient updates. It just caches the labeled training rows as the "context" (the in-context examples the model conditions on). No weights change.
