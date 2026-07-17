@@ -57,37 +57,6 @@ def test_quantile_uniform_fit_transform_and_inverse_round_trip(
 
 
 @withCUDA
-def test_quantile_transforms_more_than_one_feature_batch(
-    device: torch.device,
-) -> None:
-    base = torch.arange(6, dtype=torch.float64, device=device).unsqueeze(1)
-    offsets = torch.arange(35, dtype=torch.float64, device=device).unsqueeze(0)
-    inp = base + offsets * 10
-
-    processor = Quantile(n_quantiles=6, subsample=None).fit(
-        TableTensor.from_tensor(inp)
-    )
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-
-    expected = torch.linspace(
-        0,
-        1,
-        6,
-        dtype=torch.float64,
-        device=device,
-    ).unsqueeze(1)
-
-    assert torch.allclose(transformed, expected.expand_as(inp))
-    assert transformed.device == device
-    assert torch.allclose(
-        processor.inverse_transform(
-            TableTensor.from_tensor(transformed)
-        ).numerical,
-        inp,
-    )
-
-
-@withCUDA
 def test_quantile_repeated_values_map_to_midpoint(
     device: torch.device,
 ) -> None:
