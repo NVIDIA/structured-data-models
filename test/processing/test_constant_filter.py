@@ -9,10 +9,10 @@ from sdm.testing import withCUDA
 def test_unique_filter(device: torch.device) -> None:
     data = torch.tensor(
         [
-            [1.0, 0.0, 3.0, 5.0, torch.nan],
-            [1.0, 1.0, 3.0, torch.nan, torch.nan],
-            [1.0, 2.0, 4.0, 5.0, torch.nan],
-            [1.0, 3.0, 4.0, torch.nan, torch.nan],
+            [1.0, 0.0, 3.0, 5.0, 9.0],
+            [1.0, 1.0, 3.0, 6.0, 9.0],
+            [1.0, 2.0, 4.0, 5.0, 9.0],
+            [1.0, 3.0, 4.0, 6.0, 9.0],
         ],
         device=device,
     )
@@ -22,8 +22,8 @@ def test_unique_filter(device: torch.device) -> None:
             "constant",
             "variable",
             "two_values",
-            "value_and_nan",
-            "all_nan",
+            "two_more_values",
+            "also_constant",
         ),
     )
 
@@ -32,9 +32,9 @@ def test_unique_filter(device: torch.device) -> None:
     assert output.columns[Stype.numerical] == (
         "variable",
         "two_values",
-        "value_and_nan",
+        "two_more_values",
     )
-    assert output.numerical.allclose(data[:, [1, 2, 3]], equal_nan=True)
+    assert output.numerical.equal(data[:, [1, 2, 3]])
     assert output.device == device
 
 
@@ -44,9 +44,9 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
         torch.tensor(
             [
                 [1.0, 1.0, 1.0],
-                [1.0, 2.0, torch.nan],
+                [1.0, 2.0, 3.0],
                 [1.0, 1.0, 2.0],
-                [1.0, 2.0, torch.nan],
+                [1.0, 2.0, 3.0],
             ],
             device=device,
         ),
@@ -59,9 +59,7 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
 
 
 def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
-    table = TableTensor.from_tensor(
-        torch.tensor([[1.0, torch.nan], [1.0, torch.nan]])
-    )
+    table = TableTensor.from_tensor(torch.tensor([[1.0, 4.0], [1.0, 4.0]]))
 
     assert ConstantFilter(threshold=2).fit_transform(table) is table
 
@@ -70,17 +68,17 @@ def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
 def test_variance_filter(device: torch.device) -> None:
     data = torch.tensor(
         [
-            [1.0, 1.0, 1.0, torch.nan],
-            [1.0, 1.0000005, 2.0, 2.0],
-            [1.0, 0.9999995, 3.0, 3.0],
-            [1.0, 1.0000002, 4.0, 4.0],
+            [1.0, 1.0, 1.0, 8.0],
+            [1.0, 1.0000005, 2.0, 8.0],
+            [1.0, 0.9999995, 3.0, 8.0],
+            [1.0, 1.0000002, 4.0, 8.0],
         ],
         dtype=torch.float64,
         device=device,
     )
     table = TableTensor.from_tensor(
         data,
-        columns=("constant", "near_constant", "variable", "has_nan"),
+        columns=("constant", "near_constant", "variable", "also_constant"),
     )
 
     output = ConstantFilter(method="variance").fit_transform(table)

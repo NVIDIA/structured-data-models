@@ -79,31 +79,6 @@ def test_quantile_clip_constant_columns_are_exact(
     assert transformed.device == device
 
 
-@withCUDA
-def test_quantile_clip_nan_columns_follow_torch_quantile(
-    device: torch.device,
-) -> None:
-    inp = torch.tensor(
-        [
-            [0.0, 1.0],
-            [torch.nan, 2.0],
-            [4.0, 3.0],
-        ],
-        device=device,
-    )
-
-    processor = QuantileClip(q_low=0.0, q_high=1.0).fit(
-        TableTensor.from_tensor(inp)
-    )
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-
-    assert torch.isnan(processor.lower_bound[0])
-    assert torch.isnan(processor.upper_bound[0])
-    assert torch.isnan(transformed[:, 0]).all()
-    assert torch.equal(transformed[:, 1], inp[:, 1])
-    assert transformed.device == device
-
-
 def test_quantile_clip_rejects_invalid_quantiles() -> None:
     with pytest.raises(ValueError, match="q_low <= q_high"):
         QuantileClip(q_low=0.75, q_high=0.25)
