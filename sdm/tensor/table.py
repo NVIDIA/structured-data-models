@@ -16,6 +16,7 @@ from typing_extensions import Self, override
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.io.cudf import _set_cudf_mask
 
 if TYPE_CHECKING:
     import cudf
@@ -462,18 +463,25 @@ class TableTensor(Tensor):
                 dfs.append(tensor.to_cudf(self._columns[stype]))
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous()
-                df = cudf.DataFrame(
-                    {
-                        name: to_cudf(data)
+                columns = {}
+                for name, data, mask in zip(
+                    self._columns[stype],
+                    tensor,
+                    tensor != torch.iinfo(tensor.dtype).min,
+                ):
+                    null_count = int(mask.numel() - mask.sum().item())
+                    column = (
+                        to_cudf(data)
                         .astype("datetime64[us]", copy=False)
-                        ._column.set_mask(to_cudf(mask)._column.as_mask())
-                        for name, data, mask in zip(
-                            self._columns[stype],
-                            tensor,
-                            tensor != torch.iinfo(tensor.dtype).min,
-                        )
-                    }
-                )
+                        ._column
+                    )
+                    columns[name] = _set_cudf_mask(
+                        column,
+                        to_cudf(mask)._column.as_mask(),
+                        null_count,
+                    )
+
+                df = cudf.DataFrame(columns)
                 dfs.append(df)
             else:
                 tensor = tensor.detach().movedim(-1, 0).contiguous()

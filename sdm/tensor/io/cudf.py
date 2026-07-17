@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from inspect import signature
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
@@ -31,3 +32,22 @@ def to_cudf(tensor: Tensor) -> cudf.Series:
         import cudf
 
         return cudf.Series(tensor, copy=False)
+
+
+def _set_cudf_mask(column: Any, mask: Any, null_count: int) -> Any:
+    r"""Set a cuDF column mask across cuDF versions."""
+    try:
+        parameters = signature(column.set_mask).parameters
+    except (TypeError, ValueError):
+        try:
+            return column.set_mask(mask, null_count)
+        except TypeError as exc:
+            try:
+                return column.set_mask(mask)
+            except TypeError:
+                raise exc from None
+
+    if "null_count" in parameters or len(parameters) > 1:
+        return column.set_mask(mask, null_count)
+
+    return column.set_mask(mask)
