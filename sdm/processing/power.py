@@ -1,5 +1,4 @@
 import math
-from collections.abc import Callable
 
 import torch
 from torch import Tensor
@@ -10,37 +9,24 @@ from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
-
-def _yeojohnson_transform_col(inp: Tensor, lmbda: float) -> Tensor:
-    output = torch.zeros_like(inp)
-    positive = inp >= 0
-    eps = torch.finfo(inp.dtype).eps
-
-    if abs(lmbda) < eps:
-        output[positive] = inp[positive].log1p()
-    else:
-        output[positive] = (lmbda * inp[positive].log1p()).expm1() / lmbda
-
-    if abs(lmbda - 2) > eps:
-        output[~positive] = -(
-            (2 - lmbda) * (-inp[~positive]).log1p()
-        ).expm1() / (2 - lmbda)
-    else:
-        output[~positive] = -(-inp[~positive]).log1p()
-
-    return output
+# Keep GPU execution batched; adaptive per-column stopping would resynchronize.
+# For float32 overflow-safe bounds, 44 golden steps reaches ~1.48e-8.
+_YEOJOHNSON_OPTIMIZATION_STEPS = 44
 
 
-def _yeojohnson_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
+def _yeojohnson_transform_from_logs(
+    inp: Tensor,
+    lambdas: Tensor,
+    positive_log: Tensor,
+    negative_log: Tensor,
+) -> Tensor:
     lambdas = lambdas.unsqueeze(0)
     eps = torch.finfo(inp.dtype).eps
 
-    positive_log = inp.clamp_min(0).log1p()
     positive = (lambdas * positive_log).expm1() / lambdas
     positive = torch.where(lambdas.abs() < eps, positive_log, positive)
 
     two_minus_lambda = 2 - lambdas
-    negative_log = (-inp).clamp_min(0).log1p()
     negative = -((two_minus_lambda * negative_log).expm1() / two_minus_lambda)
     negative = torch.where(
         two_minus_lambda.abs() < eps,
@@ -49,6 +35,15 @@ def _yeojohnson_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
     )
 
     return torch.where(inp >= 0, positive, negative)
+
+
+def _yeojohnson_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
+    return _yeojohnson_transform_from_logs(
+        inp,
+        lambdas,
+        inp.clamp_min(0).log1p(),
+        (-inp).clamp_min(0).log1p(),
+    )
 
 
 def _yeojohnson_inverse_transform(inp: Tensor, lmbda: float) -> Tensor:
@@ -71,24 +66,14 @@ def _yeojohnson_inverse_transform(inp: Tensor, lmbda: float) -> Tensor:
     return inverse
 
 
-def _yeojohnson_log_likelihood(inp: Tensor, lmbda: float) -> float:
-    transformed = _yeojohnson_transform_col(inp, lmbda)
-    variance = transformed.var(correction=0)
-    if not variance.isfinite() or variance < torch.finfo(variance.dtype).tiny:
-        return -math.inf
-
-    loglike = -inp.numel() / 2 * variance.log() + (lmbda - 1) * torch.sum(
-        inp.sign() * inp.abs().log1p()
+def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
+    max_abs = inp.abs().max(dim=0).values
+    log1p_max_x = (20 * max_abs).log1p()
+    log1p_max_x = torch.where(
+        max_abs == 0,
+        torch.ones_like(log1p_max_x),
+        log1p_max_x,
     )
-    return float(loglike)
-
-
-def _yeojohnson_bounds(inp: Tensor) -> tuple[float, float]:
-    max_abs = inp.abs().max()
-    if max_abs == 0:
-        return 1.0, 1.0
-
-    log1p_max_x = torch.log1p(20 * max_abs).item()
     finfo = torch.finfo(inp.dtype)
     log_eps = math.log(finfo.eps)
     log_tiny_float = (math.log(finfo.tiny) - log_eps) / 2
@@ -96,48 +81,50 @@ def _yeojohnson_bounds(inp: Tensor) -> tuple[float, float]:
 
     lower_bound = log_tiny_float / log1p_max_x
     upper_bound = log_max_float / log1p_max_x
-    if torch.all(inp < 0):
-        lower_bound, upper_bound = 2 - upper_bound, 2 - lower_bound
-    elif torch.any(inp < 0):
-        lower_bound = max(2 - upper_bound, lower_bound)
-        upper_bound = min(2 - lower_bound, upper_bound)
+    positive_lower = lower_bound
+    positive_upper = upper_bound
 
-    return lower_bound, upper_bound
+    all_negative = (inp < 0).all(dim=0)
+    any_negative = (inp < 0).any(dim=0)
+
+    mixed_lower = torch.maximum(2 - positive_upper, positive_lower)
+    mixed_upper = torch.minimum(2 - mixed_lower, positive_upper)
+    lower_bound = torch.where(any_negative, mixed_lower, positive_lower)
+    upper_bound = torch.where(any_negative, mixed_upper, positive_upper)
+
+    negative_lower = 2 - positive_upper
+    negative_upper = 2 - positive_lower
+    lower_bound = torch.where(all_negative, negative_lower, lower_bound)
+    upper_bound = torch.where(all_negative, negative_upper, upper_bound)
+
+    zero = max_abs == 0
+    return (
+        torch.where(zero, torch.ones_like(lower_bound), lower_bound),
+        torch.where(zero, torch.ones_like(upper_bound), upper_bound),
+    )
 
 
-def _bounded_argmax(
-    function: Callable[[float], float],
-    lower_bound: float,
-    upper_bound: float,
-    *,
-    xatol: float = 1.48e-8,
-    max_iter: int = 500,
-) -> float:
-    invphi = (math.sqrt(5) - 1) / 2
-    left = lower_bound
-    right = upper_bound
-    c = right - invphi * (right - left)
-    d = left + invphi * (right - left)
-    fc = function(c)
-    fd = function(d)
-
-    for _ in range(max_iter):
-        if abs(right - left) <= xatol:
-            break
-        if fc < fd:
-            left = c
-            c = d
-            fc = fd
-            d = left + invphi * (right - left)
-            fd = function(d)
-        else:
-            right = d
-            d = c
-            fd = fc
-            c = right - invphi * (right - left)
-            fc = function(c)
-
-    return (left + right) / 2
+def _yeojohnson_log_likelihood_batch(
+    inp: Tensor,
+    lambdas: Tensor,
+    positive_log: Tensor,
+    negative_log: Tensor,
+    log_jacobian: Tensor,
+) -> Tensor:
+    transformed = _yeojohnson_transform_from_logs(
+        inp,
+        lambdas,
+        positive_log,
+        negative_log,
+    )
+    variance = transformed.var(dim=0, correction=0)
+    tiny = torch.finfo(inp.dtype).tiny
+    loglike = -inp.size(0) / 2 * variance.log() + (lambdas - 1) * log_jacobian
+    return torch.where(
+        variance.isfinite() & (variance >= tiny),
+        loglike,
+        torch.full_like(loglike, -math.inf),
+    )
 
 
 class Power(Processor, InvertibleMixin):
@@ -163,18 +150,74 @@ class Power(Processor, InvertibleMixin):
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("scale", torch.empty(0))
 
-    def _optimize_lambda(self, inp: Tensor) -> float:
-        if inp.numel() < 2 or torch.all(inp == inp[0]):
-            return 1.0
+    def _optimize_lambdas(
+        self,
+        inp: Tensor,
+        constant_features: Tensor,
+    ) -> Tensor:
+        positive_log = inp.clamp_min(0).log1p()
+        negative_log = (-inp).clamp_min(0).log1p()
+        log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).sum(
+            dim=0
+        )
 
-        lower_bound, upper_bound = _yeojohnson_bounds(inp)
-        if lower_bound == upper_bound:
-            return lower_bound
+        left, right = _yeojohnson_bounds(inp)
+        identity = torch.ones_like(left)
+        left = torch.where(constant_features, identity, left)
+        right = torch.where(constant_features, identity, right)
 
-        return _bounded_argmax(
-            lambda lmbda: _yeojohnson_log_likelihood(inp, lmbda),
-            lower_bound,
-            upper_bound,
+        invphi = (math.sqrt(5) - 1) / 2
+        c = right - invphi * (right - left)
+        d = left + invphi * (right - left)
+        fc = _yeojohnson_log_likelihood_batch(
+            inp,
+            c,
+            positive_log,
+            negative_log,
+            log_jacobian,
+        )
+        fd = _yeojohnson_log_likelihood_batch(
+            inp,
+            d,
+            positive_log,
+            negative_log,
+            log_jacobian,
+        )
+
+        for _ in range(_YEOJOHNSON_OPTIMIZATION_STEPS):
+            choose_right = fc < fd
+            old_fc = fc
+            old_fd = fd
+            left_next = torch.where(choose_right, c, left)
+            right_next = torch.where(choose_right, right, d)
+            c_next = torch.where(
+                choose_right,
+                d,
+                right_next - invphi * (right_next - left_next),
+            )
+            d_next = torch.where(
+                choose_right,
+                left_next + invphi * (right_next - left_next),
+                c,
+            )
+            new_point = torch.where(choose_right, d_next, c_next)
+            new_score = _yeojohnson_log_likelihood_batch(
+                inp,
+                new_point,
+                positive_log,
+                negative_log,
+                log_jacobian,
+            )
+            fc = torch.where(choose_right, old_fd, new_score)
+            fd = torch.where(choose_right, new_score, old_fc)
+            left = left_next
+            right = right_next
+            c = c_next
+            d = d_next
+
+        lambdas = (left + right) / 2
+        return torch.where(
+            constant_features | (left == right), identity, lambdas
         )
 
     def _fit(
@@ -189,15 +232,8 @@ class Power(Processor, InvertibleMixin):
         var = numerical.var(dim=0, correction=0)
         mean = numerical.mean(dim=0)
         self.max = numerical.max(dim=0).values
-        lambdas = numerical.new_empty(n_features)
-
         constant_features = _constant_feature_mask(var, mean, n_samples)
-        for i in range(n_features):
-            col = numerical[:, i]
-            lmbda = 1.0 if constant_features[i] else self._optimize_lambda(col)
-            lambdas[i] = lmbda
-
-        self.lambdas = lambdas
+        self.lambdas = self._optimize_lambdas(numerical, constant_features)
 
         lambda_eps = torch.finfo(numerical.dtype).eps
         self.upper_bound = -(1 / self.lambdas)
