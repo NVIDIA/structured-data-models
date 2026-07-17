@@ -15,7 +15,7 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor
-from sdm.tensor.io import arrow_as_tensor, to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 
 if TYPE_CHECKING:
     import cudf
@@ -320,7 +320,7 @@ class TableTensor(Tensor):
         )
 
     def to_arrow(self) -> pa.Table:
-        r"""Convert this tensor to a flat :class:`pyarrow.Table`."""
+        r"""Convert this tensor to a :class:`pyarrow.Table`."""
         arrays: list[pa.Array] = []
         columns: list[str] = []
         for stype, tensor in self.items():
@@ -447,6 +447,45 @@ class TableTensor(Tensor):
             columns=cast(Mapping[StypeLike, Sequence[str]], columns),
             **blocks,
         )
+
+    def to_cudf(self) -> cudf.DataFrame:
+        r"""Convert this tensor to a :class:`cudf.DataFrame`."""
+        import cudf
+
+        dfs: list[cudf.DataFrame] = []
+        for stype, tensor in self.items():
+            if tensor.size(-1) == 0:
+                continue
+
+            if stype in (Stype.categorical, Stype.id):
+                tensor = cast(CategoricalTensor | ColumnarTensor, tensor)
+                dfs.append(tensor.to_cudf(self._columns[stype]))
+            elif stype == Stype.datetime:
+                tensor = tensor.movedim(-1, 0).contiguous()
+                df = cudf.DataFrame(
+                    {
+                        name: to_cudf(data)
+                        .astype("datetime64[us]", copy=False)
+                        ._column.set_mask(to_cudf(mask)._column.as_mask())
+                        for name, data, mask in zip(
+                            self._columns[stype],
+                            tensor,
+                            tensor != torch.iinfo(tensor.dtype).min,
+                        )
+                    }
+                )
+                dfs.append(df)
+            else:
+                tensor = tensor.detach().movedim(-1, 0).contiguous()
+                df = cudf.DataFrame(
+                    {
+                        name: to_cudf(t)
+                        for name, t in zip(self._columns[stype], tensor)
+                    }
+                )
+                dfs.append(df)
+
+        return cudf.concat(dfs, axis=1)
 
     # Properties ##############################################################
 
