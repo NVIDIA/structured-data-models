@@ -70,3 +70,42 @@ def test_feature_permute_is_reproducible_with_generator(
 
     assert torch.equal(first.permutation, second.permutation)
     assert torch.equal(first_output.numerical, second_output.numerical)
+
+
+def test_feature_permute_inverse_uses_cached_permutation() -> None:
+    table = _table()
+    processor = FeaturePermute(method="random").fit(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    transformed = processor.transform(table)
+    restored = processor.inverse_transform(transformed)
+
+    assert torch.equal(
+        processor.inverse_permutation,
+        processor.permutation.argsort(),
+    )
+    assert "inverse_permutation" not in processor.state_dict()
+    assert restored.columns[Stype.numerical] == table.columns[Stype.numerical]
+    assert torch.equal(restored.numerical, table.numerical)
+
+
+def test_feature_permute_rebuilds_inverse_cache_lazily() -> None:
+    table = _table()
+    processor = FeaturePermute(method="shift").fit(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+    transformed = processor.transform(table)
+    processor.inverse_permutation = torch.empty(0, dtype=torch.long)
+    processor._inverse_permutation_indices = ()
+
+    restored = processor.inverse_transform(transformed)
+
+    assert torch.equal(
+        processor.inverse_permutation,
+        processor.permutation.argsort(),
+    )
+    assert restored.columns[Stype.numerical] == table.columns[Stype.numerical]
+    assert torch.equal(restored.numerical, table.numerical)

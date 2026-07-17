@@ -34,6 +34,13 @@ class FeaturePermute(Processor, InvertibleMixin):
             "permutation",
             torch.empty(0, dtype=torch.long),
         )
+        self.register_buffer(
+            "inverse_permutation",
+            torch.empty(0, dtype=torch.long),
+            persistent=False,
+        )
+        self._permutation_indices: tuple[int, ...] = ()
+        self._inverse_permutation_indices: tuple[int, ...] = ()
 
     def _fit(
         self,
@@ -63,20 +70,62 @@ class FeaturePermute(Processor, InvertibleMixin):
                 generator=generator,
                 device=device,
             )
+        self.inverse_permutation = self.permutation.argsort()
+        self._permutation_indices = self._to_indices(self.permutation)
+        self._inverse_permutation_indices = self._to_indices(
+            self.inverse_permutation
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Reorder the numerical block with the fitted permutation."""
-        return self._permute(table, self.permutation)
+        return self._permute(
+            table,
+            self.permutation,
+            self._index_tuple(inverse=False),
+        )
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return self._permute(table, self.permutation.argsort())
+        indices = self._index_tuple(inverse=True)
+        return self._permute(
+            table,
+            self.inverse_permutation,
+            indices,
+        )
+
+    def _index_tuple(self, *, inverse: bool) -> tuple[int, ...]:
+        if (
+            inverse
+            and self.inverse_permutation.numel() != self.permutation.numel()
+        ):
+            self.inverse_permutation = self.permutation.argsort()
+            self._inverse_permutation_indices = ()
+
+        permutation = self.inverse_permutation if inverse else self.permutation
+        indices = (
+            self._inverse_permutation_indices
+            if inverse
+            else self._permutation_indices
+        )
+        if len(indices) == permutation.numel():
+            return indices
+
+        indices = self._to_indices(permutation)
+        if inverse:
+            self._inverse_permutation_indices = indices
+        else:
+            self._permutation_indices = indices
+        return indices
+
+    @staticmethod
+    def _to_indices(permutation: Tensor) -> tuple[int, ...]:
+        return tuple(int(index) for index in permutation.tolist())
 
     def _permute(
         self,
         table: TableTensor,
         permutation: Tensor,
+        indices: tuple[int, ...],
     ) -> TableTensor:
-        indices = permutation.tolist()
         return table.__class__(
             columns={
                 Stype.numerical.value: tuple(
