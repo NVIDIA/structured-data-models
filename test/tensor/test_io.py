@@ -33,10 +33,10 @@ def test_to_cudf_valid_mask() -> None:
     tensor = torch.arange(3, device="cuda")
     valid_mask = torch.tensor([True, False, True], device="cuda")
 
-    series = to_cudf(tensor, valid_mask=valid_mask)
+    ser = to_cudf(tensor, valid_mask)
 
-    assert series.null_count == 1
-    assert series.to_arrow().to_pylist() == [0, None, 2]
+    assert ser.null_count == 1
+    assert ser.to_arrow().to_pylist() == [0, None, 2]
 
 
 def test_to_cudf_requires_cuda() -> None:

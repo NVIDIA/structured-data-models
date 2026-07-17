@@ -462,18 +462,18 @@ class TableTensor(Tensor):
                 dfs.append(tensor.to_cudf(self._columns[stype]))
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous()
-                columns = {}
-                for name, data, mask in zip(
-                    self._columns[stype],
-                    tensor,
-                    tensor != torch.iinfo(tensor.dtype).min,
-                ):
-                    columns[name] = to_cudf(
-                        data,
-                        valid_mask=mask,
-                    ).astype("datetime64[us]", copy=False)
-
-                df = cudf.DataFrame(columns)
+                df = cudf.DataFrame(
+                    {
+                        name: to_cudf(data, mask).astype(
+                            "datetime64[us]", copy=False
+                        )
+                        for name, data, mask in zip(
+                            self._columns[stype],
+                            tensor,
+                            tensor != torch.iinfo(tensor.dtype).min,
+                        )
+                    }
+                )
                 dfs.append(df)
             else:
                 tensor = tensor.detach().movedim(-1, 0).contiguous()
