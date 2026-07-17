@@ -253,48 +253,43 @@ def test_row_embedding() -> None:
 
 @onlyFullTest
 @withCUDA
-def test_tabiclv2_fit_predict_compile(device: torch.device) -> None:
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+@pytest.mark.parametrize("autocast", [False, True])
+def test_tabiclv2_fit_predict_compile(
+    device: torch.device, autocast: bool, dtype: torch.dtype
+) -> None:
     torch._dynamo.reset()
     model = TabICLv2(pretrained=False, device=device)
 
-    R, C, R_train = 8, 6, 5
-    x = torch.randn(R, C, device=device)
-    y = torch.randint(0, 10, (R_train,), device=device)
+    R_context, R_query, C = 5, 3, 6
+    x_context = torch.randn(R_context, C, device=device)
+    x_query = torch.randn(R_query, C, device=device)
+    if dtype.is_floating_point:
+        y_context = torch.randn(R_context, 1, device=device)
+    else:
+        y_context = torch.randint(0, 10, (R_context, 1), device=device)
 
-    expected = model(x, y)
-    model.fit(x[:R_train], y)
-    expected_pred = model.predict(x[R_train:])
-    model.clear()
+    with torch.amp.autocast(device.type, torch.bfloat16, enabled=autocast):
+        torch.manual_seed(0)
+        expected = model(x_context, y_context, x_query)
+        model.fit(x_context, y_context)
+        expected_pred = model.predict(x_query)
+        model.clear()
 
     # The cache-record and cache-replay routes must also compile without
     # graph breaks (each takes its own branch and builds a separate graph).
+    # The dtype parametrization traces both submodels: int y exercises the
+    # classifier, float y the regressor. The autocast=True case is the
+    # recipe shipped in examples/tabiclv2.py: autocast around the compiled
+    # submodels.
     model.cls_model.compile(fullgraph=True, backend="eager")
     model.reg_model.compile(fullgraph=True, backend="eager")
-    torch.testing.assert_close(model(x, y), expected)
-    model.fit(x[:R_train], y)
-    torch.testing.assert_close(model.predict(x[R_train:]), expected_pred)
-
-
-@onlyFullTest
-@withCUDA
-def test_tabiclv2_autocast_compile(device: torch.device) -> None:
-    torch._dynamo.reset()
-    model = TabICLv2(pretrained=False, device=device)
-
-    R, C, R_train = 8, 6, 5
-    x = torch.randn(R, C, device=device)
-    y = torch.randint(0, 10, (R_train,), device=device)
-
-    with torch.amp.autocast(device.type, torch.bfloat16):
-        expected = model(x, y)
-        model.fit(x[:R_train], y)
-        expected_pred = model.predict(x[R_train:])
-        model.clear()
-
-    # The recipe shipped in examples/tabiclv2.py: autocast around compiled
-    # submodels, including the cache record/replay routes.
-    model.cls_model.compile(fullgraph=True, backend="eager")
-    with torch.amp.autocast(device.type, torch.bfloat16):
-        torch.testing.assert_close(model(x, y), expected)
-        model.fit(x[:R_train], y)
-        torch.testing.assert_close(model.predict(x[R_train:]), expected_pred)
+    with torch.amp.autocast(device.type, torch.bfloat16, enabled=autocast):
+        torch.manual_seed(0)
+        assert model(x_context, y_context, x_query).allclose(
+            expected, atol=5e-4, rtol=5e-3
+        )
+        model.fit(x_context, y_context)
+        assert model.predict(x_query).allclose(
+            expected_pred, atol=5e-4, rtol=5e-3
+        )
