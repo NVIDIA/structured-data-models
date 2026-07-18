@@ -96,6 +96,18 @@ def test_from_arrow_dtype() -> None:
     assert tensor.as_tensor().equal(torch.tensor([[0], [1], [-1]]))
 
 
+def test_from_arrow_small_dictionary_indices() -> None:
+    array = pa.DictionaryArray.from_arrays(
+        pa.array([0, 1], type=pa.int8()),
+        pa.array(["b", "a"]),
+    )
+
+    tensor = CategoricalTensor.from_arrow(array)
+
+    assert tensor.dtype == torch.int32
+    assert tensor.as_tensor().equal(torch.tensor([[0], [1]]))
+
+
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
 def test_from_arrow_does_not_warn_on_readonly_numpy(
