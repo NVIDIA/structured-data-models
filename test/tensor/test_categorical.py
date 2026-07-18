@@ -108,6 +108,11 @@ def test_from_arrow_small_dictionary_indices() -> None:
     assert tensor.as_tensor().equal(torch.tensor([[0], [1]]))
 
 
+@pytest.mark.parametrize("dtype", [torch.int8, torch.float32])
+def test_from_arrow_rejects_invalid_dtype(dtype: torch.dtype) -> None:
+    with pytest.raises(ValueError, match="Expected .data. in .CategoricalTensor."):
+        CategoricalTensor.from_arrow(pa.array(["b", "a"]), dtype=dtype)
+
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
 def test_from_arrow_does_not_warn_on_readonly_numpy(
