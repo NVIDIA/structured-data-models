@@ -44,28 +44,38 @@ def main() -> None:
         help="Datasets to skip (APSFailure is excluded by default).",
     )
     args = parser.parse_args()
-    run_campaign(config_from_args(args), excluded_datasets=args.exclude_datasets)
+    run_campaign(
+        config_from_args(args), excluded_datasets=args.exclude_datasets
+    )
 
 
 def run_campaign(config: RunConfig, *, excluded_datasets: list[str]) -> None:
-    """Run datasets independently and write a combined strict SDM report."""
+    """Run datasets independently and write a combined strict TabArena report."""
     _prepare_output_root(config.output_root, resume=config.resume)
     datasets = _discover_datasets(config)
     excluded = set(excluded_datasets)
     selected = [dataset for dataset in datasets if dataset not in excluded]
     if not selected:
-        raise ValueError("No datasets remain after applying '--exclude-datasets'")
+        raise ValueError(
+            "No datasets remain after applying '--exclude-datasets'"
+        )
 
     _write_json(
         config.output_root / "campaign_metadata.json",
         {
-            "config": {**asdict(config), "output_root": str(config.output_root)},
+            "config": {
+                **asdict(config),
+                "output_root": str(config.output_root),
+            },
             "excluded_datasets": sorted(excluded),
             "selected_datasets": selected,
         },
     )
     records = [_run_dataset(config, dataset) for dataset in selected]
-    _write_campaign_report(config.output_root, records, excluded_datasets=excluded)
+    _write_campaign_report(
+        config.output_root, records, excluded_datasets=excluded
+    )
+    _raise_if_campaign_incomplete(records, allow_partial=config.allow_partial)
 
 
 def _discover_datasets(config: RunConfig) -> list[str]:
@@ -120,7 +130,9 @@ def _run_dataset(config: RunConfig, dataset: str) -> DatasetRun:
     )
 
 
-def _dataset_command(config: RunConfig, dataset: str, output_root: Path) -> list[str]:
+def _dataset_command(
+    config: RunConfig, dataset: str, output_root: Path
+) -> list[str]:
     """Return the exact child command for one dataset."""
     command = [
         sys.executable,
@@ -179,7 +191,11 @@ def _write_campaign_report(
             "failed_datasets": [
                 {
                     "dataset": record.dataset,
-                    "log": str(output_root / "logs" / f"{_dataset_slug(record.dataset)}.log"),
+                    "log": str(
+                        output_root
+                        / "logs"
+                        / f"{_dataset_slug(record.dataset)}.log"
+                    ),
                     "output_root": str(record.output_root),
                     "returncode": record.returncode,
                 }
@@ -188,6 +204,19 @@ def _write_campaign_report(
             "excluded_datasets": sorted(excluded_datasets),
         },
     )
+
+
+def _raise_if_campaign_incomplete(
+    records: list[DatasetRun], *, allow_partial: bool
+) -> None:
+    """Make failed dataset subprocesses visible to shell automation."""
+    failed = [record.dataset for record in records if not record.complete]
+    if failed and not allow_partial:
+        raise RuntimeError(
+            f"{len(failed)} dataset runs failed: " + ", ".join(failed) + ". "
+            "Inspect report/campaign_status.json, or pass --allow-partial to accept "
+            "the completed-dataset report."
+        )
 
 
 def _is_complete(output_root: Path) -> bool:
@@ -205,6 +234,7 @@ def _dataset_slug(dataset: str) -> str:
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
 
 if __name__ == "__main__":
     main()

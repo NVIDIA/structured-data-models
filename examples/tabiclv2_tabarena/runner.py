@@ -9,7 +9,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -73,6 +73,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
 def run(config: RunConfig, *, debug_mode: bool) -> None:
     """Run TabArena, then write results and reports to ``output_root``."""
     _prepare_output_root(config.output_root, resume=config.resume)
+    _validate_or_write_run_signature(config=config, debug_mode=debug_mode)
     _write_run_metadata(config=config, debug_mode=debug_mode)
 
     from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
@@ -100,11 +101,8 @@ def run(config: RunConfig, *, debug_mode: bool) -> None:
     jobs = context.build_jobs(experiments, task_subset=task_subset)
     _write_job_manifest(config.output_root, jobs=jobs)
 
-    results = context.run_jobs(
-        jobs,
-        expname=config.output_root,
-        new_result_prefix="[SDM] ",
-        debug_mode=debug_mode,
+    results = _run_context_jobs(
+        context, jobs, config=config, debug_mode=debug_mode
     )
     complete = len(results) == len(jobs)
     _write_completion_metadata(
@@ -116,10 +114,26 @@ def run(config: RunConfig, *, debug_mode: bool) -> None:
 
     report_dir = config.output_root / "report"
     report_dir.mkdir(parents=True, exist_ok=True)
-    candidate_results = context._registered_new_results()
-    if candidate_results is None:
-        raise RuntimeError("TabArena did not register any SDM results")
-    _write_candidate_report(candidate_results, report_dir)
+    _write_run_report(context, report_dir)
+
+    if not complete and not config.allow_partial:
+        raise RuntimeError(
+            f"Only {len(results)} of {len(jobs)} planned jobs completed. "
+            f"See {config.output_root} for cached results and diagnostics."
+        )
+
+
+def _write_run_report(context: Any, report_dir: Path) -> None:
+    """Write a report for all completed SDM jobs, including an empty partial run."""
+    new_results = context._registered_new_results()
+    if new_results is None:
+        _write_report_status(
+            report_dir,
+            leaderboard_generated=False,
+            reason="No SDM jobs completed successfully.",
+        )
+        return
+    _write_results_report(new_results, report_dir)
     try:
         leaderboard = context.compare(
             output_dir=report_dir,
@@ -128,20 +142,31 @@ def run(config: RunConfig, *, debug_mode: bool) -> None:
             fillna=None,
         )
     except (AssertionError, ValueError) as error:
-        _write_report_status(report_dir, leaderboard_generated=False, reason=str(error))
+        _write_report_status(
+            report_dir, leaderboard_generated=False, reason=str(error)
+        )
     else:
         leaderboard.to_csv(report_dir / "leaderboard.csv")
         leaderboard.to_markdown(report_dir / "leaderboard.md")
-        context.leaderboard_to_website_format(
-            leaderboard=leaderboard
-        ).to_csv(report_dir / "leaderboard_website.csv", index=False)
+        context.leaderboard_to_website_format(leaderboard=leaderboard).to_csv(
+            report_dir / "leaderboard_website.csv", index=False
+        )
         _write_report_status(report_dir, leaderboard_generated=True)
 
-    if not complete and not config.allow_partial:
-        raise RuntimeError(
-            f"Only {len(results)} of {len(jobs)} planned jobs completed. "
-            f"See {config.output_root} for cached results and diagnostics."
-        )
+
+def _run_context_jobs(
+    context: Any, jobs: list[Job], *, config: RunConfig, debug_mode: bool
+) -> list[dict[str, Any]]:
+    """Run jobs without discarding completed work after a permitted failure."""
+    return context.run_jobs(
+        jobs,
+        expname=config.output_root,
+        new_result_prefix="[SDM] ",
+        debug_mode=debug_mode,
+        # TabArena otherwise raises on the first failed job before it returns the
+        # completed jobs for registration and reporting.
+        raise_on_failure=not config.allow_partial,
+    )
 
 
 def _prepare_output_root(output_root: Path, *, resume: bool) -> None:
@@ -151,6 +176,47 @@ def _prepare_output_root(output_root: Path, *, resume: bool) -> None:
             "Pass '--resume' to reuse TabArena's cached results."
         )
     output_root.mkdir(parents=True, exist_ok=True)
+
+
+def _validate_or_write_run_signature(
+    *, config: RunConfig, debug_mode: bool
+) -> None:
+    """Reject ``--resume`` when it would reuse a different result cache."""
+    path = config.output_root / "run_signature.json"
+    signature = _run_signature(config=config, debug_mode=debug_mode)
+    if not config.resume:
+        _write_json(path, signature)
+        return
+    if not path.is_file():
+        raise RuntimeError(
+            f"Cannot safely resume {config.output_root}: run_signature.json is missing. "
+            "Use a fresh output root."
+        )
+    previous = json.loads(path.read_text())
+    if previous != signature:
+        raise RuntimeError(
+            f"Cannot safely resume {config.output_root}: its run signature differs. "
+            "Use a fresh output root for a different benchmark configuration."
+        )
+
+
+def _run_signature(
+    *, config: RunConfig, debug_mode: bool
+) -> dict[str, object]:
+    """Return fields that affect TabArena cache identity or result meaning."""
+    return {
+        "signature_version": 1,
+        "num_estimators": config.num_estimators,
+        "num_cpus": config.num_cpus,
+        "num_gpus": config.num_gpus,
+        "outer": config.outer,
+        "subset": sorted(config.subset) if config.subset is not None else None,
+        "datasets": sorted(config.datasets)
+        if config.datasets is not None
+        else None,
+        "debug_mode": debug_mode,
+        "sdm_revision": _git_revision(),
+    }
 
 
 def _write_run_metadata(*, config: RunConfig, debug_mode: bool) -> None:
@@ -202,7 +268,7 @@ def _write_completion_metadata(
     )
 
 
-def _write_candidate_report(results: pd.DataFrame, report_dir: Path) -> None:
+def _write_results_report(results: pd.DataFrame, report_dir: Path) -> None:
     results.to_csv(report_dir / "results_per_split.csv", index=False)
     summary = (
         results.groupby("problem_type", dropna=False)["metric_error"]
