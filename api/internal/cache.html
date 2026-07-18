@@ -35,10 +35,7 @@
       <div class="sy-head-extra flex items-center print:hidden"><form class="searchbox flex items-center" action="../../search.html" method="get">
   <input type="text" name="q" placeholder="Search" />
   <kbd>/</kbd>
-</form><div class="sy-head-socials">
-  <a href="https://github.com/NVIDIA/structured-data-models" aria-label="GitHub">
-    <iconify-icon icon="simple-icons:github"></iconify-icon>
-  </a></div></div>
+</form><div class="sy-head-socials"></div></div>
     </div>
     <div class="sy-head-actions flex items-center shrink-0 print:hidden"><button class="js-theme theme-switch flex items-center"
 data-aria-auto="Switch to light color mode"
@@ -145,14 +142,15 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.cache.Cache"><code class="docutils literal notranslate"><span class="pre">Cache</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.cache.Cache.Mode"><code class="docutils literal notranslate">Mode</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.cache.Cache.Mode.record"><code class="docutils literal notranslate">Mode.record</span></code></a></li>
-<li><a class="reference internal" href="#sdm.cache.Cache.Mode.replay"><code class="docutils literal notranslate">Mode.replay</span></code></a></li>
+<li><a class="reference internal" href="#sdm.cache.Cache.Mode"><code class="docutils literal notranslate"><span class="pre">Cache.Mode</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.cache.Cache.Mode.record"><code class="docutils literal notranslate"><span class="pre">Cache.Mode.record</span></code></a></li>
+<li><a class="reference internal" href="#sdm.cache.Cache.Mode.replay"><code class="docutils literal notranslate"><span class="pre">Cache.Mode.replay</span></code></a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#sdm.cache.Cache.freeze"><code class="docutils literal notranslate">freeze()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.cache.Cache.is_recording"><code class="docutils literal notranslate">is_recording</span></code></a></li>
-<li><a class="reference internal" href="#sdm.cache.Cache.is_replaying"><code class="docutils literal notranslate">is_replaying</span></code></a></li>
+<li><a class="reference internal" href="#sdm.cache.Cache.freeze"><code class="docutils literal notranslate"><span class="pre">Cache.freeze()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.cache.Cache.is_recording"><code class="docutils literal notranslate"><span class="pre">Cache.is_recording</span></code></a></li>
+<li><a class="reference internal" href="#sdm.cache.Cache.is_replaying"><code class="docutils literal notranslate"><span class="pre">Cache.is_replaying</span></code></a></li>
+<li><a class="reference internal" href="#sdm.cache.Cache.size"><code class="docutils literal notranslate"><span class="pre">Cache.size</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -244,6 +242,12 @@ Possible values are:</p>
 <dd><p>Whether the cache is in replaying mode.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.cache.Cache.size">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">size</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></em><a class="headerlink" href="#sdm.cache.Cache.size" title="Link to this definition">#</a></dt>
+<dd><p>The size in bytes of key/value entries in supported containers.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -258,7 +262,7 @@ Possible values are:</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=33c5c704"></script>
+      <script src="../../_static/documentation_options.js?v=8716b355"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

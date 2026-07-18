@@ -35,10 +35,7 @@
       <div class="sy-head-extra flex items-center print:hidden"><form class="searchbox flex items-center" action="../../search.html" method="get">
   <input type="text" name="q" placeholder="Search" />
   <kbd>/</kbd>
-</form><div class="sy-head-socials">
-  <a href="https://github.com/NVIDIA/structured-data-models" aria-label="GitHub">
-    <iconify-icon icon="simple-icons:github"></iconify-icon>
-  </a></div></div>
+</form><div class="sy-head-socials"></div></div>
     </div>
     <div class="sy-head-actions flex items-center shrink-0 print:hidden"><button class="js-theme theme-switch flex items-center"
 data-aria-auto="Switch to light color mode"
@@ -145,31 +142,31 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.tensor.TableTensor"><code class="docutils literal notranslate"><span class="pre">TableTensor</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.active_stypes"><code class="docutils literal notranslate">active_stypes</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.blocks"><code class="docutils literal notranslate">blocks</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.categorical"><code class="docutils literal notranslate">categorical</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.column_names"><code class="docutils literal notranslate">column_names</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.columns"><code class="docutils literal notranslate">columns</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.datetime"><code class="docutils literal notranslate">datetime</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.drop_columns"><code class="docutils literal notranslate">drop_columns()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.drop_stypes"><code class="docutils literal notranslate">drop_stypes()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_arrow"><code class="docutils literal notranslate">from_arrow()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_cudf"><code class="docutils literal notranslate">from_cudf()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_pandas"><code class="docutils literal notranslate">from_pandas()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_tensor"><code class="docutils literal notranslate">from_tensor()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.id"><code class="docutils literal notranslate">id</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.is_same_schema"><code class="docutils literal notranslate">is_same_schema()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.items"><code class="docutils literal notranslate">items()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.numerical"><code class="docutils literal notranslate">numerical</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.replace_blocks"><code class="docutils literal notranslate">replace_blocks()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.schema"><code class="docutils literal notranslate">schema</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.select_columns"><code class="docutils literal notranslate">select_columns()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.select_stypes"><code class="docutils literal notranslate">select_stypes()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.stype"><code class="docutils literal notranslate">stype()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.stypes"><code class="docutils literal notranslate">stypes</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.to_arrow"><code class="docutils literal notranslate">to_arrow()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.to_cudf"><code class="docutils literal notranslate">to_cudf()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.TableTensor.to_pandas"><code class="docutils literal notranslate">to_pandas()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.active_stypes"><code class="docutils literal notranslate"><span class="pre">TableTensor.active_stypes</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.blocks"><code class="docutils literal notranslate"><span class="pre">TableTensor.blocks</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.categorical"><code class="docutils literal notranslate"><span class="pre">TableTensor.categorical</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.column_names"><code class="docutils literal notranslate"><span class="pre">TableTensor.column_names</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.columns"><code class="docutils literal notranslate"><span class="pre">TableTensor.columns</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.datetime"><code class="docutils literal notranslate"><span class="pre">TableTensor.datetime</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.drop_columns"><code class="docutils literal notranslate"><span class="pre">TableTensor.drop_columns()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.drop_stypes"><code class="docutils literal notranslate"><span class="pre">TableTensor.drop_stypes()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_arrow"><code class="docutils literal notranslate"><span class="pre">TableTensor.from_arrow()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_cudf"><code class="docutils literal notranslate"><span class="pre">TableTensor.from_cudf()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_pandas"><code class="docutils literal notranslate"><span class="pre">TableTensor.from_pandas()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.from_tensor"><code class="docutils literal notranslate"><span class="pre">TableTensor.from_tensor()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.id"><code class="docutils literal notranslate"><span class="pre">TableTensor.id</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.is_same_schema"><code class="docutils literal notranslate"><span class="pre">TableTensor.is_same_schema()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.items"><code class="docutils literal notranslate"><span class="pre">TableTensor.items()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.numerical"><code class="docutils literal notranslate"><span class="pre">TableTensor.numerical</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.replace_blocks"><code class="docutils literal notranslate"><span class="pre">TableTensor.replace_blocks()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.schema"><code class="docutils literal notranslate"><span class="pre">TableTensor.schema</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.select_columns"><code class="docutils literal notranslate"><span class="pre">TableTensor.select_columns()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.select_stypes"><code class="docutils literal notranslate"><span class="pre">TableTensor.select_stypes()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.stype"><code class="docutils literal notranslate"><span class="pre">TableTensor.stype()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.stypes"><code class="docutils literal notranslate"><span class="pre">TableTensor.stypes</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.to_arrow"><code class="docutils literal notranslate"><span class="pre">TableTensor.to_arrow()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.to_cudf"><code class="docutils literal notranslate"><span class="pre">TableTensor.to_cudf()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.TableTensor.to_pandas"><code class="docutils literal notranslate"><span class="pre">TableTensor.to_pandas()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -622,7 +619,7 @@ constructor.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=33c5c704"></script>
+      <script src="../../_static/documentation_options.js?v=8716b355"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
