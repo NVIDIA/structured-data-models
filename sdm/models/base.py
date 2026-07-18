@@ -330,16 +330,14 @@ class ICLModel(torch.nn.Module, ABC):
                 related_query_tables=related_tables_i,
             )
 
-            device_cache = cache.to(x_i.device)
             out = self._forward(
                 x_context=None,
                 y_context=None,
                 x_query=x_i,
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
-                cache=device_cache,
+                cache=cache.to(x_i.device),
             )
-            del device_cache
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
