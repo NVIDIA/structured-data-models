@@ -9,7 +9,6 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-
 import pandas as pd
 import pytest
 import torch
@@ -19,25 +18,25 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 pytest.importorskip("autogluon.core.models")
 
-from examples.tabiclv2_tabarena.model import (  # noqa: E402
-    _resolve_device,
+from examples.tabiclv2_tabarena.model import (
     _prediction_to_numpy,
+    _resolve_device,
     _table_from_frame,
     _table_from_series,
 )
-from examples.tabiclv2_tabarena.run_isolated import (  # noqa: E402
+from examples.tabiclv2_tabarena.run_isolated import (
     DatasetRun,
     _dataset_command,
     _dataset_slug,
     _raise_if_campaign_incomplete,
     _write_campaign_report,
 )
-from examples.tabiclv2_tabarena.runner import (  # noqa: E402
+from examples.tabiclv2_tabarena.runner import (
     RunConfig,
     _prepare_output_root,
     _run_context_jobs,
-    _write_run_report,
     _validate_or_write_run_signature,
+    _write_run_report,
     config_from_args,
 )
 from sdm import Stype, infer_stypes

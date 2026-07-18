@@ -11,7 +11,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pandas as pd
-
 from examples.tabiclv2_tabarena.model import SDMTabICLv2Model
 from examples.tabiclv2_tabarena.runner import (
     RunConfig,
@@ -50,7 +49,7 @@ def main() -> None:
 
 
 def run_campaign(config: RunConfig, *, excluded_datasets: list[str]) -> None:
-    """Run datasets independently and write a combined strict TabArena report."""
+    """Run isolated TabArena datasets and combine their report."""
     _prepare_output_root(config.output_root, resume=config.resume)
     datasets = _discover_datasets(config)
     excluded = set(excluded_datasets)
@@ -79,7 +78,7 @@ def run_campaign(config: RunConfig, *, excluded_datasets: list[str]) -> None:
 
 
 def _discover_datasets(config: RunConfig) -> list[str]:
-    """Resolve dataset names through TabArena rather than a copied static list."""
+    """Resolve dataset names through TabArena without a copied static list."""
     from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
     from tabarena.benchmark.task.metadata.collection import TaskSubset
     from tabarena.contexts import TabArenaContext
@@ -105,7 +104,7 @@ def _discover_datasets(config: RunConfig) -> list[str]:
 
 
 def _run_dataset(config: RunConfig, dataset: str) -> DatasetRun:
-    """Run one dataset in a child process so an OOM cannot poison later runs."""
+    """Run one dataset in a subprocess so OOM failures are isolated."""
     slug = _dataset_slug(dataset)
     output_root = config.output_root / "datasets" / slug
     log_path = config.output_root / "logs" / f"{slug}.log"
@@ -214,8 +213,8 @@ def _raise_if_campaign_incomplete(
     if failed and not allow_partial:
         raise RuntimeError(
             f"{len(failed)} dataset runs failed: " + ", ".join(failed) + ". "
-            "Inspect report/campaign_status.json, or pass --allow-partial to accept "
-            "the completed-dataset report."
+            "Inspect report/campaign_status.json, or pass "
+            "'--allow-partial' to accept the completed-dataset report."
         )
 
 

@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 from autogluon.core.models import AbstractModel
-
-from sdm import Stype, TableTensor, infer_stypes
+from sdm import Stype, StypeLike, TableTensor, infer_stypes
 from sdm.models import TabICLv2
 
 if TYPE_CHECKING:
@@ -37,7 +36,7 @@ class SDMTabICLv2Model(AbstractModel):
         del kwargs
         self._device = _resolve_device(num_gpus=num_gpus)
         self._feature_stypes = infer_stypes(X)
-        self._target_name = y.name or "__target__"
+        self._target_name = str(y.name) if y.name is not None else "__target__"
         self._target_stype = (
             Stype.numerical
             if self.problem_type == "regression"
@@ -86,6 +85,7 @@ class SDMTabICLv2Model(AbstractModel):
 
     @classmethod
     def supported_problem_types(cls) -> list[str]:
+        """Return the AutoGluon problem types supported by TabICLv2."""
         return ["binary", "multiclass", "regression"]
 
     def _get_default_resources(self) -> tuple[int, int]:
@@ -129,7 +129,7 @@ def _resolve_device(*, num_gpus: int) -> torch.device:
 def _table_from_frame(
     frame: pd.DataFrame,
     *,
-    stypes: dict[str, Stype],
+    stypes: dict[str, StypeLike],
     device: torch.device,
 ) -> TableTensor:
     return TableTensor.from_pandas(

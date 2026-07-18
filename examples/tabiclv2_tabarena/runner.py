@@ -12,12 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
-
 from examples.tabiclv2_tabarena.model import SDMTabICLv2Model
 
 if TYPE_CHECKING:
     import pandas as pd
-
     from tabarena.benchmark.experiment.job import Job
 
 
@@ -124,7 +122,7 @@ def run(config: RunConfig, *, debug_mode: bool) -> None:
 
 
 def _write_run_report(context: Any, report_dir: Path) -> None:
-    """Write a report for all completed SDM jobs, including an empty partial run."""
+    """Write completed SDM results, including empty partial-run status."""
     new_results = context._registered_new_results()
     if new_results is None:
         _write_report_status(
@@ -163,8 +161,7 @@ def _run_context_jobs(
         expname=config.output_root,
         new_result_prefix="[SDM] ",
         debug_mode=debug_mode,
-        # TabArena otherwise raises on the first failed job before it returns the
-        # completed jobs for registration and reporting.
+        # Preserve completed jobs; do not raise at the first failure.
         raise_on_failure=not config.allow_partial,
     )
 
@@ -189,14 +186,15 @@ def _validate_or_write_run_signature(
         return
     if not path.is_file():
         raise RuntimeError(
-            f"Cannot safely resume {config.output_root}: run_signature.json is missing. "
-            "Use a fresh output root."
+            f"Cannot safely resume {config.output_root}: "
+            "run_signature.json is missing. Use a fresh output root."
         )
     previous = json.loads(path.read_text())
     if previous != signature:
         raise RuntimeError(
-            f"Cannot safely resume {config.output_root}: its run signature differs. "
-            "Use a fresh output root for a different benchmark configuration."
+            f"Cannot safely resume {config.output_root}: "
+            "its run signature differs. Use a fresh output root "
+            "for a different benchmark configuration."
         )
 
 
