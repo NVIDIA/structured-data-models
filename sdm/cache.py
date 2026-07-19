@@ -102,9 +102,10 @@ class Cache(MutableMapping[str, object], DeviceMixin):
 
         return _size(self)
 
-    def freeze(self) -> None:
+    def freeze(self) -> Self:
         r"""Freeze the cache to replay mode."""
         self._mode = Cache.Mode.replay
+        return self
 
     def __setitem__(self, key: str, value: object) -> None:
         if not self.is_recording:
