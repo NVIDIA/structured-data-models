@@ -165,6 +165,8 @@ class CategoricalTensor(Tensor):
             dtype=dtype,
             device=device,
         ).unsqueeze(-1)
+        if dtype is None and data.dtype not in cls.ALLOWED_DTYPES:
+            data = data.to(torch.int32)
 
         dictionary = encoded.dictionary
         is_string = pa.types.is_string(dictionary.type)
