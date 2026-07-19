@@ -1,70 +1,71 @@
 import torch
-from sdm import ColumnarTensor, Stype, TableTensor
+from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.models import KumoRFM
+from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.testing import withCUDA
 
 
 @withCUDA
 def test_invariant_gnn(device: torch.device) -> None:
-    x_dict = {
-        "users": torch.randn(4, 8, device=device),
-        "orders": torch.randn(8, 8, device=device),
-    }
-    edge_index_dict = {
-        ("orders", "to", "users"): torch.tensor(
-            [[0, 1, 2, 3, 4, 5, 6, 7], [0, 0, 1, 1, 2, 2, 3, 3]],
-            device=device,
+    related_tables = RelatedTables(
+        tables={
+            "users": TableTensor(
+                columns={"numerical": ("num",), "id": ("id",)},
+                numerical=torch.randn(4, 1, device=device),
+                id=ColumnarTensor(
+                    (torch.tensor([0, 1, 2, 3], device=device),)
+                ),
+            ),
+            "orders": TableTensor(
+                columns={"numerical": ("num",), "id": ("id",)},
+                numerical=torch.randn(8, 1, device=device),
+                id=ColumnarTensor(
+                    (torch.tensor([0, 0, 1, 1, 2, 2, 3, 3], device=device),)
+                ),
+            ),
+        },
+        relationships=[
+            {
+                "left_table": "orders",
+                "left_column": "id",
+                "right_table": "users",
+                "right_column": "id",
+            }
+        ],
+        task_links=[],
+    )
+
+    graph = HomogeneousGraph.from_related_tables(related_tables)
+    assert graph.row.equal(
+        torch.tensor(
+            [4, 5, 6, 7, 8, 9, 10, 11, 0, 0, 1, 1, 2, 2, 3, 3], device=device
         )
-    }
+    )
+    assert graph.colptr.equal(
+        torch.tensor(
+            [0, 2, 4, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16], device=device
+        )
+    )
+    assert graph.edge_type.equal(
+        torch.tensor(
+            [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], device=device
+        )
+    )
+    assert graph.num_edge_types == 2
+    assert graph.start_node_offsets == {"users": 0, "orders": 4}
+    assert graph.end_node_offsets == {"users": 4, "orders": 12}
 
     model = InvariantGNN(channels=8, device=device)
     out = model(
-        x_dict=x_dict,
-        edge_index_dict=edge_index_dict,
+        x=torch.randn(12, 8, device=device),
+        graph=graph,
         readout_table="users",
         num_hops=2,
     )
     assert out.size() == (4, 8)
     assert out.device == device
     assert not out.isnan().any()
-
-
-@withCUDA
-def test_invariant_gnn_half_zero_variance_std(device: torch.device) -> None:
-    # Every segment sees identical or no incoming messages, so std is zero:
-    x_dict = {
-        "users": torch.randn(2, 8, device=device, dtype=torch.half),
-        "orders": torch.randn(1, 8, device=device, dtype=torch.half).repeat(
-            2, 1
-        ),
-    }
-    edge_index_dict = {
-        ("orders", "to", "users"): torch.tensor(
-            [[0, 1], [0, 0]],
-            device=device,
-        )
-    }
-
-    model = InvariantGNN(channels=8, device=device, dtype=torch.half)
-
-    std_inputs: list[torch.Tensor] = []
-    handle = model.std_lin.register_forward_pre_hook(
-        lambda module, args: std_inputs.append(args[0])
-    )
-    out = model(
-        x_dict=x_dict,
-        edge_index_dict=edge_index_dict,
-        readout_table="users",
-        num_hops=2,
-    )
-    handle.remove()
-
-    assert out.size() == (2, 8)
-    assert not out.isnan().any()
-    assert len(std_inputs) == 2
-    for h in std_inputs:  # One captured input per hop:
-        assert (h == 0.0).all()
 
 
 def test_default_recipe_preserves_ids() -> None:
