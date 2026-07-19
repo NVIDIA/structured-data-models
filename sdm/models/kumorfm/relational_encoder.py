@@ -8,8 +8,7 @@ from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
 from sdm.models.kumorfm.graph import (
-    _HomogeneousGraph,
-    _make_homogeneous_graph,
+    HomogeneousGraph,
 )
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 
@@ -180,7 +179,7 @@ def _propagate_targets(
     y: Tensor,
     root_index: Tensor,
     *,
-    graph: _HomogeneousGraph,
+    graph: HomogeneousGraph,
     num_hops: int,
     num_nodes: int,
     dtype: torch.dtype,
@@ -207,7 +206,7 @@ def _propagate_targets(
 def _propagate(
     state: Tensor,
     *,
-    graph: _HomogeneousGraph,
+    graph: HomogeneousGraph,
     num_hops: int,
 ) -> Tensor:
     row = graph.edge_index[0]

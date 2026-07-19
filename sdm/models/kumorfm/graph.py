@@ -12,6 +12,7 @@ class HomogeneousGraph:  # noqa: D101
     row: Tensor
     colptr: Tensor
     edge_type: Tensor
+    num_edge_types: int
     start_node_offsets: dict[str, int]
     end_node_offsets: dict[str, int]
 
@@ -71,6 +72,7 @@ class HomogeneousGraph:  # noqa: D101
             row=row,
             colptr=colptr,
             edge_type=edge_type,
+            num_edge_types=len(edge_types),
             start_node_offsets=start_node_offsets,
             end_node_offsets=end_node_offsets,
         )
