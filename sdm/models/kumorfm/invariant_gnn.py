@@ -51,7 +51,7 @@ class InvariantGNN(torch.nn.Module):
         readout_table: str,
         num_hops: int,
         generator: torch.Generator | None = None,
-    ) -> Tensor:  # [R, C]
+    ) -> Tensor:
 
         if num_hops == 0 or graph.row.numel() == 0:
             start = graph.start_node_offsets[readout_table]

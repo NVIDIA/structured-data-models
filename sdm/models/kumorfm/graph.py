@@ -54,7 +54,9 @@ class HomogeneousGraph:  # noqa: D101
         if len(rows) == 0:
             table = next(iter(related_tables.tables.values()))
             row = torch.empty(0, dtype=torch.long, device=table.device)
-            colptr = torch.zeros(1, dtype=torch.long, device=table.device)
+            colptr = torch.zeros(
+                start + 1, dtype=torch.long, device=table.device
+            )
             edge_type = torch.empty(0, dtype=torch.long, device=table.device)
         else:
             row = torch.cat(rows, dim=0)
