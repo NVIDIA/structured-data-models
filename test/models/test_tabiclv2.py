@@ -1,6 +1,7 @@
 import pytest
 import torch
 from sdm.models import TabICLv2
+from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
@@ -31,7 +32,6 @@ def test_forward(
         out = model(x_context, y_context, x_query)
         assert out.size() == (*batch_shape, R_query, 999)
     else:
-        # TODO Increase max value once TabICLv2 supports 10+ classes:
         y_context = torch.randint(
             low=0,
             high=10,
@@ -59,7 +59,11 @@ def test_forward(
 
     torch.manual_seed(1)
     model.fit(x_context, y_context)
+    caches = model._caches
+    assert caches is not None
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
     assert model.predict(x_query).allclose(out)
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
     model.clear()
 
 
@@ -78,8 +82,15 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
+    caches = model._caches
+    assert caches is not None
+    assert len(caches) == 3
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
+
     out = model.predict(x_query)
     assert out.size() == (*batch_shape, R_query, 999)
+    assert model._caches is caches
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
     model.clear()
 
 
@@ -110,8 +121,91 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
     b = torch.tensor([4, 1, 2, 3, 0], device=device)
     y = 5 * a + b
     y_swapped = 5 * b + a
-    out = row_embedding(x, y)
-    torch.testing.assert_close(out, row_embedding(x, y_swapped))
+    out = row_embedding(x, y, num_classes=25)
+    torch.testing.assert_close(
+        out,
+        row_embedding(x, y_swapped, num_classes=25),
+    )
+
+
+def test_tabiclv2_hierarchical_log_probs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class IdentityRowEmbedding(torch.nn.Module):
+        def forward(
+            self,
+            x: torch.Tensor,
+            y: torch.Tensor,
+            *,
+            num_classes: int | None = None,
+            cache: object | None = None,
+        ) -> torch.Tensor:
+            return x
+
+    class StubHierarchicalClassifier(torch.nn.Module):
+        temperature = 0.9
+
+        def forward(
+            self,
+            row_embeddings: torch.Tensor,
+            y: torch.Tensor,
+            *,
+            num_classes: int,
+            predictor: object,
+        ) -> torch.Tensor:
+            assert num_classes == 3
+            test_size = row_embeddings.size(-2) - y.size(-1)
+            log_probs = row_embeddings.new_tensor([0.15, 0.45, 0.4]).log()
+            return log_probs.expand(test_size, -1)
+
+    model = _TabICLv2(
+        num_classes=2,
+        num_quantiles=0,
+        channels=8,
+        num_embedding_layers=1,
+        num_embedding_heads=2,
+        num_inducing_points=4,
+        group_size=3,
+        num_readout_tokens=2,
+        num_icl_layers=1,
+        num_icl_heads=2,
+        norm_bias=True,
+    )
+    monkeypatch.setattr(model, "row_embedding", IdentityRowEmbedding())
+    monkeypatch.setattr(
+        model,
+        "hierarchical_classifier",
+        StubHierarchicalClassifier(),
+    )
+
+    y = torch.tensor([0, 1, 2])
+    out = model(torch.randn(5, 4), y, num_classes=3)
+
+    probabilities = torch.tensor([0.15, 0.45, 0.4]).expand(2, -1)
+    expected = probabilities.log().mul(0.9)
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    num_classes, test_size = 11, 2
+    x_context = torch.randn(num_classes, 6, device=device)
+    x_query = torch.randn(test_size, 6, device=device)
+    y_context = torch.arange(
+        num_classes,
+        dtype=torch.int32,
+        device=device,
+    ).unsqueeze(-1)
+
+    out = model(x_context, y_context, x_query)
+
+    assert out.size() == (test_size, num_classes)
+    probabilities = out.numerical
+    torch.testing.assert_close(
+        probabilities.sum(dim=-1),
+        torch.ones(test_size, device=device),
+    )
 
 
 @onlyCUDA

@@ -1,10 +1,11 @@
 import pandas as pd
 import pytest
+import torch
 from sdm import RelationalData, TableTensor, infer_stypes
 
 
 @pytest.fixture
-def data() -> RelationalData:
+def data(device: torch.device) -> RelationalData:
     users_df = pd.DataFrame(
         {
             "user_id": [0, 1, 2, 3],
@@ -55,4 +56,4 @@ def data() -> RelationalData:
                 "right_column": "item_id",
             },
         ],
-    )
+    ).to(device)

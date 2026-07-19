@@ -31,10 +31,10 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-class Model(torch.nn.Module, ABC):
+class ICLModel(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
-    :class:`Model` defines the public interface shared among in-context
+    :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
@@ -178,7 +178,9 @@ class Model(torch.nn.Module, ABC):
         r"""Fit and cache in-context examples.
 
         Repeated calls to :meth:`predict` can then reuse the same in-context
-        examples while only providing new query examples.
+        examples while only providing new query examples. Cached key/value
+        entries are kept in CPU memory between calls and staged on the
+        prediction device when used.
 
         Args:
             x: The feature tensor of in-context examples with shape
@@ -248,8 +250,8 @@ class Model(torch.nn.Module, ABC):
                 cache=cache,
             )
             cache.freeze()
+            cache = cache.cpu()
             caches.append(cache)
-
         self._caches = caches
 
     def clear(self) -> None:
@@ -334,7 +336,7 @@ class Model(torch.nn.Module, ABC):
                 x_query=x_i,
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
-                cache=cache,
+                cache=cache.to(x_i.device),
             )
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):
