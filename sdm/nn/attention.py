@@ -1,7 +1,7 @@
 """Attention modules for structured tensor models."""
 
 from collections.abc import Callable
-from math import isfinite, prod
+from math import prod
 from typing import Any, Literal, cast, overload
 
 import torch
@@ -325,8 +325,6 @@ class SDPA(torch.nn.Module):
                 f"`num_query_heads` ({num_query_heads}) must be divisible by "
                 f"`num_key_value_heads` ({num_key_value_heads})"
             )
-        if scale is not None and (not isfinite(scale) or scale <= 0):
-            raise ValueError("`scale` must be finite and positive")
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 

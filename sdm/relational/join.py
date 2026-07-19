@@ -50,6 +50,8 @@ def join_index(
             f"(got '{left_table.device}' and '{right_table.device}')"
         )
 
+    device = device or left_table.device
+
     left_table = left_table[list(left_keys)]
     right_table = right_table[list(right_keys)]
     left_rows = math.prod(left_table.size()[:-1])

@@ -178,9 +178,7 @@ class ICLModel(torch.nn.Module, ABC):
         r"""Fit and cache in-context examples.
 
         Repeated calls to :meth:`predict` can then reuse the same in-context
-        examples while only providing new query examples. Cached key/value
-        entries are kept in CPU memory between calls and staged on the
-        prediction device when used.
+        examples while only providing new query examples.
 
         Args:
             x: The feature tensor of in-context examples with shape
@@ -249,8 +247,7 @@ class ICLModel(torch.nn.Module, ABC):
                 related_query_tables=None,
                 cache=cache,
             )
-            cache.freeze()
-            cache = cache.cpu()
+            cache = cache.cpu().freeze()
             caches.append(cache)
         self._caches = caches
 
