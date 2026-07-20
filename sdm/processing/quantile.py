@@ -9,7 +9,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 BOUNDS_THRESH = 1e-7
-_TRANSFORM_BATCH_SIZE = 32
+_MAX_NUM_COLS = 32
 
 
 def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
@@ -148,8 +148,8 @@ class Quantile(Processor, InvertibleMixin):
         """Transform ``table`` into the configured output distribution."""
         numerical = _as_float(table.numerical)
         transformed = torch.empty_like(numerical)
-        for start in range(0, numerical.shape[1], _TRANSFORM_BATCH_SIZE):
-            end = min(start + _TRANSFORM_BATCH_SIZE, numerical.shape[1])
+        for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
+            end = min(start + _MAX_NUM_COLS, numerical.shape[1])
             # Searchsorted works over the innermost dimension, so columns
             # become independent rows: input ``[N, F]`` -> ``[F, N]``.
             input_columns = numerical[:, start:end].T.contiguous()
@@ -201,7 +201,7 @@ class Quantile(Processor, InvertibleMixin):
         numerical = _as_float(table.numerical)
         inverse = numerical.clone()
         for i in range(numerical.shape[1]):
-            input_col = numerical[:, i].clone()
+            input_col = inverse[:, i]
             quantiles = self.quantiles[:, i]
             lower_bound_y = quantiles[0]
             upper_bound_y = quantiles[-1]
