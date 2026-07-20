@@ -174,7 +174,7 @@ class CellEmbedder(torch.nn.Module):
         """
         if x.dim() != 3 or not x.is_floating_point():
             raise ValueError("x must be a floating-point [B, T, H] tensor")
-        batch_size, _, num_features = x.shape
+        batch_size, num_rows, num_features = x.shape
         if cat_mask is not None and (
             cat_mask.shape != (batch_size, num_features)
             or cat_mask.dtype != torch.bool
