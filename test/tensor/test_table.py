@@ -48,6 +48,7 @@ def test_init() -> None:
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
     assert tensor._column_to_loc == {
         "age": (Stype.numerical, 0),
@@ -78,6 +79,7 @@ def test_empty() -> None:
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
     assert tensor._column_to_loc == {}
 
@@ -215,6 +217,7 @@ def test_from_tensor() -> None:
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
     assert tensor.numerical.equal(data)
     assert TableTensor.from_tensor(data[:, :0]).size() == (5, 0)
@@ -234,6 +237,7 @@ def test_from_tensor() -> None:
         Stype.categorical: ("0", "1"),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
     assert tensor.categorical.as_tensor().equal(
         torch.tensor([[2, 1], [0, 0], [3, 0], [1, 1]])
@@ -370,6 +374,7 @@ def test_select_stypes() -> None:
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
     assert numerical.numerical is tensor.numerical
     assert numerical.categorical.size() == (2, 0)
@@ -382,6 +387,7 @@ def test_select_stypes() -> None:
         Stype.categorical: ("country",),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
     assert categorical.categorical is tensor.categorical
 
@@ -391,6 +397,7 @@ def test_select_stypes() -> None:
         Stype.categorical: ("country",),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
     assert mixed.numerical is tensor.numerical
     assert mixed.categorical is tensor.categorical
@@ -422,6 +429,7 @@ def test_drop_stypes() -> None:
         Stype.categorical: ("country",),
         Stype.datetime: ("created_at",),
         Stype.id: ("user_id",),
+        Stype.text: (),
     }
     assert no_numerical.numerical.size() == (2, 0)
     assert no_numerical.categorical is tensor.categorical
@@ -434,6 +442,7 @@ def test_drop_stypes() -> None:
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
         Stype.id: ("user_id",),
+        Stype.text: (),
     }
     assert no_categorical.numerical is tensor.numerical
     assert no_categorical.categorical.size() == (2, 0)
@@ -444,6 +453,7 @@ def test_drop_stypes() -> None:
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
         Stype.id: ("user_id",),
+        Stype.text: (),
     }
     assert mixed.numerical.size() == (2, 0)
     assert mixed.categorical.size() == (2, 0)
@@ -457,6 +467,7 @@ def test_drop_stypes() -> None:
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
 
     with pytest.raises(ValueError, match="not a valid Stype"):
@@ -673,6 +684,7 @@ def test_unbind_split() -> None:
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
 
     with pytest.raises(RuntimeError, match="split size 1"):
@@ -742,6 +754,7 @@ def test_advanced_indexing() -> None:
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
 
     out = cast(TableTensor, tensor.view(-1, 3))[:, "age"]
@@ -760,6 +773,7 @@ def test_advanced_indexing() -> None:
         Stype.categorical: ("country",),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
 
     out = tensor[..., "country"]
@@ -851,6 +865,7 @@ def test_cat_stack() -> None:
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
 
     out = torch.stack([tensor1, tensor1], dim=0)

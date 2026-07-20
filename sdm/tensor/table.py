@@ -14,7 +14,7 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
-from sdm.tensor import CategoricalTensor, ColumnarTensor
+from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 
 if TYPE_CHECKING:
@@ -107,6 +107,7 @@ class TableTensor(Tensor):
         categorical: The categorical column block of shape ``[..., C_cat]``.
         datetime: The ``datetime64[us]`` column block of shape ``[..., C_dt]``.
         id: The identifier column block of shape ``[..., C_id]``.
+        text: The text column block of shape ``[..., C_text]``.
         device: The device.
     """
 
@@ -118,6 +119,7 @@ class TableTensor(Tensor):
     _categorical: CategoricalTensor
     _datetime: Tensor
     _id: ColumnarTensor
+    _text: StringTensor
     _columns: dict[Stype, tuple[str, ...]]
     _column_to_loc: dict[str, tuple[Stype, int]]
 
@@ -134,6 +136,7 @@ class TableTensor(Tensor):
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
         id: ColumnarTensor | None = None,
+        text: StringTensor | None = None,
         device: torch.device | str | None = None,
     ) -> None:
         pass
@@ -146,6 +149,7 @@ class TableTensor(Tensor):
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
         id: ColumnarTensor | None = None,
+        text: StringTensor | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
@@ -160,6 +164,7 @@ class TableTensor(Tensor):
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
             (Stype.id, id),
+            (Stype.text, text),
         ):
             if block is None:
                 continue
@@ -205,6 +210,12 @@ class TableTensor(Tensor):
             datetime = torch.empty((*size, 0), dtype=torch.long, device=device)
         if id is None:
             id = ColumnarTensor((), size=size, device=device)
+        if text is None:
+            text = StringTensor(
+                data=torch.empty(0, dtype=torch.uint8, device=device),
+                offset=torch.zeros(1, dtype=torch.int32, device=device),
+                size=(*size, 0),
+            )
 
         columns = {
             Stype(stype): tuple(names)
@@ -215,6 +226,7 @@ class TableTensor(Tensor):
             Stype.categorical: tuple(columns.get(Stype.categorical, ())),
             Stype.datetime: tuple(columns.get(Stype.datetime, ())),
             Stype.id: tuple(columns.get(Stype.id, ())),
+            Stype.text: tuple(columns.get(Stype.text, ())),
         }
 
         for stype, block in (
@@ -222,6 +234,7 @@ class TableTensor(Tensor):
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
             (Stype.id, id),
+            (Stype.text, text),
         ):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
@@ -250,6 +263,7 @@ class TableTensor(Tensor):
         out._categorical = categorical
         out._datetime = datetime
         out._id = id
+        out._text = text
         out._columns = columns
         out._column_to_loc = column_to_loc
 
@@ -308,6 +322,11 @@ class TableTensor(Tensor):
                     tensor = torch.from_numpy(values).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
+                elif stype == Stype.text:
+                    tensor = StringTensor.from_arrow(
+                        array,
+                        size=(len(array), 1),
+                    )
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
@@ -437,6 +456,12 @@ class TableTensor(Tensor):
                     tensor = tensor.to(device)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_cudf(ser, device=device)
+                elif stype == Stype.text:
+                    tensor = StringTensor.from_cudf(
+                        ser,
+                        size=(len(ser), 1),
+                        device=device,
+                    )
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
@@ -539,12 +564,18 @@ class TableTensor(Tensor):
         r"""Return the identifier column block."""
         return self._id
 
+    @property
+    def text(self) -> StringTensor:
+        r"""Return the text/string column block."""
+        return self._text
+
     def items(self) -> Iterator[tuple[Stype, Tensor]]:
         r"""Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
         yield Stype.datetime, self._datetime
         yield Stype.id, self._id
+        yield Stype.text, self._text
 
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
@@ -571,6 +602,7 @@ class TableTensor(Tensor):
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
         id: ColumnarTensor | None = None,
+        text: StringTensor | None = None,
     ) -> Self:
         r"""Return a table with one or more semantic blocks replaced.
 
@@ -586,6 +618,7 @@ class TableTensor(Tensor):
                 ``[..., C_cat]``.
             datetime: Replacement datetime block with shape ``[..., C_dt]``.
             id: Replacement identifier block with shape ``[..., C_id]``.
+            text: Replacement text block with shape ``[..., C_text]``.
         """
         return self.__class__(
             columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
@@ -595,6 +628,7 @@ class TableTensor(Tensor):
             ),
             datetime=self.datetime if datetime is None else datetime,
             id=self.id if id is None else id,
+            text=self.text if text is None else text,
         )
 
     def select_stypes(
@@ -738,6 +772,7 @@ class TableTensor(Tensor):
             self._categorical,
             self._datetime,
             self._id,
+            self._text,
         )
         return (self.__class__, args)
 
@@ -906,7 +941,7 @@ def _to_copy(
                 stype not in (Stype.categorical,)
                 or dtype in (torch.int32, torch.int64)
             )
-            and stype not in (Stype.datetime, Stype.id)
+            and stype not in (Stype.datetime, Stype.id, Stype.text)
             else None,
             layout=layout,
             pin_memory=pin_memory,
