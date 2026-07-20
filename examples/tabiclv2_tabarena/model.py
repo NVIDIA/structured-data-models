@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import gc
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import torch
@@ -37,22 +37,31 @@ class SDMTabICLv2Model(AbstractModel):
             if self.problem_type == "regression"
             else Stype.categorical
         )
+        self._autocast_enabled = _autocast_enabled(
+            precision=cast(str, self._get_model_params()["precision"]),
+            device=self._device,
+        )
 
         self.model = TabICLv2(device=self._device)
-        self.model.fit(
-            x=_table_from_frame(
-                X,
-                stypes=self._feature_stypes,
-                device=self._device,
-            ),
-            y=_table_from_series(
-                y,
-                name=self._target_name,
-                stype=self._target_stype,
-                device=self._device,
-            ),
-            num_estimators=int(self._get_model_params()["num_estimators"]),
-        )
+        with torch.amp.autocast(
+            device_type=self._device.type,
+            dtype=torch.bfloat16,
+            enabled=self._autocast_enabled,
+        ):
+            self.model.fit(
+                x=_table_from_frame(
+                    X,
+                    stypes=self._feature_stypes,
+                    device=self._device,
+                ),
+                y=_table_from_series(
+                    y,
+                    name=self._target_name,
+                    stype=self._target_stype,
+                    device=self._device,
+                ),
+                num_estimators=int(self._get_model_params()["num_estimators"]),
+            )
 
     def _predict_proba(self, X: pd.DataFrame, **kwargs: object) -> np.ndarray:
         del kwargs
@@ -61,13 +70,18 @@ class SDMTabICLv2Model(AbstractModel):
                 "SDMTabICLv2Model must be fitted before prediction"
             )
 
-        prediction = self.model.predict(
-            _table_from_frame(
-                X,
-                stypes=self._feature_stypes,
-                device=self._device,
+        with torch.amp.autocast(
+            device_type=self._device.type,
+            dtype=torch.bfloat16,
+            enabled=self._autocast_enabled,
+        ):
+            prediction = self.model.predict(
+                _table_from_frame(
+                    X,
+                    stypes=self._feature_stypes,
+                    device=self._device,
+                )
             )
-        )
         values = prediction.numerical.float().cpu().numpy()
         return _prediction_to_numpy(
             values,
@@ -77,6 +91,7 @@ class SDMTabICLv2Model(AbstractModel):
 
     def _set_default_params(self) -> None:
         self._set_default_param_value("num_estimators", 8)
+        self._set_default_param_value("precision", "auto")
 
     @classmethod
     def supported_problem_types(cls) -> list[str]:
@@ -119,6 +134,32 @@ def _resolve_device(*, num_gpus: int) -> torch.device:
     if not torch.cuda.is_available():
         raise RuntimeError("TabArena requested a GPU but CUDA is unavailable")
     return torch.device("cuda")
+
+
+def _autocast_enabled(
+    *,
+    precision: Literal["auto", "bf16", "fp32"] | str,
+    device: torch.device,
+) -> bool:
+    """Resolve precision for TabICLv2 forward passes."""
+    if precision == "fp32":
+        return False
+    if precision not in {"auto", "bf16"}:
+        raise ValueError(
+            "'precision' must be one of 'auto', 'bf16', or 'fp32' "
+            f"(got {precision!r})"
+        )
+    if device.type != "cuda":
+        if precision == "bf16":
+            raise ValueError("'precision=bf16' requires a CUDA device")
+        return False
+    if torch.cuda.is_bf16_supported():
+        return True
+    if precision == "bf16":
+        raise RuntimeError(
+            "'precision=bf16' requires CUDA hardware with bfloat16 support"
+        )
+    return False
 
 
 def _table_from_frame(

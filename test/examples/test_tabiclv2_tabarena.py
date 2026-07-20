@@ -99,6 +99,7 @@ def test_config_validation_and_output_root(tmp_path: Path) -> None:
         argparse.Namespace(
             output_root=tmp_path / "run",
             num_estimators=1,
+            precision="auto",
             num_cpus=1,
             num_gpus=0,
             outer=False,
@@ -108,6 +109,7 @@ def test_config_validation_and_output_root(tmp_path: Path) -> None:
     )
     assert isinstance(config, RunConfig)
     assert config.output_root == (tmp_path / "run").resolve()
+    assert config.precision == "auto"
 
     _prepare_output_root(config.output_root)
     (config.output_root / "existing").write_text("result\n")
@@ -135,8 +137,47 @@ def test_local_dispatch_and_results_report(tmp_path: Path) -> None:
     }
 
     results = pd.DataFrame([{"dataset": "example", "metric_error": 0.5}])
-    _write_results_report(results, tmp_path / "report")
-    assert (tmp_path / "report" / "results_per_split.csv").is_file()
+    _write_results_report(
+        results,
+        tmp_path / "report",
+        precision="bf16",
+    )
+    report = pd.read_csv(tmp_path / "report" / "results_per_split.csv")
+    assert report.precision.tolist() == ["bf16"]
+
+
+def test_precision_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("autogluon.core.models")
+    from examples.tabiclv2_tabarena.model import _autocast_enabled
+
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+
+    assert not _autocast_enabled(
+        precision="auto",
+        device=torch.device("cpu"),
+    )
+    assert not _autocast_enabled(
+        precision="fp32",
+        device=torch.device("cuda"),
+    )
+    assert _autocast_enabled(
+        precision="auto",
+        device=torch.device("cuda"),
+    )
+    assert _autocast_enabled(
+        precision="bf16",
+        device=torch.device("cuda"),
+    )
+    with pytest.raises(ValueError, match="requires a CUDA device"):
+        _autocast_enabled(
+            precision="bf16",
+            device=torch.device("cpu"),
+        )
+    with pytest.raises(ValueError, match="must be one of"):
+        _autocast_enabled(
+            precision="float16",
+            device=torch.device("cuda"),
+        )
 
 
 @pytest.mark.skipif(
@@ -153,6 +194,7 @@ def test_real_tabarena_smoke(tmp_path: Path) -> None:
         RunConfig(
             output_root=tmp_path / "tabarena-smoke",
             num_estimators=1,
+            precision="auto",
             num_cpus=1,
             num_gpus=1 if torch.cuda.is_available() else 0,
             outer=True,

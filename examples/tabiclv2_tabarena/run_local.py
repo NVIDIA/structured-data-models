@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -18,6 +18,7 @@ class RunConfig:
 
     output_root: Path
     num_estimators: int
+    precision: Literal["auto", "bf16", "fp32"]
     num_cpus: int | None
     num_gpus: int | None
     outer: bool
@@ -36,6 +37,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     """Add command-line arguments for the local TabArena runner."""
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--num-estimators", type=int, default=8)
+    parser.add_argument(
+        "--precision",
+        choices=("auto", "bf16", "fp32"),
+        default="auto",
+        help="Use CUDA bf16 automatically, force bf16, or force fp32.",
+    )
     parser.add_argument("--num-cpus", type=int)
     parser.add_argument("--num-gpus", type=int)
     parser.add_argument("--outer", action="store_true")
@@ -54,6 +61,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
     return RunConfig(
         output_root=args.output_root.resolve(),
         num_estimators=args.num_estimators,
+        precision=args.precision,
         num_cpus=args.num_cpus,
         num_gpus=args.num_gpus,
         outer=args.outer,
@@ -76,7 +84,12 @@ def run(config: RunConfig) -> None:
     generator = ConfigGenerator(
         search_space={},
         model_cls=SDMTabICLv2Model,
-        manual_configs=[{"num_estimators": config.num_estimators}],
+        manual_configs=[
+            {
+                "num_estimators": config.num_estimators,
+                "precision": config.precision,
+            }
+        ],
     )
     experiments = TabArenaV0pt1ExperimentBundle(
         models=[(generator, 0)],
@@ -97,7 +110,11 @@ def run(config: RunConfig) -> None:
     results = context._registered_new_results()
     if results is None:
         raise RuntimeError("No TabArena jobs completed successfully")
-    _write_results_report(results, config.output_root / "report")
+    _write_results_report(
+        results,
+        config.output_root / "report",
+        precision=config.precision,
+    )
 
 
 def _prepare_output_root(output_root: Path) -> None:
@@ -124,10 +141,18 @@ def _run_jobs(
     )
 
 
-def _write_results_report(results: pd.DataFrame, report_dir: Path) -> None:
+def _write_results_report(
+    results: pd.DataFrame,
+    report_dir: Path,
+    *,
+    precision: str | None = None,
+) -> None:
     """Write the completed SDM result records as a concise CSV report."""
     report_dir.mkdir(parents=True, exist_ok=True)
-    results.to_csv(report_dir / "results_per_split.csv", index=False)
+    report = results.copy()
+    if precision is not None:
+        report.insert(0, "precision", precision)
+    report.to_csv(report_dir / "results_per_split.csv", index=False)
 
 
 if __name__ == "__main__":
