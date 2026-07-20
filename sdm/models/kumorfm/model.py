@@ -13,6 +13,14 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
+from sdm.models.kumorfm.relative_time import (
+    fit_relative_time_features,
+    propagate_anchor_indices,
+    relative_days,
+    relative_days_for_rows,
+    task_anchor,
+    transform_relative_time_features,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
@@ -133,6 +141,7 @@ class KumoRFM(ICLModel):
             cache=cache,
             num_hops=kwargs.get("num_hops"),
             generator=kwargs.get("generator"),
+            task_time_column=kwargs.get("task_time_column"),
         )
 
         if classes is None:
@@ -226,6 +235,7 @@ class _KumoRFM(torch.nn.Module):
         cache: Cache | None = None,
         num_hops: int | None = None,
         generator: torch.Generator | None = None,
+        task_time_column: str | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
         for tables in (related_context_tables, related_query_tables):
@@ -264,7 +274,6 @@ class _KumoRFM(torch.nn.Module):
             if cache is not None and cache.is_recording:
                 cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
 
-        # TODO Support computing relative time.
         context_graph = HomogeneousGraph.from_related_tables(
             related_context_tables
         )
@@ -275,6 +284,58 @@ class _KumoRFM(torch.nn.Module):
         entity_table = related_context_tables.task_links[0].table
         context_roots = _task_roots(x_context, related_context_tables)
         query_roots = _task_roots(x_query, related_query_tables)
+
+        context_task_features = x_context.numerical
+        query_task_features = x_query.numerical
+        context_anchor = query_anchor = None
+        context_anchor_index = query_anchor_index = None
+        if task_time_column is not None:
+            context_anchor = task_anchor(x_context, task_time_column)
+            query_anchor = task_anchor(x_query, task_time_column)
+            context_task_relative, task_time_processors = (
+                fit_relative_time_features(
+                    context=relative_days(
+                        anchor=context_anchor,
+                        timestamps=x_context.datetime,
+                    ),
+                    columns=x_context.columns[Stype.datetime],
+                    dtype=context_task_features.dtype,
+                )
+            )
+            query_task_relative = transform_relative_time_features(
+                values=relative_days(
+                    anchor=query_anchor,
+                    timestamps=x_query.datetime,
+                ),
+                columns=x_context.columns[Stype.datetime],
+                dtype=query_task_features.dtype,
+                processors=task_time_processors,
+            )
+            context_task_features = torch.cat(
+                [context_task_features, context_task_relative],
+                dim=-1,
+            )
+            query_task_features = torch.cat(
+                [query_task_features, query_task_relative],
+                dim=-1,
+            )
+            context_anchor_index = propagate_anchor_indices(
+                num_anchors=context_anchor.size(0),
+                root_index=(
+                    context_roots
+                    + context_graph.start_node_offsets[entity_table]
+                ),
+                graph=context_graph,
+                num_hops=num_hops,
+            )
+            query_anchor_index = propagate_anchor_indices(
+                num_anchors=query_anchor.size(0),
+                root_index=(
+                    query_roots + query_graph.start_node_offsets[entity_table]
+                ),
+                graph=query_graph,
+                num_hops=num_hops,
+            )
 
         labels = _propagate_targets(
             y=y,
@@ -297,15 +358,67 @@ class _KumoRFM(torch.nn.Module):
             else:
                 x_query_i = x_context_i.new_empty((0, x_context_i.size(-1)))
 
+            if task_time_column is not None:
+                assert context_anchor is not None
+                assert query_anchor is not None
+                assert context_anchor_index is not None
+                assert query_anchor_index is not None
+                columns = related_context_tables.tables[name].columns[
+                    Stype.datetime
+                ]
+                context_start = context_graph.start_node_offsets[name]
+                context_end = context_graph.end_node_offsets[name]
+                context_relative = relative_days_for_rows(
+                    anchor=context_anchor,
+                    anchor_index=context_anchor_index[
+                        context_start:context_end
+                    ],
+                    timestamps=related_context_tables.tables[name].datetime,
+                )
+                if name in related_query_tables.tables:
+                    query_start = query_graph.start_node_offsets[name]
+                    query_end = query_graph.end_node_offsets[name]
+                    query_relative = relative_days_for_rows(
+                        anchor=query_anchor,
+                        anchor_index=query_anchor_index[query_start:query_end],
+                        timestamps=related_query_tables.tables[name].datetime,
+                    )
+                else:
+                    query_relative = context_relative.new_empty(
+                        (0, context_relative.size(-1))
+                    )
+                (
+                    context_relative,
+                    relative_time_processors,
+                ) = fit_relative_time_features(
+                    context=context_relative,
+                    columns=columns,
+                    dtype=x_context_i.dtype,
+                )
+                query_relative = transform_relative_time_features(
+                    values=query_relative,
+                    columns=columns,
+                    dtype=x_query_i.dtype,
+                    processors=relative_time_processors,
+                )
+                x_context_i = torch.cat(
+                    [x_context_i, context_relative],
+                    dim=-1,
+                )
+                x_query_i = torch.cat(
+                    [x_query_i, query_relative],
+                    dim=-1,
+                )
+
             if name == entity_table:
                 x_context_i = _inject_task_features(
                     x=x_context_i,
-                    task_x=x_context.numerical,
+                    task_x=context_task_features,
                     root_index=context_roots,
                 )
                 x_query_i = _inject_task_features(
                     x=x_query_i,
-                    task_x=x_query.numerical,
+                    task_x=query_task_features,
                     root_index=query_roots,
                 )
 

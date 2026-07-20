@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 import torch
 from sdm import (
@@ -17,6 +19,7 @@ from sdm.models.kumorfm.model import (
     _propagate_targets,
     _remap_v2_1_checkpoint,
 )
+from sdm.processing.datetime import US_PER_DAY
 from sdm.testing import withCUDA
 
 
@@ -245,8 +248,22 @@ def test_forward(
     else:
         assert repr(model) == "KumoRFM(device=cuda:0)"
 
+    users = cast(
+        TableTensor,
+        torch.cat(
+            [
+                relational_data.tables["users"],
+                TableTensor(
+                    columns={Stype.datetime: ("created_at",)},
+                    datetime=torch.arange(4, device=device).view(-1, 1)
+                    * US_PER_DAY,
+                ),
+            ],
+            dim=-1,
+        ),
+    )
     related_tables = RelatedTables(
-        tables=relational_data.tables,
+        tables={**relational_data.tables, "users": users},
         relationships=relational_data.relationships,
         task_links=[
             {
@@ -260,20 +277,24 @@ def test_forward(
     x_context = TableTensor(
         columns={
             "numerical": ("task_feature",),
+            "datetime": ("prediction_time",),
             "id": ("user_id",),
         },
         numerical=torch.tensor(
             [[0.5], [1.5], [2.5], [3.5]],
             device=device,
         ),
+        datetime=torch.arange(10, 14, device=device).view(-1, 1) * US_PER_DAY,
         id=ColumnarTensor((torch.tensor([3, 1, 2, 0], device=device),)),
     )
     x_query = TableTensor(
         columns={
             "numerical": ("task_feature",),
+            "datetime": ("prediction_time",),
             "id": ("user_id",),
         },
         numerical=torch.tensor([[2.5], [3.5]], device=device),
+        datetime=torch.arange(20, 22, device=device).view(-1, 1) * US_PER_DAY,
         id=ColumnarTensor((torch.tensor([2, 0], device=device),)),
     )
 
@@ -298,6 +319,7 @@ def test_forward(
         related_context_tables=related_tables,
         related_query_tables=related_tables.select_tables(tables=["users"]),
         num_hops=2,
+        task_time_column="prediction_time",
     )
 
     assert out.size(-2) == 2
