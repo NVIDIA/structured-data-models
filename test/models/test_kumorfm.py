@@ -15,40 +15,22 @@ from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_invariant_gnn(device: torch.device) -> None:
+def test_invariant_gnn(
+    relational_data: RelationalData,
+    device: torch.device,
+) -> None:
     related_tables = RelatedTables(
         tables={
-            "users": TableTensor(
-                columns={"numerical": ("num",), "id": ("id",)},
-                numerical=torch.randn(4, 1, device=device),
-                id=ColumnarTensor(
-                    (torch.tensor([0, 1, 2, 3], device=device),)
-                ),
-            ),
-            "orders": TableTensor(
-                columns={"numerical": ("num",), "id": ("id",)},
-                numerical=torch.randn(8, 1, device=device),
-                id=ColumnarTensor(
-                    (torch.tensor([0, 0, 1, 1, 2, 2, 3, 3], device=device),)
-                ),
-            ),
+            "users": relational_data.tables["users"],
+            "orders": relational_data.tables["orders"],
         },
-        relationships=[
-            {
-                "left_table": "orders",
-                "left_column": "id",
-                "right_table": "users",
-                "right_column": "id",
-            }
-        ],
+        relationships=relational_data.relationships[:1],
         task_links=[],
     )
 
     graph = HomogeneousGraph.from_related_tables(related_tables)
     assert graph.colptr.equal(
-        torch.tensor(
-            [0, 2, 4, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16], device=device
-        )
+        torch.tensor([0, 2, 3, 3, 6, 7, 8, 9, 10, 11, 12], device=device)
     )
     col = torch.repeat_interleave(
         torch.arange(graph.colptr.numel() - 1, device=graph.colptr.device),
@@ -58,22 +40,18 @@ def test_invariant_gnn(device: torch.device) -> None:
     row, perm = graph.row.sort()
     row = row[col[perm].argsort(stable=True)]
     assert row.equal(
-        torch.tensor(
-            [4, 5, 6, 7, 8, 9, 10, 11, 0, 0, 1, 1, 2, 2, 3, 3], device=device
-        )
+        torch.tensor([4, 5, 6, 7, 8, 9, 0, 0, 1, 3, 3, 3], device=device)
     )
     assert graph.edge_type.equal(
-        torch.tensor(
-            [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], device=device
-        )
+        torch.tensor([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1], device=device)
     )
     assert graph.num_edge_types == 2
     assert graph.start_node_offsets == {"users": 0, "orders": 4}
-    assert graph.end_node_offsets == {"users": 4, "orders": 12}
+    assert graph.end_node_offsets == {"users": 4, "orders": 10}
 
     model = InvariantGNN(channels=8, device=device)
     out = model(
-        x=torch.randn(12, 8, device=device),
+        x=torch.randn(10, 8, device=device),
         graph=graph,
         readout_table="users",
         num_hops=2,
