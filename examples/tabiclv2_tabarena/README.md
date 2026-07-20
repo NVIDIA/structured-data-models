@@ -1,9 +1,32 @@
 # TabICLv2 on TabArena
 
 This optional example evaluates the repository-local `TabICLv2` model through
-TabArena and AutoGluon. Install those packages in the active environment before
-running it. It has no Ray dependency and runs every selected job in one local
-process.
+TabArena and AutoGluon. It has no Ray runtime dependency and runs every
+selected job in one local process.
+
+## Installation and requirements
+
+Install the repository test dependencies and the pinned optional integration
+dependencies from the repository root:
+
+```bash
+uv venv .venv
+uv pip install --python .venv/bin/python -e '.[test]' \
+  -r examples/tabiclv2_tabarena/requirements.txt
+```
+
+Do not install the `tabarena` PyPI placeholder package: it does not provide the
+`tabarena.benchmark` API used by this example. The requirements file pins
+compatible TabArena and AutoGluon source revisions; update them together and
+rerun the smoke test when upgrading.
+
+The first run needs internet access to clone the optional dependencies, fetch
+the TabICLv2 checkpoint from Hugging Face, and download selected TabArena tasks
+from OpenML. A GPU run requires CUDA-compatible PyTorch and a CUDA-capable GPU.
+Set `--num-gpus 0` to run on CPU instead; CPU runs can take substantially
+longer.
+
+## Usage
 
 Run a small outer-evaluation smoke test from the repository root:
 
@@ -18,6 +41,17 @@ python -m examples.tabiclv2_tabarena.run_local \
   --datasets blood-transfusion-service-center anneal QSAR_fish_toxicity
 ```
 
+For a CPU-only single-dataset smoke run:
+
+```bash
+python -m examples.tabiclv2_tabarena.run_local \
+  --output-root outputs/tabiclv2-cpu-smoke \
+  --num-estimators 1 \
+  --num-cpus 1 \
+  --num-gpus 0 \
+  --datasets blood-transfusion-service-center
+```
+
 Omit `--datasets` and `--subset` to run the complete TabArena suite locally:
 
 ```bash
@@ -28,6 +62,30 @@ python -m examples.tabiclv2_tabarena.run_local \
   --num-gpus 1
 ```
 
-Use `--num-gpus 0` for CPU-only execution. Each run requires a fresh output
-directory and writes completed SDM result records to
-`report/results_per_split.csv`.
+| Parameter | Required | Meaning |
+| --- | --- | --- |
+| `--output-root PATH` | Yes | New or empty directory for TabArena artifacts and `report/results_per_split.csv`. |
+| `--num-estimators N` | No; default `8` | Number of TabICLv2 estimators per task. `N` must be at least `1`; use `1` for a smoke test. |
+| `--num-cpus N` | No | CPU resource request passed to TabArena. `N` must be at least `1`; omit it to let TabArena auto-detect resources. |
+| `--num-gpus N` | No | GPU resource request passed to TabArena. `N` must be non-negative; use `0` for CPU-only execution. A positive value requires CUDA while TabICLv2 fits. |
+| `--outer` | No | Builds TabArena outer-evaluation experiments; appropriate for the smoke run. |
+| `--subset NAME [NAME ...]` | No | TabArena task-subset names, such as `lite`. |
+| `--datasets NAME [NAME ...]` | No | Exact TabArena dataset names. Separate multiple names with spaces, not commas. |
+
+Omit both `--subset` and `--datasets` to select the complete suite. When both
+are supplied, TabArena applies both filters. Each run requires a new or empty
+output directory, preserves TabArena's normal output and cache structure,
+writes completed SDM result records to `report/results_per_split.csv`, and
+propagates job failures.
+
+## Smoke-test command
+
+Run the opt-in end-to-end smoke test with:
+
+```bash
+SDM_RUN_TABARENA_SMOKE=1 .venv/bin/python -m pytest \
+  test/examples/test_tabiclv2_tabarena.py::test_real_tabarena_smoke -q
+```
+
+The test runs the three datasets from the GPU smoke command: one binary,
+multiclass, and regression task. It is not the complete TabArena suite.
