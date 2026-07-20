@@ -20,7 +20,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Linear, Parameter
+from torch.nn import Linear, ModuleList, Parameter
 
 from sdm.nn import SDPA, RotaryEmbedding
 
@@ -162,3 +162,158 @@ class MultiheadAttention(torch.nn.Module):
             attn_mask=attn_mask,
         )
         return self.out_proj(output.flatten(-2))
+
+
+class _MultiheadAttentionBlock(torch.nn.Module):
+    """Apply a TabFM v1.0.0 residual attention and SwiGLU block.
+
+    Args:
+        channels: Number of input and output channels.
+        num_heads: Number of attention heads.
+        feedforward_channels: Hidden width of the SwiGLU feed-forward layer.
+        ffn_chunk_size: Optional maximum number of flattened tokens processed
+            by the feed-forward layer at once.
+        device: Device on which to create parameters.
+        dtype: Dtype of the parameters.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        num_heads: int,
+        feedforward_channels: int,
+        ffn_chunk_size: int | None = None,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        if feedforward_channels <= 0:
+            raise ValueError("feedforward_channels must be positive")
+        if ffn_chunk_size is not None and ffn_chunk_size <= 0:
+            raise ValueError("ffn_chunk_size must be positive")
+
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.attn = MultiheadAttention(
+            channels=channels,
+            num_heads=num_heads,
+            **factory_kwargs,
+        )
+        self.pre_attn_ln = _RMSNorm(channels, eps=1e-6, **factory_kwargs)
+        self.post_attn_ln = _RMSNorm(channels, eps=1e-6, **factory_kwargs)
+        self.pre_ff_ln = _RMSNorm(channels, eps=1e-6, **factory_kwargs)
+        self.post_ff_ln = _RMSNorm(channels, eps=1e-6, **factory_kwargs)
+        self.linear1 = Linear(channels, feedforward_channels, **factory_kwargs)
+        self.linear1_gate = Linear(
+            channels,
+            feedforward_channels,
+            **factory_kwargs,
+        )
+        self.linear2 = Linear(feedforward_channels, channels, **factory_kwargs)
+        self.ffn_chunk_size = ffn_chunk_size
+
+    def _feedforward_impl(self, x: Tensor) -> Tensor:
+        normalized = self.pre_ff_ln(x)
+        hidden = F.silu(self.linear1_gate(normalized))
+        hidden = hidden * self.linear1(normalized)
+        return self.post_ff_ln(self.linear2(hidden))
+
+    def _feedforward(self, x: Tensor) -> Tensor:
+        if self.ffn_chunk_size is None:
+            return self._feedforward_impl(x)
+
+        # Flatten independent batch and sequence axes into tokens.
+        shape = x.shape
+        x = x.reshape(-1, shape[-1])
+        if x.size(0) == 0:
+            return self._feedforward_impl(x).view(shape)
+
+        output = x.new_empty(x.size(0), self.linear2.out_features)
+        for start in range(0, x.size(0), self.ffn_chunk_size):
+            stop = start + self.ffn_chunk_size
+            output[start:stop].copy_(self._feedforward_impl(x[start:stop]))
+        return output.view(shape)
+
+    def forward(
+        self,
+        query: Tensor,
+        key: Tensor | None = None,
+        value: Tensor | None = None,
+        attn_mask: Tensor | None = None,
+        rope: RotaryEmbedding | None = None,
+    ) -> Tensor:
+        """Run attention and feed-forward; omitted ``value`` uses ``query``."""
+        key = query if key is None else key
+        value = query if value is None else value
+        attention = self.attn(
+            query=self.pre_attn_ln(query),
+            key=self.pre_attn_ln(key),
+            value=self.pre_attn_ln(value),
+            attn_mask=attn_mask,
+            rope=rope,
+        )
+        output = query + self.post_attn_ln(attention)
+        return output + self._feedforward(output)
+
+
+class _Encoder(torch.nn.Module):
+    """Stack TabFM v1.0.0 multi-head attention blocks.
+
+    Args:
+        num_blocks: Number of attention blocks.
+        channels: Number of input and output channels.
+        num_heads: Number of attention heads.
+        feedforward_channels: Hidden width of each SwiGLU feed-forward layer.
+        rope_theta: Rotary frequency base. ``None`` disables rotary embedding.
+        ffn_chunk_size: Optional maximum number of flattened tokens processed
+            by each feed-forward layer at once.
+        device: Device on which to create parameters.
+        dtype: Dtype of parameters.
+    """
+
+    def __init__(
+        self,
+        num_blocks: int,
+        channels: int,
+        num_heads: int,
+        feedforward_channels: int,
+        rope_theta: float | None = 100_000.0,
+        ffn_chunk_size: int | None = None,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        if num_blocks <= 0:
+            raise ValueError("num_blocks must be positive")
+        if channels <= 0:
+            raise ValueError("channels must be positive")
+        if num_heads <= 0 or channels % num_heads != 0:
+            raise ValueError("num_heads must be positive and divide channels")
+        if rope_theta is not None and rope_theta <= 0:
+            raise ValueError("rope_theta must be positive")
+
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.rope: RotaryEmbedding | None = None
+        if rope_theta is not None:
+            self.rope = RotaryEmbedding(
+                channels=channels // num_heads,
+                layout="interleaved",
+                theta=rope_theta,
+                requires_grad=False,
+                **factory_kwargs,
+            )
+        self.blocks = ModuleList(
+            _MultiheadAttentionBlock(
+                channels=channels,
+                num_heads=num_heads,
+                feedforward_channels=feedforward_channels,
+                ffn_chunk_size=ffn_chunk_size,
+                **factory_kwargs,
+            )
+            for _ in range(num_blocks)
+        )
+
+    def forward(self, x: Tensor, attn_mask: Tensor | None = None) -> Tensor:
+        """Encode a sequence with the stacked attention blocks."""
+        for block in self.blocks:
+            x = block(query=x, attn_mask=attn_mask, rope=self.rope)
+        return x

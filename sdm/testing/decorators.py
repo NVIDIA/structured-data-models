@@ -4,6 +4,11 @@ from collections.abc import Callable
 import torch
 
 
+def fullgraph(module: torch.nn.Module) -> Callable:
+    """Compile a module with the eager backend while rejecting graph breaks."""
+    return torch.compile(module, fullgraph=True, backend="eager")
+
+
 def onlyCUDA(func: Callable) -> Callable:
     """Skip the test if CUDA is not available."""
     import pytest
