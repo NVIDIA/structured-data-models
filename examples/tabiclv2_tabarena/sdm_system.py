@@ -117,7 +117,11 @@ class SDMTabICLv2System(ExternalSystemModel):
             class_keys,
             labels_by_key=self._class_labels_by_key,
         )
-        return pd.DataFrame(values, index=X.index, columns=labels)
+        return pd.DataFrame(
+            values,
+            index=X.index,
+            columns=np.asarray(labels, dtype=object),
+        )
 
     def _prediction_values(self, X: pd.DataFrame) -> np.ndarray:
         """Return numerical TabICLv2 output values for a raw query frame."""
