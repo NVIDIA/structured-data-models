@@ -201,12 +201,14 @@ class _KumoRFM(torch.nn.Module):
             num_hops = 2  # TODO Support automatic `num_hops` detection.
             # TODO Write to `cache` if available.
 
+        # TODO Assert `len(task_links) == 1`>
         # TODO Support computing relative time.
         # TODO Inject task-features.
         # TODO Inject random heterogeneous GNN.
 
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
+        # TODO Apply per hop.
         for name in related_context_tables.tables:
             x_context_i = related_context_tables.tables[name].numerical
             x_query_i = related_query_tables.tables[name].numerical
@@ -235,7 +237,7 @@ class _KumoRFM(torch.nn.Module):
             graph=HomogeneousGraph.from_related_tables(related_context_tables),
             readout_table=related_context_tables.task_links[0].table,
             num_hops=num_hops,
-            generator=None,  # TODO Support generators
+            generator=None,  # TODO
         )
         x_query = self.gnn(  # TODO Make sure we use same edge type embeddings!
             x=torch.cat(
