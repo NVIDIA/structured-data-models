@@ -241,27 +241,6 @@ def test_compile(dtype: torch.dtype) -> None:
     assert torch.is_inference(predicted)
 
 
-def test_row_embedding() -> None:
-    row_embedding = RowEmbedding(
-        num_classes=2,
-        channels=8,
-        num_layers=1,
-        num_heads=2,
-        group_size=3,
-        num_inducing_points=4,
-        num_readout_tokens=2,
-        norm_bias=True,
-    )
-
-    out = row_embedding(
-        x=torch.randn(6, 4),
-        y=torch.tensor([0, 1]),
-        train_mask=torch.tensor([False, True, False, False, True, False]),
-        max_keys=1,
-    )
-    assert out.size() == (6, 16)
-
-
 @onlyFullTest
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])

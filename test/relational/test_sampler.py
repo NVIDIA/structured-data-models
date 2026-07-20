@@ -12,10 +12,10 @@ from sdm import (
 )
 
 
-def test_sampler(data: RelationalData) -> None:
+def test_sampler(relational_data: RelationalData) -> None:
     pytest.importorskip("pyg_lib")
 
-    task_table, related_tables = data.sampler()(
+    task_table, related_tables = relational_data.sampler()(
         task_table=TableTensor(
             columns={"id": ("user_id",)},
             id=ColumnarTensor((torch.tensor([3, 2, 1, 0]),)),
