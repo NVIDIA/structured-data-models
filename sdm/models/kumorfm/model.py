@@ -78,16 +78,17 @@ class KumoRFM(ICLModel):
         elif cache is not None:
             classes = cast(Tensor | None, cache["classes"])
 
+        out = (self.reg_model if classes is None else self.cls_model)(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+            cache=cache,
+            num_hops=kwargs.get("num_hops"),
+        )
+
         if classes is None:
-            out = self.reg_model(
-                x_context=x_context,
-                y_context=y_context,
-                x_query=x_query,
-                related_context_tables=related_context_tables,
-                related_query_tables=related_query_tables,
-                cache=cache,
-                num_hops=kwargs.get("num_hops"),
-            )
             return TableTensor(
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
@@ -95,16 +96,6 @@ class KumoRFM(ICLModel):
                 numerical=out.sort(dim=-1)[0],
             )
 
-        out = self.cls_model(
-            x_context=x_context,
-            y_context=y_context,
-            x_query=x_query,
-            related_context_tables=related_context_tables,
-            related_query_tables=related_query_tables,
-            cache=cache,
-            num_classes=len(classes),
-            num_hops=kwargs.get("num_hops"),
-        )
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
             numerical=out[..., : len(classes)],
@@ -186,7 +177,6 @@ class _KumoRFM(torch.nn.Module):
         related_query_tables: RelatedTables | None,
         *,
         cache: Cache | None = None,
-        num_classes: int | None = None,
         num_hops: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
@@ -224,7 +214,7 @@ class _KumoRFM(torch.nn.Module):
                     device=y_context.device,
                 ),
                 max_keys=self.max_train_size,
-                num_classes=num_classes,
+                num_classes=None,  # TODO
                 cache=None,  # TODO
                 generator=None,  # TODO
             ).split([x_context_i.size(-2), x_query_i.size(-2)], dim=-2)
