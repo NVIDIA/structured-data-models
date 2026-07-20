@@ -1,5 +1,13 @@
+import pytest
 import torch
-from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    RelatedTables,
+    RelationalData,
+    Stype,
+    TableTensor,
+)
 from sdm.models import KumoRFM
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
@@ -73,6 +81,64 @@ def test_invariant_gnn(device: torch.device) -> None:
     assert out.size() == (4, 8)
     assert out.device == device
     assert not out.isnan().any()
+
+
+@withCUDA
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+def test_forward(
+    relational_data: RelationalData,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    model = KumoRFM(pretrained=False, device=device)
+    if device.type == "cpu":
+        assert repr(model) == "KumoRFM()"
+    else:
+        assert repr(model) == "KumoRFM(device=cuda:0)"
+
+    related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+
+    x = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.arange(4, device=device),)),
+    )
+
+    if dtype.is_floating_point:
+        y = TableTensor(
+            columns={"numerical": ("target",)},
+            numerical=torch.randn(4, 1, device=device),
+        )
+    else:
+        y = TableTensor(
+            columns={"categorical": ("target",)},
+            categorical=CategoricalTensor(
+                data=torch.randint(0, 2, size=(4, 1), device=device),
+                categories=(torch.tensor([False, True], device=device),),
+            ),
+        )
+
+    out = model(
+        x_context=x,
+        y_context=y,
+        x_query=x,
+        related_context_tables=related_tables,
+        related_query_tables=related_tables,
+        num_hops=2,
+    )
+
+    assert out.dtype == x.dtype
+    assert out.device == x.device
+    assert torch.is_inference(out)
 
 
 def test_default_recipe_preserves_ids() -> None:

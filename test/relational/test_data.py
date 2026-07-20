@@ -5,8 +5,8 @@ from sdm import RelationalData
 from sdm.testing import withCUDA
 
 
-def test_repr(data: RelationalData) -> None:
-    assert repr(data) == dedent("""\
+def test_repr(relational_data: RelationalData) -> None:
+    assert repr(relational_data) == dedent("""\
         RelationalData(
           tables={
             users: TableTensor(
@@ -40,8 +40,11 @@ def test_repr(data: RelationalData) -> None:
 
 
 @withCUDA
-def test_edge_indices(data: RelationalData, device: torch.device) -> None:
-    edge_indices = data.edge_indices()
+def test_edge_indices(
+    relational_data: RelationalData,
+    device: torch.device,
+) -> None:
+    edge_indices = relational_data.edge_indices()
 
     assert len(edge_indices) == 2
     assert edge_indices[0].equal(

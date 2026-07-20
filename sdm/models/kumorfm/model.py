@@ -151,7 +151,10 @@ class _KumoRFM(torch.nn.Module):
             norm_bias=norm_bias,
             **factory_kwargs,
         )
-        self.gnn = InvariantGNN(channels, **factory_kwargs)
+        self.gnn = InvariantGNN(
+            channels=num_readout_tokens * channels,
+            **factory_kwargs,
+        )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
             channels=num_readout_tokens * channels,
@@ -209,7 +212,15 @@ class _KumoRFM(torch.nn.Module):
             x_query_i = related_query_tables.tables[name].numerical
             xs_context[name], xs_query[name] = self.row_embedding(
                 x=torch.cat([x_context_i, x_query_i], dim=-2),
-                y=...,
+                y=torch.randint(  # TODO Inject real label.
+                    low=0,
+                    high=2,
+                    size=x_context_i.size()[:-1],
+                    dtype=torch.int64
+                    if y_context.categorical.size(-1) > 0
+                    else torch.float32,
+                    device=y_context.device,
+                ),
                 max_keys=self.max_train_size,
                 num_classes=num_classes,
                 cache=None,  # TODO
@@ -224,7 +235,7 @@ class _KumoRFM(torch.nn.Module):
             graph=HomogeneousGraph.from_related_tables(related_context_tables),
             readout_table=related_context_tables.task_links[0].table,
             num_hops=num_hops,
-            generator=None,  # TODO
+            generator=None,  # TODO Support generators
         )
         x_query = self.gnn(  # TODO Make sure we use same edge type embeddings!
             x=torch.cat(
