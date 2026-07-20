@@ -144,7 +144,7 @@ class TabICLv2(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
-        **kwargs,
+        **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
         if x_context is None and x_query is not None:
@@ -167,10 +167,9 @@ class TabICLv2(ICLModel):
             classes = cast(Tensor | None, cache["classes"])
 
         if y is None:
-            y = torch.empty(
+            y = x.new_empty(
                 (*x.size()[:-2], 0),
                 dtype=torch.int64 if classes is not None else x.dtype,
-                device=x.device,
             )
 
         if classes is None:
