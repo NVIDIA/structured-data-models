@@ -247,9 +247,8 @@ class ICLModel(torch.nn.Module, ABC):
                 related_query_tables=None,
                 cache=cache,
             )
-            cache.freeze()
+            cache = cache.cpu().freeze()
             caches.append(cache)
-
         self._caches = caches
 
     def clear(self) -> None:
@@ -334,7 +333,7 @@ class ICLModel(torch.nn.Module, ABC):
                 x_query=x_i,
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
-                cache=cache,
+                cache=cache.to(x_i.device),
             )
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):

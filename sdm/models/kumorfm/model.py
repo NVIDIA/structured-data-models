@@ -26,7 +26,7 @@ class KumoRFM(ICLModel):
 
     #:
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
-        {Stype.numerical}
+        {Stype.numerical, Stype.datetime}
     )
     #:
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(

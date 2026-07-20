@@ -59,7 +59,11 @@ def test_forward(
 
     torch.manual_seed(1)
     model.fit(x_context, y_context)
+    caches = model._caches
+    assert caches is not None
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
     assert model.predict(x_query).allclose(out)
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
     model.clear()
 
 
@@ -78,8 +82,15 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
+    caches = model._caches
+    assert caches is not None
+    assert len(caches) == 3
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
+
     out = model.predict(x_query)
     assert out.size() == (*batch_shape, R_query, 999)
+    assert model._caches is caches
+    assert all(cache.size > 0 and cache.is_cpu for cache in caches)
     model.clear()
 
 

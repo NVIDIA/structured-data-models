@@ -21,6 +21,7 @@ def reference_sdpa(
     key: Tensor,
     value: Tensor,
     attn_mask: Tensor | None = None,
+    scale: float | None = None,
 ) -> Tensor:
     # Expand KV for MQA and GQA
     groups = query.size(-2) // key.size(-2)
@@ -31,6 +32,7 @@ def reference_sdpa(
         key=key.transpose(-3, -2),
         value=value.transpose(-3, -2),
         attn_mask=attn_mask.unsqueeze(-3) if attn_mask is not None else None,
+        scale=scale,
     ).transpose(-3, -2)
 
 
@@ -206,6 +208,32 @@ def test_sdpa(
         key=key.expand(-1, num_test, -1, -1, -1),
         value=value.expand(-1, num_test, -1, -1, -1),
     )
+    torch.testing.assert_close(out, expected)
+
+
+@withCUDA
+def test_sdpa_scale(device: torch.device) -> None:
+    channels = 4
+    num_heads = 2
+    scale = 1.0
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_heads,
+        scale=scale,
+        device=device,
+    )
+    query = torch.randn(2, 3, num_heads, channels, device=device)
+    key = torch.randn(2, 5, num_heads, channels, device=device)
+    value = torch.randn(2, 5, num_heads, channels, device=device)
+
+    out = module(query=query, key=key, value=value)
+    expected = reference_sdpa(
+        query=query,
+        key=key,
+        value=value,
+        scale=scale,
+    )
+
     torch.testing.assert_close(out, expected)
 
 
