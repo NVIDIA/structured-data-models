@@ -62,15 +62,15 @@ python -m examples.tabiclv2_tabarena.run_local \
   --num-gpus 1
 ```
 
-| Parameter | Required | Meaning |
-| --- | --- | --- |
-| `--output-root PATH` | Yes | New or empty directory for TabArena artifacts and `report/results_per_split.csv`. |
-| `--num-estimators N` | No; default `8` | Number of TabICLv2 estimators per task. `N` must be at least `1`; use `1` for a smoke test. |
-| `--num-cpus N` | No | CPU resource request passed to TabArena. `N` must be at least `1`; omit it to let TabArena auto-detect resources. |
-| `--num-gpus N` | No | GPU resource request passed to TabArena. `N` must be non-negative; use `0` for CPU-only execution. A positive value requires CUDA while TabICLv2 fits. |
-| `--outer` | No | Builds TabArena outer-evaluation experiments; appropriate for the smoke run. |
-| `--subset NAME [NAME ...]` | No | TabArena task-subset names, such as `lite`. |
-| `--datasets NAME [NAME ...]` | No | Exact TabArena dataset names. Separate multiple names with spaces, not commas. |
+| Parameter                    | Required        | Meaning                                                                                                                                                |
+| ---------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--output-root PATH`         | Yes             | New or empty directory for TabArena artifacts and `report/results_per_split.csv`.                                                                      |
+| `--num-estimators N`         | No; default `8` | Number of TabICLv2 estimators per task. `N` must be at least `1`; use `1` for a smoke test.                                                            |
+| `--num-cpus N`               | No              | CPU resource request passed to TabArena. `N` must be at least `1`; omit it to let TabArena auto-detect resources.                                      |
+| `--num-gpus N`               | No              | GPU resource request passed to TabArena. `N` must be non-negative; use `0` for CPU-only execution. A positive value requires CUDA while TabICLv2 fits. |
+| `--outer`                    | No              | Builds TabArena outer-evaluation experiments; appropriate for the smoke run.                                                                           |
+| `--subset NAME [NAME ...]`   | No              | TabArena task-subset names, such as `lite`.                                                                                                            |
+| `--datasets NAME [NAME ...]` | No              | Exact TabArena dataset names. Separate multiple names with spaces, not commas.                                                                         |
 
 Omit both `--subset` and `--datasets` to select the complete suite. When both
 are supplied, TabArena applies both filters. Each run requires a new or empty
