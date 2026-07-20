@@ -14,6 +14,7 @@ python -m examples.tabiclv2_tabarena.run_local \
   --num-estimators 1 \
   --num-cpus 1 \
   --num-gpus 1 \
+  --subset lite \
   --datasets blood-transfusion-service-center anneal QSAR_fish_toxicity
 ```
 
