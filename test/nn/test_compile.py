@@ -13,7 +13,7 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import fullgraph, withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
 pytestmark = pytest.mark.skipif(
@@ -29,13 +29,6 @@ def _reset_dynamo() -> Iterator[None]:
     torch._dynamo.reset()
     yield
     torch._dynamo.reset()
-
-
-def fullgraph(module: torch.nn.Module) -> Callable[..., Tensor]:
-    # `fullgraph=True` raises on any graph break; the eager backend skips
-    # code generation, keeping the tests fast while staying numerically
-    # identical to the uncompiled module.
-    return torch.compile(module, fullgraph=True, backend="eager")
 
 
 @withCUDA
