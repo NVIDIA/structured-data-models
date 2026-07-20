@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -20,6 +20,7 @@ class RunConfig:
     num_estimators: int
     num_cpus: int | None
     num_gpus: int | None
+    mode: Literal["autogluon-compatible", "sdm-native"]
     outer: bool
     subset: list[str] | None
     datasets: list[str] | None
@@ -38,7 +39,17 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--num-estimators", type=int, default=8)
     parser.add_argument("--num-cpus", type=int)
     parser.add_argument("--num-gpus", type=int)
-    parser.add_argument("--outer", action="store_true")
+    parser.add_argument(
+        "--mode",
+        choices=("autogluon-compatible", "sdm-native"),
+        default="autogluon-compatible",
+        help="Choose AutoGluon-compatible or SDM-native preprocessing.",
+    )
+    parser.add_argument(
+        "--outer",
+        action="store_true",
+        help="Use TabArena outer experiments in AutoGluon-compatible mode.",
+    )
     parser.add_argument("--subset", nargs="+")
     parser.add_argument("--datasets", nargs="+")
 
@@ -56,6 +67,7 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
         num_estimators=args.num_estimators,
         num_cpus=args.num_cpus,
         num_gpus=args.num_gpus,
+        mode=args.mode,
         outer=args.outer,
         subset=args.subset,
         datasets=args.datasets,
@@ -64,26 +76,15 @@ def config_from_args(args: argparse.Namespace) -> RunConfig:
 
 def run(config: RunConfig) -> None:
     """Run selected TabArena jobs locally and write their result records."""
-    from examples.tabiclv2_tabarena.model import SDMTabICLv2Model
-
     _prepare_output_root(config.output_root)
 
     from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
     from tabarena.benchmark.task.metadata.collection import TaskSubset
     from tabarena.contexts import TabArenaContext
-    from tabarena.utils.config_utils import ConfigGenerator
 
-    generator = ConfigGenerator(
-        search_space={},
-        model_cls=SDMTabICLv2Model,
-        manual_configs=[{"num_estimators": config.num_estimators}],
-    )
-    experiments = TabArenaV0pt1ExperimentBundle(
-        models=[(generator, 0)],
-        outer_experiments=config.outer,
-    ).build_experiments(
-        num_cpus=config.num_cpus,
-        num_gpus=config.num_gpus,
+    experiments = _build_experiments(
+        config,
+        bundle_cls=TabArenaV0pt1ExperimentBundle,
     )
     context = TabArenaContext()
     jobs = context.build_jobs(
@@ -97,7 +98,47 @@ def run(config: RunConfig) -> None:
     results = context._registered_new_results()
     if results is None:
         raise RuntimeError("No TabArena jobs completed successfully")
-    _write_results_report(results, config.output_root / "report")
+    _write_results_report(
+        results,
+        config.output_root / "report",
+        mode=config.mode,
+    )
+
+
+def _build_experiments(config: RunConfig, *, bundle_cls: type) -> list:
+    """Build the selected TabArena integration mode with fixed parameters."""
+    if config.mode == "autogluon-compatible":
+        from examples.tabiclv2_tabarena.model import SDMTabICLv2Model
+        from tabarena.utils.config_utils import ConfigGenerator
+
+        generator = ConfigGenerator(
+            search_space={},
+            model_cls=SDMTabICLv2Model,
+            manual_configs=[{"num_estimators": config.num_estimators}],
+        )
+        return bundle_cls(
+            models=[(generator, 0)],
+            outer_experiments=config.outer,
+        ).build_experiments(
+            num_cpus=config.num_cpus,
+            num_gpus=config.num_gpus,
+        )
+
+    from examples.tabiclv2_tabarena.sdm_system import SDMTabICLv2System
+    from tabarena.utils.config_utils import SystemConfigGenerator
+
+    generator = SystemConfigGenerator(
+        model_cls=SDMTabICLv2System,
+        name="SDMTabICLv2System",
+        manual_configs=[{"num_estimators": config.num_estimators}],
+    )
+    return bundle_cls(
+        models=[(generator, 0)],
+        system_experiments=True,
+    ).build_experiments(
+        num_cpus=config.num_cpus,
+        num_gpus=config.num_gpus,
+    )
 
 
 def _prepare_output_root(output_root: Path) -> None:
@@ -124,10 +165,18 @@ def _run_jobs(
     )
 
 
-def _write_results_report(results: pd.DataFrame, report_dir: Path) -> None:
+def _write_results_report(
+    results: pd.DataFrame,
+    report_dir: Path,
+    *,
+    mode: str | None = None,
+) -> None:
     """Write the completed SDM result records as a concise CSV report."""
     report_dir.mkdir(parents=True, exist_ok=True)
-    results.to_csv(report_dir / "results_per_split.csv", index=False)
+    report = results.copy()
+    if mode is not None:
+        report.insert(0, "integration_mode", mode)
+    report.to_csv(report_dir / "results_per_split.csv", index=False)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 import pytest
@@ -101,6 +102,7 @@ def test_config_validation_and_output_root(tmp_path: Path) -> None:
             num_estimators=1,
             num_cpus=1,
             num_gpus=0,
+            mode="autogluon-compatible",
             outer=False,
             subset=None,
             datasets=None,
@@ -135,15 +137,77 @@ def test_local_dispatch_and_results_report(tmp_path: Path) -> None:
     }
 
     results = pd.DataFrame([{"dataset": "example", "metric_error": 0.5}])
-    _write_results_report(results, tmp_path / "report")
-    assert (tmp_path / "report" / "results_per_split.csv").is_file()
+    _write_results_report(
+        results,
+        tmp_path / "report",
+        mode="sdm-native",
+    )
+    report = pd.read_csv(tmp_path / "report" / "results_per_split.csv")
+    assert report.integration_mode.tolist() == ["sdm-native"]
+
+
+def test_sdm_native_schema_and_class_label_contract() -> None:
+    pytest.importorskip("tabarena")
+    from examples.tabiclv2_tabarena.sdm_system import (
+        SDMTabICLv2System,
+        _align_features,
+        _class_labels_by_key,
+        _fit_feature_schema,
+        _labels_from_prediction_columns,
+    )
+
+    frame = pd.DataFrame(
+        {
+            "amount": [1.0, 2.0],
+            "segment": pd.Series(["a", "b"], dtype="category"),
+            "user_id": [10, 20],
+        }
+    )
+    schema = _fit_feature_schema(frame)
+    aligned = _align_features(
+        frame.loc[:, ["user_id", "segment", "amount"]],
+        schema=schema,
+    )
+
+    assert aligned.columns.tolist() == ["amount", "segment"]
+    assert schema.id_columns == ("user_id",)
+    assert _align_features(
+        frame.drop(columns="user_id"),
+        schema=schema,
+    ).columns.tolist() == ["amount", "segment"]
+    assert not SDMTabICLv2System.preprocess_data
+    assert not SDMTabICLv2System.preprocess_label
+
+    with pytest.raises(ValueError, match="unexpected columns"):
+        _align_features(frame.assign(extra=1), schema=schema)
+    with pytest.raises(ValueError, match="semantic types changed"):
+        _align_features(frame.assign(amount=["one", "two"]), schema=schema)
+    with pytest.raises(ValueError, match="datetime columns"):
+        _fit_feature_schema(
+            pd.DataFrame({"timestamp": pd.to_datetime(["2024-01-01"])})
+        )
+
+    string_labels = _class_labels_by_key(pd.Series(["U", "R"]))
+    assert _labels_from_prediction_columns(
+        ("U", "R"), labels_by_key=string_labels
+    ) == ["U", "R"]
+    integer_labels = _class_labels_by_key(pd.Series([10, 20]))
+    assert _labels_from_prediction_columns(
+        ("20", "10"), labels_by_key=integer_labels
+    ) == [20, 10]
+    with pytest.raises(ValueError, match="ambiguous string representations"):
+        _class_labels_by_key(pd.Series([1, "1"]))
 
 
 @pytest.mark.skipif(
     os.environ.get("SDM_RUN_TABARENA_SMOKE") != "1",
     reason="Set SDM_RUN_TABARENA_SMOKE=1 to run the real TabArena smoke test",
 )
-def test_real_tabarena_smoke(tmp_path: Path) -> None:
+@pytest.mark.parametrize("mode", ["autogluon-compatible", "sdm-native"])
+def test_real_tabarena_smoke(
+    tmp_path: Path,
+    mode: Literal["autogluon-compatible", "sdm-native"],
+) -> None:
     """Run one binary, multiclass, and regression task end to end."""
     pytest.importorskip("autogluon.core.models")
     pytest.importorskip("tabarena")
@@ -151,10 +215,11 @@ def test_real_tabarena_smoke(tmp_path: Path) -> None:
 
     run(
         RunConfig(
-            output_root=tmp_path / "tabarena-smoke",
+            output_root=tmp_path / f"tabarena-smoke-{mode}",
             num_estimators=1,
             num_cpus=1,
             num_gpus=1 if torch.cuda.is_available() else 0,
+            mode=mode,
             outer=True,
             subset=["lite"],
             datasets=[
@@ -165,5 +230,10 @@ def test_real_tabarena_smoke(tmp_path: Path) -> None:
         )
     )
 
-    report = tmp_path / "tabarena-smoke" / "report" / "results_per_split.csv"
+    report = (
+        tmp_path
+        / f"tabarena-smoke-{mode}"
+        / "report"
+        / "results_per_split.csv"
+    )
     assert report.is_file()
