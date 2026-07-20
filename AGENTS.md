@@ -54,7 +54,7 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
 - Operate on tensor containers directly; reserve `.as_tensor()` for when the raw data tensor is required.
 - Avoid creating unnecessary views right before broadcasts.
-- Avoid materializing tensors only to provide broadcastable constants. Prefer scalar literals when PyTorch broadcasting is sufficient; create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
+- When possible, reduce allocation and memory overhead while keeping tensor operations on-device; for broadcastable constants, prefer scalar literals when PyTorch broadcasting is sufficient and create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
 - Add short tensor shape comments for complex tensor operations.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.
