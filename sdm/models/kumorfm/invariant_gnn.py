@@ -58,7 +58,7 @@ class InvariantGNN(torch.nn.Module):
             end = graph.end_node_offsets[readout_table]
             return x[start:end]
 
-        edge_type_emb = torch.randn(
+        edge_type_emb = torch.randn(  # TODO Cache for `predict`.
             (graph.num_edge_types, x.size(-1)),
             dtype=x.dtype,
             device=x.device,
