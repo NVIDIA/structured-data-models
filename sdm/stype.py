@@ -9,6 +9,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 import pyarrow as pa
+import pyarrow.compute as pc
 
 if TYPE_CHECKING:
     import cudf
@@ -47,6 +48,9 @@ StypeLike: TypeAlias = Stype | str
 # Tokenize strings on separators (non-letters/digits) and camelCase boundaries:
 _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
+# Minimum average character length for a string column to be inferred as text:
+TEXT_MIN_UNIQUE_RATIO = 0.5
+
 
 def infer_stypes(
     table: pa.Table | pd.DataFrame | cudf.DataFrame,
@@ -59,8 +63,10 @@ def infer_stypes(
 
     * Integer, floating-point, and decimal columns are inferred as
       ``numerical``.
-    * String, boolean, and dictionary-encoded (categorical) columns are
-      inferred as ``categorical``.
+    * Boolean and dictionary-encoded columns are inferred as ``categorical``.
+    * String columns are inferred as ``text`` if the fraction of distinct
+      values (measured on a sample of up to 1000 rows) exceeds
+      ``TEXT_MIN_UNIQUE_RATIO``, and as ``categorical`` otherwise.
     * Datetime columns are inferred as ``datetime``.
     * Integer or (non-dictionary) string columns are inferred as ``id`` if its
       name contains ``"id"`` as a whole word (*e.g.*, ``"user_id"``,
@@ -75,25 +81,32 @@ def infer_stypes(
         Dictionary mapping column names to inferred semantic type.
     """
     overrides = overrides or {}
+    sample = None
 
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
+            sample = pa.Table.from_pandas(
+                table.head(1000),
+                preserve_index=False,
+            )
             table = pa.Schema.from_pandas(table, preserve_index=False)
 
     if importlib.util.find_spec("cudf") is not None:
         import cudf
 
         if isinstance(table, cudf.DataFrame):
+            sample = table.head(1000)
             return {
                 column: Stype(overrides[column])
                 if column in overrides
-                else _infer_cudf_stype(column, dtype)
+                else _infer_cudf_stype(column, dtype, sample)
                 for column, dtype in table.dtypes.items()
             }
 
     if isinstance(table, pa.Table):
+        sample = table.slice(0, 1000)
         table = table.schema
 
     if not isinstance(table, pa.Schema):
@@ -105,12 +118,16 @@ def infer_stypes(
     return {
         field.name: Stype(overrides[field.name])
         if field.name in overrides
-        else _infer_arrow_stype(field.name, field.type)
+        else _infer_arrow_stype(field.name, field.type, sample)
         for field in table
     }
 
 
-def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
+def _infer_arrow_stype(
+    name: str,
+    dtype: pa.DataType,
+    sample: pa.Table | None = None,
+) -> Stype:
     if (
         pa.types.is_integer(dtype)
         or pa.types.is_string(dtype)
@@ -125,12 +142,15 @@ def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     ):
         return Stype.numerical
 
-    if (
-        pa.types.is_string(dtype)
-        or pa.types.is_large_string(dtype)
-        or pa.types.is_boolean(dtype)
-        or pa.types.is_dictionary(dtype)
-    ):
+    if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
+        if sample is not None:
+            column = sample.column(name)
+            n_unique = pc.call_function("count_distinct", [column]).as_py()
+            if _is_text(n_unique, len(column)):
+                return Stype.text
+        return Stype.categorical
+
+    if pa.types.is_boolean(dtype) or pa.types.is_dictionary(dtype):
         return Stype.categorical
 
     if pa.types.is_timestamp(dtype) or pa.types.is_date(dtype):
@@ -139,7 +159,11 @@ def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     raise TypeError(f"Unsupported Arrow type '{dtype}' for column '{name}'")
 
 
-def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
+def _infer_cudf_stype(
+    name: str,
+    dtype: Any,
+    sample: cudf.DataFrame | None = None,
+) -> Stype:
     import cudf
     from cudf.api.types import (
         is_bool_dtype,
@@ -163,10 +187,17 @@ def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
         return Stype.numerical
 
     if (
-        is_string_dtype(dtype)
-        or is_bool_dtype(dtype)
-        or isinstance(dtype, cudf.CategoricalDtype)
+        # is_string_dtype(dtype)
+        # or is_bool_dtype(dtype)
+        is_bool_dtype(dtype) or isinstance(dtype, cudf.CategoricalDtype)
     ):
+        return Stype.categorical
+
+    if is_string_dtype(dtype):
+        if sample is not None:
+            ser = sample[name]
+            if _is_text(ser.nunique(), len(ser)):
+                return Stype.text
         return Stype.categorical
 
     if is_datetime64_any_dtype(dtype):
@@ -177,3 +208,13 @@ def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
 
 def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
+
+
+def _is_text(n_unique: int, n_total: int) -> bool:
+    r"""Whether a string column's cardinality suggests free text.
+
+    Args:
+        n_unique: Number of distinct values in the sampled column.
+        n_total: Number of sampled values (including nulls).
+    """
+    return n_total > 0 and n_unique / n_total > TEXT_MIN_UNIQUE_RATIO

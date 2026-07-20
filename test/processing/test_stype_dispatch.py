@@ -3,6 +3,7 @@ import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
     CategoryShuffle,
+    Identity,
     MeanImpute,
     StandardScale,
     StypeDispatch,
@@ -119,6 +120,7 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
         Stype.categorical: (),
         Stype.datetime: (),
         Stype.id: (),
+        Stype.text: (),
     }
 
 
@@ -135,6 +137,19 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
+
+
+def test_stype_dispatch_routes_text() -> None:
+    table = TableTensor(
+        columns={"text": ("review",)},
+        text=StringTensor.from_list([["good"], ["bad"]]),
+    )
+    dispatch = StypeDispatch(text=Identity())
+
+    output = dispatch.fit_transform(table)
+
+    assert output.columns[Stype.text] == ("review",)
+    assert output.text.equal(table.text)
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:

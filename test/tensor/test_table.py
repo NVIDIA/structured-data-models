@@ -1074,6 +1074,66 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+def test_text() -> None:
+    data = {
+        "age": [0.0, 1.0, 2.0],
+        "title": ["hello world", "foo bar baz", "lorem ipsum dolor"],
+        "body": ["a b c", "d e f", "g h i"],
+    }
+
+    tensor = TableTensor.from_arrow(
+        pa.table(data),
+        stypes={"age": "numerical", "title": "text", "body": "text"},
+    )
+
+    assert tensor.size() == (3, 3)
+    assert tensor.columns[Stype.text] == ("title", "body")
+    assert tensor.text.size() == (3, 2)
+
+    assert tensor.to_arrow().to_pydict() == data
+    assert list(tensor.to_pandas().columns) == ["age", "title", "body"]
+
+
+def test_text_empty_default() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table({"age": pa.array([1.0, 2.0])}),
+        stypes={"age": "numerical"},
+    )
+
+    assert tensor.text.size() == (2, 0)
+    assert tensor.columns[Stype.text] == ()
+
+
+def test_text_select_stack_replace() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table({"a": ["x1", "x2"], "b": ["y1", "y2"]}),
+        stypes={"a": "text", "b": "text"},
+    )
+
+    assert tensor.select_stypes("text").columns[Stype.text] == ("a", "b")
+    assert torch.stack([tensor, tensor], dim=0).size() == (2, 2, 2)
+    assert tensor.replace_blocks(text=tensor.text).columns[Stype.text] == (
+        "a",
+        "b",
+    )
+
+
+def test_text_cat_aligns_columns() -> None:
+    a = TableTensor.from_arrow(
+        pa.table({"p": ["1"], "q": ["2"]}),
+        stypes={"p": "text", "q": "text"},
+    )
+    b = TableTensor.from_arrow(
+        pa.table({"q": ["3"], "p": ["4"]}),
+        stypes={"q": "text", "p": "text"},
+    )
+
+    out = cast(TableTensor, torch.cat([a, b], dim=0))
+
+    assert out.size() == (2, 2)
+    assert out.to_arrow().to_pydict() == {"p": ["1", "4"], "q": ["2", "3"]}
+
+
 @onlyCUDA
 def test_cudf() -> None:
     cudf = pytest.importorskip("cudf")
