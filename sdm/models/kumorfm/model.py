@@ -178,7 +178,15 @@ class _KumoRFM(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_hops: int | None = None,
+        generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R_query, *]
+
+        for tables in (related_context_tables, related_query_tables):
+            if tables is not None and len(tables.task_links) != 1:
+                raise NotImplementedError(
+                    f"'{self.__class__.__name__}' expects exactly one task "
+                    f"link to an entity table (got {len(tables.task_links)})"
+                )
 
         # TODO Support `fit+predict`:
         assert x_context is not None
@@ -187,19 +195,38 @@ class _KumoRFM(torch.nn.Module):
         assert related_context_tables is not None
         assert related_query_tables is not None
 
+        num_classes: int | None = None
+        if y_context is not None and y_context.categorical.size(-1) > 0:
+            y = y_context.categorical.as_tensor().squeeze(-1)
+            num_classes = len(y_context.categorical.categories[0])
+        elif y_context is not None and y_context.numerical.size(-1) > 0:
+            y = y_context.numerical.squeeze(-1)
+        else:
+            assert cache is not None
+            if isinstance(cache["classes"], Tensor):
+                num_classes = len(cache["classes"])
+            dtype = torch.float32 if num_classes is None else torch.int64
+            y = torch.empty(
+                (0,),
+                dtype=dtype,
+                device=next(self.parameters()).device,
+            )
+
         if num_hops is None:
             num_hops = 2  # TODO Support automatic `num_hops` detection.
-            # TODO Write to `cache` if available.
+            if cache is not None and cache.is_recording:
+                cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
 
-        # TODO Assert `len(task_links) == 1`>
         # TODO Support computing relative time.
         # TODO Inject task-features.
         # TODO Inject random heterogeneous GNN.
+        # TODO Make sure edge types are aligned!
 
+        # Reason within each Table ############################################
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
-        # TODO Apply per hop.
         for name in related_context_tables.tables:
+            # TODO Split entity table into task+nearby entities.
             x_context_i = related_context_tables.tables[name].numerical
             x_query_i = related_query_tables.tables[name].numerical
             xs_context[name], xs_query[name] = self.row_embedding(
@@ -214,37 +241,48 @@ class _KumoRFM(torch.nn.Module):
                     device=y_context.device,
                 ),
                 max_keys=self.max_train_size,
-                num_classes=None,  # TODO
+                num_classes=num_classes,
                 cache=None,  # TODO
-                generator=None,  # TODO
+                generator=generator,
             ).split([x_context_i.size(-2), x_query_i.size(-2)], dim=-2)
 
+        # Inter-Message Passing Exchange ######################################
+        graph_context = HomogeneousGraph.from_related_tables(
+            related_context_tables
+        )
+        x_context: Tensor = torch.cat(
+            [xs_context[name] for name in related_context_tables.tables],
+            dim=-2,
+        )
+        del xs_context
+        graph_query = HomogeneousGraph.from_related_tables(
+            related_query_tables
+        )
+        x_query: Tensor = torch.cat(
+            [xs_query[name] for name in related_query_tables.tables],
+            dim=-2,
+        )
+        del xs_query
+        edge_type_emb = self.gnn.get_edge_type_emb(
+            num_edge_types=graph_context.num_edge_types,
+            generator=generator,
+        )
+
         x_context = self.gnn(
-            x=torch.cat(
-                [xs_context[name] for name in related_context_tables.tables],
-                dim=-2,
-            ),
-            graph=HomogeneousGraph.from_related_tables(related_context_tables),
+            x=x_context,
+            graph=graph_context,
+            edge_type_emb=edge_type_emb,
             readout_table=related_context_tables.task_links[0].table,
             num_hops=num_hops,
-            generator=None,  # TODO
         )
-        x_query = self.gnn(  # TODO Make sure we use same edge type embeddings!
-            x=torch.cat(
-                [xs_query[name] for name in related_query_tables.tables],
-                dim=-2,
-            ),
-            graph=HomogeneousGraph.from_related_tables(related_query_tables),
+        x_query = self.gnn(
+            x=x_query,
+            graph=graph_query,
+            edge_type_emb=edge_type_emb,
             readout_table=related_query_tables.task_links[0].table,
             num_hops=num_hops,
-            generator=None,  # TODO
         )
 
-        x = torch.cat([x_context, x_query], dim=-2)
-        if y_context.categorical.size(-1) > 0:
-            y = y_context.categorical.as_tensor().squeeze(-1)
-        elif y_context.numerical.size(-1) > 0:
-            y = y_context.numerical.squeeze(-1)
-
-        x = self.icl_block(x, y)
+        # Reason across Tables ################################################
+        x = self.icl_block(torch.cat([x_context, x_query], dim=-2), y)
         return self.head(x)

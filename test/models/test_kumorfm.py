@@ -53,6 +53,7 @@ def test_invariant_gnn(
     out = model(
         x=torch.randn(10, 8, device=device),
         graph=graph,
+        edge_type_emb=model.get_edge_type_emb(graph.num_edge_types),
         readout_table="users",
         num_hops=2,
     )
