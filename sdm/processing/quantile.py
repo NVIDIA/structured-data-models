@@ -23,7 +23,7 @@ def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
     y0, y1 = fp[idx - 1], fp[idx]
 
     denom = x1 - x0
-    weight = torch.where(denom != 0, (x - x0) / denom, torch.zeros_like(x))
+    weight = torch.where(denom != 0, (x - x0) / denom, 0.0)
     result = torch.lerp(y0, y1, weight)
 
     result = torch.where(x <= xp[0], fp[0], result)
@@ -49,11 +49,7 @@ def _batched_interp(
     y1 = references[idx]
 
     denom = x1 - x0
-    weight = torch.where(
-        denom != 0,
-        (values - x0) / denom,
-        torch.zeros_like(values),
-    )
+    weight = torch.where(denom != 0, (values - x0) / denom, 0.0)
     result = torch.lerp(y0, y1, weight)
 
     result = torch.where(values <= boundaries[:, :1], references[0], result)
@@ -158,9 +154,6 @@ class Quantile(Processor, InvertibleMixin):
             # become independent rows: input ``[N, F]`` -> ``[F, N]``.
             input_columns = numerical[:, start:end].T.contiguous()
             quantile_columns = self.quantiles[:, start:end].T.contiguous()
-            zero = input_columns.new_zeros(())
-            one = input_columns.new_ones(())
-
             lower_bound_x = quantile_columns[:, :1]
             upper_bound_x = quantile_columns[:, -1:]
             if self.output_distribution == "normal":
@@ -189,8 +182,8 @@ class Quantile(Processor, InvertibleMixin):
             output = 0.5 * (forward - backward)
 
             output = torch.where(finite, output, input_columns)
-            output = torch.where(upper_bounds_idx, one, output)
-            output = torch.where(lower_bounds_idx, zero, output)
+            output = torch.where(upper_bounds_idx, 1.0, output)
+            output = torch.where(lower_bounds_idx, 0.0, output)
 
             if self.output_distribution == "normal":
                 eps = input_columns.new_tensor(
@@ -198,7 +191,7 @@ class Quantile(Processor, InvertibleMixin):
                 )
                 output = torch.special.ndtri(output)
                 clip_min = torch.special.ndtri(eps)
-                clip_max = torch.special.ndtri(one - eps)
+                clip_max = torch.special.ndtri(1.0 - eps)
                 output = output.clamp(clip_min, clip_max)
 
             transformed[:, start:end] = output.T.contiguous()
@@ -210,9 +203,6 @@ class Quantile(Processor, InvertibleMixin):
         for i in range(numerical.shape[1]):
             input_col = numerical[:, i].clone()
             quantiles = self.quantiles[:, i]
-            zero = input_col.new_zeros(())
-            one = input_col.new_ones(())
-
             lower_bound_y = quantiles[0]
             upper_bound_y = quantiles[-1]
             if self.output_distribution == "normal":
@@ -220,11 +210,11 @@ class Quantile(Processor, InvertibleMixin):
 
             if self.output_distribution == "normal":
                 bounds_thresh = input_col.new_tensor(BOUNDS_THRESH)
-                lower_bounds_idx = input_col - bounds_thresh < zero
-                upper_bounds_idx = input_col + bounds_thresh > one
+                lower_bounds_idx = input_col - bounds_thresh < 0.0
+                upper_bounds_idx = input_col + bounds_thresh > 1.0
             else:
-                lower_bounds_idx = input_col == zero
-                upper_bounds_idx = input_col == one
+                lower_bounds_idx = input_col == 0.0
+                upper_bounds_idx = input_col == 1.0
 
             isfinite_mask = input_col.isfinite()
             input_col[isfinite_mask] = _torch_interp(

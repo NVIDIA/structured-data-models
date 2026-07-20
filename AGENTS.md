@@ -54,6 +54,7 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
 - Operate on tensor containers directly; reserve `.as_tensor()` for when the raw data tensor is required.
 - Avoid creating unnecessary views right before broadcasts.
+- Prefer scalar literals in tensor expressions when broadcasting a scalar is sufficient; avoid allocating full-size tensors such as `torch.zeros_like(x)` only to supply a `torch.where` fallback.
 - Add short tensor shape comments for complex tensor operations.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.
