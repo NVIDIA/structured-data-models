@@ -67,7 +67,7 @@ class InvariantGNN(torch.nn.Module):
         num_hops: int,
     ) -> Tensor:
 
-        if num_hops == 0 or graph.row.numel() == 0:
+        if num_hops == 0:
             start = graph.start_node_offsets[readout_table]
             end = graph.end_node_offsets[readout_table]
             return x[start:end]

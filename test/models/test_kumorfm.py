@@ -12,7 +12,11 @@ from sdm.models import KumoRFM
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
-from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
+from sdm.models.kumorfm.model import (
+    _KumoRFM,
+    _propagate_targets,
+    _remap_v2_1_checkpoint,
+)
 from sdm.testing import withCUDA
 
 
@@ -194,6 +198,39 @@ def test_invariant_gnn(
     assert out.device == device
     assert not out.isnan().any()
 
+    isolated_graph = HomogeneousGraph.from_related_tables(
+        related_tables.select_tables(tables=["users"])
+    )
+    isolated_x = torch.randn(4, 8, device=device)
+    isolated_out = model(
+        x=isolated_x,
+        graph=isolated_graph,
+        edge_type_emb=model.get_edge_type_emb(isolated_graph.num_edge_types),
+        readout_table="users",
+        num_hops=1,
+    )
+    expected = model.out_norm(
+        model.out_lin(
+            torch.nn.functional.gelu(model.norm(model.skip_lin(isolated_x)))
+        )
+    )
+    torch.testing.assert_close(isolated_out, expected)
+
+    full_related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[],
+    )
+    subset = full_related_tables.select_tables(tables=["orders", "items"])
+    subset_graph = HomogeneousGraph.from_related_tables(
+        subset,
+        relationship_order=full_related_tables.relationships,
+    )
+    assert subset_graph.edge_type.unique().equal(
+        torch.tensor([2, 3], device=device)
+    )
+    assert subset_graph.num_edge_types == 4
+
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
@@ -220,9 +257,24 @@ def test_forward(
         ],
     )
 
-    x = TableTensor(
-        columns={"id": ("user_id",)},
-        id=ColumnarTensor((torch.arange(4, device=device),)),
+    x_context = TableTensor(
+        columns={
+            "numerical": ("task_feature",),
+            "id": ("user_id",),
+        },
+        numerical=torch.tensor(
+            [[0.5], [1.5], [2.5], [3.5]],
+            device=device,
+        ),
+        id=ColumnarTensor((torch.tensor([3, 1, 2, 0], device=device),)),
+    )
+    x_query = TableTensor(
+        columns={
+            "numerical": ("task_feature",),
+            "id": ("user_id",),
+        },
+        numerical=torch.tensor([[2.5], [3.5]], device=device),
+        id=ColumnarTensor((torch.tensor([2, 0], device=device),)),
     )
 
     if dtype.is_floating_point:
@@ -234,23 +286,83 @@ def test_forward(
         y = TableTensor(
             columns={"categorical": ("target",)},
             categorical=CategoricalTensor(
-                data=torch.randint(0, 2, size=(4, 1), device=device),
+                data=torch.tensor([[0], [1], [0], [1]], device=device),
                 categories=(torch.tensor([False, True], device=device),),
             ),
         )
 
     out = model(
-        x_context=x,
+        x_context=x_context,
         y_context=y,
-        x_query=x,
+        x_query=x_query,
         related_context_tables=related_tables,
-        related_query_tables=related_tables,
+        related_query_tables=related_tables.select_tables(tables=["users"]),
         num_hops=2,
     )
 
-    assert out.dtype == x.dtype
-    assert out.device == x.device
+    assert out.size(-2) == 2
+    assert out.dtype == x_query.dtype
+    assert out.device == x_query.device
     assert torch.is_inference(out)
+
+
+@pytest.mark.parametrize(
+    ("y", "num_classes", "expected"),
+    [
+        (
+            torch.tensor([1, 0]),
+            2,
+            torch.tensor([1, 0, 0, 0]),
+        ),
+        (
+            torch.tensor([2.0, 6.0]),
+            0,
+            torch.tensor([2.0, 4.0, 6.0, 6.0]),
+        ),
+    ],
+)
+def test_propagate_targets(
+    y: torch.Tensor,
+    num_classes: int,
+    expected: torch.Tensor,
+) -> None:
+    graph = HomogeneousGraph(
+        row=torch.tensor([1, 0, 2, 1, 3, 2]),
+        colptr=torch.tensor([0, 1, 3, 5, 6]),
+        edge_type=torch.zeros(6, dtype=torch.long),
+        num_edge_types=1,
+        start_node_offsets={"table": 0},
+        end_node_offsets={"table": 4},
+    )
+
+    out = _propagate_targets(
+        y=y,
+        root_index=torch.tensor([0, 2]),
+        graph=graph,
+        num_hops=1,
+        num_classes=num_classes,
+        dtype=torch.float32,
+    )
+
+    assert torch.equal(out, expected)
+
+    disconnected = HomogeneousGraph(
+        row=graph.row[:4],
+        colptr=torch.tensor([0, 1, 3, 4, 4]),
+        edge_type=graph.edge_type[:4],
+        num_edge_types=graph.num_edge_types,
+        start_node_offsets=graph.start_node_offsets,
+        end_node_offsets=graph.end_node_offsets,
+    )
+    with pytest.raises(ValueError, match="did not propagate"):
+        _propagate_targets(
+            y=y,
+            root_index=torch.tensor([0, 2]),
+            graph=disconnected,
+            num_hops=1,
+            num_classes=num_classes,
+            dtype=torch.float32,
+        )
 
 
 def test_default_recipe_preserves_ids() -> None:

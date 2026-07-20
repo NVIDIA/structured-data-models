@@ -1,10 +1,11 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
 from torch import Tensor
 from typing_extensions import Self
 
-from sdm import RelatedTables, RelationalData
+from sdm import RelatedTables, RelationalData, Relationship
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,15 @@ class HomogeneousGraph:  # noqa: D101
     def from_related_tables(  # noqa: D102
         cls,
         related_tables: RelatedTables,
+        relationship_order: Sequence[Relationship] | None = None,
     ) -> Self:
+
+        if relationship_order is None:
+            relationship_order = related_tables.relationships
+        relationship_to_index = {
+            relationship: i
+            for i, relationship in enumerate(relationship_order)
+        }
 
         start = 0
         start_node_offsets: dict[str, int] = {}
@@ -34,15 +43,14 @@ class HomogeneousGraph:  # noqa: D101
         rows: list[Tensor] = []
         cols: list[Tensor] = []
         edge_types: list[Tensor] = []
-        for i, (rel, edge_index) in enumerate(
-            zip(
-                related_tables.relationships,
-                RelationalData(
-                    tables=related_tables.tables,
-                    relationships=related_tables.relationships,
-                ).edge_indices(),
-            )
+        for rel, edge_index in zip(
+            related_tables.relationships,
+            RelationalData(
+                tables=related_tables.tables,
+                relationships=related_tables.relationships,
+            ).edge_indices(),
         ):
+            i = relationship_to_index[rel]
             row, col = edge_index
             row += start_node_offsets[rel.left_table]
             col += start_node_offsets[rel.right_table]
@@ -74,7 +82,7 @@ class HomogeneousGraph:  # noqa: D101
             row=row,
             colptr=colptr,
             edge_type=edge_type,
-            num_edge_types=len(edge_types),
+            num_edge_types=2 * len(relationship_order),
             start_node_offsets=start_node_offsets,
             end_node_offsets=end_node_offsets,
         )
