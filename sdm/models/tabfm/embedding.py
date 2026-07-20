@@ -18,17 +18,19 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Linear
+from torch.nn import Embedding, Linear
 
 
 class CellEmbedder(torch.nn.Module):
     """Embed grouped numerical and categorical cells for TabFM v1.0.0.
 
     Feature groups use cyclic offsets ``2**index - 1``. Numerical and
-    categorical slots have separate learned Fourier projections.
+    categorical slots have separate learned Fourier projections. Classification
+    target embeddings are added only to context rows.
 
     Args:
         channels: Number of output channels per cell.
+        max_classes: Maximum number of classification classes.
         feature_group_size: Number of cyclically shifted features per group.
         num_frequencies: Number of Fourier frequencies per group slot.
         device: Device on which to create parameters and buffers.
@@ -41,6 +43,7 @@ class CellEmbedder(torch.nn.Module):
     def __init__(
         self,
         channels: int,
+        max_classes: int | None = None,
         feature_group_size: int = 3,
         num_frequencies: int = 32,
         device: torch.device | str | None = None,
@@ -85,6 +88,15 @@ class CellEmbedder(torch.nn.Module):
             channels,
             **factory_kwargs,
         )
+        self.y_embedder_lookup: Embedding | None = None
+        if max_classes is not None:
+            if max_classes <= 0:
+                raise ValueError("max_classes must be positive")
+            self.y_embedder_lookup = Embedding(
+                max_classes,
+                channels,
+                **factory_kwargs,
+            )
 
     def _group(self, x: Tensor, d: Tensor | None = None) -> Tensor:
         batch_size, num_rows, num_features = x.shape
@@ -139,13 +151,19 @@ class CellEmbedder(torch.nn.Module):
     def forward(
         self,
         x: Tensor,
+        target: Tensor | None = None,
+        train_size: Tensor | None = None,
         cat_mask: Tensor | None = None,
         d: Tensor | None = None,
     ) -> Tensor:
-        """Embed numerical and categorical cells.
+        """Embed cells and optionally inject classification targets.
 
         Args:
             x: Feature tensor with shape ``[B, T, H]``.
+            target: Optional class targets with shape ``[B, T]``. Requires
+                ``max_classes`` to be set.
+            train_size: Optional context-row counts with shape ``[B]``.
+                Required when ``target`` is supplied.
             cat_mask: Optional categorical mask with shape ``[B, H]``.
             d: Optional active feature counts with shape ``[B]``. Grouping
                 wraps by these counts and padded output columns are zeroed.
@@ -169,6 +187,31 @@ class CellEmbedder(torch.nn.Module):
 
         cell = self._embed(x=x, cat_mask=cat_mask, d=d)
         output = cell
+        if target is not None:
+            if self.y_embedder_lookup is None:
+                raise ValueError("target requires max_classes")
+            if target.shape != (batch_size, num_rows):
+                raise ValueError("target must have shape [B, T]")
+            if train_size is None or (
+                train_size.shape != (batch_size,)
+                or train_size.is_floating_point()
+            ):
+                raise ValueError("train_size must be an integer [B] tensor")
+
+            target = target.long().clamp(
+                0,
+                self.y_embedder_lookup.num_embeddings - 1,
+            )
+            target_embedding = self.y_embedder_lookup(target)
+            row_index = torch.arange(num_rows, device=x.device)
+            context = row_index[None, :] < train_size[:, None]
+            output = torch.where(
+                context[..., None, None],
+                cell + target_embedding[:, :, None],
+                cell,
+            )
+        elif train_size is not None:
+            raise ValueError("train_size requires target")
         if d is not None:
             feature_index = torch.arange(num_features, device=x.device)
             active = feature_index[None, :] < d[:, None]
