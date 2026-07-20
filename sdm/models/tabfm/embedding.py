@@ -18,7 +18,7 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Embedding, GELU, Linear, Sequential
+from torch.nn import GELU, Embedding, Linear, Sequential
 
 
 class CellEmbedder(torch.nn.Module):
