@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 import torch
 from sdm import (
@@ -13,6 +15,7 @@ from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
+from sdm.processing.datetime import US_PER_DAY
 from sdm.testing import withCUDA
 
 
@@ -268,6 +271,70 @@ def test_forward(
         ),
     ).allclose(out)
     model.clear()
+
+
+@withCUDA
+def test_forward_with_relative_time(
+    relational_data: RelationalData,
+    device: torch.device,
+) -> None:
+    model = KumoRFM(pretrained=False, device=device)
+    users = cast(
+        TableTensor,
+        torch.cat(
+            [
+                relational_data.tables["users"],
+                TableTensor(
+                    columns={Stype.datetime: ("created_at",)},
+                    datetime=torch.arange(4, device=device).view(-1, 1)
+                    * US_PER_DAY,
+                ),
+            ],
+            dim=-1,
+        ),
+    )
+    related_tables = RelatedTables(
+        tables={**relational_data.tables, "users": users},
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    x_context = TableTensor(
+        columns={
+            Stype.numerical: ("task_feature",),
+            Stype.datetime: ("prediction_time",),
+            Stype.id: ("user_id",),
+        },
+        numerical=torch.arange(4, device=device).view(-1, 1).float(),
+        datetime=torch.arange(10, 14, device=device).view(-1, 1) * US_PER_DAY,
+        id=ColumnarTensor((torch.tensor([3, 1, 2, 0], device=device),)),
+    )
+    x_query = cast(TableTensor, x_context[:2])
+    y_context = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1], [0], [1]], device=device),
+            categories=(torch.tensor([False, True], device=device),),
+        ),
+    )
+
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        related_context_tables=related_tables,
+        related_query_tables=related_tables.select_tables(tables=["users"]),
+        num_hops=2,
+        task_time_column="prediction_time",
+    )
+
+    assert out.size(-2) == 2
+    assert out.device == device
 
 
 def test_default_recipe_preserves_ids() -> None:

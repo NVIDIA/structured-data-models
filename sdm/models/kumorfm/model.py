@@ -14,6 +14,15 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
+from sdm.models.kumorfm.relative_time import (
+    RelativeTimeProcessors,
+    fit_relative_time_features,
+    propagate_anchor_indices,
+    relative_days,
+    relative_days_for_rows,
+    task_anchor,
+    transform_relative_time_features,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
@@ -129,6 +138,7 @@ class KumoRFM(ICLModel):
             cache=cache,
             generator=generator,
             num_hops=kwargs.get("num_hops"),
+            task_time_column=kwargs.get("task_time_column"),
         )
 
         if classes is None:
@@ -222,6 +232,7 @@ class _KumoRFM(torch.nn.Module):
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
         num_hops: int | None = None,
+        task_time_column: str | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
         if related_context_tables is None and related_query_tables is None:
@@ -257,7 +268,6 @@ class _KumoRFM(torch.nn.Module):
                 device=next(self.parameters()).device,
             )
 
-        # TODO Support computing relative time.
         # TODO Inject random heterogeneous GNN.
 
         graph: HomogeneousGraph | None = None
@@ -279,6 +289,46 @@ class _KumoRFM(torch.nn.Module):
                 num_classes=num_classes,
             )
 
+        context_features: dict[str, Tensor] | None = None
+        query_features: dict[str, Tensor] | None = None
+        if task_time_column is not None:
+            if cache is not None:
+                raise NotImplementedError(
+                    "Relative-time encoding does not support cached inference"
+                )
+            assert x_context is not None
+            assert x_query is not None
+            assert related_context_tables is not None
+            assert related_query_tables is not None
+            assert graph is not None
+            assert task_index is not None
+
+            context_features, task_processors, table_processors = (
+                _prepare_relative_features(
+                    task_table=x_context,
+                    related_tables=related_context_tables,
+                    graph=graph,
+                    task_index=task_index,
+                    num_hops=num_hops,
+                    task_time_column=task_time_column,
+                )
+            )
+            query_graph = HomogeneousGraph.from_tables(
+                tables=related_query_tables.tables,
+                relationships=related_context_tables.relationships,
+            )
+            query_task_index = related_query_tables.task_indices(x_query)[0]
+            query_features, _, _ = _prepare_relative_features(
+                task_table=x_query,
+                related_tables=related_query_tables,
+                graph=query_graph,
+                task_index=query_task_index,
+                num_hops=num_hops,
+                task_time_column=task_time_column,
+                task_processors=task_processors,
+                table_processors=table_processors,
+            )
+
         # Reason within each Table ############################################
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
@@ -297,7 +347,11 @@ class _KumoRFM(torch.nn.Module):
                 # TODO Split entity table into task+nearby entities.
                 assert graph is not None
                 assert y_graph is not None
-                x_i = related_context_tables.tables[name].numerical
+                x_i = (
+                    related_context_tables.tables[name].numerical
+                    if context_features is None
+                    else context_features[name]
+                )
                 start = graph.start_node_offsets[name]
                 end = graph.end_node_offsets[name]
                 y_i = y_graph[start:end]
@@ -305,10 +359,12 @@ class _KumoRFM(torch.nn.Module):
                     related_query_tables is not None
                     and name in related_query_tables.tables
                 ):
-                    x_i = torch.cat(
-                        [x_i, related_query_tables.tables[name].numerical],
-                        dim=-2,
+                    query_x_i = (
+                        related_query_tables.tables[name].numerical
+                        if query_features is None
+                        else query_features[name]
                     )
+                    x_i = torch.cat([x_i, query_x_i], dim=-2)
             else:
                 assert related_query_tables is not None
                 x_i = related_query_tables.tables[name].numerical
@@ -406,6 +462,91 @@ class _KumoRFM(torch.nn.Module):
             del x_query
         x = self.icl_block(x, y, cache=cache)
         return self.head(x)
+
+
+def _prepare_relative_features(
+    task_table: TableTensor,
+    related_tables: RelatedTables,
+    graph: HomogeneousGraph,
+    task_index: Tensor,
+    num_hops: int,
+    task_time_column: str,
+    task_processors: RelativeTimeProcessors | None = None,
+    table_processors: dict[str, RelativeTimeProcessors] | None = None,
+) -> tuple[
+    dict[str, Tensor],
+    RelativeTimeProcessors,
+    dict[str, RelativeTimeProcessors],
+]:
+    roots = task_index[1][task_index[0].argsort()]
+    entity_table = related_tables.task_links[0].table
+    anchor = task_anchor(task_table, task_time_column)
+    task_relative = relative_days(
+        anchor=anchor,
+        timestamps=task_table.datetime,
+    )
+    if task_processors is None:
+        task_relative, task_processors = fit_relative_time_features(
+            context=task_relative,
+            columns=task_table.columns[Stype.datetime],
+            dtype=task_table.numerical.dtype,
+        )
+    else:
+        task_relative = transform_relative_time_features(
+            values=task_relative,
+            columns=task_table.columns[Stype.datetime],
+            dtype=task_table.numerical.dtype,
+            processors=task_processors,
+        )
+    task_features = torch.cat(
+        [task_table.numerical, task_relative],
+        dim=-1,
+    )
+
+    anchor_index = propagate_anchor_indices(
+        num_anchors=anchor.size(0),
+        root_index=roots + graph.start_node_offsets[entity_table],
+        graph=graph,
+        num_hops=num_hops,
+    )
+    fitted_table_processors: dict[str, RelativeTimeProcessors] = {}
+    features: dict[str, Tensor] = {}
+    for name, table in related_tables.tables.items():
+        start = graph.start_node_offsets[name]
+        end = graph.end_node_offsets[name]
+        relative = relative_days_for_rows(
+            anchor=anchor,
+            anchor_index=anchor_index[start:end],
+            timestamps=table.datetime,
+        )
+        columns = table.columns[Stype.datetime]
+        if table_processors is None:
+            relative, processors = fit_relative_time_features(
+                context=relative,
+                columns=columns,
+                dtype=table.numerical.dtype,
+            )
+            fitted_table_processors[name] = processors
+        else:
+            relative = transform_relative_time_features(
+                values=relative,
+                columns=columns,
+                dtype=table.numerical.dtype,
+                processors=table_processors[name],
+            )
+
+        x = torch.cat([table.numerical, relative], dim=-1)
+        if name == entity_table and task_features.size(-1) > 0:
+            scattered = task_features.new_zeros(
+                (x.size(0), task_features.size(-1))
+            )
+            scattered.index_copy_(0, roots, task_features)
+            x = torch.cat([x, scattered], dim=-1)
+        features[name] = x
+
+    if table_processors is not None:
+        fitted_table_processors = table_processors
+    return features, task_processors, fitted_table_processors
 
 
 def _remap_v2_1_checkpoint(
