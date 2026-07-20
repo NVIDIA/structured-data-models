@@ -104,7 +104,20 @@ class Cache(MutableMapping[str, object], DeviceMixin):
 
     def freeze(self) -> Self:
         r"""Freeze the cache to replay mode."""
+
+        def _freeze(value: object) -> None:
+            if isinstance(value, Cache):
+                value.freeze()
+            elif isinstance(value, list | tuple):
+                for item in value:
+                    _freeze(item)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    _freeze(item)
+
         self._mode = Cache.Mode.replay
+        for value in self.values():
+            _freeze(value)
         return self
 
     def __setitem__(self, key: str, value: object) -> None:
@@ -163,8 +176,14 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         r""":meta private:"""  # noqa: D415
 
         def _devices(value: object) -> set[torch.device]:
-            if isinstance(value, Tensor | KVCacheEntry | Cache):
+            if isinstance(value, Tensor | KVCacheEntry):
                 return {value.device}
+            if isinstance(value, Cache):
+                return {
+                    device
+                    for item in value.values()
+                    for device in _devices(item)
+                }
             if isinstance(value, list | tuple):
                 return {device for item in value for device in _devices(item)}
             if isinstance(value, dict):
