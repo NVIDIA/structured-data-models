@@ -214,6 +214,25 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
     )
 
 
+@pytest.mark.parametrize("cached", [False, True])
+def test_model_output_is_float32_before_output_recipe(
+    cached: bool,
+) -> None:
+    model = _RecordingModel()
+    x_context = torch.ones(2, 1, dtype=torch.float16)
+    y_context = torch.ones(2, 1)
+    x_query = torch.ones(1, 1, dtype=torch.float16)
+    recipe = Recipe()
+
+    if cached:
+        model.fit(x_context, y_context, recipe=recipe)
+        actual = model.predict(x_query)
+    else:
+        actual = model(x_context, y_context, x_query, recipe=recipe)
+
+    assert actual.numerical.dtype == torch.float32
+
+
 def test_model_input_validation() -> None:
     model = _RecordingModel()
     x_context = torch.randn(4, 3)
