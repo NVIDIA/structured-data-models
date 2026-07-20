@@ -86,6 +86,7 @@ class KumoRFM(ICLModel):
             related_query_tables=related_query_tables,
             cache=cache,
             num_hops=kwargs.get("num_hops"),
+            generator=kwargs.get("generator"),
         )
 
         if classes is None:
