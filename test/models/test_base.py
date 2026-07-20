@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import ClassVar, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 import torch
@@ -34,6 +34,7 @@ class _RecordingModel(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        **kwargs: Any,
     ) -> TableTensor:
         self.calls.append(
             _Call(
