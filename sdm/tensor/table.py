@@ -997,7 +997,10 @@ def _allclose(
         return False
 
     for stype, block in _align_like(inp, other).items():
-        if not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
+        if stype != Stype.numerical:  # Tolerance only applies for numerical:
+            if not block.equal(other.blocks[stype]):
+                return False
+        elif not block.allclose(other.blocks[stype], rtol, atol, equal_nan):
             return False
 
     return True

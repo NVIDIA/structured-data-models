@@ -440,7 +440,10 @@ def _allclose(
         return False
 
     for column1, column2 in zip(inp._columns, other._columns):
-        if not column1.allclose(column2, rtol, atol, equal_nan):
+        if column1.is_floating_point() and column2.is_floating_point():
+            if not column1.allclose(column2, rtol, atol, equal_nan):
+                return False
+        elif not column1.equal(column2):
             return False
 
     return True

@@ -142,6 +142,70 @@ def test_equal() -> None:
     assert tensor1.allclose(tensor2)
 
 
+def test_equal_categorical_categories() -> None:
+    data = torch.tensor([[0], [1]], dtype=torch.int32)
+    tensor1 = TableTensor(
+        columns={"categorical": ["country"]},
+        categorical=CategoricalTensor(
+            data=data,
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+    tensor2 = TableTensor(
+        columns={"categorical": ["country"]},
+        categorical=CategoricalTensor(
+            data=data.clone(),
+            categories=(StringTensor.from_list(["x", "y"]),),
+        ),
+    )
+
+    assert tensor1.equal(tensor1.clone())
+    assert tensor1.allclose(tensor1.clone())
+
+    assert not tensor1.equal(tensor2)
+    assert not tensor1.allclose(tensor2)
+
+
+def test_allclose_discrete_blocks() -> None:
+    datetime = torch.tensor([[1_700_000_000_000_000], [1_700_000_000_000_001]])
+    tensor1 = TableTensor(
+        columns={"datetime": ["time"]},
+        datetime=datetime,
+    )
+    tensor2 = TableTensor(
+        columns={"datetime": ["time"]},
+        datetime=datetime + 60 * 1_000_000,  # 60 seconds later.
+    )
+    assert tensor1.allclose(tensor1.clone())
+    assert not tensor1.allclose(tensor2)
+
+    tensor1 = TableTensor(
+        columns={"id": ["user_id"]},
+        id=ColumnarTensor((torch.tensor([1_000_000, 2_000_000]),)),
+    )
+    tensor2 = TableTensor(
+        columns={"id": ["user_id"]},
+        id=ColumnarTensor((torch.tensor([1_000_001, 2_000_001]),)),
+    )
+    assert tensor1.allclose(tensor1.clone())
+    assert not tensor1.allclose(tensor2)
+
+
+def test_allclose_numerical_tolerances() -> None:
+    tensor1 = TableTensor(
+        columns={"numerical": ["a", "b"]},
+        numerical=torch.tensor([[1.0, float("nan")]]),
+    )
+    tensor2 = TableTensor(
+        columns={"numerical": ["a", "b"]},
+        numerical=torch.tensor([[1.0 + 1e-7, float("nan")]]),
+    )
+
+    assert not tensor1.allclose(tensor2)
+    assert tensor1.allclose(tensor2, equal_nan=True)
+    assert not tensor1.allclose(tensor2, rtol=0.0, atol=0.0, equal_nan=True)
+
+
 def test_from_tensor() -> None:
     data = torch.randn(5, 2)
     tensor = TableTensor.from_tensor(data)
@@ -925,7 +989,9 @@ def test_arrow() -> None:
             ]
         )
     )
-    assert tensor.categorical.equal(torch.tensor([[0], [1], [2], [0]]))
+    assert tensor.categorical.as_tensor().equal(
+        torch.tensor([[0], [1], [2], [0]])
+    )
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
     assert tensor.datetime.equal(
         torch.tensor(
@@ -988,7 +1054,7 @@ def test_from_pandas() -> None:
 
     assert tensor.size() == (2, 4)
     assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
-    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.as_tensor().equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
@@ -1035,7 +1101,7 @@ def test_cudf() -> None:
             device=tensor.device,
         )
     )
-    assert tensor.categorical.equal(
+    assert tensor.categorical.as_tensor().equal(
         torch.tensor([[0], [1], [2], [0]], device=tensor.device)
     )
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]

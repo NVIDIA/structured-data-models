@@ -44,12 +44,9 @@ def to_cudf(
             f"(got '{valid_mask.device}')"
         )
 
-    column_mask = to_cudf(valid_mask.contiguous().view(-1))._column.as_mask()
     with torch.cuda.device(tensor.device):
-        try:
-            column = ser._column.set_mask(column_mask)
-        except TypeError:
-            null_count = valid_mask.numel() - int(valid_mask.sum())
-            column = ser._column.set_mask(column_mask, null_count)
+        mask = to_cudf(valid_mask.contiguous().view(-1))._column.as_mask()
+        if not isinstance(mask, tuple):
+            mask = (mask,)
 
-        return cudf.Series._from_column(column)
+        return cudf.Series._from_column(ser._column.set_mask(*mask))

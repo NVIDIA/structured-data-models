@@ -165,6 +165,8 @@ class CategoricalTensor(Tensor):
             dtype=dtype,
             device=device,
         ).unsqueeze(-1)
+        if dtype is None and data.dtype not in cls.ALLOWED_DTYPES:
+            data = data.to(torch.int32)
 
         dictionary = encoded.dictionary
         is_string = pa.types.is_string(dictionary.type)
@@ -479,6 +481,34 @@ def _contiguous(
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(inp._data.pin_memory(), inp._categories)
+
+
+@CategoricalTensor.implements(aten.equal.default)
+def _equal(inp: CategoricalTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    if not inp._data.equal(other._data):
+        return False
+
+    for category1, category2 in zip(inp._categories, other._categories):
+        if not category1.equal(category2):
+            return False
+
+    return True
+
+
+@CategoricalTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: CategoricalTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    return _equal(inp, other)
 
 
 @CategoricalTensor.implements(aten.view.default)
