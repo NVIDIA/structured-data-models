@@ -870,6 +870,8 @@ class TableTensor(Tensor):
         if self.dim() > 2:
             examples = " x ".join(str(dim) for dim in self.size()[:-2])
             size = f"{examples} examples x {size}"
+        if not self.is_cpu:
+            size += f", device={self.device}"
 
         return df.to_html(index=False, escape=True) + f"<p>{size}</p>"
 
