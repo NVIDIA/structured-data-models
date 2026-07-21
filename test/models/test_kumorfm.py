@@ -277,6 +277,7 @@ def test_forward(
 def test_forward_with_relative_time(
     relational_data: RelationalData,
     device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     model = KumoRFM(pretrained=False, device=device)
     users = cast(
@@ -323,6 +324,7 @@ def test_forward_with_relative_time(
         ),
     )
 
+    torch.manual_seed(1)
     out = model(
         x_context=x_context,
         y_context=y_context,
@@ -335,6 +337,30 @@ def test_forward_with_relative_time(
 
     assert out.size(-2) == 2
     assert out.device == device
+
+    torch.manual_seed(1)
+    model.fit(
+        x=x_context,
+        y=y_context,
+        related_tables=related_tables,
+        num_hops=2,
+        task_time_column="prediction_time",
+    )
+
+    def fail_if_fitted(*args: object, **kwargs: object) -> None:
+        raise AssertionError("relative-time processors were refitted")
+
+    monkeypatch.setattr(
+        kumorfm_model,
+        "fit_relative_time_features",
+        fail_if_fitted,
+    )
+    predicted = model.predict(
+        x=x_query,
+        related_tables=related_tables.select_tables(tables=["users"]),
+    )
+    assert predicted.allclose(out)
+    model.clear()
 
 
 def test_default_recipe_preserves_ids() -> None:

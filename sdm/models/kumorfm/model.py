@@ -27,6 +27,9 @@ from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
+_TASK_TIME_PROCESSORS_KEY = "kumorfm.task_time_processors"
+_TABLE_TIME_PROCESSORS_KEY = "kumorfm.table_time_processors"
+
 
 class KumoRFM(ICLModel):
     r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
@@ -292,42 +295,67 @@ class _KumoRFM(torch.nn.Module):
         context_features: dict[str, Tensor] | None = None
         query_features: dict[str, Tensor] | None = None
         if task_time_column is not None:
-            if cache is not None:
-                raise NotImplementedError(
-                    "Relative-time encoding does not support cached inference"
+            task_processors: RelativeTimeProcessors | None = None
+            table_processors: dict[str, RelativeTimeProcessors] | None = None
+            if cache is not None and cache.is_replaying:
+                task_processors = cast(
+                    RelativeTimeProcessors,
+                    cache[_TASK_TIME_PROCESSORS_KEY],
                 )
-            assert x_context is not None
-            assert x_query is not None
-            assert related_context_tables is not None
-            assert related_query_tables is not None
-            assert graph is not None
-            assert task_index is not None
+                table_processors = cast(
+                    dict[str, RelativeTimeProcessors],
+                    cache[_TABLE_TIME_PROCESSORS_KEY],
+                )
 
-            context_features, task_processors, table_processors = (
-                _prepare_relative_features(
-                    task_table=x_context,
-                    related_tables=related_context_tables,
-                    graph=graph,
-                    task_index=task_index,
+            if related_context_tables is not None:
+                assert x_context is not None
+                assert graph is not None
+                assert task_index is not None
+                context_features, task_processors, table_processors = (
+                    _prepare_relative_features(
+                        task_table=x_context,
+                        related_tables=related_context_tables,
+                        graph=graph,
+                        task_index=task_index,
+                        num_hops=num_hops,
+                        task_time_column=task_time_column,
+                        task_processors=task_processors,
+                        table_processors=table_processors,
+                    )
+                )
+                if cache is not None and cache.is_recording:
+                    cache[_TASK_TIME_PROCESSORS_KEY] = task_processors
+                    cache[_TABLE_TIME_PROCESSORS_KEY] = table_processors
+
+            if related_query_tables is not None:
+                assert x_query is not None
+                if related_context_tables is not None:
+                    relationships = related_context_tables.relationships
+                else:
+                    assert cache is not None
+                    relationships = cast(
+                        Sequence[Relationship],
+                        cache["relationships"],
+                    )
+                query_graph = HomogeneousGraph.from_tables(
+                    tables=related_query_tables.tables,
+                    relationships=relationships,
+                )
+                query_task_index = related_query_tables.task_indices(x_query)[
+                    0
+                ]
+                assert task_processors is not None
+                assert table_processors is not None
+                query_features, _, _ = _prepare_relative_features(
+                    task_table=x_query,
+                    related_tables=related_query_tables,
+                    graph=query_graph,
+                    task_index=query_task_index,
                     num_hops=num_hops,
                     task_time_column=task_time_column,
+                    task_processors=task_processors,
+                    table_processors=table_processors,
                 )
-            )
-            query_graph = HomogeneousGraph.from_tables(
-                tables=related_query_tables.tables,
-                relationships=related_context_tables.relationships,
-            )
-            query_task_index = related_query_tables.task_indices(x_query)[0]
-            query_features, _, _ = _prepare_relative_features(
-                task_table=x_query,
-                related_tables=related_query_tables,
-                graph=query_graph,
-                task_index=query_task_index,
-                num_hops=num_hops,
-                task_time_column=task_time_column,
-                task_processors=task_processors,
-                table_processors=table_processors,
-            )
 
         # Reason within each Table ############################################
         xs_context: dict[str, Tensor] = {}
@@ -367,7 +395,11 @@ class _KumoRFM(torch.nn.Module):
                     x_i = torch.cat([x_i, query_x_i], dim=-2)
             else:
                 assert related_query_tables is not None
-                x_i = related_query_tables.tables[name].numerical
+                x_i = (
+                    related_query_tables.tables[name].numerical
+                    if query_features is None
+                    else query_features[name]
+                )
 
             x_i = self.row_embedding(
                 x=x_i,
