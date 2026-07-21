@@ -1,6 +1,6 @@
 """Fittable pre/postprocessing transforms for structured data."""
 
-from sdm.processing.base import Processor, InvertibleMixin
+from sdm.processing.base import Processor, InvertibleMixin, SharedState
 from sdm.processing.sequential import Sequential
 from sdm.processing.choice import Choice
 from sdm.processing.stype_dispatch import StypeDispatch
@@ -22,11 +22,13 @@ from sdm.processing.quantile import Quantile
 from sdm.processing.recipe import Recipe
 from sdm.processing.sigma_clip import SigmaClip
 from sdm.processing.standard_scale import StandardScale
+from sdm.processing.tfidf_encoder import TfidfEncoder
 from sdm.processing.to_numerical import ToNumerical
 
 __all__ = [
     "Processor",
     "InvertibleMixin",
+    "SharedState",
     "Sequential",
     "Choice",
     "StypeDispatch",
@@ -47,6 +49,7 @@ __all__ = [
     "EnsembleReduce",
     "SoftmaxTemperature",
     "StandardScale",
+    "TfidfEncoder",
     "ToNumerical",
     "Recipe",
 ]
