@@ -56,29 +56,21 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(kumorfm_model, "_remap_v2_1_checkpoint", remap)
     monkeypatch.setattr(_KumoRFM, "load_state_dict", load_state_dict)
 
-    model = KumoRFM(
-        repo_id="org/private-model",
-        cache_dir="/cache",
-        local_files_only=True,
-    )
+    model = KumoRFM()
 
     assert not model.training
     assert model.reg_model.row_embedding.norm.bias is not None
     assert model.reg_model.icl_block.norm.bias is not None
     assert downloads == [
         {
-            "repo_id": "org/private-model",
+            "repo_id": "nvidia/kumorfm-2",
             "filename": "cls-model.pt",
             "revision": "v2.1.0",
-            "cache_dir": "/cache",
-            "local_files_only": True,
         },
         {
-            "repo_id": "org/private-model",
+            "repo_id": "nvidia/kumorfm-2",
             "filename": "reg-model.pt",
             "revision": "v2.1.0",
-            "cache_dir": "/cache",
-            "local_files_only": True,
         },
     ]
     assert [path for path, _, _ in loads] == [

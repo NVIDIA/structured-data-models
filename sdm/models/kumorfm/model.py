@@ -1,5 +1,4 @@
 # ruff: noqa: D205
-from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import torch
@@ -30,11 +29,6 @@ class KumoRFM(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
-        repo_id: Hugging Face repository containing the checkpoints.
-        revision: Hugging Face branch, tag, or commit containing the
-            checkpoints.
-        cache_dir: Directory used for the Hugging Face cache.
-        local_files_only: Whether to use only locally cached checkpoints.
     """
 
     #:
@@ -57,11 +51,6 @@ class KumoRFM(ICLModel):
         self,
         pretrained: bool = True,
         device: torch.device | str | None = None,
-        *,
-        repo_id: str = "nvidia/kumorfm-2",
-        revision: str | None = "v2.1.0",
-        cache_dir: str | Path | None = None,
-        local_files_only: bool = False,
     ) -> None:
         super().__init__()
 
@@ -79,32 +68,18 @@ class KumoRFM(ICLModel):
         )
 
         if pretrained:
-            self._load_from_pretrained(
-                repo_id=repo_id,
-                revision=revision,
-                cache_dir=cache_dir,
-                local_files_only=local_files_only,
-            )
+            self._load_from_pretrained()
 
         self.eval()
 
-    def _load_from_pretrained(
-        self,
-        *,
-        repo_id: str,
-        revision: str | None,
-        cache_dir: str | Path | None,
-        local_files_only: bool,
-    ) -> "KumoRFM":
+    def _load_from_pretrained(self) -> "KumoRFM":
         device = next(self.parameters()).device
 
         for variant, filename in self._checkpoint_filenames.items():
             path = download_checkpoint(
-                repo_id=repo_id,
+                repo_id="nvidia/kumorfm-2",
                 filename=filename,
-                revision=revision,
-                cache_dir=cache_dir,
-                local_files_only=local_files_only,
+                revision="v2.1.0",
             )
             checkpoint = torch.load(
                 path,
