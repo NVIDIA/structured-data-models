@@ -5,7 +5,7 @@ sdm.models
    :header-rows: 1
 
    * - Model
-     - Release
+     - Release Date
      - Parameters
      - Code License
      - Weights License
