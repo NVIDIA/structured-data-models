@@ -29,7 +29,7 @@ class _CallableProcessor(Processor):
             self.function.__class__.__name__,
         )
         if name == "<lambda>":
-            name = "Lambda()"
+            name = "lambda"
         return f"{' ' * indent}{name}"
 
 
