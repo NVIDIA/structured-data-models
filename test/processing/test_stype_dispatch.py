@@ -150,30 +150,28 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
 
 
 def test_stype_dispatch_runs_iterable_routes() -> None:
-    table = _mixed_table()
-    scale = StandardScale()
+    table = _mixed_table().replace_blocks(
+        numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])
+    )
     dispatch = StypeDispatch(
         numerical=[
             lambda table: table.replace_blocks(
                 numerical=table.numerical.square()
             ),
             MeanImpute(),
-            scale,
+            StandardScale(),
         ],
         remainder="drop",
+    )
+    expected = StandardScale().fit_transform(
+        table.select_stypes(Stype.numerical).replace_blocks(
+            numerical=table.numerical.square()
+        )
     )
 
     output = dispatch.fit_transform(table)
 
-    torch.testing.assert_close(
-        scale.mean,
-        table.numerical.square().mean(dim=0),
-    )
-    assert torch.allclose(
-        output.numerical.mean(dim=0),
-        torch.zeros(2),
-        atol=1e-6,
-    )
+    torch.testing.assert_close(output.numerical, expected.numerical)
 
 
 def test_stype_dispatch_routes_text() -> None:
