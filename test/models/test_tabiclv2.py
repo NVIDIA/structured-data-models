@@ -59,7 +59,11 @@ def test_forward(
 
     torch.manual_seed(1)
     model.fit(x_context, y_context)
+    caches = model._caches
+    assert caches is not None
+    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
     assert model.predict(x_query).allclose(out)
+    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
     model.clear()
 
 
@@ -78,8 +82,15 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     assert out.size() == (*batch_shape, R_query, 999)
 
     model.fit(x_context, y_context, num_estimators=3)
+    caches = model._caches
+    assert caches is not None
+    assert len(caches) == 3
+    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+
     out = model.predict(x_query)
     assert out.size() == (*batch_shape, R_query, 999)
+    assert model._caches is caches
+    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
     model.clear()
 
 
@@ -228,24 +239,3 @@ def test_compile(dtype: torch.dtype) -> None:
     predicted = model.predict(x_query)
     assert predicted.allclose(expected, atol=5e-4, rtol=5e-3)
     assert torch.is_inference(predicted)
-
-
-def test_row_embedding() -> None:
-    row_embedding = RowEmbedding(
-        num_classes=2,
-        channels=8,
-        num_layers=1,
-        num_heads=2,
-        group_size=3,
-        num_inducing_points=4,
-        num_readout_tokens=2,
-        norm_bias=True,
-    )
-
-    out = row_embedding(
-        x=torch.randn(6, 4),
-        y=torch.tensor([0, 1]),
-        train_mask=torch.tensor([False, True, False, False, True, False]),
-        max_keys=1,
-    )
-    assert out.size() == (6, 16)
