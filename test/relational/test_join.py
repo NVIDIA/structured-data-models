@@ -1,3 +1,5 @@
+from typing import cast
+
 import pandas as pd
 import pytest
 import torch
@@ -8,10 +10,8 @@ from sdm.testing import withCUDA
 
 def table(num_rows: int, device: torch.device) -> TableTensor:
     df = pd.DataFrame({"id": range(num_rows)})
-    return TableTensor.from_pandas(
-        df=df,
-        stypes=infer_stypes(df),
-    ).to(device)
+    tensor = TableTensor.from_pandas(df=df, stypes=infer_stypes(df))
+    return cast(TableTensor, tensor.to(device))
 
 
 @withCUDA
