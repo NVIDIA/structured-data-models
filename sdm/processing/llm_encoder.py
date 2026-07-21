@@ -1,11 +1,11 @@
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 import torch
 from torch import Tensor
 
 from sdm.processing.base import Processor, SharedState
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import StringTensor, TableTensor
 
 
 @runtime_checkable
@@ -68,7 +68,8 @@ class LLMEncoder(Processor):
             if n_rows == 0:
                 block = torch.zeros((0, dim), dtype=dtype, device=device)
             else:
-                strings = table.text[:, column].to_arrow().to_pylist()
+                column_text = cast(StringTensor, table.text[:, column])
+                strings = column_text.to_arrow().to_pylist()
                 block = self.embedder.encode(strings)
                 if block.dim() != 2 or block.size(0) != n_rows:
                     raise ValueError(
