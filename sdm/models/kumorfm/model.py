@@ -49,15 +49,15 @@ class KumoRFM(ICLModel):
     supports_related_tables: ClassVar[bool] = True
 
     _checkpoint_filenames: ClassVar[dict[str, str]] = {
-        "classifier": "classifier.ckpt",
-        "regressor": "regressor.ckpt",
+        "classifier": "cls-model.pt",
+        "regressor": "reg-model.pt",
     }
 
     def __init__(
         self,
         pretrained: bool = True,
         repo_id: str = "nvidia/kumorfm-2",
-        revision: str | None = None,
+        revision: str | None = "v2.1.0",
         cache_dir: str | Path | None = None,
         local_files_only: bool = False,
         device: torch.device | str | None = None,

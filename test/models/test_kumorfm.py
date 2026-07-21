@@ -48,7 +48,6 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
 
     model = KumoRFM(
         repo_id="org/private-model",
-        revision="v1",
         cache_dir="/cache",
         local_files_only=True,
     )
@@ -57,27 +56,27 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
     assert downloads == [
         {
             "repo_id": "org/private-model",
-            "filename": "classifier.ckpt",
-            "revision": "v1",
+            "filename": "cls-model.pt",
+            "revision": "v2.1.0",
             "cache_dir": "/cache",
             "local_files_only": True,
         },
         {
             "repo_id": "org/private-model",
-            "filename": "regressor.ckpt",
-            "revision": "v1",
+            "filename": "reg-model.pt",
+            "revision": "v2.1.0",
             "cache_dir": "/cache",
             "local_files_only": True,
         },
     ]
     assert [path for path, _, _ in loads] == [
-        "/classifier.ckpt",
-        "/regressor.ckpt",
+        "/cls-model.pt",
+        "/reg-model.pt",
     ]
     assert all(weights_only for _, _, weights_only in loads)
     assert state_dicts == [
-        ({"/classifier.ckpt": torch.tensor(1)}, True),
-        ({"/regressor.ckpt": torch.tensor(1)}, True),
+        ({"/cls-model.pt": torch.tensor(1)}, True),
+        ({"/reg-model.pt": torch.tensor(1)}, True),
     ]
 
 
