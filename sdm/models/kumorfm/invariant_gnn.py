@@ -47,11 +47,12 @@ class InvariantGNN(torch.nn.Module):
     def get_edge_type_emb(
         self,
         num_edge_types: int,
+        dtype: torch.dtype | None = None,
         generator: torch.Generator | None = None,
     ) -> Tensor:
         edge_type_emb = torch.randn(
             (num_edge_types, self.edge_type_lin.weight.size(-1)),
-            dtype=self.edge_type_lin.weight.dtype,
+            dtype=dtype,
             device=self.edge_type_lin.weight.device,
             generator=generator,
         )
