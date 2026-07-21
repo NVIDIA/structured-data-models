@@ -8,7 +8,12 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.explain import OutputIndex
+from sdm.explain import (
+    FeatureAttribution,
+    GradientSensitivity,
+    InputSite,
+    OutputIndex,
+)
 from sdm.models import KumoRFM
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
@@ -352,3 +357,132 @@ def test_explain_fitted_replays_kumorfm_related_cache(
     )
     for actual, expected in zip(tensors, snapshot):
         assert actual.equal(expected)
+
+
+def _small_kumorfm_core(
+    *,
+    num_classes: int,
+    num_quantiles: int,
+) -> _KumoRFM:
+    core = _KumoRFM(
+        num_classes=num_classes,
+        num_quantiles=num_quantiles,
+        channels=8,
+        num_embedding_layers=1,
+        num_embedding_heads=2,
+        num_inducing_points=4,
+        group_size=2,
+        num_readout_tokens=2,
+        num_icl_layers=1,
+        num_icl_heads=2,
+        norm_bias=True,
+        device="cpu",
+    )
+    with torch.no_grad():
+        for path in (
+            "row_embedding.row_layers.0.attn.out_lin",
+            "icl_block.layers.0.attn.out_lin",
+        ):
+            projection = core.get_submodule(path)
+            assert isinstance(projection, torch.nn.Linear)
+            projection.weight.fill_(0.1)
+    return core
+
+
+def test_gradient_sensitivity_uses_kumorfm_related_inputs(
+    relational_data: RelationalData,
+) -> None:
+    model = KumoRFM(pretrained=False, device="meta")
+    model.cls_model = _small_kumorfm_core(
+        num_classes=10,
+        num_quantiles=0,
+    )
+    model.reg_model = _small_kumorfm_core(
+        num_classes=0,
+        num_quantiles=999,
+    )
+    model.eval()
+    related = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    x_context = TableTensor(
+        columns={
+            Stype.numerical: ("ignored",),
+            Stype.id: ("user_id",),
+        },
+        numerical=torch.tensor([[-2.0], [-1.0], [0.0], [1.0]]),
+        id=ColumnarTensor((torch.arange(4),)),
+    )
+    x_query = TableTensor(
+        columns={
+            Stype.numerical: ("ignored",),
+            Stype.id: ("user_id",),
+        },
+        numerical=torch.tensor([[2.0]]),
+        id=ColumnarTensor((torch.tensor([0]),)),
+    )
+    y_context = TableTensor.from_tensor(
+        torch.tensor([[-1.0], [0.0], [1.0], [2.0]]),
+        columns=("target",),
+    )
+    args = (x_context, y_context, x_query, related, related)
+    expected = model(
+        *args,
+        generator=torch.Generator().manual_seed(3),
+        num_hops=2,
+    )
+
+    explanation = model.explain_full_context(
+        GradientSensitivity(
+            magnitude=True,
+            normalization="global_max_abs",
+        ),
+        *args,
+        generator=torch.Generator().manual_seed(3),
+        num_hops=2,
+        target=OutputIndex(row=0, column="q500"),
+    )
+
+    assert explanation.prediction.schema == expected.schema
+    torch.testing.assert_close(
+        explanation.prediction.numerical,
+        expected.numerical,
+    )
+    assert explanation.target.column == 499
+    assert all(parameter.grad is None for parameter in model.parameters())
+    attributions: dict[InputSite, FeatureAttribution] = {
+        attribution.site: attribution
+        for attribution in explanation.attributions
+    }
+    assert InputSite(split="context", table="users") in attributions
+    assert InputSite(split="query", table="users") in attributions
+
+    maxima: list[torch.Tensor] = []
+    for site, attribution in attributions.items():
+        assert attribution.input_space == "processed"
+        assert attribution.score_kind == "gradient"
+        assert not attribution.signed
+        assert attribution.normalization == "global_max_abs"
+        if site.table is not None:
+            original = related.tables[site.table]
+            assert (
+                attribution.values.columns[Stype.id]
+                == (original.columns[Stype.id])
+            )
+            for actual, expected_id in zip(
+                attribution.values.id.unbind(-1),
+                original.id.unbind(-1),
+            ):
+                assert actual.equal(expected_id)
+        if attribution.values.numerical.numel() > 0:
+            maxima.append(attribution.values.numerical.abs().amax())
+
+    assert torch.stack(maxima).amax().item() == pytest.approx(1.0)

@@ -113,3 +113,55 @@ or context interventions. Gradient methods fail before execution because
 `fit()` deliberately creates frozen inference-mode caches, which sever the
 autograd graph to context and cannot safely participate in backward passes.
 Gradient and context attribution therefore use `explain_full_context()`.
+
+## Gradient sensitivity
+
+`GradientSensitivity` differentiates one explicit final prediction with
+respect to the processed numerical inputs the model actually consumes:
+
+```python
+from sdm.explain import GradientSensitivity
+
+explanation = model.explain_full_context(
+    GradientSensitivity(
+        magnitude=True,
+        normalization="global_max_abs",
+    ),
+    x_context,
+    y_context,
+    x_query,
+    related_context,
+    related_query,
+    target=OutputIndex(row=0, column="approved"),
+)
+```
+
+The example configuration matches Kumo-ML's magnitude and global
+normalization choices: absolute gradients divided by one maximum absolute
+score across every emitted table. Unlike Kumo-ML's product behavior, SDM uses
+one explicit final output target and reports processed context and query sites.
+More precisely, each score is the derivative of the selected final prediction
+with respect to one processed numerical cell. The default is signed and
+unnormalized. `global_max_abs` uses one denominator across all emitted context
+and query tables, preserves sign, and leaves all-zero scores as finite zeros.
+Scores remain in processed feature space with no feature reduction.
+
+Each processed input site produces one `FeatureAttribution`. Its `values` is a
+schema-aligned `TableTensor`: numerical blocks contain scores and identifier
+blocks preserve row alignment. The `site` identifies the context or query
+split and, for related inputs, the table name. Disconnected numerical inputs
+receive zero scores. The full-context model path currently requires one
+estimator.
+
+```python
+attribution = explanation.attributions[0]
+attribution.site          # InputSite(split="query", table="users")
+attribution.values        # TableTensor
+attribution.input_space   # "processed"
+```
+
+Gradient sensitivity is local to the explained input and depends on feature
+scaling. It is not an additive contribution or evidence of causality. The
+method covers processed numerical sites exposed by prepared execution,
+including recipe-generated calendar columns. Model-internal latent features
+outside that boundary are not included.

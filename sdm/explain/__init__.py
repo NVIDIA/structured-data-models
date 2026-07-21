@@ -17,6 +17,7 @@ from sdm.explain.base import (
     ExplanationCallable,
     ExplanationMethod,
 )
+from sdm.explain.gradient import GradientSensitivity
 
 __all__ = [
     "InputSite",
@@ -32,4 +33,5 @@ __all__ = [
     "ExplanationReplacements",
     "ExplanationCallable",
     "ExplanationMethod",
+    "GradientSensitivity",
 ]
