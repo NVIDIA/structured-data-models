@@ -121,7 +121,7 @@ class CellEmbedder(torch.nn.Module):
         d: Tensor | None,
     ) -> Tensor:
         grouped = self._group(x, d=d).unsqueeze(-1).float()
-        angles = grouped * self.fourier_frequencies.float()
+        angles = grouped * self.fourier_frequencies
         fourier = torch.cat([angles.sin(), angles.cos()], dim=-1).to(x.dtype)
         numerical = self.in_linear(fourier)
         if cat_mask is None:
