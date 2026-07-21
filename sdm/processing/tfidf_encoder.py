@@ -3,7 +3,7 @@ import pyarrow.compute as pc
 import torch
 from torch import Tensor
 
-from sdm.processing.base import Processor
+from sdm.processing.base import Processor, SharedState
 from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
@@ -41,8 +41,19 @@ class TfidfEncoder(Processor):
         self.max_features = max_features
         self.lowercase = lowercase
         # Learned per text column: the n-gram vocabulary and its aligned idf.
-        self._vocabularies: list[pa.Array] = []
-        self._idfs: list[Tensor] = []
+        # Held in `SharedState` so ensemble members share one fitted copy
+        # instead of duplicating it through `copy.deepcopy`.
+        self._state: SharedState[tuple[list[pa.Array], list[Tensor]]] = (
+            SharedState(([], []))
+        )
+
+    @property
+    def _vocabularies(self) -> list[pa.Array]:
+        return self._state.value[0]
+
+    @property
+    def _idfs(self) -> list[Tensor]:
+        return self._state.value[1]
 
     def _column_ngrams(
         self,
@@ -62,8 +73,7 @@ class TfidfEncoder(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         device = table.numerical.device
-        self._vocabularies = []
-        self._idfs = []
+        self._state.value = ([], [])
         for column in range(table.text.size(-1)):
             flat, offsets = self._column_ngrams(table, column)
             n_docs = offsets.numel() - 1

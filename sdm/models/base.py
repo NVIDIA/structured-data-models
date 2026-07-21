@@ -224,7 +224,7 @@ class ICLModel(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            x_i = recipe.features.fit_transform(x, generator=generator)
+            x_i = recipe.features.fit_transform(x, generator=generator) # full refit, every member
             y_i = recipe.target.fit_transform(y, generator=generator)
 
             related_tables_i = None
