@@ -271,7 +271,10 @@ def test_tabiclv2_fit_predict_compile(
     # The dtype parametrization traces both submodels: int y exercises the
     # classifier, float y the regressor. The autocast=True case is the
     # recipe shipped in examples/tabiclv2.py: autocast around the compiled
-    # submodels.
+    # submodels. This covers the standard (<= num_classes) classification
+    # path; the hierarchical > num_classes path is not fullgraph-traceable
+    # (its class-count dispatch is data-dependent), so the example compiles
+    # it only for the standard regime.
     model.cls_model.compile(fullgraph=True, backend="eager")
     model.reg_model.compile(fullgraph=True, backend="eager")
     with torch.amp.autocast(device.type, torch.bfloat16, enabled=autocast):

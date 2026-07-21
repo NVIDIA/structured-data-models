@@ -13,6 +13,10 @@ table = TableTensor.from_pandas(
     device=device,
 )
 model = TabICLv2(device=device)
+# Compile the classifier for the standard (<= 10-class) classification
+# path. Targets with more than ``num_classes`` classes route through the
+# hierarchical classifier, whose data-dependent dispatch is not
+# fullgraph-traceable — skip compilation or use ``fullgraph=False`` there.
 if table.is_cuda:
     model.cls_model.compile(fullgraph=True)
 

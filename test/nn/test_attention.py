@@ -941,15 +941,15 @@ def test_attention_key_value_cache_dtype_mismatch() -> None:
 @withCUDA
 def test_attention_key_value_cache_autocast(device: torch.device) -> None:
     torch.manual_seed(0)
-    if device.type != "cuda":
-        pytest.skip("autocast('cuda') requires a GPU")
     module = Attention(channels=8, num_query_heads=2, device=device)
     query = torch.randn(2, 3, 8, device=device)
     key_value = torch.randn(2, 5, 8, device=device)
 
     # Caching and replaying under the same autocast context is valid even
-    # though the pre-projection query stays float32.
-    with torch.amp.autocast("cuda", torch.bfloat16):
+    # though the pre-projection query stays float32: the dtype guard compares
+    # against the projected query, so autocast validates. Runs on cpu too so
+    # this guard decision keeps CPU-CI coverage.
+    with torch.amp.autocast(device.type, torch.bfloat16):
         out, cached = module(
             query=query, key_value=key_value, return_key_value=True
         )
