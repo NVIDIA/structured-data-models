@@ -161,7 +161,10 @@ def test_invariant_gnn(
         task_links=[],
     )
 
-    graph = HomogeneousGraph.from_related_tables(related_tables)
+    graph = HomogeneousGraph.from_tables(
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+    )
     assert graph.colptr.equal(
         torch.tensor([0, 2, 3, 3, 6, 7, 8, 9, 10, 11, 12], device=device)
     )
@@ -202,7 +205,7 @@ def test_forward(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
-    model = KumoRFM(False, device)
+    model = KumoRFM(pretrained=False, device=device)
     if device.type == "cpu":
         assert repr(model) == "KumoRFM()"
     else:
@@ -239,6 +242,7 @@ def test_forward(
             ),
         )
 
+    torch.manual_seed(1)
     out = model(
         x_context=x,
         y_context=y,
@@ -248,9 +252,22 @@ def test_forward(
         num_hops=2,
     )
 
+    assert out.size(-2) == 4
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
+
+    torch.manual_seed(1)
+    model.fit(x, y, related_tables)
+    assert model.predict(
+        x=x,
+        related_tables=RelatedTables(
+            tables=dict(reversed(list(related_tables.tables.items()))),
+            relationships=related_tables.relationships[::-1],
+            task_links=related_tables.task_links[::-1],
+        ),
+    ).allclose(out)
+    model.clear()
 
 
 def test_default_recipe_preserves_ids() -> None:

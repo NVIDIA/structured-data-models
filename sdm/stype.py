@@ -26,6 +26,7 @@ class Stype(str, Enum):
         numerical: Numerical columns.
         categorical: Categorical columns.
         datetime: Date or date-time columns.
+        text: Text columns.
         id: Identifier values used to distinguish or link entities. Identifier
             columns are not used as model features by default.
     """
@@ -33,6 +34,7 @@ class Stype(str, Enum):
     numerical = "numerical"
     categorical = "categorical"
     datetime = "datetime"
+    text = "text"
     id = "id"
 
     def __repr__(self) -> str:
@@ -58,8 +60,8 @@ def infer_stypes(
 
     * Integer, floating-point, and decimal columns are inferred as
       ``numerical``.
-    * String, boolean, and dictionary-encoded (categorical) columns are
-      inferred as ``categorical``.
+    * String, boolean and dictionary-encoded columns are inferred as
+      ``categorical``.
     * Datetime columns are inferred as ``datetime``.
     * Integer or (non-dictionary) string columns are inferred as ``id`` if its
       name contains ``"id"`` as a whole word (*e.g.*, ``"user_id"``,

@@ -46,6 +46,7 @@ class _RecordingModel(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:
         self.calls.append(

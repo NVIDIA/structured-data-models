@@ -47,6 +47,7 @@ def test_init() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor._column_to_loc == {
@@ -77,6 +78,7 @@ def test_empty() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor._column_to_loc == {}
@@ -214,6 +216,7 @@ def test_from_tensor() -> None:
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor.numerical.equal(data)
@@ -233,6 +236,7 @@ def test_from_tensor() -> None:
         Stype.numerical: (),
         Stype.categorical: ("0", "1"),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor.categorical.as_tensor().equal(
@@ -369,6 +373,7 @@ def test_select_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert numerical.numerical is tensor.numerical
@@ -381,6 +386,7 @@ def test_select_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: ("country",),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert categorical.categorical is tensor.categorical
@@ -390,6 +396,7 @@ def test_select_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country",),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert mixed.numerical is tensor.numerical
@@ -421,6 +428,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: ("country",),
         Stype.datetime: ("created_at",),
+        Stype.text: (),
         Stype.id: ("user_id",),
     }
     assert no_numerical.numerical.size() == (2, 0)
@@ -433,6 +441,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
+        Stype.text: (),
         Stype.id: ("user_id",),
     }
     assert no_categorical.numerical is tensor.numerical
@@ -443,6 +452,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
+        Stype.text: (),
         Stype.id: ("user_id",),
     }
     assert mixed.numerical.size() == (2, 0)
@@ -456,6 +466,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -672,6 +683,7 @@ def test_unbind_split() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -741,6 +753,7 @@ def test_advanced_indexing() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -759,6 +772,7 @@ def test_advanced_indexing() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: ("country",),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -850,6 +864,7 @@ def test_cat_stack() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -1057,6 +1072,25 @@ def test_from_pandas() -> None:
     assert tensor.categorical.as_tensor().equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+def test_text() -> None:
+    data = {
+        "age": [0.0, 1.0, 2.0],
+        "title": ["hello world", "foo bar baz", "lorem ipsum dolor"],
+        "body": ["a b c", "d e f", "g h i"],
+    }
+
+    tensor = TableTensor.from_arrow(
+        pa.table(data),
+        stypes={"age": "numerical", "title": "text", "body": "text"},
+    )
+
+    assert tensor.size() == (3, 3)
+    assert tensor.columns[Stype.text] == ("title", "body")
+    assert tensor.text.size() == (3, 2)
+
+    assert tensor.to_arrow().to_pydict() == data
 
 
 @onlyCUDA
