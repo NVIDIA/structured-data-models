@@ -7,7 +7,7 @@ import gc
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -37,8 +37,16 @@ class SDMTabICLv2Model(AbstractModel):
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        num_gpus: int = 0,
-        **kwargs: object,
+        X_val: pd.DataFrame | None = None,
+        y_val: pd.Series | None = None,
+        X_unlabeled: pd.DataFrame | None = None,
+        time_limit: float | None = None,
+        sample_weight: pd.Series | None = None,
+        sample_weight_val: pd.Series | None = None,
+        num_cpus: int | None = None,
+        num_gpus: int | None = None,
+        verbosity: int = 2,
+        **kwargs: Any,
     ) -> None:
         self._device = _resolve_device(num_gpus=num_gpus)
         self._feature_stypes = infer_stypes(X)
@@ -65,7 +73,7 @@ class SDMTabICLv2Model(AbstractModel):
             num_estimators=int(self._get_model_params()["num_estimators"]),
         )
 
-    def _predict_proba(self, X: pd.DataFrame, **kwargs: object) -> np.ndarray:
+    def _predict_proba(self, X: pd.DataFrame, **kwargs: Any) -> np.ndarray:
         if not hasattr(self, "model"):
             raise RuntimeError(
                 "SDMTabICLv2Model must be fitted before prediction"
@@ -118,7 +126,7 @@ class FeatureSchema:
 class SDMTabICLv2System(ExternalSystemModel):
     """Run local TabICLv2 while SDM owns feature and target preprocessing."""
 
-    def __init__(self, *, num_estimators: int = 8, **kwargs: object) -> None:
+    def __init__(self, *, num_estimators: int = 8, **kwargs: Any) -> None:
         if num_estimators < 1:
             raise ValueError("'num_estimators' must be positive")
         super().__init__(**kwargs)

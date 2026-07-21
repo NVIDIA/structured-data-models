@@ -174,6 +174,7 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        generator: torch.Generator | None = None,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -189,6 +190,8 @@ class ICLModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
+            generator: Pseudorandom number generator used for sampling during
+                preprocessing.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -203,8 +206,8 @@ class ICLModel(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            x_i = recipe.features.fit_transform(x)
-            y_i = recipe.target.fit_transform(y)
+            x_i = recipe.features.fit_transform(x, generator=generator)
+            y_i = recipe.target.fit_transform(y, generator=generator)
 
             related_tables_i = None
             related_processors = None
@@ -216,7 +219,10 @@ class ICLModel(torch.nn.Module, ABC):
                 related_tables_i = replace(
                     related_tables,
                     tables={
-                        name: related_processors[name].fit_transform(t)
+                        name: related_processors[name].fit_transform(
+                            t,
+                            generator=generator,
+                        )
                         for name, t in related_tables.tables.items()
                     },
                 )
