@@ -40,7 +40,6 @@ class SDMTabICLv2Model(AbstractModel):
         num_gpus: int = 0,
         **kwargs: object,
     ) -> None:
-        del kwargs
         self._device = _resolve_device(num_gpus=num_gpus)
         self._feature_stypes = infer_stypes(X)
         self._target_name = str(y.name) if y.name is not None else "__target__"
@@ -67,7 +66,6 @@ class SDMTabICLv2Model(AbstractModel):
         )
 
     def _predict_proba(self, X: pd.DataFrame, **kwargs: object) -> np.ndarray:
-        del kwargs
         if not hasattr(self, "model"):
             raise RuntimeError(
                 "SDMTabICLv2Model must be fitted before prediction"
@@ -148,7 +146,6 @@ class SDMTabICLv2System(ExternalSystemModel):
             num_cpus,
             memory_limit,
             time_limit,
-            random_state,
         )
         if problem_type not in {"binary", "multiclass", "regression"}:
             raise ValueError(
@@ -158,6 +155,11 @@ class SDMTabICLv2System(ExternalSystemModel):
         self._schema = _fit_feature_schema(X)
         X = _align_features(X, schema=self._schema)
         self._device = _resolve_device(num_gpus=num_gpus)
+        generator = None
+        if random_state is not None:
+            generator = torch.Generator(device=self._device).manual_seed(
+                random_state
+            )
         self._problem_type = problem_type
         self._target_name = target_name or "__target__"
         self._target_stype = (
@@ -186,6 +188,7 @@ class SDMTabICLv2System(ExternalSystemModel):
                 device=self._device,
             ),
             num_estimators=self.num_estimators,
+            generator=generator,
         )
         return self
 
