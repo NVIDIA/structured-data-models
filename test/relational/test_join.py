@@ -11,8 +11,7 @@ def table(num_rows: int, device: torch.device) -> TableTensor:
     return TableTensor.from_pandas(
         df=df,
         stypes=infer_stypes(df),
-        device=device,
-    )
+    ).to(device)
 
 
 @withCUDA
