@@ -1,5 +1,6 @@
 from collections.abc import Mapping, Sequence
-from typing import NamedTuple, cast
+from dataclasses import dataclass
+from typing import Literal, NamedTuple, cast
 
 import torch
 from torch import Tensor
@@ -16,6 +17,29 @@ from sdm.relational.join import join_index
 from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
+TemporalStrategy = Literal["uniform", "last"]
+
+
+@dataclass(frozen=True)
+class TemporalSamplingConfig:
+    r"""Configuration for temporal relational sampling.
+
+    Args:
+        time_columns: Mapping from table names to their datetime columns.
+        strategy: How to select neighbors that satisfy the request cutoff.
+    """
+
+    time_columns: Mapping[str, str]
+    strategy: TemporalStrategy = "last"
+
+    def __post_init__(self) -> None:
+        if len(self.time_columns) == 0:
+            raise ValueError("Expected at least one time column")
+        if self.strategy not in ("uniform", "last"):
+            raise ValueError(
+                f"Expected temporal strategy to be 'uniform' or 'last' "
+                f"(got '{self.strategy}')"
+            )
 
 
 def _validate_time_columns(
@@ -70,18 +94,21 @@ class RelationalSampler:
 
     Args:
         data: The collection of named tables and their relationships.
-        time_columns: Mapping from table name to the datetime column used for
-            temporal sampling. A row in a time-aware table can only be sampled
-            if its timestamp does not exceed the query timestamp.
+        temporal: Temporal sampling configuration. A row in a time-aware table
+            can only be sampled if its timestamp does not exceed the query
+            timestamp.
     """
 
     def __init__(
         self,
         data: RelationalData,
-        time_columns: Mapping[str, str] | None = None,
+        temporal: TemporalSamplingConfig | None = None,
     ) -> None:
         self.data = data
-        self.time_columns = time_columns or {}
+        self.temporal = temporal
+        self.time_columns = (
+            temporal.time_columns if temporal is not None else {}
+        )
         _validate_time_columns(self.data, self.time_columns)
 
         self._row_dict: dict[tuple[str, str, str], Tensor] = {}
@@ -226,7 +253,9 @@ class RelationalSampler:
             replace=False,
             directed=True,
             disjoint=True,
-            temporal_strategy="last",
+            temporal_strategy=(
+                self.temporal.strategy if self.temporal is not None else "last"
+            ),
             return_edge_id=False,
         )
 

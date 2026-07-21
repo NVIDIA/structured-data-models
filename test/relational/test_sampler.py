@@ -1,5 +1,7 @@
 from textwrap import dedent
+from typing import Any, cast
 
+import pandas as pd
 import pytest
 import torch
 from sdm import (
@@ -9,7 +11,70 @@ from sdm import (
     Stype,
     TableTensor,
     TaskLink,
+    TemporalSamplingConfig,
 )
+
+
+def test_temporal_sampling_config_requires_time_columns() -> None:
+    with pytest.raises(ValueError, match="at least one time column"):
+        TemporalSamplingConfig(time_columns={})
+
+
+def test_temporal_sampling_config_defaults_to_last() -> None:
+    config = TemporalSamplingConfig(time_columns={"orders": "time"})
+
+    assert config.strategy == "last"
+
+
+def test_temporal_sampling_config_rejects_unknown_strategy() -> None:
+    with pytest.raises(ValueError, match="temporal strategy"):
+        TemporalSamplingConfig(
+            time_columns={"orders": "time"},
+            strategy=cast(Any, "newest"),
+        )
+
+
+def test_sampler_forwards_temporal_strategy(
+    temporal_data: RelationalData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("pyg_lib")
+    sample = torch.ops.pyg.hetero_neighbor_sample
+    strategies: list[str] = []
+
+    def capture(*args: Any, **kwargs: Any) -> Any:
+        strategies.append(kwargs["temporal_strategy"])
+        return sample(*args, **kwargs)
+
+    monkeypatch.setattr(torch.ops.pyg, "hetero_neighbor_sample", capture)
+    sampler = temporal_data.sampler(
+        temporal=TemporalSamplingConfig(
+            time_columns={"first": "time", "second": "time"},
+            strategy="uniform",
+        )
+    )
+    task_table = TableTensor.from_pandas(
+        df=pd.DataFrame(
+            {
+                "entity": [0],
+                "cutoff": pd.to_datetime([10], unit="s"),
+            }
+        ),
+        stypes={"entity": Stype.id, "cutoff": Stype.datetime},
+    )
+
+    sampler(
+        task_table=task_table,
+        task_link={
+            "task_column": "entity",
+            "table": "roots",
+            "table_column": "root_id",
+        },
+        num_neighbors=[-1],
+        task_time_column="cutoff",
+    )
+
+    assert strategies == ["uniform"]
 
 
 def test_sampler(relational_data: RelationalData) -> None:
