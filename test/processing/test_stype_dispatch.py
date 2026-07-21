@@ -119,8 +119,8 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
 
 

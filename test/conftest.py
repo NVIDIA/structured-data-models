@@ -41,10 +41,7 @@ def relational_data(device: torch.device) -> RelationalData:
         tables={
             "users": TableTensor.from_pandas(
                 df=users_df,
-                stypes=infer_stypes(
-                    users_df,
-                    overrides={"city": "categorical"},
-                ),
+                stypes=infer_stypes(users_df),
             ),
             "orders": TableTensor.from_pandas(
                 df=orders_df,
@@ -52,10 +49,7 @@ def relational_data(device: torch.device) -> RelationalData:
             ),
             "items": TableTensor.from_pandas(
                 df=items_df,
-                stypes=infer_stypes(
-                    items_df,
-                    overrides={"category": "categorical"},
-                ),
+                stypes=infer_stypes(items_df),
             ),
         },
         relationships=[

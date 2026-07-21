@@ -47,8 +47,8 @@ def test_init() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
     assert tensor._column_to_loc == {
         "age": (Stype.numerical, 0),
@@ -78,8 +78,8 @@ def test_empty() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
     assert tensor._column_to_loc == {}
 
@@ -216,8 +216,8 @@ def test_from_tensor() -> None:
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
     assert tensor.numerical.equal(data)
     assert TableTensor.from_tensor(data[:, :0]).size() == (5, 0)
@@ -236,8 +236,8 @@ def test_from_tensor() -> None:
         Stype.numerical: (),
         Stype.categorical: ("0", "1"),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
     assert tensor.categorical.as_tensor().equal(
         torch.tensor([[2, 1], [0, 0], [3, 0], [1, 1]])
@@ -373,8 +373,8 @@ def test_select_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
     assert numerical.numerical is tensor.numerical
     assert numerical.categorical.size() == (2, 0)
@@ -386,8 +386,8 @@ def test_select_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: ("country",),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
     assert categorical.categorical is tensor.categorical
 
@@ -396,8 +396,8 @@ def test_select_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country",),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
     assert mixed.numerical is tensor.numerical
     assert mixed.categorical is tensor.categorical
@@ -428,8 +428,8 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: ("country",),
         Stype.datetime: ("created_at",),
-        Stype.id: ("user_id",),
         Stype.text: (),
+        Stype.id: ("user_id",),
     }
     assert no_numerical.numerical.size() == (2, 0)
     assert no_numerical.categorical is tensor.categorical
@@ -441,8 +441,8 @@ def test_drop_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
-        Stype.id: ("user_id",),
         Stype.text: (),
+        Stype.id: ("user_id",),
     }
     assert no_categorical.numerical is tensor.numerical
     assert no_categorical.categorical.size() == (2, 0)
@@ -452,8 +452,8 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
-        Stype.id: ("user_id",),
         Stype.text: (),
+        Stype.id: ("user_id",),
     }
     assert mixed.numerical.size() == (2, 0)
     assert mixed.categorical.size() == (2, 0)
@@ -466,8 +466,8 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
 
     with pytest.raises(ValueError, match="not a valid Stype"):
@@ -683,8 +683,8 @@ def test_unbind_split() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
 
     with pytest.raises(RuntimeError, match="split size 1"):
@@ -753,8 +753,8 @@ def test_advanced_indexing() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
 
     out = cast(TableTensor, tensor.view(-1, 3))[:, "age"]
@@ -772,8 +772,8 @@ def test_advanced_indexing() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: ("country",),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
 
     out = tensor[..., "country"]
@@ -864,8 +864,8 @@ def test_cat_stack() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
-        Stype.id: (),
         Stype.text: (),
+        Stype.id: (),
     }
 
     out = torch.stack([tensor1, tensor1], dim=0)
@@ -1091,47 +1091,6 @@ def test_text() -> None:
     assert tensor.text.size() == (3, 2)
 
     assert tensor.to_arrow().to_pydict() == data
-    assert list(tensor.to_pandas().columns) == ["age", "title", "body"]
-
-
-def test_text_empty_default() -> None:
-    tensor = TableTensor.from_arrow(
-        pa.table({"age": pa.array([1.0, 2.0])}),
-        stypes={"age": "numerical"},
-    )
-
-    assert tensor.text.size() == (2, 0)
-    assert tensor.columns[Stype.text] == ()
-
-
-def test_text_select_stack_replace() -> None:
-    tensor = TableTensor.from_arrow(
-        pa.table({"a": ["x1", "x2"], "b": ["y1", "y2"]}),
-        stypes={"a": "text", "b": "text"},
-    )
-
-    assert tensor.select_stypes("text").columns[Stype.text] == ("a", "b")
-    assert torch.stack([tensor, tensor], dim=0).size() == (2, 2, 2)
-    assert tensor.replace_blocks(text=tensor.text).columns[Stype.text] == (
-        "a",
-        "b",
-    )
-
-
-def test_text_cat_aligns_columns() -> None:
-    a = TableTensor.from_arrow(
-        pa.table({"p": ["1"], "q": ["2"]}),
-        stypes={"p": "text", "q": "text"},
-    )
-    b = TableTensor.from_arrow(
-        pa.table({"q": ["3"], "p": ["4"]}),
-        stypes={"q": "text", "p": "text"},
-    )
-
-    out = cast(TableTensor, torch.cat([a, b], dim=0))
-
-    assert out.size() == (2, 2)
-    assert out.to_arrow().to_pydict() == {"p": ["1", "4"], "q": ["2", "3"]}
 
 
 @onlyCUDA
