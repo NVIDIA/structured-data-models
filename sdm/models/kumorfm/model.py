@@ -8,6 +8,7 @@ from torch.nn import GELU, Linear, Sequential
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
@@ -41,6 +42,11 @@ class KumoRFM(ICLModel):
     #:
     supports_related_tables: ClassVar[bool] = True
 
+    _checkpoint_filenames: ClassVar[dict[str, str]] = {
+        "classifier": "cls-model.pt",
+        "regressor": "reg-model.pt",
+    }
+
     def __init__(
         self,
         pretrained: bool = True,
@@ -57,9 +63,42 @@ class KumoRFM(ICLModel):
         self.reg_model = _KumoRFM(
             num_classes=0,
             num_quantiles=999,
-            norm_bias=False,
+            norm_bias=True,
             device=device,
         )
+
+        if pretrained:
+            self._load_from_pretrained()
+
+        self.eval()
+
+    def _load_from_pretrained(self) -> "KumoRFM":
+        device = next(self.parameters()).device
+
+        for variant, filename in self._checkpoint_filenames.items():
+            path = download_checkpoint(
+                repo_id="nvidia/kumorfm-2",
+                filename=filename,
+                revision="v2.1.0",
+            )
+            checkpoint = torch.load(
+                path,
+                map_location=device,
+                weights_only=True,
+            )
+            state_dict = checkpoint.get("state_dict", checkpoint)
+            model = (
+                self.cls_model if variant == "classifier" else self.reg_model
+            )
+            model.load_state_dict(
+                _remap_v2_1_checkpoint(
+                    state_dict,
+                    is_classifier=variant == "classifier",
+                ),
+                strict=True,
+            )
+
+        return self
 
     def _forward(
         self,
@@ -321,3 +360,104 @@ class _KumoRFM(torch.nn.Module):
             del x_query
         x = self.icl_block(x, y, cache=cache)
         return self.head(x)
+
+
+def _remap_v2_1_checkpoint(
+    state_dict: dict[str, Tensor],
+    *,
+    is_classifier: bool,
+) -> dict[str, Tensor]:
+    def _map_transformer(tail: str) -> str:
+        replacements = {
+            "norm1_1": "q_norm",
+            "norm1_2": "kv_norm",
+            "attn.packed_lin": "attn.qkv_lin",
+            "attn.ssmax_scale": "attn.sdpa.qassmax.scale",
+            "attn.ssmax_gate": "attn.sdpa.qassmax.gate",
+            "norm2": "mlp.0",
+            "lin1": "mlp.1",
+            "lin2": "mlp.3",
+        }
+        for old, new in replacements.items():
+            if tail == old:
+                return new
+            if tail.startswith(f"{old}."):
+                return f"{new}{tail[len(old) :]}"
+        return tail
+
+    if is_classifier:
+        ignored_prefixes = (
+            "row_embedding.y_reg_lin.",
+            "icl_block.y_reg_lin.",
+            "icl_block.reg_head.",
+        )
+        variant_replacements = (
+            ("row_embedding.y_cls_lin.", "row_embedding.y_emb."),
+            ("icl_block.y_cls_lin.", "icl_block.y_emb."),
+            ("icl_block.cls_head.", "head.2."),
+        )
+    else:
+        ignored_prefixes = (
+            "row_embedding.y_cls_lin.",
+            "icl_block.y_cls_lin.",
+            "icl_block.cls_head.",
+        )
+        variant_replacements = (
+            ("row_embedding.y_reg_lin.", "row_embedding.y_lin."),
+            ("icl_block.y_reg_lin.", "icl_block.y_lin."),
+            ("icl_block.reg_head.", "head.2."),
+        )
+
+    prefix_replacements = (
+        *variant_replacements,
+        ("gnn.post_lin.", "gnn.out_lin."),
+        ("gnn.post_norm.", "gnn.out_norm."),
+        ("icl_block.mlp.0.", "icl_block.norm."),
+        ("icl_block.mlp.1.", "head.0."),
+    )
+    remapped: dict[str, Tensor] = {}
+
+    for key, value in state_dict.items():
+        if key == "q" or key.startswith(ignored_prefixes):
+            continue
+
+        if key.startswith("row_embedding.inducing_vectors."):
+            layer = key.removeprefix("row_embedding.inducing_vectors.")
+            key = f"row_embedding.col_layers.{layer}.inducing_points"
+            value = value.squeeze(1)
+        elif key == "row_embedding.readout_token":
+            value = value.squeeze(0)
+        else:
+            for old_prefix, new_prefix, module in (
+                (
+                    "row_embedding.col_to_set_layers.",
+                    "row_embedding.col_layers.",
+                    "transformer_1.",
+                ),
+                (
+                    "row_embedding.set_to_col_layers.",
+                    "row_embedding.col_layers.",
+                    "transformer_2.",
+                ),
+                (
+                    "row_embedding.row_layers.",
+                    "row_embedding.row_layers.",
+                    "",
+                ),
+                ("icl_block.layers.", "icl_block.layers.", ""),
+            ):
+                if key.startswith(old_prefix):
+                    layer, _, tail = key[len(old_prefix) :].partition(".")
+                    key = (
+                        f"{new_prefix}{layer}.{module}{_map_transformer(tail)}"
+                    )
+                    break
+
+        for old_prefix, new_prefix in prefix_replacements:
+            if key.startswith(old_prefix):
+                key = f"{new_prefix}{key[len(old_prefix) :]}"
+                break
+
+        remapped[key] = value
+
+    return remapped
