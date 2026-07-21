@@ -29,12 +29,12 @@ class KumoRFM(ICLModel):
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
+        device: The device.
         repo_id: Hugging Face repository containing the checkpoints.
         revision: Hugging Face branch, tag, or commit containing the
             checkpoints.
         cache_dir: Directory used for the Hugging Face cache.
         local_files_only: Whether to use only locally cached checkpoints.
-        device: The device.
     """
 
     #:
@@ -56,11 +56,12 @@ class KumoRFM(ICLModel):
     def __init__(
         self,
         pretrained: bool = True,
+        device: torch.device | str | None = None,
+        *,
         repo_id: str = "nvidia/kumorfm-2",
         revision: str | None = "v2.1.0",
         cache_dir: str | Path | None = None,
         local_files_only: bool = False,
-        device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
 
@@ -73,7 +74,7 @@ class KumoRFM(ICLModel):
         self.reg_model = _KumoRFM(
             num_classes=0,
             num_quantiles=999,
-            norm_bias=False,
+            norm_bias=True,
             device=device,
         )
 
@@ -114,7 +115,13 @@ class KumoRFM(ICLModel):
             model = (
                 self.cls_model if variant == "classifier" else self.reg_model
             )
-            model.load_state_dict(state_dict, strict=True)
+            model.load_state_dict(
+                _remap_v2_1_checkpoint(
+                    state_dict,
+                    is_classifier=variant == "classifier",
+                ),
+                strict=True,
+            )
 
         return self
 
@@ -344,3 +351,124 @@ class _KumoRFM(torch.nn.Module):
         # Reason across Tables ################################################
         x = self.icl_block(torch.cat([x_context, x_query], dim=-2), y)
         return self.head(x)
+
+
+def _remap_transformer_tail(key: str) -> str:
+    replacements = {
+        "norm1_1": "q_norm",
+        "norm1_2": "kv_norm",
+        "attn.packed_lin": "attn.qkv_lin",
+        "attn.ssmax_scale": "attn.sdpa.qassmax.scale",
+        "attn.ssmax_gate": "attn.sdpa.qassmax.gate",
+        "norm2": "mlp.0",
+        "lin1": "mlp.1",
+        "lin2": "mlp.3",
+    }
+    for old, new in replacements.items():
+        if key == old:
+            return new
+        if key.startswith(f"{old}."):
+            return f"{new}{key[len(old) :]}"
+    return key
+
+
+def _remap_transformer_stack(
+    key: str,
+    *,
+    old_prefix: str,
+    new_prefix: str,
+    module: str = "",
+) -> str | None:
+    if not key.startswith(old_prefix):
+        return None
+
+    layer, separator, tail = key[len(old_prefix) :].partition(".")
+    if not separator:
+        return key
+    return f"{new_prefix}{layer}.{module}{_remap_transformer_tail(tail)}"
+
+
+def _remap_v2_1_checkpoint(
+    state_dict: dict[str, Tensor],
+    *,
+    is_classifier: bool,
+) -> dict[str, Tensor]:
+    if is_classifier:
+        ignored_prefixes = (
+            "row_embedding.y_reg_lin.",
+            "icl_block.y_reg_lin.",
+            "icl_block.reg_head.",
+        )
+        variant_replacements = (
+            ("row_embedding.y_cls_lin.", "row_embedding.y_emb."),
+            ("icl_block.y_cls_lin.", "icl_block.y_emb."),
+            ("icl_block.cls_head.", "head.2."),
+        )
+    else:
+        ignored_prefixes = (
+            "row_embedding.y_cls_lin.",
+            "icl_block.y_cls_lin.",
+            "icl_block.cls_head.",
+        )
+        variant_replacements = (
+            ("row_embedding.y_reg_lin.", "row_embedding.y_lin."),
+            ("icl_block.y_reg_lin.", "icl_block.y_lin."),
+            ("icl_block.reg_head.", "head.2."),
+        )
+
+    prefix_replacements = (
+        *variant_replacements,
+        ("gnn.post_lin.", "gnn.out_lin."),
+        ("gnn.post_norm.", "gnn.out_norm."),
+        ("icl_block.mlp.0.", "icl_block.norm."),
+        ("icl_block.mlp.1.", "head.0."),
+    )
+    remapped: dict[str, Tensor] = {}
+
+    for key, value in state_dict.items():
+        if key == "q" or key.startswith(ignored_prefixes):
+            continue
+
+        if key.startswith("row_embedding.inducing_vectors."):
+            layer = key.removeprefix("row_embedding.inducing_vectors.")
+            key = f"row_embedding.col_layers.{layer}.inducing_points"
+            value = value.squeeze(1)
+        elif key == "row_embedding.readout_token":
+            value = value.squeeze(0)
+        else:
+            for old_prefix, new_prefix, module in (
+                (
+                    "row_embedding.col_to_set_layers.",
+                    "row_embedding.col_layers.",
+                    "transformer_1.",
+                ),
+                (
+                    "row_embedding.set_to_col_layers.",
+                    "row_embedding.col_layers.",
+                    "transformer_2.",
+                ),
+                (
+                    "row_embedding.row_layers.",
+                    "row_embedding.row_layers.",
+                    "",
+                ),
+                ("icl_block.layers.", "icl_block.layers.", ""),
+            ):
+                mapped = _remap_transformer_stack(
+                    key,
+                    old_prefix=old_prefix,
+                    new_prefix=new_prefix,
+                    module=module,
+                )
+                if mapped is not None:
+                    key = mapped
+                    break
+
+        for old_prefix, new_prefix in prefix_replacements:
+            if key.startswith(old_prefix):
+                key = f"{new_prefix}{key[len(old_prefix) :]}"
+                break
+
+        remapped[key] = value
+
+    return remapped

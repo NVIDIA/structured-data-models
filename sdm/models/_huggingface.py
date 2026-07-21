@@ -18,22 +18,21 @@ def download_checkpoint(
     configured login or the ``HF_TOKEN`` environment variable for private
     repositories.
     """
-    if not local_files_only:
-        try:
-            return hf_hub_download(
-                repo_id=repo_id,
-                filename=filename,
-                revision=revision,
-                cache_dir=cache_dir,
-                local_files_only=True,
-            )
-        except LocalEntryNotFoundError:
-            pass
-
-    return hf_hub_download(
-        repo_id=repo_id,
-        filename=filename,
-        revision=revision,
-        cache_dir=cache_dir,
-        local_files_only=local_files_only,
-    )
+    try:
+        return hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            revision=revision,
+            cache_dir=cache_dir,
+            local_files_only=True,
+        )
+    except LocalEntryNotFoundError:
+        if local_files_only:
+            raise
+        return hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            revision=revision,
+            cache_dir=cache_dir,
+            local_files_only=False,
+        )
