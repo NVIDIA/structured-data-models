@@ -127,7 +127,7 @@ class CellEmbedder(torch.nn.Module):
         if cat_mask is None:
             return numerical.sum(dim=-2)
 
-        angles = grouped * self.fourier_frequencies_cat.float()
+        angles = grouped * self.fourier_frequencies_cat
         fourier = torch.cat([angles.sin(), angles.cos()], dim=-1).to(x.dtype)
         categorical = self.in_linear_cat(fourier)
         grouped_mask = self._group(
