@@ -157,7 +157,7 @@ def test_repr() -> None:
         )""")
     assert repr(Sequential(lambda table: table)) == dedent("""\
         Sequential(
-          Lambda(),
+          lambda,
         )""")
 
 
