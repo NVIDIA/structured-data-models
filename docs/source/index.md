@@ -12,6 +12,7 @@ install
 :maxdepth: 1
 
 recipe
+explainability
 ```
 
 ```{toctree}
@@ -24,4 +25,5 @@ api/relational
 api/processing
 api/nn
 api/models
+api/explain
 ```
