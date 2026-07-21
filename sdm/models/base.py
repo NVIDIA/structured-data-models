@@ -361,6 +361,7 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
                 cache=cache.to(x_i.device),
+                generator=None,
                 **cast(dict[str, Any], cache["kwargs"]),
             )
             if cache["classes"] is None:
