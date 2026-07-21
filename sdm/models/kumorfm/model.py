@@ -108,6 +108,7 @@ class KumoRFM(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
 
@@ -124,8 +125,8 @@ class KumoRFM(ICLModel):
             related_context_tables=related_context_tables,
             related_query_tables=related_query_tables,
             cache=cache,
+            generator=generator,
             num_hops=kwargs.get("num_hops"),
-            generator=kwargs.get("generator"),
         )
 
         if classes is None:
@@ -217,8 +218,8 @@ class _KumoRFM(torch.nn.Module):
         related_query_tables: RelatedTables | None,
         *,
         cache: Cache | None = None,
-        num_hops: int | None = None,
         generator: torch.Generator | None = None,
+        num_hops: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
         if related_context_tables is None and related_query_tables is None:

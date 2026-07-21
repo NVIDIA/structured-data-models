@@ -78,11 +78,8 @@ class ICLModel(torch.nn.Module, ABC):
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators for ensembling.
-            generator: Generator used for random draws while fitting recipe
-                processors and for random draws inside the model forward
-                pass. The same generator is passed to every estimator and
-                related-table processor. If ``None``, draws use the global
-                generator.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
@@ -210,11 +207,8 @@ class ICLModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
-            generator: Generator used for random draws while fitting recipe
-                processors and for random draws inside the model forward
-                pass. The same generator is passed to every estimator and
-                related-table processor. If ``None``, draws use the global
-                generator.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
         if num_estimators < 1:
@@ -394,6 +388,7 @@ class ICLModel(torch.nn.Module, ABC):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
         pass
