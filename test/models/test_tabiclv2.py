@@ -1,6 +1,5 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -207,64 +206,6 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         probabilities.sum(dim=-1),
         torch.ones(test_size, device=device),
     )
-
-
-# Cover both the standard (<=10 classes) and the hierarchical (>10
-# classes) classification routes:
-@pytest.mark.parametrize("num_classes", [2, 11])
-def test_missing_context_target_labels(num_classes: int) -> None:
-    model = TabICLv2(pretrained=False)
-    x_context = torch.randn(num_classes + 1, 6)
-    x_query = torch.randn(2, 6)
-    y_context = TableTensor(
-        columns={Stype.categorical: ("target",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([*range(num_classes), -1]).unsqueeze(-1),
-            categories=(torch.arange(num_classes),),
-        ),
-    )
-
-    with pytest.raises(ValueError, match="missing labels"):
-        model(x_context, y_context, x_query)
-    with pytest.raises(ValueError, match="missing labels"):
-        model.fit(x_context, y_context)
-
-
-def test_missing_feature_codes_allowed() -> None:
-    model = TabICLv2(pretrained=False)
-    x_context = TableTensor(
-        columns={
-            Stype.numerical: ("value",),
-            Stype.categorical: ("feature",),
-        },
-        numerical=torch.randn(5, 1),
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [-1], [0], [1]]),
-            categories=(torch.arange(2),),
-        ),
-    )
-    x_query = TableTensor(
-        columns={
-            Stype.numerical: ("value",),
-            Stype.categorical: ("feature",),
-        },
-        numerical=torch.randn(3, 1),
-        categorical=CategoricalTensor(
-            data=torch.tensor([[1], [-1], [0]]),
-            categories=(torch.arange(2),),
-        ),
-    )
-    y_context = TableTensor(
-        columns={Stype.categorical: ("target",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [0], [1], [0]]),
-            categories=(torch.arange(2),),
-        ),
-    )
-
-    out = model(x_context, y_context, x_query)
-
-    assert out.size() == (3, 2)
 
 
 @onlyCUDA

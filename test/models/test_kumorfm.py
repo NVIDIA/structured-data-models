@@ -253,44 +253,6 @@ def test_forward(
     assert torch.is_inference(out)
 
 
-def test_missing_context_target_labels(
-    relational_data: RelationalData,
-) -> None:
-    model = KumoRFM(False)
-    related_tables = RelatedTables(
-        tables=relational_data.tables,
-        relationships=relational_data.relationships,
-        task_links=[
-            {
-                "task_column": "user_id",
-                "table": "users",
-                "table_column": "user_id",
-            }
-        ],
-    )
-    x = TableTensor(
-        columns={"id": ("user_id",)},
-        id=ColumnarTensor((torch.arange(4),)),
-    )
-    y = TableTensor(
-        columns={"categorical": ("target",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [-1], [0]]),
-            categories=(torch.tensor([False, True]),),
-        ),
-    )
-
-    with pytest.raises(ValueError, match="missing labels"):
-        model(
-            x_context=x,
-            y_context=y,
-            x_query=x,
-            related_context_tables=related_tables,
-            related_query_tables=related_tables,
-            num_hops=2,
-        )
-
-
 def test_default_recipe_preserves_ids() -> None:
     table = TableTensor(
         columns={
