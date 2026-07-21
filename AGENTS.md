@@ -13,7 +13,7 @@ Do not add platform or serving abstractions unless explicitly requested.
 
 # Testing
 
-- Tests should be sensitive to behavior changes and insensitive to structure changes (Kent Beck). Prefer asserting public observable behavior over implementation details.
+- Tests should be sensitive to behavior changes and insensitive to structure changes. Prefer asserting public observable behavior over implementation details.
 
 # PR / GitHub Metadata
 
