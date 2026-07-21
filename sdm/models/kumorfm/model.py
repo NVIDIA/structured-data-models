@@ -1,4 +1,5 @@
 # ruff: noqa: D205
+from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -6,7 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -260,26 +261,32 @@ class _KumoRFM(torch.nn.Module):
         # TODO Inject random heterogeneous GNN.
 
         graph: HomogeneousGraph | None = None
+        y_graph: Tensor | None = None
         if related_context_tables is not None:
             graph = HomogeneousGraph.from_tables(
                 tables=related_context_tables.tables,
                 relationships=related_context_tables.relationships,
             )
-
-            entity_table = related_context_tables.task_links[0].table
-            context_roots = _task_roots(x_context, related_context_tables)
-            query_roots = _task_roots(x_query, related_query_tables)
-
-            labels = _propagate_targets(
-                y=y,
-                root_index=(
-                    context_roots
-                    + context_graph.start_node_offsets[entity_table]
+            task_indices = RelationalData(
+                tables=related_context_tables.tables
+                | {"__task_link__": x_context},
+                relationships=tuple(
+                    Relationship(
+                        left_table="__task_link__",
+                        left_columns=task_link.task_columns,
+                        right_table=task_link.table,
+                        right_columns=task_link.table_columns,
+                    )
+                    for task_link in related_context_tables.task_links
                 ),
-                graph=context_graph,
+            ).edge_indices()
+
+            y_graph = _propagate_y(
+                y=y,
+                graph=graph,
+                task_indices=task_indices,
                 num_hops=num_hops,
-                num_classes=num_classes or 0,
-                dtype=related_context_tables.tables[entity_table].dtype,
+                num_classes=num_classes,
             )
 
         # Reason within each Table ############################################
