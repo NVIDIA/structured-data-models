@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 import torch
 from sdm import Stype, TableTensor
@@ -6,17 +6,23 @@ from sdm.processing import EncodeDatetime
 
 
 def _timestamp(value: datetime) -> int:
+    # 'EncodeDatetime' decodes UTC calendar fields, so expected values
+    # must be built from timezone-aware datetimes. Naive datetimes are
+    # interpreted in the host's local timezone by 'datetime.timestamp'.
+    assert value.tzinfo is timezone.utc
     return int(value.timestamp() * 1_000_000)
 
 
 def test_datetime_features_calendar_channels_and_missing_values() -> None:
     missing = torch.iinfo(torch.int64).min
+    utc = timezone.utc
     table = TableTensor(
         columns={Stype.datetime: ("event_time",)},
         datetime=torch.tensor(
             [
-                [_timestamp(datetime(2024, 2, 29, 23, 59))],
-                [_timestamp(datetime(2023, 3, 1))],
+                [_timestamp(datetime(2024, 2, 29, 23, 59, tzinfo=utc))],
+                [_timestamp(datetime(2023, 3, 1, tzinfo=utc))],
+                [_timestamp(datetime(1969, 12, 31, 23, 1, tzinfo=utc))],
                 [missing],
             ]
         ),
@@ -40,6 +46,7 @@ def test_datetime_features_calendar_channels_and_missing_values() -> None:
             [
                 [59, 23, 3, 28, 1],
                 [0, 0, 2, 0, 2],
+                [1, 23, 2, 30, 11],
                 [float("NaN")] * 5,
             ]
         ),
