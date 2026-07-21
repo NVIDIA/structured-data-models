@@ -12,6 +12,7 @@ from sdm.models import KumoRFM
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
+from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
 from sdm.testing import withCUDA
 
 
@@ -247,11 +248,11 @@ def test_forward(
         y_context=y,
         x_query=x,
         related_context_tables=related_tables,
-        related_query_tables=related_tables.select_tables(tables=["users"]),
+        related_query_tables=related_tables,
         num_hops=2,
     )
 
-    assert out.size(-2) == 2
+    assert out.size(-2) == 4
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
