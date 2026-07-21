@@ -328,46 +328,29 @@ class _KumoRFM(torch.nn.Module):
         return self.head(x)
 
 
-def _remap_transformer_tail(key: str) -> str:
-    replacements = {
-        "norm1_1": "q_norm",
-        "norm1_2": "kv_norm",
-        "attn.packed_lin": "attn.qkv_lin",
-        "attn.ssmax_scale": "attn.sdpa.qassmax.scale",
-        "attn.ssmax_gate": "attn.sdpa.qassmax.gate",
-        "norm2": "mlp.0",
-        "lin1": "mlp.1",
-        "lin2": "mlp.3",
-    }
-    for old, new in replacements.items():
-        if key == old:
-            return new
-        if key.startswith(f"{old}."):
-            return f"{new}{key[len(old) :]}"
-    return key
-
-
-def _remap_transformer_stack(
-    key: str,
-    *,
-    old_prefix: str,
-    new_prefix: str,
-    module: str = "",
-) -> str | None:
-    if not key.startswith(old_prefix):
-        return None
-
-    layer, separator, tail = key[len(old_prefix) :].partition(".")
-    if not separator:
-        return key
-    return f"{new_prefix}{layer}.{module}{_remap_transformer_tail(tail)}"
-
-
 def _remap_v2_1_checkpoint(
     state_dict: dict[str, Tensor],
     *,
     is_classifier: bool,
 ) -> dict[str, Tensor]:
+    def _map_transformer(tail: str) -> str:
+        replacements = {
+            "norm1_1": "q_norm",
+            "norm1_2": "kv_norm",
+            "attn.packed_lin": "attn.qkv_lin",
+            "attn.ssmax_scale": "attn.sdpa.qassmax.scale",
+            "attn.ssmax_gate": "attn.sdpa.qassmax.gate",
+            "norm2": "mlp.0",
+            "lin1": "mlp.1",
+            "lin2": "mlp.3",
+        }
+        for old, new in replacements.items():
+            if tail == old:
+                return new
+            if tail.startswith(f"{old}."):
+                return f"{new}{tail[len(old) :]}"
+        return tail
+
     if is_classifier:
         ignored_prefixes = (
             "row_embedding.y_reg_lin.",
@@ -429,14 +412,11 @@ def _remap_v2_1_checkpoint(
                 ),
                 ("icl_block.layers.", "icl_block.layers.", ""),
             ):
-                mapped = _remap_transformer_stack(
-                    key,
-                    old_prefix=old_prefix,
-                    new_prefix=new_prefix,
-                    module=module,
-                )
-                if mapped is not None:
-                    key = mapped
+                if key.startswith(old_prefix):
+                    layer, _, tail = key[len(old_prefix) :].partition(".")
+                    key = (
+                        f"{new_prefix}{layer}.{module}{_map_transformer(tail)}"
+                    )
                     break
 
         for old_prefix, new_prefix in prefix_replacements:
