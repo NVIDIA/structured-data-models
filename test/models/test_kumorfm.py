@@ -361,8 +361,10 @@ def test_forward_honors_generator(relational_data: RelationalData) -> None:
         )
         return out.numerical
 
-    assert _call(0).equal(_call(0))
-    assert not _call(0).equal(_call(1))
+    out = _call(0)
+
+    assert out.equal(_call(0))
+    assert not out.equal(_call(1))
 
 
 def test_default_recipe_preserves_ids() -> None:

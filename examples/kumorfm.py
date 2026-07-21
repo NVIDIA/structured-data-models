@@ -80,17 +80,18 @@ kwargs = {
     "task_time_column": task.time_col,
 }
 # `KumoRFM` does not support `fit()`+`predict()` yet, so pass context and
-# query examples together in a single direct call:
+# query examples together in a single direct call. Each call fits its own
+# preprocessing recipe on the given context examples.
 train_table, related_context_tables = sampler(train_table, **kwargs).to(device)
+x_context = train_table.drop_columns(task.target_col)
+y_context = train_table[task.target_col]
 
 test_table = task_tables[-1].drop_columns(task.target_col)
-for test_batch in test_table.split(args.batch_size):
-    query_table, related_query_tables = sampler(test_batch, **kwargs).to(
-        device
-    )
+for batch in test_table.split(args.batch_size):
+    query_table, related_query_tables = sampler(batch, **kwargs).to(device)
     model(
-        x_context=train_table.drop_columns(task.target_col),
-        y_context=train_table[task.target_col],
+        x_context=x_context,
+        y_context=y_context,
         x_query=query_table,
         related_context_tables=related_context_tables,
         related_query_tables=related_query_tables,
