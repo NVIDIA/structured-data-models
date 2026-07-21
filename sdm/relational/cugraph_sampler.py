@@ -34,15 +34,14 @@ class CuGraphRelationalSampler(RelationalSampler):
 
     The sampler materializes a persistent single-GPU cuGraph topology and
     keeps task lookup, sampling, and output assembly on the CUDA device.
-    For temporal data, each hop gathers eligible neighbors with cuGraph and
-    applies the ``"last"`` top-k selection on CUDA against the original task
-    cutoff. This matches the node-time semantics of
-    :class:`RelationalSampler` without propagating edge times between hops.
+    For temporal data, each hop samples uniformly from eligible neighbors
+    against the original task cutoff. This retains a fixed cutoff across hops
+    instead of propagating sampled edge times.
 
     Args:
         data: CUDA-resident tables and their relationships.
         time_columns: Mapping from table name to the datetime column used for
-            temporal ``"last"`` sampling.
+            uniform temporal sampling.
         random_state: Seed for the advancing cuGraph random-state stream.
     """
 
@@ -157,7 +156,6 @@ class CuGraphRelationalSampler(RelationalSampler):
         dsts: list[Tensor] = []
         edge_types: list[Tensor] = []
         edge_times: list[Tensor] = []
-        target_is_temporal: list[bool] = []
         minimum_time = torch.iinfo(torch.int64).min
 
         times = {
@@ -189,18 +187,11 @@ class CuGraphRelationalSampler(RelationalSampler):
                 (relationship.left_table, left),
                 (relationship.right_table, right),
             ):
-                target_is_temporal.append(table_name in times)
                 if table_name in times:
                     edge_times.append(times[table_name][index])
                 else:
                     edge_times.append(torch.full_like(index, minimum_time))
 
-        self._edge_target_is_temporal = torch.tensor(
-            target_is_temporal,
-            dtype=torch.bool,
-            device=self.data.device,
-        )
-        self._edge_target_is_temporal_host = tuple(target_is_temporal)
         if self._num_edge_types == 0:
             self._resource_handle = None
             self._graph = None
@@ -500,12 +491,6 @@ class CuGraphRelationalSampler(RelationalSampler):
         if count == 0:
             return torch.empty(0, dtype=torch.int64, device=self.data.device)
         fanout = np.full(self._num_edge_types, count, dtype=np.int32)
-        if count > 0:
-            # PyG's temporal "last" strategy keeps the newest neighbors per
-            # task example, source, and edge type. cuGraph filters by cutoff
-            # but cannot apply that grouped latest-k here, so gather all
-            # temporal candidates and reproduce the selection below on CUDA.
-            fanout[np.asarray(self._edge_target_is_temporal_host)] = -1
 
         result = (
             self._pylibcugraph.heterogeneous_uniform_temporal_neighbor_sample(
@@ -536,58 +521,8 @@ class CuGraphRelationalSampler(RelationalSampler):
         if minor.numel() == 0:
             return minor
         batch = self._as_tensor(result["batch_id"]).long()
-        if count > 0:
-            major = self._as_tensor(result["majors"])
-            edge_type = self._as_tensor(result["edge_type"]).long()
-            edge_time = self._as_tensor(result["edge_start_time"])
-            is_temporal = self._edge_target_is_temporal[edge_type]
-            keep = ~is_temporal
-            selected = self._last_per_source(
-                batch=batch[is_temporal],
-                major=major[is_temporal],
-                edge_type=edge_type[is_temporal],
-                edge_time=edge_time[is_temporal],
-                count=count,
-            )
-            temporal_index = is_temporal.nonzero().flatten()
-            keep[temporal_index[selected]] = True
-            minor = minor[keep]
-            batch = batch[keep]
 
         return batch * self._num_vertices + minor
-
-    @staticmethod
-    def _last_per_source(
-        batch: Tensor,
-        major: Tensor,
-        edge_type: Tensor,
-        edge_time: Tensor,
-        count: int,
-    ) -> Tensor:
-        """Return PyG-compatible latest-k indices for each source group."""
-        if batch.numel() == 0:
-            return torch.empty(0, dtype=torch.int64, device=batch.device)
-
-        order = edge_time.argsort(descending=True, stable=True)
-        for value in (edge_type, major, batch):
-            order = order[value[order].argsort(stable=True)]
-
-        sorted_batch = batch[order]
-        sorted_major = major[order]
-        sorted_type = edge_type[order]
-        group_start = torch.ones(
-            order.numel(),
-            dtype=torch.bool,
-            device=order.device,
-        )
-        group_start[1:] = (
-            (sorted_batch[1:] != sorted_batch[:-1])
-            | (sorted_major[1:] != sorted_major[:-1])
-            | (sorted_type[1:] != sorted_type[:-1])
-        )
-        position = torch.arange(order.numel(), device=order.device)
-        start = torch.where(group_start, position, -1).cummax(0).values
-        return order[(position - start) < count]
 
     def _seed_nodes(
         self,
