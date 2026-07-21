@@ -1,4 +1,5 @@
 # ruff: noqa: D205
+from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import torch
@@ -6,7 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -109,6 +110,7 @@ class KumoRFM(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
 
@@ -131,8 +133,8 @@ class KumoRFM(ICLModel):
             related_context_tables=related_context_tables,
             related_query_tables=related_query_tables,
             cache=cache,
+            generator=generator,
             num_hops=kwargs.get("num_hops"),
-            generator=kwargs.get("generator"),
         )
 
         if classes is None:
@@ -224,9 +226,14 @@ class _KumoRFM(torch.nn.Module):
         related_query_tables: RelatedTables | None,
         *,
         cache: Cache | None = None,
-        num_hops: int | None = None,
         generator: torch.Generator | None = None,
+        num_hops: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
+
+        if related_context_tables is None and related_query_tables is None:
+            raise ValueError(
+                f"'{self.__class__.__name__}' requires related tables"
+            )
 
         for tables in (related_context_tables, related_query_tables):
             if tables is not None and len(tables.task_links) != 1:
@@ -235,14 +242,12 @@ class _KumoRFM(torch.nn.Module):
                     f"link to an entity table (got {len(tables.task_links)})"
                 )
 
-        # TODO Support `fit+predict`:
-        assert x_context is not None
-        assert y_context is not None
-        assert x_query is not None
-        assert related_context_tables is not None
-        assert related_query_tables is not None
+        if num_hops is None:  # Infer `num_hops`:
+            num_hops = 2  # TODO Support automatic `num_hops` detection.
+            if cache is not None and cache.is_recording:
+                cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
 
-        num_classes: int | None = None
+        num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
             y = y_context.categorical.as_tensor().squeeze(-1)
             num_classes = len(y_context.categorical.categories[0])
@@ -252,17 +257,11 @@ class _KumoRFM(torch.nn.Module):
             assert cache is not None
             if isinstance(cache["classes"], Tensor):
                 num_classes = len(cache["classes"])
-            dtype = torch.float32 if num_classes is None else torch.int64
             y = torch.empty(
-                (0,),
-                dtype=dtype,
+                (0,),  # NOTE Guaranteed to be 1D for now.
+                dtype=torch.float32 if num_classes is None else torch.int64,
                 device=next(self.parameters()).device,
             )
-
-        if num_hops is None:
-            num_hops = 2  # TODO Support automatic `num_hops` detection.
-            if cache is not None and cache.is_recording:
-                cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
 
         # TODO Support computing relative time.
         context_graph = HomogeneousGraph.from_related_tables(
@@ -320,9 +319,19 @@ class _KumoRFM(torch.nn.Module):
                 y=labels[start:end],
                 max_keys=self.max_train_size,
                 num_classes=num_classes,
-                cache=None,  # TODO
+                cache=table_cache,
                 generator=generator,
-            ).split([x_context_i.size(-2), x_query_i.size(-2)], dim=-2)
+            )
+
+            if related_context_tables is not None:
+                num_rows = related_context_tables.tables[name].size(-2)
+                xs_context[name] = x_i[..., :num_rows, :]
+            if related_query_tables is not None:
+                num_rows = related_query_tables.tables[name].size(-2)
+                xs_query[name] = x_i[..., -num_rows:, :]
+
+            if cache is not None and cache.is_recording:
+                cache[f"table_{name}"] = cast(Cache, table_cache)
 
         # Inter-Message Passing Exchange ######################################
         context_embedding = torch.cat(

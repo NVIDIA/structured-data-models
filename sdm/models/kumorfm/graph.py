@@ -18,7 +18,7 @@ class HomogeneousGraph:  # noqa: D101
     end_node_offsets: dict[str, int]
 
     @classmethod
-    def from_related_tables(  # noqa: D102
+    def from_tables(  # noqa: D102
         cls,
         related_tables: RelatedTables,
         relationship_order: Sequence[Relationship] | None = None,
@@ -34,7 +34,7 @@ class HomogeneousGraph:  # noqa: D101
         start = 0
         start_node_offsets: dict[str, int] = {}
         end_node_offsets: dict[str, int] = {}
-        for table_name, table in related_tables.tables.items():
+        for table_name, table in tables.items():
             assert table.dim() == 2
             start_node_offsets[table_name] = start
             start += table.size(0)
@@ -60,7 +60,7 @@ class HomogeneousGraph:  # noqa: D101
             edge_types.extend([edge_type, edge_type + 1])
 
         if len(rows) == 0:
-            table = next(iter(related_tables.tables.values()))
+            table = next(iter(tables.values()))
             row = torch.empty(0, dtype=torch.long, device=table.device)
             colptr = torch.zeros(
                 start + 1, dtype=torch.long, device=table.device
