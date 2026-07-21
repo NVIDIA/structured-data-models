@@ -31,4 +31,4 @@ def test_cache_size() -> None:
         metadata=torch.ones(100),
     )
 
-    assert cache.size == 3 * 4 + 2 * 8 + 5 + 4 * 2
+    assert cache.size() == 3 * 4 + 2 * 8 + 5 + 4 * 2
