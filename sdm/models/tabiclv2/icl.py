@@ -1,23 +1,24 @@
 # ruff: noqa: D101, D102
 
 import math
+from collections.abc import Callable
 from typing import Any, TypeAlias, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
+from torch.nn import Embedding, LayerNorm, Linear, ModuleList
 
 from sdm.cache import Cache
 from sdm.nn import TransformerBlock
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
+_Head: TypeAlias = Callable[[Tensor], Tensor]
 
 
 class ICLBlock(torch.nn.Module):
     def __init__(
         self,
         num_classes: int,
-        out_channels: int,
         channels: int,
         num_layers: int,
         num_heads: int,
@@ -53,19 +54,6 @@ class ICLBlock(torch.nn.Module):
             self.layers.append(layer)
 
         self.norm = LayerNorm(channels, bias=norm_bias, **factory_kwargs)
-        self.head = Sequential(
-            Linear(
-                in_features=channels,
-                out_features=2 * channels,
-                **factory_kwargs,
-            ),
-            GELU(),
-            Linear(
-                in_features=2 * channels,
-                out_features=out_channels,
-                **factory_kwargs,
-            ),
-        )
 
     def forward(
         self,
@@ -73,13 +61,15 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         num_classes: int | None = None,
+        head: _Head | None = None,
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
-    ) -> Tensor:  # [..., R_test, out_channels or num_classes]
+    ) -> Tensor:  # [..., R_test, D or num_classes]
         if num_classes is None or num_classes <= self.num_classes:
             return self._predict_standard(
                 x=x,
                 y=y,
+                head=head,
                 cache=cache,
                 cache_prefix="icl_block",
                 batch_size_limit=batch_size_limit,
@@ -90,11 +80,17 @@ class ICLBlock(torch.nn.Module):
                 "Hierarchical classification requires 'num_classes' to be "
                 "at least two"
             )
+        if head is None:
+            raise ValueError(
+                "Expected 'head' to be provided for hierarchical "
+                "classification"
+            )
 
         return self._predict_hierarchical(
             x=x,
             y=y,
             num_classes=num_classes,
+            head=head,
             cache=cache,
             batch_size_limit=batch_size_limit,
         )
@@ -104,10 +100,11 @@ class ICLBlock(torch.nn.Module):
         x: Tensor,  # [..., R, D]
         y: Tensor,  # [..., R_train]
         *,
+        head: _Head | None,
         cache: Cache | None,
         cache_prefix: str,
         batch_size_limit: int | None,
-    ) -> Tensor:  # [..., R_test, out_channels]
+    ) -> Tensor:  # [..., R_test, D or out_channels]
         train_size = y.size(-1)
 
         if y.numel() > 0:
@@ -137,7 +134,8 @@ class ICLBlock(torch.nn.Module):
             else:
                 x = result
 
-        return self.head(self.norm(x))  # [..., R_test, out_channels]
+        x = self.norm(x)  # [..., R_test, D]
+        return x if head is None else head(x)
 
     def _predict_hierarchical(
         self,
@@ -145,6 +143,7 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         num_classes: int,
+        head: _Head,
         cache: Cache | None,
         batch_size_limit: int | None,
     ) -> Tensor:  # [..., R_test, C]
@@ -172,6 +171,7 @@ class ICLBlock(torch.nn.Module):
                     test_rows=rows[train_size:],
                     node=tree,
                     num_classes=num_classes,
+                    head=head,
                     cache=cache,
                     cache_prefix=f"icl_block.table{table_idx}.node",
                     batch_size_limit=batch_size_limit,
@@ -187,6 +187,7 @@ class ICLBlock(torch.nn.Module):
                     train_rows=rows[:train_size],
                     train_labels=labels,
                     test_rows=rows[train_size:],
+                    head=head,
                     cache=cache,
                     cache_prefix=f"icl_block.table{table_idx}.node",
                     batch_size_limit=batch_size_limit,
@@ -214,6 +215,7 @@ class ICLBlock(torch.nn.Module):
         node: _Node,
         *,
         num_classes: int,
+        head: _Head,
         cache: Cache,
         cache_prefix: str,
         batch_size_limit: int | None,
@@ -221,6 +223,7 @@ class ICLBlock(torch.nn.Module):
         class_ids, local_log_probs = self._replay_node(
             test_rows=test_rows,
             node=node,
+            head=head,
             cache=cache,
             cache_prefix=cache_prefix,
             batch_size_limit=batch_size_limit,
@@ -237,6 +240,7 @@ class ICLBlock(torch.nn.Module):
         train_labels: Tensor,  # [R_node]
         test_rows: Tensor,  # [R_test, D]
         *,
+        head: _Head,
         cache: Cache | None,
         cache_prefix: str,
         batch_size_limit: int | None,
@@ -259,6 +263,7 @@ class ICLBlock(torch.nn.Module):
                     x=torch.cat((train_rows, test_rows), dim=0),
                     y=local_labels,
                     num_classes=node_num_classes,
+                    head=head,
                     cache=cache,
                     cache_prefix=cache_prefix,
                     batch_size_limit=batch_size_limit,
@@ -279,6 +284,7 @@ class ICLBlock(torch.nn.Module):
             x=torch.cat((train_rows, test_rows), dim=0),
             y=group_labels,
             num_classes=num_groups,
+            head=head,
             cache=cache,
             cache_prefix=cache_prefix,
             batch_size_limit=batch_size_limit,
@@ -293,6 +299,7 @@ class ICLBlock(torch.nn.Module):
                 train_rows=train_rows[mask],
                 train_labels=train_labels[mask],
                 test_rows=test_rows,
+                head=head,
                 cache=cache,
                 cache_prefix=f"{cache_prefix}.child{group_idx}",
                 batch_size_limit=batch_size_limit,
@@ -316,6 +323,7 @@ class ICLBlock(torch.nn.Module):
         test_rows: Tensor,  # [R_test, D]
         node: _Node,
         *,
+        head: _Head,
         cache: Cache,
         cache_prefix: str,
         batch_size_limit: int | None,
@@ -334,6 +342,7 @@ class ICLBlock(torch.nn.Module):
                     x=test_rows,
                     y=class_ids.new_empty((0,)),
                     num_classes=class_ids.numel(),
+                    head=head,
                     cache=cache,
                     cache_prefix=cache_prefix,
                     batch_size_limit=batch_size_limit,
@@ -344,6 +353,7 @@ class ICLBlock(torch.nn.Module):
             x=test_rows,
             y=class_ids.new_empty((0,)),
             num_classes=len(children),
+            head=head,
             cache=cache,
             cache_prefix=cache_prefix,
             batch_size_limit=batch_size_limit,
@@ -354,6 +364,7 @@ class ICLBlock(torch.nn.Module):
             child_ids, child_log_probs = self._replay_node(
                 test_rows=test_rows,
                 node=child,
+                head=head,
                 cache=cache,
                 cache_prefix=f"{cache_prefix}.child{group_idx}",
                 batch_size_limit=batch_size_limit,
@@ -374,6 +385,7 @@ class ICLBlock(torch.nn.Module):
         y: Tensor,  # [R_node] or [0] with cache
         *,
         num_classes: int,
+        head: _Head,
         cache: Cache | None,
         cache_prefix: str,
         batch_size_limit: int | None,
@@ -381,6 +393,7 @@ class ICLBlock(torch.nn.Module):
         logits = self._predict_standard(
             x=x,
             y=y,
+            head=head,
             cache=cache,
             cache_prefix=cache_prefix,
             batch_size_limit=batch_size_limit,

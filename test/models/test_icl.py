@@ -16,7 +16,6 @@ class _StubICLBlock(ICLBlock):
     ) -> None:
         super().__init__(
             num_classes=num_classes,
-            out_channels=max(num_classes, 1),
             channels=4,
             num_layers=0,
             num_heads=1,
@@ -24,12 +23,14 @@ class _StubICLBlock(ICLBlock):
             temperature=temperature,
         )
         self.predictor = predictor
+        self.head = torch.nn.Identity()
 
     def _predict_standard(
         self,
         x: torch.Tensor,
         y: torch.Tensor,
         *,
+        head: Callable[[torch.Tensor], torch.Tensor] | None,
         cache: Cache | None,
         cache_prefix: str,
         batch_size_limit: int | None,
@@ -133,6 +134,7 @@ def test_icl_block_hierarchical_log_probs(
         row_embeddings,
         y,
         num_classes=total_num_classes,
+        head=block.head,
     )
 
     assert calls == expected_calls
@@ -159,6 +161,7 @@ def test_icl_block_hierarchical_nonuniform_log_probs() -> None:
         row_embeddings,
         torch.arange(3),
         num_classes=3,
+        head=block.head,
     )
 
     expected = torch.tensor([0.15, 0.45, 0.4]).log().expand(2, -1)
@@ -183,6 +186,7 @@ def test_icl_block_hierarchical_batched_absent_classes() -> None:
         row_embeddings,
         y,
         num_classes=6,
+        head=block.head,
     )
 
     expected_probabilities = torch.tensor(
@@ -212,6 +216,7 @@ def test_icl_block_hierarchical_preserves_gradients() -> None:
         row_embeddings,
         torch.arange(3),
         num_classes=3,
+        head=block.head,
     )
     log_probs[:, 0].sum().backward()
 
@@ -231,6 +236,7 @@ def test_icl_block_hierarchical_empty_batch() -> None:
         row_embeddings,
         torch.zeros(0, 2, dtype=torch.long),
         num_classes=5,
+        head=block.head,
     )
 
     assert log_probs.size() == (0, 2, 5)
@@ -251,6 +257,7 @@ def test_icl_block_rejects_one_class_hierarchy() -> None:
             torch.randn(3, 4),
             torch.tensor([0, 1]),
             num_classes=2,
+            head=block.head,
         )
 
 
@@ -262,7 +269,6 @@ def test_icl_block_hierarchical_cache(
 ) -> None:
     block = ICLBlock(
         num_classes=2,
-        out_channels=2,
         channels=4,
         num_layers=2,
         num_heads=2,
@@ -270,8 +276,10 @@ def test_icl_block_hierarchical_cache(
         temperature=0.9,
         device=device,
     ).eval()
-    for parameter in block.parameters():
-        torch.nn.init.normal_(parameter, std=0.1)
+    head = torch.nn.Linear(4, 2, device=device)
+    for module in (block, head):
+        for parameter in module.parameters():
+            torch.nn.init.normal_(parameter, std=0.1)
 
     num_classes, test_size = 5, 2
     train_rows = torch.randn(*batch_shape, num_classes, 4, device=device)
@@ -285,6 +293,7 @@ def test_icl_block_hierarchical_cache(
         torch.cat((train_rows, test_rows), dim=-2),
         y,
         num_classes=num_classes,
+        head=head,
     )
 
     cache = Cache()
@@ -292,6 +301,7 @@ def test_icl_block_hierarchical_cache(
         train_rows.clone(),
         y,
         num_classes=num_classes,
+        head=head,
         cache=cache,
     )
     assert recorded.size() == (*batch_shape, 0, num_classes)
@@ -301,6 +311,7 @@ def test_icl_block_hierarchical_cache(
         test_rows.clone(),
         y.new_empty((*batch_shape, 0)),
         num_classes=num_classes,
+        head=head,
         cache=cache.freeze(),
     )
     torch.testing.assert_close(predicted, expected)

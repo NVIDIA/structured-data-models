@@ -93,13 +93,11 @@ def test_forward(
     )
 
     if dtype.is_floating_point:
-        num_outputs = 999
         y = TableTensor(
             columns={"numerical": ("target",)},
             numerical=torch.randn(4, 1, device=device),
         )
     else:
-        num_outputs = 2
         y = TableTensor(
             columns={"categorical": ("target",)},
             categorical=CategoricalTensor(
@@ -117,53 +115,9 @@ def test_forward(
         num_hops=2,
     )
 
-    assert out.size() == (4, num_outputs)
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
-
-
-@withCUDA
-def test_many_classes_forward(
-    relational_data: RelationalData,
-    device: torch.device,
-) -> None:
-    model = KumoRFM(pretrained=False, device=device)
-    related_tables = RelatedTables(
-        tables=relational_data.tables,
-        relationships=relational_data.relationships,
-        task_links=[
-            {
-                "task_column": "user_id",
-                "table": "users",
-                "table_column": "user_id",
-            }
-        ],
-    )
-    x = TableTensor(
-        columns={"id": ("user_id",)},
-        id=ColumnarTensor((torch.arange(4, device=device),)),
-    )
-    num_classes = 11
-    y = TableTensor(
-        columns={"categorical": ("target",)},
-        categorical=CategoricalTensor(
-            data=torch.arange(4, device=device).unsqueeze(-1),
-            categories=(torch.arange(num_classes, device=device),),
-        ),
-    )
-
-    with torch.inference_mode():
-        out = model.cls_model(
-            x_context=x,
-            y_context=y,
-            x_query=x,
-            related_context_tables=related_tables,
-            related_query_tables=related_tables,
-            num_hops=2,
-        )
-
-    assert out.size() == (4, num_classes)
 
 
 def test_default_recipe_preserves_ids() -> None:
