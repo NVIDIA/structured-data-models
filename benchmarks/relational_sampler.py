@@ -29,11 +29,17 @@ from typing import Any, TypeVar, cast
 
 import pyarrow as pa
 import torch
-from sdm import RelationalData, Stype, TableTensor, infer_stypes
+from sdm import (
+    RelationalData,
+    Stype,
+    TableTensor,
+    TemporalSamplingConfig,
+    infer_stypes,
+)
 from sdm.relational import CuGraphRelationalSampler, RelationalSampler
 from sdm.relational.sampler import EXAMPLE_ID, RelationalSamplerOutput
 
-RESULT_SCHEMA_VERSION = 2
+RESULT_SCHEMA_VERSION = 3
 DEFAULT_DATASET = "rel-arxiv"
 DEFAULT_TASK = "paper-citation"
 DEFAULT_BATCH_SIZES = (1, 128, 1024)
@@ -41,7 +47,6 @@ DEFAULT_FANOUTS = ((16,), (16, 16))
 PHASE_ORDER = (
     "task_to_seed_join_ms",
     "neighbor_sampling_ms",
-    "temporal_top_k_ms",
     "output_assembly_ms",
     "synchronization_other_ms",
 )
@@ -238,7 +243,6 @@ def build_relbench_workload(
 ) -> Workload:
     """Download/cache a RelBench dataset and construct the sampler workload."""
     try:
-        import relbench
         from relbench.datasets import get_dataset
         from relbench.tasks import get_task
     except ImportError as exc:
@@ -275,7 +279,7 @@ def build_relbench_workload(
         "dataset": dataset_name,
         "task": task_name,
         "split": split,
-        "relbench_version": getattr(relbench, "__version__", "unknown"),
+        "relbench_version": importlib.metadata.version("relbench"),
         "tables": _table_contract(database, identity_columns),
         "relationships": [
             {
@@ -287,6 +291,7 @@ def build_relbench_workload(
             for relation in data.relationships
         ],
         "time_columns": time_columns,
+        "temporal_sampling_strategy": "uniform",
         "task_link": task_link,
         "task_time_column": task.time_col,
         "task_rows": task_table.size(0),
@@ -497,13 +502,8 @@ def sample_cuda_with_phases(
     task_link: Mapping[str, str],
     fanout: Sequence[int],
     task_time_column: str,
-) -> tuple[RelationalSamplerOutput, dict[str, float], float, dict[str, int]]:
-    """Sample once and separate CUDA join, sampling, top-k, and assembly.
-
-    The temporal top-k is timed by wrapping the sampler's existing selection
-    helper. It remains part of the normal sampler call; the non-top-k neighbor
-    duration is the enclosing CUDA event span less that nested event span.
-    """
+) -> tuple[RelationalSamplerOutput, dict[str, float], float]:
+    """Sample once and separate CUDA join, sampling, and assembly."""
     device = sampler.data.device
     timer = CudaPhaseTimer(device)
     torch.cuda.synchronize(device)
@@ -519,51 +519,25 @@ def sample_cuda_with_phases(
     )
     seed_time = task_table[task_time_column].datetime.squeeze(-1)
 
-    original_last_per_source = sampler._last_per_source
-    selected_groups: list[
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, int]
-    ] = []
-
-    def timed_last_per_source(**kwargs: Any) -> torch.Tensor:
-        selected = timer.measure(
-            "temporal_top_k_ms",
-            lambda: original_last_per_source(**kwargs),
+    if sampler._num_edges == 0:
+        nodes = timer.measure(
+            "neighbor_sampling_ms",
+            lambda: sampler._seed_nodes(seed, validated_link),
         )
-        selected_groups.append(
-            (
-                kwargs["batch"],
-                kwargs["major"],
-                kwargs["edge_type"],
-                selected,
-                kwargs["count"],
-            )
+    elif sampler.time_columns:
+        nodes = timer.measure(
+            "neighbor_sampling_ms",
+            lambda: sampler._sample_temporal(
+                seed=seed,
+                seed_time=seed_time,
+                num_neighbors=fanout,
+            ),
         )
-        return selected
-
-    sampler._last_per_source = timed_last_per_source
-    try:
-        if sampler._num_edges == 0:
-            nodes = timer.measure(
-                "neighbor_sampling_ms",
-                lambda: sampler._seed_nodes(seed, validated_link),
-            )
-        elif sampler.time_columns:
-            neighbor_total = timer.measure(
-                "neighbor_sampling_total_ms",
-                lambda: sampler._sample_temporal(
-                    seed=seed,
-                    seed_time=seed_time,
-                    num_neighbors=fanout,
-                ),
-            )
-            nodes = neighbor_total
-        else:
-            nodes = timer.measure(
-                "neighbor_sampling_ms",
-                lambda: sampler._sample_non_temporal(seed, fanout),
-            )
-    finally:
-        del sampler._last_per_source
+    else:
+        nodes = timer.measure(
+            "neighbor_sampling_ms",
+            lambda: sampler._sample_non_temporal(seed, fanout),
+        )
 
     output = timer.measure(
         "output_assembly_ms",
@@ -571,39 +545,9 @@ def sample_cuda_with_phases(
     )
     phases = timer.finish()
     total_ms = (time.perf_counter_ns() - started) / 1_000_000
-    if "neighbor_sampling_total_ms" in phases:
-        total = phases.pop("neighbor_sampling_total_ms")
-        top_k = phases.get("temporal_top_k_ms", 0.0)
-        phases["neighbor_sampling_ms"] = max(0.0, total - top_k)
     device_ms = sum(phases.values())
     phases["synchronization_other_ms"] = max(0.0, total_ms - device_ms)
-    groups_checked = 0
-    max_selected_per_group = 0
-    fanout_violations = 0
-    for batch, major, edge_type, selected, count in selected_groups:
-        if selected.numel() == 0:
-            continue
-        groups = torch.stack(
-            (batch[selected], major[selected], edge_type[selected]),
-            dim=1,
-        )
-        counts = groups.unique(dim=0, return_counts=True)[1]
-        groups_checked += counts.numel()
-        max_selected_per_group = max(
-            max_selected_per_group,
-            int(counts.max().item()),
-        )
-        fanout_violations += int((counts > count).sum().item())
-    return (
-        output,
-        phases,
-        total_ms,
-        {
-            "groups_checked": groups_checked,
-            "max_selected_per_group": max_selected_per_group,
-            "violations": fanout_violations,
-        },
-    )
+    return output, phases, total_ms
 
 
 def _sample_cuda_once(
@@ -647,11 +591,19 @@ def _initialize_sampler(
     workload: Workload,
     random_state: int,
 ) -> tuple[RelationalSampler | CuGraphRelationalSampler, float, float | None]:
+    temporal = (
+        TemporalSamplingConfig(
+            time_columns=workload.time_columns,
+            strategy="uniform",
+        )
+        if workload.time_columns
+        else None
+    )
     if mode == "cpu":
         started = time.perf_counter_ns()
         sampler = RelationalSampler(
             data=workload.data,
-            time_columns=workload.time_columns,
+            temporal=temporal,
         )
         return sampler, (time.perf_counter_ns() - started) / 1_000_000, None
 
@@ -665,7 +617,7 @@ def _initialize_sampler(
     started = time.perf_counter_ns()
     sampler = CuGraphRelationalSampler(
         data=cuda_data,
-        time_columns=workload.time_columns,
+        temporal=temporal,
         random_state=random_state,
     )
     torch.cuda.synchronize(device)
@@ -721,7 +673,11 @@ def _environment() -> dict[str, Any]:
     packages = {
         "cudf": "cudf",
         "cupy": "cupy",
+        "datasets": "datasets",
+        "fsspec": "fsspec",
+        "huggingface_hub": "huggingface-hub",
         "numpy": "numpy",
+        "pandas": "pandas",
         "pyarrow": "pyarrow",
         "pyg_lib": "pyg-lib",
         "pylibcugraph": "pylibcugraph",
@@ -744,6 +700,10 @@ def _environment() -> dict[str, Any]:
     for package_name in (
         "cudf-cu13",
         "cupy-cuda13x",
+        "datasets",
+        "fsspec",
+        "huggingface-hub",
+        "pandas",
         "pyg-lib",
         "pylibcugraph-cu13",
         "relbench",
@@ -894,12 +854,11 @@ def _run_variant(
 
     profiled_latencies: list[float] = []
     phase_samples: dict[str, list[float]] = {}
-    fanout_observations: list[dict[str, int]] = []
     profiled_invariant: dict[str, Any] | None = None
     if mode == "cuda":
         assert isinstance(sampler, CuGraphRelationalSampler)
         for _ in range(repetitions):
-            profiled_output, phases, profiled_latency, fanout_observation = (
+            profiled_output, phases, profiled_latency = (
                 sample_cuda_with_phases(
                     sampler,
                     task_table,
@@ -909,7 +868,6 @@ def _run_variant(
                 )
             )
             profiled_latencies.append(profiled_latency)
-            fanout_observations.append(fanout_observation)
             for name, value in phases.items():
                 phase_samples.setdefault(name, []).append(value)
 
@@ -918,13 +876,6 @@ def _run_variant(
             raise RuntimeError(
                 "Profiled sampled-output invariant failed: "
                 f"{profiled_invariant['errors']}"
-            )
-        fanout_violations = sum(
-            observation["violations"] for observation in fanout_observations
-        )
-        if fanout_violations:
-            raise RuntimeError(
-                f"Observed {fanout_violations} finite fanout violations"
             )
 
     latency = summarize(latencies)
@@ -968,26 +919,8 @@ def _run_variant(
             {
                 "profiled_latency_ms": profiled_latencies,
                 "phases_ms": phase_samples,
-                "finite_fanout_observations": fanout_observations,
             }
         )
-        groups_checked = sum(
-            observation["groups_checked"]
-            for observation in fanout_observations
-        )
-        if groups_checked:
-            result["finite_fanout_observations"] = {
-                "scope": (
-                    "CUDA temporal latest-k groups observed during the "
-                    "separate profiled pass"
-                ),
-                "groups_checked": groups_checked,
-                "max_selected_per_group": max(
-                    observation["max_selected_per_group"]
-                    for observation in fanout_observations
-                ),
-                "violations": 0,
-            }
     return result
 
 

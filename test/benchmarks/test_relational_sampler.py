@@ -11,7 +11,6 @@ from sdm import Stype
 
 _MODULE_NAME = "_relational_sampler_benchmark"
 _MODULE_PATH = Path(__file__).parents[2] / "benchmarks/relational_sampler.py"
-_RESULTS_PATH = Path(__file__).parents[2] / "benchmarks/results"
 _SPEC = importlib.util.spec_from_file_location(_MODULE_NAME, _MODULE_PATH)
 assert _SPEC is not None
 assert _SPEC.loader is not None
@@ -30,20 +29,6 @@ relational_inputs_from_database = _BENCHMARK.relational_inputs_from_database
 summarize = _BENCHMARK.summarize
 workload_kind = _BENCHMARK.workload_kind
 write_timeline_artifacts = _BENCHMARK.write_timeline_artifacts
-
-
-def _assert_summary(
-    values: list[float], expected: dict[str, float | int]
-) -> None:
-    actual = summarize(values)
-    assert actual.keys() == expected.keys()
-    for key in actual:
-        if key == "count":
-            assert actual[key] == expected[key]
-        else:
-            assert actual[key] == pytest.approx(
-                expected[key], rel=1e-12, abs=1e-12
-            )
 
 
 def test_parse_request_shapes() -> None:
@@ -144,7 +129,7 @@ def test_result_comparison_checks_workload_and_exhaustive_parity() -> None:
         "invariants": {"canonical_output_sha256": "same"},
     }
     cpu = {
-        "schema_version": 2,
+        "schema_version": 3,
         "mode": "cpu",
         "workload": workload,
         "random_state": 123,
@@ -153,7 +138,7 @@ def test_result_comparison_checks_workload_and_exhaustive_parity() -> None:
         "runs": [run],
     }
     cuda = {
-        "schema_version": 2,
+        "schema_version": 3,
         "mode": "cuda",
         "workload": workload,
         "random_state": 123,
@@ -183,7 +168,7 @@ def test_result_comparison_rejects_measurement_count_mismatch() -> None:
         "invariants": {},
     }
     common = {
-        "schema_version": 2,
+        "schema_version": 3,
         "workload": {"dataset": "rel-f1"},
         "random_state": 123,
         "environment": {"versions": {}},
@@ -202,7 +187,7 @@ def test_result_comparison_rejects_measurement_count_mismatch() -> None:
 
 def test_result_comparison_rejects_runtime_version_mismatch() -> None:
     common = {
-        "schema_version": 2,
+        "schema_version": 3,
         "workload": {"dataset": "rel-f1"},
         "random_state": 123,
         "initialization": {},
@@ -239,7 +224,6 @@ def test_phase_profile_uses_data_flow_order_and_discloses_aggregation(
                     "output_assembly_ms": {"median": 1.0},
                     "neighbor_sampling_ms": {"median": 2.0},
                     "task_to_seed_join_ms": {"median": 0.75},
-                    "temporal_top_k_ms": {"median": 0.25},
                 },
             }
         ],
@@ -249,7 +233,6 @@ def test_phase_profile_uses_data_flow_order_and_discloses_aggregation(
     assert list(payload["runs"][0]["phases_ms"]) == [
         "task_to_seed_join_ms",
         "neighbor_sampling_ms",
-        "temporal_top_k_ms",
         "output_assembly_ms",
         "synchronization_other_ms",
     ]
@@ -264,58 +247,3 @@ def test_phase_profile_uses_data_flow_order_and_discloses_aggregation(
     )
     assert "not one request" in trace["metadata"]["source"]
     assert "not a single-request" in html_path.read_text()
-
-
-def test_checked_in_final_results_retain_recomputable_evidence() -> None:
-    names = (
-        "rel_arxiv_cpu_pyg_lib_t4_final.json",
-        "rel_arxiv_cuda_cugraph_t4_final.json",
-        "rel_arxiv_cpu_pyg_lib_t4_two_hop_exhaustive.json",
-        "rel_arxiv_cuda_cugraph_t4_two_hop_exhaustive.json",
-    )
-    results = {name: _load_json(_RESULTS_PATH / name) for name in names}
-
-    for result in results.values():
-        for run in result["runs"]:
-            assert run["warmups"] == 10
-            assert run["repetitions"] == 50
-            raw = run["raw_samples"]
-            _assert_summary(raw["latency_ms"], run["latency_ms"])
-            _assert_summary(raw["sampled_rows"], run["sampled_rows"])
-            _assert_summary(
-                raw["output_to_host_ms"],
-                run["output_to_host_ms_excluded"],
-            )
-            _assert_summary(
-                raw["validation_fingerprint_ms"],
-                run["validation_fingerprint_ms_excluded"],
-            )
-            assert len(raw["output_sha256"]) == run["repetitions"]
-            assert run["invariants"]["source_multiplicity_inflation_rows"] == 0
-            if result["mode"] == "cuda":
-                _assert_summary(
-                    raw["profiled_latency_ms"],
-                    run["profiled_latency_ms"],
-                )
-                for phase, values in raw["phases_ms"].items():
-                    _assert_summary(values, run["phases_ms"][phase])
-                if run["kind"] == "finite_stochastic":
-                    observations = run["finite_fanout_observations"]
-                    assert observations["groups_checked"] > 0
-                    assert observations["violations"] == 0
-                    assert observations["max_selected_per_group"] <= max(
-                        run["fanout"]
-                    )
-
-    cpu = results["rel_arxiv_cpu_pyg_lib_t4_final.json"]
-    cuda = results["rel_arxiv_cuda_cugraph_t4_final.json"]
-    assert cpu["workload"] == cuda["workload"]
-    assert cpu["environment"]["versions"] == cuda["environment"]["versions"]
-
-    cpu_two_hop = results["rel_arxiv_cpu_pyg_lib_t4_two_hop_exhaustive.json"]
-    cuda_two_hop = results["rel_arxiv_cuda_cugraph_t4_two_hop_exhaustive.json"]
-    assert cpu_two_hop["workload"] == cuda_two_hop["workload"]
-    assert (
-        cpu_two_hop["runs"][0]["invariants"]["canonical_output_sha256"]
-        == cuda_two_hop["runs"][0]["invariants"]["canonical_output_sha256"]
-    )
