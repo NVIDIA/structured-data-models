@@ -1,3 +1,5 @@
+from typing import cast
+
 import pyarrow as pa
 import pyarrow.compute as pc
 import torch
@@ -61,7 +63,8 @@ class TfidfEncoder(Processor):
         column: int,
     ) -> tuple[StringTensor, Tensor]:
         """Tokenize one text column into ``(flat_ngrams, offsets)``."""
-        return table.text[:, column].character_ngrams(
+        column_text = cast(StringTensor, table.text[:, column])
+        return column_text.character_ngrams(
             self.ngram_range,
             lowercase=self.lowercase,
         )
@@ -133,7 +136,9 @@ class TfidfEncoder(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         device = table.numerical.device
-        dtype = self._idfs[0].dtype if self._idfs else torch.get_default_dtype()
+        dtype = (
+            self._idfs[0].dtype if self._idfs else torch.get_default_dtype()
+        )
         text_names = table.columns[Stype.text]
         n_rows = table.text.size(0)
 
@@ -144,12 +149,18 @@ class TfidfEncoder(Processor):
             idf = self._idfs[column]
             vocab_size = len(vocabulary)
 
-            counts = torch.zeros(n_rows * vocab_size, dtype=dtype, device=device)
+            counts = torch.zeros(
+                n_rows * vocab_size, dtype=dtype, device=device
+            )
             if vocab_size > 0:
                 flat, offsets = self._column_ngrams(table, column)
                 # Map n-grams to fitted vocab indices; unseen -> -1 (dropped).
                 codes = arrow_as_tensor(
-                    pc.index_in(flat.to_arrow(), value_set=vocabulary).fill_null(-1),
+                    pc.call_function(
+                        "index_in",
+                        [flat.to_arrow()],
+                        options=pc.SetLookupOptions(value_set=vocabulary),
+                    ).fill_null(-1),
                     dtype=torch.int64,
                     device=device,
                 )  # [n_ngrams]
@@ -166,7 +177,9 @@ class TfidfEncoder(Processor):
             tfidf = counts.view(n_rows, vocab_size) * idf  # [rows, vocab]
             norm = tfidf.norm(dim=1, keepdim=True).clamp_min(1e-12)
             blocks.append(tfidf / norm)
-            names.extend(f"{text_names[column]}_{i}" for i in range(vocab_size))
+            names.extend(
+                f"{text_names[column]}_{i}" for i in range(vocab_size)
+            )
 
         numerical = (
             torch.cat(blocks, dim=-1)
