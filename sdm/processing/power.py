@@ -101,7 +101,7 @@ def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
     )
 
 
-def _yeojohnson_log_likelihood_batch(
+def _yeojohnson_log_likelihood(
     inp: Tensor,
     lambdas: Tensor,
     positive_log: Tensor,
@@ -152,6 +152,8 @@ class Power(Processor, InvertibleMixin):
         inp: Tensor,
         constant_features: Tensor,
     ) -> Tensor:
+        # Reuse the sign-specific log terms across all likelihood evaluations;
+        # the golden-section search only changes the per-feature lambdas.
         positive_log = inp.clamp_min(0).log1p()
         negative_log = (-inp).clamp_min(0).log1p()
         log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).sum(
@@ -166,14 +168,14 @@ class Power(Processor, InvertibleMixin):
         invphi = (math.sqrt(5) - 1) / 2
         c = right - invphi * (right - left)
         d = left + invphi * (right - left)
-        fc = _yeojohnson_log_likelihood_batch(
+        fc = _yeojohnson_log_likelihood(
             inp,
             c,
             positive_log,
             negative_log,
             log_jacobian,
         )
-        fd = _yeojohnson_log_likelihood_batch(
+        fd = _yeojohnson_log_likelihood(
             inp,
             d,
             positive_log,
@@ -185,6 +187,8 @@ class Power(Processor, InvertibleMixin):
             choose_right = fc < fd
             old_fc = fc
             old_fd = fd
+            # Keep the search fully vectorized: each feature independently
+            # chooses its next interval without per-column Python branching.
             left_next = torch.where(choose_right, c, left)
             right_next = torch.where(choose_right, right, d)
             c_next = torch.where(
@@ -198,7 +202,7 @@ class Power(Processor, InvertibleMixin):
                 c,
             )
             new_point = torch.where(choose_right, d_next, c_next)
-            new_score = _yeojohnson_log_likelihood_batch(
+            new_score = _yeojohnson_log_likelihood(
                 inp,
                 new_point,
                 positive_log,
