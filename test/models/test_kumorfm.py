@@ -274,10 +274,12 @@ def test_forward(
 
 
 @withCUDA
+@pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
 def test_forward_with_relative_time(
     relational_data: RelationalData,
     device: torch.device,
     monkeypatch: pytest.MonkeyPatch,
+    dtype: torch.dtype,
 ) -> None:
     model = KumoRFM(pretrained=False, device=device)
     users = cast(
@@ -315,16 +317,34 @@ def test_forward_with_relative_time(
         datetime=torch.arange(10, 14, device=device).view(-1, 1) * US_PER_DAY,
         id=ColumnarTensor((torch.tensor([3, 1, 2, 0], device=device),)),
     )
-    x_query = cast(TableTensor, x_context[:2])
-    y_context = TableTensor(
-        columns={Stype.categorical: ("target",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [0], [1]], device=device),
-            categories=(torch.tensor([False, True], device=device),),
-        ),
+    x_query = TableTensor(
+        columns={
+            Stype.numerical: ("task_feature",),
+            Stype.datetime: ("prediction_time",),
+            Stype.id: ("user_id",),
+        },
+        numerical=torch.tensor([[2.5], [3.5]], device=device),
+        datetime=torch.arange(20, 22, device=device).view(-1, 1) * US_PER_DAY,
+        id=ColumnarTensor((torch.tensor([2, 0], device=device),)),
     )
+    if dtype.is_floating_point:
+        y_context = TableTensor(
+            columns={Stype.numerical: ("target",)},
+            numerical=torch.tensor(
+                [[0.5], [1.5], [2.5], [3.5]],
+                device=device,
+            ),
+        )
+    else:
+        y_context = TableTensor(
+            columns={Stype.categorical: ("target",)},
+            categorical=CategoricalTensor(
+                data=torch.tensor([[0], [1], [0], [1]], device=device),
+                categories=(torch.tensor([False, True], device=device),),
+            ),
+        )
 
-    torch.manual_seed(1)
+    generator = torch.Generator(device=device).manual_seed(1)
     out = model(
         x_context=x_context,
         y_context=y_context,
@@ -333,18 +353,32 @@ def test_forward_with_relative_time(
         related_query_tables=related_tables.select_tables(tables=["users"]),
         num_hops=2,
         task_time_column="prediction_time",
+        generator=generator,
     )
 
     assert out.size(-2) == 2
     assert out.device == device
 
-    torch.manual_seed(1)
+    with pytest.raises(ValueError, match="must be a datetime column"):
+        model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_tables,
+            related_query_tables=related_tables.select_tables(
+                tables=["users"]
+            ),
+            num_hops=2,
+            task_time_column="task_feature",
+        )
+
     model.fit(
         x=x_context,
         y=y_context,
         related_tables=related_tables,
         num_hops=2,
         task_time_column="prediction_time",
+        generator=torch.Generator(device=device).manual_seed(1),
     )
 
     def fail_if_fitted(*args: object, **kwargs: object) -> None:
@@ -360,6 +394,10 @@ def test_forward_with_relative_time(
         related_tables=related_tables.select_tables(tables=["users"]),
     )
     assert predicted.allclose(out)
+    assert model.predict(
+        x=x_query,
+        related_tables=related_tables.select_tables(tables=["users"]),
+    ).allclose(predicted)
     model.clear()
 
 

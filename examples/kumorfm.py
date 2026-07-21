@@ -70,23 +70,31 @@ train_table = cast(TableTensor, train_table[perm])
 # Execute Model ###############################################################
 model = KumoRFM(device=device)
 
-kwargs = {
+num_neighbors = [16, 16]
+sampling_kwargs = {
     "task_link": {
         "task_column": task.entity_col,
         "table": task.entity_table,
         "table_column": cast(str, db.table_dict[task.entity_table].pkey_col),
     },
-    "num_neighbors": [16, 16],
+    "num_neighbors": num_neighbors,
     "task_time_column": task.time_col,
 }
-train_table, related_tables = sampler(train_table, **kwargs).to(device)
+train_table, related_tables = sampler(
+    train_table,
+    **sampling_kwargs,
+).to(device)
 model.fit(
     x=train_table.drop_columns(task.target_col),
     y=train_table[task.target_col],
     related_tables=related_tables,
+    num_hops=len(num_neighbors),
+    task_time_column=task.time_col,
 )
 
 test_table = task_tables[-1].drop_columns(task.target_col)
 for test_batch in test_table.split(args.batch_size):
-    model.predict(*sampler(test_batch, **kwargs).to(device))
+    model.predict(
+        *sampler(test_batch, **sampling_kwargs).to(device),
+    )
 model.clear()
