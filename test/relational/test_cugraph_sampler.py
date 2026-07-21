@@ -3,7 +3,13 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 import torch
-from sdm import ColumnarTensor, RelationalData, Stype, TableTensor
+from sdm import (
+    ColumnarTensor,
+    RelationalData,
+    Stype,
+    TableTensor,
+    TemporalSamplingConfig,
+)
 from sdm.relational import CuGraphRelationalSampler
 from sdm.relational.sampler import EXAMPLE_ID
 from sdm.testing import onlyCUDA
@@ -356,7 +362,10 @@ def test_cugraph_temporal_sampler_uses_bounded_uniform_fanout(
     _require_rapids()
     sampler = CuGraphRelationalSampler(
         data=temporal_data.cuda(),
-        time_columns={"first": "time", "second": "time"},
+        temporal=TemporalSamplingConfig(
+            time_columns={"first": "time", "second": "time"},
+            strategy="uniform",
+        ),
     )
     sample = (
         sampler._pylibcugraph.heterogeneous_uniform_temporal_neighbor_sample
@@ -406,7 +415,12 @@ def test_cugraph_sampler_uses_original_cutoff(
         {"entity": Stype.id, "cutoff": Stype.datetime},
     )
 
-    output = data.sampler(time_columns={"first": "time", "second": "time"})(
+    output = data.sampler(
+        temporal=TemporalSamplingConfig(
+            time_columns={"first": "time", "second": "time"},
+            strategy="uniform",
+        )
+    )(
         task_table=task_table,
         task_link={
             "task_column": "entity",
@@ -425,6 +439,21 @@ def test_cugraph_sampler_uses_original_cutoff(
     assert _rows(
         output.related_tables.tables["second"], EXAMPLE_ID, "second_id"
     ) == [(1, 20), (1, 21)]
+
+
+@onlyCUDA
+def test_cugraph_temporal_sampler_rejects_last_strategy(
+    temporal_data: RelationalData,
+) -> None:
+    _require_rapids()
+
+    with pytest.raises(NotImplementedError, match="strategy 'last'"):
+        temporal_data.cuda().sampler(
+            temporal=TemporalSamplingConfig(
+                time_columns={"first": "time", "second": "time"},
+                strategy="last",
+            )
+        )
 
 
 @onlyCUDA

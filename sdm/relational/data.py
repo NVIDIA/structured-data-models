@@ -15,7 +15,7 @@ from sdm.tensor.mixin import DeviceMixin
 if TYPE_CHECKING:
     import graphviz
 
-    from sdm.relational import RelationalSampler
+    from sdm.relational import RelationalSampler, TemporalSamplingConfig
 
 
 @dataclass(frozen=True, repr=False)
@@ -238,13 +238,17 @@ class RelationalData(DeviceMixin):
 
     def sampler(
         self,
-        time_columns: Mapping[str, str] | None = None,
+        temporal: TemporalSamplingConfig | None = None,
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
         .. code-block:: python
 
-            from sdm import RelationalData, TableTensor
+            from sdm import (
+                RelationalData,
+                TableTensor,
+                TemporalSamplingConfig,
+            )
 
             data = RelationalData(
                 tables={
@@ -263,13 +267,16 @@ class RelationalData(DeviceMixin):
             )
 
             sampler = data.sampler(
-                time_columns={"orders": "order_date"},
+                temporal=TemporalSamplingConfig(
+                    time_columns={"orders": "order_date"},
+                    strategy="last",
+                ),
             )
 
         Args:
-            time_columns: Mapping from table name to the datetime column used
-                for temporal sampling. A row in a time-aware table can only be
-                sampled if its timestamp does not exceed the query timestamp.
+            temporal: Temporal sampling configuration. A row in a time-aware
+                table can only be sampled if its timestamp does not exceed the
+                query timestamp.
         """
         if self.device.type == "cuda":
             from sdm.relational.cugraph_sampler import (
@@ -278,14 +285,14 @@ class RelationalData(DeviceMixin):
 
             return CuGraphRelationalSampler(
                 data=self,
-                time_columns=time_columns,
+                temporal=temporal,
             )
 
         from sdm.relational import RelationalSampler
 
         return RelationalSampler(
             data=self,
-            time_columns=time_columns,
+            temporal=temporal,
         )
 
     def to_graphviz(

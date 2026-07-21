@@ -11,6 +11,7 @@ from sdm.relational.join import join_index
 from sdm.relational.sampler import (
     RelationalSampler,
     RelationalSamplerOutput,
+    TemporalSamplingConfig,
     _validate_time_columns,
 )
 from sdm.relational.task import TaskLink
@@ -35,24 +36,31 @@ class CuGraphRelationalSampler(RelationalSampler):
 
     Args:
         data: CUDA-resident tables and their relationships.
-        time_columns: Mapping from table name to the datetime column used for
-            uniform temporal sampling.
+        temporal: Temporal sampling configuration. Only uniform neighbor
+            selection is currently supported.
         random_state: Seed for the advancing cuGraph random-state stream.
     """
 
     def __init__(
         self,
         data: RelationalData,
-        time_columns: Mapping[str, str] | None = None,
+        temporal: TemporalSamplingConfig | None = None,
         random_state: int | None = None,
     ) -> None:
         if data.device.type != "cuda":
             raise ValueError(
                 f"'{self.__class__.__name__}' requires CUDA-resident data"
             )
+        if temporal is not None and temporal.strategy == "last":
+            raise NotImplementedError(
+                "cuGraph temporal sampling does not support strategy 'last'"
+            )
 
         self.data = data
-        self.time_columns = time_columns or {}
+        self.temporal = temporal
+        self.time_columns = (
+            temporal.time_columns if temporal is not None else {}
+        )
         self._generator = np.random.default_rng(random_state)
         _validate_time_columns(self.data, self.time_columns)
 

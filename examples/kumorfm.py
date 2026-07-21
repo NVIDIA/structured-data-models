@@ -6,7 +6,12 @@ import relbench
 import torch
 from relbench.datasets import get_dataset
 from relbench.tasks import get_task
-from sdm import RelationalData, TableTensor, infer_stypes
+from sdm import (
+    RelationalData,
+    TableTensor,
+    TemporalSamplingConfig,
+    infer_stypes,
+)
 from sdm.models import KumoRFM
 
 parser = argparse.ArgumentParser()
@@ -39,12 +44,20 @@ data = RelationalData(
         for left_column, right_table in table.fkey_col_to_pkey_table.items()
     ],
 )
+time_columns = {
+    name: table.time_col
+    for name, table in db.table_dict.items()
+    if table.time_col is not None
+}
 sampler = data.sampler(
-    time_columns={
-        name: table.time_col
-        for name, table in db.table_dict.items()
-        if table.time_col is not None
-    },
+    temporal=(
+        TemporalSamplingConfig(
+            time_columns=time_columns,
+            strategy="last",
+        )
+        if time_columns
+        else None
+    ),
 )
 
 # Collect Task Table ##########################################################
