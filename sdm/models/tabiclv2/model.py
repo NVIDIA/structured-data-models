@@ -3,14 +3,13 @@
 from typing import Any, ClassVar, cast
 
 import torch
-from huggingface_hub import hf_hub_download
-from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.hierarchical_classifier import (
     HierarchicalClassifier,
 )
@@ -114,17 +113,10 @@ class TabICLv2(ICLModel):
         device = next(self.parameters()).device
 
         for variant in ["classifier", "regressor"]:
-            try:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                    local_files_only=True,
-                )
-            except LocalEntryNotFoundError:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                )
+            path = download_checkpoint(
+                repo_id="jingang/TabICL",
+                filename=f"tabicl-{variant}-v2-20260212.ckpt",
+            )
             ckpt = torch.load(path, map_location=device)["state_dict"]
 
             if variant == "classifier":

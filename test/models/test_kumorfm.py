@@ -9,9 +9,142 @@ from sdm import (
     TableTensor,
 )
 from sdm.models import KumoRFM
+from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
+from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
 from sdm.testing import withCUDA
+
+
+def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
+    downloads: list[dict[str, object]] = []
+    loads: list[tuple[str, object, bool]] = []
+    remaps: list[tuple[object, bool]] = []
+    state_dicts: list[tuple[object, bool]] = []
+
+    def download(**kwargs: object) -> str:
+        downloads.append(kwargs)
+        return f"/{kwargs['filename']}"
+
+    def load(
+        path: str,
+        *,
+        map_location: object,
+        weights_only: bool,
+    ) -> dict[str, object]:
+        loads.append((path, map_location, weights_only))
+        return {"state_dict": {path: torch.tensor(1)}}
+
+    def load_state_dict(
+        self: _KumoRFM,
+        state_dict: object,
+        strict: bool = True,
+        assign: bool = False,
+    ) -> None:
+        state_dicts.append((state_dict, strict))
+
+    def remap(
+        state_dict: object,
+        *,
+        is_classifier: bool,
+    ) -> dict[str, torch.Tensor]:
+        remaps.append((state_dict, is_classifier))
+        return {str(is_classifier): torch.tensor(1)}
+
+    monkeypatch.setattr(kumorfm_model, "download_checkpoint", download)
+    monkeypatch.setattr(kumorfm_model.torch, "load", load)
+    monkeypatch.setattr(kumorfm_model, "_remap_v2_1_checkpoint", remap)
+    monkeypatch.setattr(_KumoRFM, "load_state_dict", load_state_dict)
+
+    model = KumoRFM()
+
+    assert not model.training
+    assert model.reg_model.row_embedding.norm.bias is not None
+    assert model.reg_model.icl_block.norm.bias is not None
+    assert downloads == [
+        {
+            "repo_id": "nvidia/kumorfm-2",
+            "filename": "cls-model.pt",
+            "revision": "v2.1.0",
+        },
+        {
+            "repo_id": "nvidia/kumorfm-2",
+            "filename": "reg-model.pt",
+            "revision": "v2.1.0",
+        },
+    ]
+    assert [path for path, _, _ in loads] == [
+        "/cls-model.pt",
+        "/reg-model.pt",
+    ]
+    assert all(weights_only for _, _, weights_only in loads)
+    assert remaps == [
+        ({"/cls-model.pt": torch.tensor(1)}, True),
+        ({"/reg-model.pt": torch.tensor(1)}, False),
+    ]
+    assert state_dicts == [
+        ({"True": torch.tensor(1)}, True),
+        ({"False": torch.tensor(1)}, True),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("is_classifier", "source", "target"),
+    [
+        (True, "row_embedding.y_reg_lin.weight", None),
+        (True, "icl_block.reg_head.weight", None),
+        (False, "row_embedding.y_cls_lin.weight", None),
+        (False, "icl_block.cls_head.weight", None),
+        (
+            False,
+            "row_embedding.y_reg_lin.weight",
+            "row_embedding.y_lin.weight",
+        ),
+        (False, "icl_block.y_reg_lin.bias", "icl_block.y_lin.bias"),
+        (False, "icl_block.reg_head.weight", "head.2.weight"),
+    ],
+)
+def test_remap_v2_1_variant_keys(
+    is_classifier: bool,
+    source: str,
+    target: str | None,
+) -> None:
+    value = torch.tensor(1)
+    expected = {} if target is None else {target: value}
+
+    actual = _remap_v2_1_checkpoint(
+        {source: value},
+        is_classifier=is_classifier,
+    )
+
+    assert actual == expected
+
+
+def test_remap_v2_1_checkpoint_shapes() -> None:
+    inducing_points = torch.arange(6).reshape(2, 1, 3)
+    readout_token = torch.arange(6).reshape(1, 2, 3)
+
+    actual = _remap_v2_1_checkpoint(
+        {
+            "q": torch.tensor([0.02, 0.98]),
+            "row_embedding.inducing_vectors.2": inducing_points,
+            "row_embedding.readout_token": readout_token,
+        },
+        is_classifier=True,
+    )
+
+    assert actual.keys() == {
+        "row_embedding.col_layers.2.inducing_points",
+        "row_embedding.readout_token",
+    }
+    torch.testing.assert_close(
+        actual["row_embedding.col_layers.2.inducing_points"],
+        inducing_points.squeeze(1),
+    )
+    torch.testing.assert_close(
+        actual["row_embedding.readout_token"],
+        readout_token.squeeze(0),
+    )
 
 
 @withCUDA
@@ -69,7 +202,7 @@ def test_forward(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
-    model = KumoRFM(pretrained=False, device=device)
+    model = KumoRFM(False, device)
     if device.type == "cpu":
         assert repr(model) == "KumoRFM()"
     else:
