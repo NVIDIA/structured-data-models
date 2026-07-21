@@ -78,6 +78,10 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
         if problem_type != "regression":
             self._class_labels_by_key = _class_labels_by_key(y)
+            self._tabarena_class_order = _tabarena_class_order(
+                y,
+                problem_type=problem_type,
+            )
 
         self.model = TabICLv2(device=self._device)
         self.model.fit(
@@ -104,9 +108,11 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Return class-labelled probabilities without label cleaning.
+        """Return probabilities in TabArena's expected raw-label order.
 
-        AutoGluon never transforms labels on this system path.
+        SDM retains ownership of target preprocessing. The adapter only reorders
+        the semantic class-labelled output to the order TabArena's scorer
+        expects; no transformed labels are passed to TabICLv2.
         """
         if self._problem_type == "regression":
             raise RuntimeError("Regression tasks require '_predict'")
@@ -117,10 +123,14 @@ class SDMTabICLv2System(ExternalSystemModel):
             class_keys,
             labels_by_key=self._class_labels_by_key,
         )
-        return pd.DataFrame(
+        probabilities = pd.DataFrame(
             values,
             index=X.index,
             columns=np.asarray(labels, dtype=object),
+        )
+        return _order_probabilities_for_tabarena(
+            probabilities,
+            class_order=self._tabarena_class_order,
         )
 
     def _prediction_values(self, X: pd.DataFrame) -> np.ndarray:
@@ -255,6 +265,65 @@ def _labels_from_prediction_columns(
             f"labels: {missing}"
         )
     return [labels_by_key[column] for column in columns]
+
+
+def _tabarena_class_order(
+    y: pd.Series,
+    *,
+    problem_type: str,
+) -> tuple[object, ...]:
+    """Return the raw class order used by TabArena's evaluator.
+
+    The native system receives raw labels and never applies AutoGluon's label
+    transformations to the SDM model. TabArena nevertheless encodes the
+    labelled probability frame positionally for scoring. Deriving the order
+    from its own ``LabelCleaner`` makes the adapter's output ABI match that
+    evaluator, including AutoGluon's binary-class ordering rules.
+    """
+    from autogluon.core.data.label_cleaner import LabelCleaner
+
+    label_cleaner = LabelCleaner.construct(
+        problem_type=problem_type,
+        y=y,
+    )
+    class_order = label_cleaner.ordered_class_labels
+    if class_order is None:
+        raise RuntimeError(
+            "TabArena did not provide an ordered class-label contract"
+        )
+    return tuple(class_order)
+
+
+def _order_probabilities_for_tabarena(
+    probabilities: pd.DataFrame,
+    *,
+    class_order: tuple[object, ...],
+) -> pd.DataFrame:
+    """Validate and align semantic probability columns for TabArena scoring."""
+    expected = pd.Index(class_order)
+    actual = probabilities.columns
+    if actual.has_duplicates:
+        raise RuntimeError(
+            "TabICLv2 returned duplicate class-probability columns"
+        )
+    if expected.has_duplicates:
+        raise RuntimeError(
+            "TabArena's class-label contract contains duplicate labels"
+        )
+
+    missing = expected.difference(actual).tolist()
+    unexpected = actual.difference(expected).tolist()
+    if missing or unexpected:
+        details: list[str] = []
+        if missing:
+            details.append(f"missing labels: {missing}")
+        if unexpected:
+            details.append(f"unexpected labels: {unexpected}")
+        raise RuntimeError(
+            "TabICLv2 probability columns do not match TabArena's class "
+            "labels (" + "; ".join(details) + ")"
+        )
+    return probabilities.loc[:, expected]
 
 
 def _resolve_device(*, num_gpus: int | None) -> torch.device:

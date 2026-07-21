@@ -154,6 +154,8 @@ def test_sdm_native_schema_and_class_label_contract() -> None:
         _class_labels_by_key,
         _fit_feature_schema,
         _labels_from_prediction_columns,
+        _order_probabilities_for_tabarena,
+        _tabarena_class_order,
     )
 
     frame = pd.DataFrame(
@@ -197,6 +199,36 @@ def test_sdm_native_schema_and_class_label_contract() -> None:
     ) == [20, 10]
     with pytest.raises(ValueError, match="ambiguous string representations"):
         _class_labels_by_key(pd.Series([1, "1"]))
+
+    tabarena_labels = pd.Series(
+        pd.Categorical(
+            ["3", "2", "5", "U", "1"],
+            categories=["1", "2", "3", "5", "U"],
+        )
+    )
+    class_order = _tabarena_class_order(
+        tabarena_labels,
+        problem_type="multiclass",
+    )
+    assert class_order == ("1", "2", "3", "5", "U")
+    probabilities = pd.DataFrame(
+        [[0.30, 0.04, 0.05, 0.20, 0.41]],
+        columns=["3", "U", "5", "2", "1"],
+    )
+    ordered = _order_probabilities_for_tabarena(
+        probabilities,
+        class_order=class_order,
+    )
+    assert ordered.columns.tolist() == ["1", "2", "3", "5", "U"]
+    assert ordered.iloc[0].tolist() == pytest.approx(
+        [0.41, 0.20, 0.30, 0.05, 0.04]
+    )
+
+    with pytest.raises(RuntimeError, match="missing labels"):
+        _order_probabilities_for_tabarena(
+            probabilities.drop(columns="U"),
+            class_order=class_order,
+        )
 
 
 @pytest.mark.skipif(

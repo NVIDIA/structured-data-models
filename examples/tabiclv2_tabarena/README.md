@@ -111,6 +111,20 @@ values. Add an SDM datetime recipe before using that mode on datetime tasks;
 do not rely on silent column dropping. `autogluon-compatible` is the lower-risk
 choice when broad TabArena dtype handling is more important than SDM ownership.
 
+### Class-probability ordering in `sdm-native`
+
+SDM may emit class probabilities in a recipe-specific order because it preserves
+the class labels associated with its transformed categorical target. The native
+adapter maps those output labels back to the original labels, validates that one
+column is present for every fitted class, and reorders the frame to TabArena's
+own `LabelCleaner` class order before returning it for scoring.
+
+This is an output-format compatibility step only. The adapter still passes raw
+targets to TabICLv2, and neither AutoGluon label cleaning nor AutoGluon feature
+generation is used to train or preprocess the SDM model in `sdm-native` mode.
+The alignment is necessary because TabArena's scorer consumes multiclass
+probability matrices positionally after its label conversion.
+
 ## Choosing a mode
 
 | Mode                   | Advantages                                                                                                   | Trade-offs                                                                                              |
