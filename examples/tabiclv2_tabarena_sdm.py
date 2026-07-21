@@ -1,4 +1,4 @@
-"""SDM-native TabArena system adapter for local TabICLv2 evaluation."""
+"""SDM-native TabArena adapter for local TabICLv2 evaluation."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 import torch
+from autogluon.core.data.label_cleaner import LabelCleaner
 from sdm import Stype, StypeLike, TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
@@ -280,8 +281,6 @@ def _tabarena_class_order(
     from its own ``LabelCleaner`` makes the adapter's output ABI match that
     evaluator, including AutoGluon's binary-class ordering rules.
     """
-    from autogluon.core.data.label_cleaner import LabelCleaner
-
     label_cleaner = LabelCleaner.construct(
         problem_type=problem_type,
         y=y,

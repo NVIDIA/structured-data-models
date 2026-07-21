@@ -1,15 +1,22 @@
-"""AutoGluon model wrapper for the local SDM TabICLv2 implementation."""
+"""Run the repository-local TabICLv2 model on TabArena."""
 
 from __future__ import annotations
 
+import argparse
 import gc
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 from autogluon.core.models import AbstractModel
+from examples.tabiclv2_tabarena_sdm import SDMTabICLv2System
 from sdm import Stype, StypeLike, TableTensor, infer_stypes
 from sdm.models import TabICLv2
+from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
+from tabarena.benchmark.task.metadata.collection import TaskSubset
+from tabarena.contexts import TabArenaContext
+from tabarena.utils.config_utils import ConfigGenerator, SystemConfigGenerator
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -146,3 +153,90 @@ def _table_from_series(
         stypes={name: stype},
         device=device,
     )
+
+
+def main() -> None:
+    """Run selected TabArena jobs locally and write their results."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--num-estimators", type=int, default=8)
+    parser.add_argument("--num-cpus", type=int)
+    parser.add_argument("--num-gpus", type=int)
+    parser.add_argument(
+        "--mode",
+        choices=("autogluon-compatible", "sdm-native"),
+        default="autogluon-compatible",
+    )
+    parser.add_argument("--outer", action="store_true")
+    parser.add_argument("--subset", nargs="+")
+    parser.add_argument("--datasets", nargs="+")
+    args = parser.parse_args()
+
+    if args.num_estimators < 1:
+        raise ValueError("'--num-estimators' must be positive")
+    if args.num_cpus is not None and args.num_cpus < 1:
+        raise ValueError("'--num-cpus' must be positive")
+    if args.num_gpus is not None and args.num_gpus < 0:
+        raise ValueError("'--num-gpus' cannot be negative")
+
+    output_root = args.output_root.resolve()
+    if output_root.exists() and any(output_root.iterdir()):
+        raise FileExistsError(
+            f"Output root {output_root} is non-empty. Choose a fresh path."
+        )
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    if args.mode == "autogluon-compatible":
+        generator = ConfigGenerator(
+            search_space={},
+            model_cls=SDMTabICLv2Model,
+            manual_configs=[{"num_estimators": args.num_estimators}],
+        )
+        experiments = TabArenaV0pt1ExperimentBundle(
+            models=[(generator, 0)],
+            outer_experiments=args.outer,
+        ).build_experiments(
+            num_cpus=args.num_cpus,
+            num_gpus=args.num_gpus,
+        )
+    else:
+        generator = SystemConfigGenerator(
+            model_cls=SDMTabICLv2System,
+            name="SDMTabICLv2System",
+            manual_configs=[{"num_estimators": args.num_estimators}],
+        )
+        experiments = TabArenaV0pt1ExperimentBundle(
+            models=[(generator, 0)],
+            system_experiments=True,
+        ).build_experiments(
+            num_cpus=args.num_cpus,
+            num_gpus=args.num_gpus,
+        )
+
+    context = TabArenaContext()
+    jobs = context.build_jobs(
+        experiments,
+        task_subset=TaskSubset(
+            subset=args.subset,
+            dataset_names=args.datasets,
+        ),
+    )
+    context.run_jobs(
+        jobs,
+        expname=output_root,
+        new_result_prefix="[SDM] ",
+        debug_mode=True,
+    )
+    results = context._registered_new_results()
+    if results is None:
+        raise RuntimeError("No TabArena jobs completed successfully")
+
+    report_dir = output_root / "report"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report = results.copy()
+    report.insert(0, "integration_mode", args.mode)
+    report.to_csv(report_dir / "results_per_split.csv", index=False)
+
+
+if __name__ == "__main__":
+    main()
