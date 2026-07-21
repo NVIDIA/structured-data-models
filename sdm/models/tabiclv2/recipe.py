@@ -63,7 +63,6 @@ def default_recipe() -> Recipe:
             EnsembleReduce(method="mean"),
             TaskDispatch(
                 classification=SoftmaxTemperature(temperature=0.9),
-                regression=Identity(),
             ),
         ],
     )

@@ -4,6 +4,7 @@ from typing import Literal, cast
 import torch
 
 from sdm.processing.base import Processor
+from sdm.processing.identity import Identity
 from sdm.processing.sequential import Sequential
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -20,9 +21,11 @@ class TaskDispatch(Processor):
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
-        classification: Output processor for categorical targets. An iterable
-            is normalized to :class:`~sdm.processing.Sequential`.
-        regression: Output processor for numerical targets. An iterable is
+        classification: Output processor for categorical targets. If omitted,
+            :class:`~sdm.processing.Identity` is used. An iterable is
+            normalized to :class:`~sdm.processing.Sequential`.
+        regression: Output processor for numerical targets. If omitted,
+            :class:`~sdm.processing.Identity` is used. An iterable is
             normalized to :class:`~sdm.processing.Sequential`.
     """
 
@@ -37,12 +40,25 @@ class TaskDispatch(Processor):
     ) -> None:
         super().__init__()
         self.processors = torch.nn.ModuleDict()
-        for task, processor in (
+
+        routes = (
             ("classification", classification),
             ("regression", regression),
-        ):
+        )
+        explicit_tasks = {
+            task for task, processor in routes if processor is not None
+        }
+        if len(explicit_tasks) == 0:
+            raise ValueError(
+                f"'{self.__class__.__name__}' requires at least one route."
+            )
+        self._implicit_tasks = frozenset(
+            task for task, _ in routes if task not in explicit_tasks
+        )
+
+        for task, processor in routes:
             if processor is None:
-                continue
+                processor = Identity()
             if not isinstance(processor, Processor):
                 processor = Sequential(*processor)
             if processor.requires_fit:
@@ -51,11 +67,6 @@ class TaskDispatch(Processor):
                     f"but the '{task}' route requires fit."
                 )
             self.processors[task] = processor
-
-        if len(self.processors) == 0:
-            raise ValueError(
-                f"'{self.__class__.__name__}' requires at least one route."
-            )
 
         self._task: Literal["classification", "regression"] | None = None
 
@@ -82,11 +93,6 @@ class TaskDispatch(Processor):
                 f"categorical (got '{stype}')."
             )
 
-        if task not in self.processors:
-            raise ValueError(
-                f"'{self.__class__.__name__}' has no '{task}' route; "
-                f"configure {task}=... or use 'Identity()' for a no-op."
-            )
         self._task = task
 
     def _reset(self) -> None:
@@ -107,7 +113,7 @@ class TaskDispatch(Processor):
     def set_extra_state(self, state: str | None) -> None:  # noqa: D102
         if state is not None and state not in self.processors:
             raise ValueError(
-                f"Cannot restore unconfigured '{state}' task on "
+                f"Cannot restore invalid '{state}' task on "
                 f"'{self.__class__.__name__}'."
             )
         self._task = cast(
@@ -118,6 +124,8 @@ class TaskDispatch(Processor):
     def __repr__(self, *, indent: int = 0) -> str:
         reprs = []
         for task, processor in self.processors.items():
+            if task in self._implicit_tasks:
+                continue
             processor = cast(Processor, processor)
             processor_repr = processor.__repr__(indent=indent + 2)
             processor_repr = processor_repr[indent + 2 :]
