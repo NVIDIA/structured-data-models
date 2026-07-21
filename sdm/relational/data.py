@@ -1,38 +1,21 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
-from sdm.tensor.io import arrow_as_tensor, to_cudf
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID, join_index
 from sdm.tensor.mixin import DeviceMixin
 
-PREFIX = "sdm_internal"
-ROW_ID = f"__{PREFIX}_row_id__"
-LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
-RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
-
 if TYPE_CHECKING:
-    import cudf
     import graphviz
 
-    from sdm.relational import RelationalSampler
-
-
-def _to_cudf(
-    table: TableTensor,
-    columns: Sequence[str],
-) -> dict[str, cudf.Series]:
-    # Pair IDs through Python metadata to avoid a CUDA index-to-host sync.
-    id_columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
-    return {name: to_cudf(id_columns[name]) for name in columns}
+    from sdm.relational import RelationalSampler, TemporalSamplingConfig
 
 
 @dataclass(frozen=True, repr=False)
@@ -65,7 +48,7 @@ class Relationship:
             )
 
         for column in (*self.left_columns, *self.right_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
                         f"Column name '{column}' is reserved for internal "
@@ -230,152 +213,42 @@ class RelationalData(DeviceMixin):
         r"""Materialize heterogeneous graph edges for table relationships.
 
         Args:
-            dtype: The edge index dtype.
-            device: The output device. If ``None``, edges stay on the device
-                of the participating tables.
+            dtype: The dtype.
+            device: The device.
 
         Returns:
             The edge indices for each relationship in order.
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
-
-        Raises:
-            RuntimeError: If registered tables are not on the same device.
-            ImportError: If CUDA tables are used without cuDF installed.
         """
-        execution_device = self.device
-        device = execution_device if device is None else device
-
-        columns: dict[str, list[str]] = defaultdict(list)
-        for rel in self.relationships:
-            for table, rel_columns in (
-                (rel.left_table, rel.left_columns),
-                (rel.right_table, rel.right_columns),
-            ):
-                for column in rel_columns:
-                    if column not in columns[table]:
-                        columns[table].append(column)
-
-        if len(columns) == 0:
-            return ()
-
-        if execution_device.type == "cuda":
-            with torch.cuda.device(execution_device):
-                return self._edge_indices_cudf(
-                    columns=columns,
-                    dtype=dtype,
-                    device=device,
-                )
-
-        tables = {
-            name: table[..., columns[name]].to_arrow()
-            for name, table in self.tables.items()
-            if name in columns
-        }
-
-        tables = {
-            name: table.append_column(
-                ROW_ID,
-                pa.array(torch.arange(table.num_rows, dtype=dtype).numpy()),
-            )
-            for name, table in tables.items()
-        }
-
         edge_indices: list[Tensor] = []
         for rel in self.relationships:
-            left = tables[rel.left_table]
-            left = left.select((*rel.left_columns, ROW_ID))
-            left = left.rename_columns({ROW_ID: LEFT_ROW_ID})
-            right = tables[rel.right_table]
-            right = right.select((*rel.right_columns, ROW_ID))
-            right = right.rename_columns({ROW_ID: RIGHT_ROW_ID})
-
-            joined = left.join(
-                right,
-                keys=list(rel.left_columns),
-                right_keys=list(rel.right_columns),
-                join_type="inner",
-            )
-
-            src = arrow_as_tensor(joined[LEFT_ROW_ID], device=device)
-            dst = arrow_as_tensor(joined[RIGHT_ROW_ID], device=device)
-            edge_indices.append(torch.stack([src, dst], dim=0))
-
-        return tuple(edge_indices)
-
-    def _edge_indices_cudf(
-        self,
-        columns: Mapping[str, Sequence[str]],
-        dtype: torch.dtype | None,
-        device: torch.device | str | None,
-    ) -> tuple[Tensor, ...]:
-        try:
-            import cudf
-        except ImportError as exc:
-            raise ImportError(
-                "CUDA-resident relational joins require cuDF"
-            ) from exc
-
-        tables = {
-            name: _to_cudf(table=table, columns=columns[name])
-            for name, table in self.tables.items()
-            if name in columns
-        }
-        for name, table in tables.items():
-            row_id = torch.arange(
-                self.tables[name].size(-2),
-                dtype=dtype,
-                device=self.tables[name].device,
-            )
-            table[ROW_ID] = to_cudf(row_id)
-
-        edge_indices: list[Tensor] = []
-        for rel in self.relationships:
-            # Assemble frames over shared Series with their final names. cuDF
-            # renaming and DataFrame assignment would copy device buffers.
-            left = cudf.DataFrame(
-                {
-                    **{
-                        column: tables[rel.left_table][column]
-                        for column in rel.left_columns
-                    },
-                    LEFT_ROW_ID: tables[rel.left_table][ROW_ID],
-                }
-            )
-            right = cudf.DataFrame(
-                {
-                    **{
-                        column: tables[rel.right_table][column]
-                        for column in rel.right_columns
-                    },
-                    RIGHT_ROW_ID: tables[rel.right_table][ROW_ID],
-                }
-            )
-
-            joined = left.merge(
-                right,
-                left_on=list(rel.left_columns),
-                right_on=list(rel.right_columns),
+            src, dst = join_index(
+                left_table=self.tables[rel.left_table],
+                right_table=self.tables[rel.right_table],
+                left_keys=rel.left_columns,
+                right_keys=rel.right_columns,
                 how="inner",
+                dtype=dtype,
+                device=device,
             )
-
-            src = torch.as_tensor(joined[LEFT_ROW_ID])
-            dst = torch.as_tensor(joined[RIGHT_ROW_ID])
-            edge_indices.append(
-                torch.stack([src, dst], dim=0).to(device=device)
-            )
+            edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
 
     def sampler(
         self,
-        time_columns: Mapping[str, str] | None = None,
+        temporal: TemporalSamplingConfig | None = None,
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
         .. code-block:: python
 
-            from sdm import RelationalData, TableTensor
+            from sdm import (
+                RelationalData,
+                TableTensor,
+                TemporalSamplingConfig,
+            )
 
             data = RelationalData(
                 tables={
@@ -394,13 +267,16 @@ class RelationalData(DeviceMixin):
             )
 
             sampler = data.sampler(
-                time_columns={"orders": "order_date"},
+                temporal=TemporalSamplingConfig(
+                    time_columns={"orders": "order_date"},
+                    strategy="last",
+                ),
             )
 
         Args:
-            time_columns: Mapping from table name to the datetime column used
-                for temporal sampling. A row in a time-aware table can only be
-                sampled if its timestamp does not exceed the query timestamp.
+            temporal: Temporal sampling configuration. A row in a time-aware
+                table can only be sampled if its timestamp does not exceed the
+                query timestamp.
         """
         if self.device.type == "cuda":
             from sdm.relational.cugraph_sampler import (
@@ -409,14 +285,14 @@ class RelationalData(DeviceMixin):
 
             return CuGraphRelationalSampler(
                 data=self,
-                time_columns=time_columns,
+                temporal=temporal,
             )
 
         from sdm.relational import RelationalSampler
 
         return RelationalSampler(
             data=self,
-            time_columns=time_columns,
+            temporal=temporal,
         )
 
     def to_graphviz(

@@ -738,9 +738,13 @@ def _allclose(
     data1, offset1 = cast(VarLenTensor, inp.contiguous()).data_offset
     data2, offset2 = cast(VarLenTensor, other.contiguous()).data_offset
 
-    return offset1.equal(offset2) and data1.allclose(
-        data2, rtol=rtol, atol=atol, equal_nan=equal_nan
-    )
+    if not offset1.equal(offset2):
+        return False
+
+    if data1.is_floating_point() and data2.is_floating_point():
+        return data1.allclose(data2, rtol, atol, equal_nan)
+
+    return data1.equal(data2)
 
 
 @VarLenTensor.implements(aten.view.default)

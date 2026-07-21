@@ -30,15 +30,11 @@ def _sample(
     task_table: TableTensor,
     task_link: Mapping[str, str | Sequence[str]],
     num_neighbors: Sequence[int],
-    *,
-    time_columns: Mapping[str, str] | None = None,
-    task_time_column: str | None = None,
 ) -> RelationalSamplerOutput:
-    return data.sampler(time_columns=time_columns)(
+    return data.sampler()(
         task_table=task_table,
         task_link=task_link,
         num_neighbors=num_neighbors,
-        task_time_column=task_time_column,
     )
 
 
@@ -82,7 +78,7 @@ def _related_rows(
     ids=("seed-only", "one-hop", "two-hop"),
 )
 def test_pyg_and_cugraph_match_non_temporal_samples(
-    data: RelationalData,
+    relational_data: RelationalData,
     num_neighbors: list[int],
 ) -> None:
     _require_backends()
@@ -93,9 +89,9 @@ def test_pyg_and_cugraph_match_non_temporal_samples(
         "table_column": "user_id",
     }
 
-    expected = _sample(data, task_table, task_link, num_neighbors)
+    expected = _sample(relational_data, task_table, task_link, num_neighbors)
     actual = _sample(
-        data.cuda(),
+        relational_data.cuda(),
         _cuda_table(task_table),
         task_link,
         num_neighbors,
@@ -105,7 +101,9 @@ def test_pyg_and_cugraph_match_non_temporal_samples(
 
 
 @onlyCUDA
-def test_pyg_and_cugraph_match_reverse_samples(data: RelationalData) -> None:
+def test_pyg_and_cugraph_match_reverse_samples(
+    relational_data: RelationalData,
+) -> None:
     _require_backends()
     task_table = _table({"entity": ["A", "C"]}, {"entity": Stype.id})
     task_link = {
@@ -114,9 +112,9 @@ def test_pyg_and_cugraph_match_reverse_samples(data: RelationalData) -> None:
         "table_column": "item_id",
     }
 
-    expected = _sample(data, task_table, task_link, [-1, -1])
+    expected = _sample(relational_data, task_table, task_link, [-1, -1])
     actual = _sample(
-        data.cuda(),
+        relational_data.cuda(),
         _cuda_table(task_table),
         task_link,
         [-1, -1],
@@ -178,45 +176,6 @@ def test_pyg_and_cugraph_match_composite_seed_samples() -> None:
 
 
 @onlyCUDA
-def test_pyg_and_cugraph_match_temporal_last_samples(
-    temporal_data: RelationalData,
-) -> None:
-    _require_backends()
-    task_table = _table(
-        {
-            "entity": [0, 0],
-            "cutoff": pd.to_datetime([2, 10], unit="s").tolist(),
-        },
-        {"entity": Stype.id, "cutoff": Stype.datetime},
-    )
-    task_link = {
-        "task_column": "entity",
-        "table": "roots",
-        "table_column": "root_id",
-    }
-    time_columns = {"first": "time", "second": "time"}
-
-    expected = _sample(
-        temporal_data,
-        task_table,
-        task_link,
-        [1, 1],
-        time_columns=time_columns,
-        task_time_column="cutoff",
-    )
-    actual = _sample(
-        temporal_data.cuda(),
-        _cuda_table(task_table),
-        task_link,
-        [1, 1],
-        time_columns=time_columns,
-        task_time_column="cutoff",
-    )
-
-    assert _canonical_output(actual) == _canonical_output(expected)
-
-
-@onlyCUDA
 @pytest.mark.parametrize(
     ("source", "task"),
     [
@@ -257,7 +216,7 @@ def test_pyg_and_cugraph_reject_invalid_composite_seed_matches(
 
 @onlyCUDA
 def test_pyg_and_cugraph_finite_fanout_satisfies_same_invariants(
-    data: RelationalData,
+    relational_data: RelationalData,
 ) -> None:
     _require_backends()
     task_table = _table({"entity": [0]}, {"entity": Stype.id})
@@ -267,9 +226,9 @@ def test_pyg_and_cugraph_finite_fanout_satisfies_same_invariants(
         "table_column": "user_id",
     }
 
-    cpu_all = _sample(data, task_table, task_link, [-1])
-    cpu_sample = _sample(data, task_table, task_link, [1])
-    gpu_data = data.cuda()
+    cpu_all = _sample(relational_data, task_table, task_link, [-1])
+    cpu_sample = _sample(relational_data, task_table, task_link, [1])
+    gpu_data = relational_data.cuda()
     gpu_task = _cuda_table(task_table)
     gpu_all = _sample(gpu_data, gpu_task, task_link, [-1])
     gpu_sample = _sample(gpu_data, gpu_task, task_link, [1])

@@ -3,7 +3,13 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 import torch
-from sdm import ColumnarTensor, RelationalData, Stype, TableTensor
+from sdm import (
+    ColumnarTensor,
+    RelationalData,
+    Stype,
+    TableTensor,
+    TemporalSamplingConfig,
+)
 from sdm.relational import CuGraphRelationalSampler
 from sdm.relational.sampler import EXAMPLE_ID
 from sdm.testing import onlyCUDA
@@ -73,18 +79,6 @@ def _rows(table: TableTensor, *columns: str) -> list[tuple[Any, ...]]:
         cast(TableTensor, table.cpu()).to_arrow().select(columns).to_pydict()
     )
     return sorted(zip(*(values[column] for column in columns)))
-
-
-def test_last_per_source_selects_latest_per_edge_type() -> None:
-    selected = CuGraphRelationalSampler._last_per_source(
-        batch=torch.tensor([0, 0, 0, 0, 1]),
-        major=torch.tensor([5, 5, 5, 6, 5]),
-        edge_type=torch.tensor([0, 0, 0, 0, 0]),
-        edge_time=torch.tensor([1, 3, 2, 9, 4]),
-        count=2,
-    )
-
-    assert selected.equal(torch.tensor([1, 2, 3, 4]))
 
 
 @onlyCUDA
@@ -245,7 +239,7 @@ def test_cugraph_sampler_resolves_composite_string_seed() -> None:
 
 
 @onlyCUDA
-def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
+def test_cugraph_sampler_resolves_numeric_seed_without_general_join(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _require_rapids()
@@ -262,9 +256,9 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
     task_table = _table({"entity": [20, 30]}, {"entity": Stype.id})
 
     def fail(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("numeric seed lookup used the cuDF join fallback")
+        raise AssertionError("numeric seed lookup used the join fallback")
 
-    monkeypatch.setattr("sdm.relational.cugraph_sampler._to_cudf", fail)
+    monkeypatch.setattr("sdm.relational.cugraph_sampler.join_index", fail)
 
     output = sampler(
         task_table=task_table,
@@ -361,7 +355,54 @@ def test_cugraph_sampler_invalidates_retyped_numeric_seed_lookup() -> None:
 
 
 @onlyCUDA
-def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors(
+def test_cugraph_temporal_sampler_uses_bounded_uniform_fanout(
+    temporal_data: RelationalData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _require_rapids()
+    sampler = CuGraphRelationalSampler(
+        data=temporal_data.cuda(),
+        temporal=TemporalSamplingConfig(
+            time_columns={"first": "time", "second": "time"},
+            strategy="uniform",
+        ),
+    )
+    sample = (
+        sampler._pylibcugraph.heterogeneous_uniform_temporal_neighbor_sample
+    )
+    fanouts: list[list[int]] = []
+
+    def capture(*args: Any, **kwargs: Any) -> Any:
+        fanouts.append(args[7].tolist())
+        return sample(*args, **kwargs)
+
+    monkeypatch.setattr(
+        sampler._pylibcugraph,
+        "heterogeneous_uniform_temporal_neighbor_sample",
+        capture,
+    )
+    sampler(
+        task_table=_table(
+            {
+                "entity": [0],
+                "cutoff": pd.to_datetime([10], unit="s").tolist(),
+            },
+            {"entity": Stype.id, "cutoff": Stype.datetime},
+        ),
+        task_link={
+            "task_column": "entity",
+            "table": "roots",
+            "table_column": "root_id",
+        },
+        num_neighbors=[1, 2],
+        task_time_column="cutoff",
+    )
+
+    assert fanouts == [[1, 1, 1, 1], [2, 2, 2, 2]]
+
+
+@onlyCUDA
+def test_cugraph_sampler_uses_original_cutoff(
     temporal_data: RelationalData,
 ) -> None:
     _require_rapids()
@@ -374,25 +415,45 @@ def test_cugraph_sampler_uses_original_cutoff_and_latest_neighbors(
         {"entity": Stype.id, "cutoff": Stype.datetime},
     )
 
-    output = data.sampler(time_columns={"first": "time", "second": "time"})(
+    output = data.sampler(
+        temporal=TemporalSamplingConfig(
+            time_columns={"first": "time", "second": "time"},
+            strategy="uniform",
+        )
+    )(
         task_table=task_table,
         task_link={
             "task_column": "entity",
             "table": "roots",
             "table_column": "root_id",
         },
-        num_neighbors=[1, 1],
+        num_neighbors=[-1, -1],
         task_time_column="cutoff",
     )
 
     assert _rows(
         output.related_tables.tables["first"], EXAMPLE_ID, "first_id"
-    ) == [(0, 12), (1, 10)]
+    ) == [(0, 11), (0, 12), (1, 10), (1, 11), (1, 12)]
     # The second-hop time (8) is newer than the first-hop time (3), but is
     # valid because every hop uses the task cutoff (10).
     assert _rows(
         output.related_tables.tables["second"], EXAMPLE_ID, "second_id"
-    ) == [(1, 20)]
+    ) == [(1, 20), (1, 21)]
+
+
+@onlyCUDA
+def test_cugraph_temporal_sampler_rejects_last_strategy(
+    temporal_data: RelationalData,
+) -> None:
+    _require_rapids()
+
+    with pytest.raises(NotImplementedError, match="strategy 'last'"):
+        temporal_data.cuda().sampler(
+            temporal=TemporalSamplingConfig(
+                time_columns={"first": "time", "second": "time"},
+                strategy="last",
+            )
+        )
 
 
 @onlyCUDA

@@ -6,19 +6,15 @@ import torch
 from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm.relational.data import (
-    LEFT_ROW_ID,
-    RIGHT_ROW_ID,
-    RelationalData,
-    _to_cudf,
-)
+from sdm.relational.data import RelationalData
+from sdm.relational.join import join_index
 from sdm.relational.sampler import (
     RelationalSampler,
     RelationalSamplerOutput,
+    TemporalSamplingConfig,
     _validate_time_columns,
 )
 from sdm.relational.task import TaskLink
-from sdm.tensor.io import to_cudf
 
 _INTEGER_DTYPES = {
     torch.uint8,
@@ -34,31 +30,37 @@ class CuGraphRelationalSampler(RelationalSampler):
 
     The sampler materializes a persistent single-GPU cuGraph topology and
     keeps task lookup, sampling, and output assembly on the CUDA device.
-    For temporal data, each hop gathers eligible neighbors with cuGraph and
-    applies the ``"last"`` top-k selection on CUDA against the original task
-    cutoff. This matches the node-time semantics of
-    :class:`RelationalSampler` without propagating edge times between hops.
+    For temporal data, each hop samples uniformly from eligible neighbors
+    against the original task cutoff. This retains a fixed cutoff across hops
+    instead of propagating sampled edge times.
 
     Args:
         data: CUDA-resident tables and their relationships.
-        time_columns: Mapping from table name to the datetime column used for
-            temporal ``"last"`` sampling.
+        temporal: Temporal sampling configuration. Only uniform neighbor
+            selection is currently supported.
         random_state: Seed for the advancing cuGraph random-state stream.
     """
 
     def __init__(
         self,
         data: RelationalData,
-        time_columns: Mapping[str, str] | None = None,
+        temporal: TemporalSamplingConfig | None = None,
         random_state: int | None = None,
     ) -> None:
         if data.device.type != "cuda":
             raise ValueError(
                 f"'{self.__class__.__name__}' requires CUDA-resident data"
             )
+        if temporal is not None and temporal.strategy == "last":
+            raise NotImplementedError(
+                "cuGraph temporal sampling does not support strategy 'last'"
+            )
 
         self.data = data
-        self.time_columns = time_columns or {}
+        self.temporal = temporal
+        self.time_columns = (
+            temporal.time_columns if temporal is not None else {}
+        )
         self._generator = np.random.default_rng(random_state)
         _validate_time_columns(self.data, self.time_columns)
 
@@ -157,7 +159,6 @@ class CuGraphRelationalSampler(RelationalSampler):
         dsts: list[Tensor] = []
         edge_types: list[Tensor] = []
         edge_times: list[Tensor] = []
-        target_is_temporal: list[bool] = []
         minimum_time = torch.iinfo(torch.int64).min
 
         times = {
@@ -189,18 +190,11 @@ class CuGraphRelationalSampler(RelationalSampler):
                 (relationship.left_table, left),
                 (relationship.right_table, right),
             ):
-                target_is_temporal.append(table_name in times)
                 if table_name in times:
                     edge_times.append(times[table_name][index])
                 else:
                     edge_times.append(torch.full_like(index, minimum_time))
 
-        self._edge_target_is_temporal = torch.tensor(
-            target_is_temporal,
-            dtype=torch.bool,
-            device=self.data.device,
-        )
-        self._edge_target_is_temporal_host = tuple(target_is_temporal)
         if self._num_edge_types == 0:
             self._resource_handle = None
             self._graph = None
@@ -249,7 +243,7 @@ class CuGraphRelationalSampler(RelationalSampler):
             task_link=task_link,
         )
         if local_seed is None:
-            local_seed = self._resolve_seed_cudf(
+            local_seed = self._resolve_seed_join(
                 task_table=task_table,
                 task_link=task_link,
             )
@@ -272,7 +266,7 @@ class CuGraphRelationalSampler(RelationalSampler):
             task_link.table_columns[0],
         )
         # ColumnarTensor stores numeric IDs as plain tensors. String and
-        # composite IDs continue through the general cuDF join below.
+        # composite IDs continue through the shared join below.
         if (
             task_value.__class__ is not Tensor
             or table_value.__class__ is not Tensor
@@ -319,59 +313,32 @@ class CuGraphRelationalSampler(RelationalSampler):
             and cached.storage_offset() == source.storage_offset()
         )
 
-    def _resolve_seed_cudf(
+    def _resolve_seed_join(
         self,
         task_table: TableTensor,
         task_link: TaskLink,
     ) -> Tensor:
-        import cudf
+        task_index, seed = join_index(
+            left_table=task_table,
+            right_table=self.data.tables[task_link.table],
+            left_keys=task_link.task_columns,
+            right_keys=task_link.table_columns,
+            device=task_table.device,
+        )
+        task_index, perm = task_index.sort()
+        seed = seed[perm]
 
-        left_columns = _to_cudf(
-            table=task_table,
-            columns=task_link.task_columns,
+        expected = torch.arange(
+            task_table.size(-2),
+            dtype=task_index.dtype,
+            device=task_index.device,
         )
-        left = cudf.DataFrame(
-            {
-                **left_columns,
-                LEFT_ROW_ID: to_cudf(
-                    torch.arange(
-                        task_table.size(0),
-                        device=task_table.device,
-                    )
-                ),
-            }
-        )
-        right_table = self.data.tables[task_link.table]
-        right_columns = _to_cudf(
-            table=right_table,
-            columns=task_link.table_columns,
-        )
-        right = cudf.DataFrame(
-            {
-                **right_columns,
-                RIGHT_ROW_ID: to_cudf(
-                    torch.arange(
-                        right_table.size(0),
-                        device=right_table.device,
-                    )
-                ),
-            }
-        )
-
-        joined = left.merge(
-            right,
-            left_on=list(task_link.task_columns),
-            right_on=list(task_link.table_columns),
-            how="left",
-        )
-        joined = joined[[LEFT_ROW_ID, RIGHT_ROW_ID]].sort_values(LEFT_ROW_ID)
-        if len(joined) != len(left) or joined[RIGHT_ROW_ID].null_count > 0:
+        if not task_index.equal(expected):
             raise ValueError(
                 f"Expected each task row to match exactly one row in "
                 f"'{task_link.table}'"
             )
-
-        return torch.as_tensor(joined[RIGHT_ROW_ID]).to(torch.int64)
+        return seed
 
     @staticmethod
     def _id_column(table: TableTensor, column: str) -> Tensor:
@@ -512,12 +479,6 @@ class CuGraphRelationalSampler(RelationalSampler):
         if count == 0:
             return torch.empty(0, dtype=torch.int64, device=self.data.device)
         fanout = np.full(self._num_edge_types, count, dtype=np.int32)
-        if count > 0:
-            # PyG's temporal "last" strategy keeps the newest neighbors per
-            # task example, source, and edge type. cuGraph filters by cutoff
-            # but cannot apply that grouped latest-k here, so gather all
-            # temporal candidates and reproduce the selection below on CUDA.
-            fanout[np.asarray(self._edge_target_is_temporal_host)] = -1
 
         result = (
             self._pylibcugraph.heterogeneous_uniform_temporal_neighbor_sample(
@@ -548,58 +509,8 @@ class CuGraphRelationalSampler(RelationalSampler):
         if minor.numel() == 0:
             return minor
         batch = self._as_tensor(result["batch_id"]).long()
-        if count > 0:
-            major = self._as_tensor(result["majors"])
-            edge_type = self._as_tensor(result["edge_type"]).long()
-            edge_time = self._as_tensor(result["edge_start_time"])
-            is_temporal = self._edge_target_is_temporal[edge_type]
-            keep = ~is_temporal
-            selected = self._last_per_source(
-                batch=batch[is_temporal],
-                major=major[is_temporal],
-                edge_type=edge_type[is_temporal],
-                edge_time=edge_time[is_temporal],
-                count=count,
-            )
-            temporal_index = is_temporal.nonzero().flatten()
-            keep[temporal_index[selected]] = True
-            minor = minor[keep]
-            batch = batch[keep]
 
         return batch * self._num_vertices + minor
-
-    @staticmethod
-    def _last_per_source(
-        batch: Tensor,
-        major: Tensor,
-        edge_type: Tensor,
-        edge_time: Tensor,
-        count: int,
-    ) -> Tensor:
-        """Return PyG-compatible latest-k indices for each source group."""
-        if batch.numel() == 0:
-            return torch.empty(0, dtype=torch.int64, device=batch.device)
-
-        order = edge_time.argsort(descending=True, stable=True)
-        for value in (edge_type, major, batch):
-            order = order[value[order].argsort(stable=True)]
-
-        sorted_batch = batch[order]
-        sorted_major = major[order]
-        sorted_type = edge_type[order]
-        group_start = torch.ones(
-            order.numel(),
-            dtype=torch.bool,
-            device=order.device,
-        )
-        group_start[1:] = (
-            (sorted_batch[1:] != sorted_batch[:-1])
-            | (sorted_major[1:] != sorted_major[:-1])
-            | (sorted_type[1:] != sorted_type[:-1])
-        )
-        position = torch.arange(order.numel(), device=order.device)
-        start = torch.where(group_start, position, -1).cummax(0).values
-        return order[(position - start) < count]
 
     def _seed_nodes(
         self,
