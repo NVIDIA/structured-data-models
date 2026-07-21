@@ -431,6 +431,16 @@ class ICLModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}' received unsupported target "
                 f"stypes: {', '.join(stype.value for stype in invalid)}"
             )
+        if y.categorical.size(-1) > 0:
+            # Missing feature codes are legal, but label embeddings index
+            # by code, so a missing target label crashes or aliases classes.
+            missing = y.categorical < 0
+            if missing.any():
+                raise ValueError(
+                    f"Context target contains missing labels (code -1) in "
+                    f"{int(missing.sum())} rows. Drop or impute these rows "
+                    f"before fitting."
+                )
 
         if related_tables is not None:
             if not self.supports_related_tables:

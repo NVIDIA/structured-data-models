@@ -3,7 +3,13 @@ from typing import Any, ClassVar, cast
 
 import pytest
 import torch
-from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    RelatedTables,
+    Stype,
+    TableTensor,
+)
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
@@ -313,6 +319,75 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         model.calls[-1].related_query_tables.tables["users"].numerical,
         torch.tensor([[3.0]]),
     )
+
+
+def _categorical_table(codes: list[int], *, column: str) -> TableTensor:
+    return TableTensor(
+        columns={Stype.categorical: (column,)},
+        categorical=CategoricalTensor(
+            data=torch.tensor(codes).unsqueeze(-1),
+            categories=(torch.arange(2),),
+        ),
+    )
+
+
+class _CategoricalFeatureModel(_RecordingModel):
+    supported_feature_stypes = frozenset({Stype.numerical, Stype.categorical})
+
+
+def test_context_target_missing_label_validation() -> None:
+    model = _RecordingModel()
+    x_context = torch.randn(4, 3)
+    x_query = torch.randn(2, 3)
+    y_context = _categorical_table([0, 1, -1, 0], column="target")
+
+    with pytest.raises(ValueError, match="missing labels"):
+        model(x_context, y_context, x_query)
+    with pytest.raises(ValueError, match="missing labels"):
+        model.fit(x_context, y_context)
+    assert len(model.calls) == 0
+
+
+def test_context_target_all_missing_labels() -> None:
+    model = _RecordingModel()
+    y_context = _categorical_table([-1, -1, -1, -1], column="target")
+
+    with pytest.raises(
+        ValueError,
+        match=r"missing labels \(code -1\) in 4 rows",
+    ):
+        model.fit(torch.randn(4, 3), y_context)
+
+
+def test_context_feature_missing_codes_allowed() -> None:
+    model = _CategoricalFeatureModel()
+    x_context = TableTensor(
+        columns={
+            Stype.numerical: ("value",),
+            Stype.categorical: ("feature",),
+        },
+        numerical=torch.randn(4, 1),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1], [-1], [0]]),
+            categories=(torch.arange(2),),
+        ),
+    )
+    x_query = TableTensor(
+        columns={
+            Stype.numerical: ("value",),
+            Stype.categorical: ("feature",),
+        },
+        numerical=torch.randn(2, 1),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[1], [-1]]),
+            categories=(torch.arange(2),),
+        ),
+    )
+    y_context = _categorical_table([0, 1, 0, 1], column="target")
+
+    model(x_context, y_context, x_query)
+
+    assert len(model.calls) == 1
 
 
 def test_model_input_validation() -> None:
