@@ -1,10 +1,11 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import torch
 from torch import Tensor
 from typing_extensions import Self
 
-from sdm import RelatedTables, RelationalData
+from sdm import RelationalData, Relationship, TableTensor
 
 
 @dataclass(frozen=True)
@@ -17,11 +18,15 @@ class HomogeneousGraph:  # noqa: D101
     end_node_offsets: dict[str, int]
 
     @classmethod
-    def from_tables(cls, related_tables: RelatedTables) -> Self:  # noqa: D102
+    def from_tables(  # noqa: D102
+        cls,
+        tables: Mapping[str, TableTensor],
+        relationships: Sequence[Relationship],
+    ) -> Self:
         start = 0
         start_node_offsets: dict[str, int] = {}
         end_node_offsets: dict[str, int] = {}
-        for table_name, table in related_tables.tables.items():
+        for table_name, table in tables.items():
             assert table.dim() == 2
             start_node_offsets[table_name] = start
             start += table.size(0)
@@ -32,11 +37,8 @@ class HomogeneousGraph:  # noqa: D101
         edge_types: list[Tensor] = []
         for i, (rel, edge_index) in enumerate(
             zip(
-                related_tables.relationships,
-                RelationalData(
-                    tables=related_tables.tables,
-                    relationships=related_tables.relationships,
-                ).edge_indices(),
+                relationships,
+                RelationalData(tables, relationships).edge_indices(),
             )
         ):
             row, col = edge_index
@@ -48,7 +50,7 @@ class HomogeneousGraph:  # noqa: D101
             edge_types.extend([edge_type, edge_type + 1])
 
         if len(rows) == 0:
-            table = next(iter(related_tables.tables.values()))
+            table = next(iter(tables.values()))
             row = torch.empty(0, dtype=torch.long, device=table.device)
             colptr = torch.zeros(
                 start + 1, dtype=torch.long, device=table.device

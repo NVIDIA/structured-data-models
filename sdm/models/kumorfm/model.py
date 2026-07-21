@@ -1,11 +1,12 @@
 # ruff: noqa: D205
+from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -258,7 +259,6 @@ class _KumoRFM(torch.nn.Module):
         # TODO Support computing relative time.
         # TODO Inject task-features.
         # TODO Inject random heterogeneous GNN.
-        # TODO Make sure edge types are aligned!
 
         # Reason within each Table ############################################
         xs_context: dict[str, Tensor] = {}
@@ -314,7 +314,12 @@ class _KumoRFM(torch.nn.Module):
                 dim=-2,
             )
             del xs_context
-            graph = HomogeneousGraph.from_tables(related_context_tables)
+            graph = HomogeneousGraph.from_tables(
+                tables=related_context_tables.tables,
+                relationships=related_context_tables.relationships,
+            )
+            if cache is not None and cache.is_recording:
+                cache["relationships"] = related_context_tables.relationships
             edge_type_emb = self.gnn.get_edge_type_emb(
                 num_edge_types=graph.num_edge_types,
                 dtype=x_context.dtype,
@@ -336,7 +341,16 @@ class _KumoRFM(torch.nn.Module):
                 dim=-2,
             )
             del xs_query
-            graph = HomogeneousGraph.from_tables(related_query_tables)
+            if related_context_tables is not None:
+                relationships = related_context_tables.relationships
+            else:
+                assert cache is not None
+                assert cache.is_replaying
+                relationships = cache["relationships"]
+            graph = HomogeneousGraph.from_tables(
+                tables=related_query_tables.tables,
+                relationships=cast(Sequence[Relationship], relationships),
+            )
             if edge_type_emb is None:
                 assert cache is not None
                 edge_type_emb = cast(Tensor, cache["edge_type_emb"])
