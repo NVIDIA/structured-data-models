@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Relationship, Stype, TableTensor
+from sdm import RelatedTables, Relationship, Stype, TableTensor, TaskLink
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -261,30 +261,20 @@ class _KumoRFM(torch.nn.Module):
         # TODO Inject random heterogeneous GNN.
 
         graph: HomogeneousGraph | None = None
+        task_index: Tensor | None = None
         y_graph: Tensor | None = None
         if related_context_tables is not None:
+            assert x_context is not None
             graph = HomogeneousGraph.from_tables(
                 tables=related_context_tables.tables,
                 relationships=related_context_tables.relationships,
             )
-            task_indices = RelationalData(
-                tables=related_context_tables.tables
-                | {"__task_link__": x_context},
-                relationships=tuple(
-                    Relationship(
-                        left_table="__task_link__",
-                        left_columns=task_link.task_columns,
-                        right_table=task_link.table,
-                        right_columns=task_link.table_columns,
-                    )
-                    for task_link in related_context_tables.task_links
-                ),
-            ).edge_indices()
-
+            task_index = related_context_tables.task_indices(x_context)[0]
             y_graph = _propagate_y(
                 y=y,
                 graph=graph,
-                task_indices=task_indices,
+                task_links=related_context_tables.task_links,
+                task_indices=[task_index],
                 num_hops=num_hops,
                 num_classes=num_classes,
             )
@@ -305,9 +295,16 @@ class _KumoRFM(torch.nn.Module):
             y_i = y  # Distribute `target` over related tables:
             if related_context_tables is not None:
                 # TODO Split entity table into task+nearby entities.
+                assert graph is not None
+                assert y_graph is not None
                 x_i = related_context_tables.tables[name].numerical
-                y_i = y_i[:1].expand(x_i.size(-2))  # TODO
-                if related_query_tables is not None:
+                start = graph.start_node_offsets[name]
+                end = graph.end_node_offsets[name]
+                y_i = y_graph[start:end]
+                if (
+                    related_query_tables is not None
+                    and name in related_query_tables.tables
+                ):
                     x_i = torch.cat(
                         [x_i, related_query_tables.tables[name].numerical],
                         dim=-2,
@@ -328,7 +325,10 @@ class _KumoRFM(torch.nn.Module):
             if related_context_tables is not None:
                 num_rows = related_context_tables.tables[name].size(-2)
                 xs_context[name] = x_i[..., :num_rows, :]
-            if related_query_tables is not None:
+            if (
+                related_query_tables is not None
+                and name in related_query_tables.tables
+            ):
                 num_rows = related_query_tables.tables[name].size(-2)
                 xs_query[name] = x_i[..., -num_rows:, :]
 
@@ -360,8 +360,12 @@ class _KumoRFM(torch.nn.Module):
                 readout_table=related_context_tables.task_links[0].table,
                 num_hops=num_hops,
             )
+            assert task_index is not None
+            x_context = x_context[task_index[1][task_index[0].argsort()]]
 
         if related_query_tables is not None:
+            assert x_query is not None
+            task_index = related_query_tables.task_indices(x_query)[0]
             x_query: Tensor = torch.cat(
                 [xs_query[name] for name in related_query_tables.tables],
                 dim=-2,
@@ -387,6 +391,7 @@ class _KumoRFM(torch.nn.Module):
                 readout_table=related_query_tables.task_links[0].table,
                 num_hops=num_hops,
             )
+            x_query = x_query[task_index[1][task_index[0].argsort()]]
 
         # Reason across Tables ################################################
         if x_query is None and x_context is not None:
@@ -504,58 +509,28 @@ def _remap_v2_1_checkpoint(
     return remapped
 
 
-def _task_roots(
-    task_table: TableTensor,
-    related_tables: RelatedTables,
-) -> Tensor:
-    _, task_edges = related_tables.edge_indices(
-        task_table=task_table,
-        dtype=torch.long,
-        device=task_table.device,
-    )
-    task_row, root = task_edges[0]
-    permutation = task_row.argsort(stable=True)
-    expected = torch.arange(task_table.size(-2), device=task_row.device)
-    if not task_row[permutation].equal(expected):
-        raise ValueError("Each task row must match exactly one related row")
-    root = root[permutation]
-    if root.unique().numel() != root.numel():
-        raise ValueError("Each task row must match a distinct related row")
-    return root
-
-
-def _inject_task_features(
-    x: Tensor,
-    task_x: Tensor,
-    root_index: Tensor,
-) -> Tensor:
-    task_x = task_x.to(x)
-    scattered = task_x.new_zeros((x.size(0), task_x.size(-1)))
-    scattered.index_copy_(0, root_index, task_x)
-    return torch.cat([x, scattered], dim=-1)
-
-
-def _propagate_targets(
-    y: Tensor,
-    root_index: Tensor,
+def _propagate_y(
+    y: Tensor,  # [R_train]
     graph: HomogeneousGraph,
+    task_links: Sequence[TaskLink],
+    task_indices: Sequence[Tensor],
     num_hops: int,
-    num_classes: int,
-    dtype: torch.dtype,
-) -> Tensor:
-    if num_classes > 0:
-        source = F.one_hot(
-            y.to(torch.long),
-            num_classes=num_classes,
-        ).to(dtype)
-    else:
-        y = y.to(dtype)
+    num_classes: int | None,
+) -> Tensor:  # [R]
+
+    if y.is_floating_point():
         source = torch.stack([y, torch.ones_like(y)], dim=-1)
+    else:
+        source = F.one_hot(y, num_classes=num_classes or -1).float()
 
     state = source.new_zeros((graph.colptr.numel() - 1, source.size(-1)))
-    state.index_add_(0, root_index, source)
+    for task_link, task_index in zip(task_links, task_indices):
+        row, col = task_index
+        col = col + graph.start_node_offsets[task_link.table]
+        state.index_add_(dim=0, index=col, source=source[row])
+
     for _ in range(num_hops):
-        state = state + torch.segment_reduce(
+        state += torch.segment_reduce(
             state[graph.row],
             offsets=graph.colptr,
             reduce="sum",
@@ -563,17 +538,15 @@ def _propagate_targets(
             initial=0,
         )
 
-    if num_classes > 0:
-        support = state.sum(dim=-1)
-        if not support.gt(0).all():
+    if y.is_floating_point():
+        if (state[:, 1] == 0).any():
             raise ValueError(
                 "'num_hops' did not propagate targets to every related row"
             )
-        return state.argmax(dim=-1)
+        return state[:, 0] / state[:, 1]
 
-    support = state[:, 1]
-    if not support.gt(0).all():
+    if (state.sum(dim=-1) == 0).any():
         raise ValueError(
             "'num_hops' did not propagate targets to every related row"
         )
-    return state[:, 0] / support
+    return state.argmax(dim=-1)

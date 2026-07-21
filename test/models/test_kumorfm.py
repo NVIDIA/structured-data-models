@@ -12,11 +12,6 @@ from sdm.models import KumoRFM
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
-from sdm.models.kumorfm.model import (
-    _KumoRFM,
-    _propagate_targets,
-    _remap_v2_1_checkpoint,
-)
 from sdm.testing import withCUDA
 
 
