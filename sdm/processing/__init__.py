@@ -16,13 +16,16 @@ from sdm.processing.feature_permute import FeaturePermute
 from sdm.processing.identity import Identity
 from sdm.processing.impute import MeanImpute
 from sdm.processing.postprocess import SoftmaxTemperature
+from sdm.processing.pca import PCA
 from sdm.processing.power import Power
+from sdm.processing.slice_features import SliceFeatures
 from sdm.processing.ensemble_reduce import EnsembleReduce
 from sdm.processing.quantile import Quantile
 from sdm.processing.recipe import Recipe
 from sdm.processing.sigma_clip import SigmaClip
 from sdm.processing.standard_scale import StandardScale
 from sdm.processing.tfidf_encoder import TfidfEncoder
+from sdm.processing.llm_encoder import Embedder, LLMEncoder
 from sdm.processing.to_numerical import ToNumerical
 
 __all__ = [
@@ -43,13 +46,17 @@ __all__ = [
     "FeaturePermute",
     "Identity",
     "MeanImpute",
+    "PCA",
     "Power",
+    "SliceFeatures",
     "Quantile",
     "SigmaClip",
     "EnsembleReduce",
     "SoftmaxTemperature",
     "StandardScale",
     "TfidfEncoder",
+    "Embedder",
+    "LLMEncoder",
     "ToNumerical",
     "Recipe",
 ]
