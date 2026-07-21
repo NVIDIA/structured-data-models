@@ -35,8 +35,7 @@ def join_index(
         left_keys: Column names from ``left_table`` used as join keys.
         right_keys: Column names from ``right_table`` used as join keys.
         how: The join type.
-        dtype: The dtype of the returned indices. Must be a signed
-            integer dtype wide enough to hold all row indices.
+        dtype: The dtype.
         device: The device.
 
     Returns:
@@ -51,6 +50,7 @@ def join_index(
             f"(got '{left_table.device}' and '{right_table.device}')"
         )
 
+    dtype = dtype or torch.long
     device = device or left_table.device
 
     left_table = left_table[list(left_keys)]
@@ -58,21 +58,10 @@ def join_index(
     left_rows = math.prod(left_table.size()[:-1])
     right_rows = math.prod(right_table.size()[:-1])
 
-    if dtype is None:
-        dtype = torch.long
-
-    if dtype.is_floating_point or dtype.is_complex or not dtype.is_signed:
+    if max(left_rows, right_rows) - 1 > torch.iinfo(dtype).max:
         raise ValueError(
-            f"Expected 'dtype' to be a signed integer dtype since row "
-            f"indices must be exact (got '{dtype}')"
-        )
-
-    max_row_id = max(left_rows, right_rows) - 1
-    if max_row_id > torch.iinfo(dtype).max:
-        raise ValueError(
-            f"Cannot represent row indices up to {max_row_id} in "
-            f"'dtype={dtype}' (its maximum representable value is "
-            f"{torch.iinfo(dtype).max})"
+            f"Creating row indices up to {max(left_rows, right_rows) - 1:,} "
+            f"in '{dtype}' would overflow"
         )
 
     backend: Literal["arrow", "cudf"] = "arrow"
@@ -94,16 +83,14 @@ def join_index(
             warnings.warn(message, RuntimeWarning, stacklevel=2)
             _warned = True
 
-    # Build row IDs in int64 to keep them exact and cast the joined
-    # output to the requested dtype afterwards:
     if backend == "arrow":
         left = left_table.to_arrow().append_column(
             LEFT_ROW_ID,
-            pa.array(torch.arange(left_rows, dtype=torch.long).numpy()),
+            pa.array(torch.arange(left_rows, dtype=dtype).numpy()),
         )
         right = right_table.to_arrow().append_column(
             RIGHT_ROW_ID,
-            pa.array(torch.arange(right_rows, dtype=torch.long).numpy()),
+            pa.array(torch.arange(right_rows, dtype=dtype).numpy()),
         )
 
         joined = left.join(
@@ -114,27 +101,19 @@ def join_index(
         )
 
         return (
-            arrow_as_tensor(joined[LEFT_ROW_ID], device=device).to(dtype),
-            arrow_as_tensor(joined[RIGHT_ROW_ID], device=device).to(dtype),
+            arrow_as_tensor(joined[LEFT_ROW_ID], device=device),
+            arrow_as_tensor(joined[RIGHT_ROW_ID], device=device),
         )
 
     assert backend == "cudf"
     with torch.cuda.device(left_table.device):
         left = left_table.to_cudf()
         left[LEFT_ROW_ID] = to_cudf(
-            torch.arange(
-                left_rows,
-                dtype=torch.long,
-                device=left_table.device,
-            )
+            torch.arange(left_rows, dtype=dtype, device=left_table.device)
         )
         right = right_table.to_cudf()
         right[RIGHT_ROW_ID] = to_cudf(
-            torch.arange(
-                right_rows,
-                dtype=torch.long,
-                device=right_table.device,
-            )
+            torch.arange(right_rows, dtype=dtype, device=right_table.device)
         )
 
         joined = left.merge(
@@ -145,12 +124,6 @@ def join_index(
         )
 
         return (
-            torch.as_tensor(joined[LEFT_ROW_ID]).to(
-                device=device,
-                dtype=dtype,
-            ),
-            torch.as_tensor(joined[RIGHT_ROW_ID]).to(
-                device=device,
-                dtype=dtype,
-            ),
+            torch.as_tensor(joined[LEFT_ROW_ID]).to(device),
+            torch.as_tensor(joined[RIGHT_ROW_ID]).to(device),
         )
