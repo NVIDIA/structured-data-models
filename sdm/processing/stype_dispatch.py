@@ -33,6 +33,8 @@ class StypeDispatch(Processor, InvertibleMixin):
             normalized to :class:`~sdm.processing.Sequential`.
         datetime: Processor route for datetime columns. An iterable is
             normalized to :class:`~sdm.processing.Sequential`.
+        text: Processor route for text columns. An iterable is normalized to
+            :class:`~sdm.processing.Sequential`.
         id: Processor route for identifier columns. An iterable is normalized
             to :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
@@ -49,6 +51,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         categorical: Processor | Iterable[Processor] | None = None,
         datetime: Processor | Iterable[Processor] | None = None,
         id: Processor | Iterable[Processor] | None = None,
+        text: Processor | Iterable[Processor] | None = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
@@ -57,6 +60,7 @@ class StypeDispatch(Processor, InvertibleMixin):
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
+            (Stype.text, text),
             (Stype.id, id),
         ):
             if processor is None:
