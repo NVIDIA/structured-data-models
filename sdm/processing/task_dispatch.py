@@ -119,8 +119,8 @@ class TaskDispatch(Processor):
         reprs = []
         for task, processor in self.processors.items():
             processor = cast(Processor, processor)
-            processor_repr = processor.__repr__(indent=indent + 4)
-            processor_repr = processor_repr[indent + 4 :]
+            processor_repr = processor.__repr__(indent=indent + 2)
+            processor_repr = processor_repr[indent + 2 :]
             reprs.append(f"{' ' * (indent + 2)}{task}: {processor_repr}")
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"
