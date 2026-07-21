@@ -86,25 +86,23 @@ def test_pipeline_accepts_regular_callable() -> None:
 
 
 def test_pipeline_mixes_processors_and_callables() -> None:
-    table = _table()
+    table = _table(
+        torch.tensor(
+            [[1.0, 2.0], [2.0, 3.0], [4.0, 8.0]],
+        )
+    )
     pipeline = Sequential(
         lambda table: table.replace_blocks(numerical=table.numerical.square()),
         StandardScale(),
     )
+    expected = StandardScale().fit_transform(
+        table.replace_blocks(numerical=table.numerical.square())
+    )
 
     assert pipeline.fit(table) is pipeline
-    scale = pipeline.steps[1]
-    assert isinstance(scale, StandardScale)
-    torch.testing.assert_close(
-        scale.mean,
-        table.numerical.square().mean(dim=0),
-    )
-
     output = pipeline.transform(table)
-    torch.testing.assert_close(
-        output.numerical.mean(dim=0),
-        torch.zeros(2),
-    )
+
+    torch.testing.assert_close(output.numerical, expected.numerical)
 
 
 def test_pipeline_accepts_nested_sequential_with_callable() -> None:
