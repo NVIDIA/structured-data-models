@@ -14,12 +14,18 @@ from sdm.tensor import TableTensor
 _YEOJOHNSON_OPTIMIZATION_STEPS = 44
 
 
-def _yeojohnson_transform_from_logs(
+def _yeojohnson_transform(
     inp: Tensor,
     lambdas: Tensor,
-    positive_log: Tensor,
-    negative_log: Tensor,
+    *,
+    positive_log: Tensor | None = None,
+    negative_log: Tensor | None = None,
 ) -> Tensor:
+    if positive_log is None:
+        positive_log = inp.clamp_min(0).log1p()
+    if negative_log is None:
+        negative_log = (-inp).clamp_min(0).log1p()
+
     lambdas = lambdas.unsqueeze(0)
     eps = torch.finfo(inp.dtype).eps
 
@@ -35,15 +41,6 @@ def _yeojohnson_transform_from_logs(
     )
 
     return torch.where(inp >= 0, positive, negative)
-
-
-def _yeojohnson_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
-    return _yeojohnson_transform_from_logs(
-        inp,
-        lambdas,
-        inp.clamp_min(0).log1p(),
-        (-inp).clamp_min(0).log1p(),
-    )
 
 
 def _yeojohnson_inverse_transform(inp: Tensor, lmbda: float) -> Tensor:
@@ -111,11 +108,11 @@ def _yeojohnson_log_likelihood_batch(
     negative_log: Tensor,
     log_jacobian: Tensor,
 ) -> Tensor:
-    transformed = _yeojohnson_transform_from_logs(
+    transformed = _yeojohnson_transform(
         inp,
         lambdas,
-        positive_log,
-        negative_log,
+        positive_log=positive_log,
+        negative_log=negative_log,
     )
     variance = transformed.var(dim=0, correction=0)
     tiny = torch.finfo(inp.dtype).tiny
