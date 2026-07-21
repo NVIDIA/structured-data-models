@@ -138,8 +138,7 @@ class CellEmbedder(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,
-        cat_mask: Tensor | None = None,
+        x: TableTensor,
         d: Tensor | None = None,
     ) -> Tensor:
         """Embed numerical and categorical cells.
