@@ -7,7 +7,7 @@ from sdm.testing import withCUDA
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.uint8, torch.int32])
-def test_join_index_dtype(dtype: torch.dtype, device: torch.device) -> None:
+def test_join_index(dtype: torch.dtype, device: torch.device) -> None:
     left_table = right_table = TableTensor(
         columns={"id": ("id",)},
         id=ColumnarTensor((torch.arange(8, device=device),)),
@@ -31,7 +31,7 @@ def test_join_index_dtype(dtype: torch.dtype, device: torch.device) -> None:
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
-def test_join_index_invalid_dtype(
+def test_invalid_dtype(
     dtype: torch.dtype,
     device: torch.device,
 ) -> None:
@@ -51,7 +51,7 @@ def test_join_index_invalid_dtype(
 
 
 @withCUDA
-def test_join_index_too_narrow_dtype(device: torch.device) -> None:
+def test_overflow(device: torch.device) -> None:
     left_table = right_table = TableTensor(
         columns={"id": ("id",)},
         id=ColumnarTensor((torch.arange(200, device=device),)),
