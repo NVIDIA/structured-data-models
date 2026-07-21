@@ -213,7 +213,7 @@ def test_sdm_native_schema_and_class_label_contract() -> None:
     assert class_order == ("1", "2", "3", "5", "U")
     probabilities = pd.DataFrame(
         [[0.30, 0.04, 0.05, 0.20, 0.41]],
-        columns=["3", "U", "5", "2", "1"],
+        columns=pd.Index(["3", "U", "5", "2", "1"]),
     )
     ordered = _order_probabilities_for_tabarena(
         probabilities,

@@ -110,9 +110,9 @@ class SDMTabICLv2System(ExternalSystemModel):
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
         """Return probabilities in TabArena's expected raw-label order.
 
-        SDM retains ownership of target preprocessing. The adapter only reorders
-        the semantic class-labelled output to the order TabArena's scorer
-        expects; no transformed labels are passed to TabICLv2.
+        SDM retains ownership of target preprocessing. The adapter reorders the
+        semantic class-labelled output to the order TabArena's scorer expects;
+        no transformed labels are passed to TabICLv2.
         """
         if self._problem_type == "regression":
             raise RuntimeError("Regression tasks require '_predict'")
