@@ -30,15 +30,11 @@ def _sample(
     task_table: TableTensor,
     task_link: Mapping[str, str | Sequence[str]],
     num_neighbors: Sequence[int],
-    *,
-    time_columns: Mapping[str, str] | None = None,
-    task_time_column: str | None = None,
 ) -> RelationalSamplerOutput:
-    return data.sampler(time_columns=time_columns)(
+    return data.sampler()(
         task_table=task_table,
         task_link=task_link,
         num_neighbors=num_neighbors,
-        task_time_column=task_time_column,
     )
 
 
@@ -174,45 +170,6 @@ def test_pyg_and_cugraph_match_composite_seed_samples() -> None:
         _cuda_table(task_table),
         task_link,
         [-1],
-    )
-
-    assert _canonical_output(actual) == _canonical_output(expected)
-
-
-@onlyCUDA
-def test_pyg_and_cugraph_match_temporal_last_samples(
-    temporal_data: RelationalData,
-) -> None:
-    _require_backends()
-    task_table = _table(
-        {
-            "entity": [0, 0],
-            "cutoff": pd.to_datetime([2, 10], unit="s").tolist(),
-        },
-        {"entity": Stype.id, "cutoff": Stype.datetime},
-    )
-    task_link = {
-        "task_column": "entity",
-        "table": "roots",
-        "table_column": "root_id",
-    }
-    time_columns = {"first": "time", "second": "time"}
-
-    expected = _sample(
-        temporal_data,
-        task_table,
-        task_link,
-        [1, 1],
-        time_columns=time_columns,
-        task_time_column="cutoff",
-    )
-    actual = _sample(
-        temporal_data.cuda(),
-        _cuda_table(task_table),
-        task_link,
-        [1, 1],
-        time_columns=time_columns,
-        task_time_column="cutoff",
     )
 
     assert _canonical_output(actual) == _canonical_output(expected)
