@@ -80,7 +80,6 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         r"""Whether the cache is in replaying mode."""
         return self._mode == Cache.Mode.replay
 
-    @property
     def size(self) -> int:
         r"""The size in bytes of key/value entries in supported containers."""
 
@@ -90,15 +89,11 @@ class Cache(MutableMapping[str, object], DeviceMixin):
                     value.key.numel() * value.key.element_size()
                     + value.value.numel() * value.value.element_size()
                 )
-            if isinstance(value, Cache):
-                values = value.values()
-            elif isinstance(value, list | tuple):
-                values = value
-            elif isinstance(value, dict):
-                values = value.values()
-            else:
-                return 0
-            return sum(_size(item) for item in values)
+            if isinstance(value, list | tuple):
+                return sum(_size(item) for item in value)
+            if isinstance(value, dict | Cache):
+                return sum(_size(item) for item in value.values())
+            return 0
 
         return _size(self)
 
@@ -107,7 +102,9 @@ class Cache(MutableMapping[str, object], DeviceMixin):
 
         def _freeze(value: object) -> None:
             if isinstance(value, Cache):
-                value.freeze()
+                value._mode = Cache.Mode.replay
+                for item in value.values():
+                    _freeze(item)
             elif isinstance(value, list | tuple):
                 for item in value:
                     _freeze(item)
@@ -115,9 +112,7 @@ class Cache(MutableMapping[str, object], DeviceMixin):
                 for item in value.values():
                     _freeze(item)
 
-        for value in self.values():
-            _freeze(value)
-        self._mode = Cache.Mode.replay
+        _freeze(self)
         return self
 
     def __setitem__(self, key: str, value: object) -> None:

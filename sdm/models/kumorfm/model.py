@@ -210,7 +210,7 @@ class _KumoRFM(torch.nn.Module):
             if isinstance(cache["classes"], Tensor):
                 num_classes = len(cache["classes"])
             y = torch.empty(
-                (0,),
+                (0,),  # NOTE Guaranteed to be 1D for now.
                 dtype=torch.float32 if num_classes is None else torch.int64,
                 device=next(self.parameters()).device,
             )
@@ -277,6 +277,7 @@ class _KumoRFM(torch.nn.Module):
             graph = HomogeneousGraph.from_tables(related_context_tables)
             edge_type_emb = self.gnn.get_edge_type_emb(
                 num_edge_types=graph.num_edge_types,
+                dtype=x_context.dtype,
                 generator=generator,
             )
             if cache is not None and cache.is_recording:

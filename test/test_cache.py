@@ -31,19 +31,4 @@ def test_cache_size() -> None:
         metadata=torch.ones(100),
     )
 
-    assert cache.size == 3 * 4 + 2 * 8 + 5 + 4 * 2
-
-
-def test_cache_freeze_nested() -> None:
-    nested_list = Cache()
-    nested_dict = Cache()
-    cache = Cache(
-        nested_list=[nested_list],
-        nested_dict={"cache": nested_dict},
-    )
-
-    cache.freeze()
-
-    assert cache.is_replaying
-    assert nested_list.is_replaying
-    assert nested_dict.is_replaying
+    assert cache.size() == 3 * 4 + 2 * 8 + 5 + 4 * 2

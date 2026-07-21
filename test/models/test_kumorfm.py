@@ -122,7 +122,7 @@ def test_forward(
 
     torch.manual_seed(1)
     model.fit(x, y, related_tables)
-    out = model.predict(x, related_tables).allclose(out)
+    assert model.predict(x, related_tables).allclose(out)
     model.clear()
 
 
