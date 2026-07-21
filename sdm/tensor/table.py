@@ -106,8 +106,8 @@ class TableTensor(Tensor):
         numerical: The numerical column block of shape ``[..., C_num]``.
         categorical: The categorical column block of shape ``[..., C_cat]``.
         datetime: The ``datetime64[us]`` column block of shape ``[..., C_dt]``.
-        id: The identifier column block of shape ``[..., C_id]``.
         text: The text column block of shape ``[..., C_text]``.
+        id: The identifier column block of shape ``[..., C_id]``.
         device: The device.
     """
 
@@ -118,8 +118,8 @@ class TableTensor(Tensor):
     _numerical: Tensor
     _categorical: CategoricalTensor
     _datetime: Tensor
-    _id: ColumnarTensor
     _text: StringTensor
+    _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
     _column_to_loc: dict[str, tuple[Stype, int]]
 
@@ -135,8 +135,8 @@ class TableTensor(Tensor):
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
-        id: ColumnarTensor | None = None,
         text: StringTensor | None = None,
+        id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
     ) -> None:
         pass
@@ -148,8 +148,8 @@ class TableTensor(Tensor):
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
-        id: ColumnarTensor | None = None,
         text: StringTensor | None = None,
+        id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
@@ -163,8 +163,8 @@ class TableTensor(Tensor):
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
-            (Stype.id, id),
             (Stype.text, text),
+            (Stype.id, id),
         ):
             if block is None:
                 continue
@@ -208,14 +208,14 @@ class TableTensor(Tensor):
             )
         if datetime is None:
             datetime = torch.empty((*size, 0), dtype=torch.long, device=device)
-        if id is None:
-            id = ColumnarTensor((), size=size, device=device)
         if text is None:
             text = StringTensor(
                 data=torch.empty(0, dtype=torch.uint8, device=device),
                 offset=torch.zeros(1, dtype=torch.int32, device=device),
                 size=(*size, 0),
             )
+        if id is None:
+            id = ColumnarTensor((), size=size, device=device)
 
         columns = {
             Stype(stype): tuple(names)
@@ -225,16 +225,16 @@ class TableTensor(Tensor):
             Stype.numerical: tuple(columns.get(Stype.numerical, ())),
             Stype.categorical: tuple(columns.get(Stype.categorical, ())),
             Stype.datetime: tuple(columns.get(Stype.datetime, ())),
-            Stype.id: tuple(columns.get(Stype.id, ())),
             Stype.text: tuple(columns.get(Stype.text, ())),
+            Stype.id: tuple(columns.get(Stype.id, ())),
         }
 
         for stype, block in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
-            (Stype.id, id),
             (Stype.text, text),
+            (Stype.id, id),
         ):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
@@ -262,8 +262,8 @@ class TableTensor(Tensor):
         out._numerical = numerical
         out._categorical = categorical
         out._datetime = datetime
-        out._id = id
         out._text = text
+        out._id = id
         out._columns = columns
         out._column_to_loc = column_to_loc
 
@@ -320,13 +320,10 @@ class TableTensor(Tensor):
                     values = array.to_numpy(zero_copy_only=False)
                     values = values.astype("int64")
                     tensor = torch.from_numpy(values).unsqueeze(-1)
+                elif stype == Stype.text:
+                    tensor = StringTensor.from_arrow(array).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
-                elif stype == Stype.text:
-                    tensor = StringTensor.from_arrow(
-                        array,
-                        size=(len(array), 1),
-                    )
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
@@ -454,14 +451,11 @@ class TableTensor(Tensor):
                         ser = ser.fillna(torch.iinfo(torch.int64).min)
                     tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
                     tensor = tensor.to(device)
+                elif stype == Stype.text:
+                    tensor = StringTensor.from_cudf(ser, device=device)
+                    tensor = tensor.unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_cudf(ser, device=device)
-                elif stype == Stype.text:
-                    tensor = StringTensor.from_cudf(
-                        ser,
-                        size=(len(ser), 1),
-                        device=device,
-                    )
                 else:
                     raise NotImplementedError
                 tensors.append(tensor)
@@ -560,22 +554,22 @@ class TableTensor(Tensor):
         return self._datetime
 
     @property
+    def text(self) -> StringTensor:
+        r"""Return the text column block."""
+        return self._text
+
+    @property
     def id(self) -> ColumnarTensor:
         r"""Return the identifier column block."""
         return self._id
-
-    @property
-    def text(self) -> StringTensor:
-        r"""Return the text/string column block."""
-        return self._text
 
     def items(self) -> Iterator[tuple[Stype, Tensor]]:
         r"""Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
         yield Stype.datetime, self._datetime
-        yield Stype.id, self._id
         yield Stype.text, self._text
+        yield Stype.id, self._id
 
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
@@ -601,8 +595,8 @@ class TableTensor(Tensor):
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
         datetime: Tensor | None = None,
-        id: ColumnarTensor | None = None,
         text: StringTensor | None = None,
+        id: ColumnarTensor | None = None,
     ) -> Self:
         r"""Return a table with one or more semantic blocks replaced.
 
@@ -617,8 +611,8 @@ class TableTensor(Tensor):
             categorical: Replacement categorical block with shape
                 ``[..., C_cat]``.
             datetime: Replacement datetime block with shape ``[..., C_dt]``.
-            id: Replacement identifier block with shape ``[..., C_id]``.
             text: Replacement text block with shape ``[..., C_text]``.
+            id: Replacement identifier block with shape ``[..., C_id]``.
         """
         return self.__class__(
             columns=cast(Mapping[StypeLike, Sequence[str]], self.columns),
@@ -627,8 +621,8 @@ class TableTensor(Tensor):
                 self.categorical if categorical is None else categorical
             ),
             datetime=self.datetime if datetime is None else datetime,
-            id=self.id if id is None else id,
             text=self.text if text is None else text,
+            id=self.id if id is None else id,
         )
 
     def select_stypes(
@@ -771,8 +765,8 @@ class TableTensor(Tensor):
             self._numerical,
             self._categorical,
             self._datetime,
-            self._id,
             self._text,
+            self._id,
         )
         return (self.__class__, args)
 
@@ -941,7 +935,7 @@ def _to_copy(
                 stype not in (Stype.categorical,)
                 or dtype in (torch.int32, torch.int64)
             )
-            and stype not in (Stype.datetime, Stype.id, Stype.text)
+            and stype not in (Stype.datetime, Stype.text, Stype.id)
             else None,
             layout=layout,
             pin_memory=pin_memory,
