@@ -3,7 +3,6 @@ from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
@@ -129,7 +128,6 @@ class _KumoRFM(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_classes = num_classes
         self.max_train_size = max_train_size
 
         self.row_embedding = RowEmbedding(
@@ -149,24 +147,13 @@ class _KumoRFM(torch.nn.Module):
         )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
+            out_channels=num_classes or num_quantiles,
             channels=num_readout_tokens * channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
             norm_bias=norm_bias,
+            temperature=0.9,
             **factory_kwargs,
-        )
-        self.head = Sequential(
-            Linear(
-                in_features=num_readout_tokens * channels,
-                out_features=2 * num_readout_tokens * channels,
-                **factory_kwargs,
-            ),
-            GELU(),
-            Linear(
-                in_features=2 * num_readout_tokens * channels,
-                out_features=num_classes or num_quantiles,
-                **factory_kwargs,
-            ),
         )
 
     def forward(
@@ -285,5 +272,9 @@ class _KumoRFM(torch.nn.Module):
         )
 
         # Reason across Tables ################################################
-        x = self.icl_block(torch.cat([x_context, x_query], dim=-2), y)
-        return self.head(x)
+        return self.icl_block(
+            x=torch.cat([x_context, x_query], dim=-2),
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+        )

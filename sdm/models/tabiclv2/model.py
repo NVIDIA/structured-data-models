@@ -6,14 +6,10 @@ import torch
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
-from sdm.models.tabiclv2.hierarchical_classifier import (
-    HierarchicalClassifier,
-)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -208,8 +204,6 @@ class _TabICLv2(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_classes = num_classes
-
         self.row_embedding = RowEmbedding(
             num_classes=num_classes,
             channels=channels,
@@ -223,31 +217,14 @@ class _TabICLv2(torch.nn.Module):
         )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
+            out_channels=num_classes or num_quantiles,
             channels=num_readout_tokens * channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
             norm_bias=norm_bias,
+            temperature=0.9,
             **factory_kwargs,
         )
-        self.head = Sequential(
-            Linear(
-                in_features=num_readout_tokens * channels,
-                out_features=2 * num_readout_tokens * channels,
-                **factory_kwargs,
-            ),
-            GELU(),
-            Linear(
-                in_features=2 * num_readout_tokens * channels,
-                out_features=num_classes or num_quantiles,
-                **factory_kwargs,
-            ),
-        )
-        self.hierarchical_classifier: HierarchicalClassifier | None = None
-        if self.num_classes > 1:
-            self.hierarchical_classifier = HierarchicalClassifier(
-                num_classes=self.num_classes,
-                temperature=0.9,
-            )
 
     def forward(
         self,
@@ -260,40 +237,13 @@ class _TabICLv2(torch.nn.Module):
         if not y.is_floating_point():
             assert num_classes is not None
 
-        if (
-            cache is not None
-            and num_classes is not None
-            and num_classes > self.num_classes
-        ):
-            # TODO Support KV cache
-            raise NotImplementedError(
-                f"Key/value caching is not supported with more than "
-                f"{self.num_classes} classes (got {num_classes})"
-            )
-
         x = self.row_embedding(x, y, num_classes=num_classes, cache=cache)
-
-        if num_classes is None or num_classes <= self.num_classes:
-            x = self.icl_block(x, y, cache=cache)
-            return self.head(x)
-
-        assert self.hierarchical_classifier is not None
-        log_probs = self.hierarchical_classifier(
-            row_embeddings=x,
+        return self.icl_block(
+            x=x,
             y=y,
             num_classes=num_classes,
-            predictor=self._predict_standard,
+            cache=cache,
         )
-        # Scale the log-probabilities so the output processor's matching
-        # temperature cancels while converting them to probabilities.
-        return log_probs.mul(self.hierarchical_classifier.temperature)
-
-    def _predict_standard(
-        self,
-        row_embeddings: Tensor,  # [R_node + R_test, D]
-        y: Tensor,  # [R_node]
-    ) -> Tensor:  # [R_test, num_classes]
-        return self.head(self.icl_block(x=row_embeddings, y=y))
 
 
 # Helpers #####################################################################
@@ -413,6 +363,6 @@ def _remap_ckpt(
             out[key.replace("icl_predictor.ln", "icl_block.norm")] = value
 
         elif key.startswith("icl_predictor.decoder."):
-            out[key.replace("icl_predictor.decoder", "head")] = value
+            out[key.replace("icl_predictor.decoder", "icl_block.head")] = value
 
     return out

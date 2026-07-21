@@ -103,21 +103,19 @@ class RowEmbedding(torch.nn.Module):
         x = self.lin(x)  # [..., R, C, D]
 
         num_digits = 1
+        if (
+            self.y_emb is not None
+            and num_classes is not None
+            and num_classes > self.num_classes
+        ):
+            bases = _mixed_radix_bases(num_classes, self.num_classes)
+            num_digits = len(bases)
+            x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
+            if y.numel() > 0:
+                y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
+
         if y.numel() > 0:
             if self.y_emb is not None:
-                if num_classes is not None and num_classes > self.num_classes:
-                    # TODO Support KV cache
-                    if cache is not None:
-                        raise NotImplementedError(
-                            f"Key/value caching is not supported with more "
-                            f"than {self.num_classes} classes "
-                            f"(got {num_classes})"
-                        )
-
-                    bases = _mixed_radix_bases(num_classes, self.num_classes)
-                    num_digits = len(bases)
-                    y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
-                    x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
                 y_emb = self.y_emb(y).unsqueeze(-2)
             else:
                 assert self.y_lin is not None
