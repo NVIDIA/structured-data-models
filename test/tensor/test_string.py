@@ -176,7 +176,7 @@ def test_to_cudf_empty(offset_dtype: torch.dtype) -> None:
 def test_to_cudf_requires_cuda() -> None:
     tensor = StringTensor.from_list(["a"])
 
-    with pytest.raises(RuntimeError, match="CUDA-resident"):
+    with pytest.raises(RuntimeError, match="on a CUDA device"):
         tensor.to_cudf()
 
 

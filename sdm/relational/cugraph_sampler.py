@@ -6,19 +6,14 @@ import torch
 from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm.relational.data import (
-    LEFT_ROW_ID,
-    RIGHT_ROW_ID,
-    RelationalData,
-    _to_cudf,
-)
+from sdm.relational.data import RelationalData
+from sdm.relational.join import join_index
 from sdm.relational.sampler import (
     RelationalSampler,
     RelationalSamplerOutput,
     _validate_time_columns,
 )
 from sdm.relational.task import TaskLink
-from sdm.tensor.io import to_cudf
 
 _INTEGER_DTYPES = {
     torch.uint8,
@@ -249,7 +244,7 @@ class CuGraphRelationalSampler(RelationalSampler):
             task_link=task_link,
         )
         if local_seed is None:
-            local_seed = self._resolve_seed_cudf(
+            local_seed = self._resolve_seed_join(
                 task_table=task_table,
                 task_link=task_link,
             )
@@ -272,7 +267,7 @@ class CuGraphRelationalSampler(RelationalSampler):
             task_link.table_columns[0],
         )
         # ColumnarTensor stores numeric IDs as plain tensors. String and
-        # composite IDs continue through the general cuDF join below.
+        # composite IDs continue through the shared join below.
         if (
             task_value.__class__ is not Tensor
             or table_value.__class__ is not Tensor
@@ -319,59 +314,32 @@ class CuGraphRelationalSampler(RelationalSampler):
             and cached.storage_offset() == source.storage_offset()
         )
 
-    def _resolve_seed_cudf(
+    def _resolve_seed_join(
         self,
         task_table: TableTensor,
         task_link: TaskLink,
     ) -> Tensor:
-        import cudf
+        task_index, seed = join_index(
+            left_table=task_table,
+            right_table=self.data.tables[task_link.table],
+            left_keys=task_link.task_columns,
+            right_keys=task_link.table_columns,
+            device=task_table.device,
+        )
+        task_index, perm = task_index.sort()
+        seed = seed[perm]
 
-        left_columns = _to_cudf(
-            table=task_table,
-            columns=task_link.task_columns,
+        expected = torch.arange(
+            task_table.size(-2),
+            dtype=task_index.dtype,
+            device=task_index.device,
         )
-        left = cudf.DataFrame(
-            {
-                **left_columns,
-                LEFT_ROW_ID: to_cudf(
-                    torch.arange(
-                        task_table.size(0),
-                        device=task_table.device,
-                    )
-                ),
-            }
-        )
-        right_table = self.data.tables[task_link.table]
-        right_columns = _to_cudf(
-            table=right_table,
-            columns=task_link.table_columns,
-        )
-        right = cudf.DataFrame(
-            {
-                **right_columns,
-                RIGHT_ROW_ID: to_cudf(
-                    torch.arange(
-                        right_table.size(0),
-                        device=right_table.device,
-                    )
-                ),
-            }
-        )
-
-        joined = left.merge(
-            right,
-            left_on=list(task_link.task_columns),
-            right_on=list(task_link.table_columns),
-            how="left",
-        )
-        joined = joined[[LEFT_ROW_ID, RIGHT_ROW_ID]].sort_values(LEFT_ROW_ID)
-        if len(joined) != len(left) or joined[RIGHT_ROW_ID].null_count > 0:
+        if not task_index.equal(expected):
             raise ValueError(
                 f"Expected each task row to match exactly one row in "
                 f"'{task_link.table}'"
             )
-
-        return torch.as_tensor(joined[RIGHT_ROW_ID]).to(torch.int64)
+        return seed
 
     @staticmethod
     def _id_column(table: TableTensor, column: str) -> Tensor:

@@ -115,28 +115,17 @@ class StringTensor(VarLenTensor):
         )
 
     def to_cudf(self) -> cudf.Series:
-        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`.
-
-        Raises:
-            RuntimeError: If this tensor is not CUDA-resident.
-            ImportError: If cuDF is not installed.
-        """
+        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`."""
         if not self.is_cuda:
             raise RuntimeError(
-                f"Expected '{self.__class__.__name__}' in 'to_cudf' to be "
-                f"CUDA-resident (got '{self.device}')"
+                f"Expected tensor to be on a CUDA device (got '{self.device}')"
             )
 
-        with torch.cuda.device(self.device):
-            try:
-                import cudf
-                import pylibcudf as plc
-            except ImportError as exc:
-                raise ImportError(
-                    "Converting tensors to cuDF requires cuDF"
-                ) from exc
+        tensor = cast(StringTensor, self.contiguous())
 
-            tensor = cast(StringTensor, self.contiguous())
+        with torch.cuda.device(self.device):
+            import cudf
+            import pylibcudf as plc
 
             # StringTensor stores variable-width strings in separate UTF-8
             # data and offset buffers. Use pylibcudf to expose them without a

@@ -245,7 +245,7 @@ def test_cugraph_sampler_resolves_composite_string_seed() -> None:
 
 
 @onlyCUDA
-def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
+def test_cugraph_sampler_resolves_numeric_seed_without_general_join(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _require_rapids()
@@ -262,9 +262,9 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
     task_table = _table({"entity": [20, 30]}, {"entity": Stype.id})
 
     def fail(*args: Any, **kwargs: Any) -> None:
-        raise AssertionError("numeric seed lookup used the cuDF join fallback")
+        raise AssertionError("numeric seed lookup used the join fallback")
 
-    monkeypatch.setattr("sdm.relational.cugraph_sampler._to_cudf", fail)
+    monkeypatch.setattr("sdm.relational.cugraph_sampler.join_index", fail)
 
     output = sampler(
         task_table=task_table,
