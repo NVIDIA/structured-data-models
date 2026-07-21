@@ -105,7 +105,7 @@ class ICLBlock(torch.nn.Module):
         cache_prefix: str,
         batch_size_limit: int | None,
     ) -> Tensor:  # [..., R_test, D or out_channels]
-        train_size = y.size(-1)
+        R_train = y.size(-1)
 
         if y.numel() > 0:
             if self.y_emb is not None:
@@ -114,17 +114,15 @@ class ICLBlock(torch.nn.Module):
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1))  # [..., R_train, D]
 
-            x[..., :train_size, :] += y_emb.to(x.dtype)
+            x[..., :R_train, :] += y_emb.to(x.dtype)
 
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
             result = layer(
-                query=x[..., train_size:, :]
-                if i == len(self.layers) - 1
-                else x,
+                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
                 key_value=cache[key]
                 if cache is not None and cache.is_replaying
-                else x[..., :train_size, :],  # [..., R_train, D]
+                else x[..., :R_train, :],  # [..., R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
                 batch_size_limit=batch_size_limit,
             )
