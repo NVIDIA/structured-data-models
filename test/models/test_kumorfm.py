@@ -202,7 +202,7 @@ def test_forward(
     device: torch.device,
     dtype: torch.dtype,
 ) -> None:
-    model = KumoRFM(False, device)
+    model = KumoRFM(pretrained=False, device=device)
     if device.type == "cpu":
         assert repr(model) == "KumoRFM()"
     else:
