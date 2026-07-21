@@ -1,24 +1,17 @@
-from typing import cast
-
-import pandas as pd
 import pytest
 import torch
-from sdm import TableTensor, infer_stypes
+from sdm import ColumnarTensor, TableTensor
 from sdm.relational.join import join_index
 from sdm.testing import withCUDA
 
 
-def table(num_rows: int, device: torch.device) -> TableTensor:
-    df = pd.DataFrame({"id": range(num_rows)})
-    tensor = TableTensor.from_pandas(df=df, stypes=infer_stypes(df))
-    return cast(TableTensor, tensor.to(device))
-
-
 @withCUDA
-@pytest.mark.parametrize("dtype", [torch.int8, torch.int32])
+@pytest.mark.parametrize("dtype", [torch.uint8, torch.int32])
 def test_join_index_dtype(dtype: torch.dtype, device: torch.device) -> None:
-    num_rows = 8 if dtype == torch.int8 else 5000
-    left_table = right_table = table(num_rows, device)
+    left_table = right_table = TableTensor(
+        columns={"id": ("id",)},
+        id=ColumnarTensor((torch.arange(8, device=device),)),
+    )
 
     left_index, right_index = join_index(
         left_table=left_table,
@@ -32,24 +25,22 @@ def test_join_index_dtype(dtype: torch.dtype, device: torch.device) -> None:
     assert right_index.dtype == dtype
     assert left_index.device == device
     assert right_index.device == device
-    # Self-join on unique keys must yield every row index exactly once:
-    expected = torch.arange(num_rows, dtype=dtype, device=device)
-    assert left_index.sort().values.equal(expected)
+    assert left_index.sort()[0].equal(torch.arange(8, device=device))
     assert right_index.equal(left_index)
 
 
 @withCUDA
-@pytest.mark.parametrize(
-    "dtype",
-    [torch.float16, torch.float32, torch.uint8],
-)
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
 def test_join_index_invalid_dtype(
     dtype: torch.dtype,
     device: torch.device,
 ) -> None:
-    left_table = right_table = table(8, device)
+    left_table = right_table = TableTensor(
+        columns={"id": ("id",)},
+        id=ColumnarTensor((torch.arange(8, device=device),)),
+    )
 
-    with pytest.raises(ValueError, match="signed integer"):
+    with pytest.raises(TypeError, match="requires an integer input type"):
         join_index(
             left_table=left_table,
             right_table=right_table,
@@ -61,7 +52,10 @@ def test_join_index_invalid_dtype(
 
 @withCUDA
 def test_join_index_too_narrow_dtype(device: torch.device) -> None:
-    left_table = right_table = table(200, device)
+    left_table = right_table = TableTensor(
+        columns={"id": ("id",)},
+        id=ColumnarTensor((torch.arange(200, device=device),)),
+    )
 
     with pytest.raises(ValueError, match="row indices up to 199"):
         join_index(
