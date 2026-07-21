@@ -18,6 +18,10 @@ from sdm.explain.base import (
     ExplanationMethod,
 )
 from sdm.explain.gradient import GradientSensitivity
+from sdm.explain.captum import (
+    IntegratedGradientsDiagnostics,
+    CaptumIntegratedGradients,
+)
 
 __all__ = [
     "InputSite",
@@ -34,4 +38,6 @@ __all__ = [
     "ExplanationCallable",
     "ExplanationMethod",
     "GradientSensitivity",
+    "IntegratedGradientsDiagnostics",
+    "CaptumIntegratedGradients",
 ]

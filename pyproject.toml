@@ -47,6 +47,9 @@ test = [
     "pytest-cov",
     "pandas",
 ]
+captum = [
+    "captum>=0.9",
+]
 doc = [
     "myst-parser",
     "shibuya",
@@ -170,6 +173,7 @@ ignorelist = ["id"]
 
 [tool.ty.analysis]
 allowed-unresolved-imports = [
+    "captum.**",
     "cudf.**",
     "cupy.**",
     "pyg_lib.**",

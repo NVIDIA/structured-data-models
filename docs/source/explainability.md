@@ -165,3 +165,63 @@ scaling. It is not an additive contribution or evidence of causality. The
 method covers processed numerical sites exposed by prepared execution,
 including recipe-generated calendar columns. Model-internal latent features
 outside that boundary are not included.
+
+## Captum Integrated Gradients
+
+Install the optional dependency with
+`pip install "structured-data-models[captum]"`. Importing `sdm.explain` does
+not import Captum.
+
+`CaptumIntegratedGradients` uses the same full-context model execution path as
+native gradient sensitivity:
+
+```python
+from sdm.explain import CaptumIntegratedGradients, InputSite
+
+method = CaptumIntegratedGradients(
+    baselines={
+        InputSite(split="query"): processed_query_baseline,
+        InputSite(split="query", table="users"): processed_users_baseline,
+    },
+    n_steps=50,
+)
+explanation = model.explain_full_context(
+    method,
+    x_context,
+    y_context,
+    x_query,
+    related_context,
+    related_query,
+    target=OutputIndex(row=0, column="approved"),
+)
+```
+
+Baselines are method configuration, not model configuration. They are keyed
+by `InputSite` so one method can select task, context, query, or related-table
+inputs without changing a model class. A baseline may be a constant scalar, a
+numerical tensor, or a schema-aligned `TableTensor`. Values are in the
+processed feature space exposed to the method. If `baselines` is omitted,
+every floating-point input site is compared with zero. If a mapping is
+supplied, only its sites vary; unlisted sites stay fixed at their endpoint
+values.
+
+The method adapts SDM's repeatable scalar evaluation callable to Captum's
+`IntegratedGradients` callable. Captum repeatedly interpolates numerical
+values from each baseline to the endpoint; SDM performs each model evaluation
+with identical prepared inputs and random state. The public `forward()`
+remains inference-only.
+
+Each varied site yields a signed, unnormalized `FeatureAttribution` whose
+`values` is an aligned `TableTensor`. `IntegratedGradientsDiagnostics` records
+the baseline prediction, varied sites, integration steps, and Captum's signed
+completeness residual:
+
+```text
+sum(attributions) - (prediction[target] - reference_prediction[target])
+```
+
+The residual is an approximation diagnostic, not an error bound. Integrated
+Gradients is baseline-dependent and does not establish causality. The initial
+adapter supports full-context execution only; fitted inference caches are
+inference tensors and therefore cannot provide the gradient path Captum
+requires.

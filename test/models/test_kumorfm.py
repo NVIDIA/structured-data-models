@@ -9,9 +9,11 @@ from sdm import (
     TableTensor,
 )
 from sdm.explain import (
+    CaptumIntegratedGradients,
     FeatureAttribution,
     GradientSensitivity,
     InputSite,
+    IntegratedGradientsDiagnostics,
     OutputIndex,
 )
 from sdm.models import KumoRFM
@@ -389,9 +391,19 @@ def _small_kumorfm_core(
     return core
 
 
-def test_gradient_sensitivity_uses_kumorfm_related_inputs(
+def _kumorfm_explanation_case(
     relational_data: RelationalData,
-) -> None:
+) -> tuple[
+    KumoRFM,
+    tuple[
+        TableTensor,
+        TableTensor,
+        TableTensor,
+        RelatedTables,
+        RelatedTables,
+    ],
+    RelatedTables,
+]:
     model = KumoRFM(pretrained=False, device="meta")
     model.cls_model = _small_kumorfm_core(
         num_classes=10,
@@ -434,6 +446,13 @@ def test_gradient_sensitivity_uses_kumorfm_related_inputs(
         columns=("target",),
     )
     args = (x_context, y_context, x_query, related, related)
+    return model, args, related
+
+
+def test_gradient_sensitivity_uses_kumorfm_related_inputs(
+    relational_data: RelationalData,
+) -> None:
+    model, args, related = _kumorfm_explanation_case(relational_data)
     expected = model(
         *args,
         generator=torch.Generator().manual_seed(3),
@@ -486,3 +505,44 @@ def test_gradient_sensitivity_uses_kumorfm_related_inputs(
             maxima.append(attribution.values.numerical.abs().amax())
 
     assert torch.stack(maxima).amax().item() == pytest.approx(1.0)
+
+
+def test_captum_integrated_gradients_uses_kumorfm_execution(
+    relational_data: RelationalData,
+) -> None:
+    pytest.importorskip("captum")
+    model, args, _ = _kumorfm_explanation_case(relational_data)
+    query_site = InputSite(split="query")
+    expected = model(
+        *args,
+        generator=torch.Generator().manual_seed(3),
+        num_hops=2,
+    )
+
+    explanation = model.explain_full_context(
+        CaptumIntegratedGradients(
+            baselines={query_site: torch.zeros(1, 1)},
+            n_steps=4,
+        ),
+        *args,
+        generator=torch.Generator().manual_seed(3),
+        num_hops=2,
+        target=OutputIndex(row=0, column="q500"),
+    )
+
+    assert explanation.prediction.allclose(expected)
+    assert explanation.target.column == 499
+    assert all(parameter.grad is None for parameter in model.parameters())
+    assert len(explanation.attributions) == 1
+    attribution = explanation.attributions[0]
+    assert attribution.site == query_site
+    assert attribution.score_kind == "integrated_gradients"
+    assert attribution.input_space == "processed"
+    assert attribution.values.size() == (1, 2)
+    assert torch.isfinite(attribution.values.numerical).all()
+    assert len(explanation.diagnostics) == 1
+    diagnostics = explanation.diagnostics[0]
+    assert isinstance(diagnostics, IntegratedGradientsDiagnostics)
+    assert diagnostics.varied_sites == (query_site,)
+    assert diagnostics.n_steps == 4
+    assert torch.isfinite(diagnostics.convergence_delta).all()
