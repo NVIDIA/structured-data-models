@@ -39,7 +39,6 @@ def test_category_shuffle_shift_maps_single_target() -> None:
         [[0], [1], [2], [-1]],
         (("a", "b", "c"),),
     )
-    torch.manual_seed(3)  # draws a cyclic offset of 1 for three classes
     processor = CategoryShuffle(method="shift")
 
     output = processor.fit_transform(target)
@@ -69,7 +68,6 @@ def test_category_shuffle_random_permutes_each_categorical_column(
         (("a", "b", "c"), ("x", "y")),
         device=device,
     )
-    torch.manual_seed(0)
     processor = CategoryShuffle(method="random")
 
     transformed = processor.fit_transform(features)
