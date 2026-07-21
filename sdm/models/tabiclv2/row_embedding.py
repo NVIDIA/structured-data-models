@@ -30,7 +30,7 @@ class RowEmbedding(torch.nn.Module):
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
 
-        self.max_classes = num_classes
+        self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
         self.y_lin: torch.nn.Module | None = None
         if num_classes > 0:
@@ -84,8 +84,8 @@ class RowEmbedding(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
-        train_mask: Tensor | None = None,  # [R],
         max_keys: int | None = None,
+        num_classes: int | None = None,
         cache: Cache | None = None,
         batch_size_limit: int | None = None,
         generator: torch.Generator | None = None,
@@ -94,7 +94,6 @@ class RowEmbedding(torch.nn.Module):
         R_train = y.size(-1)
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
-        train_mask: Any = slice(R_train) if train_mask is None else train_mask
 
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
@@ -106,21 +105,16 @@ class RowEmbedding(torch.nn.Module):
         num_digits = 1
         if y.numel() > 0:
             if self.y_emb is not None:
-                # TODO Cache `num_classes` to avoid device synchronization.
-                num_classes = int(y.max()) + 1
-                if torch.compiler.is_compiling():
-                    # FIXME Don't give up on hierarchical classification.
-                    torch._check(num_classes <= self.max_classes)
-                if num_classes > self.max_classes:
+                if num_classes is not None and num_classes > self.num_classes:
                     # TODO Support KV cache
                     if cache is not None:
                         raise NotImplementedError(
                             f"Key/value caching is not supported with more "
-                            f"than {self.max_classes} classes "
+                            f"than {self.num_classes} classes "
                             f"(got {num_classes})"
                         )
 
-                    bases = _mixed_radix_bases(num_classes, self.max_classes)
+                    bases = _mixed_radix_bases(num_classes, self.num_classes)
                     num_digits = len(bases)
                     y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
                     x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
@@ -130,7 +124,7 @@ class RowEmbedding(torch.nn.Module):
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
 
             # y_emb has shape [F, ..., R_train, 1, D]:
-            x[..., train_mask, :, :] += y_emb.to(x.dtype)
+            x[..., :R_train, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis):
         x = x.transpose(-2, -3)  # [..., C, R, D]
@@ -139,7 +133,7 @@ class RowEmbedding(torch.nn.Module):
             if cache is not None and cache.is_replaying:
                 key_value = cache[key]
             else:
-                key_value = x[..., train_mask, :]
+                key_value = x[..., :R_train, :]
                 if max_keys is not None and key_value.size(-2) > max_keys:
                     index = torch.randperm(
                         key_value.size(-2),

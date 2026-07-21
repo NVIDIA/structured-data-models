@@ -3,7 +3,7 @@ import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
-from typing import ClassVar, cast
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
@@ -31,10 +31,10 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
-class Model(torch.nn.Module, ABC):
+class ICLModel(torch.nn.Module, ABC):
     r"""Base model for in-context foundation models on structured data.
 
-    :class:`Model` defines the public interface shared among in-context
+    :class:`ICLModel` defines the public interface shared among in-context
     foundation models on structured data.
     It enriches models by unified pre-processing and post-processing routines,
     key/value caching, and ensembling.
@@ -61,7 +61,9 @@ class Model(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-    ) -> TableTensor:  # [..., R_query, *]
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
 
         Args:
@@ -76,9 +78,14 @@ class Model(torch.nn.Module, ABC):
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators for ensembling.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
+            kwargs: Additional keyword arguments passed to the model.
 
         Returns:
-            The prediction ``[..., R_query, *]`` for all query examples.
+            The processed prediction. Member outputs enter ``recipe.output``
+            stacked as ``[E, ..., R_query, *]``; the output processors
+            determine whether the leading estimator dimension remains.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -106,8 +113,14 @@ class Model(torch.nn.Module, ABC):
 
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
-            x_context_i = recipe.features.fit_transform(x_context)
-            y_context_i = recipe.target.fit_transform(y_context)
+            x_context_i = recipe.features.fit_transform(
+                x_context,
+                generator=generator,
+            )
+            y_context_i = recipe.target.fit_transform(
+                y_context,
+                generator=generator,
+            )
             x_query_i = recipe.features.transform(x_query)
 
             related_context_tables_i = related_query_tables_i = None
@@ -119,7 +132,10 @@ class Model(torch.nn.Module, ABC):
                 related_context_tables_i = replace(
                     related_context_tables,
                     tables={
-                        name: related_processors[name].fit_transform(t)
+                        name: related_processors[name].fit_transform(
+                            t,
+                            generator=generator,
+                        )
                         for name, t in related_context_tables.tables.items()
                     },
                 )
@@ -153,6 +169,8 @@ class Model(torch.nn.Module, ABC):
                 related_context_tables=related_context_tables_i,
                 related_query_tables=related_query_tables_i,
                 cache=None,
+                generator=generator,
+                **kwargs,
             )
             if y_context_i.numerical.size(-1) == 1:
                 if not isinstance(recipe.target, InvertibleMixin):
@@ -172,6 +190,8 @@ class Model(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -187,6 +207,9 @@ class Model(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
+            kwargs: Additional keyword arguments passed to the model.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -201,8 +224,8 @@ class Model(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            x_i = recipe.features.fit_transform(x)
-            y_i = recipe.target.fit_transform(y)
+            x_i = recipe.features.fit_transform(x, generator=generator)
+            y_i = recipe.target.fit_transform(y, generator=generator)
 
             related_tables_i = None
             related_processors = None
@@ -214,7 +237,10 @@ class Model(torch.nn.Module, ABC):
                 related_tables_i = replace(
                     related_tables,
                     tables={
-                        name: related_processors[name].fit_transform(t)
+                        name: related_processors[name].fit_transform(
+                            t,
+                            generator=generator,
+                        )
                         for name, t in related_tables.tables.items()
                     },
                 )
@@ -235,6 +261,7 @@ class Model(torch.nn.Module, ABC):
                 classes=y_i.categorical.categories[0]
                 if y_i.categorical.size(-1) > 0
                 else None,
+                kwargs=kwargs,
             )
 
             self._forward(
@@ -244,10 +271,11 @@ class Model(torch.nn.Module, ABC):
                 related_context_tables=related_tables_i,
                 related_query_tables=None,
                 cache=cache,
+                generator=generator,
+                **kwargs,
             )
-            cache.freeze()
+            cache = cache.cpu().freeze()
             caches.append(cache)
-
         self._caches = caches
 
     def clear(self) -> None:
@@ -259,7 +287,7 @@ class Model(torch.nn.Module, ABC):
         self,
         x: Tensor | TableTensor,  # [..., R, D]
         related_tables: RelatedTables | None = None,
-    ) -> TableTensor:  # [..., R, *]
+    ) -> TableTensor:  # Recipe-defined output shape.
         r"""Predict unseen query examples.
 
         .. note::
@@ -272,7 +300,9 @@ class Model(torch.nn.Module, ABC):
             related_tables: Related context for query examples.
 
         Returns:
-            The prediction ``[..., R, *]`` for all query examples.
+            The processed prediction. Member outputs enter ``recipe.output``
+            stacked as ``[E, ..., R, *]``; the output processors determine
+            whether the leading estimator dimension remains.
         """
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
@@ -330,7 +360,9 @@ class Model(torch.nn.Module, ABC):
                 x_query=x_i,
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
-                cache=cache,
+                cache=cache.to(x_i.device),
+                generator=None,
+                **cast(dict[str, Any], cache["kwargs"]),
             )
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):
@@ -340,6 +372,11 @@ class Model(torch.nn.Module, ABC):
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
         return recipe.output.transform(out)
+
+    def __repr__(self) -> str:
+        device = next(self.parameters()).device
+        device_repr = f"device={device}" if device.type != "cpu" else ""
+        return f"{self.__class__.__name__}({device_repr})"
 
     # Abstract Methods ########################################################
 
@@ -352,6 +389,8 @@ class Model(torch.nn.Module, ABC):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
         pass
 

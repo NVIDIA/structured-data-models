@@ -43,6 +43,8 @@ class StypeDispatch(Processor, InvertibleMixin):
         datetime: Processor or stateless callable route for datetime columns.
             An iterable is normalized to
             :class:`~sdm.processing.Sequential`.
+        text: Processor or stateless callable route for text columns. An
+            iterable is normalized to :class:`~sdm.processing.Sequential`.
         id: Processor or stateless callable route for identifier columns. An
             iterable is normalized to :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
@@ -59,6 +61,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         categorical: _ProcessorRoute | None = None,
         datetime: _ProcessorRoute | None = None,
         id: _ProcessorRoute | None = None,
+        text: _ProcessorRoute | None = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
@@ -67,6 +70,7 @@ class StypeDispatch(Processor, InvertibleMixin):
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
+            (Stype.text, text),
             (Stype.id, id),
         ):
             if processor is None:
@@ -187,7 +191,8 @@ class StypeDispatch(Processor, InvertibleMixin):
         reprs = []
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            processor_repr = processor.__repr__(indent=indent + 4)
+            processor_repr = processor.__repr__(indent=indent + 2)
+            processor_repr = processor_repr[indent + 2 :]
             reprs.append(f"{' ' * (indent + 2)}{stype}: {processor_repr}")
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"

@@ -13,10 +13,9 @@ from sdm.processing import (
 )
 
 
-def _table(seed: int = 0) -> TableTensor:
-    generator = torch.Generator().manual_seed(seed)
+def _table() -> TableTensor:
     return TableTensor.from_tensor(
-        torch.randn(32, 2, generator=generator),
+        torch.arange(64, dtype=torch.float32).view(32, 2),
         columns=("x0", "x1"),
     )
 
@@ -108,9 +107,6 @@ def test_choice_is_reproducible_with_generator() -> None:
 
 def test_choice_repr_shows_all_options() -> None:
     choice = Choice(Identity(), StandardScale())
-
-    torch.manual_seed(0)
-    choice.fit(_table())
 
     assert "Identity" in repr(choice)
     assert "StandardScale" in repr(choice)
