@@ -147,10 +147,10 @@ class TabICLv2(ICLModel):
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
-        if x_context is None and x_query is not None:
-            x = x_query.numerical
-        elif x_query is None and x_context is not None:
+        if x_query is None and x_context is not None:
             x = x_context.numerical
+        elif x_context is None and x_query is not None:
+            x = x_query.numerical
         else:
             assert x_context is not None
             assert x_query is not None

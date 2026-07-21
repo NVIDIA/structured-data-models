@@ -17,11 +17,7 @@ class HomogeneousGraph:  # noqa: D101
     end_node_offsets: dict[str, int]
 
     @classmethod
-    def from_related_tables(  # noqa: D102
-        cls,
-        related_tables: RelatedTables,
-    ) -> Self:
-
+    def from_tables(cls, related_tables: RelatedTables) -> Self:  # noqa: D102
         start = 0
         start_node_offsets: dict[str, int] = {}
         end_node_offsets: dict[str, int] = {}

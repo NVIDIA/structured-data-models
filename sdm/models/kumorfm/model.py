@@ -182,6 +182,11 @@ class _KumoRFM(torch.nn.Module):
         generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
+        if related_context_tables is None and related_query_tables is None:
+            raise ValueError(
+                f"'{self.__class__.__name__}' requires related tables"
+            )
+
         for tables in (related_context_tables, related_query_tables):
             if tables is not None and len(tables.task_links) != 1:
                 raise NotImplementedError(
@@ -189,14 +194,12 @@ class _KumoRFM(torch.nn.Module):
                     f"link to an entity table (got {len(tables.task_links)})"
                 )
 
-        # TODO Support `fit+predict`:
-        assert x_context is not None
-        assert y_context is not None
-        assert x_query is not None
-        assert related_context_tables is not None
-        assert related_query_tables is not None
+        if num_hops is None:  # Infer `num_hops`:
+            num_hops = 2  # TODO Support automatic `num_hops` detection.
+            if cache is not None and cache.is_recording:
+                cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
 
-        num_classes: int | None = None
+        num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
             y = y_context.categorical.as_tensor().squeeze(-1)
             num_classes = len(y_context.categorical.categories[0])
@@ -206,17 +209,11 @@ class _KumoRFM(torch.nn.Module):
             assert cache is not None
             if isinstance(cache["classes"], Tensor):
                 num_classes = len(cache["classes"])
-            dtype = torch.float32 if num_classes is None else torch.int64
             y = torch.empty(
                 (0,),
-                dtype=dtype,
+                dtype=torch.float32 if num_classes is None else torch.int64,
                 device=next(self.parameters()).device,
             )
-
-        if num_hops is None:
-            num_hops = 2  # TODO Support automatic `num_hops` detection.
-            if cache is not None and cache.is_recording:
-                cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
 
         # TODO Support computing relative time.
         # TODO Inject task-features.
@@ -226,64 +223,100 @@ class _KumoRFM(torch.nn.Module):
         # Reason within each Table ############################################
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
-        for name in related_context_tables.tables:
-            # TODO Split entity table into task+nearby entities.
-            x_context_i = related_context_tables.tables[name].numerical
-            x_query_i = related_query_tables.tables[name].numerical
-            xs_context[name], xs_query[name] = self.row_embedding(
-                x=torch.cat([x_context_i, x_query_i], dim=-2),
-                y=torch.randint(  # TODO Inject real label.
-                    low=0,
-                    high=2,
-                    size=x_context_i.size()[:-1],
-                    dtype=torch.int64
-                    if y_context.categorical.size(-1) > 0
-                    else torch.float32,
-                    device=y_context.device,
-                ),
+        for name in cast(
+            RelatedTables,
+            related_context_tables or related_query_tables,
+        ).tables:
+            table_cache: Cache | None = None
+            if cache is not None and cache.is_recording:
+                table_cache = Cache()
+            elif cache is not None:
+                table_cache = cast(Cache, cache[f"table_{name}"])
+
+            y_i = y  # Distribute `target` over related tables:
+            if related_context_tables is not None:
+                # TODO Split entity table into task+nearby entities.
+                x_i = related_context_tables.tables[name].numerical
+                y_i = y_i[:1].expand(x_i.size(-2))  # TODO
+                if related_query_tables is not None:
+                    x_i = torch.cat(
+                        [x_i, related_query_tables.tables[name].numerical],
+                        dim=-2,
+                    )
+            else:
+                assert related_query_tables is not None
+                x_i = related_query_tables.tables[name].numerical
+
+            x_i = self.row_embedding(
+                x=x_i,
+                y=y_i,
                 max_keys=self.max_train_size,
                 num_classes=num_classes,
-                cache=None,  # TODO
+                cache=table_cache,
                 generator=generator,
-            ).split([x_context_i.size(-2), x_query_i.size(-2)], dim=-2)
+            )
+
+            if related_context_tables is not None:
+                num_rows = related_context_tables.tables[name].size(-2)
+                xs_context[name] = x_i[..., :num_rows, :]
+            if related_query_tables is not None:
+                num_rows = related_query_tables.tables[name].size(-2)
+                xs_query[name] = x_i[..., -num_rows:, :]
+
+            if cache is not None and cache.is_recording:
+                cache[f"table_{name}"] = cast(Cache, table_cache)
 
         # Inter-Message Passing Exchange ######################################
-        graph_context = HomogeneousGraph.from_related_tables(
-            related_context_tables
-        )
-        x_context: Tensor = torch.cat(
-            [xs_context[name] for name in related_context_tables.tables],
-            dim=-2,
-        )
-        del xs_context
-        graph_query = HomogeneousGraph.from_related_tables(
-            related_query_tables
-        )
-        x_query: Tensor = torch.cat(
-            [xs_query[name] for name in related_query_tables.tables],
-            dim=-2,
-        )
-        del xs_query
-        edge_type_emb = self.gnn.get_edge_type_emb(
-            num_edge_types=graph_context.num_edge_types,
-            generator=generator,
-        )
+        edge_type_emb: Tensor | None = None
+        if related_context_tables is not None:
+            x_context: Tensor = torch.cat(
+                [xs_context[name] for name in related_context_tables.tables],
+                dim=-2,
+            )
+            del xs_context
+            graph = HomogeneousGraph.from_tables(related_context_tables)
+            edge_type_emb = self.gnn.get_edge_type_emb(
+                num_edge_types=graph.num_edge_types,
+                generator=generator,
+            )
+            if cache is not None and cache.is_recording:
+                cache["edge_type_emb"] = edge_type_emb
+            x_context = self.gnn(
+                x=x_context,
+                graph=graph,
+                edge_type_emb=edge_type_emb,
+                readout_table=related_context_tables.task_links[0].table,
+                num_hops=num_hops,
+            )
 
-        x_context = self.gnn(
-            x=x_context,
-            graph=graph_context,
-            edge_type_emb=edge_type_emb,
-            readout_table=related_context_tables.task_links[0].table,
-            num_hops=num_hops,
-        )
-        x_query = self.gnn(
-            x=x_query,
-            graph=graph_query,
-            edge_type_emb=edge_type_emb,
-            readout_table=related_query_tables.task_links[0].table,
-            num_hops=num_hops,
-        )
+        if related_query_tables is not None:
+            x_query: Tensor = torch.cat(
+                [xs_query[name] for name in related_query_tables.tables],
+                dim=-2,
+            )
+            del xs_query
+            graph = HomogeneousGraph.from_tables(related_query_tables)
+            if edge_type_emb is None:
+                assert cache is not None
+                edge_type_emb = cast(Tensor, cache["edge_type_emb"])
+            x_query = self.gnn(
+                x=x_query,
+                graph=graph,
+                edge_type_emb=edge_type_emb,
+                readout_table=related_query_tables.task_links[0].table,
+                num_hops=num_hops,
+            )
 
         # Reason across Tables ################################################
-        x = self.icl_block(torch.cat([x_context, x_query], dim=-2), y)
+        if x_query is None and x_context is not None:
+            x = x_context
+        elif x_context is None and x_query is not None:
+            x = x_query
+        else:
+            assert x_context is not None
+            assert x_query is not None
+            x = torch.cat([x_context, x_query], dim=-2)
+            del x_context
+            del x_query
+        x = self.icl_block(x, y, cache=cache)
         return self.head(x)

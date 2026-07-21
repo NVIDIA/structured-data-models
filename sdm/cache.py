@@ -104,6 +104,19 @@ class Cache(MutableMapping[str, object], DeviceMixin):
 
     def freeze(self) -> Self:
         r"""Freeze the cache to replay mode."""
+
+        def _freeze(value: object) -> None:
+            if isinstance(value, Cache):
+                value.freeze()
+            elif isinstance(value, list | tuple):
+                for item in value:
+                    _freeze(item)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    _freeze(item)
+
+        for value in self.values():
+            _freeze(value)
         self._mode = Cache.Mode.replay
         return self
 

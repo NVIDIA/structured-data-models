@@ -28,7 +28,7 @@ def test_invariant_gnn(
         task_links=[],
     )
 
-    graph = HomogeneousGraph.from_related_tables(related_tables)
+    graph = HomogeneousGraph.from_tables(related_tables)
     assert graph.colptr.equal(
         torch.tensor([0, 2, 3, 3, 6, 7, 8, 9, 10, 11, 12], device=device)
     )
@@ -106,6 +106,7 @@ def test_forward(
             ),
         )
 
+    torch.manual_seed(1)
     out = model(
         x_context=x,
         y_context=y,
@@ -118,6 +119,11 @@ def test_forward(
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
+
+    torch.manual_seed(1)
+    model.fit(x, y, related_tables)
+    out = model.predict(x, related_tables).allclose(out)
+    model.clear()
 
 
 def test_default_recipe_preserves_ids() -> None:
