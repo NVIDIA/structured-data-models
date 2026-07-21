@@ -232,12 +232,11 @@ def test_missing_context_target_labels(num_classes: int) -> None:
 
 def test_missing_feature_codes_allowed() -> None:
     model = TabICLv2(pretrained=False)
-    columns = {
-        Stype.numerical: ("value",),
-        Stype.categorical: ("feature",),
-    }
     x_context = TableTensor(
-        columns=columns,
+        columns={
+            Stype.numerical: ("value",),
+            Stype.categorical: ("feature",),
+        },
         numerical=torch.randn(5, 1),
         categorical=CategoricalTensor(
             data=torch.tensor([[0], [1], [-1], [0], [1]]),
@@ -245,7 +244,10 @@ def test_missing_feature_codes_allowed() -> None:
         ),
     )
     x_query = TableTensor(
-        columns=columns,
+        columns={
+            Stype.numerical: ("value",),
+            Stype.categorical: ("feature",),
+        },
         numerical=torch.randn(3, 1),
         categorical=CategoricalTensor(
             data=torch.tensor([[1], [-1], [0]]),
