@@ -72,26 +72,6 @@ class KumoRFM(ICLModel):
 
         self.eval()
 
-    def fit(self, *args: Any, **kwargs: Any) -> None:
-        r"""Raise a :class:`NotImplementedError` since :class:`KumoRFM`
-        does not support :meth:`fit` + :meth:`predict` yet.
-        """
-        raise NotImplementedError(
-            "'KumoRFM' does not support 'fit()'/'predict()' yet. Call "
-            "the model directly instead: 'model(x_context, y_context, "
-            "x_query, related_context_tables, related_query_tables)'"
-        )
-
-    def predict(self, *args: Any, **kwargs: Any) -> TableTensor:
-        r"""Raise a :class:`NotImplementedError` since :class:`KumoRFM`
-        does not support :meth:`fit` + :meth:`predict` yet.
-        """
-        raise NotImplementedError(
-            "'KumoRFM' does not support 'fit()'/'predict()' yet. Call "
-            "the model directly instead: 'model(x_context, y_context, "
-            "x_query, related_context_tables, related_query_tables)'"
-        )
-
     def _load_from_pretrained(self) -> "KumoRFM":
         device = next(self.parameters()).device
 
