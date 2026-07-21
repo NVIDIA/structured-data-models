@@ -6,9 +6,6 @@ from sdm.processing import EncodeDatetime
 
 
 def _timestamp(value: datetime) -> int:
-    # 'EncodeDatetime' decodes UTC calendar fields, so expected values
-    # must be built from timezone-aware datetimes. Naive datetimes are
-    # interpreted in the host's local timezone by 'datetime.timestamp'.
     assert value.tzinfo is timezone.utc
     return int(value.timestamp() * 1_000_000)
 
