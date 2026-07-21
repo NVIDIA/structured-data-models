@@ -17,9 +17,10 @@ sdm.models
      - `BSD-3-Clause <https://huggingface.co/jingang/TabICL>`__
    * - `KumoRFM <https://arxiv.org/abs/2604.12596>`__
      - 2026-04-14
-     - 30.96M
-     - `MIT <https://github.com/kumo-ai/kumo-rfm/blob/master/LICENSE>`__
-     - `Proprietary <https://huggingface.co/nvidia/kumorfm-2>`__
+     - | 29.93M (classification)
+       | 30.94M (regression)
+     - TBD
+     - TBD
 
 .. autosummary::
    :toctree: generated
