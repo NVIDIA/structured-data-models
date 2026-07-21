@@ -33,10 +33,10 @@ class StypeDispatch(Processor, InvertibleMixin):
             normalized to :class:`~sdm.processing.Sequential`.
         datetime: Processor route for datetime columns. An iterable is
             normalized to :class:`~sdm.processing.Sequential`.
-        id: Processor route for identifier columns. An iterable is normalized
-            to :class:`~sdm.processing.Sequential`.
         text: Processor route for text columns. An iterable is normalized to
             :class:`~sdm.processing.Sequential`.
+        id: Processor route for identifier columns. An iterable is normalized
+            to :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
             route. ``"passthrough"`` keeps them unchanged and is the default,
             ``"drop"`` removes them, and ``"error"`` raises.
@@ -60,8 +60,8 @@ class StypeDispatch(Processor, InvertibleMixin):
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
-            (Stype.id, id),
             (Stype.text, text),
+            (Stype.id, id),
         ):
             if processor is None:
                 continue
