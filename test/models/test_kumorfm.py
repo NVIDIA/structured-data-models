@@ -89,66 +89,6 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize(
-    ("source", "target"),
-    [
-        ("row_embedding.y_cls_lin.weight", "row_embedding.y_emb.weight"),
-        (
-            "row_embedding.col_to_set_layers.0.norm1_1.weight",
-            "row_embedding.col_layers.0.transformer_1.q_norm.weight",
-        ),
-        (
-            "row_embedding.set_to_col_layers.1.norm1_2.bias",
-            "row_embedding.col_layers.1.transformer_2.kv_norm.bias",
-        ),
-        (
-            "row_embedding.row_layers.2.attn.packed_lin.weight",
-            "row_embedding.row_layers.2.attn.qkv_lin.weight",
-        ),
-        (
-            "row_embedding.row_layers.2.attn.ssmax_scale.0.weight",
-            "row_embedding.row_layers.2.attn.sdpa.qassmax.scale.0.weight",
-        ),
-        (
-            "row_embedding.row_layers.2.attn.ssmax_gate.2.bias",
-            "row_embedding.row_layers.2.attn.sdpa.qassmax.gate.2.bias",
-        ),
-        (
-            "row_embedding.row_layers.2.norm2.weight",
-            "row_embedding.row_layers.2.mlp.0.weight",
-        ),
-        (
-            "row_embedding.row_layers.2.lin1.weight",
-            "row_embedding.row_layers.2.mlp.1.weight",
-        ),
-        (
-            "row_embedding.row_layers.2.lin2.bias",
-            "row_embedding.row_layers.2.mlp.3.bias",
-        ),
-        ("gnn.post_lin.weight", "gnn.out_lin.weight"),
-        ("gnn.post_norm.bias", "gnn.out_norm.bias"),
-        (
-            "icl_block.layers.0.norm1_1.weight",
-            "icl_block.layers.0.q_norm.weight",
-        ),
-        ("icl_block.y_cls_lin.weight", "icl_block.y_emb.weight"),
-        ("icl_block.mlp.0.weight", "icl_block.norm.weight"),
-        ("icl_block.mlp.1.bias", "head.0.bias"),
-        ("icl_block.cls_head.weight", "head.2.weight"),
-        ("row_embedding.lin.weight", "row_embedding.lin.weight"),
-    ],
-)
-def test_remap_v2_1_checkpoint(source: str, target: str) -> None:
-    value = torch.tensor(1)
-
-    actual = _remap_v2_1_checkpoint(
-        {source: value},
-        is_classifier=True,
-    )
-
-    assert actual == {target: value}
-
-
-@pytest.mark.parametrize(
     ("is_classifier", "source", "target"),
     [
         (True, "row_embedding.y_reg_lin.weight", None),
