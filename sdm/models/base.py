@@ -79,9 +79,10 @@ class ICLModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators for ensembling.
             generator: Generator used for random draws while fitting recipe
-                processors. The same generator is passed to every estimator
-                and related-table processor. If ``None``, draws use the
-                global generator.
+                processors and for random draws inside the model forward
+                pass. The same generator is passed to every estimator and
+                related-table processor. If ``None``, draws use the global
+                generator.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
@@ -171,6 +172,7 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=related_context_tables_i,
                 related_query_tables=related_query_tables_i,
                 cache=None,
+                generator=generator,
                 **kwargs,
             )
             if y_context_i.numerical.size(-1) == 1:
@@ -209,9 +211,10 @@ class ICLModel(torch.nn.Module, ABC):
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
             generator: Generator used for random draws while fitting recipe
-                processors. The same generator is passed to every estimator
-                and related-table processor. If ``None``, draws use the
-                global generator.
+                processors and for random draws inside the model forward
+                pass. The same generator is passed to every estimator and
+                related-table processor. If ``None``, draws use the global
+                generator.
             kwargs: Additional keyword arguments passed to the model.
         """
         if num_estimators < 1:
@@ -274,6 +277,7 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=related_tables_i,
                 related_query_tables=None,
                 cache=cache,
+                generator=generator,
                 **kwargs,
             )
             cache = cache.cpu().freeze()

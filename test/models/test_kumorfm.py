@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 import torch
 from sdm import (
@@ -8,6 +10,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.cache import Cache
 from sdm.models import KumoRFM
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
@@ -86,6 +89,19 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
         ({"True": torch.tensor(1)}, True),
         ({"False": torch.tensor(1)}, True),
     ]
+
+
+def test_fit_predict_not_supported() -> None:
+    model = KumoRFM(pretrained=False)
+    caches = cast("list[Cache]", ["sentinel"])
+    model._caches = caches
+
+    with pytest.raises(NotImplementedError, match="does not support 'fit"):
+        model.fit(torch.randn(4, 2), torch.randn(4, 1))
+    assert model._caches is caches
+
+    with pytest.raises(NotImplementedError, match="does not support 'fit"):
+        model.predict(torch.randn(4, 2))
 
 
 @pytest.mark.parametrize(
@@ -251,6 +267,102 @@ def test_forward(
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
+
+
+def test_too_many_classes() -> None:
+    num_users = 11
+    users = TableTensor(
+        columns={Stype.numerical: ("age",), Stype.id: ("user_id",)},
+        numerical=torch.randn(num_users, 1),
+        id=ColumnarTensor((torch.arange(num_users),)),
+    )
+    orders = TableTensor(
+        columns={Stype.numerical: ("amount",), Stype.id: ("user_id",)},
+        numerical=torch.randn(2 * num_users, 1),
+        id=ColumnarTensor((torch.arange(2 * num_users) % num_users,)),
+    )
+    related_tables = RelatedTables(
+        tables={"users": users, "orders": orders},
+        relationships=[
+            {
+                "left_table": "orders",
+                "left_column": "user_id",
+                "right_table": "users",
+                "right_column": "user_id",
+            }
+        ],
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    x = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.arange(num_users),)),
+    )
+    y = TableTensor(
+        columns={"categorical": ("target",)},
+        categorical=CategoricalTensor(
+            data=torch.arange(num_users).view(-1, 1),
+            categories=(torch.arange(num_users),),
+        ),
+    )
+    model = KumoRFM(pretrained=False)
+
+    with pytest.raises(NotImplementedError, match="at most 10 classes"):
+        model(
+            x_context=x,
+            y_context=y,
+            x_query=x,
+            related_context_tables=related_tables,
+            related_query_tables=related_tables,
+            num_hops=2,
+        )
+
+
+def test_forward_honors_generator(relational_data: RelationalData) -> None:
+    model = KumoRFM(pretrained=False)
+
+    related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    x = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.arange(4),)),
+    )
+    y = TableTensor(
+        columns={"categorical": ("target",)},
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1], [0], [1]]),
+            categories=(torch.tensor([False, True]),),
+        ),
+    )
+
+    def _call(seed: int) -> torch.Tensor:
+        out = model(
+            x_context=x,
+            y_context=y,
+            x_query=x,
+            related_context_tables=related_tables,
+            related_query_tables=related_tables,
+            num_hops=2,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        return out.numerical
+
+    assert _call(0).equal(_call(0))
+    assert not _call(0).equal(_call(1))
 
 
 def test_default_recipe_preserves_ids() -> None:

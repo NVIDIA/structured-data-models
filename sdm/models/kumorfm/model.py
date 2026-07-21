@@ -72,6 +72,26 @@ class KumoRFM(ICLModel):
 
         self.eval()
 
+    def fit(self, *args: Any, **kwargs: Any) -> None:
+        r"""Raise a :class:`NotImplementedError` since :class:`KumoRFM`
+        does not support :meth:`fit` + :meth:`predict` yet.
+        """
+        raise NotImplementedError(
+            "'KumoRFM' does not support 'fit()'/'predict()' yet. Call "
+            "the model directly instead: 'model(x_context, y_context, "
+            "x_query, related_context_tables, related_query_tables)'"
+        )
+
+    def predict(self, *args: Any, **kwargs: Any) -> TableTensor:
+        r"""Raise a :class:`NotImplementedError` since :class:`KumoRFM`
+        does not support :meth:`fit` + :meth:`predict` yet.
+        """
+        raise NotImplementedError(
+            "'KumoRFM' does not support 'fit()'/'predict()' yet. Call "
+            "the model directly instead: 'model(x_context, y_context, "
+            "x_query, related_context_tables, related_query_tables)'"
+        )
+
     def _load_from_pretrained(self) -> "KumoRFM":
         device = next(self.parameters()).device
 
@@ -252,6 +272,13 @@ class _KumoRFM(torch.nn.Module):
                 device=next(self.parameters()).device,
             )
 
+        if num_classes is not None and num_classes > self.num_classes:
+            # TODO Support more than `self.num_classes` classes.
+            raise NotImplementedError(
+                f"'KumoRFM' supports at most {self.num_classes} classes "
+                f"(got {num_classes})"
+            )
+
         if num_hops is None:
             num_hops = 2  # TODO Support automatic `num_hops` detection.
             if cache is not None and cache.is_recording:
@@ -279,6 +306,7 @@ class _KumoRFM(torch.nn.Module):
                     if y_context.categorical.size(-1) > 0
                     else torch.float32,
                     device=y_context.device,
+                    generator=generator,
                 ),
                 max_keys=self.max_train_size,
                 num_classes=num_classes,
