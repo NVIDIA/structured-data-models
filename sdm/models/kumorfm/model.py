@@ -1,4 +1,5 @@
 # ruff: noqa: D205
+from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import torch
@@ -8,6 +9,7 @@ from torch.nn import GELU, Linear, Sequential
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
@@ -27,6 +29,11 @@ class KumoRFM(ICLModel):
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
+        repo_id: Hugging Face repository containing the checkpoints.
+        revision: Hugging Face branch, tag, or commit containing the
+            checkpoints.
+        cache_dir: Directory used for the Hugging Face cache.
+        local_files_only: Whether to use only locally cached checkpoints.
         device: The device.
     """
 
@@ -41,9 +48,18 @@ class KumoRFM(ICLModel):
     #:
     supports_related_tables: ClassVar[bool] = True
 
+    _checkpoint_filenames: ClassVar[dict[str, str]] = {
+        "classifier": "classifier.ckpt",
+        "regressor": "regressor.ckpt",
+    }
+
     def __init__(
         self,
         pretrained: bool = True,
+        repo_id: str = "nvidia/kumorfm-2",
+        revision: str | None = None,
+        cache_dir: str | Path | None = None,
+        local_files_only: bool = False,
         device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
@@ -60,6 +76,47 @@ class KumoRFM(ICLModel):
             norm_bias=False,
             device=device,
         )
+
+        if pretrained:
+            self._load_from_pretrained(
+                repo_id=repo_id,
+                revision=revision,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+            )
+
+        self.eval()
+
+    def _load_from_pretrained(
+        self,
+        *,
+        repo_id: str,
+        revision: str | None,
+        cache_dir: str | Path | None,
+        local_files_only: bool,
+    ) -> "KumoRFM":
+        device = next(self.parameters()).device
+
+        for variant, filename in self._checkpoint_filenames.items():
+            path = download_checkpoint(
+                repo_id=repo_id,
+                filename=filename,
+                revision=revision,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+            )
+            checkpoint = torch.load(
+                path,
+                map_location=device,
+                weights_only=True,
+            )
+            state_dict = checkpoint.get("state_dict", checkpoint)
+            model = (
+                self.cls_model if variant == "classifier" else self.reg_model
+            )
+            model.load_state_dict(state_dict, strict=True)
+
+        return self
 
     def _forward(
         self,

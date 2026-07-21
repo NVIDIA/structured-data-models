@@ -9,9 +9,76 @@ from sdm import (
     TableTensor,
 )
 from sdm.models import KumoRFM
+from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
+from sdm.models.kumorfm.model import _KumoRFM
 from sdm.testing import withCUDA
+
+
+def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
+    downloads: list[dict[str, object]] = []
+    loads: list[tuple[str, object, bool]] = []
+    state_dicts: list[tuple[object, bool]] = []
+
+    def download(**kwargs: object) -> str:
+        downloads.append(kwargs)
+        return f"/{kwargs['filename']}"
+
+    def load(
+        path: str,
+        *,
+        map_location: object,
+        weights_only: bool,
+    ) -> dict[str, object]:
+        loads.append((path, map_location, weights_only))
+        return {"state_dict": {path: torch.tensor(1)}}
+
+    def load_state_dict(
+        self: _KumoRFM,
+        state_dict: object,
+        strict: bool = True,
+        assign: bool = False,
+    ) -> None:
+        state_dicts.append((state_dict, strict))
+
+    monkeypatch.setattr(kumorfm_model, "download_checkpoint", download)
+    monkeypatch.setattr(kumorfm_model.torch, "load", load)
+    monkeypatch.setattr(_KumoRFM, "load_state_dict", load_state_dict)
+
+    model = KumoRFM(
+        repo_id="org/private-model",
+        revision="v1",
+        cache_dir="/cache",
+        local_files_only=True,
+    )
+
+    assert not model.training
+    assert downloads == [
+        {
+            "repo_id": "org/private-model",
+            "filename": "classifier.ckpt",
+            "revision": "v1",
+            "cache_dir": "/cache",
+            "local_files_only": True,
+        },
+        {
+            "repo_id": "org/private-model",
+            "filename": "regressor.ckpt",
+            "revision": "v1",
+            "cache_dir": "/cache",
+            "local_files_only": True,
+        },
+    ]
+    assert [path for path, _, _ in loads] == [
+        "/classifier.ckpt",
+        "/regressor.ckpt",
+    ]
+    assert all(weights_only for _, _, weights_only in loads)
+    assert state_dicts == [
+        ({"/classifier.ckpt": torch.tensor(1)}, True),
+        ({"/regressor.ckpt": torch.tensor(1)}, True),
+    ]
 
 
 @withCUDA
