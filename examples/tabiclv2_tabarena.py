@@ -1,20 +1,15 @@
-r"""Run the repository-local TabICLv2 model on TabArena.
+r"""Run TabICLv2 on TabArena.
 
-For example, run the SDM-native integration on one dataset's lightweight
-split:
+$ uv run --group example-tabarena python examples/tabiclv2_tabarena.py \
+    --output-root outputs/tabiclv2-tabarena \
+    --mode sdm-native \
+    --subset lite \
+    --datasets blood-transfusion-service-center \
+    --num-estimators 1 \
+    --num-cpus 1 \
+    --num-gpus 0
 
-.. code-block:: console
-
-    uv run --group example-tabarena python examples/tabiclv2_tabarena.py \
-        --output-root outputs/tabiclv2-tabarena \
-        --mode sdm-native \
-        --subset lite \
-        --datasets blood-transfusion-service-center \
-        --num-estimators 1 \
-        --num-cpus 1 \
-        --num-gpus 0
-
-The output directory must be new or empty.
+The output directory must be empty.
 """
 
 from __future__ import annotations
