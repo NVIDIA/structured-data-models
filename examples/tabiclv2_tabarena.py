@@ -63,20 +63,21 @@ class SDMTabICLv2Model(AbstractModel):
         )
 
         self.model = TabICLv2(device=self._device)
-        self.model.fit(
-            x=TableTensor.from_pandas(
-                df=X,
-                stypes=self._feature_stypes,
-                device=self._device,
-            ),
-            y=_table_from_series(
-                y,
-                name=self._target_name,
-                stype=self._target_stype,
-                device=self._device,
-            ),
-            num_estimators=int(self._get_model_params()["num_estimators"]),
-        )
+        with _autocast(self._device):
+            self.model.fit(
+                x=TableTensor.from_pandas(
+                    df=X,
+                    stypes=self._feature_stypes,
+                    device=self._device,
+                ),
+                y=_table_from_series(
+                    y,
+                    name=self._target_name,
+                    stype=self._target_stype,
+                    device=self._device,
+                ),
+                num_estimators=int(self._get_model_params()["num_estimators"]),
+            )
 
     def _predict_proba(self, X: pd.DataFrame, **kwargs: Any) -> np.ndarray:
         if not hasattr(self, "model"):
@@ -84,13 +85,14 @@ class SDMTabICLv2Model(AbstractModel):
                 "SDMTabICLv2Model must be fitted before prediction"
             )
 
-        prediction = self.model.predict(
-            TableTensor.from_pandas(
-                df=X,
-                stypes=self._feature_stypes,
-                device=self._device,
+        with _autocast(self._device):
+            prediction = self.model.predict(
+                TableTensor.from_pandas(
+                    df=X,
+                    stypes=self._feature_stypes,
+                    device=self._device,
+                )
             )
-        )
         values = prediction.numerical.float().cpu().numpy()
         return _prediction_to_numpy(
             values,
@@ -188,21 +190,22 @@ class SDMTabICLv2System(ExternalSystemModel):
             )
 
         self.model = TabICLv2(device=self._device)
-        self.model.fit(
-            x=TableTensor.from_pandas(
-                df=X,
-                stypes=self._schema.stypes,
-                device=self._device,
-            ),
-            y=_table_from_series(
-                y,
-                name=self._target_name,
-                stype=self._target_stype,
-                device=self._device,
-            ),
-            num_estimators=self.num_estimators,
-            generator=generator,
-        )
+        with _autocast(self._device):
+            self.model.fit(
+                x=TableTensor.from_pandas(
+                    df=X,
+                    stypes=self._schema.stypes,
+                    device=self._device,
+                ),
+                y=_table_from_series(
+                    y,
+                    name=self._target_name,
+                    stype=self._target_stype,
+                    device=self._device,
+                ),
+                num_estimators=self.num_estimators,
+                generator=generator,
+            )
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
@@ -247,13 +250,14 @@ class SDMTabICLv2System(ExternalSystemModel):
                 "SDMTabICLv2System must be fitted before prediction"
             )
         X = _align_features(X, schema=self._schema)
-        return self.model.predict(
-            TableTensor.from_pandas(
-                df=X,
-                stypes=self._schema.stypes,
-                device=self._device,
+        with _autocast(self._device):
+            return self.model.predict(
+                TableTensor.from_pandas(
+                    df=X,
+                    stypes=self._schema.stypes,
+                    device=self._device,
+                )
             )
-        )
 
     def cleanup(self) -> None:
         """Release local TabICLv2 caches and CUDA allocations after a task."""
@@ -447,6 +451,14 @@ def _resolve_device(*, num_gpus: int | None) -> torch.device:
     if not torch.cuda.is_available():
         raise RuntimeError("TabArena requested a GPU but CUDA is unavailable")
     return torch.device("cuda")
+
+
+def _autocast(device: torch.device) -> torch.amp.autocast:
+    return torch.amp.autocast(
+        device_type=device.type,
+        dtype=torch.bfloat16,
+        enabled=device.type == "cuda",
+    )
 
 
 def _table_from_series(
