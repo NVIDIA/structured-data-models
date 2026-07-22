@@ -58,13 +58,11 @@ class CategoryShuffle(Processor):
             if n_classes <= 1:
                 permutation = torch.arange(n_classes, device=device)
             elif self.method == "shift":
-                offset = int(
-                    torch.randint(
-                        n_classes,
-                        (1,),
-                        generator=generator,
-                        device=device,
-                    ).item()
+                offset = torch.randint(
+                    n_classes,
+                    (1,),
+                    generator=generator,
+                    device=device,
                 )
                 permutation = (
                     torch.arange(n_classes, device=device) - offset

@@ -87,18 +87,17 @@ class CategoricalAlign(Processor):
         ):
             codes = table.categorical[..., index]
             observed = codes >= 0
-            if not observed.any():
-                continue
-
             mapping = self._category_mapping(
                 actual=actual,
                 expected=expected,
                 device=out.device,
                 column=columns[index],
             )
-            out[..., index][observed] = mapping[
-                codes[observed].to(torch.long)
-            ].to(out.dtype)
+            if mapping.numel() == 0:
+                continue
+
+            remapped = mapping[codes.clamp_min(0).to(torch.long)].to(out.dtype)
+            out[..., index] = torch.where(observed, remapped, out[..., index])
 
         categorical = CategoricalTensor(
             data=out,
@@ -200,8 +199,9 @@ class CategoricalAlign(Processor):
             actual_nan = actual.isnan()
             # [num_fitted_categories]
             expected_nan = expected.isnan()
-            if actual_nan.any() and expected_nan.any():
-                mapping[actual_nan] = expected_nan.to(torch.int64).argmax()
+            mapping[actual_nan & expected_nan.any()] = expected_nan.to(
+                torch.int64
+            ).argmax()
         else:
             actual_nan = torch.zeros_like(actual, dtype=torch.bool)
             expected_nan = torch.zeros_like(expected, dtype=torch.bool)
