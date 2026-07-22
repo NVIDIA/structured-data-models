@@ -285,6 +285,8 @@ class _KumoRFM(torch.nn.Module):
         # TODO Inject task features.
 
         # Reason within each Table ############################################
+        # Embed context and query rows jointly per table. Targets are injected
+        # by distributing them to related tables via task-row assignment:
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
         for table_name in (
