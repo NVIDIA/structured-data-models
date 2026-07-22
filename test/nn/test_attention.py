@@ -938,7 +938,6 @@ def test_attention_key_value_cache_dtype_mismatch() -> None:
 
 @withCUDA
 def test_attention_key_value_cache_autocast(device: torch.device) -> None:
-    torch.manual_seed(0)
     module = Attention(channels=8, num_query_heads=2, device=device)
     query = torch.randn(2, 3, 8, device=device)
     key_value = torch.randn(2, 5, 8, device=device)
