@@ -17,6 +17,8 @@ split:
 The output directory must be new or empty.
 """
 
+# ruff: noqa: D101, D102, D103
+
 from __future__ import annotations
 
 import argparse
@@ -44,8 +46,6 @@ if TYPE_CHECKING:
 
 
 class SDMTabICLv2Model(AbstractModel):
-    """Expose local :class:`sdm.models.TabICLv2` through AutoGluon."""
-
     ag_key = "SDMTABICLV2"
     ag_name = "SDMTabICLv2"
 
@@ -81,10 +81,9 @@ class SDMTabICLv2Model(AbstractModel):
                     stypes=self._feature_stypes,
                     device=self._device,
                 ),
-                y=_table_from_series(
-                    y,
-                    name=self._target_name,
-                    stype=self._target_stype,
+                y=TableTensor.from_pandas(
+                    df=y.rename(self._target_name).to_frame(),
+                    stypes={self._target_name: self._target_stype},
                     device=self._device,
                 ),
                 num_estimators=int(self._get_model_params()["num_estimators"]),
@@ -116,14 +115,12 @@ class SDMTabICLv2Model(AbstractModel):
 
     @classmethod
     def supported_problem_types(cls) -> list[str]:
-        """Return the AutoGluon problem types supported by TabICLv2."""
         return ["binary", "multiclass", "regression"]
 
     def _get_default_resources(self) -> tuple[int, int]:
         return 1, 1 if torch.cuda.is_available() else 0
 
     def cleanup(self) -> None:
-        """Release the local model cache and GPU allocations after one task."""
         if hasattr(self, "model"):
             self.model.clear()
             del self.model
@@ -134,19 +131,13 @@ class SDMTabICLv2Model(AbstractModel):
 
 @dataclass(frozen=True)
 class FeatureSchema:
-    """The SDM-owned feature contract fitted from one training frame."""
-
     columns: tuple[str, ...]
     stypes: dict[str, Stype]
     id_columns: tuple[str, ...]
 
 
 class SDMTabICLv2System(ExternalSystemModel):
-    """Run local TabICLv2 while SDM owns feature and target preprocessing."""
-
     def __init__(self, *, num_estimators: int = 8, **kwargs: Any) -> None:
-        if num_estimators < 1:
-            raise ValueError("'num_estimators' must be positive")
         super().__init__(**kwargs)
         self.num_estimators = num_estimators
 
@@ -165,7 +156,6 @@ class SDMTabICLv2System(ExternalSystemModel):
         time_limit: float | None,
         random_state: int | None,
     ) -> SDMTabICLv2System:
-        """Fit TabICLv2 on raw TabArena data through SDM's recipe."""
         del (
             eval_metric,
             validation_metadata,
@@ -208,10 +198,9 @@ class SDMTabICLv2System(ExternalSystemModel):
                     stypes=self._schema.stypes,
                     device=self._device,
                 ),
-                y=_table_from_series(
-                    y,
-                    name=self._target_name,
-                    stype=self._target_stype,
+                y=TableTensor.from_pandas(
+                    df=y.rename(self._target_name).to_frame(),
+                    stypes={self._target_name: self._target_stype},
                     device=self._device,
                 ),
                 num_estimators=self.num_estimators,
@@ -220,7 +209,6 @@ class SDMTabICLv2System(ExternalSystemModel):
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
-        """Return indexed point predictions for a regression task."""
         if self._problem_type != "regression":
             raise RuntimeError("Classification tasks require '_predict_proba'")
         values = self._prediction_values(X)
@@ -231,7 +219,6 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        """Return probabilities in TabArena's expected raw-label order."""
         if self._problem_type == "regression":
             raise RuntimeError("Regression tasks require '_predict'")
         prediction = self._predict_table(X)
@@ -251,11 +238,9 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
 
     def _prediction_values(self, X: pd.DataFrame) -> np.ndarray:
-        """Return numerical TabICLv2 output values for a query frame."""
         return self._predict_table(X).numerical.float().cpu().numpy()
 
     def _predict_table(self, X: pd.DataFrame) -> TableTensor:
-        """Run cached TabICLv2 inference after schema validation."""
         if not hasattr(self, "model"):
             raise RuntimeError(
                 "SDMTabICLv2System must be fitted before prediction"
@@ -271,7 +256,6 @@ class SDMTabICLv2System(ExternalSystemModel):
             )
 
     def cleanup(self) -> None:
-        """Release local TabICLv2 caches and CUDA allocations after a task."""
         if hasattr(self, "model"):
             self.model.clear()
             del self.model
@@ -281,7 +265,6 @@ class SDMTabICLv2System(ExternalSystemModel):
 
 
 def _fit_feature_schema(frame: pd.DataFrame) -> FeatureSchema:
-    """Infer and validate the SDM-owned feature contract."""
     stypes = {
         name: Stype(stype) for name, stype in infer_stypes(frame).items()
     }
@@ -317,7 +300,6 @@ def _align_features(
     *,
     schema: FeatureSchema,
 ) -> pd.DataFrame:
-    """Validate a query schema and return the fitted non-ID column order."""
     expected = set(schema.columns)
     allowed = expected | set(schema.id_columns)
     actual = set(frame.columns)
@@ -356,7 +338,6 @@ def _align_features(
 
 
 def _class_labels_by_key(y: pd.Series) -> dict[str, object]:
-    """Map SDM's string output identifiers back to pandas labels."""
     if y.isna().any():
         raise ValueError(
             "Classification targets must not contain missing values"
@@ -379,7 +360,6 @@ def _labels_from_prediction_columns(
     *,
     labels_by_key: dict[str, object],
 ) -> list[object]:
-    """Resolve TabICLv2 prediction columns to original class labels."""
     missing = [column for column in columns if column not in labels_by_key]
     if missing:
         raise RuntimeError(
@@ -394,7 +374,6 @@ def _tabarena_class_order(
     *,
     problem_type: str,
 ) -> tuple[object, ...]:
-    """Return the raw class order used by TabArena's evaluator."""
     label_cleaner = LabelCleaner.construct(
         problem_type=problem_type,
         y=y,
@@ -412,7 +391,6 @@ def _order_probabilities_for_tabarena(
     *,
     class_order: tuple[object, ...],
 ) -> pd.DataFrame:
-    """Validate and align probability columns for TabArena scoring."""
     expected = pd.Index(class_order)
     actual = probabilities.columns
     if actual.has_duplicates:
@@ -472,22 +450,7 @@ def _autocast(device: torch.device) -> torch.amp.autocast:
     )
 
 
-def _table_from_series(
-    series: pd.Series,
-    *,
-    name: str,
-    stype: Stype,
-    device: torch.device,
-) -> TableTensor:
-    return TableTensor.from_pandas(
-        df=series.rename(name).to_frame(),
-        stypes={name: stype},
-        device=device,
-    )
-
-
 def main() -> None:
-    """Run selected TabArena jobs locally and write their results."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--num-estimators", type=int, default=8)
@@ -503,8 +466,6 @@ def main() -> None:
     parser.add_argument("--datasets", nargs="+")
     args = parser.parse_args()
 
-    if args.num_estimators < 1:
-        raise ValueError("'--num-estimators' must be positive")
     if args.num_cpus is not None and args.num_cpus < 1:
         raise ValueError("'--num-cpus' must be positive")
     if args.num_gpus is not None and args.num_gpus < 0:
