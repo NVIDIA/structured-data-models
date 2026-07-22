@@ -3,14 +3,13 @@
 from typing import Any, ClassVar, cast
 
 import torch
-from huggingface_hub import hf_hub_download
-from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.hierarchical_classifier import (
     HierarchicalClassifier,
 )
@@ -114,17 +113,10 @@ class TabICLv2(ICLModel):
         device = next(self.parameters()).device
 
         for variant in ["classifier", "regressor"]:
-            try:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                    local_files_only=True,
-                )
-            except LocalEntryNotFoundError:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                )
+            path = download_checkpoint(
+                repo_id="jingang/TabICL",
+                filename=f"tabicl-{variant}-v2-20260212.ckpt",
+            )
             ckpt = torch.load(path, map_location=device)["state_dict"]
 
             if variant == "classifier":
@@ -144,12 +136,14 @@ class TabICLv2(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
-        if x_context is None and x_query is not None:
-            x = x_query.numerical
-        elif x_query is None and x_context is not None:
+        if x_query is None and x_context is not None:
             x = x_context.numerical
+        elif x_context is None and x_query is not None:
+            x = x_query.numerical
         else:
             assert x_context is not None
             assert x_query is not None
@@ -163,7 +157,7 @@ class TabICLv2(ICLModel):
         elif y_context is not None and y_context.numerical.size(-1) > 0:
             y = y_context.numerical.squeeze(-1)
         elif cache is not None:
-            classes = cast(Tensor, cache["classes"])
+            classes = cast(Tensor | None, cache["classes"])
 
         if y is None:
             y = x.new_empty(
@@ -172,28 +166,19 @@ class TabICLv2(ICLModel):
             )
 
         if classes is None:
+            out = self.reg_model(x, y, cache=cache)
             return TableTensor(
                 columns={
                     Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
                 },
-                numerical=self.reg_model(x, y, cache=cache).sort(dim=-1)[0],
+                numerical=out.sort(dim=-1)[0],
             )
 
-        num_classes = len(classes)
+        out = self.cls_model(x, y, cache=cache, num_classes=len(classes))
         return TableTensor(
             columns={Stype.numerical: [str(i) for i in classes.tolist()]},
-            numerical=self.cls_model(
-                x,
-                y,
-                num_classes=num_classes,
-                cache=cache,
-            )[..., : len(classes)],
+            numerical=out[..., : len(classes)],
         )
-
-    def __repr__(self) -> str:
-        device = next(self.parameters()).device
-        device_repr = f"device={device}" if device.type != "cpu" else ""
-        return f"{self.__class__.__name__}({device_repr})"
 
 
 class _TabICLv2(torch.nn.Module):
@@ -215,6 +200,8 @@ class _TabICLv2(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.num_classes = num_classes
 
         self.row_embedding = RowEmbedding(
             num_classes=num_classes,
@@ -248,11 +235,10 @@ class _TabICLv2(torch.nn.Module):
                 **factory_kwargs,
             ),
         )
-        self.num_classes = num_classes
         self.hierarchical_classifier: HierarchicalClassifier | None = None
-        if num_classes > 1:
+        if self.num_classes > 1:
             self.hierarchical_classifier = HierarchicalClassifier(
-                num_classes=num_classes,
+                num_classes=self.num_classes,
                 temperature=0.9,
             )
 
@@ -264,11 +250,8 @@ class _TabICLv2(torch.nn.Module):
         cache: Cache | None = None,
         num_classes: int | None = None,
     ) -> Tensor:  # [..., R_test, self.num_classes or self.num_quantiles]
-        is_classification = not y.is_floating_point()
-        if is_classification and num_classes is None:
-            # For classification, num_classes is necessary to determine the
-            # number of classes to predict for since it's data-dependent.
-            num_classes = int(y.max()) + 1
+        if not y.is_floating_point():
+            assert num_classes is not None
 
         if (
             cache is not None
@@ -281,10 +264,10 @@ class _TabICLv2(torch.nn.Module):
                 f"{self.num_classes} classes (got {num_classes})"
             )
 
-        x = self.row_embedding(x=x, y=y, num_classes=num_classes, cache=cache)
+        x = self.row_embedding(x, y, num_classes=num_classes, cache=cache)
 
         if num_classes is None or num_classes <= self.num_classes:
-            x = self.icl_block(x=x, y=y, cache=cache)
+            x = self.icl_block(x, y, cache=cache)
             return self.head(x)
 
         assert self.hierarchical_classifier is not None

@@ -11,6 +11,11 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Test execution via `pytest`
 - Pre-commit checks via `pre-commit run --all-files`
 
+# Testing
+
+- Tests should be sensitive to behavior changes and insensitive to structure changes. Prefer asserting public observable behavior over implementation details.
+- Do not set seeds in tests unless they must require them.
+
 # PR / GitHub Metadata
 
 - Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions, commit messages, or review replies unless explicitly requested.
@@ -50,10 +55,11 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Prefer PyTorch-native, vectorized tensor operations over NumPy or Python loops.
   Call out cases where vectorization is not practical.
 - Preserve tensor device and dtype.
-  Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, Python scalars, or newly-created CPU tensors.
+  Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, scalar extraction from tensors, or newly-created CPU tensors.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
 - Operate on tensor containers directly; reserve `.as_tensor()` for when the raw data tensor is required.
 - Avoid creating unnecessary views right before broadcasts.
+- When possible, reduce allocation and memory overhead while keeping tensor operations on-device; for broadcastable constants, prefer scalar literals when PyTorch broadcasting is sufficient and create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
 - Add short tensor shape comments for complex tensor operations.
 - Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.
