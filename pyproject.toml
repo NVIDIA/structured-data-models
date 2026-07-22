@@ -104,17 +104,17 @@ skip_covered = true
 skip_empty = true
 
 [tool.ty.src]
-include = ["sdm", "test", "examples"]
+include = ["sdm", "test", "examples", "benchmarks"]
 
 [[tool.ty.overrides]]
-include = ["examples/**"]
+include = ["examples/**", "benchmarks/**"]
 
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"
 unresolved-attribute = "ignore"
 
 [tool.ruff]  # https://docs.astral.sh/ruff/rules
-src = ["pyproject.toml", "sdm", "test", "examples"]
+src = ["pyproject.toml", "sdm", "test", "examples", "benchmarks"]
 line-length = 79
 indent-width = 4
 target-version = "py310"
