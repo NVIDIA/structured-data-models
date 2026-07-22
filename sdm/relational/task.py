@@ -220,20 +220,6 @@ class RelatedTables(DeviceMixin):
             task_links=self.task_links,
         )
 
-    def with_tables(self, tables: Mapping[str, TableTensor]) -> Self:
-        r"""Return related tables with replaced table data.
-
-        Relationship and task-link metadata is preserved.
-
-        Args:
-            tables: Related tables keyed by table name.
-        """
-        return self.__class__(
-            tables=tables,
-            relationships=self.relationships,
-            task_links=self.task_links,
-        )
-
     @property
     def device(self) -> torch.device:
         r""":meta private:"""  # noqa: D415
@@ -292,6 +278,21 @@ class RelatedTables(DeviceMixin):
                 for task_link in self.task_links
                 if task_link.table in tables
             ),
+        )
+
+    def replace_tables(self, tables: Mapping[str, TableTensor]) -> Self:
+        r"""Return related tables with replaced table data.
+
+        Args:
+            tables: Related tables keyed by table name.
+        """
+        if tables.keys() != self.tables.keys():
+            raise ValueError("Expected 'tables' to match existing table names")
+
+        return self.__class__(
+            tables=tables,
+            relationships=self.relationships,
+            task_links=self.task_links,
         )
 
     def to_graphviz(

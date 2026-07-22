@@ -92,11 +92,11 @@ class KumoRFM(ICLModel):
         y_context = task_table[:2, "churn"]
         x_query = task_table[2:].drop_columns("churn")
 
-        related_context_tables = related_tables.with_tables({
+        related_context_tables = related_tables.replace_tables({
             "users": related_tables.tables["users"][:2],
             "orders": related_tables.tables["orders"][:3],
         })
-        related_query_tables = related_tables.with_tables({
+        related_query_tables = related_tables.replace_tables({
             "users": related_tables.tables["users"][2:],
             "orders": related_tables.tables["orders"][3:],
         })
