@@ -23,6 +23,7 @@ from sdm.processing.recipe import Recipe
 from sdm.processing.sigma_clip import SigmaClip
 from sdm.processing.standard_scale import StandardScale
 from sdm.processing.to_numerical import ToNumerical
+from sdm.processing.to_categorical import ToCategorical
 
 __all__ = [
     "Processor",
@@ -48,5 +49,6 @@ __all__ = [
     "SoftmaxTemperature",
     "StandardScale",
     "ToNumerical",
+    "ToCategorical",
     "Recipe",
 ]

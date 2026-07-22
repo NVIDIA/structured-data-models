@@ -163,6 +163,22 @@ def test_text_empty_and_null_columns() -> None:
     assert infer_stypes(null) == {"all_null": Stype.categorical}
 
 
+def test_text_cardinality_boundaries() -> None:
+    at_ratio = pa.table({"col": pa.array([f"v{i // 2}" for i in range(40)])})
+    assert infer_stypes(at_ratio) == {"col": Stype.categorical}
+
+    above = pa.table({"col": pa.array([f"v{i % 20}" for i in range(39)])})
+    assert infer_stypes(above) == {"col": Stype.text}
+
+    few_unique = pa.table({"col": pa.array([f"v{i}" for i in range(19)])})
+    assert infer_stypes(few_unique) == {"col": Stype.categorical}
+
+
+def test_text_all_null_head_keeps_dtype_inference() -> None:
+    df = pd.DataFrame({"note": [None] * 1000 + ["some text"] * 10})
+    assert infer_stypes(df) == {"note": Stype.categorical}
+
+
 @onlyCUDA
 def test_text_detection_cudf() -> None:
     cudf = pytest.importorskip("cudf")

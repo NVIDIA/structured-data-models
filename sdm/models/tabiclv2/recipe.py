@@ -15,6 +15,7 @@ from sdm.processing import (
     StandardScale,
     StypeDispatch,
     TaskDispatch,
+    ToCategorical,
     ToNumerical,
 )
 
@@ -27,13 +28,20 @@ def default_recipe() -> Recipe:
     (``soda-inria/tabicl``). The target semantic type selects the target and
     output routes. For regression, the target inverse receives the complete
     numerical model-output head. Missing and unseen categorical feature
-    values remain encoded as ``-1``.
+    values remain encoded as ``-1``. Text features are factorized to
+    categorical codes and follow the categorical path until dedicated text
+    encoders are available.
     """
     return Recipe(
         features=[
             StypeDispatch(
                 numerical=Identity(),
                 categorical=[
+                    CategoricalAlign(),
+                    ToNumerical(),
+                ],
+                text=[
+                    ToCategorical(),
                     CategoricalAlign(),
                     ToNumerical(),
                 ],

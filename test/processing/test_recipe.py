@@ -1,6 +1,14 @@
+import pyarrow as pa
+import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.models import TabICLv2
+from sdm import (
+    CategoricalTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+    infer_stypes,
+)
+from sdm.models import ICLModel, KumoRFM, TabICLv2
 from sdm.processing import InvertibleMixin, Recipe, Sequential, StandardScale
 from sdm.testing import withCUDA
 
@@ -117,3 +125,27 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
         features.select_columns("kind")
     )
     assert transformed.categorical.unique().sort().values.tolist() == [0, 1]
+
+
+@pytest.mark.parametrize("model_cls", [TabICLv2, KumoRFM])
+def test_default_recipe_routes_text(model_cls: type[ICLModel]) -> None:
+    table = pa.table(
+        {
+            "amount": pa.array([float(i) for i in range(40)]),
+            "bio": pa.array([f"free text value {i}" for i in range(40)]),
+        }
+    )
+    features = TableTensor.from_arrow(table, stypes=infer_stypes(table))
+    assert Stype.text in features.active_stypes
+
+    recipe = model_cls.default_recipe()
+    context = recipe.features.fit_transform(features)
+    query = recipe.features.transform(features)
+
+    for out in (context, query):
+        assert out.size() == features.size()
+        invalid = (
+            out.active_stypes - model_cls.supported_feature_stypes - {Stype.id}
+        )
+        assert len(invalid) == 0
+    assert torch.isfinite(context.numerical).all()

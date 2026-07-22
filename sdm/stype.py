@@ -88,7 +88,13 @@ def infer_stypes(
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
-            table = pa.Table.from_pandas(table, preserve_index=False)
+            # Infer dtypes on the full frame, but only convert the value
+            # sample needed by the text cardinality rule:
+            table = pa.Table.from_pandas(
+                df=table.iloc[:_TEXT_SAMPLE_SIZE],
+                schema=pa.Schema.from_pandas(table, preserve_index=False),
+                preserve_index=False,
+            )
 
     if importlib.util.find_spec("cudf") is not None:
         import cudf
