@@ -205,7 +205,7 @@ class SDMTabICLv2System(ExternalSystemModel):
     def _predict(self, X: pd.DataFrame) -> pd.Series:
         if self._problem_type != "regression":
             raise RuntimeError("Classification tasks require '_predict_proba'")
-        values = self._prediction_values(X)
+        values = self._predict_table(X).numerical.float().cpu().numpy()
         return pd.Series(
             values.mean(axis=-1),
             index=X.index,
@@ -230,9 +230,6 @@ class SDMTabICLv2System(ExternalSystemModel):
             probabilities,
             class_order=self._tabarena_class_order,
         )
-
-    def _prediction_values(self, X: pd.DataFrame) -> np.ndarray:
-        return self._predict_table(X).numerical.float().cpu().numpy()
 
     def _predict_table(self, X: pd.DataFrame) -> TableTensor:
         if not hasattr(self, "model"):
