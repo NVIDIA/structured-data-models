@@ -13,8 +13,8 @@ table = TableTensor.from_pandas(
     device=device,
 )
 model = TabICLv2(device=device)
-if table.is_cuda:
-    model.cls_model.compile(fullgraph=True)
+# Optionally, torch.compile the model
+# model.cls_model.compile(fullgraph=True)
 
 # Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
