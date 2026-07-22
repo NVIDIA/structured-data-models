@@ -86,7 +86,7 @@ class HierarchicalClassifier(torch.nn.Module):
         )
         return log_probs.index_copy(
             -1,
-            class_ids,
+            class_ids.to(torch.long),
             local_log_probs,
         )
 

@@ -13,6 +13,9 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
 from sdm.models.kumorfm.task import TaskGraph
+from sdm.models.tabiclv2.hierarchical_classifier import (
+    HierarchicalClassifier,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
@@ -47,6 +50,10 @@ class KumoRFM(ICLModel):
       dataset-level ICL block.
       Context rows carry target information, while query rows attend to the
       labeled context to produce class logits or regression quantiles.
+
+    Classification with more than 10 classes uses hierarchical inference
+    through :meth:`forward`. The key/value-cached workflow through :meth:`fit`
+    and :meth:`predict` supports at most 10 classes.
 
     .. code-block:: python
 
@@ -293,6 +300,12 @@ class _KumoRFM(torch.nn.Module):
                 **factory_kwargs,
             ),
         )
+        self.hierarchical_classifier: HierarchicalClassifier | None = None
+        if self.num_classes > 1:
+            self.hierarchical_classifier = HierarchicalClassifier(
+                num_classes=self.num_classes,
+                temperature=0.9,
+            )
 
     def forward(
         self,
@@ -321,6 +334,16 @@ class _KumoRFM(torch.nn.Module):
                 (0,),  # NOTE Guaranteed to be 1D for now.
                 dtype=torch.float32 if num_classes is None else torch.int64,
                 device=next(self.parameters()).device,
+            )
+
+        if (
+            cache is not None
+            and num_classes is not None
+            and num_classes > self.num_classes
+        ):
+            raise NotImplementedError(
+                f"Key/value caching is not supported with more than "
+                f"{self.num_classes} classes (got {num_classes})"
             )
 
         context: TaskGraph | None = None
@@ -457,8 +480,27 @@ class _KumoRFM(torch.nn.Module):
             x = torch.cat([x_context, x_query], dim=-2)
             del x_context
             del x_query
-        x = self.icl_block(x, y, cache=cache)
-        return self.head(x)
+        if num_classes is None or num_classes <= self.num_classes:
+            x = self.icl_block(x, y, cache=cache)
+            return self.head(x)
+
+        assert self.hierarchical_classifier is not None
+        log_probs = self.hierarchical_classifier(
+            row_embeddings=x,
+            y=y,
+            num_classes=num_classes,
+            predictor=self._predict_standard,
+        )
+        # Scale the log-probabilities so the output processor's matching
+        # temperature cancels while converting them to probabilities.
+        return log_probs.mul(self.hierarchical_classifier.temperature)
+
+    def _predict_standard(
+        self,
+        row_embeddings: Tensor,  # [R_node + R_test, D]
+        y: Tensor,  # [R_node]
+    ) -> Tensor:  # [R_test, num_classes]
+        return self.head(self.icl_block(x=row_embeddings, y=y))
 
     def _embed_table(
         self,

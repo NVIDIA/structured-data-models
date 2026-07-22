@@ -281,6 +281,91 @@ def test_forward(
     model.clear()
 
 
+@withCUDA
+def test_many_classes_forward_only(device: torch.device) -> None:
+    num_classes = 11
+    model = KumoRFM(pretrained=False, device=device)
+
+    def make_input(ids: torch.Tensor) -> tuple[TableTensor, RelatedTables]:
+        task_table = TableTensor(
+            columns={Stype.id: ("entity_id",)},
+            id=ColumnarTensor((ids,)),
+        )
+        entity_table = TableTensor(
+            columns={
+                Stype.numerical: ("value",),
+                Stype.id: ("entity_id",),
+            },
+            numerical=ids.to(torch.float32).unsqueeze(-1),
+            id=ColumnarTensor((ids,)),
+        )
+        related_tables = RelatedTables(
+            tables={"entities": entity_table},
+            relationships=[],
+            task_links=[
+                {
+                    "task_column": "entity_id",
+                    "table": "entities",
+                    "table_column": "entity_id",
+                }
+            ],
+        )
+        return task_table, related_tables
+
+    context_ids = torch.arange(
+        num_classes,
+        dtype=torch.int32,
+        device=device,
+    )
+    query_ids = torch.tensor(
+        [num_classes],
+        dtype=torch.int32,
+        device=device,
+    )
+    x_context, related_context = make_input(context_ids)
+    x_query, related_query = make_input(query_ids)
+    y_context = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=context_ids.unsqueeze(-1),
+            categories=(context_ids,),
+        ),
+    )
+
+    out = model(
+        x_context=x_context,
+        y_context=y_context,
+        x_query=x_query,
+        related_context_tables=related_context,
+        related_query_tables=related_query,
+        num_hops=0,
+    )
+
+    assert out.size() == (1, num_classes)
+    assert set(out.columns[Stype.numerical]) == {
+        str(i) for i in range(num_classes)
+    }
+    assert out.numerical.isfinite().all()
+    assert (out.numerical >= 0).all()
+    torch.testing.assert_close(
+        out.numerical.sum(dim=-1),
+        torch.ones(1, device=device),
+    )
+
+    with pytest.raises(
+        NotImplementedError,
+        match=r"caching is not supported with more than 10 classes \(got 11\)",
+    ):
+        model.fit(
+            x=x_context,
+            y=y_context,
+            related_tables=related_context,
+            num_hops=0,
+        )
+    with pytest.raises(RuntimeError, match="not yet fitted"):
+        model.predict(x=x_query, related_tables=related_query)
+
+
 def test_default_recipe_preserves_ids() -> None:
     table = TableTensor(
         columns={

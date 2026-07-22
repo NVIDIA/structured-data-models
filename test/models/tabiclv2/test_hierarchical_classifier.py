@@ -122,7 +122,7 @@ def test_hierarchical_classifier_nonuniform_log_probs() -> None:
     row_embeddings = torch.randn(5, 4)
     log_probs = classifier(
         row_embeddings,
-        torch.arange(3),
+        torch.arange(3, dtype=torch.int32),
         num_classes=3,
         predictor=predictor,
     )
