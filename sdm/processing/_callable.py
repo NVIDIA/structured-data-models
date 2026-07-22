@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TypeAlias
 
 from sdm.processing.base import Processor
@@ -7,6 +7,7 @@ from sdm.tensor import TableTensor
 
 ProcessorCallable: TypeAlias = Callable[[TableTensor], TableTensor]
 ProcessorLike: TypeAlias = Processor | ProcessorCallable
+ProcessorRoute: TypeAlias = ProcessorLike | Iterable[ProcessorLike] | None
 
 
 class _CallableProcessor(Processor):

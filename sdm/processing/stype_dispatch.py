@@ -1,5 +1,4 @@
-from collections.abc import Iterable
-from typing import Literal, TypeAlias, cast
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
@@ -7,14 +6,12 @@ from torch import Tensor
 from sdm import Stype
 from sdm.processing._callable import (
     ProcessorCallable,
-    ProcessorLike,
+    ProcessorRoute,
     as_processor,
 )
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.sequential import Sequential
 from sdm.tensor import TableTensor
-
-_ProcessorRoute: TypeAlias = ProcessorLike | Iterable[ProcessorLike]
 
 
 class StypeDispatch(Processor, InvertibleMixin):
@@ -57,11 +54,11 @@ class StypeDispatch(Processor, InvertibleMixin):
     def __init__(
         self,
         *,
-        numerical: _ProcessorRoute | None = None,
-        categorical: _ProcessorRoute | None = None,
-        datetime: _ProcessorRoute | None = None,
-        id: _ProcessorRoute | None = None,
-        text: _ProcessorRoute | None = None,
+        numerical: ProcessorRoute = None,
+        categorical: ProcessorRoute = None,
+        datetime: ProcessorRoute = None,
+        id: ProcessorRoute = None,
+        text: ProcessorRoute = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
