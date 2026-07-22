@@ -47,6 +47,19 @@ def test_power_standardized_fit_transform_and_inverse_round_trip(
 
 
 @withCUDA
+def test_power_wide_inverse_round_trip(device: torch.device) -> None:
+    inp = torch.linspace(-3, 3, steps=32 * 40, device=device).view(32, 40)
+
+    processor = Power().fit(TableTensor.from_tensor(inp))
+    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
+    inverse = processor.inverse_transform(
+        TableTensor.from_tensor(transformed)
+    ).numerical
+
+    assert torch.allclose(inverse, inp, atol=1e-4, rtol=1e-4)
+
+
+@withCUDA
 def test_power_without_standardization_is_near_identity(
     device: torch.device,
 ) -> None:
