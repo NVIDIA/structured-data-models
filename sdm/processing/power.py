@@ -43,24 +43,31 @@ def _yeojohnson_transform(
     return torch.where(inp >= 0, positive, negative)
 
 
-def _yeojohnson_inverse_transform(inp: Tensor, lmbda: float) -> Tensor:
-    inverse = torch.zeros_like(inp)
+def _yeojohnson_inverse_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
+    lambdas = lambdas.unsqueeze(0)
     positive = inp >= 0
     eps = torch.finfo(inp.dtype).eps
 
-    if abs(lmbda) < eps:
-        inverse[positive] = inp[positive].expm1()
-    else:
-        inverse[positive] = ((inp[positive] * lmbda + 1).log() / lmbda).expm1()
+    positive_power = ((inp * lambdas + 1).log() / lambdas).expm1()
+    positive_log = inp.expm1()
+    positive_out = torch.where(
+        lambdas.abs() < eps,
+        positive_log,
+        positive_power,
+    )
 
-    if abs(lmbda - 2) > eps:
-        inverse[~positive] = -(
-            (-(2 - lmbda) * inp[~positive] + 1).log() / (2 - lmbda)
-        ).expm1()
-    else:
-        inverse[~positive] = -(-inp[~positive]).expm1()
+    two_minus_lambda = 2 - lambdas
+    negative_power = -(
+        (1 - two_minus_lambda * inp).log() / two_minus_lambda
+    ).expm1()
+    negative_log = -(-inp).expm1()
+    negative_out = torch.where(
+        two_minus_lambda.abs() < eps,
+        negative_log,
+        negative_power,
+    )
 
-    return inverse
+    return torch.where(positive, positive_out, negative_out)
 
 
 def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
@@ -249,15 +256,6 @@ class Power(Processor, InvertibleMixin):
             self.mean = numerical.new_zeros(n_features)
             self.scale = numerical.new_ones(n_features)
 
-    def _yeojohnson_inverse_transform(self, inp: Tensor) -> Tensor:
-        inverse = inp.clone()
-        for i, lmbda in enumerate(self.lambdas):
-            inverse[:, i] = _yeojohnson_inverse_transform(
-                inp[:, i],
-                float(lmbda),
-            )
-        return inverse
-
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
         numerical = _as_float(table.numerical)
@@ -268,16 +266,16 @@ class Power(Processor, InvertibleMixin):
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = _as_float(table.numerical)
         unscaled = numerical * self.scale + self.mean
-        inverse = self._yeojohnson_inverse_transform(unscaled)
+        inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 
         out_of_bounds = inverse.isinf()
-        if out_of_bounds.any():
-            eps = torch.finfo(numerical.dtype).eps
-            unscaled = torch.minimum(unscaled, self.upper_bound - eps)
-            inverse[out_of_bounds] = self._yeojohnson_inverse_transform(
-                unscaled,
-            )[out_of_bounds]
-            invalid = inverse.isinf()
-            inverse[invalid] = torch.fmin(inverse, self.max)[invalid]
+        eps = torch.finfo(numerical.dtype).eps
+        bounded_unscaled = torch.minimum(unscaled, self.upper_bound - eps)
+        bounded_inverse = _yeojohnson_inverse_transform(
+            bounded_unscaled, self.lambdas
+        )
+        inverse = torch.where(out_of_bounds, bounded_inverse, inverse)
+        invalid = inverse.isinf()
+        inverse = torch.where(invalid, torch.fmin(inverse, self.max), inverse)
 
         return table.replace_blocks(numerical=inverse)
