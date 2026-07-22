@@ -1,10 +1,14 @@
-from collections.abc import Iterable
 from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import Stype
+from sdm.processing._callable import (
+    ProcessorCallable,
+    ProcessorRoute,
+    as_processor,
+)
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.sequential import Sequential
 from sdm.tensor import TableTensor
@@ -27,16 +31,19 @@ class StypeDispatch(Processor, InvertibleMixin):
     ``remainder="drop"`` is not invertible.
 
     Args:
-        numerical: Processor route for numerical columns. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
-        categorical: Processor route for categorical columns. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
-        datetime: Processor route for datetime columns. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
-        text: Processor route for text columns. An iterable is normalized to
+        numerical: Processor or stateless callable route for numerical
+            columns. An iterable is normalized to
             :class:`~sdm.processing.Sequential`.
-        id: Processor route for identifier columns. An iterable is normalized
-            to :class:`~sdm.processing.Sequential`.
+        categorical: Processor or stateless callable route for categorical
+            columns. An iterable is normalized to
+            :class:`~sdm.processing.Sequential`.
+        datetime: Processor or stateless callable route for datetime columns.
+            An iterable is normalized to
+            :class:`~sdm.processing.Sequential`.
+        text: Processor or stateless callable route for text columns. An
+            iterable is normalized to :class:`~sdm.processing.Sequential`.
+        id: Processor or stateless callable route for identifier columns. An
+            iterable is normalized to :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
             route. ``"passthrough"`` keeps them unchanged and is the default,
             ``"drop"`` removes them, and ``"error"`` raises.
@@ -47,11 +54,11 @@ class StypeDispatch(Processor, InvertibleMixin):
     def __init__(
         self,
         *,
-        numerical: Processor | Iterable[Processor] | None = None,
-        categorical: Processor | Iterable[Processor] | None = None,
-        datetime: Processor | Iterable[Processor] | None = None,
-        id: Processor | Iterable[Processor] | None = None,
-        text: Processor | Iterable[Processor] | None = None,
+        numerical: ProcessorRoute = None,
+        categorical: ProcessorRoute = None,
+        datetime: ProcessorRoute = None,
+        id: ProcessorRoute = None,
+        text: ProcessorRoute = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
@@ -66,7 +73,13 @@ class StypeDispatch(Processor, InvertibleMixin):
             if processor is None:
                 continue
             if not isinstance(processor, Processor):
-                processor = Sequential(*processor)
+                if callable(processor):
+                    processor = as_processor(
+                        cast(ProcessorCallable, processor),
+                        label=f"StypeDispatch route '{stype.value}'",
+                    )
+                else:
+                    processor = Sequential(*processor)
             self.processors[stype.value] = processor
 
         self.remainder = remainder

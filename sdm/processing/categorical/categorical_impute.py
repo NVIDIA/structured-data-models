@@ -3,8 +3,8 @@ from typing import Literal
 import torch
 
 from sdm import CategoricalTensor, Stype
-from sdm.processing._categorical import _check_categorical_codes
 from sdm.processing.base import Processor
+from sdm.processing.categorical._categorical import _check_categorical_codes
 from sdm.tensor import TableTensor
 
 

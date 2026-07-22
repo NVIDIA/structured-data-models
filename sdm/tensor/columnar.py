@@ -13,6 +13,7 @@ from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -86,7 +87,7 @@ class ColumnarTensor(Tensor):
                 )
         columns = tuple(columns)
         size = tuple(size) if size is not None else size
-        device = torch.device(device) if device is not None else None
+        device = _resolve_device(device)
 
         for i, column in enumerate(columns):
             size = tuple(column.size()) if size is None else size
@@ -347,6 +348,10 @@ def _to_copy(
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
+
+    # Wrapper dtype is a placeholder, so same dtype means no conversion:
+    if dtype == inp.dtype:
+        dtype = None
 
     if dtype is not None:
         raise TypeError(

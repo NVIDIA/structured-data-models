@@ -179,6 +179,7 @@ class ICLModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        out = cast(TableTensor, out.to(x_query_i.dtype))
         return recipe.output.transform(out)
 
     @_maybe_inference_mode()
@@ -371,6 +372,7 @@ class ICLModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        out = cast(TableTensor, out.to(x_i.dtype))
         return recipe.output.transform(out)
 
     def __repr__(self) -> str:

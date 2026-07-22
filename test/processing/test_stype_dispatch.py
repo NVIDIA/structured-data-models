@@ -50,6 +50,31 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     )
 
 
+def test_stype_dispatch_accepts_callable_route() -> None:
+    table = _mixed_table()
+    dispatch = StypeDispatch(
+        numerical=lambda table: table.replace_blocks(
+            numerical=table.numerical.square()
+        )
+    )
+
+    output = dispatch.transform(table)
+
+    assert not dispatch.requires_fit
+    assert output.columns == table.columns
+    assert torch.equal(
+        output.numerical,
+        table.numerical.square(),
+    )
+    assert torch.equal(
+        output.categorical.as_tensor(),
+        table.categorical.as_tensor(),
+    )
+
+    with pytest.raises(TypeError, match="non-invertible"):
+        dispatch.inverse_transform(output)
+
+
 def test_stype_dispatch_passes_generator_to_routes() -> None:
     table = TableTensor(
         columns={"categorical": ("kind",)},
@@ -125,18 +150,28 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
 
 
 def test_stype_dispatch_runs_iterable_routes() -> None:
+    table = _mixed_table().replace_blocks(
+        numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])
+    )
     dispatch = StypeDispatch(
-        numerical=[MeanImpute(), StandardScale()],
+        numerical=[
+            lambda table: table.replace_blocks(
+                numerical=table.numerical.square()
+            ),
+            MeanImpute(),
+            StandardScale(),
+        ],
         remainder="drop",
     )
-
-    output = dispatch.fit_transform(_mixed_table())
-
-    assert torch.allclose(
-        output.numerical.mean(dim=0),
-        torch.zeros(2),
-        atol=1e-6,
+    expected = StandardScale().fit_transform(
+        table.select_stypes(Stype.numerical).replace_blocks(
+            numerical=table.numerical.square()
+        )
     )
+
+    output = dispatch.fit_transform(table)
+
+    torch.testing.assert_close(output.numerical, expected.numerical)
 
 
 def test_stype_dispatch_routes_text() -> None:

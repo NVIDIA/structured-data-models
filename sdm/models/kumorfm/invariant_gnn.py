@@ -1,12 +1,13 @@
 # ruff: noqa: D102
 
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import LayerNorm, Linear
 
+from sdm.cache import Cache
 from sdm.models.kumorfm.graph import HomogeneousGraph
 
 
@@ -63,15 +64,32 @@ class InvariantGNN(torch.nn.Module):
         self,
         x: Tensor,
         graph: HomogeneousGraph,
-        edge_type_emb: Tensor,
+        *,
         readout_table: str,
+        readout_index: Tensor,
         num_hops: int,
+        cache: Cache | None = None,
+        generator: torch.Generator | None = None,
     ) -> Tensor:
 
         if num_hops == 0:
             start = graph.start_node_offsets[readout_table]
             end = graph.end_node_offsets[readout_table]
-            return x[start:end]
+            return x[start:end][readout_index]
+
+        if cache is None or cache.is_recording:
+            edge_type_emb = torch.randn(
+                (graph.num_edge_types, self.edge_type_lin.weight.size(-1)),
+                dtype=x.dtype,
+                device=x.device,
+                generator=generator,
+            )
+            edge_type_emb = F.normalize(edge_type_emb, dim=-1)
+            edge_type_emb = self.edge_type_lin(edge_type_emb)
+            if cache is not None and cache.is_recording:
+                cache["edge_type_emb"] = edge_type_emb
+        else:
+            edge_type_emb = cast(Tensor, cache["edge_type_emb"])
 
         edge_type_emb = edge_type_emb[graph.edge_type]
 
@@ -127,7 +145,7 @@ class InvariantGNN(torch.nn.Module):
             if i == num_hops - 1:
                 start = graph.start_node_offsets[readout_table]
                 end = graph.end_node_offsets[readout_table]
-                x = x[start:end]
+                x = x[start:end][readout_index]
 
             x = F.gelu(self.norm(x))
 

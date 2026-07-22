@@ -16,6 +16,7 @@ from typing_extensions import Self, override
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -157,7 +158,7 @@ class TableTensor(Tensor):
             raise ValueError("Expected 'size' to be non-empty")
 
         size = tuple(size) if size is not None else size
-        device = torch.device(device) if device is not None else device
+        device = _resolve_device(device)
 
         for stype, block in (
             (Stype.numerical, numerical),
@@ -377,6 +378,30 @@ class TableTensor(Tensor):
         """
         return cls.from_arrow(
             table=pa.Table.from_pandas(df, preserve_index=False),
+            stypes=stypes,
+            device=device,
+        )
+
+    @classmethod
+    def from_columns(
+        cls,
+        data: Mapping[str, Sequence[Any]],
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create a tensor from column data.
+
+        Args:
+            data: Column data keyed by column name.
+            stypes: The semantic type for each column. Columns that are present
+                in ``data`` but not included in ``stypes`` will be ignored.
+            device: The device.
+        """
+        import pandas as pd
+
+        return cls.from_pandas(
+            df=pd.DataFrame(data),
             stypes=stypes,
             device=device,
         )
@@ -928,6 +953,7 @@ def _to_copy(
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
+    device = inp.device if device is None else device
     blocks = {
         stype: aten._to_copy.default(
             tensor,
@@ -949,6 +975,24 @@ def _to_copy(
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
+    )
+
+
+@TableTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: TableTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    if not copy and inp.dtype == dtype:
+        return inp
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
     )
 
 
