@@ -3,7 +3,7 @@ import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
-from typing import ClassVar, cast
+from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
@@ -61,6 +61,8 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
         r"""The in-context learning forward pass.
 
@@ -76,6 +78,9 @@ class ICLModel(torch.nn.Module, ABC):
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators for ensembling.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
+            kwargs: Additional keyword arguments passed to the model.
 
         Returns:
             The processed prediction. Member outputs enter ``recipe.output``
@@ -108,8 +113,14 @@ class ICLModel(torch.nn.Module, ABC):
 
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
-            x_context_i = recipe.features.fit_transform(x_context)
-            y_context_i = recipe.target.fit_transform(y_context)
+            x_context_i = recipe.features.fit_transform(
+                x_context,
+                generator=generator,
+            )
+            y_context_i = recipe.target.fit_transform(
+                y_context,
+                generator=generator,
+            )
             x_query_i = recipe.features.transform(x_query)
 
             related_context_tables_i = related_query_tables_i = None
@@ -121,7 +132,10 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables_i = replace(
                     related_context_tables,
                     tables={
-                        name: related_processors[name].fit_transform(t)
+                        name: related_processors[name].fit_transform(
+                            t,
+                            generator=generator,
+                        )
                         for name, t in related_context_tables.tables.items()
                     },
                 )
@@ -155,6 +169,8 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=related_context_tables_i,
                 related_query_tables=related_query_tables_i,
                 cache=None,
+                generator=generator,
+                **kwargs,
             )
             if y_context_i.numerical.size(-1) == 1:
                 if not isinstance(recipe.target, InvertibleMixin):
@@ -243,6 +259,7 @@ class ICLModel(torch.nn.Module, ABC):
                 classes=y_i.categorical.categories[0]
                 if y_i.categorical.size(-1) > 0
                 else None,
+                kwargs=kwargs,
             )
 
             self._forward(
@@ -252,6 +269,8 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=related_tables_i,
                 related_query_tables=None,
                 cache=cache,
+                generator=generator,
+                **kwargs,
             )
             cache = cache.cpu().freeze()
             caches.append(cache)
@@ -340,6 +359,8 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
                 cache=cache.to(x_i.device),
+                generator=None,
+                **cast(dict[str, Any], cache["kwargs"]),
             )
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):
@@ -349,6 +370,11 @@ class ICLModel(torch.nn.Module, ABC):
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
         return recipe.output.transform(out)
+
+    def __repr__(self) -> str:
+        device = next(self.parameters()).device
+        device_repr = f"device={device}" if device.type != "cpu" else ""
+        return f"{self.__class__.__name__}({device_repr})"
 
     # Abstract Methods ########################################################
 
@@ -361,6 +387,8 @@ class ICLModel(torch.nn.Module, ABC):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
         pass
 

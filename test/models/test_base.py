@@ -1,12 +1,18 @@
 from dataclasses import dataclass
-from typing import ClassVar, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 import torch
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
-from sdm.processing import Processor, Recipe, StandardScale, StypeDispatch
+from sdm.processing import (
+    InvertibleMixin,
+    Processor,
+    Recipe,
+    StandardScale,
+    StypeDispatch,
+)
 
 
 @dataclass
@@ -34,6 +40,8 @@ class _RecordingModel(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
     ) -> TableTensor:
         self.calls.append(
             _Call(
@@ -56,6 +64,32 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables = False
+
+
+class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
+    supported_stypes = frozenset(Stype)
+    generators: ClassVar[list[torch.Generator | None]] = []
+    draws: ClassVar[list[torch.Tensor]] = []
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.generators.clear()
+        cls.draws.clear()
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self.generators.append(generator)
+        self.draws.append(torch.rand((), generator=generator))
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return table
 
 
 def _table(
@@ -106,6 +140,75 @@ def _recipe() -> Recipe:
     return Recipe(
         features=StypeDispatch(numerical=StandardScale()),
     )
+
+
+def _generator_recipe() -> Recipe:
+    return Recipe(
+        features=_GeneratorRecordingProcessor(),
+        target=_GeneratorRecordingProcessor(),
+    )
+
+
+def _fit_draws(
+    *,
+    seed: int,
+    cached: bool,
+) -> list[torch.Tensor]:
+    model = _RecordingModel()
+    x_context = _table([0.0, 2.0], [1, 2], value_column="feature")
+    y_context = TableTensor.from_tensor(torch.tensor([[0.0], [1.0]]))
+    related_context = _related_tables(query=False)
+    generator = torch.Generator().manual_seed(seed)
+
+    _GeneratorRecordingProcessor.reset()
+    if cached:
+        model.fit(
+            x_context,
+            y_context,
+            related_context,
+            recipe=_generator_recipe(),
+            num_estimators=2,
+            generator=generator,
+        )
+    else:
+        model(
+            x_context,
+            y_context,
+            _table([3.0], [3], value_column="feature"),
+            related_context,
+            _related_tables(query=True),
+            recipe=_generator_recipe(),
+            num_estimators=2,
+            generator=generator,
+        )
+
+    assert _GeneratorRecordingProcessor.generators == [generator] * 8
+    return list(_GeneratorRecordingProcessor.draws)
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_model_recipe_fitting_honors_generator(cached: bool) -> None:
+    first = _fit_draws(seed=0, cached=cached)
+    second = _fit_draws(seed=0, cached=cached)
+    different_seed = _fit_draws(seed=1, cached=cached)
+
+    assert len(first) == 8
+    assert all(torch.equal(left, right) for left, right in zip(first, second))
+    assert any(
+        not torch.equal(left, right)
+        for left, right in zip(first, different_seed)
+    )
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_model_recipe_generator_does_not_advance_global_rng(
+    cached: bool,
+) -> None:
+    state = torch.get_rng_state()
+
+    _fit_draws(seed=0, cached=cached)
+
+    assert torch.equal(torch.get_rng_state(), state)
 
 
 def test_related_table_preprocessing_forward_and_cache() -> None:

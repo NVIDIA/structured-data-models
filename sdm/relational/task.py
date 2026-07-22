@@ -289,11 +289,32 @@ class RelatedTables(DeviceMixin):
 
     def edge_indices(
         self,
+        dtype: torch.dtype | None = None,
+        device: torch.device | str | None = None,
+    ) -> tuple[Tensor, ...]:
+        r"""Materialize heterogeneous graph edges for table relationships.
+
+        Args:
+            dtype: The dtype.
+            device: The device.
+
+        Returns:
+            The edge indices for each relationship in order.
+            Each edge index has shape ``[2, num_edges]`` and stores left table
+            indices in the first row and right table indices in the second row.
+        """
+        return RelationalData(
+            tables=self.tables,
+            relationships=self.relationships,
+        ).edge_indices(dtype=dtype, device=device)
+
+    def task_indices(
+        self,
         task_table: TableTensor,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
-    ) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...]]:
-        r"""Materialize heterogeneous graph edges for table relationships.
+    ) -> tuple[Tensor, ...]:
+        r"""Materialize graph edges for task links.
 
         Args:
             task_table: The task table.
@@ -301,32 +322,23 @@ class RelatedTables(DeviceMixin):
             device: The device.
 
         Returns:
-            A ``(relationships, task_links)`` pair, each holding edge indices
-            for each relationship and task link in order.
-            Each edge index has shape ``[2, num_edges]`` and stores left/task
-            table indices in the first row and right table indices in the
-            second row.
+            The edge indices for each task link in order.
+            Each edge index has shape ``[2, num_edges]`` and stores task table
+            indices in the first row and table indices in the second row.
         """
-        edge_indices = RelationalData(
-            tables={**self.tables, TASK_TABLE: task_table},
-            relationships=(
-                *self.relationships,
-                *(
-                    Relationship(
-                        left_table=TASK_TABLE,
-                        left_columns=link.task_columns,
-                        right_table=link.table,
-                        right_columns=link.table_columns,
-                    )
-                    for link in self.task_links
-                ),
+        data = RelationalData(
+            tables={**self.tables, "__task_table__": task_table},
+            relationships=tuple(
+                Relationship(
+                    left_table="__task_table__",
+                    left_columns=task_link.task_columns,
+                    right_table=task_link.table,
+                    right_columns=task_link.table_columns,
+                )
+                for task_link in self.task_links
             ),
-        ).edge_indices(dtype=dtype, device=device)
-
-        return (
-            edge_indices[: len(self.relationships)],
-            edge_indices[len(self.relationships) :],
         )
+        return data.edge_indices(dtype=dtype, device=device)
 
     def to_graphviz(
         self,

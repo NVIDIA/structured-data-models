@@ -42,8 +42,8 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
         TaskDispatch(
           classification: SoftmaxTemperature(),
           regression: Sequential(
-              Identity(),
-            ),
+            Identity(),
+          ),
         )""")
     assert repr(dispatch) == description
 

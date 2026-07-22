@@ -44,28 +44,36 @@ class InvariantGNN(torch.nn.Module):
         self.out_lin = Linear(channels, channels, **factory_kwargs)
         self.out_norm = LayerNorm(channels, **factory_kwargs)
 
+    def get_edge_type_emb(
+        self,
+        num_edge_types: int,
+        dtype: torch.dtype | None = None,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:
+        edge_type_emb = torch.randn(
+            (num_edge_types, self.edge_type_lin.weight.size(-1)),
+            dtype=dtype,
+            device=self.edge_type_lin.weight.device,
+            generator=generator,
+        )
+        edge_type_emb = F.normalize(edge_type_emb, dim=-1)
+        return self.edge_type_lin(edge_type_emb)
+
     def forward(
         self,
         x: Tensor,
         graph: HomogeneousGraph,
+        edge_type_emb: Tensor,
         readout_table: str,
         num_hops: int,
-        generator: torch.Generator | None = None,
     ) -> Tensor:
 
-        if num_hops == 0 or graph.row.numel() == 0:
+        if num_hops == 0:
             start = graph.start_node_offsets[readout_table]
             end = graph.end_node_offsets[readout_table]
             return x[start:end]
 
-        edge_type_emb = torch.randn(
-            (graph.num_edge_types, x.size(-1)),
-            dtype=x.dtype,
-            device=x.device,
-            generator=generator,
-        )
-        edge_type_emb = F.normalize(edge_type_emb, dim=-1)
-        edge_type_emb = self.edge_type_lin(edge_type_emb)[graph.edge_type]
+        edge_type_emb = edge_type_emb[graph.edge_type]
 
         for i in range(num_hops):
             src_x = self.src_lin(x)[graph.row] + edge_type_emb
