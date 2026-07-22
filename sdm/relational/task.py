@@ -280,6 +280,21 @@ class RelatedTables(DeviceMixin):
             ),
         )
 
+    def replace_tables(self, tables: Mapping[str, TableTensor]) -> Self:
+        r"""Return related tables with replaced table data.
+
+        Args:
+            tables: Related tables keyed by table name.
+        """
+        if tables.keys() != self.tables.keys():
+            raise ValueError("Expected 'tables' to match existing table names")
+
+        return self.__class__(
+            tables=tables,
+            relationships=self.relationships,
+            task_links=self.task_links,
+        )
+
     def to_graphviz(
         self,
         *,

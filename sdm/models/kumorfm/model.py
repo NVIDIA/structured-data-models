@@ -19,13 +19,103 @@ from sdm.processing import Recipe
 
 
 class KumoRFM(ICLModel):
-    r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
-    Foundation Models for Relational Learning"
+    r"""An adapted and simplified version of the relational foundation model
+    from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
     .. image:: https://arxiv.org/html/2604.12596v1/x3.png
         :align: center
         :width: 100%
+
+    :class:`KumoRFM` extends the in-context learning structure of tabular
+    foundation models from single tables to relational, multi-table inputs.
+    It processes task rows together with one or more related tables, avoiding
+    manual flattening of relational data into a single table.
+
+    This implementation follows the high-level KumoRFM-2 architecture.
+    It consists of three stages:
+
+    * **Intra-table row embeddings:** Each related table is embedded
+      independently with a :class:`TabICLv2`-style row embedding stack.
+      Target information is injected by distributing context targets over the
+      relational graph.
+    * **Inter-table message passing:** A schema-agnostic GNN exchanges the row
+      embeddings along pre-defined relationships for ``num_hops`` rounds,
+      before it reads out the rows linked to the task table.
+    * **In-context learning over samples:** The readout embeddings for context
+      and query task rows are processed by a :class:`TabICLv2`-style
+      dataset-level ICL block.
+      Context rows carry target information, while query rows attend to the
+      labeled context to produce class logits or regression quantiles.
+
+    .. code-block:: python
+
+        from sdm import RelatedTables, TableTensor
+        from sdm.models import KumoRFM
+
+        task_table = TableTensor.from_columns({
+            {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
+            stypes={"user_id": "id", "churn": "categorical"},
+            device="cuda",
+        )
+
+        related_tables = RelatedTables(
+            tables={
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1, 2, 3], "age": [42, 23, 31, 26]},
+                    stypes={"user_id": "id", "age": "numerical"},
+                    device="cuda",
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 0, 1, 3, 3, 3],
+                        "amount": [9.99, 31.57, 29.97, 19.49, 4.99, 10.00],
+                    },
+                    stypes={"user_id": "id", "amount": "numerical"},
+                    device="cuda",
+                ),
+            },
+            relationships=[{
+                "left_table": "orders",
+                "left_columns": "user_id",
+                "right_table": "users",
+                "right_columns": "user_id",
+            }],
+            task_links=[{
+                "task_columns": "user_id",
+                "table": "users",
+                "table_columns": "user_id",
+            }],
+        )
+
+        x_context = task_table[:2].drop_columns("churn")
+        y_context = task_table[:2, "churn"]
+        x_query = task_table[2:].drop_columns("churn")
+
+        related_context_tables = related_tables.replace_tables({
+            "users": related_tables.tables["users"][:2],
+            "orders": related_tables.tables["orders"][:3],
+        })
+        related_query_tables = related_tables.replace_tables({
+            "users": related_tables.tables["users"][2:],
+            "orders": related_tables.tables["orders"][3:],
+        })
+
+        model = KumoRFM(device="cuda")
+
+        # Default in-context learning forward pass:
+        out = model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+            num_hops=1,
+        )
+
+        # Fit+Predict forward pass via key/value caching:
+        model.fit(x_context, y_context, related_context_tables, num_hops=1)
+        out = model.predict(x_query, related_query_tables)
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
