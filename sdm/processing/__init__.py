@@ -23,7 +23,7 @@ from sdm.processing.categorical import (
 )
 from sdm.processing.datetime import EncodeDatetime
 from sdm.processing.output import EnsembleReduce, SoftmaxTemperature
-from sdm.processing.cross_stype import Identity, FeaturePermute, ToNumerical
+from sdm.processing.common import Identity, FeaturePermute, ToNumerical
 
 __all__ = [
     "Processor",
