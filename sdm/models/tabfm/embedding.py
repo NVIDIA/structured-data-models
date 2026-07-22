@@ -58,13 +58,17 @@ class CellEmbedder(torch.nn.Module):
             raise ValueError("all dimensions must be positive")
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        frequency_factory_kwargs: dict[str, Any] = {
+            "device": device,
+            "dtype": torch.float32,
+        }
         self.feature_group_size = feature_group_size
         self.register_buffer(
             "fourier_frequencies",
             torch.zeros(
                 feature_group_size,
                 num_frequencies,
-                **factory_kwargs,
+                **frequency_factory_kwargs,
             ),
         )
         self.register_buffer(
@@ -72,7 +76,7 @@ class CellEmbedder(torch.nn.Module):
             torch.zeros(
                 feature_group_size,
                 num_frequencies,
-                **factory_kwargs,
+                **frequency_factory_kwargs,
             ),
         )
         self.in_linear = Linear(
