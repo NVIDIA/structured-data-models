@@ -71,7 +71,6 @@ class SDMTabICLv2System(ExternalSystemModel):
             generator = torch.Generator(device=self._device).manual_seed(
                 random_state
             )
-        self._problem_type = problem_type
         self._target_name = target_name or "__target__"
         self._target_stype = (
             Stype.numerical
@@ -103,18 +102,16 @@ class SDMTabICLv2System(ExternalSystemModel):
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
-        if self._problem_type != "regression":
-            raise RuntimeError("Classification tasks require '_predict_proba'")
-        values = self._predict_table(X).numerical.float().cpu().numpy()
+        values = (
+            self._predict_table(X).numerical.float().mean(dim=-1).cpu().numpy()
+        )
         return pd.Series(
-            values.mean(axis=-1),
+            values,
             index=X.index,
             name=self._target_name,
         )
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        if self._problem_type == "regression":
-            raise RuntimeError("Regression tasks require '_predict'")
         prediction = self._predict_table(X)
         values = prediction.numerical.float().cpu().numpy()
         labels = _labels_from_prediction_columns(
