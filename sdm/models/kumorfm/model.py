@@ -282,61 +282,70 @@ class _KumoRFM(torch.nn.Module):
 
         # TODO Support computing relative time.
         # TODO Inject random heterogeneous GNN.
-        # TODO Inject task features.
 
         # Reason within each Table ############################################
+        if context is not None:
+            table_names = list(context.related_tables.tables)
+            readout_table = context.readout_table
+        else:
+            assert query is not None
+            table_names = list(query.related_tables.tables)
+            readout_table = query.readout_table
+
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
-        for table_name in (
-            context.related_tables.tables
-            if context is not None
-            else query.related_tables.tables  # type: ignore
-        ):
-            context_table = context_task_row = None
+        for name in table_names:
+            x_context_i = task_row_i = None
             if context is not None:
-                context_table = context.related_tables.tables[table_name]
-                context_task_row = context.task_row_by_table[table_name]
+                x_context_i = context.related_tables.tables[name].numerical
+                task_row_i = context.task_row_by_table[name]
+                if name == readout_table:  # Inject task features:
+                    assert x_context is not None
+                    x_context_i = self._inject_task(
+                        x=x_context_i,
+                        task=x_context.numerical,
+                        readout_index=context.readout_index,
+                    )
 
-            query_table = query_task_row = None
-            if query is not None and table_name in query.related_tables.tables:
-                query_table = query.related_tables.tables[table_name]
-                query_task_row = query.task_row_by_table[table_name]
+            x_query_i = None
+            if query is not None and name in query.related_tables.tables:
+                x_query_i = query.related_tables.tables[name].numerical
+                if name == readout_table:  # Inject task features:
+                    assert x_query is not None
+                    x_query_i = self._inject_task(
+                        x=x_query_i,
+                        task=x_query.numerical,
+                        readout_index=query.readout_index,
+                    )
 
-            xs_context[table_name], xs_query[table_name] = self._embed_table(
-                context_table=context_table,
-                context_task_row=context_task_row,
-                query_table=query_table,
-                query_task_row=query_task_row,
+            xs_context[name], xs_query[name] = self._embed_table(
+                x_context=x_context_i,
+                x_query=x_query_i,
                 y=y,
+                task_row=task_row_i,
                 num_classes=num_classes,
-                cache_key=f"table_{table_name}",
+                cache_key=f"table_{name}",
                 cache=cache,
                 generator=generator,
             )
 
         # Inter-Message Passing ###############################################
-        edge_type_emb: Tensor | None = None
+        gnn_cache = cache or Cache()
         if context is not None:
             x_context: Tensor = torch.cat(
                 [xs_context[name] for name in context.related_tables.tables],
                 dim=-2,
             )
             del xs_context
-            edge_type_emb = self.gnn.get_edge_type_emb(
-                num_edge_types=context.graph.num_edge_types,
-                dtype=x_context.dtype,
-                generator=generator,
-            )
-            if cache is not None and cache.is_recording:
-                cache["edge_type_emb"] = edge_type_emb
             x_context = self.gnn(
                 x=x_context,
                 graph=context.graph,
-                edge_type_emb=edge_type_emb,
                 readout_table=context.readout_table,
+                readout_index=context.readout_index,
                 num_hops=context.num_hops,
+                cache=gnn_cache,
+                generator=generator,
             )
-            x_context = x_context[context.readout_index]
 
         if query is not None:
             x_query: Tensor = torch.cat(
@@ -344,17 +353,14 @@ class _KumoRFM(torch.nn.Module):
                 dim=-2,
             )
             del xs_query
-            if edge_type_emb is None:
-                assert cache is not None
-                edge_type_emb = cast(Tensor, cache["edge_type_emb"])
             x_query = self.gnn(
                 x=x_query,
                 graph=query.graph,
-                edge_type_emb=edge_type_emb,
                 readout_table=query.readout_table,
+                readout_index=query.readout_index,
                 num_hops=query.num_hops,
+                cache=gnn_cache.freeze() if cache is None else cache,
             )
-            x_query = x_query[query.readout_index]
 
         # Reason across Tables ################################################
         if x_query is None and x_context is not None:
@@ -372,11 +378,10 @@ class _KumoRFM(torch.nn.Module):
 
     def _embed_table(
         self,
-        context_table: TableTensor | None,
-        context_task_row: Tensor | None,
-        query_table: TableTensor | None,
-        query_task_row: Tensor | None,
+        x_context: Tensor | None,
+        x_query: Tensor | None,
         y: Tensor,
+        task_row: Tensor | None,
         num_classes: int | None,
         cache_key: str,
         cache: Cache | None,
@@ -391,18 +396,18 @@ class _KumoRFM(torch.nn.Module):
             _cache = cast(Cache, cache[cache_key])
 
         train_mask: Tensor | None = None
-        if context_table is not None:
-            assert context_task_row is not None
-            x = context_table.numerical
-            train_mask = context_task_row >= 0
-            y = y[context_task_row[train_mask]]
-            if query_table is not None:
-                x = torch.cat([x, query_table.numerical], dim=-2)
-                test_mask = train_mask.new_zeros(query_table.size(-2))
+        if x_context is not None:
+            assert task_row is not None
+            x = x_context
+            train_mask = task_row >= 0
+            y = y[task_row[train_mask]]
+            if x_query is not None:
+                x = torch.cat([x, x_query], dim=-2)
+                test_mask = train_mask.new_zeros(x_query.size(-2))
                 train_mask = torch.cat([train_mask, test_mask])
         else:
-            assert query_table is not None
-            x = query_table.numerical
+            assert x_query is not None
+            x = x_query
 
         x = self.row_embedding(
             x=x,
@@ -418,10 +423,27 @@ class _KumoRFM(torch.nn.Module):
             cache[cache_key] = cast(Cache, _cache)
 
         sections = [
-            context_table.size(-2) if context_table is not None else 0,
-            query_table.size(-2) if query_table is not None else 0,
+            x_context.size(-2) if x_context is not None else 0,
+            x_query.size(-2) if x_query is not None else 0,
         ]
         return x.split(sections, dim=-2)
+
+    def _inject_task(
+        self,
+        x: Tensor,
+        task: Tensor,
+        readout_index: Tensor,
+    ) -> Tensor:
+
+        if task.size(-1) == 0:
+            return x
+
+        x = torch.cat(
+            [x, x.new_zeros(*x.size()[:-1], task.size(-1))],
+            dim=-1,
+        )
+        x[..., readout_index, -task.size(-1) :] = task
+        return x
 
 
 def _remap_v2_1_checkpoint(
