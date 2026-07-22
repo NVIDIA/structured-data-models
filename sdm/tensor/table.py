@@ -381,6 +381,30 @@ class TableTensor(Tensor):
             device=device,
         )
 
+    @classmethod
+    def from_columns(
+        cls,
+        data: Mapping[str, Sequence[Any]],
+        stypes: Mapping[str, StypeLike],
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create a tensor from column data.
+
+        Args:
+            data: Column data keyed by column name.
+            stypes: The semantic type for each column. Columns that are present
+                in ``data`` but not included in ``stypes`` will be ignored.
+            device: The device.
+        """
+        import pandas as pd
+
+        return cls.from_pandas(
+            df=pd.DataFrame(data),
+            stypes=stypes,
+            device=device,
+        )
+
     def to_pandas(self) -> pd.DataFrame:
         r"""Convert this tensor to a :class:`pandas.DataFrame`."""
         return self.to_arrow().to_pandas()

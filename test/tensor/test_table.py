@@ -1094,6 +1094,27 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+def test_from_columns() -> None:
+    tensor = TableTensor.from_columns(
+        {
+            "age": [10, 20],
+            "income": [1.0, 2.5],
+            "country": ["US", "CA"],
+            "unused": ["a", "b"],
+        },
+        stypes={
+            "age": "numerical",
+            "income": "numerical",
+            "country": "categorical",
+        },
+    )
+
+    assert tensor.size() == (2, 3)
+    assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
+    assert tensor.categorical.as_tensor().equal(torch.tensor([[0], [1]]))
+    assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
+
+
 def test_text() -> None:
     data = {
         "age": [0.0, 1.0, 2.0],
