@@ -72,7 +72,11 @@ class SDMTabICLv2Model(AbstractModel):
         )
 
         self.model = TabICLv2(device=self._device)
-        with _autocast(self._device):
+        with torch.amp.autocast(
+            device_type=self._device.type,
+            dtype=torch.bfloat16,
+            enabled=self._device.type == "cuda",
+        ):
             self.model.fit(
                 x=TableTensor.from_pandas(
                     df=X,
@@ -93,7 +97,11 @@ class SDMTabICLv2Model(AbstractModel):
                 "SDMTabICLv2Model must be fitted before prediction"
             )
 
-        with _autocast(self._device):
+        with torch.amp.autocast(
+            device_type=self._device.type,
+            dtype=torch.bfloat16,
+            enabled=self._device.type == "cuda",
+        ):
             prediction = self.model.predict(
                 TableTensor.from_pandas(
                     df=X,
@@ -189,7 +197,11 @@ class SDMTabICLv2System(ExternalSystemModel):
             )
 
         self.model = TabICLv2(device=self._device)
-        with _autocast(self._device):
+        with torch.amp.autocast(
+            device_type=self._device.type,
+            dtype=torch.bfloat16,
+            enabled=self._device.type == "cuda",
+        ):
             self.model.fit(
                 x=TableTensor.from_pandas(
                     df=X,
@@ -244,7 +256,11 @@ class SDMTabICLv2System(ExternalSystemModel):
                 "SDMTabICLv2System must be fitted before prediction"
             )
         X = _align_features(X, schema=self._schema)
-        with _autocast(self._device):
+        with torch.amp.autocast(
+            device_type=self._device.type,
+            dtype=torch.bfloat16,
+            enabled=self._device.type == "cuda",
+        ):
             return self.model.predict(
                 TableTensor.from_pandas(
                     df=X,
@@ -438,14 +454,6 @@ def _resolve_device(*, num_gpus: int | None) -> torch.device:
     if not torch.cuda.is_available():
         raise RuntimeError("TabArena requested a GPU but CUDA is unavailable")
     return torch.device("cuda")
-
-
-def _autocast(device: torch.device) -> torch.amp.autocast:
-    return torch.amp.autocast(
-        device_type=device.type,
-        dtype=torch.bfloat16,
-        enabled=device.type == "cuda",
-    )
 
 
 def main() -> None:
