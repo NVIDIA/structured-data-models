@@ -17,8 +17,6 @@ split:
 The output directory must be new or empty.
 """
 
-# ruff: noqa: D101, D102, D103
-
 from __future__ import annotations
 
 import argparse
