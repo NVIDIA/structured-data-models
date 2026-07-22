@@ -188,8 +188,8 @@ def test_invariant_gnn(
     out = model(
         x=torch.randn(10, 8, device=device),
         graph=graph,
-        edge_type_emb=model.get_edge_type_emb(graph.num_edge_types),
         readout_table="users",
+        readout_index=torch.arange(4, device=device),
         num_hops=2,
     )
     assert out.size() == (4, 8)
@@ -255,6 +255,18 @@ def test_forward(
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
+
+    out_zero_hops = model(
+        x_context=x,
+        y_context=y,
+        x_query=x,
+        related_context_tables=related_tables,
+        related_query_tables=related_tables,
+        num_hops=0,
+    )
+    assert out_zero_hops.size() == out.size()
+    assert out_zero_hops.dtype == x.dtype
+    assert out_zero_hops.device == x.device
 
     torch.manual_seed(1)
     model.fit(x, y, related_tables)
