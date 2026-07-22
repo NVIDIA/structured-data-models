@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 import torch
 import torch.nn.functional as F
+from sdm.cache import KVCacheEntry
 from sdm.nn import (
     SDPA,
     Attention,
@@ -925,9 +926,6 @@ def test_transformer_block_kv_cache() -> None:
 
 
 def test_attention_key_value_cache_dtype_mismatch() -> None:
-    torch.manual_seed(0)
-    from sdm.cache import KVCacheEntry
-
     module = Attention(channels=8, num_query_heads=2)
     query = torch.randn(2, 3, 8)
     cached = KVCacheEntry(
