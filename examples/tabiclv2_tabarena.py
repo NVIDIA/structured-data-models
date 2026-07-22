@@ -1,10 +1,15 @@
 """Run the repository-local TabICLv2 model on TabArena."""
 
+# Quick smoke run:
+# uv run --group example-tabarena python examples/tabiclv2_tabarena.py \
+#   --output-root "$(mktemp -d)" --mode sdm-native --subset lite \
+#   --datasets blood-transfusion-service-center --num-estimators 1 \
+#   --num-cpus 1 --num-gpus 0
+
 from __future__ import annotations
 
 import argparse
 import gc
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,7 +19,7 @@ import pandas as pd
 import torch
 from autogluon.core.data.label_cleaner import LabelCleaner
 from autogluon.core.models import AbstractModel
-from sdm import Stype, StypeLike, TableTensor, infer_stypes
+from sdm import Stype, TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
@@ -59,8 +64,8 @@ class SDMTabICLv2Model(AbstractModel):
 
         self.model = TabICLv2(device=self._device)
         self.model.fit(
-            x=_table_from_frame(
-                X,
+            x=TableTensor.from_pandas(
+                df=X,
                 stypes=self._feature_stypes,
                 device=self._device,
             ),
@@ -80,8 +85,8 @@ class SDMTabICLv2Model(AbstractModel):
             )
 
         prediction = self.model.predict(
-            _table_from_frame(
-                X,
+            TableTensor.from_pandas(
+                df=X,
                 stypes=self._feature_stypes,
                 device=self._device,
             )
@@ -184,8 +189,8 @@ class SDMTabICLv2System(ExternalSystemModel):
 
         self.model = TabICLv2(device=self._device)
         self.model.fit(
-            x=_table_from_frame(
-                X,
+            x=TableTensor.from_pandas(
+                df=X,
                 stypes=self._schema.stypes,
                 device=self._device,
             ),
@@ -243,8 +248,8 @@ class SDMTabICLv2System(ExternalSystemModel):
             )
         X = _align_features(X, schema=self._schema)
         return self.model.predict(
-            _table_from_frame(
-                X,
+            TableTensor.from_pandas(
+                df=X,
                 stypes=self._schema.stypes,
                 device=self._device,
             )
@@ -442,19 +447,6 @@ def _resolve_device(*, num_gpus: int | None) -> torch.device:
     if not torch.cuda.is_available():
         raise RuntimeError("TabArena requested a GPU but CUDA is unavailable")
     return torch.device("cuda")
-
-
-def _table_from_frame(
-    frame: pd.DataFrame,
-    *,
-    stypes: Mapping[str, StypeLike],
-    device: torch.device,
-) -> TableTensor:
-    return TableTensor.from_pandas(
-        df=frame,
-        stypes=stypes,
-        device=device,
-    )
 
 
 def _table_from_series(
