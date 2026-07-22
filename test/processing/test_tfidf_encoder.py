@@ -4,6 +4,7 @@ import pytest
 import torch
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import StypeDispatch, TfidfEncoder
+from sdm.testing import onlyCUDA
 
 
 def _text_table(*columns: list[str]) -> TableTensor:
@@ -16,15 +17,21 @@ def _text_table(*columns: list[str]) -> TableTensor:
 
 
 def test_tfidf_encoder_outputs_numerical_block() -> None:
-    table = _text_table(["hello world", "hello there"], ["cat", "dog"])
+    table = TableTensor(
+        columns={"text": ("t0", "t1")},
+        text=StringTensor.from_list(
+            [["hello world", "cat"], ["hello there", "dog"]]
+        ),
+    )
 
     output = TfidfEncoder(ngram_range=(2, 3)).fit_transform(table)
 
     assert output.columns[Stype.text] == ()
     names = output.columns[Stype.numerical]
     assert len(names) == output.numerical.size(-1)
-    assert names[0].startswith("t0_")
-    assert names[-1].startswith("t1_")
+    assert names[:32] == tuple(f"t0_{i}" for i in range(32))
+    assert names[32:] == tuple(f"t1_{i}" for i in range(14))
+    assert output.numerical.size(-1) == 46
     assert output.numerical.size(0) == 2
     assert output.numerical.dtype.is_floating_point
 
@@ -91,12 +98,54 @@ def test_tfidf_encoder_shares_fitted_state_across_deepcopy() -> None:
     )
 
 
-def test_tfidf_encoder_in_stype_dispatch_route() -> None:
+def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
+    table = TableTensor(
+        columns={"text": ("t0", "t1")},
+        text=StringTensor.from_list(
+            [["hello world", "cat"], ["hello there", "dog"]]
+        ),
+    )
+    encoder = TfidfEncoder(ngram_range=(2, 3))
+    expected = encoder.fit_transform(table)
+
+    path = tmp_path / "encoder.pt"
+    torch.save(encoder.state_dict(), path)
+
+    restored = TfidfEncoder(ngram_range=(2, 3))
+    restored.load_state_dict(torch.load(path, weights_only=True))
+
+    assert torch.equal(restored.transform(table).numerical, expected.numerical)
+
+
+def test_tfidf_encoder_unfitted_state_dict_round_trip() -> None:
+    restored = TfidfEncoder(ngram_range=(2, 2))
+    restored.load_state_dict(TfidfEncoder(ngram_range=(2, 2)).state_dict())
+
+    with pytest.raises(RuntimeError, match="not fitted"):
+        restored.transform(_text_table(["a"]))
+
+
+def test_tfidf_encoder_to_moves_fitted_state() -> None:
     table = _text_table(["hello world", "hello there"])
-    dispatch = StypeDispatch(text=TfidfEncoder(ngram_range=(2, 2)))
+    encoder = TfidfEncoder(ngram_range=(2, 2))
+    encoder.fit(table)
 
-    output = dispatch.fit_transform(table)
+    encoder.to(torch.float64)
 
-    assert output.columns[Stype.text] == ()
-    assert output.numerical.size(0) == 2
-    assert output.numerical.size(-1) > 0
+    assert encoder.transform(table).numerical.dtype == torch.float64
+
+
+@onlyCUDA
+def test_tfidf_encoder_to_moves_fitted_state_cuda() -> None:
+    texts = ["hello world", "hello there"]
+    encoder = TfidfEncoder(ngram_range=(2, 2))
+    encoder.fit(_text_table(texts))
+    query = TableTensor(
+        columns={"text": ("t0",)},
+        text=StringTensor.from_list([[t] for t in texts], device="cuda"),
+    )
+
+    encoder.to("cuda")
+
+    output = encoder.transform(query)
+    assert output.numerical.is_cuda

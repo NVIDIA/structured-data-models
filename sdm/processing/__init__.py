@@ -55,8 +55,6 @@ __all__ = [
     "SoftmaxTemperature",
     "StandardScale",
     "TfidfEncoder",
-    "Embedder",
-    "LLMEncoder",
     "ToNumerical",
     "Recipe",
 ]

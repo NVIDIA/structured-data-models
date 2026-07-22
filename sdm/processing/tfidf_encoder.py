@@ -1,9 +1,11 @@
-from typing import cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
 import torch
 from torch import Tensor
+from typing_extensions import Self
 
 from sdm.processing.base import Processor, SharedState
 from sdm.stype import Stype
@@ -56,6 +58,53 @@ class TfidfEncoder(Processor):
     @property
     def _idfs(self) -> list[Tensor]:
         return self._state.value[1]
+
+    def get_extra_state(self) -> dict[str, Any]:
+        """Package the fitted state for :meth:`~torch.nn.Module.state_dict`.
+
+        The fitted state lives outside PyTorch's parameter/buffer registries
+        (see ``_state``), so it is exported here instead. Vocabularies are
+        stored as plain ``(data, offset)`` tensor pairs to keep checkpoints
+        loadable under ``torch.load(weights_only=True)``.
+        """
+        vocabularies, idfs = self._state.value
+        return {
+            "vocabularies": [
+                StringTensor.from_arrow(vocabulary).data_offset
+                for vocabulary in vocabularies
+            ],
+            "idfs": list(idfs),
+            "fitted": self._fitted,
+        }
+
+    def set_extra_state(self, state: dict[str, Any]) -> None:
+        """Restore the fitted state from a checkpoint."""
+        self._state.value = (
+            [
+                StringTensor(
+                    data=data,
+                    offset=offset,
+                    size=(offset.numel() - 1,),
+                ).to_arrow()
+                for data, offset in state["vocabularies"]
+            ],
+            list(state["idfs"]),
+        )
+        self._fitted = state["fitted"]
+
+    def _apply(
+        self,
+        fn: Callable[[Tensor], Tensor],
+        recurse: bool = True,
+    ) -> Self:
+        # `.to()`/`.cuda()`/`.half()` only walk parameters and buffers, so
+        # route the idf tensors inside `SharedState` through `fn` as well.
+        # The arrow vocabularies stay host-side (used by CPU arrow kernels
+        # only). Since the state is shared, this moves it for all ensemble
+        # members at once.
+        vocabularies, idfs = self._state.value
+        self._state.value = (vocabularies, [fn(idf) for idf in idfs])
+        return super()._apply(fn, recurse=recurse)
 
     def _column_ngrams(
         self,
