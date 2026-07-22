@@ -13,6 +13,7 @@ from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -952,17 +953,6 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 
 
 # Helpers #####################################################################
-
-
-def _resolve_device(
-    device: torch.device | str | None,
-) -> torch.device | None:
-    if device is None:
-        return None
-    device = torch.device(device)
-    if device.type == "cuda" and device.index is None:
-        return torch.device("cuda", torch.cuda.current_device())
-    return device
 
 
 def _normalize_dim(inp: Tensor, dim: int) -> int:
