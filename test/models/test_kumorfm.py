@@ -252,6 +252,7 @@ def test_forward(
         num_hops=2,
     )
 
+    assert out.size(-2) == 4
     assert out.dtype == x.dtype
     assert out.device == x.device
     assert torch.is_inference(out)
