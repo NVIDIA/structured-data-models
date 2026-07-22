@@ -1,11 +1,15 @@
+import pickle
 from textwrap import dedent
+from typing import Any, cast
 
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
+    FeaturePermute,
     MeanImpute,
     Power,
+    Quantile,
     Sequential,
     SoftmaxTemperature,
     StandardScale,
@@ -36,6 +40,10 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
 
 
+def _add_one(table: TableTensor) -> TableTensor:
+    return table.replace_blocks(numerical=table.numerical + 1)
+
+
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
@@ -52,12 +60,102 @@ def test_pipeline_transforms_numerical() -> None:
     assert not torch.equal(output.numerical, table.numerical)
 
 
+def test_pipeline_accepts_lambda() -> None:
+    table = _table()
+    pipeline = Sequential(
+        lambda table: table.replace_blocks(numerical=table.numerical.square())
+    )
+
+    output = pipeline.transform(table)
+
+    assert not pipeline.requires_fit
+    assert torch.equal(output.numerical, table.numerical.square())
+
+
+def test_pipeline_accepts_regular_callable() -> None:
+    table = _table()
+    pipeline = Sequential(_add_one)
+
+    assert pipeline.fit(table) is pipeline
+    restored = pickle.loads(pickle.dumps(pipeline))
+
+    assert torch.equal(
+        restored.transform(table).numerical,
+        table.numerical + 1,
+    )
+
+
+def test_pipeline_mixes_processors_and_callables() -> None:
+    table = _table(
+        torch.tensor(
+            [[1.0, 2.0], [2.0, 3.0], [4.0, 8.0]],
+        )
+    )
+    pipeline = Sequential(
+        lambda table: table.replace_blocks(numerical=table.numerical.square()),
+        StandardScale(),
+    )
+    expected = StandardScale().fit_transform(
+        table.replace_blocks(numerical=table.numerical.square())
+    )
+
+    assert pipeline.fit(table) is pipeline
+    output = pipeline.transform(table)
+
+    torch.testing.assert_close(output.numerical, expected.numerical)
+
+
+def test_pipeline_accepts_nested_sequential_with_callable() -> None:
+    table = _table()
+    pipeline = Sequential(
+        lambda table: table.replace_blocks(numerical=table.numerical + 1),
+        Sequential(
+            lambda table: table.replace_blocks(numerical=table.numerical * 2)
+        ),
+    )
+
+    output = pipeline.transform(table)
+
+    assert torch.equal(output.numerical, (table.numerical + 1) * 2)
+
+
+def test_pipeline_rejects_invalid_step() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"step 0.*Processor or callable.*object",
+    ):
+        Sequential(cast(Any, object()))
+
+
+def test_pipeline_passes_generator_to_steps() -> None:
+    table = _table(torch.arange(200.0).view(100, 2))
+
+    def _fit(seed: int) -> tuple[FeaturePermute, Quantile]:
+        permute = FeaturePermute(method="random")
+        quantile = Quantile(n_quantiles=6, subsample=32)
+        Sequential(permute, quantile).fit(
+            table,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        return permute, quantile
+
+    first_permute, first_quantile = _fit(0)
+    second_permute, second_quantile = _fit(0)
+
+    assert torch.equal(first_permute.permutation, second_permute.permutation)
+    assert torch.equal(first_quantile.quantiles, second_quantile.quantiles)
+
+
 def test_repr() -> None:
     assert repr(Sequential()) == "Sequential()"
     assert repr(Sequential(StandardScale(), Power())) == dedent("""\
         Sequential(
           StandardScale(),
           Power(),
+        )""")
+    assert repr(Sequential(lambda table: table)) == dedent("""\
+        Sequential(
+          lambda,
         )""")
 
 

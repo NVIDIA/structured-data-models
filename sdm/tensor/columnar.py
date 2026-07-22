@@ -12,7 +12,7 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 
 if TYPE_CHECKING:
     import cudf
@@ -152,11 +152,7 @@ class ColumnarTensor(Tensor):
                 raise ValueError(
                     f"'{cls.__name__}' cannot represent null integer values"
                 )
-            values = array.to_numpy(
-                zero_copy_only=False,
-                writable=device.type == "cpu",
-            )
-            column = torch.as_tensor(values, device=device)
+            column = arrow_as_tensor(array, device=device)
 
         return cls(columns=(column,), device=device)
 
@@ -188,23 +184,46 @@ class ColumnarTensor(Tensor):
 
         return cls(columns=(column,), device=device)
 
-    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
-        r"""Convert this tensor to a flat :class:`pyarrow.Table`.
+    def to_arrow(self, names: Sequence[str] | None = None) -> pa.Table:
+        r"""Convert this tensor to a two-dimensional :class:`pyarrow.Table`.
 
         Args:
-            columns: The column names.
+            names: The column names.
         """
-        if columns is None:
-            columns = tuple(str(i) for i in range(self.size(-1)))
-        elif len(columns) != self.size(-1):
+        if names is None:
+            names = tuple(str(i) for i in range(self.size(-1)))
+        elif len(names) != self.size(-1):
             raise ValueError(
-                f"Expected 'columns' to contain {self.size(-1)} entries "
-                f"(got {len(columns)})"
+                f"Expected 'names' to contain {self.size(-1)} entries "
+                f"(got {len(names)})"
             )
 
         return pa.Table.from_arrays(
             arrays=[to_arrow(column) for column in self.unbind(-1)],
-            names=columns,
+            names=names,
+        )
+
+    def to_cudf(self, names: Sequence[str] | None = None) -> cudf.DataFrame:
+        r"""Convert this tensor to a two-dimensional :class:`cudf.DataFrame`.
+
+        Args:
+            names: The column names.
+        """
+        import cudf
+
+        if names is None:
+            names = tuple(str(i) for i in range(self.size(-1)))
+        elif len(names) != self.size(-1):
+            raise ValueError(
+                f"Expected 'names' to contain {self.size(-1)} entries "
+                f"(got {len(names)})"
+            )
+
+        return cudf.DataFrame(
+            {
+                name: to_cudf(column)
+                for name, column in zip(names, self.unbind(-1))
+            },
         )
 
     # Decorators ##############################################################
@@ -391,6 +410,43 @@ def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
         size=inp.size()[:-1],
         device=inp.device,
     )
+
+
+@ColumnarTensor.implements(aten.equal.default)
+def _equal(inp: ColumnarTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    for column1, column2 in zip(inp._columns, other._columns):
+        if not column1.equal(column2):
+            return False
+
+    return True
+
+
+@ColumnarTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: ColumnarTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    for column1, column2 in zip(inp._columns, other._columns):
+        if column1.is_floating_point() and column2.is_floating_point():
+            if not column1.allclose(column2, rtol, atol, equal_nan):
+                return False
+        elif not column1.equal(column2):
+            return False
+
+    return True
 
 
 @ColumnarTensor.implements(aten.view.default)

@@ -1,6 +1,8 @@
 import torch
-from sdm import TableTensor
-from sdm.processing import Recipe, Sequential, StandardScale
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm.models import TabICLv2
+from sdm.processing import InvertibleMixin, Recipe, Sequential, StandardScale
+from sdm.testing import withCUDA
 
 
 def _table(numerical: torch.Tensor | None = None) -> TableTensor:
@@ -67,3 +69,51 @@ def test_recipe_role_fit_accepts_table() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
+
+
+@withCUDA
+def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
+    recipe = TabICLv2.default_recipe()
+
+    features = TableTensor(
+        columns={
+            "numerical": ("a", "b"),
+            "categorical": ("kind",),
+        },
+        numerical=torch.randn(8, 2, device=device),
+        categorical=CategoricalTensor(
+            data=torch.tensor(
+                [[1], [3]], dtype=torch.int32, device=device
+            ).repeat(4, 1),
+            categories=(
+                StringTensor.from_list(
+                    ["unused-a", "a", "unused-b", "b"],
+                    device=device,
+                ),
+            ),
+        ),
+    )
+    target = TableTensor.from_tensor(
+        torch.randn(8, 1, device=device),
+        columns=("y",),
+    )
+
+    model_features = recipe.features.fit_transform(features)
+    model_target = recipe.target.fit_transform(target)
+
+    assert model_features.size() == features.size()
+    assert model_features.numerical.device == device
+    assert model_features.categorical.size(-1) == 0
+    assert set(model_features.columns[Stype.numerical]) == {"a", "b", "kind"}
+    assert torch.isfinite(model_features.numerical).all()
+
+    assert model_target.numerical.device == device
+    assert isinstance(recipe.target, InvertibleMixin)
+    restored = recipe.target.inverse_transform(model_target)
+    torch.testing.assert_close(restored.numerical, target.numerical)
+
+    # The original categorical column uses sparse codes 1 and 3.
+    transformed = TabICLv2.default_recipe().target.fit_transform(
+        features.select_columns("kind")
+    )
+    assert transformed.categorical.unique().sort().values.tolist() == [0, 1]

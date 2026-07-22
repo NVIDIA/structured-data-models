@@ -1,13 +1,14 @@
 # ruff: noqa: D102
 
-import math
-from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import LayerNorm, Linear
+
+from sdm.cache import Cache
+from sdm.models.kumorfm.graph import HomogeneousGraph
 
 
 class InvariantGNN(torch.nn.Module):
@@ -44,101 +45,96 @@ class InvariantGNN(torch.nn.Module):
         self.out_lin = Linear(channels, channels, **factory_kwargs)
         self.out_norm = LayerNorm(channels, **factory_kwargs)
 
-    def forward(
+    def get_edge_type_emb(
         self,
-        x_dict: Mapping[str, Tensor],  # {name: [R, C]}
-        edge_index_dict: Mapping[tuple[str, str, str], Tensor],
-        readout_table: str,
-        num_hops: int,
+        num_edge_types: int,
+        dtype: torch.dtype | None = None,
         generator: torch.Generator | None = None,
-    ) -> Tensor:  # [R, C]
-
-        if num_hops == 0 or len(edge_index_dict) == 0:
-            return x_dict[readout_table]
-
-        start = 0
-        offset_dict: dict[str, tuple[int, int]] = {}
-        for table_name, table_x in x_dict.items():
-            end = start + table_x.size(0)
-            offset_dict[table_name] = (start, end)
-            start = end
-
-        if len(x_dict) == 1:
-            x = next(iter(x_dict.values()))
-        else:
-            x = torch.cat(list(x_dict.values()), dim=0)
-
-        rows: list[Tensor] = []
-        cols: list[Tensor] = []
-        edge_types: list[Tensor] = []
-        for i, (edge_type, edge_index) in enumerate(edge_index_dict.items()):
-            src, _, dst = edge_type
-            row = edge_index[0] + offset_dict[src][0]
-            col = edge_index[1] + offset_dict[dst][0]
-            edge_type = edge_index.new_full((edge_index.size(1),), 2 * i)
-            rows.extend([row, col])
-            cols.extend([col, row])
-            edge_types.extend([edge_type, edge_type + 1])
-        row = torch.cat(rows, dim=0)
-        col = torch.cat(cols, dim=0)
-        edge_type = torch.cat(edge_types, dim=0)
-        del rows
-        del cols
-        del edge_types
-
-        col, perm = col.sort()
-        colptr = torch._convert_indices_from_coo_to_csr(
-            col, x.size(0), out_int32=col.dtype != torch.int64
-        )
-        row = row[perm]
-        edge_type = edge_type[perm]
-        del col
-        del perm
-
+    ) -> Tensor:
         edge_type_emb = torch.randn(
-            (2 * len(edge_index_dict), x.size(-1)),
-            dtype=x.dtype,
-            device=x.device,
+            (num_edge_types, self.edge_type_lin.weight.size(-1)),
+            dtype=dtype,
+            device=self.edge_type_lin.weight.device,
             generator=generator,
         )
         edge_type_emb = F.normalize(edge_type_emb, dim=-1)
-        edge_type_emb = self.edge_type_lin(edge_type_emb)[edge_type]
-        del edge_type
+        return self.edge_type_lin(edge_type_emb)
+
+    def forward(
+        self,
+        x: Tensor,
+        graph: HomogeneousGraph,
+        *,
+        readout_table: str,
+        readout_index: Tensor,
+        num_hops: int,
+        cache: Cache | None = None,
+        generator: torch.Generator | None = None,
+    ) -> Tensor:
+
+        if num_hops == 0:
+            start = graph.start_node_offsets[readout_table]
+            end = graph.end_node_offsets[readout_table]
+            return x[start:end][readout_index]
+
+        if cache is None or cache.is_recording:
+            edge_type_emb = torch.randn(
+                (graph.num_edge_types, self.edge_type_lin.weight.size(-1)),
+                dtype=x.dtype,
+                device=x.device,
+                generator=generator,
+            )
+            edge_type_emb = F.normalize(edge_type_emb, dim=-1)
+            edge_type_emb = self.edge_type_lin(edge_type_emb)
+            if cache is not None and cache.is_recording:
+                cache["edge_type_emb"] = edge_type_emb
+        else:
+            edge_type_emb = cast(Tensor, cache["edge_type_emb"])
+
+        edge_type_emb = edge_type_emb[graph.edge_type]
 
         for i in range(num_hops):
-            src_x = self.src_lin(x)[row] + edge_type_emb
+            src_x = self.src_lin(x)[graph.row] + edge_type_emb
             x = self.skip_lin(x)
 
-            h = torch.segment_reduce(  # Sum aggregation:
-                src_x, offsets=colptr, reduce="sum", unsafe=True, initial=0
+            # Sum aggregation:
+            h = torch.segment_reduce(
+                src_x,
+                offsets=graph.colptr,
+                reduce="sum",
+                unsafe=True,
+                initial=0,
             )
             x = x + self.sum_lin(h)
 
-            h = h / colptr.diff().clamp(min=1).view(-1, 1)  # Mean aggregation:
+            # Mean aggregation:
+            h = h / graph.colptr.diff().clamp(min=1).view(-1, 1)
             x = x + self.avg_lin(h)
 
-            h = (  # Std aggregation:
+            # Std aggregation:
+            h = (
                 torch.segment_reduce(
                     src_x.square(),
-                    offsets=colptr,
+                    offsets=graph.colptr,
                     reduce="mean",
                     unsafe=True,
                     initial=0,
                 )
                 - h.square()
             )
-            h = h.clamp(min=1e-5).sqrt()
-            h = h.masked_fill(h <= math.sqrt(1e-5), 0.0)
+            h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
             x = x + self.std_lin(h)
 
-            h = torch.segment_reduce(  # Min aggregation:
-                src_x, offsets=colptr, reduce="min", unsafe=True
+            # Min aggregation:
+            h = torch.segment_reduce(
+                src_x, offsets=graph.colptr, reduce="min", unsafe=True
             )
             h = torch.where(h.isinf(), 0.0, h)
             x = x + self.min_lin(h)
 
-            h = torch.segment_reduce(  # Max aggregation:
-                src_x, offsets=colptr, reduce="max", unsafe=True
+            # Max aggregation:
+            h = torch.segment_reduce(
+                src_x, offsets=graph.colptr, reduce="max", unsafe=True
             )
             h = torch.where(h.isinf(), 0.0, h)
             x = x + self.max_lin(h)
@@ -147,8 +143,9 @@ class InvariantGNN(torch.nn.Module):
             del src_x
 
             if i == num_hops - 1:
-                start, end = offset_dict[readout_table]
-                x = x[start:end]
+                start = graph.start_node_offsets[readout_table]
+                end = graph.end_node_offsets[readout_table]
+                x = x[start:end][readout_index]
 
             x = F.gelu(self.norm(x))
 

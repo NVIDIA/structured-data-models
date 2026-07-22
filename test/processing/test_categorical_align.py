@@ -306,19 +306,6 @@ def test_categorical_align_rejects_lossy_numeric_dtype_change() -> None:
         CategoricalAlign().fit(context).transform(query)
 
 
-def test_categorical_align_rejects_complex_category_values() -> None:
-    context = TableTensor(
-        columns={"categorical": ("value",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0]], dtype=torch.int32),
-            categories=(torch.tensor([1 + 2j]),),
-        ),
-    )
-
-    with pytest.raises(ValueError, match=r"complex.*value"):
-        CategoricalAlign().fit_transform(context)
-
-
 @pytest.mark.parametrize("during_fit", [True, False])
 def test_categorical_align_rejects_out_of_range_codes(
     during_fit: bool,

@@ -12,7 +12,7 @@ from torch.utils import _pytree as pytree
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
-from sdm.tensor.io import to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 
 if TYPE_CHECKING:
     import cudf
@@ -160,15 +160,13 @@ class CategoricalTensor(Tensor):
                 array = array.combine_chunks()
 
         encoded = array.dictionary_encode()
-        values = encoded.indices.fill_null(-1).to_numpy(
-            zero_copy_only=False,
-            writable=device.type == "cpu",
-        )
-        data = torch.as_tensor(
-            values,
+        data = arrow_as_tensor(
+            encoded.indices.fill_null(-1),
             dtype=dtype,
             device=device,
         ).unsqueeze(-1)
+        if dtype is None and data.dtype not in cls.ALLOWED_DTYPES:
+            data = data.to(torch.int32)
 
         dictionary = encoded.dictionary
         is_string = pa.types.is_string(dictionary.type)
@@ -178,29 +176,22 @@ class CategoricalTensor(Tensor):
         elif pa.types.is_null(dictionary.type):
             category = torch.empty(0, dtype=torch.int64, device=device)
         else:  # Use regular torch.Tensor for Tensor-compatible dictionaries:
-            values = dictionary.to_numpy(
-                zero_copy_only=False,
-                writable=device.type == "cpu",
-            )
-            category = torch.as_tensor(
-                values,
-                device=device,
-            )
+            category = arrow_as_tensor(dictionary, device=device)
 
         return cls(data=data, categories=(category,))
 
-    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
-        r"""Convert this tensor to a flat :class:`pyarrow.Table`.
+    def to_arrow(self, names: Sequence[str] | None = None) -> pa.Table:
+        r"""Convert this tensor to a two-dimensional :class:`pyarrow.Table`.
 
         Args:
-            columns: Column names.
+            names: Column names.
         """
-        if columns is None:
-            columns = tuple(str(i) for i in range(self.size(-1)))
-        elif len(columns) != self.size(-1):
+        if names is None:
+            names = tuple(str(i) for i in range(self.size(-1)))
+        elif len(names) != self.size(-1):
             raise ValueError(
                 f"Expected 'columns' to contain {self.size(-1)} entries "
-                f"(got {len(columns)})"
+                f"(got {len(names)})"
             )
 
         data_t = self._data.movedim(-1, 0).contiguous()
@@ -211,14 +202,10 @@ class CategoricalTensor(Tensor):
             self.categories,
             (data_t < 0).cpu().unbind(0),
         ):
-            if na_mask.any().item():
-                indices = pa.array(
-                    data.clamp(min=0).view(-1).numpy(),
-                    mask=na_mask.view(-1).numpy(),
-                )
-            else:
-                indices = to_arrow(data.view(-1))
-
+            indices = pa.array(
+                data.view(-1).numpy(),
+                mask=na_mask.view(-1).numpy(),
+            )
             arrays.append(
                 pa.DictionaryArray.from_arrays(
                     indices=indices,
@@ -226,7 +213,7 @@ class CategoricalTensor(Tensor):
                 )
             )
 
-        return pa.Table.from_arrays(arrays, names=columns)
+        return pa.Table.from_arrays(arrays, names=names)
 
     @classmethod
     def from_cudf(
@@ -259,6 +246,63 @@ class CategoricalTensor(Tensor):
             category = torch.from_dlpack(categories.to_cupy()).to(device)
 
         return cls(data=data, categories=(category,))
+
+    def to_cudf(self, names: Sequence[str] | None = None) -> cudf.DataFrame:
+        r"""Convert this tensor to a two-dimensional :class:`cudf.DataFrame`.
+
+        Args:
+            names: Column names.
+        """
+        import cudf
+
+        if names is None:
+            names = tuple(str(i) for i in range(self.size(-1)))
+        elif len(names) != self.size(-1):
+            raise ValueError(
+                f"Expected 'columns' to contain {self.size(-1)} entries "
+                f"(got {len(names)})"
+            )
+
+        data_t = self._data.movedim(-1, 0).contiguous()
+
+        columns = {}
+        for name, data, category, mask in zip(
+            names,
+            data_t.unbind(0),
+            self.categories,
+            (data_t >= 0).unbind(0),
+        ):
+            columns[name] = cudf.CategoricalIndex.from_codes(
+                codes=to_cudf(data, mask)._column,
+                categories=to_cudf(category),
+                ordered=False,
+            )
+
+        return cudf.DataFrame(columns)
+
+    @classmethod
+    def from_tensor(cls, tensor: Tensor) -> Self:
+        r"""Create tensor from a numerical :class:`torch.Tensor`.
+
+        Args:
+            tensor: The numerical tensor.
+        """
+        if tensor.size(-1) == 0:
+            return cls(
+                data=tensor.to(torch.int64),
+                categories=(),
+            )
+
+        categories, values = zip(
+            *[
+                column.unique(return_inverse=True)
+                for column in tensor.unbind(dim=-1)
+            ]
+        )
+        return cls(
+            data=torch.stack(values, dim=-1),
+            categories=categories,
+        )
 
     # Properties ##############################################################
 
@@ -437,6 +481,34 @@ def _contiguous(
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(inp._data.pin_memory(), inp._categories)
+
+
+@CategoricalTensor.implements(aten.equal.default)
+def _equal(inp: CategoricalTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    if not inp._data.equal(other._data):
+        return False
+
+    for category1, category2 in zip(inp._categories, other._categories):
+        if not category1.equal(category2):
+            return False
+
+    return True
+
+
+@CategoricalTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: CategoricalTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    return _equal(inp, other)
 
 
 @CategoricalTensor.implements(aten.view.default)

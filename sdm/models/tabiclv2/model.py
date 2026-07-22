@@ -1,23 +1,25 @@
 # ruff: noqa: D205
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import torch
-from huggingface_hub import hf_hub_download
-from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables
+from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.models import Model
+from sdm.models import ICLModel
+from sdm.models._huggingface import download_checkpoint
+from sdm.models.tabiclv2.hierarchical_classifier import (
+    HierarchicalClassifier,
+)
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
 
-class TabICLv2(Model):
+class TabICLv2(ICLModel):
     r"""The tabular foundation model from the `"TabICLv2: A Better, Faster,
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
@@ -61,11 +63,41 @@ class TabICLv2(Model):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
+    .. code-block:: python
+
+        from sdm import TableTensor
+        from sdm.models import TabICLv2
+
+        table = TableTensor.from_pandas(...)
+        model = TabICLv2(device="cuda")
+
+        # Default in-context learning forward pass:
+        out = model(
+            x_context=table[:300].drop_columns("target"),
+            y_context=table[:300, "target"],
+            x_query=table[300:].drop_columns("target"),
+        )
+
+        # Fit+Predict forward pass via key/value caching:
+        model.fit(
+            x=table[:300].drop_columns("target"),
+            y=table[:300, "target"],
+        )
+        out = model.predict(table[300:].drop_columns("target"))
+
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
 
+    #:
+    supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical}
+    )
+    #:
+    supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
+        {Stype.numerical, Stype.categorical}
+    )
     #:
     supports_related_tables: ClassVar[bool] = False
 
@@ -103,17 +135,10 @@ class TabICLv2(Model):
         device = next(self.parameters()).device
 
         for variant in ["classifier", "regressor"]:
-            try:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                    local_files_only=True,
-                )
-            except LocalEntryNotFoundError:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                )
+            path = download_checkpoint(
+                repo_id="jingang/TabICL",
+                filename=f"tabicl-{variant}-v2-20260212.ckpt",
+            )
             ckpt = torch.load(path, map_location=device)["state_dict"]
 
             if variant == "classifier":
@@ -125,32 +150,57 @@ class TabICLv2(Model):
 
         return self
 
-    def _forward(  # TODO Add multi-class support.
+    def _forward(
         self,
-        x: Tensor,  # [..., R, C]
-        y: Tensor,  # [..., R_train]
-        related_tables: RelatedTables | None,
+        x_context: TableTensor | None,  # [..., R_context, D]
+        y_context: TableTensor | None,  # [..., R_context, 1]
+        x_query: TableTensor | None,  # [..., R_query, D]
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:  # [..., R_test, num_classes or 999]
-        r"""The forward pass.
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
-        Returns:
-            Tensor with shape ``[..., R_test, num_classes]`` for integer ``y``
-            and ``[..., R_test, 999]`` for floating-point ``y``.
-            Integer ``y`` return class logits.
-            Floating-point ``y`` return 999 quantiles at probability levels
-            :math:`\left\{0.001, 0.002, \ldots, 0.999\right\}`.
-        """
-        assert related_tables is None
+        if x_query is None and x_context is not None:
+            x = x_context.numerical
+        elif x_context is None and x_query is not None:
+            x = x_query.numerical
+        else:
+            assert x_context is not None
+            assert x_query is not None
+            x = torch.cat([x_context.numerical, x_query.numerical], dim=-2)
 
-        if y.is_floating_point():
-            return self.reg_model(x=x, y=y, cache=cache)
-        return self.cls_model(x=x, y=y, cache=cache)
+        y: Tensor | None = None
+        classes: Tensor | None = None
+        if y_context is not None and y_context.categorical.size(-1) > 0:
+            y = y_context.categorical.as_tensor().squeeze(-1)
+            classes = y_context.categorical.categories[0]
+        elif y_context is not None and y_context.numerical.size(-1) > 0:
+            y = y_context.numerical.squeeze(-1)
+        elif cache is not None:
+            classes = cast(Tensor | None, cache["classes"])
 
-    def __repr__(self) -> str:
-        device = next(self.parameters()).device
-        device_repr = f"device={device}" if device.type != "cpu" else ""
-        return f"{self.__class__.__name__}({device_repr})"
+        if y is None:
+            y = x.new_empty(
+                (*x.size()[:-2], 0),
+                dtype=torch.int64 if classes is not None else x.dtype,
+            )
+
+        if classes is None:
+            out = self.reg_model(x, y, cache=cache)
+            return TableTensor(
+                columns={
+                    Stype.numerical: [f"q{i:03d}" for i in range(1, 1000)]
+                },
+                numerical=out.sort(dim=-1)[0],
+            )
+
+        out = self.cls_model(x, y, cache=cache, num_classes=len(classes))
+        return TableTensor(
+            columns={Stype.numerical: [str(i) for i in classes.tolist()]},
+            numerical=out[..., : len(classes)],
+        )
 
 
 class _TabICLv2(torch.nn.Module):
@@ -172,6 +222,8 @@ class _TabICLv2(torch.nn.Module):
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+
+        self.num_classes = num_classes
 
         self.row_embedding = RowEmbedding(
             num_classes=num_classes,
@@ -205,6 +257,12 @@ class _TabICLv2(torch.nn.Module):
                 **factory_kwargs,
             ),
         )
+        self.hierarchical_classifier: HierarchicalClassifier | None = None
+        if self.num_classes > 1:
+            self.hierarchical_classifier = HierarchicalClassifier(
+                num_classes=self.num_classes,
+                temperature=0.9,
+            )
 
     def forward(
         self,
@@ -212,10 +270,45 @@ class _TabICLv2(torch.nn.Module):
         y: Tensor,  # [..., R_train]
         *,
         cache: Cache | None = None,
-    ) -> Tensor:  # [..., R_test, num_classes or num_quantiles]
-        x = self.row_embedding(x=x, y=y, cache=cache)
-        x = self.icl_block(x=x, y=y, cache=cache)
-        return self.head(x)
+        num_classes: int | None = None,
+    ) -> Tensor:  # [..., R_test, self.num_classes or self.num_quantiles]
+        if not y.is_floating_point():
+            assert num_classes is not None
+
+        if (
+            cache is not None
+            and num_classes is not None
+            and num_classes > self.num_classes
+        ):
+            # TODO Support KV cache
+            raise NotImplementedError(
+                f"Key/value caching is not supported with more than "
+                f"{self.num_classes} classes (got {num_classes})"
+            )
+
+        x = self.row_embedding(x, y, num_classes=num_classes, cache=cache)
+
+        if num_classes is None or num_classes <= self.num_classes:
+            x = self.icl_block(x, y, cache=cache)
+            return self.head(x)
+
+        assert self.hierarchical_classifier is not None
+        log_probs = self.hierarchical_classifier(
+            row_embeddings=x,
+            y=y,
+            num_classes=num_classes,
+            predictor=self._predict_standard,
+        )
+        # Scale the log-probabilities so the output processor's matching
+        # temperature cancels while converting them to probabilities.
+        return log_probs.mul(self.hierarchical_classifier.temperature)
+
+    def _predict_standard(
+        self,
+        row_embeddings: Tensor,  # [R_node + R_test, D]
+        y: Tensor,  # [R_node]
+    ) -> Tensor:  # [R_test, num_classes]
+        return self.head(self.icl_block(x=row_embeddings, y=y))
 
 
 # Helpers #####################################################################

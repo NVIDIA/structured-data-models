@@ -1,10 +1,14 @@
-from collections.abc import Iterable
 from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import Stype
+from sdm.processing._callable import (
+    ProcessorCallable,
+    ProcessorRoute,
+    as_processor,
+)
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.sequential import Sequential
 from sdm.tensor import TableTensor
@@ -17,7 +21,8 @@ class StypeDispatch(Processor, InvertibleMixin):
     :class:`TableTensor` and passed to that processor. A route may change
     column values, names, count, or order. Route outputs are concatenated in
     semantic type order. With the default passthrough behavior, unconfigured
-    semantic types follow in tableut order.
+    semantic types follow in input order. A ``generator`` passed to ``fit()``
+    or ``fit_transform()`` is passed on to every route.
 
     Inverse transform supports routes that preserve their semantic type. Every
     active route must be invertible. Tracking transformed ownership for routes
@@ -26,14 +31,19 @@ class StypeDispatch(Processor, InvertibleMixin):
     ``remainder="drop"`` is not invertible.
 
     Args:
-        numerical: Processor route for numerical columns. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
-        categorical: Processor route for categorical columns. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
-        datetime: Processor route for datetime columns. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
-        id: Processor route for identifier columns. An iterable is normalized
-            to :class:`~sdm.processing.Sequential`.
+        numerical: Processor or stateless callable route for numerical
+            columns. An iterable is normalized to
+            :class:`~sdm.processing.Sequential`.
+        categorical: Processor or stateless callable route for categorical
+            columns. An iterable is normalized to
+            :class:`~sdm.processing.Sequential`.
+        datetime: Processor or stateless callable route for datetime columns.
+            An iterable is normalized to
+            :class:`~sdm.processing.Sequential`.
+        text: Processor or stateless callable route for text columns. An
+            iterable is normalized to :class:`~sdm.processing.Sequential`.
+        id: Processor or stateless callable route for identifier columns. An
+            iterable is normalized to :class:`~sdm.processing.Sequential`.
         remainder: How to handle non-empty semantic types without a configured
             route. ``"passthrough"`` keeps them unchanged and is the default,
             ``"drop"`` removes them, and ``"error"`` raises.
@@ -44,10 +54,11 @@ class StypeDispatch(Processor, InvertibleMixin):
     def __init__(
         self,
         *,
-        numerical: Processor | Iterable[Processor] | None = None,
-        categorical: Processor | Iterable[Processor] | None = None,
-        datetime: Processor | Iterable[Processor] | None = None,
-        id: Processor | Iterable[Processor] | None = None,
+        numerical: ProcessorRoute = None,
+        categorical: ProcessorRoute = None,
+        datetime: ProcessorRoute = None,
+        id: ProcessorRoute = None,
+        text: ProcessorRoute = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
@@ -56,12 +67,19 @@ class StypeDispatch(Processor, InvertibleMixin):
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
             (Stype.datetime, datetime),
+            (Stype.text, text),
             (Stype.id, id),
         ):
             if processor is None:
                 continue
             if not isinstance(processor, Processor):
-                processor = Sequential(*processor)
+                if callable(processor):
+                    processor = as_processor(
+                        cast(ProcessorCallable, processor),
+                        label=f"StypeDispatch route '{stype.value}'",
+                    )
+                else:
+                    processor = Sequential(*processor)
             self.processors[stype.value] = processor
 
         self.remainder = remainder
@@ -75,13 +93,18 @@ class StypeDispatch(Processor, InvertibleMixin):
 
         names = ", ".join(f"'{stype.value}'" for stype in remainder_stypes)
         raise ValueError(
-            f"Found non-empty tableut columns for semantic types {names}, but "
+            f"Found non-empty input columns for semantic types {names}, but "
             f"'{self.__class__.__name__}' has no route for them. Configure "
             "a processor for each semantic type or set "
             "remainder='passthrough' or remainder='drop'."
         )
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         remainder_stypes = [
             stype
             for stype, columns in table.columns.items()
@@ -90,10 +113,10 @@ class StypeDispatch(Processor, InvertibleMixin):
         self._check_remainder(remainder_stypes)
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_tableut = table.select_stypes(stype)
-            if route_tableut.size(-1) == 0:
+            route_input = table.select_stypes(stype)
+            if route_input.size(-1) == 0:
                 continue
-            processor.fit(route_tableut)
+            processor.fit(route_input, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         remainder_stypes = [
@@ -106,10 +129,10 @@ class StypeDispatch(Processor, InvertibleMixin):
         outputs: list[TableTensor] = []
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_tableut = table.select_stypes(stype)
-            if route_tableut.size(-1) == 0:
+            route_input = table.select_stypes(stype)
+            if route_input.size(-1) == 0:
                 continue
-            outputs.append(processor.transform(route_tableut))
+            outputs.append(processor.transform(route_input))
         if self.remainder == "passthrough":
             outputs.extend(
                 table.select_stypes(stype) for stype in remainder_stypes
@@ -132,15 +155,15 @@ class StypeDispatch(Processor, InvertibleMixin):
         # change stype or share an output stype.
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            route_tableut = table.select_stypes(stype)
-            if route_tableut.size(-1) == 0:
+            route_input = table.select_stypes(stype)
+            if route_input.size(-1) == 0:
                 continue
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
                     f"Route '{stype}' uses non-invertible processor "
                     f"'{processor.__class__.__name__}'"
                 )
-            outputs.append(processor.inverse_transform(route_tableut))
+            outputs.append(processor.inverse_transform(route_input))
 
         remainder_stypes = [
             stype
@@ -165,7 +188,8 @@ class StypeDispatch(Processor, InvertibleMixin):
         reprs = []
         for stype, processor in self.processors.items():
             processor = cast(Processor, processor)
-            processor_repr = processor.__repr__(indent=indent + 4)
+            processor_repr = processor.__repr__(indent=indent + 2)
+            processor_repr = processor_repr[indent + 2 :]
             reprs.append(f"{' ' * (indent + 2)}{stype}: {processor_repr}")
         return (
             f"{' ' * indent}{self.__class__.__name__}(\n"

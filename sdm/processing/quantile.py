@@ -9,6 +9,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 BOUNDS_THRESH = 1e-7
+_MAX_NUM_COLS = 32
 
 
 def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
@@ -22,11 +23,56 @@ def _torch_interp(x: Tensor, xp: Tensor, fp: Tensor) -> Tensor:
     y0, y1 = fp[idx - 1], fp[idx]
 
     denom = x1 - x0
-    weight = torch.where(denom != 0, (x - x0) / denom, torch.zeros_like(x))
+    weight = torch.where(denom != 0, (x - x0) / denom, 0.0)
     result = torch.lerp(y0, y1, weight)
 
     result = torch.where(x <= xp[0], fp[0], result)
     return torch.where(x >= xp[-1], fp[-1], result)
+
+
+def _batched_interp(
+    values: Tensor,
+    boundaries: Tensor,
+    references: Tensor,
+) -> Tensor:
+    # Batched 1D linear interpolation over independent feature grids:
+    # values ``[F, N]`` with boundaries/references as ``[Q]`` or ``[F, Q]``.
+    n = boundaries.shape[-1]
+    if n == 1:
+        if references.dim() == 1:
+            return references[0].expand_as(values)
+        return references[:, :1].expand_as(values)
+
+    idx = torch.searchsorted(boundaries, values, right=True).clamp(1, n - 1)
+
+    if boundaries.dim() == 1:
+        x0 = boundaries[idx - 1]
+        x1 = boundaries[idx]
+        lower_boundary = boundaries[0]
+        upper_boundary = boundaries[-1]
+    else:
+        x0 = boundaries.gather(1, idx - 1)
+        x1 = boundaries.gather(1, idx)
+        lower_boundary = boundaries[:, :1]
+        upper_boundary = boundaries[:, -1:]
+
+    if references.dim() == 1:
+        y0 = references[idx - 1]
+        y1 = references[idx]
+        lower = references[0]
+        upper = references[-1]
+    else:
+        y0 = references.gather(1, idx - 1)
+        y1 = references.gather(1, idx)
+        lower = references[:, :1]
+        upper = references[:, -1:]
+
+    denom = x1 - x0
+    weight = torch.where(denom != 0, (values - x0) / denom, 0.0)
+    result = torch.lerp(y0, y1, weight)
+
+    result = torch.where(values <= lower_boundary, lower, result)
+    return torch.where(values >= upper_boundary, upper, result)
 
 
 class Quantile(Processor, InvertibleMixin):
@@ -36,12 +82,13 @@ class Quantile(Processor, InvertibleMixin):
     ``subsample`` is set, by ``20%`` of the subsample size to keep dense grids
     tractable.
 
+    The subsample rows are drawn from the ``generator`` passed to ``fit()``;
+    without one, they are drawn from the data device's global generator.
+
     Args:
         n_quantiles: Maximum number of quantiles to compute.
         subsample: Maximum number of rows to use for quantile computation.
         output_distribution: Distribution to map the empirical quantiles to.
-        random_state: Seed for deterministic subsampling. If ``None``, use the
-            global PyTorch generator.
     """
 
     supported_stypes = frozenset({Stype.numerical})
@@ -52,7 +99,6 @@ class Quantile(Processor, InvertibleMixin):
         n_quantiles: int = 1000,
         subsample: int | None = 10_000,
         output_distribution: Literal["uniform", "normal"] = "uniform",
-        random_state: int | None = 0,
     ) -> None:
         super().__init__()
         if n_quantiles <= 0:
@@ -66,24 +112,28 @@ class Quantile(Processor, InvertibleMixin):
         self._n_quantiles = n_quantiles
         self.subsample = subsample
         self.output_distribution = output_distribution
-        self.random_state = random_state
         self.n_quantiles = 0
 
         self.register_buffer("quantiles", torch.empty(0))
         self.register_buffer("references", torch.empty(0))
 
-    def _subsample_indices(self, inp: Tensor) -> Tensor:
-        generator = None
-        if self.random_state is not None:
-            generator = torch.Generator(device=inp.device)
-            generator.manual_seed(self.random_state)
+    def _subsample_indices(
+        self,
+        inp: Tensor,
+        generator: torch.Generator | None,
+    ) -> Tensor:
         return torch.randperm(
             inp.shape[0],
-            device=inp.device,
             generator=generator,
+            device=inp.device,
         )[: self.subsample]
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         n_samples = numerical.shape[0]
         quantile_limit = n_samples
@@ -102,101 +152,100 @@ class Quantile(Processor, InvertibleMixin):
         )
 
         if self.subsample is not None and self.subsample < n_samples:
-            input_sample = numerical[self._subsample_indices(numerical)]
+            indices = self._subsample_indices(numerical, generator)
+            input_sample = numerical[indices]
         else:
             input_sample = numerical
 
-        self.quantiles = torch.nanquantile(
+        self.quantiles = torch.quantile(
             input_sample,
             self.references,
             dim=0,
         )
 
-    def _transform_col(
-        self,
-        inp: Tensor,
-        quantiles: Tensor,
-        *,
-        inverse: bool = False,
-    ) -> Tensor:
-        input_col = inp.clone()
-        zero = input_col.new_zeros(())
-        one = input_col.new_ones(())
-
-        if not inverse:
-            lower_bound_x = quantiles[0]
-            upper_bound_x = quantiles[-1]
-            lower_bound_y = zero
-            upper_bound_y = one
-        else:
-            lower_bound_x = zero
-            upper_bound_x = one
-            lower_bound_y = quantiles[0]
-            upper_bound_y = quantiles[-1]
-            if self.output_distribution == "normal":
-                input_col = torch.special.ndtr(input_col)
-
-        if self.output_distribution == "normal":
-            bounds_thresh = input_col.new_tensor(BOUNDS_THRESH)
-            lower_bounds_idx = input_col - bounds_thresh < lower_bound_x
-            upper_bounds_idx = input_col + bounds_thresh > upper_bound_x
-        else:
-            lower_bounds_idx = input_col == lower_bound_x
-            upper_bounds_idx = input_col == upper_bound_x
-
-        isfinite_mask = input_col.isfinite()
-        input_col_finite = input_col[isfinite_mask]
-        if not inverse:
-            forward = _torch_interp(
-                input_col_finite,
-                quantiles,
-                self.references,
-            )
-            backward = _torch_interp(
-                -input_col_finite,
-                -quantiles.flip(0),
-                -self.references.flip(0),
-            )
-            input_col[isfinite_mask] = 0.5 * (forward - backward)
-        else:
-            input_col[isfinite_mask] = _torch_interp(
-                input_col_finite,
-                self.references,
-                quantiles,
-            )
-
-        input_col[upper_bounds_idx] = upper_bound_y
-        input_col[lower_bounds_idx] = lower_bound_y
-        if not inverse and self.output_distribution == "normal":
-            eps = input_col.new_tensor(
-                BOUNDS_THRESH - torch.finfo(torch.float64).eps
-            )
-            input_col = torch.special.ndtri(input_col)
-            clip_min = torch.special.ndtri(eps)
-            clip_max = torch.special.ndtri(one - eps)
-            input_col = input_col.clamp(clip_min, clip_max)
-
-        return input_col
-
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` into the configured output distribution."""
         numerical = _as_float(table.numerical)
         transformed = torch.empty_like(numerical)
-        for i in range(numerical.shape[1]):
-            transformed[:, i] = self._transform_col(
-                numerical[:, i],
-                self.quantiles[:, i],
-                inverse=False,
+        for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
+            end = min(start + _MAX_NUM_COLS, numerical.shape[1])
+            # Searchsorted works over the innermost dimension, so columns
+            # become independent rows: input ``[N, F]`` -> ``[F, N]``.
+            input_columns = numerical[:, start:end].T.contiguous()
+            quantile_columns = self.quantiles[:, start:end].T.contiguous()
+            lower_bound_x = quantile_columns[:, :1]
+            upper_bound_x = quantile_columns[:, -1:]
+            if self.output_distribution == "normal":
+                bounds_thresh = input_columns.new_tensor(BOUNDS_THRESH)
+                lower_bounds_idx = (
+                    input_columns - bounds_thresh < lower_bound_x
+                )
+                upper_bounds_idx = (
+                    input_columns + bounds_thresh > upper_bound_x
+                )
+            else:
+                lower_bounds_idx = input_columns == lower_bound_x
+                upper_bounds_idx = input_columns == upper_bound_x
+
+            finite = input_columns.isfinite()
+            forward = _batched_interp(
+                input_columns,
+                quantile_columns,
+                self.references,
             )
+            backward = _batched_interp(
+                -input_columns,
+                -quantile_columns.flip(1),
+                -self.references.flip(0),
+            )
+            output = 0.5 * (forward - backward)
+
+            output = torch.where(finite, output, input_columns)
+            output = torch.where(upper_bounds_idx, 1.0, output)
+            output = torch.where(lower_bounds_idx, 0.0, output)
+
+            if self.output_distribution == "normal":
+                eps = input_columns.new_tensor(
+                    BOUNDS_THRESH - torch.finfo(torch.float64).eps
+                )
+                output = torch.special.ndtri(output)
+                clip_min = torch.special.ndtri(eps)
+                clip_max = torch.special.ndtri(1.0 - eps)
+                output = output.clamp(clip_min, clip_max)
+
+            transformed[:, start:end] = output.T.contiguous()
         return table.replace_blocks(numerical=transformed)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = _as_float(table.numerical)
-        inverse = numerical.clone()
-        for i in range(numerical.shape[1]):
-            inverse[:, i] = self._transform_col(
-                numerical[:, i],
-                self.quantiles[:, i],
-                inverse=True,
+        inverse = torch.empty_like(numerical)
+        for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
+            end = min(start + _MAX_NUM_COLS, numerical.shape[1])
+            # Searchsorted works over the innermost dimension, so columns
+            # become independent rows: input ``[N, F]`` -> ``[F, N]``.
+            input_columns = numerical[:, start:end].T.contiguous()
+            quantile_columns = self.quantiles[:, start:end].T.contiguous()
+            lower_bound_y = quantile_columns[:, :1]
+            upper_bound_y = quantile_columns[:, -1:]
+            if self.output_distribution == "normal":
+                input_columns = torch.special.ndtr(input_columns)
+
+            if self.output_distribution == "normal":
+                bounds_thresh = input_columns.new_tensor(BOUNDS_THRESH)
+                lower_bounds_idx = input_columns - bounds_thresh < 0.0
+                upper_bounds_idx = input_columns + bounds_thresh > 1.0
+            else:
+                lower_bounds_idx = input_columns == 0.0
+                upper_bounds_idx = input_columns == 1.0
+
+            finite = input_columns.isfinite()
+            output = _batched_interp(
+                input_columns,
+                self.references,
+                quantile_columns,
             )
+            output = torch.where(finite, output, input_columns)
+            output = torch.where(upper_bounds_idx, upper_bound_y, output)
+            output = torch.where(lower_bounds_idx, lower_bound_y, output)
+            inverse[:, start:end] = output.T.contiguous()
         return table.replace_blocks(numerical=inverse)

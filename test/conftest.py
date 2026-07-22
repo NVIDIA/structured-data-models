@@ -1,10 +1,21 @@
 import pandas as pd
 import pytest
+import torch
 from sdm import RelationalData, TableTensor, infer_stypes
 
 
 @pytest.fixture
-def data() -> RelationalData:
+def device() -> torch.device:
+    return torch.device("cpu")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _torch_warn_always() -> None:
+    torch.set_warn_always(True)
+
+
+@pytest.fixture
+def relational_data(device: torch.device) -> RelationalData:
     users_df = pd.DataFrame(
         {
             "user_id": [0, 1, 2, 3],
@@ -55,4 +66,4 @@ def data() -> RelationalData:
                 "right_column": "item_id",
             },
         ],
-    )
+    ).to(device)

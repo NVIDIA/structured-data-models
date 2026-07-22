@@ -14,7 +14,7 @@ class CategoricalImpute(Processor):
     Negative category codes are missing values. The fitted fill value is
     learned independently for every categorical column and applied without
     changing its category vocabulary.
-    Transform tableuts must use the fitted per-column category vocabularies.
+    Transform inputs must use the fitted per-column category vocabularies.
     The processor raises if they do not match. Column names are not
     validated. Use :class:`~sdm.processing.CategoricalAlign` before this
     processor when training and transform inputs were tensorized
@@ -45,7 +45,12 @@ class CategoricalImpute(Processor):
             torch.empty(0, dtype=torch.long),
         )
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         data = table.categorical
         _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []

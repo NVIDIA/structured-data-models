@@ -7,18 +7,9 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-def _nanstd(inp: Tensor, *, dim: int) -> Tensor:
-    mask = ~torch.isnan(inp)
-    count = mask.sum(dim=dim)
-    mean = torch.nanmean(inp, dim=dim)
-    centered = inp - mean
-    centered = torch.where(mask, centered, torch.zeros_like(centered))
-    sum_squares = centered.square().sum(dim=dim)
-
-    correction = (count > 1).to(count.dtype)
-    denominator = (count - correction).clamp_min(1)
-    variance = sum_squares / denominator
-    return torch.where(count > 0, variance.sqrt(), torch.nan)
+def _std(inp: Tensor, *, dim: int) -> Tensor:
+    correction = 1 if inp.size(dim) > 1 else 0
+    return inp.std(dim=dim, correction=correction)
 
 
 class SigmaClip(Processor):
@@ -49,40 +40,45 @@ class SigmaClip(Processor):
         self.register_buffer("lower_bound", torch.empty(0))
         self.register_buffer("upper_bound", torch.empty(0))
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
         numerical = _as_float(table.numerical)
         min_std = numerical.new_tensor(1e-6)
 
-        mean = torch.nanmean(numerical, dim=0)
-        std = _nanstd(numerical, dim=0)
-        std = torch.where(std.isnan(), min_std, std)
-        std = torch.maximum(std, min_std)
-
-        inf = numerical.new_tensor(float("inf"))
-        lower_bound = torch.where(
-            mean.isnan(), -inf, mean - self.threshold * std
-        )
-        upper_bound = torch.where(
-            mean.isnan(), inf, mean + self.threshold * std
-        )
+        mean = numerical.mean(dim=0)
+        std = torch.maximum(_std(numerical, dim=0), min_std)
+        lower_bound = mean - self.threshold * std
+        upper_bound = mean + self.threshold * std
         outlier_mask = (numerical < lower_bound) | (numerical > upper_bound)
-        clean = torch.where(outlier_mask, torch.nan, numerical)
 
-        mean_clean = torch.nanmean(clean, dim=0)
-        std_clean = _nanstd(clean, dim=0)
-        self._mean = torch.where(mean_clean.isnan(), mean, mean_clean)
-        self._std = torch.where(std_clean.isnan(), std, std_clean)
+        keep = ~outlier_mask
+        count = keep.sum(dim=0)
+        safe_count = count.clamp_min(1)
+        clean_sum = torch.where(
+            keep,
+            numerical,
+            torch.zeros_like(numerical),
+        ).sum(dim=0)
+        mean_clean = clean_sum / safe_count
+        centered = torch.where(
+            keep,
+            numerical - mean_clean,
+            torch.zeros_like(numerical),
+        )
+        correction = (count > 1).to(count.dtype)
+        denominator = (count - correction).clamp_min(1)
+        std_clean = (centered.square().sum(dim=0) / denominator).sqrt()
+
+        has_clean = count > 0
+        self._mean = torch.where(has_clean, mean_clean, mean)
+        self._std = torch.where(has_clean, std_clean, std)
         self._std = torch.maximum(self._std, min_std)
-        self.lower_bound = torch.where(
-            self._mean.isnan(),
-            -inf,
-            self._mean - self.threshold * self._std,
-        )
-        self.upper_bound = torch.where(
-            self._mean.isnan(),
-            inf,
-            self._mean + self.threshold * self._std,
-        )
+        self.lower_bound = self._mean - self.threshold * self._std
+        self.upper_bound = self._mean + self.threshold * self._std
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Clip ``table`` using the fitted soft lower and upper bounds."""

@@ -1,4 +1,5 @@
 import copy
+from typing import Any, cast
 
 import pytest
 import torch
@@ -12,10 +13,9 @@ from sdm.processing import (
 )
 
 
-def _table(seed: int = 0) -> TableTensor:
-    generator = torch.Generator().manual_seed(seed)
+def _table() -> TableTensor:
     return TableTensor.from_tensor(
-        torch.randn(32, 2, generator=generator),
+        torch.arange(64, dtype=torch.float32).view(32, 2),
         columns=("x0", "x1"),
     )
 
@@ -29,6 +29,30 @@ def test_choice_draws_at_fit() -> None:
     choice.fit(_table())
 
     assert choice.selected in list(choice.options)
+
+
+def test_choice_accepts_callable_option() -> None:
+    table = _table()
+    choice = Choice(
+        lambda table: table.replace_blocks(numerical=table.numerical.square())
+    )
+
+    output = choice.fit_transform(table)
+
+    assert not choice.selected.requires_fit
+    assert torch.equal(output.numerical, table.numerical.square())
+    assert repr(choice) == "Choice(\n  lambda,\n)"
+
+    with pytest.raises(AttributeError, match="inverse_transform"):
+        choice.inverse_transform(output)
+
+
+def test_choice_rejects_invalid_option() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"Choice option 1.*Processor or callable.*object",
+    ):
+        Choice(Identity(), cast(Any, object()))
 
 
 def test_choice_keeps_state_dict_keys_independent_of_the_draw() -> None:
@@ -63,11 +87,26 @@ def test_choice_inverse_requires_invertible_selected() -> None:
         choice.inverse_transform(table)
 
 
+def test_choice_is_reproducible_with_generator() -> None:
+    table = _table()
+
+    # Seed 1 draws the second option, whose fit consumes the generator.
+    first = Choice(Identity(), Quantile(n_quantiles=6, subsample=16)).fit(
+        table,
+        generator=torch.Generator().manual_seed(1),
+    )
+    second = Choice(Identity(), Quantile(n_quantiles=6, subsample=16)).fit(
+        table,
+        generator=torch.Generator().manual_seed(1),
+    )
+
+    assert isinstance(first.selected, Quantile)
+    assert type(first.selected) is type(second.selected)
+    assert torch.equal(first.selected.quantiles, second.selected.quantiles)
+
+
 def test_choice_repr_shows_all_options() -> None:
     choice = Choice(Identity(), StandardScale())
-
-    torch.manual_seed(0)
-    choice.fit(_table())
 
     assert "Identity" in repr(choice)
     assert "StandardScale" in repr(choice)
