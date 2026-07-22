@@ -131,54 +131,6 @@ def test_quantile_single_quantile_maps_to_single_reference(
 
 
 @withCUDA
-def test_quantile_preserves_nan_positions(device: torch.device) -> None:
-    inp = torch.tensor(
-        [
-            [0.0, 1.0],
-            [torch.nan, 2.0],
-            [2.0, torch.nan],
-            [3.0, 4.0],
-        ],
-        device=device,
-    )
-
-    processor = Quantile(n_quantiles=4, subsample=None).fit(
-        TableTensor.from_tensor(inp)
-    )
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-    inverse = processor.inverse_transform(
-        TableTensor.from_tensor(transformed)
-    ).numerical
-
-    assert torch.equal(torch.isnan(transformed), torch.isnan(inp))
-    assert torch.equal(torch.isnan(inverse), torch.isnan(inp))
-    assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
-    assert transformed.device == device
-    assert inverse.device == device
-
-
-@withCUDA
-def test_quantile_all_nan_column_remains_nan(device: torch.device) -> None:
-    inp = torch.tensor(
-        [
-            [torch.nan, 1.0],
-            [torch.nan, 2.0],
-            [torch.nan, 3.0],
-        ],
-        device=device,
-    )
-
-    processor = Quantile(n_quantiles=3, subsample=None).fit(
-        TableTensor.from_tensor(inp)
-    )
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-
-    assert torch.isnan(processor.quantiles[:, 0]).all()
-    assert torch.isnan(transformed[:, 0]).all()
-    assert transformed.device == device
-
-
-@withCUDA
 def test_quantile_normal_distribution_is_finite_at_bounds(
     device: torch.device,
 ) -> None:
@@ -203,30 +155,6 @@ def test_quantile_normal_distribution_is_finite_at_bounds(
         inp,
         atol=1e-5,
     )
-
-
-@withCUDA
-def test_quantile_normal_distribution_preserves_nan_positions(
-    device: torch.device,
-) -> None:
-    inp = torch.tensor([[0.0], [torch.nan], [2.0], [3.0]], device=device)
-
-    processor = Quantile(
-        n_quantiles=4,
-        subsample=None,
-        output_distribution="normal",
-    ).fit(TableTensor.from_tensor(inp))
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-    inverse = processor.inverse_transform(
-        TableTensor.from_tensor(transformed)
-    ).numerical
-
-    assert torch.equal(torch.isnan(transformed), torch.isnan(inp))
-    assert torch.equal(torch.isnan(inverse), torch.isnan(inp))
-    finite = ~torch.isnan(inp)
-    assert torch.allclose(inverse[finite], inp[finite])
-    assert transformed.device == device
-    assert inverse.device == device
 
 
 @onlyCUDA

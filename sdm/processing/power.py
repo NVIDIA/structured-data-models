@@ -140,32 +140,6 @@ def _bounded_argmax(
     return (left + right) / 2
 
 
-def _nan_mean_var(inp: Tensor) -> tuple[Tensor, Tensor]:
-    finite = ~inp.isnan()
-    counts = finite.sum(dim=0)
-    safe_counts = counts.clamp(min=1)
-    finite_input = torch.where(finite, inp, torch.zeros_like(inp))
-    mean = finite_input.sum(dim=0) / safe_counts
-    centered = torch.where(finite, inp - mean, torch.zeros_like(inp))
-    var = (centered * centered).sum(dim=0) / safe_counts
-
-    nan = torch.full_like(mean, torch.nan)
-    mean = torch.where(counts > 0, mean, nan)
-    var = torch.where(counts > 0, var, nan)
-    return mean, var
-
-
-def _nan_max(inp: Tensor) -> Tensor:
-    """Per-column max over finite values; all-NaN columns map to NaN."""
-    finite = ~inp.isnan()
-    counts = finite.sum(dim=0)
-    neg_inf = torch.full_like(inp, float("-inf"))
-    result = torch.where(finite, inp, neg_inf).max(dim=0).values
-
-    nan = torch.full_like(result, torch.nan)
-    return torch.where(counts > 0, result, nan)
-
-
 class Power(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
@@ -190,16 +164,15 @@ class Power(Processor, InvertibleMixin):
         self.register_buffer("scale", torch.empty(0))
 
     def _optimize_lambda(self, inp: Tensor) -> float:
-        finite = inp[inp.isfinite()]
-        if finite.numel() < 2 or torch.all(finite == finite[0]):
+        if inp.numel() < 2 or torch.all(inp == inp[0]):
             return 1.0
 
-        lower_bound, upper_bound = _yeojohnson_bounds(finite)
+        lower_bound, upper_bound = _yeojohnson_bounds(inp)
         if lower_bound == upper_bound:
             return lower_bound
 
         return _bounded_argmax(
-            lambda lmbda: _yeojohnson_log_likelihood(finite, lmbda),
+            lambda lmbda: _yeojohnson_log_likelihood(inp, lmbda),
             lower_bound,
             upper_bound,
         )
@@ -215,7 +188,7 @@ class Power(Processor, InvertibleMixin):
 
         var = numerical.var(dim=0, correction=0)
         mean = numerical.mean(dim=0)
-        self.max = _nan_max(numerical)
+        self.max = numerical.max(dim=0).values
         lambdas = numerical.new_empty(n_features)
 
         constant_features = _constant_feature_mask(var, mean, n_samples)
@@ -232,7 +205,8 @@ class Power(Processor, InvertibleMixin):
 
         if self.standardize:
             transformed = _yeojohnson_transform(numerical, self.lambdas)
-            self.mean, var = _nan_mean_var(transformed)
+            self.mean = transformed.mean(dim=0)
+            var = transformed.var(dim=0, correction=0)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
             self.scale = scale

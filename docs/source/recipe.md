@@ -21,6 +21,10 @@ both sides of the model.
   `fit` and `transform` flow, but does not support `inverse_transform`.
 
 - A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
+  Recipes do not infer each step's non-finite input contract. Place imputation
+  or cleanup before processors that do not explicitly document non-finite
+  support; for example, use {py:class}`~sdm.processing.MeanImpute` before
+  downstream numerical processors that expect finite input.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
   attributes:
