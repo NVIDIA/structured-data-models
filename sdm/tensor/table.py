@@ -929,7 +929,7 @@ def _to_copy(
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
 
-    # Wrapper dtype is a placeholder, so same dtype means no conversion:
+    # Device-only `.to` auto-fills the wrapper dtype; treat as no cast:
     if dtype == inp.dtype:
         dtype = None
 

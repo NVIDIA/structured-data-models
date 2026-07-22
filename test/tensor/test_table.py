@@ -559,6 +559,28 @@ def test_to_in_inference_mode() -> None:
     assert out._column_to_loc == tensor._column_to_loc
 
 
+def test_to_device_and_dtype_in_inference_mode() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ("number",),
+            "categorical": ("category",),
+        },
+        numerical=torch.tensor([[1]], dtype=torch.int32),
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0]], dtype=torch.int64),
+            categories=(torch.tensor([10]),),
+        ),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to("cpu", torch.float64)
+
+    assert isinstance(out, TableTensor)
+    assert out.is_cpu
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.dtype == torch.int64
+
+
 def test_to_on_table_created_in_inference_mode() -> None:
     with torch.inference_mode():
         tensor = TableTensor(
