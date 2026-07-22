@@ -15,6 +15,7 @@ from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm.tensor.columnar import _resolve_device
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 
 if TYPE_CHECKING:
@@ -157,7 +158,7 @@ class TableTensor(Tensor):
             raise ValueError("Expected 'size' to be non-empty")
 
         size = tuple(size) if size is not None else size
-        device = torch.device(device) if device is not None else device
+        device = _resolve_device(device)
 
         for stype, block in (
             (Stype.numerical, numerical),
