@@ -14,6 +14,7 @@ class TaskGraph:  # noqa: D101
     x: TableTensor
     related_tables: RelatedTables
     graph: HomogeneousGraph
+    readout_table: str
     readout_index: Tensor  # Entity-table rows ordered by task row.
     row_batches: dict[str, Tensor]  # Per table row-to-task assignment.
     num_hops: int
@@ -43,20 +44,20 @@ class TaskGraph:  # noqa: D101
             tables=related_tables.tables,
             relationships=related_tables.relationships,
         )
-        entity_table_name = related_tables.task_links[0].table
-        entity_offset = graph.start_node_offsets[entity_table_name]
+        readout_table = related_tables.task_links[0].table
+        readout_offset = graph.start_node_offsets[readout_table]
 
         # Map each task row to exactly one entity-table row:
         task_index, readout_index = join_index(
             left_table=x,
-            right_table=related_tables.tables[entity_table_name],
+            right_table=related_tables.tables[readout_table],
             left_keys=related_tables.task_links[0].task_columns,
             right_keys=related_tables.task_links[0].table_columns,
             how="inner",
         )
         task_index, perm = task_index.sort()
         readout_index = readout_index[perm]
-        global_readout_index = readout_index + entity_offset
+        global_readout_index = readout_index + readout_offset
 
         arange = torch.arange(
             x.size(-2),
@@ -69,7 +70,7 @@ class TaskGraph:  # noqa: D101
         ):
             raise ValueError(
                 f"Expected each task row to match exactly one distinct row in "
-                f"'{related_tables.task_links[0].table}'"
+                f"'{readout_table}'"
             )
 
         row_batch = readout_index.new_full((graph.num_nodes,), fill_value=-1)
@@ -98,6 +99,7 @@ class TaskGraph:  # noqa: D101
             x=x,
             related_tables=related_tables,
             graph=graph,
+            readout_table=readout_table,
             readout_index=readout_index,
             row_batches={
                 table_name: row_batch[graph.node_slice(table_name)]
