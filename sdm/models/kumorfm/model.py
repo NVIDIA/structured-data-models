@@ -30,7 +30,7 @@ class KumoRFM(ICLModel):
     :class:`KumoRFM` extends the in-context learning structure of tabular
     foundation models from single tables to relational, multi-table inputs.
     It processes task rows together with one or more related tables, avoiding
-    manual flattening of relational data into a single task table.
+    manual flattening of relational data into a single table.
 
     This implementation follows the high-level KumoRFM-2 architecture.
     It consists of three stages:
