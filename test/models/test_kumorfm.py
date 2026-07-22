@@ -165,17 +165,15 @@ def test_invariant_gnn(
         tables=related_tables.tables,
         relationships=related_tables.relationships,
     )
+    assert graph.col.equal(
+        torch.tensor([0, 0, 1, 3, 3, 3, 4, 5, 6, 7, 8, 9], device=device)
+    )
     assert graph.colptr.equal(
         torch.tensor([0, 2, 3, 3, 6, 7, 8, 9, 10, 11, 12], device=device)
     )
-    # TODO Test `col`
-    col = torch.repeat_interleave(
-        torch.arange(graph.colptr.numel() - 1, device=graph.colptr.device),
-        graph.colptr.diff(),
-    )
     # Make `row` deterministic within local neighborhoods:
     row, perm = graph.row.sort()
-    row = row[col[perm].argsort(stable=True)]
+    row = row[graph.col[perm].argsort(stable=True)]
     assert row.equal(
         torch.tensor([4, 5, 6, 7, 8, 9, 0, 0, 1, 3, 3, 3], device=device)
     )
