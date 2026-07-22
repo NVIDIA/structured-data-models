@@ -192,6 +192,10 @@ when you call <code class="docutils literal notranslate"><span class="pre">fit</
 <a class="reference internal" href="api/generated/sdm.processing.StandardScale.html#sdm.processing.StandardScale" title="sdm.processing.StandardScale"><code class="xref py py-class docutils literal notranslate"><span class="pre">StandardScale</span></code></a> learns each column’s mean and
 standard deviation); a stateless one does not (for example
 <a class="reference internal" href="api/generated/sdm.processing.SoftmaxTemperature.html#sdm.processing.SoftmaxTemperature" title="sdm.processing.SoftmaxTemperature"><code class="xref py py-class docutils literal notranslate"><span class="pre">SoftmaxTemperature</span></code></a>).</p></li>
+<li><p>A small stateless transformation can be supplied directly to
+<a class="reference internal" href="api/generated/sdm.processing.Sequential.html#sdm.processing.Sequential" title="sdm.processing.Sequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> as a function or lambda. It is
+normalized to a stateless processor and participates in the usual
+<code class="docutils literal notranslate"><span class="pre">fit</span></code> and <code class="docutils literal notranslate"><span class="pre">transform</span></code> flow, but does not support <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code>.</p></li>
 <li><p>A <a class="reference internal" href="api/generated/sdm.processing.Sequential.html#sdm.processing.Sequential" title="sdm.processing.Sequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> is an ordered list of steps.</p></li>
 <li><p>A <a class="reference internal" href="api/generated/sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> bundles three pipelines, reached as
 attributes:</p>
@@ -213,6 +217,18 @@ target inverse (for example turning logits into probabilities).</p></li>
 </span><span data-line="4"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Recipe</span><span class="p">,</span> <span class="n">StandardScale</span>
 </span><span data-line="5">
 </span><span data-line="6"><span class="n">recipe</span> <span class="o">=</span> <span class="n">Recipe</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()],</span> <span class="n">target</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()])</span>
+</span></pre></div>
+</div>
+<p>For a small stateless transformation, pass a callable directly to
+<a class="reference internal" href="api/generated/sdm.processing.Sequential.html#sdm.processing.Sequential" title="sdm.processing.Sequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequential</span>
+</span><span data-line="2">
+</span><span data-line="3"><span class="n">features</span> <span class="o">=</span> <span class="n">Sequential</span><span class="p">(</span>
+</span><span data-line="4">    <span class="n">StandardScale</span><span class="p">(),</span>
+</span><span data-line="5">    <span class="k">lambda</span> <span class="n">table</span><span class="p">:</span> <span class="n">table</span><span class="o">.</span><span class="n">replace_blocks</span><span class="p">(</span>
+</span><span data-line="6">        <span class="n">numerical</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">numerical</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+</span><span data-line="7">    <span class="p">),</span>
+</span><span data-line="8"><span class="p">)</span>
 </span></pre></div>
 </div>
 <p>Fit the recipe pipelines on your labeled data and transform them in one call
@@ -259,7 +275,7 @@ back to the original space:</p>
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=d84ad312"></script>
+      <script src="_static/documentation_options.js?v=50c6b181"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
