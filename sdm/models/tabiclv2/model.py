@@ -63,6 +63,28 @@ class TabICLv2(ICLModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
+    .. code-block:: python
+
+        from sdm import TableTensor
+        from sdm.models import TabICLv2
+
+        table = TableTensor.from_pandas(...)
+        model = TabICLv2(device="cuda")
+
+        # Default in-context learning forward pass:
+        out = model(
+            x_context=table[:300].drop_columns("target"),
+            y_context=table[:300, "target"],
+            x_query=table[300:].drop_columns("target"),
+        )
+
+        # Fit+Predict forward pass via key/value caching:
+        model.fit(
+            x=table[:300].drop_columns("target"),
+            y=table[:300, "target"],
+        )
+        out = model.predict(table[300:].drop_columns("target"))
+
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.

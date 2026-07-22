@@ -68,7 +68,7 @@ perm = torch.randperm(len(train_table))[: args.context_size]
 train_table = cast(TableTensor, train_table[perm])
 
 # Execute Model ###############################################################
-model = KumoRFM(device=device)
+model = KumoRFM(pretrained=False, device=device)
 
 kwargs = {
     "task_link": {
