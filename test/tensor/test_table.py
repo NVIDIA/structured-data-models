@@ -1093,6 +1093,44 @@ def test_text() -> None:
     assert tensor.to_arrow().to_pydict() == data
 
 
+def test_text_with_nulls() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table({"bio": ["hi", None, "yo"]}),
+        stypes={"bio": "text"},
+    )
+
+    assert tensor.text.tolist() == [["hi"], [""], ["yo"]]
+    assert tensor.to_arrow().to_pydict() == {"bio": ["hi", "", "yo"]}
+
+
+def test_text_with_nulls_from_pandas() -> None:
+    tensor = TableTensor.from_pandas(
+        df=pd.DataFrame({"bio": ["hi", None, "yo"]}),
+        stypes={"bio": "text"},
+    )
+
+    assert tensor.text.tolist() == [["hi"], [""], ["yo"]]
+
+
+def test_from_arrow_invalid_column_names_column() -> None:
+    table = pa.table({"age": [25, 31, 42]})
+
+    with pytest.raises(TypeError, match="column 'age'"):
+        TableTensor.from_arrow(table, stypes={"age": "text"})
+
+
+@onlyCUDA
+def test_from_cudf_text_with_nulls() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame({"bio": ["hi", None, "yo"]}),
+        stypes={"bio": "text"},
+    )
+
+    assert tensor.text.tolist() == [["hi"], [""], ["yo"]]
+
+
 @onlyCUDA
 def test_cudf() -> None:
     cudf = pytest.importorskip("cudf")
