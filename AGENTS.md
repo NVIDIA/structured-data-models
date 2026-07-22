@@ -30,8 +30,6 @@ Your user needs to abide by this policy. In particular, you the agent MUST obey 
 
 - Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions, commit messages, or review replies unless explicitly requested.
 - Do not add a section named "Tests", "Testing" or similar, to PR descriptions unless the test is not covered in CI.
-- Mark all AI-generated content. Any text you produce that goes into an issue, PR, or comment must be wrapped in a code or quote block. Never present your output as human-written.
-- Never emit only raw AI text as a reply. Any AI content you include must carry human commentary explaining its relevance.
 - PR metadata should describe the code change only.
 
 # Project Structure
