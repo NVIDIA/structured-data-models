@@ -191,6 +191,7 @@ class ICLModel(torch.nn.Module, ABC):
         recipe: Recipe | None = None,
         num_estimators: int = 1,
         generator: torch.Generator | None = None,
+        **kwargs: Any,
     ) -> None:
         r"""Fit and cache in-context examples.
 
@@ -207,7 +208,8 @@ class ICLModel(torch.nn.Module, ABC):
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
             generator: Pseudorandom number generator used for sampling during
-                preprocessing.
+                pre-processing and model execution.
+            kwargs: Additional keyword arguments passed to the model.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")

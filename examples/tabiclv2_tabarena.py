@@ -17,24 +17,22 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import torch
 from autogluon.core.data.label_cleaner import LabelCleaner
+from autogluon.core.metrics import Scorer
 from autogluon.core.models import AbstractModel
 from sdm import Stype, TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
+from tabarena.benchmark.task.metadata import ValidationMetadata
 from tabarena.benchmark.task.metadata.collection import TaskSubset
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import ConfigGenerator, SystemConfigGenerator
-
-if TYPE_CHECKING:
-    from autogluon.core.metrics import Scorer
-    from tabarena.benchmark.task.metadata import ValidationMetadata
 
 
 class SDMTabICLv2Model(AbstractModel):
