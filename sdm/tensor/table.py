@@ -928,6 +928,7 @@ def _to_copy(
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
+    device = inp.device if device is None else device
     blocks = {
         stype: aten._to_copy.default(
             tensor,
@@ -949,6 +950,24 @@ def _to_copy(
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
+    )
+
+
+@TableTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: TableTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    if not copy and inp.dtype == dtype:
+        return inp
+    return _to_copy(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        memory_format=memory_format,
     )
 
 
