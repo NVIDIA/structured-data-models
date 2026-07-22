@@ -2,7 +2,6 @@ r"""Run TabICLv2 on TabArena.
 
 $ uv run --group example-tabarena python examples/tabiclv2_tabarena.py \
     --output-root outputs/tabiclv2-tabarena \
-    --mode sdm-native \
     --subset lite \
     --datasets blood-transfusion-service-center \
     --num-estimators 1 \
@@ -24,7 +23,6 @@ import pandas as pd
 import torch
 from autogluon.core.data.label_cleaner import LabelCleaner
 from autogluon.core.metrics import Scorer
-from autogluon.core.models import AbstractModel
 from sdm import Stype, TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
@@ -32,91 +30,7 @@ from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.benchmark.task.metadata import ValidationMetadata
 from tabarena.benchmark.task.metadata.collection import TaskSubset
 from tabarena.contexts import TabArenaContext
-from tabarena.utils.config_utils import ConfigGenerator, SystemConfigGenerator
-
-
-class SDMTabICLv2Model(AbstractModel):
-    ag_key = "SDMTABICLV2"
-    ag_name = "SDMTabICLv2"
-
-    def _fit(
-        self,
-        X: pd.DataFrame,
-        y: pd.Series,
-        X_val: pd.DataFrame | None = None,
-        y_val: pd.Series | None = None,
-        X_unlabeled: pd.DataFrame | None = None,
-        time_limit: float | None = None,
-        sample_weight: pd.Series | None = None,
-        sample_weight_val: pd.Series | None = None,
-        num_cpus: int | None = None,
-        num_gpus: int | None = None,
-        verbosity: int = 2,
-        **kwargs: Any,
-    ) -> None:
-        self._device = _resolve_device(num_gpus=num_gpus)
-        self._feature_stypes = infer_stypes(X)
-        self._target_name = str(y.name) if y.name is not None else "__target__"
-        self._target_stype = (
-            Stype.numerical
-            if self.problem_type == "regression"
-            else Stype.categorical
-        )
-
-        self.model = TabICLv2(device=self._device)
-        with torch.amp.autocast(
-            device_type=self._device.type,
-            dtype=torch.bfloat16,
-            enabled=self._device.type == "cuda",
-        ):
-            self.model.fit(
-                x=TableTensor.from_pandas(
-                    df=X,
-                    stypes=self._feature_stypes,
-                    device=self._device,
-                ),
-                y=TableTensor.from_pandas(
-                    df=y.rename(self._target_name).to_frame(),
-                    stypes={self._target_name: self._target_stype},
-                    device=self._device,
-                ),
-                num_estimators=int(self._get_model_params()["num_estimators"]),
-            )
-
-    def _predict_proba(self, X: pd.DataFrame, **kwargs: Any) -> np.ndarray:
-        if not hasattr(self, "model"):
-            raise RuntimeError(
-                "SDMTabICLv2Model must be fitted before prediction"
-            )
-
-        with torch.amp.autocast(
-            device_type=self._device.type,
-            dtype=torch.bfloat16,
-            enabled=self._device.type == "cuda",
-        ):
-            prediction = self.model.predict(
-                TableTensor.from_pandas(
-                    df=X,
-                    stypes=self._feature_stypes,
-                    device=self._device,
-                )
-            )
-        values = prediction.numerical.float().cpu().numpy()
-        return _prediction_to_numpy(
-            values,
-            problem_type=self.problem_type,
-            class_labels=prediction.columns[Stype.numerical],
-        )
-
-    def _set_default_params(self) -> None:
-        self._set_default_param_value("num_estimators", 8)
-
-    @classmethod
-    def supported_problem_types(cls) -> list[str]:
-        return ["binary", "multiclass", "regression"]
-
-    def _get_default_resources(self) -> tuple[int, int]:
-        return 1, 1 if torch.cuda.is_available() else 0
+from tabarena.utils.config_utils import SystemConfigGenerator
 
 
 @dataclass(frozen=True)
@@ -262,8 +176,7 @@ def _fit_feature_schema(frame: pd.DataFrame) -> FeatureSchema:
         columns = ", ".join(repr(column) for column in datetime_columns)
         raise ValueError(
             "SDM-native TabICLv2 does not yet support datetime columns: "
-            f"{columns}. Use the AutoGluon-compatible mode or add an SDM "
-            "datetime recipe before running this task."
+            f"{columns}. Add an SDM datetime recipe before running this task."
         )
 
     id_columns = tuple(
@@ -385,23 +298,6 @@ def _order_probabilities_for_tabarena(
     return probabilities.loc[:, expected]
 
 
-def _prediction_to_numpy(
-    values: np.ndarray,
-    *,
-    problem_type: str,
-    class_labels: tuple[str, ...] | None = None,
-) -> np.ndarray:
-    if problem_type == "regression":
-        return values.mean(axis=-1)
-    if class_labels is None:
-        raise ValueError("Classification predictions require class labels")
-    class_indices = np.asarray([int(label) for label in class_labels])
-    values = values[:, np.argsort(class_indices)]
-    if problem_type == "binary":
-        return values[:, 1]
-    return values
-
-
 def _resolve_device(*, num_gpus: int | None) -> torch.device:
     if num_gpus is None or num_gpus <= 0:
         return torch.device("cpu")
@@ -416,12 +312,6 @@ def main() -> None:
     parser.add_argument("--num-estimators", type=int, default=8)
     parser.add_argument("--num-cpus", type=int)
     parser.add_argument("--num-gpus", type=int)
-    parser.add_argument(
-        "--mode",
-        choices=("autogluon-compatible", "sdm-native"),
-        default="autogluon-compatible",
-    )
-    parser.add_argument("--outer", action="store_true")
     parser.add_argument("--subset", nargs="+")
     parser.add_argument("--datasets", nargs="+")
     args = parser.parse_args()
@@ -438,32 +328,18 @@ def main() -> None:
         )
     output_root.mkdir(parents=True, exist_ok=True)
 
-    if args.mode == "autogluon-compatible":
-        generator = ConfigGenerator(
-            search_space={},
-            model_cls=SDMTabICLv2Model,
-            manual_configs=[{"num_estimators": args.num_estimators}],
-        )
-        experiments = TabArenaV0pt1ExperimentBundle(
-            models=[(generator, 0)],
-            outer_experiments=args.outer,
-        ).build_experiments(
-            num_cpus=args.num_cpus,
-            num_gpus=args.num_gpus,
-        )
-    else:
-        generator = SystemConfigGenerator(
-            model_cls=SDMTabICLv2System,
-            name="SDMTabICLv2System",
-            manual_configs=[{"num_estimators": args.num_estimators}],
-        )
-        experiments = TabArenaV0pt1ExperimentBundle(
-            models=[(generator, 0)],
-            system_experiments=True,
-        ).build_experiments(
-            num_cpus=args.num_cpus,
-            num_gpus=args.num_gpus,
-        )
+    generator = SystemConfigGenerator(
+        model_cls=SDMTabICLv2System,
+        name="SDMTabICLv2System",
+        manual_configs=[{"num_estimators": args.num_estimators}],
+    )
+    experiments = TabArenaV0pt1ExperimentBundle(
+        models=[(generator, 0)],
+        system_experiments=True,
+    ).build_experiments(
+        num_cpus=args.num_cpus,
+        num_gpus=args.num_gpus,
+    )
 
     context = TabArenaContext()
     jobs = context.build_jobs(
@@ -485,9 +361,7 @@ def main() -> None:
 
     report_dir = output_root / "report"
     report_dir.mkdir(parents=True, exist_ok=True)
-    report = results.copy()
-    report.insert(0, "integration_mode", args.mode)
-    report.to_csv(report_dir / "results_per_split.csv", index=False)
+    results.to_csv(report_dir / "results_per_split.csv", index=False)
 
 
 if __name__ == "__main__":
