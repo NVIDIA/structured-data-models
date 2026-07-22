@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, StringTensor, Stype
-from sdm.processing._categorical import _check_categorical_codes
+from sdm.processing.categorical._categorical import _check_categorical_codes
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
