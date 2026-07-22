@@ -15,7 +15,6 @@ The output directory must be empty.
 from __future__ import annotations
 
 import argparse
-import gc
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -120,14 +119,6 @@ class SDMTabICLv2Model(AbstractModel):
 
     def _get_default_resources(self) -> tuple[int, int]:
         return 1, 1 if torch.cuda.is_available() else 0
-
-    def cleanup(self) -> None:
-        if hasattr(self, "model"):
-            self.model.clear()
-            del self.model
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
 
 @dataclass(frozen=True)
@@ -263,14 +254,6 @@ class SDMTabICLv2System(ExternalSystemModel):
                     device=self._device,
                 )
             )
-
-    def cleanup(self) -> None:
-        if hasattr(self, "model"):
-            self.model.clear()
-            del self.model
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
 
 def _fit_feature_schema(frame: pd.DataFrame) -> FeatureSchema:
