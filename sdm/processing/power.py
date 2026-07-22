@@ -217,9 +217,7 @@ class Power(Processor, InvertibleMixin):
             d = d_next
 
         lambdas = (left + right) / 2
-        return torch.where(
-            constant_features | (left == right), identity, lambdas
-        )
+        return torch.where(constant_features, identity, lambdas)
 
     def _fit(
         self,
