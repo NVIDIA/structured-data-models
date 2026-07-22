@@ -48,6 +48,10 @@ StypeLike: TypeAlias = Stype | str
 # Tokenize strings on separators (non-letters/digits) and camelCase boundaries:
 _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
+_TEXT_SAMPLE_SIZE = 1_000
+_TEXT_MIN_UNIQUE = 20
+_TEXT_UNIQUE_RATIO = 0.5
+
 
 def infer_stypes(
     table: pa.Table | pd.DataFrame | cudf.DataFrame,
@@ -60,8 +64,11 @@ def infer_stypes(
 
     * Integer, floating-point, and decimal columns are inferred as
       ``numerical``.
-    * String, boolean and dictionary-encoded columns are inferred as
+    * Boolean and dictionary-encoded columns are inferred as
       ``categorical``.
+    * String columns are inferred as ``text`` if their first 1,000 rows
+      contain at least 20 unique non-null values and more than 50% of
+      the non-null values are unique, and as ``categorical`` otherwise.
     * Datetime columns are inferred as ``datetime``.
     * Integer or (non-dictionary) string columns are inferred as ``id`` if its
       name contains ``"id"`` as a whole word (*e.g.*, ``"user_id"``,
@@ -81,7 +88,7 @@ def infer_stypes(
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
-            table = pa.Schema.from_pandas(table, preserve_index=False)
+            table = pa.Table.from_pandas(table, preserve_index=False)
 
     if importlib.util.find_spec("cudf") is not None:
         import cudf
@@ -90,14 +97,11 @@ def infer_stypes(
             return {
                 column: Stype(overrides[column])
                 if column in overrides
-                else _infer_cudf_stype(column, dtype)
+                else _infer_cudf_stype(column, dtype, table[column])
                 for column, dtype in table.dtypes.items()
             }
 
-    if isinstance(table, pa.Table):
-        table = table.schema
-
-    if not isinstance(table, pa.Schema):
+    if not isinstance(table, pa.Table):
         raise TypeError(
             f"Expected input to be a 'pandas.DataFrame', 'pyarrow.Table', "
             f"or 'cudf.DataFrame' (got '{type(table).__name__}')"
@@ -106,12 +110,16 @@ def infer_stypes(
     return {
         field.name: Stype(overrides[field.name])
         if field.name in overrides
-        else _infer_arrow_stype(field.name, field.type)
-        for field in table
+        else _infer_arrow_stype(field.name, field.type, table.column(i))
+        for i, field in enumerate(table.schema)
     }
 
 
-def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
+def _infer_arrow_stype(
+    name: str,
+    dtype: pa.DataType,
+    column: pa.ChunkedArray,
+) -> Stype:
     if (
         pa.types.is_integer(dtype)
         or pa.types.is_string(dtype)
@@ -126,12 +134,13 @@ def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     ):
         return Stype.numerical
 
-    if (
-        pa.types.is_string(dtype)
-        or pa.types.is_large_string(dtype)
-        or pa.types.is_boolean(dtype)
-        or pa.types.is_dictionary(dtype)
-    ):
+    if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
+        sample = column.slice(0, _TEXT_SAMPLE_SIZE).drop_null()
+        if _has_text_cardinality(len(sample.unique()), len(sample)):
+            return Stype.text
+        return Stype.categorical
+
+    if pa.types.is_boolean(dtype) or pa.types.is_dictionary(dtype):
         return Stype.categorical
 
     if pa.types.is_timestamp(dtype) or pa.types.is_date(dtype):
@@ -140,7 +149,7 @@ def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     raise TypeError(f"Unsupported Arrow type '{dtype}' for column '{name}'")
 
 
-def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
+def _infer_cudf_stype(name: str, dtype: Any, column: Any) -> Stype:
     import cudf
     from cudf.api.types import (
         is_bool_dtype,
@@ -163,17 +172,25 @@ def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
     ):
         return Stype.numerical
 
-    if (
-        is_string_dtype(dtype)
-        or is_bool_dtype(dtype)
-        or isinstance(dtype, cudf.CategoricalDtype)
-    ):
+    if is_string_dtype(dtype) and not isinstance(dtype, cudf.CategoricalDtype):
+        sample = column.iloc[:_TEXT_SAMPLE_SIZE].dropna()
+        if _has_text_cardinality(sample.nunique(), len(sample)):
+            return Stype.text
+        return Stype.categorical
+
+    if is_bool_dtype(dtype) or isinstance(dtype, cudf.CategoricalDtype):
         return Stype.categorical
 
     if is_datetime64_any_dtype(dtype):
         return Stype.datetime
 
     raise TypeError(f"Unsupported cuDF type '{dtype}' for column '{name}'")
+
+
+def _has_text_cardinality(num_unique: int, num_valid: int) -> bool:
+    if num_unique < _TEXT_MIN_UNIQUE:
+        return False
+    return num_unique > _TEXT_UNIQUE_RATIO * num_valid
 
 
 def _has_id_token(name: str) -> bool:

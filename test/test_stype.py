@@ -126,3 +126,55 @@ def test_overrides() -> None:
         "age": Stype.numerical,
         "account_number": Stype.id,
     }
+
+
+def test_text_detection() -> None:
+    table = pa.table(
+        {
+            "bio": pa.array([f"some free text {i}" for i in range(100)]),
+            "city": pa.array([f"city_{i % 5}" for i in range(100)]),
+            "trace_id": pa.array([f"trace {i}" for i in range(100)]),
+        }
+    )
+
+    assert infer_stypes(table) == {
+        "bio": Stype.text,
+        "city": Stype.categorical,
+        "trace_id": Stype.id,
+    }
+
+
+def test_text_override() -> None:
+    table = pa.table(
+        {"bio": pa.array([f"some free text {i}" for i in range(100)])}
+    )
+
+    assert infer_stypes(table) == {"bio": Stype.text}
+    assert infer_stypes(table, overrides={"bio": "categorical"}) == {
+        "bio": Stype.categorical,
+    }
+
+
+def test_text_empty_and_null_columns() -> None:
+    empty = pa.table({"empty": pa.array([], type=pa.string())})
+    assert infer_stypes(empty) == {"empty": Stype.categorical}
+
+    null = pa.table({"all_null": pa.array([None, None], type=pa.string())})
+    assert infer_stypes(null) == {"all_null": Stype.categorical}
+
+
+@onlyCUDA
+def test_text_detection_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    df = cudf.DataFrame(
+        {
+            "bio": [f"some free text {i}" for i in range(100)],
+            "city": [f"city_{i % 5}" for i in range(100)],
+        }
+    )
+
+    assert infer_stypes(df) == {
+        "bio": Stype.text,
+        "city": Stype.categorical,
+    }
