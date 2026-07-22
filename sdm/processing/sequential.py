@@ -1,37 +1,9 @@
-from collections.abc import Callable
-
 import torch
 
+from sdm.processing._callable import ProcessorLike, as_processor
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
-
-
-class _CallableProcessor(Processor):
-    """Adapt a stateless callable to the :class:`Processor` interface."""
-
-    supported_stypes = frozenset(Stype)
-    requires_fit = False
-
-    def __init__(
-        self,
-        function: Callable[[TableTensor], TableTensor],
-    ) -> None:
-        super().__init__()
-        self.function = function
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self.function(table)
-
-    def __repr__(self, *, indent: int = 0) -> str:
-        name = getattr(
-            self.function,
-            "__name__",
-            self.function.__class__.__name__,
-        )
-        if name == "<lambda>":
-            name = "lambda"
-        return f"{' ' * indent}{name}"
 
 
 class Sequential(Processor, InvertibleMixin):
@@ -50,22 +22,13 @@ class Sequential(Processor, InvertibleMixin):
 
     def __init__(
         self,
-        *args: Processor | Callable[[TableTensor], TableTensor],
+        *args: ProcessorLike,
     ) -> None:
         super().__init__()
-        steps: list[Processor] = []
-        for index, step in enumerate(args):
-            if isinstance(step, Processor):
-                steps.append(step)
-            elif callable(step):
-                steps.append(_CallableProcessor(step))
-            else:
-                raise TypeError(
-                    f"Sequential step {index} must be a Processor or "
-                    f"callable, got {step.__class__.__name__}."
-                )
-
-        self.steps = tuple(steps)
+        self.steps = tuple(
+            as_processor(step, label=f"Sequential step {index}")
+            for index, step in enumerate(args)
+        )
         for i, step in enumerate(self.steps):
             self.add_module(str(i), step)
         self.requires_fit = any(step.requires_fit for step in self.steps)
