@@ -292,12 +292,24 @@ class _KumoRFM(torch.nn.Module):
             if context is not None
             else query.related_tables.tables  # type: ignore
         ):
+            context_table = context_task_row = None
+            if context is not None:
+                context_table = context.related_tables.tables[table_name]
+                context_task_row = context.task_row_by_table[table_name]
+
+            query_table = query_task_row = None
+            if query is not None and table_name in query.related_tables.tables:
+                query_table = query.related_tables.tables[table_name]
+                query_task_row = query.task_row_by_table[table_name]
+
             xs_context[table_name], xs_query[table_name] = self._embed_table(
-                table_name=table_name,
-                context=context,
-                query=query,
+                context_table=context_table,
+                context_task_row=context_task_row,
+                query_table=query_table,
+                query_task_row=query_task_row,
                 y=y,
                 num_classes=num_classes,
+                cache_key=f"table_{table_name}",
                 cache=cache,
                 generator=generator,
             )
@@ -360,64 +372,56 @@ class _KumoRFM(torch.nn.Module):
 
     def _embed_table(
         self,
-        table_name: str,
-        context: TaskGraph | None,
-        query: TaskGraph | None,
+        context_table: TableTensor | None,
+        context_task_row: Tensor | None,
+        query_table: TableTensor | None,
+        query_task_row: Tensor | None,
         y: Tensor,
         num_classes: int | None,
+        cache_key: str,
         cache: Cache | None,
         generator: torch.Generator | None,
     ) -> tuple[Tensor, Tensor]:
         # Embed context and query rows jointly per table. Targets are injected
         # by distributing them to related tables via task-row assignment:
-        table_cache: Cache | None = None
+        _cache: Cache | None = None
         if cache is not None and cache.is_recording:
-            table_cache = Cache()
+            _cache = Cache()
         elif cache is not None:
-            table_cache = cast(Cache, cache[f"table_{table_name}"])
+            _cache = cast(Cache, cache[cache_key])
 
-        train_mask_i: Tensor | None = None
-        if context is not None:
-            task_row_i = context.task_row_by_table[table_name]
-            x_i = context.related_tables.tables[table_name].numerical
-            train_mask_i = task_row_i >= 0
-            y_i = y[task_row_i[train_mask_i]]
-            if query is not None and table_name in query.related_tables.tables:
-                x_query_i = query.related_tables.tables[table_name].numerical
-                x_i = torch.cat([x_i, x_query_i], dim=-2)
-                train_mask_i = torch.cat(
-                    [
-                        train_mask_i,
-                        train_mask_i.new_zeros(x_query_i.size(-2)),
-                    ]
-                )
+        train_mask: Tensor | None = None
+        if context_table is not None:
+            assert context_task_row is not None
+            x = context_table.numerical
+            train_mask = context_task_row >= 0
+            y = y[context_task_row[train_mask]]
+            if query_table is not None:
+                x = torch.cat([x, query_table.numerical], dim=-2)
+                test_mask = train_mask.new_zeros(query_table.size(-2))
+                train_mask = torch.cat([train_mask, test_mask])
         else:
-            assert query is not None
-            x_i = query.related_tables.tables[table_name].numerical
-            y_i = y
+            assert query_table is not None
+            x = query_table.numerical
 
-        x_i = self.row_embedding(
-            x=x_i,
-            y=y_i,
-            train_mask=train_mask_i,
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            train_mask=train_mask,
             max_keys=self.max_train_size,
             num_classes=num_classes,
-            cache=table_cache,
+            cache=_cache,
             generator=generator,
         )
 
         if cache is not None and cache.is_recording:
-            cache[f"table_{table_name}"] = cast(Cache, table_cache)
+            cache[cache_key] = cast(Cache, _cache)
 
         sections = [
-            context.related_tables.tables[table_name].size(-2)
-            if context is not None
-            else 0,
-            query.related_tables.tables[table_name].size(-2)
-            if query is not None
-            else 0,
+            context_table.size(-2) if context_table is not None else 0,
+            query_table.size(-2) if query_table is not None else 0,
         ]
-        return x_i.split(sections, dim=-2)
+        return x.split(sections, dim=-2)
 
 
 def _remap_v2_1_checkpoint(
