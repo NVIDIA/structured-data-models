@@ -41,29 +41,28 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Avoid mandatory config-first APIs. Direct Python composition should be the primary interface.
 - Add composable transformations instead of hard-coding one-off preprocessing into model wrappers.
 - Keep recipes inspectable and deterministic where possible. Any stochastic transformations should expose seed/generator control.
-- Treat preprocessing as leakage-sensitive.
-  Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
-- Keep dependencies minimal in the core package.
-  Heavy dependencies should be optional unless they become essential.
-- Aim for GPU acceleration in all core components. Prefer PyTorch and cuDF execution paths over CPU-bound pandas, NumPy, or sklearn implementations.
+- Treat preprocessing as leakage-sensitive. Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
+- Keep dependencies minimal in the core package. Heavy dependencies should be optional unless they become essential.
+- Aim for GPU acceleration in all core components.
 
 # Python/PyTorch Coding Style
 
 - Keep Python code typed at function and method boundaries.
 - Use keyword arguments in multi-line calls.
 - Avoid `else` after `return`, `raise`, `break`, or `continue`.
-- Prefer PyTorch-native, vectorized tensor operations over NumPy or Python loops.
-  Call out cases where vectorization is not practical.
-- Preserve tensor device and dtype.
-  Avoid accidental transfers through `.cpu()`, `.numpy()`, `.item()`, scalar extraction from tensors, or newly-created CPU tensors.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
 - Operate on tensor containers directly; reserve `.as_tensor()` for when the raw data tensor is required.
-- Avoid creating unnecessary views right before broadcasts.
-- When possible, reduce allocation and memory overhead while keeping tensor operations on-device; for broadcastable constants, prefer scalar literals when PyTorch broadcasting is sufficient and create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
 - Add short tensor shape comments for complex tensor operations.
-- Avoid accidental graph breaks where a `torch.compile`-friendly formulation is straightforward.
 - Use established names.
 - Document public constructor parameters.
 - Keep code direct and use the narrowest practical scope. Introduce abstractions only when they encapsulate behavior or invariants, define a public interface, or serve established reuse.
-- In `__init__.py`, order imports and `__all__` in *dependency order* (base
-  classes/mixins first, then concrete), never alphabetically.
+- In `__init__.py`, order imports and `__all__` in dependency order: base classes/mixins first, then concrete; never alphabetically.
+
+# CUDA / GPU Performance
+
+- Avoid host-device synchronization in model and processor hot paths. Do not use `.item()`, `.cpu()`, `.numpy()`, `print(cuda_tensor)`, or `torch.cuda.synchronize()` except at explicit API boundaries, tests, debugging, or profiler code.
+- Create tensors on the target device and preserve dtype/device. Prefer `x.new_*`, `torch.empty_like`, `torch.zeros_like`, or explicit `device=x.device, dtype=x.dtype` over CPU defaults followed by `.to(...)`.
+- Keep tensor execution vectorized and compiler-friendly. Prefer batched tensor operations over Python loops across rows, columns, heads, estimators, or sequence positions. Avoid graph breaks where a `torch.compile`-friendly formulation is straightforward.
+- Reduce allocation and memory overhead while keeping tensor operations on-device. For broadcastable constants, prefer scalar literals when PyTorch broadcasting is sufficient, and create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
+- In inference and prediction paths, avoid building autograd state unless the API explicitly needs gradients. Prefer `torch.inference_mode()` or `torch.no_grad()` for pure inference paths.
+- Benchmark CUDA changes with synchronization-aware timing. Use CUDA events, `torch.profiler`, or explicit synchronization around measurements; plain wall-clock timing of asynchronous CUDA work is not sufficient.
