@@ -16,7 +16,7 @@ class TaskGraph:  # noqa: D101
     graph: HomogeneousGraph
     readout_table: str
     readout_index: Tensor  # Entity-table rows ordered by task row.
-    task_rows: dict[str, Tensor]  # Per table task-row assignment.
+    task_row_by_table: dict[str, Tensor]  # Per table task-row assignment.
     num_hops: int
 
     @classmethod
@@ -101,7 +101,7 @@ class TaskGraph:  # noqa: D101
             graph=graph,
             readout_table=readout_table,
             readout_index=readout_index,
-            task_rows={
+            task_row_by_table={
                 table_name: task_row[graph.node_slice(table_name)]
                 for table_name in related_tables.tables
             },
