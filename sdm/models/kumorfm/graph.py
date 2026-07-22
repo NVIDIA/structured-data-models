@@ -5,7 +5,8 @@ import torch
 from torch import Tensor
 from typing_extensions import Self
 
-from sdm import RelationalData, Relationship, TableTensor
+from sdm import Relationship, TableTensor
+from sdm.relational.join import join_index
 
 
 @dataclass(frozen=True)
@@ -35,16 +36,19 @@ class HomogeneousGraph:  # noqa: D101
         rows: list[Tensor] = []
         cols: list[Tensor] = []
         edge_types: list[Tensor] = []
-        for i, (rel, edge_index) in enumerate(
-            zip(
-                relationships,
-                RelationalData(tables, relationships).edge_indices(),
+        for i, rel in enumerate(relationships):
+            if rel.left_table not in tables or rel.right_table not in tables:
+                continue
+            row, col = join_index(
+                left_table=tables[rel.left_table],
+                right_table=tables[rel.right_table],
+                left_keys=rel.left_columns,
+                right_keys=rel.right_columns,
+                how="inner",
             )
-        ):
-            row, col = edge_index
             row += start_node_offsets[rel.left_table]
             col += start_node_offsets[rel.right_table]
-            edge_type = edge_index.new_full((edge_index.size(1),), 2 * i)
+            edge_type = row.new_full((row.size(0),), 2 * i)
             rows.extend([row, col])
             cols.extend([col, row])
             edge_types.extend([edge_type, edge_type + 1])
@@ -72,7 +76,7 @@ class HomogeneousGraph:  # noqa: D101
             row=row,
             colptr=colptr,
             edge_type=edge_type,
-            num_edge_types=len(edge_types),
+            num_edge_types=2 * len(relationships),
             start_node_offsets=start_node_offsets,
             end_node_offsets=end_node_offsets,
         )

@@ -11,6 +11,11 @@ Do not add platform or serving abstractions unless explicitly requested.
 - Test execution via `pytest`
 - Pre-commit checks via `pre-commit run --all-files`
 
+# Testing
+
+- Tests should be sensitive to behavior changes and insensitive to structure changes. Prefer asserting public observable behavior over implementation details.
+- Do not set seeds in tests unless they must require them.
+
 # PR / GitHub Metadata
 
 - Do not mention Codex, AI, or tool attribution in PR titles, PR descriptions, commit messages, or review replies unless explicitly requested.
