@@ -16,6 +16,3 @@
   PR #371 predates #359's precision commit, so either apply the same autocast
   policy to both TabArena modes or explicitly retain and document fp32 for
   both.
-- [ ] Add opt-in end-to-end validation for the optional TabArena dependencies
-  once the example interface settles. The previous smoke tests were skipped
-  by default, so normal CI did not import or execute the integration.
