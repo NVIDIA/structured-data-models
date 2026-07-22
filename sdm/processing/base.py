@@ -1,5 +1,5 @@
 import abc
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeAlias, TypeVar
 
 import torch
 from typing_extensions import Self
@@ -8,6 +8,37 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 SupportedStypes: TypeAlias = frozenset[Stype]
+
+T = TypeVar("T")
+
+
+class SharedState(Generic[T]):
+    """Holder whose contents are shared, not copied, across ``deepcopy``.
+
+    Ensembling duplicates a recipe per member via ``copy.deepcopy``, which
+    would also duplicate any heavy processor state it reaches (e.g. a fitted
+    vocabulary or a pretrained embedding table). State stored inside a
+    ``SharedState`` survives the copy as a reference: every member points at
+    the same underlying object.
+
+    Only use it for member-invariant state. Per-member state (e.g. random
+    draws at fit time) must stay outside so each copy keeps its own.
+
+    Args:
+        value: The initial held value.
+    """
+
+    def __init__(self, value: T) -> None:
+        self.value = value
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Self:
+        return self
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.value!r})"
 
 
 class Processor(torch.nn.Module, abc.ABC):
