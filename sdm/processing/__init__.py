@@ -6,6 +6,7 @@ from sdm.processing.choice import Choice
 from sdm.processing.stype_dispatch import StypeDispatch
 from sdm.processing.task_dispatch import TaskDispatch
 from sdm.processing.recipe import Recipe
+from sdm.processing.tfidf_encoder import TfidfEncoder
 from sdm.processing.numerical import (
     Clip,
     QuantileClip,

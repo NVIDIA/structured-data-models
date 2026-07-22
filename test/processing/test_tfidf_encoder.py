@@ -3,7 +3,7 @@ import copy
 import pytest
 import torch
 from sdm import StringTensor, Stype, TableTensor
-from sdm.processing import StypeDispatch, TfidfEncoder
+from sdm.processing.tfidf_encoder import TfidfEncoder
 from sdm.testing import onlyCUDA
 
 
