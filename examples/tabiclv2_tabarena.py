@@ -95,25 +95,20 @@ class SDMTabICLv2System(ExternalSystemModel):
             )
 
         self.model = TabICLv2(device=self._device)
-        with torch.amp.autocast(
-            device_type=self._device.type,
-            dtype=torch.bfloat16,
-            enabled=self._device.type == "cuda",
-        ):
-            self.model.fit(
-                x=TableTensor.from_pandas(
-                    df=X,
-                    stypes=self._schema.stypes,
-                    device=self._device,
-                ),
-                y=TableTensor.from_pandas(
-                    df=y.rename(self._target_name).to_frame(),
-                    stypes={self._target_name: self._target_stype},
-                    device=self._device,
-                ),
-                num_estimators=self.num_estimators,
-                generator=generator,
-            )
+        self.model.fit(
+            x=TableTensor.from_pandas(
+                df=X,
+                stypes=self._schema.stypes,
+                device=self._device,
+            ),
+            y=TableTensor.from_pandas(
+                df=y.rename(self._target_name).to_frame(),
+                stypes={self._target_name: self._target_stype},
+                device=self._device,
+            ),
+            num_estimators=self.num_estimators,
+            generator=generator,
+        )
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
@@ -146,23 +141,14 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
 
     def _predict_table(self, X: pd.DataFrame) -> TableTensor:
-        if not hasattr(self, "model"):
-            raise RuntimeError(
-                "SDMTabICLv2System must be fitted before prediction"
-            )
         X = _align_features(X, schema=self._schema)
-        with torch.amp.autocast(
-            device_type=self._device.type,
-            dtype=torch.bfloat16,
-            enabled=self._device.type == "cuda",
-        ):
-            return self.model.predict(
-                TableTensor.from_pandas(
-                    df=X,
-                    stypes=self._schema.stypes,
-                    device=self._device,
-                )
+        return self.model.predict(
+            TableTensor.from_pandas(
+                df=X,
+                stypes=self._schema.stypes,
+                device=self._device,
             )
+        )
 
 
 def _fit_feature_schema(frame: pd.DataFrame) -> FeatureSchema:
