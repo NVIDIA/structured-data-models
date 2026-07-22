@@ -168,6 +168,7 @@ def test_invariant_gnn(
     assert graph.colptr.equal(
         torch.tensor([0, 2, 3, 3, 6, 7, 8, 9, 10, 11, 12], device=device)
     )
+    # TODO Test `col`
     col = torch.repeat_interleave(
         torch.arange(graph.colptr.numel() - 1, device=graph.colptr.device),
         graph.colptr.diff(),

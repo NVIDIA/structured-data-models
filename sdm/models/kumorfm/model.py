@@ -3,17 +3,16 @@ from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Relationship, Stype, TableTensor, TaskLink
+from sdm import RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
+from sdm.models.kumorfm.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
@@ -224,23 +223,6 @@ class _KumoRFM(torch.nn.Module):
         num_hops: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
-        if related_context_tables is None and related_query_tables is None:
-            raise ValueError(
-                f"'{self.__class__.__name__}' requires related tables"
-            )
-
-        for tables in (related_context_tables, related_query_tables):
-            if tables is not None and len(tables.task_links) != 1:
-                raise NotImplementedError(
-                    f"'{self.__class__.__name__}' expects exactly one task "
-                    f"link to an entity table (got {len(tables.task_links)})"
-                )
-
-        if num_hops is None:  # Infer `num_hops`:
-            num_hops = 2  # TODO Support automatic `num_hops` detection.
-            if cache is not None and cache.is_recording:
-                cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
-
         num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
             y = y_context.categorical.as_tensor().squeeze(-1)
@@ -257,97 +239,116 @@ class _KumoRFM(torch.nn.Module):
                 device=next(self.parameters()).device,
             )
 
+        context: TaskGraph | None = None
+        if x_context is not None:
+            if related_context_tables is None:
+                raise ValueError(
+                    f"'{self.__class__.__name__}' requires related tables"
+                )
+            context = TaskGraph.from_input(
+                x=x_context,
+                related_tables=related_context_tables,
+                num_hops=num_hops,
+            )
+            if cache is not None and cache.is_recording:
+                cache["relationships"] = context.related_tables.relationships
+                cache["num_hops"] = context.num_hops
+
+        query: TaskGraph | None = None
+        if x_query is not None:
+            if related_query_tables is None:
+                raise ValueError(
+                    f"'{self.__class__.__name__}' requires related tables"
+                )
+            if context is not None:
+                relationships = context.related_tables.relationships
+                num_hops = context.num_hops
+            else:
+                assert cache is not None
+                assert cache.is_replaying
+                relationships = cast(
+                    Sequence[Relationship], cache["relationships"]
+                )
+                num_hops = cast(int, cache["num_hops"])
+            query = TaskGraph.from_input(
+                x=x_query,
+                related_tables=RelatedTables(
+                    tables=related_query_tables.tables,
+                    relationships=relationships,
+                    task_links=related_query_tables.task_links,
+                ),
+                num_hops=num_hops,
+            )
+
         # TODO Support computing relative time.
         # TODO Inject random heterogeneous GNN.
-
-        graph: HomogeneousGraph | None = None
-        task_index: Tensor | None = None
-        y_graph: Tensor | None = None
-        if related_context_tables is not None:
-            assert x_context is not None
-            graph = HomogeneousGraph.from_tables(
-                tables=related_context_tables.tables,
-                relationships=related_context_tables.relationships,
-            )
-            task_index = related_context_tables.task_indices(x_context)[0]
-            y_graph = _propagate_y(
-                y=y,
-                graph=graph,
-                task_links=related_context_tables.task_links,
-                task_indices=[task_index],
-                num_hops=num_hops,
-                num_classes=num_classes,
-            )
+        # TODO Inject task features.
 
         # Reason within each Table ############################################
+
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
-        for name in cast(
-            RelatedTables,
-            related_context_tables or related_query_tables,
-        ).tables:
+        for name in (
+            context.related_tables.tables
+            if context is not None
+            else query.related_tables.tables  # type: ignore
+        ):
             table_cache: Cache | None = None
             if cache is not None and cache.is_recording:
                 table_cache = Cache()
             elif cache is not None:
                 table_cache = cast(Cache, cache[f"table_{name}"])
 
-            y_i = y  # Distribute `target` over related tables:
-            if related_context_tables is not None:
-                # TODO Split entity table into task+nearby entities.
-                assert graph is not None
-                assert y_graph is not None
-                x_i = related_context_tables.tables[name].numerical
-                start = graph.start_node_offsets[name]
-                end = graph.end_node_offsets[name]
-                y_i = y_graph[start:end]
-                if (
-                    related_query_tables is not None
-                    and name in related_query_tables.tables
-                ):
-                    x_i = torch.cat(
-                        [x_i, related_query_tables.tables[name].numerical],
-                        dim=-2,
+            train_mask_i: Tensor | None = None
+            if context is not None:
+                row_batch_i = context.row_batches[name]
+                x_i = context.related_tables.tables[name].numerical
+                train_mask_i = row_batch_i >= 0
+                y_i = y[row_batch_i][train_mask_i]
+                if query is not None and name in query.related_tables.tables:
+                    x_query_i = query.related_tables.tables[name].numerical
+                    x_i = torch.cat([x_i, x_query_i], dim=-2)
+                    train_mask_i = torch.cat(
+                        [
+                            train_mask_i,
+                            train_mask_i.new_zeros(x_query_i.size(-2)),
+                        ]
                     )
             else:
-                assert related_query_tables is not None
-                x_i = related_query_tables.tables[name].numerical
+                assert query is not None
+                x_i = query.related_tables.tables[name].numerical
+                y_i = y
 
             x_i = self.row_embedding(
                 x=x_i,
                 y=y_i,
+                train_mask=train_mask_i,
                 max_keys=self.max_train_size,
                 num_classes=num_classes,
                 cache=table_cache,
                 generator=generator,
             )
 
-            if related_context_tables is not None:
-                num_rows = related_context_tables.tables[name].size(-2)
+            if context is not None:
+                num_rows = context.related_tables.tables[name].size(-2)
                 xs_context[name] = x_i[..., :num_rows, :]
-            if (
-                related_query_tables is not None
-                and name in related_query_tables.tables
-            ):
-                num_rows = related_query_tables.tables[name].size(-2)
+            if query is not None and name in query.related_tables.tables:
+                num_rows = query.related_tables.tables[name].size(-2)
                 xs_query[name] = x_i[..., -num_rows:, :]
 
             if cache is not None and cache.is_recording:
                 cache[f"table_{name}"] = cast(Cache, table_cache)
 
-        # Inter-Message Passing Exchange ######################################
+        # Inter-Message Passing ###############################################
         edge_type_emb: Tensor | None = None
-        if related_context_tables is not None:
-            assert graph is not None
+        if context is not None:
             x_context: Tensor = torch.cat(
-                [xs_context[name] for name in related_context_tables.tables],
+                [xs_context[name] for name in context.related_tables.tables],
                 dim=-2,
             )
             del xs_context
-            if cache is not None and cache.is_recording:
-                cache["relationships"] = related_context_tables.relationships
             edge_type_emb = self.gnn.get_edge_type_emb(
-                num_edge_types=graph.num_edge_types,
+                num_edge_types=context.graph.num_edge_types,
                 dtype=x_context.dtype,
                 generator=generator,
             )
@@ -355,43 +356,30 @@ class _KumoRFM(torch.nn.Module):
                 cache["edge_type_emb"] = edge_type_emb
             x_context = self.gnn(
                 x=x_context,
-                graph=graph,
+                graph=context.graph,
                 edge_type_emb=edge_type_emb,
-                readout_table=related_context_tables.task_links[0].table,
-                num_hops=num_hops,
+                readout_table=context.related_tables.task_links[0].table,
+                num_hops=context.num_hops,
             )
-            assert task_index is not None
-            x_context = x_context[task_index[1][task_index[0].argsort()]]
+            x_context = x_context[context.readout_index]
 
-        if related_query_tables is not None:
-            assert x_query is not None
-            task_index = related_query_tables.task_indices(x_query)[0]
+        if query is not None:
             x_query: Tensor = torch.cat(
-                [xs_query[name] for name in related_query_tables.tables],
+                [xs_query[name] for name in query.related_tables.tables],
                 dim=-2,
             )
             del xs_query
-            if related_context_tables is not None:
-                relationships = related_context_tables.relationships
-            else:
-                assert cache is not None
-                assert cache.is_replaying
-                relationships = cache["relationships"]
-            graph = HomogeneousGraph.from_tables(
-                tables=related_query_tables.tables,
-                relationships=cast(Sequence[Relationship], relationships),
-            )
             if edge_type_emb is None:
                 assert cache is not None
                 edge_type_emb = cast(Tensor, cache["edge_type_emb"])
             x_query = self.gnn(
                 x=x_query,
-                graph=graph,
+                graph=query.graph,
                 edge_type_emb=edge_type_emb,
-                readout_table=related_query_tables.task_links[0].table,
-                num_hops=num_hops,
+                readout_table=query.related_tables.task_links[0].table,
+                num_hops=query.num_hops,
             )
-            x_query = x_query[task_index[1][task_index[0].argsort()]]
+            x_query = x_query[query.readout_index]
 
         # Reason across Tables ################################################
         if x_query is None and x_context is not None:
@@ -507,46 +495,3 @@ def _remap_v2_1_checkpoint(
         remapped[key] = value
 
     return remapped
-
-
-def _propagate_y(
-    y: Tensor,  # [R_train]
-    graph: HomogeneousGraph,
-    task_links: Sequence[TaskLink],
-    task_indices: Sequence[Tensor],
-    num_hops: int,
-    num_classes: int | None,
-) -> Tensor:  # [R]
-
-    if y.is_floating_point():
-        source = torch.stack([y, torch.ones_like(y)], dim=-1)
-    else:
-        source = F.one_hot(y, num_classes=num_classes or -1).float()
-
-    state = source.new_zeros((graph.colptr.numel() - 1, source.size(-1)))
-    for task_link, task_index in zip(task_links, task_indices):
-        row, col = task_index
-        col = col + graph.start_node_offsets[task_link.table]
-        state.index_add_(dim=0, index=col, source=source[row])
-
-    for _ in range(num_hops):
-        state += torch.segment_reduce(
-            state[graph.row],
-            offsets=graph.colptr,
-            reduce="sum",
-            unsafe=True,
-            initial=0,
-        )
-
-    if y.is_floating_point():
-        if (state[:, 1] == 0).any():
-            raise ValueError(
-                "'num_hops' did not propagate targets to every related row"
-            )
-        return state[:, 0] / state[:, 1]
-
-    if (state.sum(dim=-1) == 0).any():
-        raise ValueError(
-            "'num_hops' did not propagate targets to every related row"
-        )
-    return state.argmax(dim=-1)

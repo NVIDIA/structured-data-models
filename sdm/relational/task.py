@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
-from torch import Tensor
 from typing_extensions import Self
 
 from sdm import TableTensor
@@ -209,12 +208,6 @@ class RelatedTables(DeviceMixin):
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", relationships)
         object.__setattr__(self, "task_links", task_links)
-        self.__post_init__()
-
-    def __post_init__(self) -> None:
-        for table in self.tables.values():
-            if table.dim() != 2:
-                raise ValueError("Tables need to be two-dimensional")
 
     def to(self, device: torch.device | str | None) -> Self:
         r""":meta private:"""  # noqa: D415
@@ -286,59 +279,6 @@ class RelatedTables(DeviceMixin):
                 if task_link.table in tables
             ),
         )
-
-    def edge_indices(
-        self,
-        dtype: torch.dtype | None = None,
-        device: torch.device | str | None = None,
-    ) -> tuple[Tensor, ...]:
-        r"""Materialize heterogeneous graph edges for table relationships.
-
-        Args:
-            dtype: The dtype.
-            device: The device.
-
-        Returns:
-            The edge indices for each relationship in order.
-            Each edge index has shape ``[2, num_edges]`` and stores left table
-            indices in the first row and right table indices in the second row.
-        """
-        return RelationalData(
-            tables=self.tables,
-            relationships=self.relationships,
-        ).edge_indices(dtype=dtype, device=device)
-
-    def task_indices(
-        self,
-        task_table: TableTensor,
-        dtype: torch.dtype | None = None,
-        device: torch.device | str | None = None,
-    ) -> tuple[Tensor, ...]:
-        r"""Materialize graph edges for task links.
-
-        Args:
-            task_table: The task table.
-            dtype: The dtype.
-            device: The device.
-
-        Returns:
-            The edge indices for each task link in order.
-            Each edge index has shape ``[2, num_edges]`` and stores task table
-            indices in the first row and table indices in the second row.
-        """
-        data = RelationalData(
-            tables={**self.tables, "__task_table__": task_table},
-            relationships=tuple(
-                Relationship(
-                    left_table="__task_table__",
-                    left_columns=task_link.task_columns,
-                    right_table=task_link.table,
-                    right_columns=task_link.table_columns,
-                )
-                for task_link in self.task_links
-            ),
-        )
-        return data.edge_indices(dtype=dtype, device=device)
 
     def to_graphviz(
         self,
