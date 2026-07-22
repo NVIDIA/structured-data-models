@@ -6,7 +6,7 @@ sdm.models
 
    * - Model
      - Release Date
-     - Parameters
+     - Parameter Count
      - Code License
      - Weights License
    * - `TabICLv2 <https://arxiv.org/abs/2602.11139>`__
