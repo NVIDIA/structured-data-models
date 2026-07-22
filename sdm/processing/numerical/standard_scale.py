@@ -1,6 +1,6 @@
 import torch
 
-from sdm.processing._stats import _constant_feature_mask
+from sdm.processing.numerical._stats import _constant_feature_mask
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
