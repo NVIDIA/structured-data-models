@@ -358,7 +358,7 @@ class _KumoRFM(torch.nn.Module):
                 x=x_context,
                 graph=context.graph,
                 edge_type_emb=edge_type_emb,
-                readout_table=context.related_tables.task_links[0].table,
+                readout_table=context.readout_table,
                 num_hops=context.num_hops,
             )
             x_context = x_context[context.readout_index]
@@ -376,7 +376,7 @@ class _KumoRFM(torch.nn.Module):
                 x=x_query,
                 graph=query.graph,
                 edge_type_emb=edge_type_emb,
-                readout_table=query.related_tables.task_links[0].table,
+                readout_table=query.readout_table,
                 num_hops=query.num_hops,
             )
             x_query = x_query[query.readout_index]
