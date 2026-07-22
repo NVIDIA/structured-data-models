@@ -535,6 +535,26 @@ def test_to_copy() -> None:
     assert out._column_to_loc == tensor._column_to_loc
 
 
+@withCUDA
+def test_to_dtype_preserves_empty_block_device(
+    device: torch.device,
+) -> None:
+    tensor = TableTensor.from_tensor(
+        torch.ones(2, 1, dtype=torch.float16, device=device),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to(torch.float32)
+
+    assert isinstance(out, TableTensor)
+    assert out.numerical.dtype == torch.float32
+    assert out.device == device
+    assert out.categorical.device == device
+    assert out.datetime.device == device
+    assert out.text.device == device
+    assert out.id.device == device
+
+
 def test_clone_contiguous() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
