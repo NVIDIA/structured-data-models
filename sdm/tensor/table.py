@@ -324,6 +324,8 @@ class TableTensor(Tensor):
                         values = values.astype("int64")
                         tensor = torch.from_numpy(values).unsqueeze(-1)
                     elif stype == Stype.text:
+                        if pa.types.is_null(array.type):
+                            array = array.cast(pa.string())
                         if array.null_count > 0:
                             array = array.fill_null("")
                         tensor = StringTensor.from_arrow(array)

@@ -1112,7 +1112,23 @@ def test_text_with_nulls_from_pandas() -> None:
     assert tensor.text.tolist() == [["hi"], [""], ["yo"]]
 
 
-def test_from_arrow_invalid_column_names_column() -> None:
+def test_text_all_nulls() -> None:
+    tensor = TableTensor.from_pandas(
+        df=pd.DataFrame({"bio": [None, None]}),
+        stypes={"bio": "text"},
+    )
+
+    assert tensor.text.tolist() == [[""], [""]]
+
+    tensor = TableTensor.from_pandas(
+        df=pd.DataFrame({"bio": []}, dtype=object),
+        stypes={"bio": "text"},
+    )
+
+    assert tensor.text.size() == (0, 1)
+
+
+def test_from_arrow_error_names_column() -> None:
     table = pa.table({"age": [25, 31, 42]})
 
     with pytest.raises(TypeError, match="column 'age'"):
