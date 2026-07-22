@@ -302,25 +302,6 @@ def _align_features(
             "Feature schema mismatch (" + "; ".join(details) + ")"
         )
 
-    actual_stypes = {
-        name: Stype(stype)
-        for name, stype in infer_stypes(
-            frame.loc[:, list(schema.columns)]
-        ).items()
-    }
-    changed = {
-        name: (schema.stypes[name], actual_stypes[name])
-        for name in schema.columns
-        if actual_stypes[name] != schema.stypes[name]
-    }
-    if changed:
-        details = ", ".join(
-            f"{name!r}: {expected.value} -> {actual.value}"
-            for name, (expected, actual) in changed.items()
-        )
-        raise ValueError(
-            f"Feature semantic types changed since fit ({details})"
-        )
     return frame.loc[:, list(schema.columns)]
 
 
