@@ -203,9 +203,11 @@ stacked outputs, while steps after it receive already-reduced outputs.</p></li>
 <p>Each pipeline exposes <code class="docutils literal notranslate"><span class="pre">fit</span></code>/<code class="docutils literal notranslate"><span class="pre">transform</span></code>/<code class="docutils literal notranslate"><span class="pre">fit_transform</span></code> and, when its
 steps are invertible, <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code>. Call them directly, e.g.
 <code class="docutils literal notranslate"><span class="pre">recipe.features.transform(table)</span></code> or
-<code class="docutils literal notranslate"><span class="pre">recipe.target.inverse_transform(prediction)</span></code>. When <code class="docutils literal notranslate"><span class="pre">output</span></code> contains
-<a class="reference internal" href="sdm.processing.TaskDispatch.html#sdm.processing.TaskDispatch" title="sdm.processing.TaskDispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a>, fitting <code class="docutils literal notranslate"><span class="pre">target</span></code> also selects its
-task-specific output route.</p>
+<code class="docutils literal notranslate"><span class="pre">recipe.target.inverse_transform(prediction)</span></code>. Recipes do not infer each
+step’s non-finite input contract; order steps so values are imputed before
+processors that do not explicitly document non-finite support. When
+<code class="docutils literal notranslate"><span class="pre">output</span></code> contains <a class="reference internal" href="sdm.processing.TaskDispatch.html#sdm.processing.TaskDispatch" title="sdm.processing.TaskDispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a>, fitting
+<code class="docutils literal notranslate"><span class="pre">target</span></code> also selects its task-specific output route.</p>
 <p>Copy a task-aware recipe as a whole so its target remains connected to the
 output dispatchers.</p>
 <dl class="field-list simple">
@@ -248,7 +250,7 @@ in this pipeline.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=47a1465d"></script>
+      <script src="../../_static/documentation_options.js?v=df8a41e0"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
