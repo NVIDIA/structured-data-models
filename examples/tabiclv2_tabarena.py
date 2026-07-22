@@ -4,7 +4,6 @@ $ uv run --group example-tabarena python examples/tabiclv2_tabarena.py \
     --output-root outputs/tabiclv2-tabarena \
     --subset lite \
     --datasets blood-transfusion-service-center \
-    --num-estimators 1 \
     --num-cpus 1 \
     --num-gpus 0
 
@@ -15,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -33,10 +31,6 @@ from tabarena.utils.config_utils import SystemConfigGenerator
 
 
 class SDMTabICLv2System(ExternalSystemModel):
-    def __init__(self, *, num_estimators: int = 8, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.num_estimators = num_estimators
-
     def _fit_system(
         self,
         X: pd.DataFrame,
@@ -96,7 +90,7 @@ class SDMTabICLv2System(ExternalSystemModel):
                 stypes={self._target_name: self._target_stype},
                 device=self._device,
             ),
-            num_estimators=self.num_estimators,
+            num_estimators=8,
             generator=generator,
         )
         return self
@@ -229,7 +223,6 @@ def _resolve_device(*, num_gpus: int | None) -> torch.device:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
-    parser.add_argument("--num-estimators", type=int, default=8)
     parser.add_argument("--num-cpus", type=int)
     parser.add_argument("--num-gpus", type=int)
     parser.add_argument("--subset", nargs="+")
@@ -251,7 +244,7 @@ def main() -> None:
     generator = SystemConfigGenerator(
         model_cls=SDMTabICLv2System,
         name="SDMTabICLv2System",
-        manual_configs=[{"num_estimators": args.num_estimators}],
+        manual_configs=[{}],
     )
     experiments = TabArenaV0pt1ExperimentBundle(
         models=[(generator, 0)],
