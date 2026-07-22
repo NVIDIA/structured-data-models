@@ -347,18 +347,17 @@ class RelatedTables(DeviceMixin):
         num_rows = task_table.size(-2)
         for task_link, edge_index in zip(self.task_links, edge_indices):
             count = edge_index[0].bincount(minlength=num_rows)
-            num_unmatched = int((count == 0).sum())
-            if num_unmatched > 0:
+            if not count.eq(1).all():
+                num_unmatched = int((count == 0).sum())
+                if num_unmatched > 0:
+                    raise ValueError(
+                        f"Expected each task row to match exactly one row "
+                        f"in '{task_link.table}' (got {num_unmatched} task "
+                        f"rows without a match)"
+                    )
                 raise ValueError(
                     f"Expected each task row to match exactly one row in "
-                    f"'{task_link.table}' (got {num_unmatched} task rows "
-                    f"without a match)"
-                )
-            if (count > 1).any():
-                raise ValueError(
-                    f"Expected each task row to match exactly one row in "
-                    f"'{task_link.table}' (got duplicate keys in "
-                    f"'{task_link.table}')"
+                    f"'{task_link.table}' (got duplicate keys)"
                 )
 
         return edge_indices
