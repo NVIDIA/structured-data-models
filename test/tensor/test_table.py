@@ -559,6 +559,35 @@ def test_to_in_inference_mode() -> None:
     assert out._column_to_loc == tensor._column_to_loc
 
 
+def test_to_on_table_created_in_inference_mode() -> None:
+    with torch.inference_mode():
+        tensor = TableTensor(
+            columns={
+                "numerical": ["age"],
+                "categorical": ["country"],
+                "text": ["bio"],
+            },
+            numerical=torch.randn(2, 1),
+            categorical=CategoricalTensor(
+                data=torch.tensor([[0], [1]], dtype=torch.int64),
+                categories=(StringTensor.from_list(["USA", "GERMANY"]),),
+            ),
+            text=StringTensor.from_list([["hello"], ["world"]]),
+        )
+
+    out = tensor.cpu()
+    assert isinstance(out, TableTensor)
+    assert out.is_cpu
+    assert out.columns == tensor.columns
+
+    out = tensor.to(torch.float64)
+    assert isinstance(out, TableTensor)
+    assert out.numerical.dtype == torch.float64
+    assert out.categorical.dtype == torch.int64
+    assert isinstance(out.text, StringTensor)
+    assert out.text.tolist() == [["hello"], ["world"]]
+
+
 @onlyCUDA
 def test_to_cuda_in_inference_mode() -> None:
     tensor = TableTensor(
