@@ -16,7 +16,7 @@ class TaskGraph:  # noqa: D101
     graph: HomogeneousGraph
     readout_table: str
     readout_index: Tensor  # Entity-table rows ordered by task row.
-    row_batches: dict[str, Tensor]  # Per table row-to-task assignment.
+    task_rows: dict[str, Tensor]  # Per table task-row assignment.
     num_hops: int
 
     @classmethod
@@ -73,9 +73,9 @@ class TaskGraph:  # noqa: D101
                 f"'{readout_table}'"
             )
 
-        row_batch = readout_index.new_full((graph.num_nodes,), fill_value=-1)
-        row_batch[global_readout_index] = task_index
-        frontier = torch.zeros_like(row_batch, dtype=torch.bool)
+        task_row = readout_index.new_full((graph.num_nodes,), fill_value=-1)
+        task_row[global_readout_index] = task_index
+        frontier = torch.zeros_like(task_row, dtype=torch.bool)
         frontier[global_readout_index] = True
 
         # Propagate task assignment along graph edges.
@@ -84,13 +84,13 @@ class TaskGraph:  # noqa: D101
         while True:
             if num_hops is not None and propagated_hops >= num_hops:
                 break
-            mask = frontier[graph.row] & (row_batch[graph.col] < 0)
+            mask = frontier[graph.row] & (task_row[graph.col] < 0)
             row = graph.row[mask]
             if row.numel() == 0:
                 break
             col = graph.col[mask]
 
-            row_batch[col] = row_batch[row]
+            task_row[col] = task_row[row]
             frontier.fill_(False)
             frontier[col] = True
             propagated_hops += 1
@@ -101,8 +101,8 @@ class TaskGraph:  # noqa: D101
             graph=graph,
             readout_table=readout_table,
             readout_index=readout_index,
-            row_batches={
-                table_name: row_batch[graph.node_slice(table_name)]
+            task_rows={
+                table_name: task_row[graph.node_slice(table_name)]
                 for table_name in related_tables.tables
             },
             num_hops=propagated_hops if num_hops is None else num_hops,

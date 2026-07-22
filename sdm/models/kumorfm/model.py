@@ -285,7 +285,8 @@ class _KumoRFM(torch.nn.Module):
         # TODO Inject task features.
 
         # Reason within each Table ############################################
-
+        # Embed context and query rows jointly per table. Targets are injected
+        # by distributing them to related tables via task-row assignment:
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
         for name in (
@@ -301,10 +302,10 @@ class _KumoRFM(torch.nn.Module):
 
             train_mask_i: Tensor | None = None
             if context is not None:
-                row_batch_i = context.row_batches[name]
+                task_row_i = context.task_rows[name]
                 x_i = context.related_tables.tables[name].numerical
-                train_mask_i = row_batch_i >= 0
-                y_i = y[row_batch_i][train_mask_i]
+                train_mask_i = task_row_i >= 0
+                y_i = y[task_row_i][train_mask_i]
                 if query is not None and name in query.related_tables.tables:
                     x_query_i = query.related_tables.tables[name].numerical
                     x_i = torch.cat([x_i, x_query_i], dim=-2)
