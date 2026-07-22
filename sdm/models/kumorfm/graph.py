@@ -12,11 +12,25 @@ from sdm.relational.join import join_index
 @dataclass(frozen=True)
 class HomogeneousGraph:  # noqa: D101
     row: Tensor
+    col: Tensor
     colptr: Tensor
     edge_type: Tensor
     num_edge_types: int
     start_node_offsets: dict[str, int]
     end_node_offsets: dict[str, int]
+
+    @property
+    def num_nodes(self) -> int:  # noqa: D102
+        return self.colptr.numel() - 1
+
+    @property
+    def num_edges(self) -> int:  # noqa: D102
+        return self.row.numel()
+
+    def node_slice(self, name: str) -> slice:  # noqa: D102
+        start = self.start_node_offsets[name]
+        end = self.end_node_offsets[name]
+        return slice(start, end)
 
     @classmethod
     def from_tables(  # noqa: D102
@@ -56,6 +70,7 @@ class HomogeneousGraph:  # noqa: D101
         if len(rows) == 0:
             table = next(iter(tables.values()))
             row = torch.empty(0, dtype=torch.long, device=table.device)
+            col = torch.empty(0, dtype=torch.long, device=table.device)
             colptr = torch.zeros(
                 start + 1, dtype=torch.long, device=table.device
             )
@@ -74,6 +89,7 @@ class HomogeneousGraph:  # noqa: D101
 
         return cls(
             row=row,
+            col=col,
             colptr=colptr,
             edge_type=edge_type,
             num_edge_types=2 * len(relationships),
