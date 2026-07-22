@@ -14,7 +14,6 @@ The output directory must be empty.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,13 +30,6 @@ from tabarena.benchmark.task.metadata import ValidationMetadata
 from tabarena.benchmark.task.metadata.collection import TaskSubset
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import SystemConfigGenerator
-
-
-@dataclass(frozen=True)
-class FeatureSchema:
-    columns: tuple[str, ...]
-    stypes: dict[str, Stype]
-    id_columns: tuple[str, ...]
 
 
 class SDMTabICLv2System(ExternalSystemModel):
@@ -72,8 +64,7 @@ class SDMTabICLv2System(ExternalSystemModel):
                 f"Unsupported TabArena problem type '{problem_type}'"
             )
 
-        self._schema = _fit_feature_schema(X)
-        X = _align_features(X, schema=self._schema)
+        self._feature_stypes = infer_stypes(X)
         self._device = _resolve_device(num_gpus=num_gpus)
         generator = None
         if random_state is not None:
@@ -98,7 +89,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         self.model.fit(
             x=TableTensor.from_pandas(
                 df=X,
-                stypes=self._schema.stypes,
+                stypes=self._feature_stypes,
                 device=self._device,
             ),
             y=TableTensor.from_pandas(
@@ -141,67 +132,13 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
 
     def _predict_table(self, X: pd.DataFrame) -> TableTensor:
-        X = _align_features(X, schema=self._schema)
         return self.model.predict(
             TableTensor.from_pandas(
                 df=X,
-                stypes=self._schema.stypes,
+                stypes=self._feature_stypes,
                 device=self._device,
             )
         )
-
-
-def _fit_feature_schema(frame: pd.DataFrame) -> FeatureSchema:
-    stypes = {
-        name: Stype(stype) for name, stype in infer_stypes(frame).items()
-    }
-    datetime_columns = [
-        name for name, stype in stypes.items() if stype == Stype.datetime
-    ]
-    if datetime_columns:
-        columns = ", ".join(repr(column) for column in datetime_columns)
-        raise ValueError(
-            "SDM-native TabICLv2 does not yet support datetime columns: "
-            f"{columns}. Add an SDM datetime recipe before running this task."
-        )
-
-    id_columns = tuple(
-        name for name, stype in stypes.items() if stype == Stype.id
-    )
-    columns = tuple(name for name in frame.columns if name not in id_columns)
-    if not columns:
-        raise ValueError(
-            "SDM-native TabICLv2 requires at least one non-ID feature"
-        )
-
-    return FeatureSchema(
-        columns=columns,
-        stypes={name: stypes[name] for name in columns},
-        id_columns=id_columns,
-    )
-
-
-def _align_features(
-    frame: pd.DataFrame,
-    *,
-    schema: FeatureSchema,
-) -> pd.DataFrame:
-    expected = set(schema.columns)
-    allowed = expected | set(schema.id_columns)
-    actual = set(frame.columns)
-    missing = sorted(expected - actual)
-    unexpected = sorted(actual - allowed)
-    if missing or unexpected:
-        details: list[str] = []
-        if missing:
-            details.append(f"missing columns: {missing}")
-        if unexpected:
-            details.append(f"unexpected columns: {unexpected}")
-        raise ValueError(
-            "Feature schema mismatch (" + "; ".join(details) + ")"
-        )
-
-    return frame.loc[:, list(schema.columns)]
 
 
 def _class_labels_by_key(y: pd.Series) -> dict[str, object]:
