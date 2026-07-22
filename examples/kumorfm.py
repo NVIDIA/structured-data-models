@@ -9,6 +9,7 @@ task in the canonical ``rel-*`` datasets that this benchmark supports.
 import argparse
 import warnings
 from collections.abc import Sequence
+from time import perf_counter
 
 import torch
 from relbench.base import Dataset, EntityTask
@@ -158,12 +159,13 @@ def collect_predictions(
     target_column: str,
     device: torch.device,
     seed: int,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, float]:
     """Run one model interface over every test batch."""
     context = sampled_context.to(device)
     context_x = context.task_table.drop_columns(target_column)
     context_y = context.task_table[target_column]
     predictions: list[torch.Tensor] = []
+    model_call_runtimes_seconds: list[float] = []
     generator = torch.Generator(device=device).manual_seed(seed)
 
     try:
@@ -177,6 +179,12 @@ def collect_predictions(
 
         for test_batch in test_table.split(batch_size):
             query = sampler(test_batch, **sample_kwargs).to(device)
+            if device.type == "cuda":
+                start_event = torch.cuda.Event(enable_timing=True)
+                end_event = torch.cuda.Event(enable_timing=True)
+                start_event.record()
+            else:
+                start_time = perf_counter()
             if interface == "forward":
                 prediction = model(
                     x_context=context_x,
@@ -191,11 +199,23 @@ def collect_predictions(
                     x=query.task_table,
                     related_tables=query.related_tables,
                 )
+            if device.type == "cuda":
+                end_event.record()
+            else:
+                model_call_runtime_seconds = perf_counter() - start_time
             predictions.append(prediction_to_tensor(prediction, task_type))
+            if device.type == "cuda":
+                model_call_runtime_seconds = (
+                    start_event.elapsed_time(end_event) / 1_000
+                )
+            model_call_runtimes_seconds.append(model_call_runtime_seconds)
     finally:
         model.clear()
 
-    return torch.cat(predictions, dim=0)
+    return (
+        torch.cat(predictions, dim=0),
+        sum(model_call_runtimes_seconds) / len(model_call_runtimes_seconds),
+    )
 
 
 def run_benchmark(
@@ -334,7 +354,9 @@ def run_benchmark(
 
     interface_results: dict[str, object] = {}
     for interface in interfaces:
-        prediction = collect_predictions(
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
+        prediction, average_model_call_runtime_seconds = collect_predictions(
             model=KumoRFM(device=device),
             interface=interface,
             sampler=sampler,
@@ -347,12 +369,21 @@ def run_benchmark(
             device=device,
             seed=seed,
         )
+
         metrics = task.evaluate(
             prediction.numpy(),
             target_table=target_table,
         )
         interface_results[interface] = {
-            "metrics": {name: float(value) for name, value in metrics.items()}
+            "metrics": {name: float(value) for name, value in metrics.items()},
+            "average_batch_model_call_runtime_seconds": (
+                average_model_call_runtime_seconds
+            ),
+            "peak_cuda_memory_allocated_bytes": (
+                torch.cuda.max_memory_allocated(device)
+                if device.type == "cuda"
+                else None
+            ),
         }
 
     return {
@@ -379,6 +410,16 @@ def print_result(result) -> None:
                 for name, value in values["metrics"].items()
             )
             lines.append(f"  {interface}: {metrics}")
+            performance = (
+                f"    average_batch_model_call_runtime="
+                f"{values['average_batch_model_call_runtime_seconds']:.3f}s"
+            )
+            peak_memory = values["peak_cuda_memory_allocated_bytes"]
+            if peak_memory is not None:
+                performance += (
+                    f", peak_cuda_memory_allocated={peak_memory} bytes"
+                )
+            lines.append(performance)
     else:
         lines.append(f"  {result['reason']}")
     print("\n".join(lines), flush=True)  # noqa: T201

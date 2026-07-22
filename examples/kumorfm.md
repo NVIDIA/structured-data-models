@@ -44,3 +44,10 @@ binary classification, and multiclass classification with at most 10 classes.
 It reports recommendation, link-prediction, multilabel, and larger multiclass
 tasks as skipped. These are limitations of the benchmark integration, not a
 statement about SDM-wide model support.
+
+For each interface, the script reports the average batch model-call runtime
+across the complete test split. It times `forward` or `predict` for each test
+batch, excluding model setup, `fit`, sampling, data transfer, output
+conversion, and metric evaluation. Peak CUDA memory allocated by PyTorch
+covers the complete dataset/task/interface run. CUDA runtime uses CUDA events;
+CPU runtime uses a wall-clock timer.
