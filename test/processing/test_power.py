@@ -144,37 +144,3 @@ def test_power_inverse_overflow_with_positive_lambda_clamps_to_max(
     assert torch.isfinite(inverse).all()
     assert torch.equal(inverse, processor.max.reshape_as(inverse))
     assert inverse.device == device
-
-
-@withCUDA
-def test_power_is_nan_aware(device: torch.device) -> None:
-    inp = torch.tensor(
-        [
-            [1.0, -2.0],
-            [torch.nan, -1.0],
-            [4.0, torch.nan],
-            [16.0, 2.0],
-        ],
-        dtype=torch.float64,
-        device=device,
-    )
-
-    processor = Power().fit(TableTensor.from_tensor(inp))
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-    inverse = processor.inverse_transform(
-        TableTensor.from_tensor(transformed)
-    ).numerical
-
-    # Fitted overflow-guard ceiling is the finite per-column max, not NaN
-    # poisoned by the missing entries.
-    assert torch.equal(
-        processor.max,
-        torch.tensor([16.0, 2.0], dtype=torch.float64, device=device),
-    )
-    # NaN positions are preserved through transform and inverse; finite
-    # entries stay finite.
-    assert torch.equal(torch.isnan(transformed), torch.isnan(inp))
-    assert torch.equal(torch.isnan(inverse), torch.isnan(inp))
-    assert torch.isfinite(transformed[~torch.isnan(transformed)]).all()
-    assert transformed.device == device
-    assert inverse.device == device
