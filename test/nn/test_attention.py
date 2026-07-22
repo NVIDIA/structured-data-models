@@ -123,6 +123,18 @@ def test_sdpa(
     )
     torch.testing.assert_close(out, expected)
 
+    # Empty key/value sequences produce a zero attention result.
+    query = torch.randn(2, 3, num_query_heads, channels, device=device)
+    key = torch.empty(1, 0, num_key_value_heads, channels, device=device)
+    value = torch.empty(2, 0, num_key_value_heads, channels, device=device)
+    out = module(
+        query=query,
+        key=key,
+        value=value,
+    )
+    assert out.size() == query.size()
+    torch.testing.assert_close(out, torch.zeros_like(query))
+
     # Apply sequence lengths to mask keys.
     batch_size = 2
     query_len = 4
