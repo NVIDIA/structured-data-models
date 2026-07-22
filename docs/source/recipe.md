@@ -15,6 +15,11 @@ both sides of the model.
   standard deviation); a stateless one does not (for example
   {py:class}`~sdm.processing.SoftmaxTemperature`).
 
+- A small stateless transformation can be supplied directly to
+  {py:class}`~sdm.processing.Sequential` as a function or lambda. It is
+  normalized to a stateless processor and participates in the usual
+  `fit` and `transform` flow, but does not support `inverse_transform`.
+
 - A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
@@ -35,6 +40,20 @@ from sdm import TableTensor
 from sdm.processing import Recipe, StandardScale
 
 recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
+```
+
+For a small stateless transformation, pass a callable directly to
+{py:class}`~sdm.processing.Sequential`:
+
+```python
+from sdm.processing import Sequential
+
+features = Sequential(
+    StandardScale(),
+    lambda table: table.replace_blocks(
+        numerical=table.numerical.clamp_min(0),
+    ),
+)
 ```
 
 Fit the recipe pipelines on your labeled data and transform them in one call
