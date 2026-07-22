@@ -535,6 +535,26 @@ def test_to_copy() -> None:
     assert out._column_to_loc == tensor._column_to_loc
 
 
+@withCUDA
+def test_to_dtype_preserves_empty_block_device(
+    device: torch.device,
+) -> None:
+    tensor = TableTensor.from_tensor(
+        torch.ones(2, 1, dtype=torch.float16, device=device),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to(torch.float32)
+
+    assert isinstance(out, TableTensor)
+    assert out.numerical.dtype == torch.float32
+    assert out.device == device
+    assert out.categorical.device == device
+    assert out.datetime.device == device
+    assert out.text.device == device
+    assert out.id.device == device
+
+
 def test_clone_contiguous() -> None:
     tensor = TableTensor(
         columns={"numerical": ["age", "income"]},
@@ -1072,6 +1092,40 @@ def test_from_pandas() -> None:
     assert tensor.categorical.as_tensor().equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+@onlyCUDA
+def test_from_pandas_id_cuda() -> None:
+    df = pd.DataFrame(
+        {
+            "user_id": [0, 1, 2],
+            "item_id": ["a", "b", "c"],
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"user_id": "id", "item_id": "id"},
+        device="cuda",
+    )
+
+    assert tensor.size() == (3, 2)
+    assert tensor.device.type == "cuda"
+    assert tensor.id.device == tensor.device
+    assert tensor.id[:, 0].equal(torch.tensor([0, 1, 2], device=tensor.device))
+
+
+@onlyCUDA
+def test_to_device_without_index() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age"]},
+        numerical=torch.randn(3, 1),
+    )
+
+    out = tensor.to("cuda")
+    assert isinstance(out, TableTensor)
+    assert out.device.type == "cuda"
+    assert out.id.device == out.device
 
 
 def test_text() -> None:

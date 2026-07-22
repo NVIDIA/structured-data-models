@@ -46,13 +46,11 @@ class FeaturePermute(Processor, InvertibleMixin):
         if n_features <= 1:
             self.permutation = torch.arange(n_features, device=device)
         elif self.method == "shift":
-            offset = int(
-                torch.randint(
-                    n_features,
-                    (1,),
-                    generator=generator,
-                    device=device,
-                ).item()
+            offset = torch.randint(
+                n_features,
+                (1,),
+                generator=generator,
+                device=device,
             )
             self.permutation = (
                 torch.arange(n_features, device=device) + offset

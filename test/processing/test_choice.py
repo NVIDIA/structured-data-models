@@ -1,4 +1,5 @@
 import copy
+from typing import Any, cast
 
 import pytest
 import torch
@@ -28,6 +29,30 @@ def test_choice_draws_at_fit() -> None:
     choice.fit(_table())
 
     assert choice.selected in list(choice.options)
+
+
+def test_choice_accepts_callable_option() -> None:
+    table = _table()
+    choice = Choice(
+        lambda table: table.replace_blocks(numerical=table.numerical.square())
+    )
+
+    output = choice.fit_transform(table)
+
+    assert not choice.selected.requires_fit
+    assert torch.equal(output.numerical, table.numerical.square())
+    assert repr(choice) == "Choice(\n  lambda,\n)"
+
+    with pytest.raises(AttributeError, match="inverse_transform"):
+        choice.inverse_transform(output)
+
+
+def test_choice_rejects_invalid_option() -> None:
+    with pytest.raises(
+        TypeError,
+        match=r"Choice option 1.*Processor or callable.*object",
+    ):
+        Choice(Identity(), cast(Any, object()))
 
 
 def test_choice_keeps_state_dict_keys_independent_of_the_draw() -> None:

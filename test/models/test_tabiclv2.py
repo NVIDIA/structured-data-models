@@ -4,6 +4,7 @@ from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
+from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -65,6 +66,28 @@ def test_forward(
     assert model.predict(x_query).allclose(out)
     assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
     model.clear()
+
+
+@withCUDA
+@pytest.mark.parametrize("cached", [False, True])
+def test_autocast_output_is_float32(
+    device: torch.device,
+    cached: bool,
+) -> None:
+    model = TabICLv2(pretrained=False, device=device)
+    x_context = torch.randn(5, 6, device=device)
+    y_context = torch.randn(5, 1, device=device)
+    x_query = torch.randn(3, 6, device=device)
+    dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
+
+    with torch.autocast(device_type=device.type, dtype=dtype):
+        if cached:
+            model.fit(x_context, y_context, recipe=Recipe())
+            out = model.predict(x_query)
+        else:
+            out = model(x_context, y_context, x_query, recipe=Recipe())
+
+    assert out.numerical.dtype == torch.float32
 
 
 # @pytest.mark.parametrize("batch_shape", [(), (2,)])  # TODO Reenable
