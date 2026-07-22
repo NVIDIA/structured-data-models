@@ -316,6 +316,9 @@ class RelatedTables(DeviceMixin):
     ) -> tuple[Tensor, ...]:
         r"""Materialize graph edges for task links.
 
+        Each task row is required to match exactly one row in its linked
+        table.
+
         Args:
             task_table: The task table.
             dtype: The dtype.
@@ -323,8 +326,9 @@ class RelatedTables(DeviceMixin):
 
         Returns:
             The edge indices for each task link in order.
-            Each edge index has shape ``[2, num_edges]`` and stores task table
-            indices in the first row and table indices in the second row.
+            Each edge index has shape ``[2, num_task_rows]`` and stores task
+            table indices in the first row and table indices in the second
+            row.
         """
         data = RelationalData(
             tables={**self.tables, "__task_table__": task_table},
@@ -338,7 +342,26 @@ class RelatedTables(DeviceMixin):
                 for task_link in self.task_links
             ),
         )
-        return data.edge_indices(dtype=dtype, device=device)
+        edge_indices = data.edge_indices(dtype=dtype, device=device)
+
+        num_rows = task_table.size(-2)
+        for task_link, edge_index in zip(self.task_links, edge_indices):
+            count = edge_index[0].bincount(minlength=num_rows)
+            num_unmatched = int((count == 0).sum())
+            if num_unmatched > 0:
+                raise ValueError(
+                    f"Expected each task row to match exactly one row in "
+                    f"'{task_link.table}' (got {num_unmatched} task rows "
+                    f"without a match)"
+                )
+            if (count > 1).any():
+                raise ValueError(
+                    f"Expected each task row to match exactly one row in "
+                    f"'{task_link.table}' (got duplicate keys in "
+                    f"'{task_link.table}')"
+                )
+
+        return edge_indices
 
     def to_graphviz(
         self,

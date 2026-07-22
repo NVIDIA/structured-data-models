@@ -270,6 +270,47 @@ def test_forward(
     model.clear()
 
 
+def test_forward_unmatched_task_row(
+    relational_data: RelationalData,
+) -> None:
+    model = KumoRFM(pretrained=False)
+
+    related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+
+    x_context = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.tensor([0, 1, 2, 99]),)),
+    )
+    y_context = TableTensor(
+        columns={"numerical": ("target",)},
+        numerical=torch.randn(4, 1),
+    )
+    x_query = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.arange(4),)),
+    )
+
+    with pytest.raises(ValueError, match="task rows without a match"):
+        model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_tables,
+            related_query_tables=related_tables,
+            num_hops=2,
+        )
+
+
 def test_default_recipe_preserves_ids() -> None:
     table = TableTensor(
         columns={
