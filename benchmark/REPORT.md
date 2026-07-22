@@ -2,286 +2,167 @@
 
 ## Method
 
-Benchmarks ran on 14 July 2026 on an AWS Linux host with four AMD EPYC 7R13
-vCPUs, 15 GiB RAM, and an NVIDIA L4 (23,034 MiB). SDM used PyTorch
-2.12.1+cu130 with float32 tensors. The pinned reference used NumPy/sklearn
-float32 inputs from TabICLv2 commit
-`f719c886a586ed4a29236345e319ac1ea596c478`.
+Benchmarks were rerun on 22 July 2026 on AWS Linux (`Linux-6.17.0-1017-aws-x86_64`) with Python 3.10.18, PyTorch 2.13.0+cu130, CUDA 13.0, and an NVIDIA L4. `origin/main` was merged into this PR before the rerun; the main commit included in the benchmarked state is `3d65acc556890d74db57eb23cdc6fcb228d0626f`, and the local merged worktree commit used for the rerun is `cc38e6558379da813d7edd1f56f002bb63337b10`.
 
-The headline combined-stress workload has 50,000 rows and 100 features, split
-into 40,000 context and 10,000 query rows. It contains 90 numerical and 10
-categorical columns and exercises all requested paths:
+The headline workload has 50,000 rows and 100 features, split into 40,000 context rows and 10,000 query rows. It contains 90 numerical and 10 categorical columns and exercises the combined-stress path:
 
 - a constant numerical column;
-- 1% missing numerical values and missing categorical codes every 97 rows;
+- missing numerical values and missing categorical codes;
 - 4,096 observed categorical values plus one query-only unseen value;
 - a `1e12` query outlier for fixed `Clip(-100, 100)`;
 - a value of `20` for sigma-based soft clipping;
 - explicit Power and Quantile Recipe variants.
 
-The reference receives the equivalent pandas DataFrame, so its
-`TransformToNumerical` path fits an `OrdinalEncoder` and handles unseen
-categories as `-1`. Each measurement uses one warmup and five repetitions.
-Dataset construction, fitted-state preparation, assertions, and output
-comparisons occur outside timed regions. GPU timings synchronize the device
-before and after the operation. GPU peak memory is the largest incremental
-CUDA allocation above the prepared-operation baseline. CPU peak memory remains
-null to avoid perturbing short operations.
+Each recipe measurement uses one warmup and five measured repetitions. The speed-of-light run uses five warmups and 20 measured repetitions. Dataset creation, fitted-state preparation, correctness checks, and output comparisons are outside timed regions. CUDA measurements synchronize before and after timed regions and record both host wall-clock time and CUDA-event time. Peak memory is incremental CUDA allocation above the prepared-operation baseline. CPU peak memory remains null to avoid perturbing short operations.
 
-All 210 recorded large-stress results (194 SDM and 16 reference) have
-`correctness_status="pass"`.
+All 194 rerun SDM large-stress results have `correctness_status="pass"`. The pinned TabICLv2 reference artifacts remain historical and were not rerun for this main-state refresh.
 
-## Power Recipe headline
+## Main-state recipe headline
 
-Times are median / p95 milliseconds. Cells contain classification / regression.
-"Speedup" is SDM CPU median divided by SDM GPU median. Stage distributions are
-measured independently and are not additive.
+Times are median / p95 milliseconds. Speedup is SDM CPU median divided by SDM GPU median. Stage measurements are independent and are not additive.
 
-| Stage                              | Pinned TabICLv2 CPU |             SDM CPU |             SDM GPU | CPU/GPU speedup |
-| ---------------------------------- | ------------------: | ------------------: | ------------------: | --------------: |
-| Feature + target preprocessing     | 4310.751 / 4388.693 | 5500.250 / 5513.649 | 2911.733 / 2867.174 |   1.89× / 1.92× |
-| Map model output to original space |      0.008 / 31.059 |      0.017 / 45.349 |       0.029 / 2.071 |  0.61× / 21.90× |
-| Output transform                   |      0.059 / 0.0002 |       0.445 / 0.026 |       0.103 / 0.020 |   4.33× / 1.32× |
-| Total Recipe overhead              | 4300.828 / 4368.834 | 5372.213 / 5549.592 | 2796.823 / 2732.915 |   1.92× / 2.03× |
+| Recipe   | Task           | Stage                              |             SDM CPU |         SDM GPU | CPU/GPU speedup |
+| -------- | -------------- | ---------------------------------- | ------------------: | --------------: | --------------: |
+| Power    | Classification | Feature + target preprocessing     | 2315.757 / 2328.383 | 79.754 / 82.238 |          29.04× |
+| Power    | Classification | Map model output to original space |       0.070 / 0.115 |   0.070 / 0.083 |           0.99× |
+| Power    | Classification | Output transform                   |       0.480 / 0.503 |   0.232 / 0.259 |           2.07× |
+| Power    | Classification | Total Recipe overhead              | 2169.644 / 2174.713 | 78.950 / 79.494 |          27.48× |
+| Power    | Regression     | Feature + target preprocessing     | 2285.435 / 2290.452 | 73.069 / 73.829 |          31.28× |
+| Power    | Regression     | Map model output to original space |     32.674 / 39.385 |   2.169 / 2.266 |          15.07× |
+| Power    | Regression     | Output transform                   |     17.784 / 19.941 |   0.496 / 0.594 |          35.85× |
+| Power    | Regression     | Total Recipe overhead              | 2260.380 / 2289.452 | 78.044 / 80.600 |          28.96× |
+| Quantile | Classification | Feature + target preprocessing     | 1129.658 / 1177.476 | 48.767 / 53.022 |          23.16× |
+| Quantile | Classification | Map model output to original space |       0.110 / 0.124 |   0.074 / 0.080 |           1.49× |
+| Quantile | Classification | Output transform                   |       0.447 / 0.476 |   0.226 / 0.248 |           1.98× |
+| Quantile | Classification | Total Recipe overhead              |   716.368 / 726.307 | 53.656 / 57.099 |          13.35× |
+| Quantile | Regression     | Feature + target preprocessing     | 1164.758 / 1254.385 | 46.900 / 48.984 |          24.84× |
+| Quantile | Regression     | Map model output to original space |     32.945 / 33.648 |  2.256 / 90.165 |          14.60× |
+| Quantile | Regression     | Output transform                   |     17.898 / 18.658 |   0.493 / 0.504 |          36.31× |
+| Quantile | Regression     | Total Recipe overhead              |   766.604 / 770.707 | 46.648 / 50.113 |          16.43× |
 
-The largest observed incremental GPU peak was 180,534,272 bytes (172.2 MiB)
-for the regression Quantile total. Power preprocessing peaked at 97.4 MiB;
-the Power regression total peaked at 171.8 MiB because it also materializes
-the 10,000 × 999 output head.
+The main-state result changes the conclusion from the earlier report: Power preprocessing is no longer a multi-second GPU bottleneck. The full Power recipe now lands around 73-80 ms on this L4, and the full Quantile recipe lands around 47-54 ms. The remaining absolute bottlenecks are `Power.fit`, `CategoricalAlign`, and a few search/gather-heavy transform paths, not CPU fallback or transfers inside the timed Processor operations.
 
-Classification output mapping is too small for CUDA to amortize dispatch and
-synchronization. Regression mapping is large enough to improve from 45.349 ms
-on CPU to 2.071 ms on GPU.
-
-## Quantile Recipe comparison
-
-Quantile exposes a materially more GPU-friendly path than Power:
-
-| Task           | Stage         | Pinned TabICLv2 CPU |  SDM CPU | SDM GPU | CPU/GPU speedup |
-| -------------- | ------------- | ------------------: | -------: | ------: | --------------: |
-| Classification | Preprocessing |            1830.848 | 1324.511 | 252.847 |           5.24× |
-| Classification | Total Recipe  |            1789.067 | 1304.179 | 238.477 |           5.47× |
-| Regression     | Preprocessing |            1781.132 | 1386.787 | 246.220 |           5.63× |
-| Regression     | Total Recipe  |            1837.495 | 1478.236 | 239.726 |           6.17× |
+The largest observed incremental GPU allocation in the main-state large-stress run was 193,472,000 bytes (184.5 MiB) for `Power.inverse_transform` on the classification processor microbenchmark. Full-recipe peaks were lower: 143,646,720 bytes (137.0 MiB) for Quantile classification preprocessing and 141,116,928 bytes (134.6 MiB) for Power regression total overhead.
 
 ## Individual Processor results
 
-Complete individual Processor operation matrix on the combined-stress workload. Current timings are the original large-stress GPU medians/p95s. Non-target feature Processors show classification and regression because both tasks exercise the same operation. The speed-of-light column is the fastest passing CUDA candidate from `processor_gpu_speed_of_light.json`, measured once on the classification feature workload unless the row is target-specific.
+Complete individual Processor operation matrix on the combined-stress workload. Current timings are the rerun large-stress GPU medians/p95s. The speed-of-light column is the fastest passing CUDA candidate from `processor_gpu_speed_of_light.json`; when the current implementation is fastest or the only passing candidate, it is listed as `current`.
 
-| Processor / operation                |                                 Current GPU large stress |   Speed of light | Candidate                                    |
-| ------------------------------------ | -------------------------------------------------------: | ---------------: | -------------------------------------------- |
-| `StandardScale.fit`                  |             cls: 0.138 / 0.172 ms; reg: 0.135 / 0.167 ms | 0.129 / 0.150 ms | `direct_reduce_state`                        |
-| `StandardScale.fit_transform`        |             cls: 0.240 / 0.518 ms; reg: 0.245 / 0.274 ms | 0.173 / 0.224 ms | `direct_reduce_affine`                       |
-| `StandardScale.transform`            |             cls: 0.174 / 0.182 ms; reg: 0.178 / 0.185 ms | 0.180 / 0.193 ms | `direct_affine`                              |
-| `StandardScale.inverse_transform`    |             cls: 0.178 / 0.182 ms; reg: 0.184 / 0.190 ms | 0.176 / 0.212 ms | `current`                                    |
-| `Clip.transform`                     |             cls: 0.165 / 0.180 ms; reg: 0.163 / 0.176 ms | 0.064 / 0.089 ms | `direct_clamp`                               |
-| `Power.fit`                          | cls: 2531.540 / 2588.057 ms; reg: 2490.340 / 2584.606 ms | 2.941 / 3.114 ms | `batched_newton_compiled`                    |
-| `Power.fit_transform`                | cls: 2549.359 / 2558.115 ms; reg: 2537.143 / 2599.415 ms | 3.078 / 3.125 ms | `batched_newton_compiled`                    |
-| `Power.transform`                    |         cls: 41.254 / 51.740 ms; reg: 36.302 / 40.340 ms | 0.380 / 0.394 ms | `vectorized_compiled`                        |
-| `Power.inverse_transform`            |         cls: 43.433 / 45.743 ms; reg: 40.853 / 41.982 ms | 0.326 / 0.356 ms | `vectorized_compiled`                        |
-| `Quantile.fit`                       |             cls: 0.590 / 0.680 ms; reg: 0.632 / 0.684 ms | 0.451 / 0.484 ms | `direct_nanquantile_preindexed`              |
-| `Quantile.fit_transform`             |       cls: 100.505 / 136.100 ms; reg: 93.801 / 98.213 ms | 5.619 / 5.664 ms | `direct_nanquantile_searchsorted_preindexed` |
-| `Quantile.transform`                 |         cls: 90.761 / 99.187 ms; reg: 93.460 / 98.471 ms | 0.884 / 0.915 ms | `batched_searchsorted_compiled`              |
-| `Quantile.inverse_transform`         |         cls: 60.811 / 63.698 ms; reg: 73.496 / 83.658 ms | 4.572 / 4.938 ms | `batched_searchsorted_row_major`             |
-| `SigmaClip.fit`                      |             cls: 1.707 / 1.731 ms; reg: 1.733 / 1.769 ms | 1.648 / 1.705 ms | `direct_two_pass_bounds`                     |
-| `SigmaClip.fit_transform`            |             cls: 2.212 / 2.241 ms; reg: 2.191 / 2.217 ms | 2.196 / 2.299 ms | `current`                                    |
-| `SigmaClip.transform`                |             cls: 0.752 / 0.773 ms; reg: 0.743 / 0.755 ms | 0.720 / 0.740 ms | `direct_soft_clip`                           |
-| `FeaturePermute.fit`                 |             cls: 0.100 / 0.104 ms; reg: 0.099 / 0.103 ms | 0.113 / 0.146 ms | `direct_shift_permutation`                   |
-| `FeaturePermute.fit_transform`       |             cls: 0.290 / 0.335 ms; reg: 0.288 / 0.385 ms | 0.078 / 0.121 ms | `direct_index_select`                        |
-| `FeaturePermute.transform`           |             cls: 0.241 / 0.488 ms; reg: 0.242 / 0.259 ms | 0.102 / 0.134 ms | `direct_index_select`                        |
-| `FeaturePermute.inverse_transform`   |             cls: 0.285 / 0.307 ms; reg: 0.261 / 0.294 ms | 0.072 / 0.095 ms | `direct_index_select`                        |
-| `SoftmaxTemperature.transform`       |             cls: 0.094 / 0.123 ms; reg: 0.089 / 0.101 ms | 0.074 / 0.110 ms | `direct_softmax`                             |
-| `CategoricalAlign.fit`               |             cls: 5.455 / 5.576 ms; reg: 5.458 / 5.528 ms | 0.174 / 0.205 ms | `dense_observed_mask`                        |
-| `CategoricalAlign.fit_transform`     |         cls: 13.790 / 13.918 ms; reg: 13.682 / 13.942 ms | 0.382 / 0.429 ms | `dense_observed_lookup`                      |
-| `CategoricalAlign.transform`         |             cls: 8.334 / 8.523 ms; reg: 8.398 / 8.555 ms | 0.204 / 0.267 ms | `direct_lookup_gather`                       |
-| `ClassificationTarget.fit`           |                                    cls: 0.176 / 0.216 ms | 0.098 / 0.128 ms | `direct_shift_permutation`                   |
-| `ClassificationTarget.fit_transform` |                                    cls: 0.933 / 0.989 ms | 0.168 / 0.208 ms | `direct_permutation_gather`                  |
-| `ClassificationTarget.transform`     |                                    cls: 0.799 / 0.843 ms | 0.159 / 0.196 ms | `direct_permutation_gather`                  |
-| `RegressionTarget.fit`               |                                    reg: 0.206 / 0.228 ms | 0.141 / 0.163 ms | `direct_reduce_state`                        |
-| `RegressionTarget.fit_transform`     |                                    reg: 0.280 / 0.310 ms | 0.216 / 0.332 ms | `direct_reduce_affine`                       |
-| `RegressionTarget.transform`         |                                    reg: 0.091 / 0.093 ms | 0.087 / 0.130 ms | `direct_affine`                              |
-| `RegressionTarget.inverse_transform` |                                    reg: 0.097 / 0.131 ms | 0.090 / 0.107 ms | `direct_affine`                              |
+| Processor / operation                |                         Current GPU large stress |   Speed of light | Candidate                       |
+| ------------------------------------ | -----------------------------------------------: | ---------------: | ------------------------------- |
+| `StandardScale.fit`                  |     cls: 0.139 / 0.143 ms; reg: 0.136 / 0.156 ms | 0.134 / 0.158 ms | `direct_reduce_state`           |
+| `StandardScale.fit_transform`        |     cls: 0.248 / 0.534 ms; reg: 0.276 / 0.518 ms | 0.165 / 0.193 ms | `direct_reduce_affine`          |
+| `StandardScale.transform`            |     cls: 0.160 / 0.173 ms; reg: 0.158 / 0.184 ms | 0.189 / 0.196 ms | `direct_affine`                 |
+| `StandardScale.inverse_transform`    |     cls: 0.152 / 0.156 ms; reg: 0.147 / 0.438 ms | 0.183 / 0.192 ms | `direct_affine`                 |
+| `Clip.transform`                     |     cls: 0.112 / 0.134 ms; reg: 0.104 / 0.138 ms | 0.070 / 0.115 ms | `direct_clamp`                  |
+| `Power.fit`                          | cls: 32.207 / 32.461 ms; reg: 32.037 / 32.174 ms | 3.381 / 3.416 ms | `batched_newton_compiled`       |
+| `Power.fit_transform`                | cls: 33.101 / 33.253 ms; reg: 32.833 / 32.970 ms | 3.411 / 3.497 ms | `batched_newton_compiled`       |
+| `Power.transform`                    |     cls: 1.363 / 1.369 ms; reg: 1.369 / 1.374 ms | 0.376 / 0.394 ms | `vectorized_compiled`           |
+| `Power.inverse_transform`            |     cls: 3.146 / 3.159 ms; reg: 3.137 / 3.144 ms | 0.278 / 0.308 ms | `vectorized_compiled`           |
+| `Quantile.fit`                       |     cls: 0.602 / 0.657 ms; reg: 0.565 / 0.607 ms | 0.602 / 0.658 ms | `current`                       |
+| `Quantile.fit_transform`             |     cls: 3.651 / 3.676 ms; reg: 3.736 / 3.779 ms | 3.709 / 4.560 ms | `current`                       |
+| `Quantile.transform`                 |     cls: 4.060 / 4.198 ms; reg: 3.870 / 4.132 ms | 0.831 / 0.852 ms | `batched_searchsorted_compiled` |
+| `Quantile.inverse_transform`         |     cls: 2.320 / 2.338 ms; reg: 2.376 / 2.493 ms | 0.221 / 0.227 ms | `batched_searchsorted_compiled` |
+| `SigmaClip.fit`                      |     cls: 0.730 / 0.737 ms; reg: 0.717 / 0.722 ms | 0.726 / 0.738 ms | `direct_two_pass_bounds`        |
+| `SigmaClip.fit_transform`            |     cls: 1.163 / 1.168 ms; reg: 1.106 / 1.112 ms | 1.254 / 1.281 ms | `direct_two_pass_soft_clip`     |
+| `SigmaClip.transform`                |     cls: 0.698 / 0.706 ms; reg: 0.697 / 0.730 ms | 0.709 / 0.723 ms | `direct_soft_clip`              |
+| `FeaturePermute.fit`                 |     cls: 0.109 / 0.131 ms; reg: 0.110 / 0.111 ms | 0.092 / 0.115 ms | `direct_shift_permutation`      |
+| `FeaturePermute.fit_transform`       |     cls: 0.343 / 0.350 ms; reg: 0.323 / 0.338 ms | 0.074 / 0.101 ms | `direct_index_select`           |
+| `FeaturePermute.transform`           |     cls: 0.239 / 0.271 ms; reg: 0.228 / 0.251 ms | 0.079 / 0.099 ms | `direct_index_select`           |
+| `FeaturePermute.inverse_transform`   |     cls: 0.295 / 0.323 ms; reg: 0.291 / 0.595 ms | 0.075 / 0.113 ms | `direct_index_select`           |
+| `SoftmaxTemperature.transform`       |     cls: 0.126 / 0.138 ms; reg: 0.091 / 0.100 ms | 0.074 / 0.098 ms | `direct_softmax`                |
+| `CategoricalAlign.fit`               |     cls: 5.463 / 5.587 ms; reg: 6.230 / 6.773 ms | 0.213 / 0.248 ms | `dense_observed_mask`           |
+| `CategoricalAlign.fit_transform`     | cls: 12.756 / 14.315 ms; reg: 14.339 / 15.316 ms | 0.362 / 0.394 ms | `dense_observed_lookup`         |
+| `CategoricalAlign.transform`         |     cls: 7.113 / 8.501 ms; reg: 7.095 / 7.565 ms | 0.194 / 0.226 ms | `direct_lookup_gather`          |
+| `ClassificationTarget.fit`           |                            cls: 0.176 / 0.202 ms | 0.089 / 0.113 ms | `direct_shift_permutation`      |
+| `ClassificationTarget.fit_transform` |                            cls: 0.967 / 1.007 ms | 0.148 / 0.177 ms | `direct_permutation_gather`     |
+| `ClassificationTarget.transform`     |                            cls: 0.791 / 0.813 ms | 0.159 / 0.191 ms | `direct_permutation_gather`     |
+| `RegressionTarget.fit`               |                            reg: 0.211 / 0.226 ms | 0.117 / 0.147 ms | `direct_reduce_state`           |
+| `RegressionTarget.fit_transform`     |                            reg: 0.284 / 0.298 ms | 0.143 / 0.183 ms | `direct_reduce_affine`          |
+| `RegressionTarget.transform`         |                            reg: 0.091 / 0.096 ms | 0.076 / 0.090 ms | `direct_affine`                 |
+| `RegressionTarget.inverse_transform` |                            reg: 0.090 / 0.094 ms | 0.076 / 0.108 ms | `direct_affine`                 |
 
-The operations with meaningful absolute latency gaps remain the nonlinear numerical paths (`Power` and `Quantile`) plus integer categorical remapping. Simple affine, clamp, sigma-clip, softmax, and target-scale rows are already at sub-millisecond to low-single-millisecond absolute latency.
+Small differences where the large-stress current row is faster than the speed-of-light row are measurement noise across separate runs. The decision signal is the absolute latency and whether a candidate materially changes the implementation.
 
-## Bottleneck and interpretation
+## Speed-of-light interpretation
 
-`Power.fit` dominates the Power Recipe on both devices. Its feature-wise
-Yeo-Johnson lambda search includes Python control flow and scalar reductions,
-which limit GPU utilization and introduce synchronization. Tensorized
-Quantile, scale, sigma clip, fixed Clip, permutation, output transform, and
-large regression inverse mapping all benefit substantially from CUDA.
+The practical lower bound is now much closer to current main for most processors. The old multi-second Power gap has already been closed on `main` by preprocessing improvements. Remaining gaps fall into three categories:
 
-Consequently, moving the complete Recipe to GPU yields about 2× for Power but
-5–6× for Quantile. The smallest localized performance opportunity is to
-vectorize or batch Power lambda fitting; Clip is not a meaningful bottleneck.
+- `Power.fit` can still go from about 32 ms to about 3.4 ms with the compiled analytic Newton prototype, but that changes the fitting algorithm and needs model-quality validation beyond parity checks.
+- `Power.transform`, `Power.inverse_transform`, `Quantile.transform`, and `Quantile.inverse_transform` can reach sub-millisecond compiled lower bounds, but eager current main is already low-single-millisecond.
+- `CategoricalAlign` still has the largest maintainable absolute cleanup opportunity for integer categorical workloads: dense observed masks and lookup gathers reduce fit/transform from 5-14 ms to 0.2-0.4 ms in the prototype.
 
-## GPU speed-of-light follow-up
+For the remaining processors, the absolute runtimes are already sub-millisecond or around 1 ms. Some direct prototypes are faster, but the end-to-end recipe impact is too small to justify risky rewrites.
 
-### Scope and method
+## CUDA timing, kernel time, host overhead, and throughput
 
-The follow-up ran on 17 July 2026 on the same NVIDIA L4 (23,034 MiB), with PyTorch 2.12.1+cu130, CUDA 13.0, and float32 inputs. It now covers the full individual Processor operation matrix from the large-stress benchmark: 31 fit, fit_transform, transform, and inverse_transform rows across numerical, categorical, target, permutation, and output Processors.
+The table below uses median timings from `processor_gpu_speed_of_light.json`. Wall time includes host orchestration plus synchronized CUDA execution. CUDA time is event-measured device time for the already-prepared operation. Throughput is recorded for every row in the JSON/CSV artifacts; selected current rows are shown here.
 
-Each result has five warmups and 20 measured repetitions. Host wall time and CUDA-event time are recorded around the already-prepared operation, with a device synchronization before and after each sample. Dataset creation, processor preparation, compilation, and correctness checks are outside the timed region. Incremental peak allocation is reset after preparation. Pinned, preallocated H2D and D2H copies are measured separately for the Power and Quantile fit/fit_transform/transform/inverse_transform shapes.
+| Operation                    | Current wall | Current CUDA | Host overhead | Current throughput | Speed of light wall / CUDA | Candidate                       |
+| ---------------------------- | -----------: | -----------: | ------------: | -----------------: | -------------------------: | ------------------------------- |
+| `Power.fit`                  |    32.272 ms |    32.244 ms |      0.031 ms |    1.12e8 values/s |           3.381 / 3.352 ms | `batched_newton_compiled`       |
+| `Power.fit_transform`        |    33.568 ms |    33.525 ms |      0.040 ms |    1.07e8 values/s |           3.411 / 3.380 ms | `batched_newton_compiled`       |
+| `Power.transform`            |     1.386 ms |     1.360 ms |      0.025 ms |    3.25e9 values/s |           0.376 / 0.352 ms | `vectorized_compiled`           |
+| `Power.inverse_transform`    |     3.217 ms |     3.188 ms |      0.029 ms |    1.40e9 values/s |           0.278 / 0.253 ms | `vectorized_compiled`           |
+| `Quantile.fit_transform`     |     3.709 ms |     3.671 ms |      0.037 ms |    9.71e8 values/s |           3.709 / 3.671 ms | `current`                       |
+| `Quantile.transform`         |     3.929 ms |     3.893 ms |      0.038 ms |    1.15e9 values/s |           0.831 / 0.806 ms | `batched_searchsorted_compiled` |
+| `Quantile.inverse_transform` |     2.566 ms |     2.515 ms |      0.044 ms |    1.75e9 values/s |           0.221 / 0.199 ms | `batched_searchsorted_compiled` |
+| `CategoricalAlign.transform` |     7.036 ms |     6.991 ms |      0.039 ms |    7.11e7 values/s |           0.194 / 0.157 ms | `direct_lookup_gather`          |
 
-Power candidates must match fitted lambdas within `atol=1e-3` and standardized outputs within `rtol=1e-3, atol=5e-3`. Quantile transform/inverse candidates use `rtol=1e-6, atol=2e-5`, must preserve the exact NaN mask, and must retain the current repeated-value endpoint/midpoint behavior. Integer candidates must match exactly. All selected speed-of-light candidates pass. Four exploratory rows are intentionally rejected: float16, bfloat16, and float64 Quantile transform, plus compiled Quantile inverse.
+There is no CPU numerical fallback and no host/device transfer inside the timed Processor operations. Host overhead is now small for the main nonlinear rows; remaining gaps are mostly kernel fusion, batched search/gather layout, and algorithm choice rather than repeated explicit synchronization.
 
-### Minimum work
+## Transfer and synchronization measurements
 
-`Power.fit` and `Power.fit_transform` must establish safe per-feature lambda bounds, maximize the Yeo-Johnson log likelihood, apply the fitted transform, and compute the fitted mean and scale. The current golden-section algorithm requires about 44 likelihood refinements for these bounds. The maintainable baseline batches that same search over features. The lower-bound prototype instead evaluates analytic first and second derivatives and converges in four fused Newton steps.
-
-`Power.transform` and `Power.inverse_transform` require sign-dependent Yeo-Johnson math plus affine scale/unscale. No feature loop is intrinsically required.
-
-`Quantile.fit_transform` combines `nanquantile` over the selected sample with the same transform work as `Quantile.transform`. `Quantile.transform` requires two monotonic searches per finite value to preserve duplicate midpoints, interpolation, endpoint handling, inverse-normal mapping, and NaN restoration. `Quantile.inverse_transform` requires the inverse-normal CDF to map normal scores back to `[0, 1]`, then one monotonic search/interpolation per value.
-
-For the remaining Processors, the minimum work is small: fixed clamp for `Clip`, reductions plus affine math for `StandardScale`, nanmean/std bounds plus soft clipping for `SigmaClip`, dense observed-category detection plus lookup-gather remapping for integer `CategoricalAlign`, index-select for `FeaturePermute`, softmax over logits, permutation gather for classification targets, and one-column affine math for regression targets.
-
-### Headline result
-
-Times are median / p95. “Maintainable” is the smallest eager PyTorch prototype recommended for production. “Lower bound” is the fastest passing prototype, using `torch.compile` after warmup where compilation materially changes the limit. “Gap closed” measures how much of the absolute distance from current to lower-bound latency the maintainable prototype removes.
-
-| Processor operation          |                Current | Practical lower bound | Maintainable prototype | Current / prototype | Prototype / bound | Gap closed |
-| ---------------------------- | ---------------------: | --------------------: | ---------------------: | ------------------: | ----------------: | ---------: |
-| `Power.fit`                  | 2622.770 / 2697.540 ms |      2.941 / 3.114 ms |     98.796 / 99.600 ms |              26.55× |            33.60× |     96.34% |
-| `Power.fit_transform`        | 2690.451 / 2941.937 ms |      3.078 / 3.125 ms |     99.113 / 99.825 ms |              27.15× |            32.20× |     96.43% |
-| `Power.transform`            |     43.403 / 51.359 ms |      0.380 / 0.394 ms |       1.334 / 1.347 ms |              32.53× |             3.51× |     97.78% |
-| `Power.inverse_transform`    |     45.090 / 55.336 ms |      0.326 / 0.356 ms |       3.938 / 3.957 ms |              11.45× |            12.09× |     91.93% |
-| `Quantile.fit_transform`     |   105.418 / 115.008 ms |      5.619 / 5.664 ms |       5.619 / 5.664 ms |              18.76× |             1.00× |    100.00% |
-| `Quantile.transform`         |   104.172 / 113.462 ms |      0.884 / 0.915 ms |       4.280 / 4.450 ms |              24.34× |             4.84× |     96.71% |
-| `Quantile.inverse_transform` |    71.974 / 110.100 ms |      4.572 / 4.938 ms |       4.572 / 4.938 ms |              15.74× |             1.00× |    100.00% |
-
-The largest practical gaps are still `Power.fit`, `Power.fit_transform`, `Power.transform`, `Power.inverse_transform`, and `Quantile.transform`. `Quantile.fit_transform` and `Quantile.inverse_transform` also have large absolute gaps, but their maintainable eager lower bounds are the fastest passing candidates measured here.
-
-Peak incremental CUDA allocation for the headline rows is:
-
-| Processor operation          |  Current | Maintainable | Lower bound |
-| ---------------------------- | -------: | -----------: | ----------: |
-| `Power.fit`                  | 72.9 MiB |    100.4 MiB |    55.3 MiB |
-| `Power.fit_transform`        | 72.9 MiB |    100.9 MiB |    55.8 MiB |
-| `Power.transform`            | 51.5 MiB |    103.0 MiB |    38.7 MiB |
-| `Power.inverse_transform`    | 56.7 MiB |    176.9 MiB |    18.0 MiB |
-| `Quantile.fit_transform`     | 59.9 MiB |    183.5 MiB |   183.5 MiB |
-| `Quantile.transform`         | 20.0 MiB |     87.1 MiB |    40.4 MiB |
-| `Quantile.inverse_transform` | 20.5 MiB |    211.4 MiB |   211.4 MiB |
-
-### Complete individual Processor operation lower bounds
-
-| Processor / operation                |   Current in speed run |   Speed of light | Candidate                                    | Current / bound |
-| ------------------------------------ | ---------------------: | ---------------: | -------------------------------------------- | --------------: |
-| `StandardScale.fit`                  |       0.245 / 0.300 ms | 0.129 / 0.150 ms | `direct_reduce_state`                        |           1.89× |
-| `StandardScale.fit_transform`        |       0.442 / 0.489 ms | 0.173 / 0.224 ms | `direct_reduce_affine`                       |           2.55× |
-| `StandardScale.transform`            |       0.185 / 0.227 ms | 0.180 / 0.193 ms | `direct_affine`                              |           1.03× |
-| `StandardScale.inverse_transform`    |       0.176 / 0.212 ms | 0.176 / 0.212 ms | `current`                                    |           1.00× |
-| `Clip.transform`                     |       0.149 / 0.203 ms | 0.064 / 0.089 ms | `direct_clamp`                               |           2.35× |
-| `Power.fit`                          | 2622.770 / 2697.540 ms | 2.941 / 3.114 ms | `batched_newton_compiled`                    |         891.87× |
-| `Power.fit_transform`                | 2690.451 / 2941.937 ms | 3.078 / 3.125 ms | `batched_newton_compiled`                    |         874.14× |
-| `Power.transform`                    |     43.403 / 51.359 ms | 0.380 / 0.394 ms | `vectorized_compiled`                        |         114.12× |
-| `Power.inverse_transform`            |     45.090 / 55.336 ms | 0.326 / 0.356 ms | `vectorized_compiled`                        |         138.41× |
-| `Quantile.fit`                       |       0.647 / 0.712 ms | 0.451 / 0.484 ms | `direct_nanquantile_preindexed`              |           1.43× |
-| `Quantile.fit_transform`             |   105.418 / 115.008 ms | 5.619 / 5.664 ms | `direct_nanquantile_searchsorted_preindexed` |          18.76× |
-| `Quantile.transform`                 |   104.172 / 113.462 ms | 0.884 / 0.915 ms | `batched_searchsorted_compiled`              |         117.80× |
-| `Quantile.inverse_transform`         |    71.974 / 110.100 ms | 4.572 / 4.938 ms | `batched_searchsorted_row_major`             |          15.74× |
-| `SigmaClip.fit`                      |       1.672 / 1.742 ms | 1.648 / 1.705 ms | `direct_two_pass_bounds`                     |           1.01× |
-| `SigmaClip.fit_transform`            |       2.196 / 2.299 ms | 2.196 / 2.299 ms | `current`                                    |           1.00× |
-| `SigmaClip.transform`                |       0.723 / 0.731 ms | 0.720 / 0.740 ms | `direct_soft_clip`                           |           1.00× |
-| `FeaturePermute.fit`                 |       0.196 / 0.226 ms | 0.113 / 0.146 ms | `direct_shift_permutation`                   |           1.74× |
-| `FeaturePermute.fit_transform`       |       0.448 / 0.503 ms | 0.078 / 0.121 ms | `direct_index_select`                        |           5.74× |
-| `FeaturePermute.transform`           |       0.237 / 0.296 ms | 0.102 / 0.134 ms | `direct_index_select`                        |           2.33× |
-| `FeaturePermute.inverse_transform`   |       0.289 / 0.330 ms | 0.072 / 0.095 ms | `direct_index_select`                        |           4.00× |
-| `SoftmaxTemperature.transform`       |       0.123 / 0.152 ms | 0.074 / 0.110 ms | `direct_softmax`                             |           1.66× |
-| `CategoricalAlign.fit`               |       5.671 / 7.236 ms | 0.174 / 0.205 ms | `dense_observed_mask`                        |          32.66× |
-| `CategoricalAlign.fit_transform`     |     19.094 / 23.695 ms | 0.382 / 0.429 ms | `dense_observed_lookup`                      |          50.04× |
-| `CategoricalAlign.transform`         |      9.757 / 15.085 ms | 0.204 / 0.267 ms | `direct_lookup_gather`                       |          47.94× |
-| `ClassificationTarget.fit`           |       0.231 / 0.275 ms | 0.098 / 0.128 ms | `direct_shift_permutation`                   |           2.36× |
-| `ClassificationTarget.fit_transform` |       1.022 / 1.105 ms | 0.168 / 0.208 ms | `direct_permutation_gather`                  |           6.08× |
-| `ClassificationTarget.transform`     |       0.823 / 0.882 ms | 0.159 / 0.196 ms | `direct_permutation_gather`                  |           5.16× |
-| `RegressionTarget.fit`               |       0.346 / 0.385 ms | 0.141 / 0.163 ms | `direct_reduce_state`                        |           2.45× |
-| `RegressionTarget.fit_transform`     |       0.502 / 0.906 ms | 0.216 / 0.332 ms | `direct_reduce_affine`                       |           2.33× |
-| `RegressionTarget.transform`         |       0.185 / 0.206 ms | 0.087 / 0.130 ms | `direct_affine`                              |           2.11× |
-| `RegressionTarget.inverse_transform` |       0.150 / 0.184 ms | 0.090 / 0.107 ms | `direct_affine`                              |           1.67× |
-
-These complete lower bounds do not change the production priority. `Power` and `Quantile` dominate absolute runtime. `CategoricalAlign` has a large relative gap and is worth a medium-priority cleanup, but its absolute cost is much smaller than the nonlinear numerical paths. `SigmaClip`, `StandardScale`, `Clip`, `SoftmaxTemperature`, `FeaturePermute.fit`, and regression target scaling are already near their practical limits or too small to justify risky changes.
-
-### Why the current paths are slow
-
-CUDA profiling shows orchestration and synchronization, not device arithmetic, dominate the current nonlinear paths. Profiler instrumentation perturbs wall time, so summed kernel time is diagnostic rather than directly additive to the unprofiled medians.
-
-| Operation                             | GPU kernels | Summed kernel time | Scalar syncs | D2H events |
-| ------------------------------------- | ----------: | -----------------: | -----------: | ---------: |
-| Current `Power.fit`                   |     232,182 |         447.421 ms |       12,736 |     29,328 |
-| Compiled Newton `Power.fit`           |          58 |           2.782 ms |            0 |          0 |
-| Current `Power.transform`             |       3,603 |           6.987 ms |           90 |        450 |
-| Compiled vector `Power.transform`     |           6 |           0.346 ms |            0 |          0 |
-| Current `Quantile.transform`          |       7,888 |          15.703 ms |            0 |        360 |
-| Compiled batched `Quantile.transform` |           7 |           0.674 ms |            0 |          0 |
-
-`Power.fit` filters and optimizes one feature at a time. Python converts CUDA scalars for likelihood decisions and fitted lambdas, while boolean indexing per likelihood evaluation triggers dynamic compaction and D2H size reads. The result is thousands of synchronizations, repeated temporary allocations, and over 232,000 small kernels.
-
-`Power.transform` and `Power.inverse_transform` repeat masked Yeo-Johnson math by feature and convert 90 CUDA lambdas to Python floats. `Quantile.transform` and `Quantile.inverse_transform` avoid explicit scalar `.item()` fallbacks, but their per-column finite-value boolean indexing creates dynamic output sizes and fragmented kernels. Batched search removes that compaction.
-
-There is no CPU numerical fallback and no input/output transfer inside the timed Processor operations. The dominant limits are CPU-side orchestration, kernel-launch fragmentation, and synchronization. After fusion, the paths are primarily pointwise/reduction compute (`Power`) or search/memory access (`Quantile`).
-
-### Transfers and synchronization
-
-Pinned transfers use preallocated source and destination buffers:
+Pinned transfers use preallocated source and destination buffers. These are measured separately and are excluded from Processor kernel timing.
 
 | Transfer                                      |       Shape |     Median / p95 |
 | --------------------------------------------- | ----------: | ---------------: |
-| `Power.fit` H2D input                         | 40,000 × 90 | 1.121 / 1.131 ms |
-| `Power.fit` D2H output/state                  |      5 × 90 | 0.052 / 0.070 ms |
-| `Quantile.fit` H2D input                      | 40,000 × 90 | 1.110 / 1.127 ms |
-| `Quantile.fit` D2H output/state               |  1,000 × 90 | 0.060 / 0.085 ms |
-| `Power.fit_transform` H2D input               | 40,000 × 90 | 1.122 / 1.133 ms |
-| `Power.fit_transform` D2H output/state        | 40,000 × 90 | 1.140 / 1.150 ms |
-| `Power.transform` H2D input                   | 50,000 × 90 | 1.386 / 1.404 ms |
-| `Power.transform` D2H output/state            | 50,000 × 90 | 1.397 / 1.415 ms |
-| `Power.inverse_transform` H2D input           | 50,000 × 90 | 1.386 / 1.393 ms |
-| `Power.inverse_transform` D2H output/state    | 50,000 × 90 | 1.410 / 1.417 ms |
-| `Quantile.fit_transform` H2D input            | 40,000 × 90 | 1.125 / 1.135 ms |
-| `Quantile.fit_transform` D2H output/state     | 40,000 × 90 | 1.133 / 1.144 ms |
-| `Quantile.transform` H2D input                | 50,000 × 90 | 1.379 / 1.391 ms |
-| `Quantile.transform` D2H output/state         | 50,000 × 90 | 1.389 / 1.394 ms |
-| `Quantile.inverse_transform` H2D input        | 50,000 × 90 | 1.377 / 1.381 ms |
-| `Quantile.inverse_transform` D2H output/state | 50,000 × 90 | 1.404 / 1.426 ms |
+| `Power.fit` H2D input                         | 40,000 × 90 | 1.114 / 1.124 ms |
+| `Power.fit` D2H output/state                  |      5 × 90 | 0.067 / 0.098 ms |
+| `Quantile.fit` H2D input                      | 40,000 × 90 | 1.109 / 1.117 ms |
+| `Quantile.fit` D2H output/state               |  1,000 × 90 | 0.056 / 0.062 ms |
+| `Power.fit_transform` H2D input               | 40,000 × 90 | 1.109 / 1.121 ms |
+| `Power.fit_transform` D2H output/state        | 40,000 × 90 | 1.130 / 1.141 ms |
+| `Power.transform` H2D input                   | 50,000 × 90 | 1.387 / 1.393 ms |
+| `Power.transform` D2H output/state            | 50,000 × 90 | 1.401 / 1.407 ms |
+| `Power.inverse_transform` H2D input           | 50,000 × 90 | 1.376 / 1.394 ms |
+| `Power.inverse_transform` D2H output/state    | 50,000 × 90 | 1.407 / 1.416 ms |
+| `Quantile.fit_transform` H2D input            | 40,000 × 90 | 1.109 / 1.123 ms |
+| `Quantile.fit_transform` D2H output/state     | 40,000 × 90 | 1.140 / 1.163 ms |
+| `Quantile.transform` H2D input                | 50,000 × 90 | 1.378 / 1.388 ms |
+| `Quantile.transform` D2H output/state         | 50,000 × 90 | 1.409 / 1.428 ms |
+| `Quantile.inverse_transform` H2D input        | 50,000 × 90 | 1.375 / 1.389 ms |
+| `Quantile.inverse_transform` D2H output/state | 50,000 × 90 | 1.407 / 1.414 ms |
 
-An idle `torch.cuda.synchronize()` costs 0.0103 ms median and 0.0135 ms p95. If data is not resident, transfer dominates the sub-millisecond transform lower bounds; for example `Power.transform` becomes about 3.16 ms end-to-end when adding measured H2D and D2H copies.
+An idle `torch.cuda.synchronize()` costs 0.00939 ms median and 0.0114 ms p95 on this run. If data is not already resident on device, H2D/D2H copies dominate the sub-millisecond compiled transform lower bounds; for example, `Power.transform` is about 3.16 ms end-to-end after adding measured input and output copies to the 0.376 ms kernel lower bound.
 
-### Production recommendation
+## Production recommendation
 
-| Priority      | Change                                                                                                                                                          | Expected result                                                                                                                  | Complexity / risk                                                                                                 |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Quick win     | Replace the feature loop in `Power.transform` and `Power.inverse_transform` with broadcasted, NaN-safe Yeo-Johnson expressions.                                 | `Power.transform` 1.334 ms eager; `Power.inverse_transform` 3.938 ms eager. Compiled callers can approach 0.380 ms and 0.326 ms. | Small; low risk. Inverse uses the same fitted buffers and bound repair as the current implementation.             |
-| Quick win     | Replace Quantile’s column loop and finite-value compaction with NaN-safe batched `searchsorted` for `transform`, `fit_transform`, and `inverse_transform`.      | `Quantile.transform` 4.280 ms fastest eager, 0.884 ms compiled; `fit_transform` 5.619 ms; inverse 4.572 ms.                      | Small-to-medium; low numerical risk, with temporary-memory tradeoffs for all-column execution.                    |
-| Medium effort | Batch the existing golden-section `Power.fit` search over all features, precompute reusable masks/Jacobian terms, and keep it compile-friendly.                 | 98.796 ms eager for fit and 99.113 ms eager for fit_transform; 24–26 ms when compiled after warmup.                              | Medium; reduction order changes fitted lambdas by at most `1e-3` here, so strict downstream parity must be rerun. |
-| Medium effort | Replace integer `CategoricalAlign` fit/transform with dense observed-category masks and lookup-table gathers when category dtypes support device-side matching. | 0.174 ms fit, 0.382 ms fit_transform, and 0.204 ms transform lower bounds in this integer workload.                              | Medium; dtype-specific vocabulary behavior and metadata require careful coverage.                                 |
-| Long term     | Use the four-step analytic Newton solver only after broader convergence and model-quality validation.                                                           | 2.941 ms fit and 3.078 ms fit_transform practical L4 lower bounds.                                                               | High numerical/algorithmic risk despite low runtime complexity.                                                   |
+| Priority                                    | Change                                                                                                                                    | Expected result                                                                                                                                                            | Complexity / risk                                                                                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Already achieved on `main`                  | Keep the current finite-input Power fitting path.                                                                                         | `Power.fit` is now about 32 ms and `Power.fit_transform` about 33 ms on the L4, down from multi-second historical measurements and already under the earlier 50 ms target. | No additional PR needed for this benchmark report.                                                                                            |
+| Quick win only if this path remains hot     | Keep Power transform/inverse vectorized and compiler-friendly; avoid reintroducing per-column Python scalar loops.                        | Current eager `Power.transform` is about 1.4 ms. Compiled callers can approach 0.376 ms transform and 0.278 ms inverse.                                                    | Low for preserving current structure; a standalone inverse rewrite is not justified because eager vectorized inverse was slower than current. |
+| Medium effort                               | Replace integer `CategoricalAlign` fit/transform with dense observed masks and lookup-table gathers for bounded integer category domains. | Fit/fit_transform/transform lower bounds are 0.213 / 0.362 / 0.194 ms versus current 5.8 / 13.1 / 7.0 ms in the speed run.                                                 | Medium; category dtype, metadata, unseen-category semantics, and memory bounds need explicit coverage.                                        |
+| Medium effort only for compiled deployments | Make Quantile transform/inverse graph-friendly for `torch.compile` without changing eager semantics.                                      | Current eager transform/inverse are 3.9 / 2.6 ms; compiled lower bounds are 0.831 / 0.221 ms.                                                                              | Medium; useful only if the model execution path actually compiles these processors.                                                           |
+| Long term                                   | Validate analytic Newton `Power.fit` as an alternative fitting algorithm.                                                                 | Practical lower bound is 3.381 ms fit and 3.411 ms fit_transform.                                                                                                          | High numerical/model-quality risk because the optimizer changes, even though parity passed within the benchmark tolerance.                    |
 
-The minimal production package is therefore: vectorize Power transform/inverse, batch Quantile transform/fit_transform/inverse with `searchsorted`, and batch the existing golden Power fit. This closes most of the absolute latency gap using ordinary PyTorch. Keeping the helpers graph-friendly lets callers that already compile their model approach the measured sub-millisecond transform/inverse bounds. No custom CUDA kernel is warranted at this stage.
+The minimal conclusion is: current `main` has already closed the largest Power fit bottleneck for the benchmarked L4. The next low-risk production work is not another broad Power fit rewrite; it is targeted cleanup of categorical remapping if those workloads remain common, and preserving compiler-friendly tensor code so compiled inference paths can use the measured sub-millisecond transform limits.
 
-### Rejected experiments
+## Rejected or deprioritized experiments
 
-- Float16 and bfloat16 inverse-normal mapping are unsupported by `ndtri_cuda`. Mixed-precision Quantile transform ran in about 4.85–4.88 ms but had 5.20 maximum absolute output error, so both fail tolerance.
-- Float64 Quantile transform took 19.811 ms, peaked at 417.2 MiB, and did not reproduce the current float32 interpolation within tolerance.
-- Compiled Quantile inverse measured 0.366 ms but missed tolerance with maximum absolute error `1.04e-4`, so the passing speed of light remains the 4.572 ms eager batched inverse.
-- Processing all Quantile features together and retaining a column-major layout both used substantially more memory and were slower than the 32-feature eager transform chunking path.
-- Retaining per-column Power likelihood reductions while merely removing scalar decisions left the workload dominated by small kernels and did not approach the batched baseline.
-- A custom CUDA kernel was not pursued: compiled standard PyTorch already reaches 58 kernels / 2.94 ms for Power fit and 7 kernels / 0.88 ms for Quantile transform.
+- `Quantile.fit` and `Quantile.fit_transform` direct preindexed candidates were not selected because the current implementation is the fastest passing candidate in this main-state run.
+- Eager batched golden-section `Power.fit` was slower than current main (94.069 ms versus 32.272 ms), so it is not a production recommendation.
+- Eager analytic Newton `Power.fit` was also slower than current main (36.235 ms versus 32.272 ms); only the compiled Newton prototype materially improves the fit path.
+- Eager vectorized `Power.inverse_transform` was slower than current main (3.695 ms versus 3.217 ms), so inverse should not be changed unless the compiled path is part of the deployment plan.
+- Quantile row-major, column-major, float16, bfloat16, and float64 transform variants were slower than the selected compiled candidate or added dtype/layout risk without enough benefit.
+- A custom CUDA kernel is not warranted at this point. Standard PyTorch plus compilation already reaches the measured lower bounds for the remaining hot transform/search paths.
 
 ## Artifacts
 
-- `tabiclv2_processing_large_stress.json` / `.csv`: 194 SDM CPU/GPU
-  large-stress results for explicit Power and Quantile Recipes and individual
-  Processors.
-- `tabiclv2_reference_large_stress.json` / `.csv`: 16 pinned-reference
-  large-stress results.
-- `tabiclv2_processing_full.json` / `.csv`: historical 512-workload
-  Cartesian run from the prior six-factor suite.
-- `tabiclv2_processing_large_baseline.json` and
-  `tabiclv2_reference_large_baseline.json`: historical numerical-only,
-  Identity-member baselines.
-- `processor_gpu_speed_of_light.json` / `.csv`: current, optimized, dtype,
-  transfer, synchronization, correctness, and peak-memory measurements.
+- `tabiclv2_processing_large_stress.json` / `.csv`: 194 rerun SDM CPU/GPU large-stress results for explicit Power and Quantile Recipes and individual Processors.
+- `processor_gpu_speed_of_light.json` / `.csv`: current, optimized, dtype, transfer, synchronization, correctness, throughput, CUDA-event, host-overhead, and peak-memory measurements.
+- `tabiclv2_reference_large_stress.json` / `.csv`: historical pinned-reference large-stress results from the prior reference run.
+- `tabiclv2_processing_full.json` / `.csv`: historical 512-workload Cartesian run from the prior six-factor suite.
+- `tabiclv2_processing_large_baseline.json` and `tabiclv2_reference_large_baseline.json`: historical numerical-only, Identity-member baselines.
 
-The current seven-factor Cartesian generator contains 128 characteristic
-combinations, or 1,024 task/size workloads before Recipe variants. The
-large-stress run is the reproducible all-factors subset requested here.
+The current seven-factor Cartesian generator contains 128 characteristic combinations, or 1,024 task/size workloads before Recipe variants. The large-stress run is the reproducible all-factors subset refreshed here.

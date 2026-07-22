@@ -83,5 +83,5 @@ batched, compiled, layout, batching, algorithm, and dtype candidates. It records
 wall and CUDA-event medians/p95s, incremental peak allocation, throughput,
 correctness error, pinned H2D/D2H copies, and idle synchronization overhead.
 Compilation, data creation, fitted-state preparation, and correctness checks
-remain outside timed regions. See `REPORT.md` for profiler kernel counts and
-the production recommendation.
+remain outside timed regions. See `REPORT.md` for the current timing
+summary, speed-of-light tables, and production recommendation.

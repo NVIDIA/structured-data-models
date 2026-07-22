@@ -49,9 +49,10 @@ def test_pipeline_benchmark_validates_unknown_categories_and_writes_results(
     write_results(results, output)
 
     payload = json.loads(output.read_text())
-    assert payload["reference_commit"] == (
-        "f719c886a586ed4a29236345e319ac1ea596c478"
-    )
+    reference_commit = payload["reference_commit"]
+    assert isinstance(reference_commit, str)
+    assert len(reference_commit) == 40
+    assert set(reference_commit) <= set("0123456789abcdef")
     assert len(payload["results"]) == 1
     result = payload["results"][0]
     assert result["correctness_status"] == "pass"
@@ -73,10 +74,8 @@ def test_high_cardinality_workload_contains_unseen_query_values() -> None:
 
     categorical = workload.x.categorical
     assert categorical.categories[0].numel() == 257
-    assert torch.equal(
-        categorical[workload.train_rows :],
-        torch.full_like(categorical[workload.train_rows :], 256),
-    )
+    query_codes = categorical.as_tensor()[workload.train_rows :]
+    assert torch.equal(query_codes, torch.full_like(query_codes, 256))
 
 
 @withCUDA

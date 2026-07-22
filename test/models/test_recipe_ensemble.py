@@ -10,9 +10,10 @@ from sdm import (
     TableTensor,
 )
 from sdm.cache import Cache
-from sdm.models import Model
+from sdm.models import ICLModel
 from sdm.processing import (
     Clip,
+    EnsembleReduce,
     Identity,
     InvertibleMixin,
     MeanImpute,
@@ -40,7 +41,13 @@ class _CyclingClassShuffle(Processor):
     def reset(cls) -> None:
         cls.next_plan = 0
 
-    def _fit(self, table: TableTensor) -> None:
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        del generator
         plan = self.plans[self.__class__.next_plan]
         self.__class__.next_plan += 1
         self.permutation = torch.tensor(plan, device=table.device)
@@ -87,7 +94,9 @@ class _SwapFeatures(Processor):
         )
 
 
-class _AnalyticModel(Model):
+class _AnalyticModel(ICLModel):
+    supported_feature_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables = False
 
     def __init__(self, outputs: Tensor) -> None:
@@ -109,30 +118,53 @@ class _AnalyticModel(Model):
 
     def _forward(
         self,
-        x: Tensor,
-        y: Tensor,
-        related_tables: RelatedTables | None,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:
-        del related_tables
-        self.model_targets.append(y.clone())
+        generator: torch.Generator | None,
+        **kwargs: object,
+    ) -> TableTensor:
+        del related_context_tables, related_query_tables, generator, kwargs
+        columns = None
+        if y_context is not None:
+            if y_context.categorical.size(-1) > 0:
+                target = y_context.categorical.as_tensor().squeeze(-1)
+                classes = y_context.categorical.categories[0]
+                columns = tuple(str(value) for value in classes.tolist())
+            else:
+                target = y_context.numerical.squeeze(-1)
+            self.model_targets.append(target.clone())
+        elif cache is not None and cache["classes"] is not None:
+            classes = cast(Tensor, cache["classes"])
+            columns = tuple(str(value) for value in classes.tolist())
         if cache is not None and cache.is_recording:
             member = self._cache_build_calls
             self._cache_build_calls += 1
             cache["member"] = member
-            return x.new_empty((0, self.outputs.size(-1)))
+            return TableTensor.from_tensor(
+                self.outputs.new_empty((0, self.outputs.size(-1))),
+                columns=columns,
+            )
 
         if cache is None:
+            assert x_query is not None
             member = self._uncached_calls % self.outputs.size(0)
             self._uncached_calls += 1
-            n_test = x.size(-2) - y.size(-1)
+            n_test = x_query.size(-2)
         else:
+            assert x_query is not None
             member = cast(int, cache["member"])
-            n_test = x.size(-2)
-        return self.outputs[member].to(x).expand(n_test, -1)
+            n_test = x_query.size(-2)
+        output = self.outputs[member].to(x_query.device).expand(n_test, -1)
+        return TableTensor.from_tensor(output, columns=columns)
 
 
-class _FeatureEchoModel(Model):
+class _FeatureEchoModel(ICLModel):
+    supported_feature_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical})
     supports_related_tables = False
 
     @classmethod
@@ -141,14 +173,20 @@ class _FeatureEchoModel(Model):
 
     def _forward(
         self,
-        x: Tensor,
-        y: Tensor,
-        related_tables: RelatedTables | None,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
         cache: Cache | None,
-    ) -> Tensor:
-        del related_tables
+        generator: torch.Generator | None,
+        **kwargs: object,
+    ) -> TableTensor:
+        del x_context, y_context, related_context_tables
+        del related_query_tables, generator, kwargs
         assert cache is None
-        return x[..., y.size(-1) :, :1]
+        assert x_query is not None
+        return TableTensor.from_tensor(x_query.numerical[..., :1])
 
 
 def _features() -> TableTensor:
@@ -168,7 +206,10 @@ def _classification_target() -> TableTensor:
 def _classification_recipe() -> Recipe:
     return Recipe(
         target=[_CyclingClassShuffle()],
-        output=[SoftmaxTemperature(temperature=0.9)],
+        output=[
+            EnsembleReduce(method="mean"),
+            SoftmaxTemperature(temperature=0.9),
+        ],
     )
 
 
@@ -197,9 +238,11 @@ def test_category_columns_map_members_before_logit_aggregation() -> None:
     canonical, raw = _classification_outputs()
     model = _AnalyticModel(raw)
 
+    features = _features()
     actual = model(
-        _features(),
+        features[:3],
         _classification_target(),
+        features[3:],
         recipe=_classification_recipe(),
         num_estimators=2,
     )
@@ -208,8 +251,8 @@ def test_category_columns_map_members_before_logit_aggregation() -> None:
     probability_average = (
         (canonical / 0.9).softmax(dim=-1).mean(dim=0).unsqueeze(0)
     )
-    torch.testing.assert_close(actual, expected, rtol=0, atol=1e-7)
-    assert not torch.allclose(actual, probability_average)
+    torch.testing.assert_close(actual.numerical, expected, rtol=0, atol=1e-7)
+    assert not torch.allclose(actual.numerical, probability_average)
     assert torch.equal(model.model_targets[0], torch.tensor([0, 1, 2]))
     assert torch.equal(model.model_targets[1], torch.tensor([1, 2, 0]))
 
@@ -221,31 +264,41 @@ def test_regression_target_inverse_runs_per_member_before_aggregation() -> (
     model = _AnalyticModel(outputs)
     target = TableTensor.from_tensor(torch.tensor([[1.0], [2.0], [4.0]]))
 
+    features = _features()
     actual = model(
-        _features(),
+        features[:3],
         target,
-        recipe=Recipe(target=[_LogTarget()], output=[Identity()]),
+        features[3:],
+        recipe=Recipe(
+            target=[_LogTarget()],
+            output=[EnsembleReduce(method="mean")],
+        ),
         num_estimators=2,
     )
 
-    torch.testing.assert_close(actual, torch.tensor([[2.5]]))
+    torch.testing.assert_close(actual.numerical, torch.tensor([[2.5]]))
     inverse_after_average = outputs.mean(dim=0).exp().unsqueeze(0)
-    assert not torch.equal(actual, inverse_after_average)
+    assert not torch.equal(actual.numerical, inverse_after_average)
 
 
 def test_output_transform_runs_once_after_aggregation() -> None:
     model = _AnalyticModel(torch.tensor([[1.0], [3.0]]))
     target = TableTensor.from_tensor(torch.ones(3, 1))
 
+    features = _features()
     actual = model(
-        _features(),
+        features[:3],
         target,
-        recipe=Recipe(target=[Identity()], output=[_SquareOutput()]),
+        features[3:],
+        recipe=Recipe(
+            target=[Identity()],
+            output=[EnsembleReduce(method="mean"), _SquareOutput()],
+        ),
         num_estimators=2,
     )
 
-    torch.testing.assert_close(actual, torch.tensor([[4.0]]))
-    assert not torch.equal(actual, torch.tensor([[5.0]]))
+    torch.testing.assert_close(actual.numerical, torch.tensor([[4.0]]))
+    assert not torch.equal(actual.numerical, torch.tensor([[5.0]]))
 
 
 def test_deterministic_model_end_to_end_includes_pre_and_postprocessing() -> (
@@ -264,15 +317,17 @@ def test_deterministic_model_end_to_end_includes_pre_and_postprocessing() -> (
             _SwapFeatures(),
         ],
         target=[StandardScale()],
-        output=[_SquareOutput()],
+        output=[EnsembleReduce(method="mean"), _SquareOutput()],
     )
 
-    actual = _FeatureEchoModel()(features, target, recipe=recipe)
+    actual = _FeatureEchoModel()(
+        features[:3], target, features[3:], recipe=recipe
+    )
 
     target_scale = torch.tensor([1.0, 2.0, 3.0]).std(correction=0)
     canonical = 2.0 * target_scale + 2.0
     expected = canonical.square().reshape(1, 1)
-    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(actual.numerical, expected)
 
 
 def test_cache_reuses_member_recipe_and_category_mapping() -> None:
@@ -282,8 +337,9 @@ def test_cache_reuses_member_recipe_and_category_mapping() -> None:
     _CyclingClassShuffle.reset()
     direct_model = _AnalyticModel(raw)
     direct = direct_model(
-        features,
+        features[:3],
         _classification_target(),
+        features[3:],
         recipe=_classification_recipe(),
         num_estimators=2,
     )
@@ -306,14 +362,19 @@ def test_cache_reuses_member_recipe_and_category_mapping() -> None:
     repeated = cached_model.predict(features[3:])
 
     expected = (canonical.mean(dim=0) / 0.9).softmax(dim=-1).unsqueeze(0)
-    torch.testing.assert_close(direct, expected, rtol=0, atol=1e-7)
-    torch.testing.assert_close(cached, direct, rtol=0, atol=0)
-    torch.testing.assert_close(repeated, cached, rtol=0, atol=0)
+    torch.testing.assert_close(direct.numerical, expected, rtol=0, atol=1e-7)
+    torch.testing.assert_close(
+        cached.numerical, direct.numerical, rtol=0, atol=0
+    )
+    torch.testing.assert_close(
+        repeated.numerical, cached.numerical, rtol=0, atol=0
+    )
 
 
 def test_num_estimators_must_be_positive() -> None:
     model = _AnalyticModel(torch.tensor([[1.0]]))
     target = TableTensor.from_tensor(torch.ones(3, 1))
 
-    with pytest.raises(ValueError, match="num_estimators must be positive"):
-        model(_features(), target, num_estimators=0)
+    features = _features()
+    with pytest.raises(ValueError, match=r"num_estimators.*positive"):
+        model(features[:3], target, features[3:], num_estimators=0)

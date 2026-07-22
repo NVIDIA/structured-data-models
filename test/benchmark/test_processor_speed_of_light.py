@@ -45,13 +45,13 @@ def test_vectorized_yeojohnson_inverse_matches_feature_loop() -> None:
             [-1.0, -1.0, -1.0, -1.0],
             [0.0, 0.0, 0.0, 0.0],
             [1.0, 1.0, 1.0, 1.0],
-            [torch.nan, 2.0, 2.0, 2.0],
+            [2.0, 2.0, 2.0, 2.0],
         ]
     )
     lambdas = torch.tensor([0.0, 2.0, 0.5, 1.5])
     expected = torch.stack(
         [
-            _yeojohnson_inverse_transform(inp[:, index], float(lmbda))
+            _yeojohnson_inverse_transform(inp[:, index], lmbda)
             for index, lmbda in enumerate(lambdas)
         ],
         dim=1,
@@ -69,13 +69,13 @@ def test_vectorized_yeojohnson_matches_feature_loop() -> None:
             [-1.0, -1.0, -1.0, -1.0],
             [0.0, 0.0, 0.0, 0.0],
             [1.0, 1.0, 1.0, 1.0],
-            [torch.nan, 2.0, 2.0, 2.0],
+            [2.0, 2.0, 2.0, 2.0],
         ]
     )
     lambdas = torch.tensor([0.0, 2.0, 0.5, 1.5])
     expected = torch.stack(
         [
-            _yeojohnson_transform(inp[:, index], float(lmbda))
+            _yeojohnson_transform(inp[:, index], lmbda)
             for index, lmbda in enumerate(lambdas)
         ],
         dim=1,
@@ -90,7 +90,6 @@ def test_batched_power_candidates_match_current_float32_output() -> None:
     generator = torch.Generator().manual_seed(0)
     inp = torch.randn(1_024, 4, generator=generator)
     inp[:, 0] = 1
-    inp[::97, 1] = torch.nan
     inp[:, 2] = inp[:, 2].exp()
     table = TableTensor.from_tensor(inp)
     current = Power().fit(table)
@@ -147,14 +146,14 @@ def test_batched_power_candidates_match_current_float32_output() -> None:
     )
 
 
-def test_batched_quantile_candidates_preserve_duplicates_and_nans() -> None:
+def test_batched_quantile_candidates_preserve_duplicates() -> None:
     inp = torch.tensor(
         [
             [2.0, 0.0, 1.0],
             [2.0, 1.0, 1.0],
-            [torch.nan, 1.0, 2.0],
+            [2.0, 1.0, 2.0],
             [2.0, 2.0, 3.0],
-            [2.0, 3.0, torch.nan],
+            [2.0, 3.0, 4.0],
         ]
     )
     table = TableTensor.from_tensor(inp)

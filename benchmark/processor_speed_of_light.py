@@ -26,11 +26,11 @@ from sdm.processing import (
     SoftmaxTemperature,
     StandardScale,
 )
-from sdm.processing.sigma_clip import _nanstd
 from torch import Tensor
 
 from benchmark.tabiclv2_processing import (
     Characteristics,
+    _current_git_commit,
     build_workload,
 )
 
@@ -311,24 +311,28 @@ def _sigma_clip_fit_state(
     threshold: float,
 ) -> tuple[Tensor, Tensor]:
     min_std = inp.new_tensor(1e-6)
-    mean = torch.nanmean(inp, dim=0)
-    std = _nanstd(inp, dim=0)
-    std = torch.where(std.isnan(), min_std, std)
-    std = torch.maximum(std, min_std)
+    correction = 1 if inp.size(0) > 1 else 0
 
-    inf = inp.new_tensor(float("inf"))
-    lower = torch.where(mean.isnan(), -inf, mean - threshold * std)
-    upper = torch.where(mean.isnan(), inf, mean + threshold * std)
-    clean = torch.where((inp < lower) | (inp > upper), torch.nan, inp)
+    mean = inp.mean(dim=0)
+    std = torch.maximum(inp.std(dim=0, correction=correction), min_std)
+    lower = mean - threshold * std
+    upper = mean + threshold * std
 
-    mean_clean = torch.nanmean(clean, dim=0)
-    std_clean = _nanstd(clean, dim=0)
-    mean = torch.where(mean_clean.isnan(), mean, mean_clean)
-    std = torch.where(std_clean.isnan(), std, std_clean)
+    keep = (inp >= lower) & (inp <= upper)
+    count = keep.sum(dim=0)
+    safe_count = count.clamp_min(1)
+    clean_sum = torch.where(keep, inp, torch.zeros_like(inp)).sum(dim=0)
+    mean_clean = clean_sum / safe_count
+    centered = torch.where(keep, inp - mean_clean, torch.zeros_like(inp))
+    clean_correction = (count > 1).to(count.dtype)
+    denominator = (count - clean_correction).clamp_min(1)
+    std_clean = (centered.square().sum(dim=0) / denominator).sqrt()
+
+    has_clean = count > 0
+    mean = torch.where(has_clean, mean_clean, mean)
+    std = torch.where(has_clean, std_clean, std)
     std = torch.maximum(std, min_std)
-    lower = torch.where(mean.isnan(), -inf, mean - threshold * std)
-    upper = torch.where(mean.isnan(), inf, mean + threshold * std)
-    return lower, upper
+    return mean - threshold * std, mean + threshold * std
 
 
 def _sigma_clip_transform(
@@ -3637,6 +3641,7 @@ def _write_results(results: Sequence[Result], output: Path) -> None:
     device = torch.device("cuda")
     sync_median, sync_p95 = _idle_synchronize_timing(device)
     payload = {
+        "reference_commit": _current_git_commit(),
         "environment": {
             "gpu_model": torch.cuda.get_device_name(device),
             "gpu_total_memory_bytes": torch.cuda.get_device_properties(

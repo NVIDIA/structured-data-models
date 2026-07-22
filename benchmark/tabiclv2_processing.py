@@ -15,6 +15,7 @@ import json
 import logging
 import platform
 import statistics
+import subprocess
 import time
 from collections.abc import Callable, Iterable, Sequence
 from copy import deepcopy
@@ -23,14 +24,22 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.models.base import Model
+from sdm import (
+    CategoricalTensor,
+    RelatedTables,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
+from sdm.cache import Cache
+from sdm.models import ICLModel
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.processing import (
     CategoricalAlign,
     CategoryShuffle,
     Clip,
     ConstantFilter,
+    EnsembleReduce,
     FeaturePermute,
     Identity,
     InvertibleMixin,
@@ -68,6 +77,19 @@ FACTOR_NAMES = (
     "unknown_category",
     "high_cardinality",
 )
+
+
+def _current_git_commit() -> str | None:
+    """Return the current repository commit for benchmark metadata."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[1],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -128,20 +150,74 @@ class BenchmarkResult:
     correctness_status: str
 
 
-class _ZeroModel(Model):
+class _ZeroModel(ICLModel):
     """A deterministic zero-cost head used to isolate recipe overhead."""
 
+    supported_feature_stypes = frozenset({Stype.numerical})
+    supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables = False
 
     @classmethod
-    def default_recipe(cls):
+    def default_recipe(cls) -> Recipe:
         return default_recipe()
 
-    def _forward(self, x, y, related_tables, cache):
-        del related_tables, cache
-        n_test = x.size(-2) - y.size(-1)
-        width = 999 if y.is_floating_point() else 10
-        return x.new_zeros((*x.shape[:-2], n_test, width))
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        del related_context_tables, related_query_tables, generator, kwargs
+        table = x_query if x_query is not None else x_context
+        assert table is not None
+
+        if y_context is not None and y_context.categorical.size(-1) > 0:
+            classes = y_context.categorical.categories[0]
+        elif cache is not None:
+            classes = cache["classes"]
+        else:
+            classes = None
+
+        if classes is None:
+            width = 999
+            columns = tuple(str(i) for i in range(width))
+        else:
+            width = len(classes)
+            columns = tuple(str(value) for value in classes.tolist())
+
+        raw = table.numerical.new_zeros((*table.shape[:-1], width))
+        return TableTensor.from_tensor(raw, columns=columns)
+
+    @staticmethod
+    def _class_indices(
+        canonical: tuple[str, ...] | None,
+        member: tuple[str, ...] | None,
+    ) -> Tensor | None:
+        if canonical is None or member is None:
+            return None
+        positions = {label: index for index, label in enumerate(member)}
+        return torch.tensor([positions[label] for label in canonical])
+
+    @staticmethod
+    def _postprocess(
+        raw: Tensor,
+        target: Tensor,
+        recipe: Recipe,
+        *,
+        class_indices: Tensor | None,
+    ) -> Tensor:
+        del target
+        if class_indices is not None:
+            return raw[:, class_indices.to(raw.device)]
+        inverse = cast(InvertibleMixin, recipe.target)
+        return inverse.inverse_transform(
+            TableTensor.from_tensor(raw)
+        ).numerical
 
 
 def benchmark_recipe(variant: RecipeVariant = "default") -> Recipe:
@@ -182,6 +258,7 @@ def benchmark_recipe(variant: RecipeVariant = "default") -> Recipe:
             ),
         ],
         output=[
+            EnsembleReduce(method="mean"),
             TaskDispatch(
                 classification=SoftmaxTemperature(temperature=0.9),
                 regression=Identity(),
@@ -441,8 +518,9 @@ def _assert_workload_correct(
     model = _ZeroModel()
     torch.manual_seed(0)
     output = model(
-        workload.x,
+        workload.x[: workload.train_rows],
         workload.y,
+        workload.x[workload.train_rows :],
         recipe=benchmark_recipe(recipe_variant),
     )
     expected_width = 2 if workload.task == "classification" else 999
@@ -450,7 +528,7 @@ def _assert_workload_correct(
         workload.rows - workload.train_rows,
         expected_width,
     )
-    assert torch.isfinite(output).all()
+    assert torch.isfinite(output.numerical).all()
 
 
 def benchmark_pipeline(
@@ -581,7 +659,7 @@ def benchmark_pipeline(
                 recipe,
                 class_indices=class_indices,
             )
-            table = TableTensor.from_tensor(mapped)
+            table = TableTensor.from_tensor(mapped.unsqueeze(0))
             return lambda: recipe.output.transform(table)
 
         add("output_transform", output_prepare)
@@ -590,7 +668,12 @@ def benchmark_pipeline(
         model = _ZeroModel()
         recipe = benchmark_recipe(recipe_variant)
         torch.manual_seed(0)
-        return lambda: model(workload.x, workload.y, recipe=recipe)
+        return lambda: model(
+            workload.x[: workload.train_rows],
+            workload.y,
+            workload.x[workload.train_rows :],
+            recipe=recipe,
+        )
 
     add("total_recipe_overhead", total_prepare)
     return results
@@ -831,7 +914,7 @@ def write_results(results: list[BenchmarkResult], output: Path) -> None:
     rows = [asdict(result) for result in results]
     payload = {
         "schema_version": 1,
-        "reference_commit": "f719c886a586ed4a29236345e319ac1ea596c478",
+        "reference_commit": _current_git_commit(),
         "sizes": SIZES,
         "system": {
             "platform": platform.platform(),
