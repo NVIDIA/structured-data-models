@@ -2,7 +2,7 @@ import contextlib
 import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, ClassVar, cast
 
 import torch
@@ -29,6 +29,31 @@ def _maybe_inference_mode() -> Iterator[None]:
 
     with context_fn():
         yield
+
+
+@dataclass(frozen=True)
+class _FullContextInputs:
+    context: TableTensor
+    target: TableTensor
+    query: TableTensor
+    related_context: RelatedTables | None
+    related_query: RelatedTables | None
+
+
+@dataclass(frozen=True)
+class _PreparedICLInputs:
+    context: TableTensor
+    query: TableTensor
+    related_context: RelatedTables | None
+    related_query: RelatedTables | None
+
+
+@dataclass(frozen=True)
+class _PreparedICLMember:
+    inputs: _PreparedICLInputs
+    target: TableTensor
+    recipe: Recipe
+    kwargs: Mapping[str, Any]
 
 
 class ICLModel(torch.nn.Module, ABC):
@@ -89,6 +114,46 @@ class ICLModel(torch.nn.Module, ABC):
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
+        inputs = self._full_context_inputs(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+        )
+        recipe = self.default_recipe() if recipe is None else recipe
+        recipes = tuple(copy.deepcopy(recipe) for _ in range(num_estimators))
+
+        outs: list[TableTensor] = []
+        for member_recipe in recipes:
+            prepared = self._prepare_full_context_member(
+                inputs=inputs,
+                recipe=member_recipe,
+                generator=generator,
+                kwargs=kwargs,
+            )
+            outs.append(
+                self._execute_full_context_member(
+                    prepared,
+                    generator=generator,
+                )
+            )
+
+        return self._finalize_full_context(
+            outs,
+            recipe=recipes[-1],
+            dtype=prepared.inputs.query.dtype,
+        )
+
+    def _full_context_inputs(
+        self,
+        *,
+        x_context: Tensor | TableTensor,
+        y_context: Tensor | TableTensor,
+        x_query: Tensor | TableTensor,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+    ) -> _FullContextInputs:
         if not isinstance(x_context, TableTensor):
             x_context = TableTensor.from_tensor(x_context)
         if not isinstance(y_context, TableTensor):
@@ -101,85 +166,120 @@ class ICLModel(torch.nn.Module, ABC):
                 "Expected 'related_context_tables' and 'related_query_tables' "
                 "to be provided together"
             )
-
         if related_query_tables is not None:
             assert related_context_tables is not None
             related_query_tables = related_query_tables.select_tables(
                 tables=related_context_tables.tables
             )
 
-        recipe = self.default_recipe() if recipe is None else recipe
-        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
+        return _FullContextInputs(
+            context=x_context,
+            target=y_context,
+            query=x_query,
+            related_context=related_context_tables,
+            related_query=related_query_tables,
+        )
 
-        outs: Sequence[TableTensor] = []
-        for recipe in recipes:
-            x_context_i = recipe.features.fit_transform(
-                x_context,
-                generator=generator,
-            )
-            y_context_i = recipe.target.fit_transform(
-                y_context,
-                generator=generator,
-            )
-            x_query_i = recipe.features.transform(x_query)
+    def _prepare_full_context_member(
+        self,
+        *,
+        inputs: _FullContextInputs,
+        recipe: Recipe,
+        generator: torch.Generator | None,
+        kwargs: Mapping[str, Any],
+    ) -> _PreparedICLMember:
+        x_context = recipe.features.fit_transform(
+            inputs.context,
+            generator=generator,
+        )
+        y_context = recipe.target.fit_transform(
+            inputs.target,
+            generator=generator,
+        )
+        x_query = recipe.features.transform(inputs.query)
 
-            related_context_tables_i = related_query_tables_i = None
-            if related_context_tables is not None:
-                related_processors = {
-                    table_name: copy.deepcopy(recipe.features)
-                    for table_name in related_context_tables.tables
-                }
-                related_context_tables_i = replace(
-                    related_context_tables,
-                    tables={
-                        name: related_processors[name].fit_transform(
-                            t,
-                            generator=generator,
-                        )
-                        for name, t in related_context_tables.tables.items()
-                    },
-                )
-                assert related_query_tables is not None
-                related_query_tables_i = replace(
-                    related_query_tables,
-                    tables={
-                        name: related_processors[name].transform(t)
-                        for name, t in related_query_tables.tables.items()
-                    },
-                )
-
-            self._validate_context(
-                x=x_context_i,
-                y=y_context_i,
-                related_tables=related_context_tables_i,
+        related_context = related_query = None
+        if inputs.related_context is not None:
+            related_processors = {
+                table_name: copy.deepcopy(recipe.features)
+                for table_name in inputs.related_context.tables
+            }
+            related_context = replace(
+                inputs.related_context,
+                tables={
+                    name: related_processors[name].fit_transform(
+                        table,
+                        generator=generator,
+                    )
+                    for name, table in inputs.related_context.tables.items()
+                },
             )
-            self._validate_query(
-                x_context=x_context_i.schema,
-                x_query=x_query_i,
-                related_context_tables=related_context_tables_i.schema
-                if related_context_tables_i is not None
-                else None,
-                related_query_tables=related_query_tables_i,
+            assert inputs.related_query is not None
+            related_query = replace(
+                inputs.related_query,
+                tables={
+                    name: related_processors[name].transform(table)
+                    for name, table in inputs.related_query.tables.items()
+                },
             )
 
-            out = self._forward(
-                x_context=x_context_i,
-                y_context=y_context_i,
-                x_query=x_query_i,
-                related_context_tables=related_context_tables_i,
-                related_query_tables=related_query_tables_i,
-                cache=None,
-                generator=generator,
-                **kwargs,
-            )
-            if y_context_i.numerical.size(-1) == 1:
-                if not isinstance(recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                out = recipe.target.inverse_transform(out)
-            outs.append(out)
+        self._validate_context(
+            x=x_context,
+            y=y_context,
+            related_tables=related_context,
+        )
+        self._validate_query(
+            x_context=x_context.schema,
+            x_query=x_query,
+            related_context_tables=(
+                related_context.schema if related_context is not None else None
+            ),
+            related_query_tables=related_query,
+        )
+        return _PreparedICLMember(
+            inputs=_PreparedICLInputs(
+                context=x_context,
+                query=x_query,
+                related_context=related_context,
+                related_query=related_query,
+            ),
+            target=y_context,
+            recipe=recipe,
+            kwargs=dict(kwargs),
+        )
 
-        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        out = cast(TableTensor, out.to(x_query_i.dtype))
+    def _execute_full_context_member(
+        self,
+        prepared: _PreparedICLMember,
+        *,
+        generator: torch.Generator | None,
+    ) -> TableTensor:
+        inputs = prepared.inputs
+        out = self._forward(
+            x_context=inputs.context,
+            y_context=prepared.target,
+            x_query=inputs.query,
+            related_context_tables=inputs.related_context,
+            related_query_tables=inputs.related_query,
+            cache=None,
+            generator=generator,
+            **prepared.kwargs,
+        )
+        if prepared.target.numerical.size(-1) == 1:
+            if not isinstance(prepared.recipe.target, InvertibleMixin):
+                raise RuntimeError("Target recipe is not invertible")
+            out = prepared.recipe.target.inverse_transform(out)
+        return out
+
+    def _finalize_full_context(
+        self,
+        outs: Sequence[TableTensor],
+        *,
+        recipe: Recipe,
+        dtype: torch.dtype,
+    ) -> TableTensor:
+        out = cast(TableTensor, torch.stack(tuple(outs), dim=0))
+        out = cast(TableTensor, out.to(dtype))
         return recipe.output.transform(out)
 
     @_maybe_inference_mode()
