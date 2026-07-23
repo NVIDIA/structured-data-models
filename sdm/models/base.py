@@ -10,6 +10,14 @@ from torch import Tensor
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
+from sdm.explain.base import (
+    ExplanationMethod,
+    ExplanationMode,
+    ExplanationReplacements,
+    UnsupportedExplanationError,
+)
+from sdm.explain.execution import PreparedICLInputs
+from sdm.explain.result import Explanation, InputSite, OutputIndex
 from sdm.processing import InvertibleMixin, Processor, Recipe
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -31,6 +39,14 @@ def _maybe_inference_mode() -> Iterator[None]:
         yield
 
 
+@contextlib.contextmanager
+def _explanation_mode(*, gradients: bool) -> Iterator[None]:
+    with torch.inference_mode(False):
+        context_fn = torch.enable_grad if gradients else torch.no_grad
+        with context_fn():
+            yield
+
+
 @dataclass(frozen=True)
 class _FullContextInputs:
     context: TableTensor
@@ -41,19 +57,19 @@ class _FullContextInputs:
 
 
 @dataclass(frozen=True)
-class _PreparedICLInputs:
-    context: TableTensor
-    query: TableTensor
-    related_context: RelatedTables | None
-    related_query: RelatedTables | None
-
-
-@dataclass(frozen=True)
 class _PreparedICLMember:
-    inputs: _PreparedICLInputs
+    inputs: PreparedICLInputs
     target: TableTensor
     recipe: Recipe
     kwargs: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class _ExplanationRandomState:
+    generator: torch.Generator | None
+    cpu: Tensor
+    cuda: Tensor | None
+    device: torch.device
 
 
 class ICLModel(torch.nn.Module, ABC):
@@ -143,6 +159,101 @@ class ICLModel(torch.nn.Module, ABC):
             outs,
             recipe=recipes[-1],
             dtype=prepared.inputs.query.dtype,
+        )
+
+    def explain_full_context(
+        self,
+        method: ExplanationMethod,
+        x_context: Tensor | TableTensor,
+        y_context: Tensor | TableTensor,
+        x_query: Tensor | TableTensor,
+        related_context_tables: RelatedTables | None = None,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        target: OutputIndex,
+        recipe: Recipe | None = None,
+        num_estimators: int = 1,
+        generator: torch.Generator | None = None,
+        **kwargs: Any,
+    ) -> Explanation:
+        r"""Explain a cache-free prediction with explicit context inputs."""
+        self._validate_explanation_method(
+            method,
+            mode=ExplanationMode.full_context,
+        )
+        if num_estimators != 1:
+            raise UnsupportedExplanationError(
+                "Full-context explanation currently requires exactly one "
+                "estimator"
+            )
+        if any(module.training for module in self.modules()):
+            raise UnsupportedExplanationError(
+                "Full-context explanation requires the model to be fully "
+                "in evaluation mode"
+            )
+
+        with _explanation_mode(gradients=method.requirements.gradients):
+            inputs = self._full_context_inputs(
+                x_context=x_context,
+                y_context=y_context,
+                x_query=x_query,
+                related_context_tables=related_context_tables,
+                related_query_tables=related_query_tables,
+            )
+            inputs = _normal_full_context_inputs(inputs)
+            with _isolated_randomness(
+                generator,
+                device=inputs.context.device,
+            ) as preparation_generator:
+                prepared = self._prepare_full_context_member(
+                    inputs=inputs,
+                    recipe=copy.deepcopy(
+                        self.default_recipe() if recipe is None else recipe
+                    ),
+                    generator=preparation_generator,
+                    kwargs=kwargs,
+                )
+                execution_state = _capture_random_state(
+                    preparation_generator,
+                    device=inputs.context.device,
+                )
+
+                def evaluate(
+                    replacements: ExplanationReplacements | None = None,
+                ) -> TableTensor:
+                    with _replay_randomness(
+                        execution_state
+                    ) as execution_generator:
+                        out = self._execute_full_context_member(
+                            prepared,
+                            replacements=replacements,
+                            generator=execution_generator,
+                        )
+                        return self._finalize_full_context(
+                            (out,),
+                            recipe=prepared.recipe,
+                            dtype=prepared.inputs.query.dtype,
+                        )
+
+                prediction = evaluate(None)
+                prediction = prediction.replace_blocks(
+                    numerical=prediction.numerical.detach()
+                )
+                explanation = method.explain(
+                    evaluate=evaluate,
+                    inputs=prepared.inputs.sites,
+                    prediction=prediction,
+                    target=target,
+                    mode=ExplanationMode.full_context,
+                )
+
+        return self._validate_explanation_result(
+            explanation,
+            method=method,
+            mode=ExplanationMode.full_context,
+            prediction=prediction,
+            inputs=prepared.inputs.sites,
+            target=target,
         )
 
     def _full_context_inputs(
@@ -237,7 +348,7 @@ class ICLModel(torch.nn.Module, ABC):
             related_query_tables=related_query,
         )
         return _PreparedICLMember(
-            inputs=_PreparedICLInputs(
+            inputs=PreparedICLInputs(
                 context=x_context,
                 query=x_query,
                 related_context=related_context,
@@ -252,9 +363,10 @@ class ICLModel(torch.nn.Module, ABC):
         self,
         prepared: _PreparedICLMember,
         *,
+        replacements: ExplanationReplacements | None = None,
         generator: torch.Generator | None,
     ) -> TableTensor:
-        inputs = prepared.inputs
+        inputs = prepared.inputs.replace_numerical(replacements)
         out = self._forward(
             x_context=inputs.context,
             y_context=prepared.target,
@@ -281,6 +393,89 @@ class ICLModel(torch.nn.Module, ABC):
         out = cast(TableTensor, torch.stack(tuple(outs), dim=0))
         out = cast(TableTensor, out.to(dtype))
         return recipe.output.transform(out)
+
+    def _validate_explanation_method(
+        self,
+        method: ExplanationMethod,
+        *,
+        mode: ExplanationMode,
+    ) -> None:
+        if not isinstance(method, ExplanationMethod):
+            raise TypeError("'method' needs to be an 'ExplanationMethod'")
+        if mode not in method.requirements.supported_modes:
+            raise UnsupportedExplanationError(
+                f"'{method.name}' does not support '{mode.value}' execution"
+            )
+        if method.requirements.input_space != "processed":
+            raise UnsupportedExplanationError(
+                f"'{self.__class__.__name__}' does not yet expose "
+                f"'{method.requirements.input_space}' explanation inputs"
+            )
+        method.validate_model(self, mode=mode)
+
+    def _validate_explanation_result(
+        self,
+        explanation: Explanation,
+        *,
+        method: ExplanationMethod,
+        mode: ExplanationMode,
+        prediction: TableTensor,
+        inputs: Mapping[InputSite, TableTensor],
+        target: OutputIndex,
+    ) -> Explanation:
+        if not isinstance(explanation, Explanation):
+            raise TypeError(
+                f"'{method.name}.explain()' needs to return an 'Explanation'"
+            )
+        if explanation.method != method.name:
+            raise ValueError(
+                "Explanation method identity does not match the requested "
+                "method"
+            )
+        if explanation.mode != mode:
+            raise ValueError(
+                "Explanation mode does not match the model execution path"
+            )
+        if explanation.target != target.resolve(prediction):
+            raise ValueError(
+                "Explanation target does not match the requested output"
+            )
+        if explanation.prediction.numerical.requires_grad:
+            raise ValueError(
+                "Explanation prediction needs to be detached from autograd"
+            )
+        if not explanation.prediction.allclose(
+            prediction,
+            rtol=0.0,
+            atol=0.0,
+            equal_nan=True,
+        ):
+            raise ValueError(
+                "Explanation prediction does not match the unmodified model "
+                "prediction"
+            )
+
+        for attribution in explanation.attributions:
+            if attribution.site not in inputs:
+                raise ValueError(
+                    "Explanation attribution site was not exposed by the "
+                    f"model: {attribution.site!r}"
+                )
+            if attribution.input_space != method.requirements.input_space:
+                raise ValueError(
+                    "Explanation attribution input space does not match the "
+                    "method requirements"
+                )
+            if attribution.values.numerical.requires_grad:
+                raise ValueError(
+                    "Explanation attributions need to be detached from "
+                    "autograd"
+                )
+            _validate_attribution_alignment(
+                attribution.values,
+                inputs[attribution.site],
+            )
+        return explanation
 
     @_maybe_inference_mode()
     def fit(
@@ -575,3 +770,109 @@ class ICLModel(torch.nn.Module, ABC):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+
+def _normal_full_context_inputs(
+    inputs: _FullContextInputs,
+) -> _FullContextInputs:
+    def normal_table(table: TableTensor) -> TableTensor:
+        if table.is_inference() or any(
+            block.is_inference() for _, block in table.items()
+        ):
+            return cast(TableTensor, table.clone())
+        return table
+
+    def normal_related(
+        related: RelatedTables | None,
+    ) -> RelatedTables | None:
+        if related is None:
+            return None
+        tables = {
+            name: normal_table(table) for name, table in related.tables.items()
+        }
+        if all(
+            table is related.tables[name] for name, table in tables.items()
+        ):
+            return related
+        return replace(related, tables=tables)
+
+    return _FullContextInputs(
+        context=normal_table(inputs.context),
+        target=normal_table(inputs.target),
+        query=normal_table(inputs.query),
+        related_context=normal_related(inputs.related_context),
+        related_query=normal_related(inputs.related_query),
+    )
+
+
+def _validate_attribution_alignment(
+    values: TableTensor,
+    inputs: TableTensor,
+) -> None:
+    if values.size()[:-1] != inputs.size()[:-1]:
+        raise ValueError(
+            "Explanation attribution rows do not match the model input"
+        )
+    for stype in (Stype.numerical, Stype.id):
+        if values.columns[stype] != inputs.columns[stype]:
+            raise ValueError(
+                "Explanation attribution columns do not match the model input"
+            )
+    if not values.id.equal(inputs.id):
+        raise ValueError(
+            "Explanation attribution identifiers do not match the model input"
+        )
+    if values.device != inputs.device:
+        raise ValueError(
+            "Explanation attribution device does not match the model input"
+        )
+
+
+def _clone_generator(generator: torch.Generator) -> torch.Generator:
+    clone = torch.Generator(device=generator.device)
+    clone.set_state(generator.get_state())
+    return clone
+
+
+@contextlib.contextmanager
+def _isolated_randomness(
+    generator: torch.Generator | None,
+    *,
+    device: torch.device,
+) -> Iterator[torch.Generator | None]:
+    devices = [device] if device.type == "cuda" else []
+    with torch.random.fork_rng(devices=devices):
+        yield _clone_generator(generator) if generator is not None else None
+
+
+def _capture_random_state(
+    generator: torch.Generator | None,
+    *,
+    device: torch.device,
+) -> _ExplanationRandomState:
+    return _ExplanationRandomState(
+        generator=(
+            _clone_generator(generator) if generator is not None else None
+        ),
+        cpu=torch.get_rng_state(),
+        cuda=(
+            torch.cuda.get_rng_state(device) if device.type == "cuda" else None
+        ),
+        device=device,
+    )
+
+
+@contextlib.contextmanager
+def _replay_randomness(
+    state: _ExplanationRandomState,
+) -> Iterator[torch.Generator | None]:
+    devices = [state.device] if state.device.type == "cuda" else []
+    with torch.random.fork_rng(devices=devices):
+        torch.set_rng_state(state.cpu)
+        if state.cuda is not None:
+            torch.cuda.set_rng_state(state.cuda, state.device)
+        yield (
+            _clone_generator(state.generator)
+            if state.generator is not None
+            else None
+        )
