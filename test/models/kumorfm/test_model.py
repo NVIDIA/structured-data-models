@@ -13,6 +13,7 @@ from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
+from sdm.models.kumorfm.task import TaskGraph
 from sdm.testing import withCUDA
 
 
@@ -184,17 +185,78 @@ def test_invariant_gnn(
     assert graph.start_node_offsets == {"users": 0, "orders": 4}
     assert graph.end_node_offsets == {"users": 4, "orders": 10}
 
+    readout_index = torch.arange(4, device=device)
+    active = torch.zeros(graph.num_nodes, dtype=torch.bool, device=device)
+    active[readout_index] = True
+    node_masks = [active]
+    for _ in range(2):
+        previous = active.clone()
+        previous[graph.row[active[graph.col]]] = True
+        node_masks.append(previous)
+        active = previous
+
     model = InvariantGNN(channels=8, device=device)
     out = model(
         x=torch.randn(10, 8, device=device),
-        graph=graph,
-        readout_table="users",
-        readout_index=torch.arange(4, device=device),
-        num_hops=2,
+        graph=graph.layered(
+            node_masks=node_masks,
+            readout_index=readout_index,
+        ),
     )
     assert out.size() == (4, 8)
     assert out.device == device
     assert not out.isnan().any()
+
+
+@withCUDA
+def test_task_graph_preserves_hops_after_diameter(
+    relational_data: RelationalData,
+    device: torch.device,
+) -> None:
+    x = TableTensor(
+        columns={"id": ("user_id",)},
+        id=ColumnarTensor((torch.tensor([0, 2], device=device),)),
+    )
+    related_tables = RelatedTables(
+        tables={"users": relational_data.tables["users"]},
+        relationships=[],
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    homogeneous_graph = HomogeneousGraph.from_tables(
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+    )
+    task = TaskGraph.from_input(
+        x=x,
+        related_tables=related_tables,
+        num_hops=3,
+    )
+
+    assert task.num_hops == 3
+    assert len(task.graph.layers) == 3
+
+    full_mask = torch.ones(
+        homogeneous_graph.num_nodes,
+        dtype=torch.bool,
+        device=device,
+    )
+    full_graph = homogeneous_graph.layered(
+        node_masks=[full_mask] * 4,
+        readout_index=task.readout_index,
+    )
+    model = InvariantGNN(channels=8, device=device)
+    features = torch.randn(homogeneous_graph.num_nodes, 8, device=device)
+
+    full = model(x=features, graph=full_graph)
+    pruned = model(x=features, graph=task.graph)
+
+    torch.testing.assert_close(pruned, full, rtol=5e-3, atol=3e-5)
 
 
 @withCUDA

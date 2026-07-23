@@ -424,9 +424,6 @@ class _KumoRFM(torch.nn.Module):
             x_context = self.gnn(
                 x=x_context,
                 graph=context.graph,
-                readout_table=context.readout_table,
-                readout_index=context.readout_index,
-                num_hops=context.num_hops,
                 cache=gnn_cache,
                 generator=generator,
             )
@@ -440,9 +437,6 @@ class _KumoRFM(torch.nn.Module):
             x_query = self.gnn(
                 x=x_query,
                 graph=query.graph,
-                readout_table=query.readout_table,
-                readout_index=query.readout_index,
-                num_hops=query.num_hops,
                 cache=gnn_cache.freeze() if cache is None else cache,
             )
 

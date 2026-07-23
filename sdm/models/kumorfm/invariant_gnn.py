@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.nn import LayerNorm, Linear
 
 from sdm.cache import Cache
-from sdm.models.kumorfm.graph import HomogeneousGraph
+from sdm.models.kumorfm.graph import LayeredGraph
 
 
 class InvariantGNN(torch.nn.Module):
@@ -63,19 +63,15 @@ class InvariantGNN(torch.nn.Module):
     def forward(
         self,
         x: Tensor,
-        graph: HomogeneousGraph,
+        graph: LayeredGraph,
         *,
-        readout_table: str,
-        readout_index: Tensor,
-        num_hops: int,
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
     ) -> Tensor:
-
-        if num_hops == 0:
-            start = graph.start_node_offsets[readout_table]
-            end = graph.end_node_offsets[readout_table]
-            return x[start:end][readout_index]
+        if graph.input_index is not None:
+            x = x[graph.input_index]
+        if len(graph.layers) == 0:
+            return x[graph.output_index]
 
         if cache is None or cache.is_recording:
             edge_type_emb = torch.randn(
@@ -91,62 +87,64 @@ class InvariantGNN(torch.nn.Module):
         else:
             edge_type_emb = cast(Tensor, cache["edge_type_emb"])
 
-        edge_type_emb = edge_type_emb[graph.edge_type]
-
-        for i in range(num_hops):
-            src_x = self.src_lin(x)[graph.row] + edge_type_emb
-            x = self.skip_lin(x)
-
-            # Sum aggregation:
-            h = torch.segment_reduce(
-                src_x,
-                offsets=graph.colptr,
-                reduce="sum",
-                unsafe=True,
-                initial=0,
+        for i, layer in enumerate(graph.layers):
+            src_x = self.src_lin(x)[layer.row] + edge_type_emb[layer.edge_type]
+            skip_x = x if layer.dst_index is None else x[layer.dst_index]
+            x = self._aggregate(
+                src_x=src_x,
+                colptr=layer.colptr,
+                skip_x=self.skip_lin(skip_x),
             )
-            x = x + self.sum_lin(h)
-
-            # Mean aggregation:
-            h = h / graph.colptr.diff().clamp(min=1).view(-1, 1)
-            x = x + self.avg_lin(h)
-
-            # Std aggregation:
-            h = (
-                torch.segment_reduce(
-                    src_x.square(),
-                    offsets=graph.colptr,
-                    reduce="mean",
-                    unsafe=True,
-                    initial=0,
-                )
-                - h.square()
-            )
-            h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
-            x = x + self.std_lin(h)
-
-            # Min aggregation:
-            h = torch.segment_reduce(
-                src_x, offsets=graph.colptr, reduce="min", unsafe=True
-            )
-            h = torch.where(h.isinf(), 0.0, h)
-            x = x + self.min_lin(h)
-
-            # Max aggregation:
-            h = torch.segment_reduce(
-                src_x, offsets=graph.colptr, reduce="max", unsafe=True
-            )
-            h = torch.where(h.isinf(), 0.0, h)
-            x = x + self.max_lin(h)
-
-            del h
-            del src_x
-
-            if i == num_hops - 1:
-                start = graph.start_node_offsets[readout_table]
-                end = graph.end_node_offsets[readout_table]
-                x = x[start:end][readout_index]
-
+            if i == len(graph.layers) - 1:
+                x = x[graph.output_index]
             x = F.gelu(self.norm(x))
 
         return self.out_norm(self.out_lin(x))
+
+    def _aggregate(
+        self,
+        src_x: Tensor,
+        colptr: Tensor,
+        skip_x: Tensor,
+    ) -> Tensor:
+        # Sum aggregation:
+        h = torch.segment_reduce(
+            src_x,
+            offsets=colptr,
+            reduce="sum",
+            unsafe=True,
+            initial=0,
+        )
+        x = skip_x + self.sum_lin(h)
+
+        # Mean aggregation:
+        h = h / colptr.diff().clamp(min=1).view(-1, 1)
+        x = x + self.avg_lin(h)
+
+        # Std aggregation:
+        h = (
+            torch.segment_reduce(
+                src_x.square(),
+                offsets=colptr,
+                reduce="mean",
+                unsafe=True,
+                initial=0,
+            )
+            - h.square()
+        )
+        h = torch.where(h <= 1e-5, 0.0, h.clamp(min=1e-5).sqrt())
+        x = x + self.std_lin(h)
+
+        # Min aggregation:
+        h = torch.segment_reduce(
+            src_x, offsets=colptr, reduce="min", unsafe=True
+        )
+        h = torch.where(h.isinf(), 0.0, h)
+        x = x + self.min_lin(h)
+
+        # Max aggregation:
+        h = torch.segment_reduce(
+            src_x, offsets=colptr, reduce="max", unsafe=True
+        )
+        h = torch.where(h.isinf(), 0.0, h)
+        return x + self.max_lin(h)

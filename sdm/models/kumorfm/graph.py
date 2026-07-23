@@ -10,6 +10,22 @@ from sdm.relational.join import join_index
 
 
 @dataclass(frozen=True)
+class LayeredGraphLayer:  # noqa: D101
+    row: Tensor
+    colptr: Tensor
+    edge_type: Tensor
+    dst_index: Tensor | None
+
+
+@dataclass(frozen=True)
+class LayeredGraph:  # noqa: D101
+    input_index: Tensor | None
+    layers: tuple[LayeredGraphLayer, ...]
+    output_index: Tensor
+    num_edge_types: int
+
+
+@dataclass(frozen=True)
 class HomogeneousGraph:  # noqa: D101
     row: Tensor
     col: Tensor
@@ -31,6 +47,89 @@ class HomogeneousGraph:  # noqa: D101
         start = self.start_node_offsets[name]
         end = self.end_node_offsets[name]
         return slice(start, end)
+
+    def layered(
+        self,
+        *,
+        node_masks: Sequence[Tensor],
+        readout_index: Tensor,
+    ) -> LayeredGraph:
+        r"""Compact cumulative node masks into message-passing layers."""
+        if len(node_masks) == 0:
+            raise ValueError("'node_masks' cannot be empty")
+
+        output_nodes = node_masks[0].nonzero().flatten()
+        output_map = self.row.new_full((self.num_nodes,), fill_value=-1)
+        output_map[output_nodes] = torch.arange(
+            output_nodes.numel(),
+            dtype=self.row.dtype,
+            device=self.row.device,
+        )
+        output_index = output_map[readout_index]
+
+        layers = [
+            self._layer(previous=previous, active=active)
+            for previous, active in zip(
+                reversed(node_masks[1:]),
+                reversed(node_masks[:-1]),
+                strict=True,
+            )
+        ]
+        input_nodes = node_masks[-1].nonzero().flatten()
+        input_index = (
+            None if input_nodes.numel() == self.num_nodes else input_nodes
+        )
+        return LayeredGraph(
+            input_index=input_index,
+            layers=tuple(layers),
+            output_index=output_index,
+            num_edge_types=self.num_edge_types,
+        )
+
+    def _layer(
+        self,
+        previous: Tensor,
+        active: Tensor,
+    ) -> LayeredGraphLayer:
+        previous_nodes = previous.nonzero().flatten()
+        active_nodes = active.nonzero().flatten()
+
+        if active_nodes.numel() == self.num_nodes:
+            return LayeredGraphLayer(
+                row=self.row,
+                colptr=self.colptr,
+                edge_type=self.edge_type,
+                dst_index=None,
+            )
+
+        edge_mask = active[self.col]
+        row = self.row[edge_mask]
+        edge_type = self.edge_type[edge_mask]
+        if previous_nodes.numel() == self.num_nodes:
+            dst_index = active_nodes
+        else:
+            previous_map = self.row.new_full((self.num_nodes,), fill_value=-1)
+            previous_map[previous_nodes] = torch.arange(
+                previous_nodes.numel(),
+                dtype=self.row.dtype,
+                device=self.row.device,
+            )
+            row = previous_map[row]
+            dst_index = previous_map[active_nodes]
+
+        degree = self.colptr.diff()[active_nodes]
+        colptr = torch.cat(
+            [
+                degree.new_zeros(1),
+                degree.cumsum(dim=0, dtype=degree.dtype),
+            ]
+        )
+        return LayeredGraphLayer(
+            row=row,
+            colptr=colptr,
+            edge_type=edge_type,
+            dst_index=dst_index,
+        )
 
     @classmethod
     def from_tables(  # noqa: D102
