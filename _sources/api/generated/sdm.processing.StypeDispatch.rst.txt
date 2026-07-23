@@ -1,8 +1,0 @@
-﻿StypeDispatch
-=============
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: StypeDispatch
-   :members:
-   :show-inheritance:

@@ -1,0 +1,8 @@
+﻿StypeDispatch
+=============
+
+.. currentmodule:: sdm.processing.stype_dispatch
+
+.. autoclass:: StypeDispatch
+   :members:
+   :show-inheritance:

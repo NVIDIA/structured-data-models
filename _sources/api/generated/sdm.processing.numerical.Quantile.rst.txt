@@ -1,0 +1,8 @@
+﻿Quantile
+========
+
+.. currentmodule:: sdm.processing.numerical
+
+.. autoclass:: Quantile
+   :members:
+   :show-inheritance:

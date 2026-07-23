@@ -1,8 +1,0 @@
-﻿Sequential
-==========
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: Sequential
-   :members:
-   :show-inheritance:

@@ -1,8 +1,0 @@
-﻿Clip
-====
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: Clip
-   :members:
-   :show-inheritance:

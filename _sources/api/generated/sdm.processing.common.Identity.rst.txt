@@ -1,0 +1,8 @@
+﻿Identity
+========
+
+.. currentmodule:: sdm.processing.common
+
+.. autoclass:: Identity
+   :members:
+   :show-inheritance:

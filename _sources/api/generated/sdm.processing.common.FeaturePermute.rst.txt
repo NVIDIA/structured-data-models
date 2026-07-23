@@ -1,0 +1,8 @@
+﻿FeaturePermute
+==============
+
+.. currentmodule:: sdm.processing.common
+
+.. autoclass:: FeaturePermute
+   :members:
+   :show-inheritance:

@@ -1,0 +1,8 @@
+﻿EnsembleReduce
+==============
+
+.. currentmodule:: sdm.processing.output
+
+.. autoclass:: EnsembleReduce
+   :members:
+   :show-inheritance:

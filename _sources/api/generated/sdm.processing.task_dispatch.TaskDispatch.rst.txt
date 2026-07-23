@@ -1,0 +1,8 @@
+﻿TaskDispatch
+============
+
+.. currentmodule:: sdm.processing.task_dispatch
+
+.. autoclass:: TaskDispatch
+   :members:
+   :show-inheritance:

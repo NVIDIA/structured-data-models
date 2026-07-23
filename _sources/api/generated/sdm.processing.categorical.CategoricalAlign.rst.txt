@@ -1,0 +1,8 @@
+﻿CategoricalAlign
+================
+
+.. currentmodule:: sdm.processing.categorical
+
+.. autoclass:: CategoricalAlign
+   :members:
+   :show-inheritance:

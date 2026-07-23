@@ -1,8 +1,0 @@
-﻿CategoricalImpute
-=================
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: CategoricalImpute
-   :members:
-   :show-inheritance:

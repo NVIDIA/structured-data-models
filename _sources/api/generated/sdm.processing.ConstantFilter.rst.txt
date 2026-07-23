@@ -1,8 +1,0 @@
-﻿ConstantFilter
-==============
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: ConstantFilter
-   :members:
-   :show-inheritance:

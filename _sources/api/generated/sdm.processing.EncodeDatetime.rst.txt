@@ -1,8 +1,0 @@
-﻿EncodeDatetime
-==============
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: EncodeDatetime
-   :members:
-   :show-inheritance:

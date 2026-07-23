@@ -1,8 +1,0 @@
-﻿ToNumerical
-===========
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: ToNumerical
-   :members:
-   :show-inheritance:

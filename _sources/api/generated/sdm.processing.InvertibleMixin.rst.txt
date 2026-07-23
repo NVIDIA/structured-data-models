@@ -1,8 +1,0 @@
-﻿InvertibleMixin
-===============
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: InvertibleMixin
-   :members:
-   :show-inheritance:

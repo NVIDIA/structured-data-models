@@ -1,8 +1,0 @@
-﻿Choice
-======
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: Choice
-   :members:
-   :show-inheritance:

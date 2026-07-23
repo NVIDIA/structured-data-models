@@ -1,8 +1,0 @@
-﻿StandardScale
-=============
-
-.. currentmodule:: sdm.processing
-
-.. autoclass:: StandardScale
-   :members:
-   :show-inheritance:

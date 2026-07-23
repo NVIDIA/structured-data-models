@@ -1,0 +1,8 @@
+﻿Processor
+=========
+
+.. currentmodule:: sdm.processing.base
+
+.. autoclass:: Processor
+   :members:
+   :show-inheritance:

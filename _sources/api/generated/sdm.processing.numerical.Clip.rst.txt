@@ -1,0 +1,8 @@
+﻿Clip
+====
+
+.. currentmodule:: sdm.processing.numerical
+
+.. autoclass:: Clip
+   :members:
+   :show-inheritance:

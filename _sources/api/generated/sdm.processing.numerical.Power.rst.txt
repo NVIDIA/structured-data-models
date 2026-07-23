@@ -1,0 +1,8 @@
+﻿Power
+=====
+
+.. currentmodule:: sdm.processing.numerical
+
+.. autoclass:: Power
+   :members:
+   :show-inheritance:

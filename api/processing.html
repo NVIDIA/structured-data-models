@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.processing - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Processor" href="generated/sdm.processing.Processor.html" /><link rel="prev" title="RelationalSampler" href="generated/sdm.relational.RelationalSampler.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.processing - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="Processor" href="generated/sdm.processing.base.Processor.html" /><link rel="prev" title="RelationalSampler" href="generated/sdm.relational.RelationalSampler.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=e1a1ceaf" />
@@ -91,30 +91,30 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.processing</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Processor.html">Processor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Sequential.html">Sequential</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Choice.html">Choice</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.StypeDispatch.html">StypeDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.CategoricalAlign.html">CategoricalAlign</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.CategoricalImpute.html">CategoricalImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.TaskDispatch.html">TaskDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Clip.html">Clip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.QuantileClip.html">QuantileClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.CategoryShuffle.html">CategoryShuffle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ConstantFilter.html">ConstantFilter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.EncodeDatetime.html">EncodeDatetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.FeaturePermute.html">FeaturePermute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Identity.html">Identity</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.MeanImpute.html">MeanImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Power.html">Power</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Quantile.html">Quantile</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.SigmaClip.html">SigmaClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.EnsembleReduce.html">EnsembleReduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ToNumerical.html">ToNumerical</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Recipe.html">Recipe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.Processor.html">Processor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.sequential.Sequential.html">Sequential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.choice.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.stype_dispatch.StypeDispatch.html">StypeDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.task_dispatch.TaskDispatch.html">TaskDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.FeaturePermute.html">FeaturePermute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html">Clip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.QuantileClip.html">QuantileClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.SigmaClip.html">SigmaClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.MeanImpute.html">MeanImpute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Power.html">Power</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Quantile.html">Quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.StandardScale.html">StandardScale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.ConstantFilter.html">ConstantFilter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.CategoricalAlign.html">CategoricalAlign</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.CategoricalImpute.html">CategoricalImpute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.CategoryShuffle.html">CategoryShuffle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.datetime.EncodeDatetime.html">EncodeDatetime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.output.EnsembleReduce.html">EnsembleReduce</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.output.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="nn.html">sdm.nn</a><ul>
@@ -143,7 +143,15 @@ data-aria-dark="Switch to auto color mode">
     <button class="rside-close js-menu xl:hidden" aria-label="Close Table of Contents" type="button" aria-controls="rside" aria-expanded="false">
       <i class="i-lucide close"></i>
     </button>
-    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
+    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#processor-api">Processor API</a></li>
+<li><a class="reference internal" href="#common-processors">Common Processors</a></li>
+<li><a class="reference internal" href="#numerical-processors">Numerical Processors</a></li>
+<li><a class="reference internal" href="#categorical-processors">Categorical Processors</a></li>
+<li><a class="reference internal" href="#datetime-processors">Datetime Processors</a></li>
+<li><a class="reference internal" href="#post-processors">Post-Processors</a></li>
+</ul>
+</div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
   <div class="rside-overlay js-menu" role="button" aria-label="Close Table of Contents" aria-controls="rside" aria-expanded="false"></div>
   <main class="sy-main w-full max-sm:max-w-full print:pt-6">
@@ -174,84 +182,132 @@ data-aria-dark="Switch to auto color mode">
   <article class="yue" role="main">
           <section id="sdm-processing">
 <h1>sdm.processing<a class="headerlink" href="#sdm-processing" title="Link to this heading">#</a></h1>
+<section id="processor-api">
+<h2>Processor API<a class="headerlink" href="#processor-api" title="Link to this heading">#</a></h2>
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Processor.html#sdm.processing.Processor" title="sdm.processing.Processor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Processor</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Processor</span></code></a></p></td>
 <td><p>Fittable, table-in/table-out transform.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.InvertibleMixin.html#sdm.processing.InvertibleMixin" title="sdm.processing.InvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.InvertibleMixin</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p></td>
 <td><p>Adds <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code> to a <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Sequential.html#sdm.processing.Sequential" title="sdm.processing.Sequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Sequential</span></code></a></p></td>
-<td><p>Apply processors and stateless callables in sequence.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Choice.html#sdm.processing.Choice" title="sdm.processing.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Choice</span></code></a></p></td>
-<td><p>Delegate to one option drawn uniformly at random.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.StypeDispatch.html#sdm.processing.StypeDispatch" title="sdm.processing.StypeDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.StypeDispatch</span></code></a></p></td>
-<td><p>Apply separate processor pipelines to columns grouped by semantic type.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.CategoricalAlign.html#sdm.processing.CategoricalAlign" title="sdm.processing.CategoricalAlign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.CategoricalAlign</span></code></a></p></td>
-<td><p>Align categorical codes to vocabularies fitted on training rows.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.CategoricalImpute.html#sdm.processing.CategoricalImpute" title="sdm.processing.CategoricalImpute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.CategoricalImpute</span></code></a></p></td>
-<td><p>Replace missing categorical values with fitted per-column values.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.TaskDispatch.html#sdm.processing.TaskDispatch" title="sdm.processing.TaskDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.TaskDispatch</span></code></a></p></td>
-<td><p>Route model output by the transformed target's semantic type.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Clip.html#sdm.processing.Clip" title="sdm.processing.Clip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Clip</span></code></a></p></td>
-<td><p>Clamp numerical values to a fixed interval.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.QuantileClip.html#sdm.processing.QuantileClip" title="sdm.processing.QuantileClip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.QuantileClip</span></code></a></p></td>
-<td><p>Clamp feature columns to fitted quantile bounds.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.CategoryShuffle.html#sdm.processing.CategoryShuffle" title="sdm.processing.CategoryShuffle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.CategoryShuffle</span></code></a></p></td>
-<td><p>Independently permute the integer codes of categorical columns.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.ConstantFilter.html#sdm.processing.ConstantFilter" title="sdm.processing.ConstantFilter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ConstantFilter</span></code></a></p></td>
-<td><p>Remove non-informative numerical columns learned during fit.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.EncodeDatetime.html#sdm.processing.EncodeDatetime" title="sdm.processing.EncodeDatetime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.EncodeDatetime</span></code></a></p></td>
-<td><p>Separate timestamps into numerical calendar features.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.FeaturePermute.html#sdm.processing.FeaturePermute" title="sdm.processing.FeaturePermute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.FeaturePermute</span></code></a></p></td>
-<td><p>Permute the numerical feature columns.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Identity.html#sdm.processing.Identity" title="sdm.processing.Identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Identity</span></code></a></p></td>
-<td><p>Return inputs unchanged.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.MeanImpute.html#sdm.processing.MeanImpute" title="sdm.processing.MeanImpute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.MeanImpute</span></code></a></p></td>
-<td><p>Replace NaN feature values with fitted per-column means.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.Power.html#sdm.processing.Power" title="sdm.processing.Power"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Power</span></code></a></p></td>
-<td><p>Apply a feature-wise Yeo-Johnson power transform.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Quantile.html#sdm.processing.Quantile" title="sdm.processing.Quantile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Quantile</span></code></a></p></td>
-<td><p>Map feature columns through their empirical quantiles.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.SigmaClip.html#sdm.processing.SigmaClip" title="sdm.processing.SigmaClip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.SigmaClip</span></code></a></p></td>
-<td><p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.EnsembleReduce.html#sdm.processing.EnsembleReduce" title="sdm.processing.EnsembleReduce"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.EnsembleReduce</span></code></a></p></td>
-<td><p>Reduce the leading ensemble dimension of model outputs.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.SoftmaxTemperature.html#sdm.processing.SoftmaxTemperature" title="sdm.processing.SoftmaxTemperature"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.SoftmaxTemperature</span></code></a></p></td>
-<td><p>Apply softmax to logits after temperature scaling.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.StandardScale.html#sdm.processing.StandardScale" title="sdm.processing.StandardScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.StandardScale</span></code></a></p></td>
-<td><p>Center and scale each feature column.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.ToNumerical.html#sdm.processing.ToNumerical" title="sdm.processing.ToNumerical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.ToNumerical</span></code></a></p></td>
-<td><p>Move categorical columns into the numerical block.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.Recipe.html#sdm.processing.Recipe" title="sdm.processing.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.processing.Recipe</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Recipe</span></code></a></p></td>
 <td><p>Processing contract around an external model boundary.</p></td>
 </tr>
 </tbody>
 </table>
 </div>
+</section>
+<section id="common-processors">
+<h2>Common Processors<a class="headerlink" href="#common-processors" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.sequential.Sequential.html#sdm.processing.sequential.Sequential" title="sdm.processing.sequential.Sequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Sequential</span></code></a></p></td>
+<td><p>Apply processors and stateless callables in sequence.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.choice.Choice.html#sdm.processing.choice.Choice" title="sdm.processing.choice.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
+<td><p>Delegate to one option drawn uniformly at random.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.stype_dispatch.StypeDispatch.html#sdm.processing.stype_dispatch.StypeDispatch" title="sdm.processing.stype_dispatch.StypeDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a></p></td>
+<td><p>Apply separate processor pipelines to columns grouped by semantic type.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.task_dispatch.TaskDispatch.html#sdm.processing.task_dispatch.TaskDispatch" title="sdm.processing.task_dispatch.TaskDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a></p></td>
+<td><p>Route model output by the transformed target's semantic type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Identity.html#sdm.processing.common.Identity" title="sdm.processing.common.Identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Identity</span></code></a></p></td>
+<td><p>Return inputs unchanged.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.FeaturePermute.html#sdm.processing.common.FeaturePermute" title="sdm.processing.common.FeaturePermute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FeaturePermute</span></code></a></p></td>
+<td><p>Permute the numerical feature columns.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html#sdm.processing.common.ToNumerical" title="sdm.processing.common.ToNumerical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToNumerical</span></code></a></p></td>
+<td><p>Move categorical columns into the numerical block.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="numerical-processors">
+<h2>Numerical Processors<a class="headerlink" href="#numerical-processors" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html#sdm.processing.numerical.Clip" title="sdm.processing.numerical.Clip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Clip</span></code></a></p></td>
+<td><p>Clamp numerical values to a fixed interval.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.QuantileClip.html#sdm.processing.numerical.QuantileClip" title="sdm.processing.numerical.QuantileClip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QuantileClip</span></code></a></p></td>
+<td><p>Clamp feature columns to fitted quantile bounds.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.SigmaClip.html#sdm.processing.numerical.SigmaClip" title="sdm.processing.numerical.SigmaClip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SigmaClip</span></code></a></p></td>
+<td><p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.MeanImpute.html#sdm.processing.numerical.MeanImpute" title="sdm.processing.numerical.MeanImpute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MeanImpute</span></code></a></p></td>
+<td><p>Replace NaN feature values with fitted per-column means.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Power.html#sdm.processing.numerical.Power" title="sdm.processing.numerical.Power"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Power</span></code></a></p></td>
+<td><p>Apply a feature-wise Yeo-Johnson power transform.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.Quantile.html#sdm.processing.numerical.Quantile" title="sdm.processing.numerical.Quantile"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Quantile</span></code></a></p></td>
+<td><p>Map feature columns through their empirical quantiles.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.StandardScale.html#sdm.processing.numerical.StandardScale" title="sdm.processing.numerical.StandardScale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StandardScale</span></code></a></p></td>
+<td><p>Center and scale each feature column.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.numerical.ConstantFilter.html#sdm.processing.numerical.ConstantFilter" title="sdm.processing.numerical.ConstantFilter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConstantFilter</span></code></a></p></td>
+<td><p>Remove non-informative numerical columns learned during fit.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="categorical-processors">
+<h2>Categorical Processors<a class="headerlink" href="#categorical-processors" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.categorical.CategoricalAlign.html#sdm.processing.categorical.CategoricalAlign" title="sdm.processing.categorical.CategoricalAlign"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CategoricalAlign</span></code></a></p></td>
+<td><p>Align categorical codes to vocabularies fitted on training rows.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.categorical.CategoricalImpute.html#sdm.processing.categorical.CategoricalImpute" title="sdm.processing.categorical.CategoricalImpute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CategoricalImpute</span></code></a></p></td>
+<td><p>Replace missing categorical values with fitted per-column values.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.categorical.CategoryShuffle.html#sdm.processing.categorical.CategoryShuffle" title="sdm.processing.categorical.CategoryShuffle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CategoryShuffle</span></code></a></p></td>
+<td><p>Independently permute the integer codes of categorical columns.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="datetime-processors">
+<h2>Datetime Processors<a class="headerlink" href="#datetime-processors" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.datetime.EncodeDatetime.html#sdm.processing.datetime.EncodeDatetime" title="sdm.processing.datetime.EncodeDatetime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EncodeDatetime</span></code></a></p></td>
+<td><p>Separate timestamps into numerical calendar features.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="post-processors">
+<h2>Post-Processors<a class="headerlink" href="#post-processors" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.output.EnsembleReduce.html#sdm.processing.output.EnsembleReduce" title="sdm.processing.output.EnsembleReduce"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleReduce</span></code></a></p></td>
+<td><p>Reduce the leading ensemble dimension of model outputs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.output.SoftmaxTemperature.html#sdm.processing.output.SoftmaxTemperature" title="sdm.processing.output.SoftmaxTemperature"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SoftmaxTemperature</span></code></a></p></td>
+<td><p>Apply softmax to logits after temperature scaling.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 </section>
 
         </article><button class="back-to-top" type="button">
@@ -266,7 +322,7 @@ data-aria-dark="Switch to auto color mode">
         <span>Previous</span><div class="title">RelationalSampler</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="generated/sdm.processing.Processor.html">
+    <a href="generated/sdm.processing.base.Processor.html">
       <div class="page-info">
         <span>Next</span>
         <div class="title">Processor</div>
@@ -278,7 +334,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=4355b152"></script>
+      <script src="../_static/documentation_options.js?v=20eb6340"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

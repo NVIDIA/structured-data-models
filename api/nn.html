@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.nn - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="QASSMax" href="generated/sdm.nn.QASSMax.html" /><link rel="prev" title="Recipe" href="generated/sdm.processing.Recipe.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>sdm.nn - Structured Data Models</title><link rel="index" title="Index" href="../genindex.html" /><link rel="search" title="Search" href="../search.html" /><link rel="next" title="QASSMax" href="generated/sdm.nn.QASSMax.html" /><link rel="prev" title="SoftmaxTemperature" href="generated/sdm.processing.output.SoftmaxTemperature.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=e1a1ceaf" />
@@ -91,30 +91,30 @@ data-aria-dark="Switch to auto color mode">
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="processing.html">sdm.processing</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Processor.html">Processor</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.InvertibleMixin.html">InvertibleMixin</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Sequential.html">Sequential</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Choice.html">Choice</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.StypeDispatch.html">StypeDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.CategoricalAlign.html">CategoricalAlign</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.CategoricalImpute.html">CategoricalImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.TaskDispatch.html">TaskDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Clip.html">Clip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.QuantileClip.html">QuantileClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.CategoryShuffle.html">CategoryShuffle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ConstantFilter.html">ConstantFilter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.EncodeDatetime.html">EncodeDatetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.FeaturePermute.html">FeaturePermute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Identity.html">Identity</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.MeanImpute.html">MeanImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Power.html">Power</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Quantile.html">Quantile</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.SigmaClip.html">SigmaClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.EnsembleReduce.html">EnsembleReduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ToNumerical.html">ToNumerical</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.Recipe.html">Recipe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.Processor.html">Processor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.sequential.Sequential.html">Sequential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.choice.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.stype_dispatch.StypeDispatch.html">StypeDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.task_dispatch.TaskDispatch.html">TaskDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.FeaturePermute.html">FeaturePermute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html">Clip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.QuantileClip.html">QuantileClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.SigmaClip.html">SigmaClip</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.MeanImpute.html">MeanImpute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Power.html">Power</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Quantile.html">Quantile</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.StandardScale.html">StandardScale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.ConstantFilter.html">ConstantFilter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.CategoricalAlign.html">CategoricalAlign</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.CategoricalImpute.html">CategoricalImpute</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.CategoryShuffle.html">CategoryShuffle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.datetime.EncodeDatetime.html">EncodeDatetime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.output.EnsembleReduce.html">EnsembleReduce</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.output.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
 </ul>
 </li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.nn</a><ul>
@@ -177,22 +177,22 @@ data-aria-dark="Switch to auto color mode">
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.QASSMax</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.QASSMax.html#sdm.nn.QASSMax" title="sdm.nn.QASSMax"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QASSMax</span></code></a></p></td>
 <td><p>Query-Aware Scalable SoftMax (QASSMax).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.SDPA.html#sdm.nn.SDPA" title="sdm.nn.SDPA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.SDPA</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.SDPA.html#sdm.nn.SDPA" title="sdm.nn.SDPA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SDPA</span></code></a></p></td>
 <td><p>Scaled Dot-Product Attention (SDPA).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.RotaryEmbedding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.RotaryEmbedding</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.RotaryEmbedding.html#sdm.nn.RotaryEmbedding" title="sdm.nn.RotaryEmbedding"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RotaryEmbedding</span></code></a></p></td>
 <td><p>Rotary Positional Embedding (RoPE).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.Attention.html#sdm.nn.Attention" title="sdm.nn.Attention"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.Attention</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.Attention.html#sdm.nn.Attention" title="sdm.nn.Attention"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Attention</span></code></a></p></td>
 <td><p>Multi-head attention layer with grouped-query attention support.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html#sdm.nn.TransformerBlock" title="sdm.nn.TransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.TransformerBlock</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.nn.TransformerBlock.html#sdm.nn.TransformerBlock" title="sdm.nn.TransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TransformerBlock</span></code></a></p></td>
 <td><p>Transformer block with pre-norm attention and feedforward modules.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.InducedTransformerBlock.html#sdm.nn.InducedTransformerBlock" title="sdm.nn.InducedTransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.nn.InducedTransformerBlock</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.nn.InducedTransformerBlock.html#sdm.nn.InducedTransformerBlock" title="sdm.nn.InducedTransformerBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InducedTransformerBlock</span></code></a></p></td>
 <td><p>Transformer block using learned inducing points.</p></td>
 </tr>
 </tbody>
@@ -206,10 +206,10 @@ data-aria-dark="Switch to auto color mode">
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="generated/sdm.processing.Recipe.html">
+    <a href="generated/sdm.processing.output.SoftmaxTemperature.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Recipe</div></div>
+        <span>Previous</span><div class="title">SoftmaxTemperature</div></div>
     </a>
   </div><div class="navigation-next">
     <a href="generated/sdm.nn.QASSMax.html">
@@ -224,7 +224,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=4355b152"></script>
+      <script src="../_static/documentation_options.js?v=20eb6340"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

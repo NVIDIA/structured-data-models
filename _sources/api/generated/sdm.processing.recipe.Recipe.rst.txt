@@ -1,0 +1,8 @@
+﻿Recipe
+======
+
+.. currentmodule:: sdm.processing.recipe
+
+.. autoclass:: Recipe
+   :members:
+   :show-inheritance:
