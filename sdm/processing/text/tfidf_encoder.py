@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -13,10 +14,10 @@ from typing_extensions import Self
 
 
 class TfidfEncoder(Processor):
-    r"""Encode text columns as character ``char_wb`` TF-IDF vectors.
+    r"""Encode text columns as character n-gram TF-IDF vectors.
 
     Each text column is tokenized into word-boundary character n-grams (see
-    :meth:`~sdm.tensor.StringTensor.character_ngrams`), and a separate
+    :meth:`character_ngrams`), and a separate
     vocabulary and inverse-document-frequency (idf) weighting is fitted per
     column on the context table. Every column expands to a block of numerical
     features (one per fitted n-gram), and the blocks are concatenated into the
@@ -99,10 +100,72 @@ class TfidfEncoder(Processor):
     ) -> tuple[StringTensor, Tensor]:
         """Tokenize one text column into ``(flat_ngrams, offsets)``."""
         column_text = cast(StringTensor, table.text[:, column])
-        return column_text.character_ngrams(
+        return self._character_ngrams(
+            column_text,
             self.ngram_range,
             lowercase=self.lowercase,
         )
+
+    def _character_ngrams(
+        self,
+        tensor: StringTensor,
+        ngram_range: tuple[int, int],
+        *,
+        lowercase: bool = True,
+    ) -> tuple[StringTensor, Tensor]:
+        r"""Split each string into word-boundary character n-grams.
+
+        Mirrors scikit-learn's ``analyzer='char_wb'``: each whitespace-
+        delimited word is padded with a single space on both sides before
+        windowing, so a word shorter than ``n`` still yields one n-gram.
+
+        Returns a flat :class:`StringTensor` holding every n-gram of every
+        document, together with an ``offset`` tensor of length ``numel() + 1``
+        where document ``d``'s n-grams are ``flat[offset[d]:offset[d + 1]]``.
+
+        Args:
+            tensor: StringTensor.
+            ngram_range: Inclusive ``(min_n, max_n)`` window sizes.
+            lowercase: Lowercase each string before windowing.
+        """
+        if tensor.dim() != 1:
+            raise NotImplementedError(
+                "'character_ngrams' only supports one-dimensional input"
+            )
+
+        min_n, max_n = ngram_range
+        if min_n < 1 or max_n < min_n:
+            raise ValueError("'ngram_range' must satisfy 1 <= min_n <= max_n.")
+
+        if tensor.is_cuda:
+            return tensor.character_ngrams_cuda(ngram_range, lowercase)
+
+        whitespace = re.compile(r"\s\s+")
+        ngrams: list[str] = []
+        offsets: list[int] = [0]
+        for document in tensor.to_arrow().to_pylist():
+            if lowercase:
+                document = document.lower()
+            document = whitespace.sub(" ", document)
+            for word in document.split():
+                word = " " + word + " "
+                word_len = len(word)
+                for n in range(min_n, max_n + 1):
+                    offset = 0
+                    ngrams.append(word[offset : offset + n])
+                    while offset + n < word_len:
+                        offset += 1
+                        ngrams.append(word[offset : offset + n])
+                    if offset == 0:  # word shorter than n: count it once
+                        break
+            offsets.append(len(ngrams))
+
+        flat = tensor.from_arrow(
+            pa.array(ngrams, type=pa.large_string()),
+            device=tensor.device,
+        )
+        offset = torch.tensor(offsets, dtype=torch.int64, device=tensor.device)
+        return flat, offset
 
     def _fit(
         self,

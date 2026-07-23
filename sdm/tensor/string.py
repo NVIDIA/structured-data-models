@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import math
-import re
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch.utils.dlpack import from_dlpack
 from typing_extensions import Self, override
 
 from sdm.tensor import VarLenTensor
@@ -292,48 +292,32 @@ class StringTensor(VarLenTensor):
             size=size,
         )
 
-    def character_ngrams(
+    def character_ngrams_cuda(
         self,
         ngram_range: tuple[int, int],
-        *,
         lowercase: bool = True,
     ) -> tuple[Self, Tensor]:
-        r"""Split each string into word-boundary character n-grams.
+        r"""Split each string into word-boundary character n-grams on GPU.
 
-        Mirrors scikit-learn's ``analyzer='char_wb'``: each whitespace-
-        delimited word is padded with a single space on both sides before
-        windowing, so a word shorter than ``n`` still yields one n-gram.
+        Device-native counterpart to the CPU/Arrow implementation in
+        :class:`~sdm.processing.text.tfidf_encoder.TfidfEncoder`; requires a
+        CUDA tensor and an installed cuDF. Mirrors scikit-learn's
+        ``analyzer='char_wb'``: each whitespace-delimited word is padded with a
+        single space on both sides before windowing, so a word shorter than
+        ``n`` still yields one n-gram.
 
         Returns a flat :class:`StringTensor` holding every n-gram of every
         document, together with an ``offset`` tensor of length ``numel() + 1``
         where document ``d``'s n-grams are ``flat[offset[d]:offset[d + 1]]``.
+        The n-grams within a document are unordered and may differ in order
+        from the CPU implementation; only the per-document grouping is stable.
 
         Args:
             ngram_range: Inclusive ``(min_n, max_n)`` window sizes.
             lowercase: Lowercase each string before windowing.
         """
-        if self.dim() != 1:
-            raise NotImplementedError(
-                "'character_ngrams' only supports one-dimensional input"
-            )
-
-        min_n, max_n = ngram_range
-        if min_n < 1 or max_n < min_n:
-            raise ValueError("'ngram_range' must satisfy 1 <= min_n <= max_n.")
-
-        if self.is_cuda:
-            return self._cuda_character_ngrams(ngram_range, lowercase)
-
-        return self._arrow_character_ngrams(ngram_range, lowercase)
-
-    def _cuda_character_ngrams(
-        self,
-        ngram_range: tuple[int, int],
-        lowercase: bool = True,
-    ) -> tuple[Self, Tensor]:
         import cudf
         import cupy as cp
-        from torch.utils.dlpack import from_dlpack
 
         min_n, max_n = ngram_range
         n_docs = self.numel()
@@ -383,39 +367,6 @@ class StringTensor(VarLenTensor):
             flat["gram"].reset_index(drop=True), device=self.device
         )
         return ngrams, offset
-
-    def _arrow_character_ngrams(
-        self,
-        ngram_range: tuple[int, int],
-        lowercase: bool = True,
-    ) -> tuple[Self, Tensor]:
-        min_n, max_n = ngram_range
-        whitespace = re.compile(r"\s\s+")
-        ngrams: list[str] = []
-        offsets: list[int] = [0]
-        for document in self.to_arrow().to_pylist():
-            if lowercase:
-                document = document.lower()
-            document = whitespace.sub(" ", document)
-            for word in document.split():
-                word = " " + word + " "
-                word_len = len(word)
-                for n in range(min_n, max_n + 1):
-                    offset = 0
-                    ngrams.append(word[offset : offset + n])
-                    while offset + n < word_len:
-                        offset += 1
-                        ngrams.append(word[offset : offset + n])
-                    if offset == 0:  # word shorter than n: count it once
-                        break
-            offsets.append(len(ngrams))
-
-        flat = self.from_arrow(
-            pa.array(ngrams, type=pa.large_string()),
-            device=self.device,
-        )
-        offset = torch.tensor(offsets, dtype=torch.int64, device=self.device)
-        return flat, offset
 
     @override
     def item(self) -> str:  # type: ignore

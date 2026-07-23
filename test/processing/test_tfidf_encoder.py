@@ -133,3 +133,78 @@ def test_tfidf_encoder_to_moves_fitted_state_cuda() -> None:
 
     output = encoder.transform(query)
     assert output.numerical.is_cuda
+
+
+def _ngrams(
+    values: list[str],
+    ngram_range: tuple[int, int],
+    *,
+    lowercase: bool = True,
+) -> tuple[StringTensor, torch.Tensor]:
+    encoder = TfidfEncoder(ngram_range=ngram_range)
+    tensor = StringTensor.from_list(values)
+    return encoder._character_ngrams(tensor, ngram_range, lowercase=lowercase)
+
+
+def test_character_ngrams() -> None:
+    flat, offset = _ngrams(["cat", "hi cat"], (2, 2))
+
+    assert flat.tolist() == [
+        " c",
+        "ca",
+        "at",
+        "t ",
+        " h",
+        "hi",
+        "i ",
+        " c",
+        "ca",
+        "at",
+        "t ",
+    ]
+    assert offset.equal(torch.tensor([0, 4, 11]))
+
+
+def test_character_ngrams_combines_sizes() -> None:
+    flat, offset = _ngrams(["cat"], (2, 3))
+
+    assert flat.tolist() == [
+        " c",
+        "ca",
+        "at",
+        "t ",
+        " ca",
+        "cat",
+        "at ",
+    ]
+    assert offset.equal(torch.tensor([0, 7]))
+
+
+def test_character_ngrams_short_word_counts_once() -> None:
+    flat, offset = _ngrams(["a"], (5, 5))
+
+    assert flat.tolist() == [" a "]
+    assert offset.equal(torch.tensor([0, 1]))
+
+
+def test_character_ngrams_empty_string_yields_nothing() -> None:
+    flat, offset = _ngrams([""], (2, 2))
+
+    assert flat.tolist() == []
+    assert offset.equal(torch.tensor([0, 0]))
+
+
+def test_character_ngrams_lowercases_by_default() -> None:
+    flat, _ = _ngrams(["CAT"], (3, 3))
+    assert flat.tolist() == [" ca", "cat", "at "]
+
+    flat, _ = _ngrams(["CAT"], (3, 3), lowercase=False)
+    assert flat.tolist() == [" CA", "CAT", "AT "]
+
+
+def test_character_ngrams_rejects_multi_dimensional_input() -> None:
+    encoder = TfidfEncoder(ngram_range=(2, 2))
+    tensor = StringTensor.from_list([["a", "b"], ["c", "d"]])
+
+    with pytest.raises(NotImplementedError, match="one-dimensional"):
+        encoder._character_ngrams(tensor, (2, 2))
