@@ -165,7 +165,7 @@ class KumoRFM(ICLModel):
 
         for variant, filename in self._checkpoint_filenames.items():
             path = download_checkpoint(
-                repo_id="nvidia/kumorfm-2",
+                repo_id="nvidia/kumorfm",
                 filename=filename,
                 revision="v2.1.0",
             )
