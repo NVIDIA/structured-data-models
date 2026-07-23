@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
@@ -803,7 +804,9 @@ class TableTensor(Tensor):
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            # The wrapper has no autograd edge; record operations on blocks.
+            with enable_reentrant_dispatch():
+                return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
             f"'{func}' is not supported for '{cls.__name__}'"

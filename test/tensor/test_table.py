@@ -1,7 +1,7 @@
 import io
 from datetime import datetime
 from textwrap import dedent
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 import pyarrow as pa
@@ -897,6 +897,34 @@ def test_cat_stack() -> None:
 
     with pytest.raises(RuntimeError, match="Can't stack"):
         _ = torch.stack([tensor1, tensor1], dim=-1)
+
+
+@pytest.mark.parametrize(
+    ("operation", "expected_gradient"),
+    [
+        (lambda table: table.clone(), 2.0),
+        (lambda table: torch.cat((table, table), dim=0), 4.0),
+        (lambda table: torch.stack((table, table), dim=0), 4.0),
+    ],
+)
+def test_block_operations_preserve_numerical_autograd(
+    operation: Any,
+    expected_gradient: float,
+) -> None:
+    numerical = torch.randn(2, 1, requires_grad=True)
+    table = TableTensor(
+        columns={Stype.numerical: ("value",)},
+        numerical=numerical * 2,
+    )
+
+    out = operation(table)
+    gradient = torch.autograd.grad(out.numerical.sum(), numerical)[0]
+
+    assert out.numerical.grad_fn is not None
+    torch.testing.assert_close(
+        gradient,
+        torch.full_like(numerical, expected_gradient),
+    )
 
 
 @withCUDA
