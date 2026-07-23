@@ -1,10 +1,15 @@
 """Fittable pre/postprocessing transforms for structured data."""
 
-from sdm.processing.base import Processor, InvertibleMixin, SharedState
-from sdm.processing.sequential import Sequential
-from sdm.processing.choice import Choice
-from sdm.processing.stype_dispatch import StypeDispatch
-from sdm.processing.task_dispatch import TaskDispatch
+from sdm.processing.base import Processor, InvertibleMixin
+from sdm.processing.common import (
+    Sequential,
+    Choice,
+    StypeDispatch,
+    TaskDispatch,
+    Identity,
+    FeaturePermute,
+    ToNumerical,
+)
 from sdm.processing.recipe import Recipe
 from sdm.processing.tfidf_encoder import TfidfEncoder
 from sdm.processing.numerical import (
@@ -24,7 +29,7 @@ from sdm.processing.categorical import (
 )
 from sdm.processing.datetime import EncodeDatetime
 from sdm.processing.output import EnsembleReduce, SoftmaxTemperature
-from sdm.processing.common import Identity, FeaturePermute, ToNumerical
+from sdm.processing.recipe import Recipe
 
 __all__ = [
     "Processor",

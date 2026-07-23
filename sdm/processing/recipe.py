@@ -5,8 +5,8 @@ import torch
 from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.sequential import Sequential
-from sdm.processing.task_dispatch import TaskDispatch
+from sdm.processing.common.sequential import Sequential
+from sdm.processing.common.task_dispatch import TaskDispatch
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 

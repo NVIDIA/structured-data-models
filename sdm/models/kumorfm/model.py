@@ -53,7 +53,7 @@ class KumoRFM(ICLModel):
         from sdm import RelatedTables, TableTensor
         from sdm.models import KumoRFM
 
-        task_table = TableTensor.from_columns({
+        task_table = TableTensor.from_columns(
             {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
             stypes={"user_id": "id", "churn": "categorical"},
             device="cuda",
@@ -67,10 +67,7 @@ class KumoRFM(ICLModel):
                     device="cuda",
                 ),
                 "orders": TableTensor.from_columns(
-                    {
-                        "user_id": [0, 0, 1, 3, 3, 3],
-                        "amount": [9.99, 31.57, 29.97, 19.49, 4.99, 10.00],
-                    },
+                    {"user_id": [0, 0, 1, 3, 3, 3], "amount": [9.99, 4.99, ...]},
                     stypes={"user_id": "id", "amount": "numerical"},
                     device="cuda",
                 ),
@@ -120,7 +117,7 @@ class KumoRFM(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
-    """
+    """  # noqa: E501
 
     #:
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -168,7 +165,7 @@ class KumoRFM(ICLModel):
 
         for variant, filename in self._checkpoint_filenames.items():
             path = download_checkpoint(
-                repo_id="nvidia/kumorfm-2",
+                repo_id="nvidia/kumorfm",
                 filename=filename,
                 revision="v2.1.0",
             )

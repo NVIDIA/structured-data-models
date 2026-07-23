@@ -6,5 +6,5 @@ sdm.relational
    :nosignatures:
 
 {% for name in api_names("sdm.relational") %}
-   sdm.relational.{{ name }}
+   ~sdm.relational.{{ name }}
 {% endfor %}
