@@ -24,7 +24,7 @@ class AlignCategories(Processor):
     categorical schema. It also removes categories that occur only outside a
     sliced training context from a jointly inferred vocabulary. Only
     categorical columns are supported; use
-    :class:`~sdm.processing.DispatchByStype` for mixed feature tables.
+    :class:`~sdm.processing.StypeDispatch` for mixed feature tables.
 
     String and unsigned integer vocabularies are matched through host metadata
     because their required tensor operations are unavailable on every device.

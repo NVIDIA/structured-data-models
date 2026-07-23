@@ -2,11 +2,11 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
-    DispatchByStype,
     Identity,
     ImputeMean,
     ShuffleCategories,
     Standardize,
+    StypeDispatch,
 )
 
 
@@ -24,9 +24,9 @@ def _mixed_table() -> TableTensor:
     )
 
 
-def test_dispatch_by_stype_routes_and_passes_through_by_default() -> None:
+def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     table = _mixed_table()
-    dispatch = DispatchByStype(numerical=Standardize())
+    dispatch = StypeDispatch(numerical=Standardize())
 
     output = dispatch.fit_transform(table)
 
@@ -50,9 +50,9 @@ def test_dispatch_by_stype_routes_and_passes_through_by_default() -> None:
     )
 
 
-def test_dispatch_by_stype_accepts_callable_route() -> None:
+def test_stype_dispatch_accepts_callable_route() -> None:
     table = _mixed_table()
-    dispatch = DispatchByStype(
+    dispatch = StypeDispatch(
         numerical=lambda table: table.replace_blocks(
             numerical=table.numerical.square()
         )
@@ -75,7 +75,7 @@ def test_dispatch_by_stype_accepts_callable_route() -> None:
         dispatch.inverse_transform(output)
 
 
-def test_dispatch_by_stype_passes_generator_to_routes() -> None:
+def test_stype_dispatch_passes_generator_to_routes() -> None:
     table = TableTensor(
         columns={"categorical": ("kind",)},
         categorical=CategoricalTensor(
@@ -85,12 +85,12 @@ def test_dispatch_by_stype_passes_generator_to_routes() -> None:
     )
 
     first = ShuffleCategories(method="random")
-    DispatchByStype(categorical=first).fit(
+    StypeDispatch(categorical=first).fit(
         table,
         generator=torch.Generator().manual_seed(0),
     )
     second = ShuffleCategories(method="random")
-    DispatchByStype(categorical=second).fit(
+    StypeDispatch(categorical=second).fit(
         table,
         generator=torch.Generator().manual_seed(0),
     )
@@ -98,9 +98,9 @@ def test_dispatch_by_stype_passes_generator_to_routes() -> None:
     assert torch.equal(first.permutations, second.permutations)
 
 
-def test_dispatch_by_stype_inverse_rejects_noninvertible_route() -> None:
+def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
     table = _mixed_table()
-    dispatch = DispatchByStype(numerical=ImputeMean())
+    dispatch = StypeDispatch(numerical=ImputeMean())
 
     output = dispatch.fit_transform(table)
 
@@ -108,9 +108,9 @@ def test_dispatch_by_stype_inverse_rejects_noninvertible_route() -> None:
         dispatch.inverse_transform(output)
 
 
-def test_dispatch_by_stype_inverse_rejects_dropped_remainder() -> None:
+def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
     table = _mixed_table()
-    dispatch = DispatchByStype(
+    dispatch = StypeDispatch(
         numerical=Standardize(),
         remainder="drop",
     )
@@ -121,10 +121,10 @@ def test_dispatch_by_stype_inverse_rejects_dropped_remainder() -> None:
         dispatch.inverse_transform(output)
 
 
-def test_dispatch_by_stype_rejects_remainder_before_fitting_routes() -> None:
+def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     table = _mixed_table()
     processor = Standardize()
-    dispatch = DispatchByStype(
+    dispatch = StypeDispatch(
         numerical=processor,
         remainder="error",
     )
@@ -136,8 +136,8 @@ def test_dispatch_by_stype_rejects_remainder_before_fitting_routes() -> None:
         processor.transform(table.select_stypes(Stype.numerical))
 
 
-def test_dispatch_by_stype_drops_remainder_and_empty_outputs() -> None:
-    output = DispatchByStype(remainder="drop").fit_transform(_mixed_table())
+def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
+    output = StypeDispatch(remainder="drop").fit_transform(_mixed_table())
 
     assert output.size() == (2, 0)
     assert output.columns == {
@@ -149,11 +149,11 @@ def test_dispatch_by_stype_drops_remainder_and_empty_outputs() -> None:
     }
 
 
-def test_dispatch_by_stype_runs_iterable_routes() -> None:
+def test_stype_dispatch_runs_iterable_routes() -> None:
     table = _mixed_table().replace_blocks(
         numerical=torch.tensor([[-3.0, 2.0], [1.0, 4.0]])
     )
-    dispatch = DispatchByStype(
+    dispatch = StypeDispatch(
         numerical=[
             lambda table: table.replace_blocks(
                 numerical=table.numerical.square()
@@ -174,12 +174,12 @@ def test_dispatch_by_stype_runs_iterable_routes() -> None:
     torch.testing.assert_close(output.numerical, expected.numerical)
 
 
-def test_dispatch_by_stype_routes_text() -> None:
+def test_stype_dispatch_routes_text() -> None:
     table = TableTensor(
         columns={"text": ("review",)},
         text=StringTensor.from_list([["good"], ["bad"]]),
     )
-    dispatch = DispatchByStype(text=Identity())
+    dispatch = StypeDispatch(text=Identity())
 
     output = dispatch.fit_transform(table)
 
@@ -187,13 +187,13 @@ def test_dispatch_by_stype_routes_text() -> None:
     assert output.text.equal(table.text)
 
 
-def test_dispatch_by_stype_uses_route_fitted_state() -> None:
-    dispatch = DispatchByStype(
+def test_stype_dispatch_uses_route_fitted_state() -> None:
+    dispatch = StypeDispatch(
         numerical=Standardize(),
         remainder="drop",
     )
 
-    with pytest.raises(RuntimeError, match=r"DispatchByStype.*not fitted"):
+    with pytest.raises(RuntimeError, match=r"StypeDispatch.*not fitted"):
         dispatch.transform(_mixed_table())
 
     transformed = dispatch.fit_transform(_mixed_table())

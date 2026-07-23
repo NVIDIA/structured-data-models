@@ -7,11 +7,11 @@ from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
-    DispatchByStype,
     InvertibleMixin,
     Processor,
     Recipe,
     Standardize,
+    StypeDispatch,
 )
 
 
@@ -138,7 +138,7 @@ def _related_tables(*, query: bool) -> RelatedTables:
 
 def _recipe() -> Recipe:
     return Recipe(
-        features=DispatchByStype(numerical=Standardize()),
+        features=StypeDispatch(numerical=Standardize()),
     )
 
 

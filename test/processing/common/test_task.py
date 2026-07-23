@@ -4,10 +4,10 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
-    DispatchByTask,
     Identity,
     Softmax,
     Standardize,
+    TaskDispatch,
 )
 
 
@@ -32,14 +32,14 @@ def _numerical_table(
     )
 
 
-def test_dispatch_by_task_routes_output_and_has_stable_repr() -> None:
-    dispatch = DispatchByTask(
+def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
+    dispatch = TaskDispatch(
         classification=Softmax(),
         regression=[Identity()],
     )
     output = _numerical_table(("a", "b"))
     description = dedent("""\
-        DispatchByTask(
+        TaskDispatch(
           classification: Softmax(),
           regression: Sequential(
             Identity(),
@@ -60,7 +60,7 @@ def test_dispatch_by_task_routes_output_and_has_stable_repr() -> None:
     )
     assert repr(dispatch) == description
 
-    restored = DispatchByTask(
+    restored = TaskDispatch(
         classification=Softmax(),
         regression=[Identity()],
     )
@@ -72,14 +72,14 @@ def test_dispatch_by_task_routes_output_and_has_stable_repr() -> None:
     )
 
 
-def test_dispatch_by_task_rejects_invalid_routes_and_targets() -> None:
+def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
     with pytest.raises(ValueError, match="at least one route"):
-        DispatchByTask()
+        TaskDispatch()
 
     with pytest.raises(ValueError, match=r"regression.*requires fit"):
-        DispatchByTask(regression=Standardize())
+        TaskDispatch(regression=Standardize())
 
-    dispatch = DispatchByTask(regression=Identity())
+    dispatch = TaskDispatch(regression=Identity())
     output = _numerical_table()
 
     with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):

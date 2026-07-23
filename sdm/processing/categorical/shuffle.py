@@ -16,7 +16,7 @@ class ShuffleCategories(Processor):
     Codes and their corresponding category vectors are permuted together so
     decoded values remain unchanged. Negative codes represent missing values
     and are preserved unchanged. Only categorical columns are supported; use
-    :class:`~sdm.processing.DispatchByStype` to apply this processor to the
+    :class:`~sdm.processing.StypeDispatch` to apply this processor to the
     categorical block of a mixed feature table.
 
     Args:

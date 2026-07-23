@@ -6,7 +6,7 @@ from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.common.sequential import Sequential
-from sdm.processing.common.task import DispatchByTask
+from sdm.processing.common.task import TaskDispatch
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -24,11 +24,11 @@ class _TaskResolver(Processor, InvertibleMixin):
     def __init__(
         self,
         processor: Processor,
-        dispatch_by_tasks: tuple[DispatchByTask, ...],
+        task_dispatchers: tuple[TaskDispatch, ...],
     ) -> None:
         super().__init__()
         self.processor = processor
-        self._dispatch_by_tasks = dispatch_by_tasks
+        self._task_dispatchers = task_dispatchers
 
     def fit(
         self,
@@ -47,8 +47,8 @@ class _TaskResolver(Processor, InvertibleMixin):
     ) -> TableTensor:
         self._check_supported_stypes(table)
         self._fitted = False
-        for dispatch_by_task in self._dispatch_by_tasks:
-            dispatch_by_task._reset()
+        for task_dispatcher in self._task_dispatchers:
+            task_dispatcher._reset()
 
         succeeded = False
         try:
@@ -56,15 +56,15 @@ class _TaskResolver(Processor, InvertibleMixin):
                 table,
                 generator=generator,
             )
-            for dispatch_by_task in self._dispatch_by_tasks:
-                dispatch_by_task._resolve(target)
+            for task_dispatcher in self._task_dispatchers:
+                task_dispatcher._resolve(target)
             self._fitted = True
             succeeded = True
             return target
         finally:
             if not succeeded:
-                for dispatch_by_task in self._dispatch_by_tasks:
-                    dispatch_by_task._reset()
+                for task_dispatcher in self._task_dispatchers:
+                    task_dispatcher._reset()
 
     def _transform(self, table: TableTensor) -> TableTensor:
         return self.processor.transform(table)
@@ -106,7 +106,7 @@ class Recipe:
     ``recipe.target.inverse_transform(prediction)``. Recipes do not infer each
     step's non-finite input contract; order steps so values are imputed before
     processors that do not explicitly document non-finite support. When
-    ``output`` contains :class:`~sdm.processing.DispatchByTask`, fitting
+    ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
     ``target`` also selects its task-specific output route.
 
     Copy a task-aware recipe as a whole so its target remains connected to the
@@ -147,61 +147,61 @@ class Recipe:
         elif not isinstance(output, Processor):
             output = Sequential(*output)
 
-        # TODO: Support DispatchByTask in features after defining task-aware
+        # TODO: Support TaskDispatch in features after defining task-aware
         # feature fit ordering.
         for role, processor in (
             ("features", features),
             ("target", target),
         ):
             if any(
-                isinstance(module, DispatchByTask)
+                isinstance(module, TaskDispatch)
                 for module in processor.modules()
             ):
                 raise ValueError(
-                    f"'DispatchByTask' is only supported in 'Recipe.output' "
+                    f"'TaskDispatch' is only supported in 'Recipe.output' "
                     f"(found in '{role}')."
                 )
 
         # Common output steps can remain adjacent; nesting would require
         # defining whether dispatchers in inactive branches are resolved.
-        dispatch_by_task_entries = tuple(
+        task_dispatch_entries = tuple(
             (path, module)
             for path, module in output.named_modules(remove_duplicate=False)
-            if isinstance(module, DispatchByTask)
+            if isinstance(module, TaskDispatch)
         )
-        if isinstance(output, DispatchByTask):
+        if isinstance(output, TaskDispatch):
             direct_paths = {""}
         elif isinstance(output, Sequential):
             direct_paths = {
                 str(index)
                 for index, step in enumerate(output.steps)
-                if isinstance(step, DispatchByTask)
+                if isinstance(step, TaskDispatch)
             }
         else:
             direct_paths = set()
 
         nested_paths = tuple(
             path
-            for path, _ in dispatch_by_task_entries
+            for path, _ in task_dispatch_entries
             if path not in direct_paths
         )
         if len(nested_paths) > 0:
             locations = ", ".join(repr(path) for path in nested_paths)
             raise ValueError(
-                "'DispatchByTask' must be a direct step in 'Recipe.output'; "
+                "'TaskDispatch' must be a direct step in 'Recipe.output'; "
                 f"nested task dispatch was found at {locations}."
             )
 
-        dispatch_by_tasks = tuple(
+        task_dispatchers = tuple(
             module
-            for path, module in dispatch_by_task_entries
+            for path, module in task_dispatch_entries
             if path in direct_paths
         )
 
-        if len(dispatch_by_tasks) > 0:
+        if len(task_dispatchers) > 0:
             target = _TaskResolver(
                 processor=target,
-                dispatch_by_tasks=dispatch_by_tasks,
+                task_dispatchers=task_dispatchers,
             )
 
         object.__setattr__(self, "features", features)

@@ -3,7 +3,7 @@ from typing import Any, cast
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import DispatchByStype, ImputeCategories, ToNumerical
+from sdm.processing import ImputeCategories, StypeDispatch, ToNumerical
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -160,7 +160,7 @@ def test_impute_categories_rejects_out_of_range_code_during_transform() -> (
 
 def test_impute_categories_composes_before_to_numerical() -> None:
     table = _table([[0, 0], [0, -1], [1, 1], [-1, 1]])
-    processor = DispatchByStype(
+    processor = StypeDispatch(
         categorical=[ImputeCategories(), ToNumerical()],
     )
 

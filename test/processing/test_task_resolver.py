@@ -6,13 +6,13 @@ import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     Choice,
-    DispatchByTask,
     Identity,
     InvertibleMixin,
     Processor,
     Recipe,
     Softmax,
     Standardize,
+    TaskDispatch,
     ToNumerical,
 )
 from sdm.testing import withCUDA
@@ -50,7 +50,7 @@ def _recipe(*, target: Processor | None = None) -> Recipe:
     return Recipe(
         target=target,
         output=[
-            DispatchByTask(
+            TaskDispatch(
                 classification=Softmax(),
                 regression=Identity(),
             )
@@ -86,7 +86,7 @@ def test_task_resolver_uses_final_target_type_once(
 
     converted = Recipe(
         target=[ToNumerical()],
-        output=[DispatchByTask(regression=Identity())],
+        output=[TaskDispatch(regression=Identity())],
     )
     transformed_target = converted.target.fit_transform(categorical_target)
 
@@ -95,7 +95,7 @@ def test_task_resolver_uses_final_target_type_once(
 
     scaled = Recipe(
         target=[Standardize()],
-        output=[DispatchByTask(regression=Identity())],
+        output=[TaskDispatch(regression=Identity())],
     )
     numerical_target = _numerical_target(device)
     transformed_target = scaled.target.fit_transform(numerical_target)
@@ -110,7 +110,7 @@ def test_task_resolver_uses_final_target_type_once(
 
 def test_task_resolver_clears_failures_and_validates_placement() -> None:
     output = _output()
-    recipe = Recipe(output=[DispatchByTask(regression=Identity())])
+    recipe = Recipe(output=[TaskDispatch(regression=Identity())])
     assert "_TaskResolver" not in repr(recipe)
 
     recipe.target.fit(_numerical_target())
@@ -122,11 +122,11 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
         recipe.output.transform(output)
 
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
-        Recipe(features=[DispatchByTask(regression=Identity())])
+        Recipe(features=[TaskDispatch(regression=Identity())])
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
-        Recipe(target=[DispatchByTask(regression=Identity())])
+        Recipe(target=[TaskDispatch(regression=Identity())])
 
-    shared = DispatchByTask(regression=Identity())
+    shared = TaskDispatch(regression=Identity())
     nested = Choice(Identity(), shared)
     with pytest.raises(ValueError, match=r"direct step.*1\.options\.1"):
         Recipe(output=[shared, nested])
@@ -135,7 +135,7 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
 def test_task_resolver_copies_recipes_independently() -> None:
     template = _recipe()
     assert not any(
-        isinstance(module, DispatchByTask)
+        isinstance(module, TaskDispatch)
         for module in template.target.modules()
     )
     classification = copy.deepcopy(template)

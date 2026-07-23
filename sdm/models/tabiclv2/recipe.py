@@ -3,8 +3,6 @@ from sdm.processing import (
     Choice,
     Clip,
     ClipBySigma,
-    DispatchByStype,
-    DispatchByTask,
     DropConstant,
     Identity,
     ImputeMean,
@@ -15,6 +13,8 @@ from sdm.processing import (
     ShuffleColumns,
     Softmax,
     Standardize,
+    StypeDispatch,
+    TaskDispatch,
     ToNumerical,
 )
 
@@ -31,14 +31,14 @@ def default_recipe() -> Recipe:
     """
     return Recipe(
         features=[
-            DispatchByStype(
+            StypeDispatch(
                 numerical=Identity(),
                 categorical=[
                     AlignCategories(),
                     ToNumerical(),
                 ],
             ),
-            DispatchByStype(  # TODO Support `id` as passthrough.
+            StypeDispatch(  # TODO Support `id` as passthrough.
                 numerical=[
                     ImputeMean(),
                     DropConstant(),
@@ -51,7 +51,7 @@ def default_recipe() -> Recipe:
             ),
         ],
         target=[
-            DispatchByStype(
+            StypeDispatch(
                 categorical=[
                     AlignCategories(),
                     ShuffleCategories(method="shift"),
@@ -61,7 +61,7 @@ def default_recipe() -> Recipe:
         ],
         output=[
             ReduceEstimators(method="mean"),
-            DispatchByTask(
+            TaskDispatch(
                 classification=Softmax(temperature=0.9),
                 regression=Identity(),
             ),
