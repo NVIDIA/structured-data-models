@@ -6,7 +6,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class ClipByQuantiles(Processor):
+class ClipQuantiles(Processor):
     """Clamp feature columns to fitted quantile bounds.
 
     Values outside the fitted bounds are discarded, so this processor is not

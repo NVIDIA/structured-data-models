@@ -1,12 +1,12 @@
 import pytest
 import torch
 from sdm import TableTensor
-from sdm.processing import ClipByQuantiles
+from sdm.processing import ClipQuantiles
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_clip_by_quantiles_bounds_and_transform(device: torch.device) -> None:
+def test_clip_quantiles_bounds_and_transform(device: torch.device) -> None:
     inp = torch.tensor(
         [
             [0.0, 10.0],
@@ -17,7 +17,7 @@ def test_clip_by_quantiles_bounds_and_transform(device: torch.device) -> None:
         device=device,
     )
 
-    processor = ClipByQuantiles(q_low=0.25, q_high=0.75).fit(
+    processor = ClipQuantiles(q_low=0.25, q_high=0.75).fit(
         TableTensor.from_tensor(inp)
     )
     expected_bounds = torch.quantile(
@@ -35,7 +35,7 @@ def test_clip_by_quantiles_bounds_and_transform(device: torch.device) -> None:
 
 
 @withCUDA
-def test_clip_by_quantiles_default_uses_min_max_bounds(
+def test_clip_quantiles_default_uses_min_max_bounds(
     device: torch.device,
 ) -> None:
     inp = torch.tensor(
@@ -43,7 +43,7 @@ def test_clip_by_quantiles_default_uses_min_max_bounds(
         device=device,
     )
 
-    processor = ClipByQuantiles().fit(TableTensor.from_tensor(inp))
+    processor = ClipQuantiles().fit(TableTensor.from_tensor(inp))
 
     assert torch.equal(
         processor.lower_bound,
@@ -59,12 +59,12 @@ def test_clip_by_quantiles_default_uses_min_max_bounds(
 
 
 @withCUDA
-def test_clip_by_quantiles_constant_columns_are_exact(
+def test_clip_quantiles_constant_columns_are_exact(
     device: torch.device,
 ) -> None:
     inp = torch.full((4, 2), 3.0, device=device)
 
-    processor = ClipByQuantiles(q_low=0.02, q_high=0.98).fit(
+    processor = ClipQuantiles(q_low=0.02, q_high=0.98).fit(
         TableTensor.from_tensor(inp)
     )
 
@@ -79,6 +79,6 @@ def test_clip_by_quantiles_constant_columns_are_exact(
     assert transformed.device == device
 
 
-def test_clip_by_quantiles_rejects_invalid_quantiles() -> None:
+def test_clip_quantiles_rejects_invalid_quantiles() -> None:
     with pytest.raises(ValueError, match="q_low <= q_high"):
-        ClipByQuantiles(q_low=0.75, q_high=0.25)
+        ClipQuantiles(q_low=0.75, q_high=0.25)

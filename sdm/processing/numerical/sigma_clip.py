@@ -12,7 +12,7 @@ def _std(inp: Tensor, *, dim: int) -> Tensor:
     return inp.std(dim=dim, correction=correction)
 
 
-class ClipBySigma(Processor):
+class ClipSigma(Processor):
     """Two-stage z-score outlier clipping with soft logarithmic bounds.
 
     The first pass masks values outside the initial z-score bounds, then the

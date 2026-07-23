@@ -1,9 +1,7 @@
-from typing import Any, cast
-
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ImputeCategories, StypeDispatch, ToNumerical
+from sdm.processing import ImputeMode, StypeDispatch, ToNumerical
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -30,7 +28,7 @@ def _table(
 
 
 @withCUDA
-def test_impute_categories_most_frequent(
+def test_impute_mode_uses_most_frequent_category(
     device: torch.device,
 ) -> None:
     context = _table(
@@ -41,7 +39,7 @@ def test_impute_categories_most_frequent(
         [[-1, -1], [2, 0]],
         device=device,
     )
-    processor = ImputeCategories().fit(context)
+    processor = ImputeMode().fit(context)
 
     output = processor.transform(query)
 
@@ -62,8 +60,8 @@ def test_impute_categories_most_frequent(
 
 
 @onlyCUDA
-def test_impute_categories_moves_fitted_processor_to_cuda() -> None:
-    processor = ImputeCategories().fit(_table([[0, 1], [0, -1], [1, 0]]))
+def test_impute_mode_moves_fitted_processor_to_cuda() -> None:
+    processor = ImputeMode().fit(_table([[0, 1], [0, -1], [1, 0]]))
     processor = processor.to("cuda")
     query = _table([[-1, -1]], device=torch.device("cuda"))
 
@@ -77,12 +75,12 @@ def test_impute_categories_moves_fitted_processor_to_cuda() -> None:
 
 
 @withCUDA
-def test_impute_categories_tie_uses_lowest_code(
+def test_impute_mode_tie_uses_lowest_code(
     device: torch.device,
 ) -> None:
     table = _table([[1, 0], [0, 1], [-1, -1]], device=device)
 
-    output = ImputeCategories().fit_transform(table)
+    output = ImputeMode().fit_transform(table)
 
     assert torch.equal(
         output.categorical.as_tensor(),
@@ -94,16 +92,11 @@ def test_impute_categories_tie_uses_lowest_code(
     )
 
 
-def test_impute_categories_rejects_all_missing_column() -> None:
+def test_impute_mode_rejects_all_missing_column() -> None:
     table = _table([[0, -1], [1, -1]])
 
     with pytest.raises(ValueError, match=r"segment.*no observed values"):
-        ImputeCategories().fit(table)
-
-
-def test_impute_categories_rejects_unknown_strategy() -> None:
-    with pytest.raises(ValueError, match="strategy must be 'most_frequent'"):
-        ImputeCategories(strategy=cast(Any, "constant"))
+        ImputeMode().fit(table)
 
 
 @pytest.mark.parametrize(
@@ -113,10 +106,10 @@ def test_impute_categories_rejects_unknown_strategy() -> None:
         (("a", "b"), ("x", "y")),
     ],
 )
-def test_impute_categories_rejects_changed_vocabulary(
+def test_impute_mode_rejects_changed_vocabulary(
     categories: tuple[tuple[str, ...], ...],
 ) -> None:
-    processor = ImputeCategories().fit(_table([[0, 0], [0, 1]]))
+    processor = ImputeMode().fit(_table([[0, 0], [0, 1]]))
     query = _table([[-1, -1]], categories=categories)
 
     with pytest.raises(
@@ -126,8 +119,8 @@ def test_impute_categories_rejects_changed_vocabulary(
         processor.transform(query)
 
 
-def test_impute_categories_rejects_reordered_columns() -> None:
-    processor = ImputeCategories().fit(_table([[0, 0], [0, 1]]))
+def test_impute_mode_rejects_reordered_columns() -> None:
+    processor = ImputeMode().fit(_table([[0, 0], [0, 1]]))
     query = _table(
         [[-1, -1]],
         columns=("segment", "kind"),
@@ -141,27 +134,25 @@ def test_impute_categories_rejects_reordered_columns() -> None:
         processor.transform(query)
 
 
-def test_impute_categories_rejects_out_of_range_code_during_fit() -> None:
+def test_impute_mode_rejects_out_of_range_code_during_fit() -> None:
     table = _table([[3, 0], [0, 1]])
 
     with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
-        ImputeCategories().fit(table)
+        ImputeMode().fit(table)
 
 
-def test_impute_categories_rejects_out_of_range_code_during_transform() -> (
-    None
-):
-    processor = ImputeCategories().fit(_table([[0, 0], [1, 1]]))
+def test_impute_mode_rejects_out_of_range_code_during_transform() -> None:
+    processor = ImputeMode().fit(_table([[0, 0], [1, 1]]))
     query = _table([[3, -1]])
 
     with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
         processor.transform(query)
 
 
-def test_impute_categories_composes_before_to_numerical() -> None:
+def test_impute_mode_composes_before_to_numerical() -> None:
     table = _table([[0, 0], [0, -1], [1, 1], [-1, 1]])
     processor = StypeDispatch(
-        categorical=[ImputeCategories(), ToNumerical()],
+        categorical=[ImputeMode(), ToNumerical()],
     )
 
     output = processor.fit_transform(table)

@@ -12,8 +12,8 @@ from sdm.processing.common import (
 )
 from sdm.processing.numerical import (
     Clip,
-    ClipByQuantiles,
-    ClipBySigma,
+    ClipQuantiles,
+    ClipSigma,
     ImputeMean,
     PowerTransform,
     QuantileTransform,
@@ -23,9 +23,9 @@ from sdm.processing.numerical import (
 from sdm.processing.categorical import (
     AlignCategories,
     ShuffleCategories,
-    ImputeCategories,
+    ImputeMode,
 )
-from sdm.processing.datetime import CalendarParts
+from sdm.processing.datetime import AddCalendarFields
 from sdm.processing.output import ReduceEstimators, Softmax
 from sdm.processing.recipe import Recipe
 
@@ -40,8 +40,8 @@ __all__ = [
     "ToNumerical",
     "ShuffleColumns",
     "Clip",
-    "ClipByQuantiles",
-    "ClipBySigma",
+    "ClipQuantiles",
+    "ClipSigma",
     "ImputeMean",
     "PowerTransform",
     "QuantileTransform",
@@ -49,8 +49,8 @@ __all__ = [
     "DropConstantColumns",
     "AlignCategories",
     "ShuffleCategories",
-    "ImputeCategories",
-    "CalendarParts",
+    "ImputeMode",
+    "AddCalendarFields",
     "ReduceEstimators",
     "Softmax",
     "Recipe",
