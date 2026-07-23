@@ -144,7 +144,7 @@ class Processor(torch.nn.Module, abc.ABC):
 
         if not isinstance(other, Processor) and not callable(other):
             return NotImplemented
-        return Sequential(self, cast(Processor, other))
+        return Sequential(cast(Processor, other), self)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"
