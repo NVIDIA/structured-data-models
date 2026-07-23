@@ -1,7 +1,22 @@
 import pytest
 import torch
+from sdm import CategoricalTensor, TableTensor
 from sdm.models.tabfm.embedding import CellEmbedder
 from sdm.testing import withCUDA
+
+
+def _table(
+    numerical: torch.Tensor,
+    categorical: torch.Tensor,
+) -> TableTensor:
+    return TableTensor(
+        columns={
+            "numerical": ["numerical_0", "numerical_1"],
+            "categorical": ["categorical_0", "categorical_1"],
+        },
+        numerical=numerical,
+        categorical=CategoricalTensor.from_tensor(categorical),
+    )
 
 
 def _reference_group(
@@ -92,16 +107,21 @@ def test_cell_embedder_mixed_features(
     with torch.no_grad():
         module.fourier_frequencies.normal_()
         module.fourier_frequencies_cat.normal_()
-    x = torch.randn(2, 5, 4, device=device, dtype=dtype)
+    numerical = torch.randn(2, 5, 2, device=device, dtype=dtype)
+    categorical = torch.randint(0, 4, (2, 5, 2), device=device)
+    table = _table(numerical, categorical)
+    x = torch.cat(
+        [numerical, table.categorical.as_tensor().to(dtype)],
+        dim=-1,
+    )
     cat_mask = torch.tensor(
-        [[False, True, False, True], [True, False, True, False]],
+        [[False, False, True, True], [False, False, True, True]],
         device=device,
     )
 
     d = torch.tensor([4, 2], device=device)
     output = module(
-        x=x,
-        cat_mask=cat_mask,
+        x=table,
         d=d,
     )
     expected = _reference_forward(
@@ -132,12 +152,23 @@ def test_cell_embedder_routes_categorical_groups() -> None:
         module.in_linear.bias.zero_()
         module.in_linear_cat.weight.fill_(2)
         module.in_linear_cat.bias.zero_()
-    x = torch.tensor([[[0.5, 1.0]]])
-    cat_mask = torch.tensor([[False, True]])
+    numerical = torch.tensor([[[0.5]]])
+    categorical = torch.tensor([[[1]]])
+    table = TableTensor(
+        columns={"numerical": ["numerical"], "categorical": ["category"]},
+        numerical=numerical,
+        categorical=CategoricalTensor(
+            data=categorical,
+            categories=(torch.arange(2),),
+        ),
+    )
+    x = torch.cat(
+        [numerical, table.categorical.as_tensor().float()],
+        dim=-1,
+    )
 
     output = module(
-        x=x,
-        cat_mask=cat_mask,
+        x=table,
     )
 
     numerical = x[0, 0, 0].sin() + x[0, 0, 0].cos()
@@ -161,12 +192,12 @@ def test_cell_embedder_rejects_invalid_configuration(
         CellEmbedder(channels=channels)
 
 
-def test_cell_embedder_rejects_invalid_inputs() -> None:
+def test_cell_embedder_rejects_invalid_active_width() -> None:
     module = CellEmbedder(channels=4)
-    x = torch.randn(2, 5, 4)
+    table = TableTensor.from_tensor(torch.randn(2, 5, 4))
 
-    with pytest.raises(ValueError, match="cat_mask"):
+    with pytest.raises(ValueError, match="d"):
         module(
-            x=x,
-            cat_mask=torch.zeros(2, 4),
+            x=table,
+            d=torch.ones(2),
         )
