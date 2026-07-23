@@ -121,7 +121,7 @@ class Sequential(Processor, InvertibleMixin):
 
     def __iadd__(self, other: ProcessorLike | Iterable[ProcessorLike]) -> Self:
         if isinstance(other, Processor) or callable(other):
-            self.append(other)
+            self.append(cast(ProcessorLike, other))
         else:
             self.extend(other)
         return self

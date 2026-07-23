@@ -17,9 +17,9 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
     assert isinstance(recipe.features, Sequential)
     assert isinstance(recipe.target, Sequential)
     assert isinstance(recipe.output, Sequential)
-    assert len(recipe.features.steps) == 1
-    assert len(recipe.target.steps) == 0
-    assert len(recipe.output.steps) == 0
+    assert len(recipe.features) == 1
+    assert len(recipe.target) == 0
+    assert len(recipe.output) == 0
     assert "features=Sequential" in repr(recipe)
     assert "target=Sequential()" in repr(recipe)
 
