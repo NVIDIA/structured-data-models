@@ -19,10 +19,6 @@ Common Processors
    :toctree: generated
    :nosignatures:
 
-   ~sdm.processing.sequential.Sequential
-   ~sdm.processing.choice.Choice
-   ~sdm.processing.stype_dispatch.StypeDispatch
-   ~sdm.processing.task_dispatch.TaskDispatch
 {% for name in api_names("sdm.processing.common") %}
    ~sdm.processing.common.{{ name }}
 {% endfor %}
