@@ -8,12 +8,14 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.explain import OutputIndex
 from sdm.models import KumoRFM
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
 from sdm.testing import withCUDA
+from test.models._explain import FittedEndpointMethod, cache_tensors
 
 
 def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -295,3 +297,58 @@ def test_default_recipe_preserves_ids() -> None:
 
     assert transformed.columns[Stype.id] == ("entity_id",)
     assert transformed.id is table.id
+
+
+def test_explain_fitted_replays_kumorfm_related_cache(
+    relational_data: RelationalData,
+) -> None:
+    model = KumoRFM(pretrained=False).eval()
+    related = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    x = TableTensor(
+        columns={Stype.id: ("user_id",)},
+        id=ColumnarTensor((torch.arange(4),)),
+    )
+    y = TableTensor.from_tensor(
+        torch.tensor([[-1.0], [0.0], [1.0], [2.0]]),
+        columns=("target",),
+    )
+    torch.manual_seed(1)
+    model.fit(x, y, related, num_hops=2)
+    prediction = model.predict(x, related)
+    caches = model._caches
+    assert caches is not None
+    tensors = cache_tensors(caches)
+    snapshot = tuple(tensor.clone() for tensor in tensors)
+    cache_sizes = tuple(cache.size() for cache in caches)
+
+    explanation = model.explain_fitted(
+        FittedEndpointMethod(),
+        x,
+        related,
+        target=OutputIndex(row=0, column="q500"),
+    )
+
+    assert explanation.prediction.allclose(
+        prediction,
+        rtol=0.0,
+        atol=0.0,
+        equal_nan=True,
+    )
+    assert model._caches is caches
+    assert all(cache.is_replaying and cache.is_cpu for cache in caches)
+    assert tuple(cache.size() for cache in caches) == cache_sizes
+    assert tuple(id(tensor) for tensor in cache_tensors(caches)) == tuple(
+        id(tensor) for tensor in tensors
+    )
+    for actual, expected in zip(tensors, snapshot):
+        assert actual.equal(expected)

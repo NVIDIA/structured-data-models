@@ -108,6 +108,7 @@ class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
 
 class _CountingStandardScale(StandardScale):
     fit_calls: ClassVar[int] = 0
+    transform_calls: ClassVar[int] = 0
 
     def _fit(
         self,
@@ -117,6 +118,10 @@ class _CountingStandardScale(StandardScale):
     ) -> None:
         type(self).fit_calls += 1
         super()._fit(table, generator=generator)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        type(self).transform_calls += 1
+        return super()._transform(table)
 
 
 class _GradientModel(_RecordingModel):
@@ -897,6 +902,236 @@ def test_explain_full_context_rejects_unexposed_attribution_site() -> None:
             *_gradient_inputs(),
             target=OutputIndex(row=0, column=0),
             recipe=_gradient_recipe(),
+        )
+
+
+def test_explain_fitted_reuses_prediction_execution() -> None:
+    model = _GradientModel().eval()
+    x_context, y_context, x_query = _gradient_inputs()
+    model.fit(x_context, y_context, recipe=_gradient_recipe())
+    rng_state = torch.get_rng_state().clone()
+    public_prediction = model.predict(x_query)
+    torch.set_rng_state(rng_state)
+    raw_query = x_query.numerical.clone()
+    _CountingStandardScale.transform_calls = 0
+    method: _CallbackMethod
+
+    def explain(
+        evaluate: ExplanationCallable,
+        inputs: ExplanationInputs,
+        prediction: TableTensor,
+        target: OutputIndex,
+        mode: ExplanationMode,
+    ) -> Explanation:
+        query_site = InputSite(split="query")
+        assert mode is ExplanationMode.fitted
+        assert tuple(inputs) == (query_site,)
+        assert not inputs[query_site].is_inference()
+        assert not torch.is_grad_enabled()
+        torch.testing.assert_close(
+            prediction.numerical,
+            public_prediction.numerical,
+        )
+        changed = evaluate({query_site: inputs[query_site].numerical + 1})
+        repeated = evaluate(None)
+        torch.testing.assert_close(
+            repeated.numerical,
+            prediction.numerical,
+        )
+        assert not changed.numerical.equal(prediction.numerical)
+        return _result(method, prediction, target, mode)
+
+    method = _CallbackMethod(
+        explain,
+        requirements=ExplanationRequirements(
+            supported_modes=frozenset({ExplanationMode.fitted})
+        ),
+    )
+    with torch.inference_mode():
+        explanation = model.explain_fitted(
+            method,
+            x_query,
+            target=OutputIndex(row=0, column=0),
+        )
+        assert torch.is_inference_mode_enabled()
+
+    torch.testing.assert_close(
+        explanation.prediction.numerical,
+        public_prediction.numerical,
+    )
+    assert _CountingStandardScale.transform_calls == 1
+    assert torch.equal(x_query.numerical, raw_query)
+    assert torch.equal(torch.get_rng_state(), rng_state)
+
+
+def test_explain_fitted_rejects_unsupported_execution() -> None:
+    x_context, y_context, x_query = _gradient_inputs()
+    model = _RecordingModel().eval()
+    target = OutputIndex(row=0, column=0)
+    fitted_method = _CallbackMethod(
+        lambda evaluate, inputs, prediction, target, mode: cast(Any, None),
+        requirements=ExplanationRequirements(
+            supported_modes=frozenset({ExplanationMode.fitted})
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="not yet fitted"):
+        model.explain_fitted(fitted_method, x_query, target=target)
+
+    model.fit(x_context, y_context, recipe=_gradient_recipe())
+    full_context_method = _CallbackMethod(
+        lambda evaluate, inputs, prediction, target, mode: cast(Any, None),
+        requirements=ExplanationRequirements(gradients=False),
+    )
+    with pytest.raises(
+        UnsupportedExplanationError,
+        match="does not support 'fitted'",
+    ):
+        model.explain_fitted(full_context_method, x_query, target=target)
+
+    gradient_method = _CallbackMethod(
+        lambda evaluate, inputs, prediction, target, mode: cast(Any, None),
+        requirements=ExplanationRequirements(
+            gradients=True,
+            supported_modes=frozenset({ExplanationMode.fitted}),
+        ),
+    )
+    with pytest.raises(
+        UnsupportedExplanationError,
+        match="fit caches contain inference tensors",
+    ):
+        model.explain_fitted(gradient_method, x_query, target=target)
+
+    model.train()
+    with pytest.raises(UnsupportedExplanationError, match="evaluation mode"):
+        model.explain_fitted(fitted_method, x_query, target=target)
+
+
+def test_explain_fitted_requires_one_estimator() -> None:
+    x_context, y_context, x_query = _gradient_inputs()
+    model = _RecordingModel().eval()
+    model.fit(
+        x_context,
+        y_context,
+        recipe=_gradient_recipe(),
+        num_estimators=2,
+    )
+    method = _CallbackMethod(
+        lambda evaluate, inputs, prediction, target, mode: cast(Any, None),
+        requirements=ExplanationRequirements(
+            supported_modes=frozenset({ExplanationMode.fitted})
+        ),
+    )
+
+    with pytest.raises(UnsupportedExplanationError, match="one estimator"):
+        model.explain_fitted(
+            method,
+            x_query,
+            target=OutputIndex(row=0, column=0),
+        )
+
+
+def test_explain_fitted_related_replacement_is_call_local() -> None:
+    model = _RecordingModel().eval()
+    related_context = _related_tables(query=False)
+    related_query = _related_tables(query=True)
+    raw_query = related_query.tables["users"].numerical.clone()
+    model.fit(
+        _table([0.0, 2.0], [1, 2], value_column="feature"),
+        TableTensor.from_tensor(torch.tensor([[0.0], [1.0]])),
+        related_context,
+        recipe=_reduced_recipe(),
+    )
+    method: _CallbackMethod
+
+    def explain(
+        evaluate: ExplanationCallable,
+        inputs: ExplanationInputs,
+        prediction: TableTensor,
+        target: OutputIndex,
+        mode: ExplanationMode,
+    ) -> Explanation:
+        assert tuple(inputs) == (
+            InputSite(split="query"),
+            InputSite(split="query", table="users"),
+            InputSite(split="query", table="orders"),
+        )
+        site = InputSite(split="query", table="users")
+        original = inputs[site].numerical.clone()
+        evaluate({site: original + 1})
+
+        call = model.calls[-1]
+        assert call.related_query_tables is not None
+        table = call.related_query_tables.tables["users"]
+        torch.testing.assert_close(table.numerical, original + 1)
+        assert call.related_query_tables.relationships == (
+            related_query.relationships
+        )
+        assert call.related_query_tables.task_links == related_query.task_links
+        assert table.id.tolist() == related_query.tables["users"].id.tolist()
+        torch.testing.assert_close(inputs[site].numerical, original)
+        return _result(method, prediction, target, mode)
+
+    method = _CallbackMethod(
+        explain,
+        requirements=ExplanationRequirements(
+            supported_modes=frozenset({ExplanationMode.fitted})
+        ),
+    )
+    model.explain_fitted(
+        method,
+        _table([3.0], [3], value_column="feature"),
+        related_query,
+        target=OutputIndex(row=0, column=0),
+    )
+
+    torch.testing.assert_close(
+        related_query.tables["users"].numerical,
+        raw_query,
+    )
+
+
+def test_explain_fitted_rejects_context_attribution() -> None:
+    model = _RecordingModel().eval()
+    x_context, y_context, x_query = _gradient_inputs()
+    model.fit(x_context, y_context, recipe=_gradient_recipe())
+    method: _CallbackMethod
+
+    def explain(
+        evaluate: ExplanationCallable,
+        inputs: ExplanationInputs,
+        prediction: TableTensor,
+        target: OutputIndex,
+        mode: ExplanationMode,
+    ) -> Explanation:
+        result = _result(method, prediction, target, mode)
+        values = inputs[InputSite(split="query")].select_stypes(
+            (Stype.numerical, Stype.id)
+        )
+        values = values.replace_blocks(numerical=values.numerical.detach())
+        return replace(
+            result,
+            attributions=(
+                FeatureAttribution(
+                    site=InputSite(split="context"),
+                    values=values,
+                    score_kind="test",
+                    input_space="processed",
+                ),
+            ),
+        )
+
+    method = _CallbackMethod(
+        explain,
+        requirements=ExplanationRequirements(
+            supported_modes=frozenset({ExplanationMode.fitted})
+        ),
+    )
+    with pytest.raises(ValueError, match="was not exposed"):
+        model.explain_fitted(
+            method,
+            x_query,
+            target=OutputIndex(row=0, column=0),
         )
 
 

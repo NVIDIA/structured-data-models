@@ -124,6 +124,77 @@ class PreparedICLInputs:
         )
 
 
+@dataclass(frozen=True)
+class PreparedFittedInputs:
+    r"""Processed query inputs bound to one fitted execution."""
+
+    query: TableTensor
+    related_query: RelatedTables | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.query, TableTensor):
+            raise TypeError("'query' needs to be a 'TableTensor'")
+        if self.related_query is not None and not isinstance(
+            self.related_query, RelatedTables
+        ):
+            raise TypeError(
+                "'related_query' needs to be 'RelatedTables' or None"
+            )
+
+    @property
+    def sites(self) -> Mapping[InputSite, TableTensor]:
+        r"""Processed query sites in stable execution order."""
+        sites: dict[InputSite, TableTensor] = {}
+        if self.query.numerical.size(-1) > 0:
+            sites[InputSite(split="query")] = self.query
+        if self.related_query is not None:
+            sites.update(
+                {
+                    InputSite(split="query", table=name): table
+                    for name, table in self.related_query.tables.items()
+                    if table.numerical.size(-1) > 0
+                }
+            )
+        return MappingProxyType(sites)
+
+    def replace_numerical(
+        self,
+        replacements: ExplanationReplacements | None,
+    ) -> "PreparedFittedInputs":
+        r"""Return query inputs with processed numerical replacements."""
+        replacements = _validate_replacements(self.sites, replacements)
+        if len(replacements) == 0:
+            return self
+
+        query = self.query
+        numerical = replacements.get(InputSite(split="query"))
+        if numerical is not None:
+            query = query.replace_blocks(numerical=numerical)
+
+        related_query = self.related_query
+        if related_query is not None:
+            tables: dict[str, TableTensor] = {}
+            for name, table in related_query.tables.items():
+                replacement = replacements.get(
+                    InputSite(split="query", table=name)
+                )
+                tables[name] = (
+                    table.replace_blocks(numerical=replacement)
+                    if replacement is not None
+                    else table
+                )
+            if any(
+                table is not related_query.tables[name]
+                for name, table in tables.items()
+            ):
+                related_query = replace(related_query, tables=tables)
+
+        return PreparedFittedInputs(
+            query=query,
+            related_query=related_query,
+        )
+
+
 def _validate_replacements(
     inputs: Mapping[InputSite, TableTensor],
     replacements: ExplanationReplacements | None,

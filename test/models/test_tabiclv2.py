@@ -1,11 +1,13 @@
 import pytest
 import torch
+from sdm.explain import ExplanationMode, OutputIndex
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+from test.models._explain import FittedEndpointMethod, cache_tensors
 
 
 @withCUDA
@@ -66,6 +68,52 @@ def test_forward(
     assert model.predict(x_query).allclose(out)
     assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
     model.clear()
+
+
+@withCUDA
+@pytest.mark.parametrize("classification", [False, True])
+def test_explain_fitted_replays_real_cache(
+    device: torch.device,
+    classification: bool,
+) -> None:
+    model = TabICLv2(pretrained=False, device=device).eval()
+    x_context = torch.randn(5, 6, device=device)
+    x_query = torch.randn(3, 6, device=device)
+    y_context = (
+        torch.randint(0, 3, (5, 1), device=device)
+        if classification
+        else torch.randn(5, 1, device=device)
+    )
+    torch.manual_seed(1)
+    model.fit(x_context, y_context)
+    prediction = model.predict(x_query)
+    caches = model._caches
+    assert caches is not None
+    tensors = cache_tensors(caches)
+    snapshot = tuple(tensor.clone() for tensor in tensors)
+    cache_sizes = tuple(cache.size() for cache in caches)
+
+    explanation = model.explain_fitted(
+        FittedEndpointMethod(),
+        x_query,
+        target=OutputIndex(row=0, column=0),
+    )
+
+    assert explanation.mode is ExplanationMode.fitted
+    assert explanation.prediction.allclose(
+        prediction,
+        rtol=0.0,
+        atol=0.0,
+        equal_nan=True,
+    )
+    assert model._caches is caches
+    assert all(cache.is_replaying and cache.is_cpu for cache in caches)
+    assert tuple(cache.size() for cache in caches) == cache_sizes
+    assert tuple(id(tensor) for tensor in cache_tensors(caches)) == tuple(
+        id(tensor) for tensor in tensors
+    )
+    for actual, expected in zip(tensors, snapshot):
+        assert actual.equal(expected)
 
 
 @withCUDA

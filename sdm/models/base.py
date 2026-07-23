@@ -16,7 +16,7 @@ from sdm.explain.base import (
     ExplanationReplacements,
     UnsupportedExplanationError,
 )
-from sdm.explain.execution import PreparedICLInputs
+from sdm.explain.execution import PreparedFittedInputs, PreparedICLInputs
 from sdm.explain.result import Explanation, InputSite, OutputIndex
 from sdm.processing import InvertibleMixin, Processor, Recipe
 from sdm.relational.task import RelatedTablesSchema
@@ -70,6 +70,20 @@ class _ExplanationRandomState:
     cpu: Tensor
     cuda: Tensor | None
     device: torch.device
+
+
+@dataclass(frozen=True)
+class _FittedQueryInputs:
+    query: TableTensor
+    related_query: RelatedTables | None
+
+
+@dataclass(frozen=True)
+class _PreparedFittedMember:
+    inputs: PreparedFittedInputs
+    cache: Cache
+    recipe: Recipe
+    kwargs: Mapping[str, Any]
 
 
 class ICLModel(torch.nn.Module, ABC):
@@ -155,7 +169,7 @@ class ICLModel(torch.nn.Module, ABC):
                 )
             )
 
-        return self._finalize_full_context(
+        return self._finalize_outputs(
             outs,
             recipe=recipes[-1],
             dtype=prepared.inputs.query.dtype,
@@ -229,7 +243,7 @@ class ICLModel(torch.nn.Module, ABC):
                             replacements=replacements,
                             generator=execution_generator,
                         )
-                        return self._finalize_full_context(
+                        return self._finalize_outputs(
                             (out,),
                             recipe=prepared.recipe,
                             dtype=prepared.inputs.query.dtype,
@@ -383,7 +397,7 @@ class ICLModel(torch.nn.Module, ABC):
             out = prepared.recipe.target.inverse_transform(out)
         return out
 
-    def _finalize_full_context(
+    def _finalize_outputs(
         self,
         outs: Sequence[TableTensor],
         *,
@@ -600,9 +614,118 @@ class ICLModel(torch.nn.Module, ABC):
             stacked as ``[E, ..., R, *]``; the output processors determine
             whether the leading estimator dimension remains.
         """
+        inputs = self._fitted_query_inputs(
+            x=x,
+            related_tables=related_tables,
+        )
+        assert self._caches is not None
+
+        outs: list[TableTensor] = []
+        for cache in self._caches:
+            prepared = self._prepare_fitted_member(
+                inputs=inputs,
+                cache=cache,
+            )
+            outs.append(self._execute_fitted_member(prepared))
+
+        return self._finalize_outputs(
+            outs,
+            recipe=prepared.recipe,
+            dtype=prepared.inputs.query.dtype,
+        )
+
+    def explain_fitted(
+        self,
+        method: ExplanationMethod,
+        x_query: Tensor | TableTensor,
+        related_query_tables: RelatedTables | None = None,
+        *,
+        target: OutputIndex,
+    ) -> Explanation:
+        r"""Explain a query prediction using state created by :meth:`fit`."""
+        self._validate_explanation_method(
+            method,
+            mode=ExplanationMode.fitted,
+        )
+        if method.requirements.gradients:
+            raise UnsupportedExplanationError(
+                "Fitted explanation does not yet support gradients because "
+                "fit caches contain inference tensors"
+            )
+        if any(module.training for module in self.modules()):
+            raise UnsupportedExplanationError(
+                "Fitted explanation requires the model to be fully in "
+                "evaluation mode"
+            )
+
+        with _explanation_mode(gradients=False):
+            inputs = self._fitted_query_inputs(
+                x=x_query,
+                related_tables=related_query_tables,
+            )
+            inputs = _normal_fitted_query_inputs(inputs)
+            assert self._caches is not None
+            if len(self._caches) != 1:
+                raise UnsupportedExplanationError(
+                    "Fitted explanation currently requires exactly one "
+                    "estimator"
+                )
+            with _isolated_randomness(
+                None,
+                device=inputs.query.device,
+            ):
+                prepared = self._prepare_fitted_member(
+                    inputs=inputs,
+                    cache=self._caches[0],
+                )
+                execution_state = _capture_random_state(
+                    None,
+                    device=inputs.query.device,
+                )
+
+                def evaluate(
+                    replacements: ExplanationReplacements | None = None,
+                ) -> TableTensor:
+                    with (
+                        _replay_randomness(execution_state),
+                        _explanation_mode(gradients=False),
+                    ):
+                        out = self._execute_fitted_member(
+                            prepared,
+                            replacements=replacements,
+                        )
+                        return self._finalize_outputs(
+                            (out,),
+                            recipe=prepared.recipe,
+                            dtype=prepared.inputs.query.dtype,
+                        )
+
+                prediction = evaluate(None)
+                explanation = method.explain(
+                    evaluate=evaluate,
+                    inputs=prepared.inputs.sites,
+                    prediction=prediction,
+                    target=target,
+                    mode=ExplanationMode.fitted,
+                )
+
+        return self._validate_explanation_result(
+            explanation,
+            method=method,
+            mode=ExplanationMode.fitted,
+            prediction=prediction,
+            inputs=prepared.inputs.sites,
+            target=target,
+        )
+
+    def _fitted_query_inputs(
+        self,
+        *,
+        x: Tensor | TableTensor,
+        related_tables: RelatedTables | None,
+    ) -> _FittedQueryInputs:
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
-
         if self._caches is None:
             raise RuntimeError(
                 f"'{self.__class__.__name__}' not yet fitted. Make sure to "
@@ -620,55 +743,75 @@ class ICLModel(torch.nn.Module, ABC):
                     self._caches[0]["related_tables_schema"],
                 ).tables,
             )
+        return _FittedQueryInputs(
+            query=x,
+            related_query=related_tables,
+        )
 
-        outs: Sequence[TableTensor] = []
-        for cache in self._caches:
-            recipe = cast(Recipe, cache["recipe"])
-            x_i = recipe.features.transform(x)
+    def _prepare_fitted_member(
+        self,
+        *,
+        inputs: _FittedQueryInputs,
+        cache: Cache,
+    ) -> _PreparedFittedMember:
+        recipe = cast(Recipe, cache["recipe"])
+        query = recipe.features.transform(inputs.query)
 
-            related_tables_i = None
-            if related_tables is not None:
-                related_processors = cast(
-                    Mapping[str, Processor],
-                    cache["related_processors"],
-                )
-                related_tables_i = replace(
-                    related_tables,
-                    tables={
-                        name: related_processors[name].transform(t)
-                        for name, t in related_tables.tables.items()
-                    },
-                )
-
-            self._validate_query(
-                x_context=cast(TableSchema, cache["x_schema"]),
-                x_query=x_i,
-                related_context_tables=cast(
-                    RelatedTablesSchema,
-                    cache["related_tables_schema"],
-                ),
-                related_query_tables=related_tables_i,
+        related_query = None
+        if inputs.related_query is not None:
+            related_processors = cast(
+                Mapping[str, Processor],
+                cache["related_processors"],
+            )
+            related_query = replace(
+                inputs.related_query,
+                tables={
+                    name: related_processors[name].transform(table)
+                    for name, table in inputs.related_query.tables.items()
+                },
             )
 
-            out = self._forward(
-                x_context=None,
-                y_context=None,
-                x_query=x_i,
-                related_context_tables=None,
-                related_query_tables=related_tables_i,
-                cache=cache.to(x_i.device),
-                generator=None,
-                **cast(dict[str, Any], cache["kwargs"]),
-            )
-            if cache["classes"] is None:
-                if not isinstance(recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                out = recipe.target.inverse_transform(out)
-            outs.append(out)
+        self._validate_query(
+            x_context=cast(TableSchema, cache["x_schema"]),
+            x_query=query,
+            related_context_tables=cast(
+                RelatedTablesSchema,
+                cache["related_tables_schema"],
+            ),
+            related_query_tables=related_query,
+        )
+        return _PreparedFittedMember(
+            inputs=PreparedFittedInputs(
+                query=query,
+                related_query=related_query,
+            ),
+            cache=cache.to(query.device),
+            recipe=recipe,
+            kwargs=cast(dict[str, Any], cache["kwargs"]),
+        )
 
-        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        out = cast(TableTensor, out.to(x_i.dtype))
-        return recipe.output.transform(out)
+    def _execute_fitted_member(
+        self,
+        prepared: _PreparedFittedMember,
+        *,
+        replacements: ExplanationReplacements | None = None,
+    ) -> TableTensor:
+        inputs = prepared.inputs.replace_numerical(replacements)
+        out = self._forward(
+            x_context=None,
+            y_context=None,
+            x_query=inputs.query,
+            related_context_tables=None,
+            related_query_tables=inputs.related_query,
+            cache=prepared.cache,
+            generator=None,
+            **prepared.kwargs,
+        )
+        if prepared.cache["classes"] is None:
+            if not isinstance(prepared.recipe.target, InvertibleMixin):
+                raise RuntimeError("Target recipe is not invertible")
+            out = prepared.recipe.target.inverse_transform(out)
+        return out
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -775,34 +918,43 @@ class ICLModel(torch.nn.Module, ABC):
 def _normal_full_context_inputs(
     inputs: _FullContextInputs,
 ) -> _FullContextInputs:
-    def normal_table(table: TableTensor) -> TableTensor:
-        if table.is_inference() or any(
-            block.is_inference() for _, block in table.items()
-        ):
-            return cast(TableTensor, table.clone())
-        return table
-
-    def normal_related(
-        related: RelatedTables | None,
-    ) -> RelatedTables | None:
-        if related is None:
-            return None
-        tables = {
-            name: normal_table(table) for name, table in related.tables.items()
-        }
-        if all(
-            table is related.tables[name] for name, table in tables.items()
-        ):
-            return related
-        return replace(related, tables=tables)
-
     return _FullContextInputs(
-        context=normal_table(inputs.context),
-        target=normal_table(inputs.target),
-        query=normal_table(inputs.query),
-        related_context=normal_related(inputs.related_context),
-        related_query=normal_related(inputs.related_query),
+        context=_normal_table(inputs.context),
+        target=_normal_table(inputs.target),
+        query=_normal_table(inputs.query),
+        related_context=_normal_related(inputs.related_context),
+        related_query=_normal_related(inputs.related_query),
     )
+
+
+def _normal_fitted_query_inputs(
+    inputs: _FittedQueryInputs,
+) -> _FittedQueryInputs:
+    return _FittedQueryInputs(
+        query=_normal_table(inputs.query),
+        related_query=_normal_related(inputs.related_query),
+    )
+
+
+def _normal_table(table: TableTensor) -> TableTensor:
+    if table.is_inference() or any(
+        block.is_inference() for _, block in table.items()
+    ):
+        return cast(TableTensor, table.clone())
+    return table
+
+
+def _normal_related(
+    related: RelatedTables | None,
+) -> RelatedTables | None:
+    if related is None:
+        return None
+    tables = {
+        name: _normal_table(table) for name, table in related.tables.items()
+    }
+    if all(table is related.tables[name] for name, table in tables.items()):
+        return related
+    return replace(related, tables=tables)
 
 
 def _validate_attribution_alignment(

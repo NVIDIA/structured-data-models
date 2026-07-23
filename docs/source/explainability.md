@@ -10,8 +10,7 @@ SDM separates explanation mathematics from model execution. An
 owns preprocessing, cache behavior, gradient mode, and repeated model
 evaluation.
 
-The model integration is introduced in the next PRs through two explicit
-paths:
+The model exposes two explicit execution paths:
 
 ```python
 explanation = model.explain_full_context(
@@ -85,6 +84,32 @@ endpoint and that every attribution site, row, identifier, and numerical
 column aligns with an input exposed to the method.
 
 The initial path requires one estimator, an evaluation-mode model, an
-unbatched target, and processed input-space attribution. Fitted explanation is
-added separately because inference-mode caches require different safety and
-support rules.
+unbatched target, and processed input-space attribution.
+
+## Fitted execution
+
+`ICLModel.explain_fitted()` explains query predictions using state created by
+`fit()`:
+
+```python
+model.eval()
+model.fit(x_context, y_context, related_context_tables)
+explanation = model.explain_fitted(
+    method,
+    x_query,
+    related_query_tables,
+    target=OutputIndex(row=0, column="approved"),
+)
+```
+
+This path shares query preprocessing, cache replay, and output processing with
+`predict()`. It exposes query sites only; context inputs are represented by
+the fitted cache and cannot be replaced. Methods must include
+`ExplanationMode.fitted` in their requirements to use this path.
+
+The initial fitted path supports repeatable processed-numerical perturbations
+with fixed cached context. It does not yet expose raw, categorical, structural,
+or context interventions. Gradient methods fail before execution because
+`fit()` deliberately creates frozen inference-mode caches, which sever the
+autograd graph to context and cannot safely participate in backward passes.
+Gradient and context attribution therefore use `explain_full_context()`.
