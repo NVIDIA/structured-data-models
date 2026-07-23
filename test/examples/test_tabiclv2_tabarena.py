@@ -230,6 +230,17 @@ def test_sdm_native_schema_and_class_label_contract() -> None:
             class_order=class_order,
         )
 
+    boolean_probabilities = pd.DataFrame(
+        [[0.8, 0.2]],
+        columns=pd.Index([True, False], dtype=object),
+    )
+    ordered_boolean = _order_probabilities_for_tabarena(
+        boolean_probabilities,
+        class_order=(False, True),
+    )
+    assert ordered_boolean.columns.tolist() == [False, True]
+    assert ordered_boolean.iloc[0].tolist() == pytest.approx([0.2, 0.8])
+
 
 @pytest.mark.skipif(
     os.environ.get("SDM_RUN_TABARENA_SMOKE") != "1",

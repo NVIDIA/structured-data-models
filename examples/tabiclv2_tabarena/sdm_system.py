@@ -323,7 +323,7 @@ def _order_probabilities_for_tabarena(
             "TabICLv2 probability columns do not match TabArena's class "
             "labels (" + "; ".join(details) + ")"
         )
-    return probabilities.loc[:, expected]
+    return probabilities.iloc[:, actual.get_indexer(expected)]
 
 
 def _resolve_device(*, num_gpus: int | None) -> torch.device:
