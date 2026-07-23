@@ -66,6 +66,10 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
   Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
 - Keep dependencies minimal in the core package.
   Heavy dependencies should be optional unless they become essential.
+- Treat packages listed in `[project].dependencies` as required at runtime.
+  Import them at module scope; do not defer or guard them with function-local
+  imports, `TYPE_CHECKING`, `try/except ImportError`, availability checks,
+  or dynamic imports. Reserve guarded imports for optional dependencies.
 - Aim for GPU acceleration in all core components.
 
 # Python/PyTorch Coding Style
