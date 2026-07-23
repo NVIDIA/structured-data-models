@@ -59,7 +59,12 @@ class SDMTabICLv2System(ExternalSystemModel):
             )
 
         self._feature_stypes = infer_stypes(X)
-        self._device = _resolve_device(num_gpus=num_gpus)
+        use_cuda = num_gpus is not None and num_gpus > 0
+        if use_cuda and not torch.cuda.is_available():
+            raise RuntimeError(
+                "TabArena requested a GPU but CUDA is unavailable"
+            )
+        self._device = torch.device("cuda" if use_cuda else "cpu")
         generator = None
         if random_state is not None:
             generator = torch.Generator(device=self._device).manual_seed(
@@ -210,14 +215,6 @@ def _order_probabilities_for_tabarena(
             "labels (" + "; ".join(details) + ")"
         )
     return probabilities.loc[:, expected]
-
-
-def _resolve_device(*, num_gpus: int | None) -> torch.device:
-    if num_gpus is None or num_gpus <= 0:
-        return torch.device("cpu")
-    if not torch.cuda.is_available():
-        raise RuntimeError("TabArena requested a GPU but CUDA is unavailable")
-    return torch.device("cuda")
 
 
 def main() -> None:
