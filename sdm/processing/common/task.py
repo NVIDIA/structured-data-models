@@ -9,7 +9,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class TaskDispatch(Processor):
+class DispatchByTask(Processor):
     """Route model output by the transformed target's semantic type.
 
     When used in :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
@@ -17,7 +17,7 @@ class TaskDispatch(Processor):
     from the final transformed target. One numerical column selects regression
     and one categorical column selects classification. Routes must be stateless
     because output processing has no fitting data of its own. Configure
-    ``TaskDispatch`` as a direct step in ``Recipe.output``.
+    ``DispatchByTask`` as a direct step in ``Recipe.output``.
 
     Args:
         classification: Output processor for categorical targets. An iterable

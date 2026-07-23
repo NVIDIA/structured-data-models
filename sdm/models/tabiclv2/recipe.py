@@ -1,20 +1,20 @@
 from sdm.processing import (
-    CategoricalAlign,
-    CategoryShuffle,
+    AlignCategories,
     Choice,
     Clip,
-    ConstantFilter,
-    EnsembleReduce,
-    FeaturePermute,
+    ClipBySigma,
+    DispatchByStype,
+    DispatchByTask,
+    DropConstant,
     Identity,
-    MeanImpute,
-    Power,
+    ImputeMean,
+    PowerTransform,
     Recipe,
-    SigmaClip,
-    SoftmaxTemperature,
-    StandardScale,
-    StypeDispatch,
-    TaskDispatch,
+    ReduceEstimators,
+    ShuffleCategories,
+    ShuffleColumns,
+    Softmax,
+    Standardize,
     ToNumerical,
 )
 
@@ -31,38 +31,38 @@ def default_recipe() -> Recipe:
     """
     return Recipe(
         features=[
-            StypeDispatch(
+            DispatchByStype(
                 numerical=Identity(),
                 categorical=[
-                    CategoricalAlign(),
+                    AlignCategories(),
                     ToNumerical(),
                 ],
             ),
-            StypeDispatch(  # TODO Support `id` as passthrough.
+            DispatchByStype(  # TODO Support `id` as passthrough.
                 numerical=[
-                    MeanImpute(),
-                    ConstantFilter(),
-                    StandardScale(epsilon=1e-6),
+                    ImputeMean(),
+                    DropConstant(),
+                    Standardize(epsilon=1e-6),
                     Clip(min_value=-100.0, max_value=100.0),
-                    Choice(Identity(), Power()),
-                    SigmaClip(threshold=4.0),
-                    FeaturePermute(method="shift"),
+                    Choice(Identity(), PowerTransform()),
+                    ClipBySigma(threshold=4.0),
+                    ShuffleColumns(method="shift"),
                 ],
             ),
         ],
         target=[
-            StypeDispatch(
+            DispatchByStype(
                 categorical=[
-                    CategoricalAlign(),
-                    CategoryShuffle(method="shift"),
+                    AlignCategories(),
+                    ShuffleCategories(method="shift"),
                 ],
-                numerical=StandardScale(),
+                numerical=Standardize(),
             ),
         ],
         output=[
-            EnsembleReduce(method="mean"),
-            TaskDispatch(
-                classification=SoftmaxTemperature(temperature=0.9),
+            ReduceEstimators(method="mean"),
+            DispatchByTask(
+                classification=Softmax(temperature=0.9),
                 regression=Identity(),
             ),
         ],

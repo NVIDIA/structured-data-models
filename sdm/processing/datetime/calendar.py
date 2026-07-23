@@ -13,7 +13,7 @@ US_PER_HOUR = 60 * US_PER_MINUTE
 US_PER_DAY = 24 * US_PER_HOUR
 
 
-class EncodeDatetime(Processor):
+class EncodeCalendar(Processor):
     r"""Separate timestamps into numerical calendar features.
 
     Args:

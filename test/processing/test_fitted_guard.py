@@ -9,7 +9,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import Processor, QuantileClip, StandardScale
+from sdm.processing import ClipByQuantiles, Processor, Standardize
 from sdm.processing.base import InvertibleMixin
 
 ProcessorFactory = Callable[[], Processor]
@@ -17,7 +17,7 @@ ProcessorFactory = Callable[[], Processor]
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [QuantileClip, StandardScale],
+    [ClipByQuantiles, Standardize],
 )
 def test_processor_requires_fit_for_transform(
     processor_factory: ProcessorFactory,
@@ -33,7 +33,7 @@ def test_processor_requires_fit_for_transform(
 
 @pytest.mark.parametrize(
     "processor_factory",
-    [StandardScale],
+    [Standardize],
 )
 def test_invertible_processor_requires_fit_for_inverse_transform(
     processor_factory: ProcessorFactory,
@@ -88,10 +88,10 @@ def _id_table() -> TableTensor:
 def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
     numerical = TableTensor.from_tensor(torch.ones(2, 1))
     mixed = _mixed_table()
-    processor = StandardScale().fit(numerical)
+    processor = Standardize().fit(numerical)
 
     with pytest.raises(ValueError, match="categorical"):
-        StandardScale().fit(mixed)
+        Standardize().fit(mixed)
     with pytest.raises(ValueError, match="categorical"):
         processor.transform(mixed)
     with pytest.raises(ValueError, match="categorical"):
@@ -100,4 +100,4 @@ def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
 
 def test_processor_rejects_id_stype() -> None:
     with pytest.raises(ValueError, match="id"):
-        StandardScale().fit(_id_table())
+        Standardize().fit(_id_table())

@@ -135,7 +135,7 @@ class InvertibleMixin(abc.ABC):
     """Adds ``inverse_transform`` to a :class:`Processor`.
 
     Combine with :class:`Processor` and implement ``_inverse_transform``,
-    e.g. ``class StandardScale(Processor, InvertibleMixin): ...``.
+    e.g. ``class Standardize(Processor, InvertibleMixin): ...``.
     """
 
     @abc.abstractmethod

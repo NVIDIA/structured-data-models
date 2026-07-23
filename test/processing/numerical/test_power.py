@@ -1,11 +1,11 @@
 import torch
 from sdm import TableTensor
-from sdm.processing import Power
+from sdm.processing import PowerTransform
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_power_standardized_fit_transform_and_inverse_round_trip(
+def test_power_transform_standardized_fit_transform_and_inverse_round_trip(
     device: torch.device,
 ) -> None:
     inp = torch.tensor(
@@ -20,7 +20,7 @@ def test_power_standardized_fit_transform_and_inverse_round_trip(
         device=device,
     )
 
-    processor = Power().fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     finite_var = transformed[:, :2].var(dim=0, correction=0)
 
@@ -47,10 +47,10 @@ def test_power_standardized_fit_transform_and_inverse_round_trip(
 
 
 @withCUDA
-def test_power_wide_inverse_round_trip(device: torch.device) -> None:
+def test_power_transform_wide_inverse_round_trip(device: torch.device) -> None:
     inp = torch.linspace(-3, 3, steps=32 * 40, device=device).view(32, 40)
 
-    processor = Power().fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     inverse = processor.inverse_transform(
         TableTensor.from_tensor(transformed)
@@ -60,7 +60,7 @@ def test_power_wide_inverse_round_trip(device: torch.device) -> None:
 
 
 @withCUDA
-def test_power_without_standardization_is_near_identity(
+def test_power_transform_without_standardization_is_near_identity(
     device: torch.device,
 ) -> None:
     inp = torch.tensor(
@@ -69,7 +69,9 @@ def test_power_without_standardization_is_near_identity(
         device=device,
     )
 
-    processor = Power(standardize=False).fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform(standardize=False).fit(
+        TableTensor.from_tensor(inp)
+    )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
@@ -88,14 +90,18 @@ def test_power_without_standardization_is_near_identity(
 
 
 @withCUDA
-def test_power_learns_skewed_lambda_regression(device: torch.device) -> None:
+def test_power_transform_learns_skewed_lambda(
+    device: torch.device,
+) -> None:
     inp = torch.tensor(
         [[0.0], [1.0], [2.0], [4.0], [8.0], [16.0], [32.0]],
         dtype=torch.float64,
         device=device,
     )
 
-    processor = Power(standardize=False).fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform(standardize=False).fit(
+        TableTensor.from_tensor(inp)
+    )
     expected = torch.tensor(
         [-0.057856304067531325],
         dtype=inp.dtype,
@@ -110,12 +116,12 @@ def test_power_learns_skewed_lambda_regression(device: torch.device) -> None:
 
 
 @withCUDA
-def test_power_constant_columns_use_identity_lambda(
+def test_power_transform_constant_columns_use_identity_lambda(
     device: torch.device,
 ) -> None:
     inp = torch.full((4, 2), 3.0, device=device)
 
-    processor = Power().fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.equal(processor.lambdas, torch.ones(2, device=device))
@@ -130,7 +136,7 @@ def test_power_constant_columns_use_identity_lambda(
 
 
 @withCUDA
-def test_power_inverse_overflow_with_positive_lambda_clamps_to_max(
+def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     device: torch.device,
 ) -> None:
     # This column fits a positive lambda, whose inverse-domain has no finite
@@ -143,7 +149,7 @@ def test_power_inverse_overflow_with_positive_lambda_clamps_to_max(
         device=device,
     )
 
-    processor = Power().fit(TableTensor.from_tensor(inp))
+    processor = PowerTransform().fit(TableTensor.from_tensor(inp))
     assert (processor.lambdas > 0).all()
     assert torch.isinf(processor.upper_bound).all()
 

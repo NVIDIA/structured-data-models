@@ -1,5 +1,5 @@
 """Datetime preprocessing transforms."""
 
-from sdm.processing.datetime.datetime import EncodeDatetime
+from sdm.processing.datetime.calendar import EncodeCalendar
 
-__all__ = ["EncodeDatetime"]
+__all__ = ["EncodeCalendar"]

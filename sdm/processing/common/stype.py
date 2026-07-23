@@ -14,7 +14,7 @@ from sdm.processing.common.sequential import Sequential
 from sdm.tensor import TableTensor
 
 
-class StypeDispatch(Processor, InvertibleMixin):
+class DispatchByStype(Processor, InvertibleMixin):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
 
     For each configured route, the matching columns are selected into a
@@ -76,7 +76,7 @@ class StypeDispatch(Processor, InvertibleMixin):
                 if callable(processor):
                     processor = as_processor(
                         cast(ProcessorCallable, processor),
-                        label=f"StypeDispatch route '{stype.value}'",
+                        label=f"DispatchByStype route '{stype.value}'",
                     )
                 else:
                     processor = Sequential(*processor)
@@ -147,7 +147,7 @@ class StypeDispatch(Processor, InvertibleMixin):
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         if self.remainder == "drop":
             raise ValueError(
-                "'StypeDispatch' with remainder='drop' is not invertible"
+                "'DispatchByStype' with remainder='drop' is not invertible"
             )
 
         outputs: list[TableTensor] = []

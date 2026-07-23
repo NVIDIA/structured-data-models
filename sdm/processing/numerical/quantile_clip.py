@@ -6,12 +6,12 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class QuantileClip(Processor):
+class ClipByQuantiles(Processor):
     """Clamp feature columns to fitted quantile bounds.
 
     Values outside the fitted bounds are discarded, so this processor is not
-    invertible. Quantile bounds are fitted independently for each feature
-    column.
+    invertible. Quantile transform bounds are fitted independently for each
+    feature column.
 
     Args:
         q_low: Lower quantile in ``[0, 1]`` used as the per-column lower bound.

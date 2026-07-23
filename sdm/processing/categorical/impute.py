@@ -8,7 +8,7 @@ from sdm.processing.categorical._categorical import _check_categorical_codes
 from sdm.tensor import TableTensor
 
 
-class CategoricalImpute(Processor):
+class ImputeCategories(Processor):
     """Replace missing categorical values with fitted per-column values.
 
     Negative category codes are missing values. The fitted fill value is
@@ -16,7 +16,7 @@ class CategoricalImpute(Processor):
     changing its category vocabulary.
     Transform inputs must use the fitted per-column category vocabularies.
     The processor raises if they do not match. Column names are not
-    validated. Use :class:`~sdm.processing.CategoricalAlign` before this
+    validated. Use :class:`~sdm.processing.AlignCategories` before this
     processor when training and transform inputs were tensorized
     independently.
 
@@ -60,7 +60,7 @@ class CategoricalImpute(Processor):
             observed = codes[codes >= 0].to(torch.long)
             if observed.numel() == 0:
                 raise ValueError(
-                    "Cannot fit 'CategoricalImpute' because categorical "
+                    "Cannot fit 'ImputeCategories' because categorical "
                     f"column '{columns[index]}' has no observed values."
                 )
 
@@ -103,6 +103,6 @@ class CategoricalImpute(Processor):
                     "Expected the category vocabulary for categorical column "
                     f"'{columns[index]}' to match the fitted values and "
                     "order. "
-                    "Use 'CategoricalAlign' before this processor for "
+                    "Use 'AlignCategories' before this processor for "
                     "independently tensorized inputs."
                 )

@@ -8,7 +8,7 @@ from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
 
-class CategoryShuffle(Processor):
+class ShuffleCategories(Processor):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
@@ -16,7 +16,7 @@ class CategoryShuffle(Processor):
     Codes and their corresponding category vectors are permuted together so
     decoded values remain unchanged. Negative codes represent missing values
     and are preserved unchanged. Only categorical columns are supported; use
-    :class:`~sdm.processing.StypeDispatch` to apply this processor to the
+    :class:`~sdm.processing.DispatchByStype` to apply this processor to the
     categorical block of a mixed feature table.
 
     Args:

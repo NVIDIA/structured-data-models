@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import Stype, TableTensor
-from sdm.processing import ConstantFilter
+from sdm.processing import DropConstant
 from sdm.testing import withCUDA
 
 
@@ -27,7 +27,7 @@ def test_unique_filter(device: torch.device) -> None:
         ),
     )
 
-    output = ConstantFilter().fit_transform(table)
+    output = DropConstant().fit_transform(table)
 
     assert output.columns[Stype.numerical] == (
         "variable",
@@ -53,7 +53,7 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
         columns=("one", "two", "three"),
     )
 
-    output = ConstantFilter(threshold=2).fit_transform(table)
+    output = DropConstant(threshold=2).fit_transform(table)
 
     assert output.columns[Stype.numerical] == ("three",)
 
@@ -61,7 +61,7 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
 def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0, 4.0], [1.0, 4.0]]))
 
-    assert ConstantFilter(threshold=2).fit_transform(table) is table
+    assert DropConstant(threshold=2).fit_transform(table) is table
 
 
 @withCUDA
@@ -81,21 +81,21 @@ def test_variance_filter(device: torch.device) -> None:
         columns=("constant", "near_constant", "variable", "also_constant"),
     )
 
-    output = ConstantFilter(method="variance").fit_transform(table)
+    output = DropConstant(method="variance").fit_transform(table)
 
     assert output.columns[Stype.numerical] == ("variable",)
     assert output.numerical.equal(data[:, [2]])
     assert output.device == device
 
 
-def test_constant_filter_rejects_invalid_arguments() -> None:
+def test_drop_constant_rejects_invalid_arguments() -> None:
     with pytest.raises(ValueError, match="method must be"):
-        ConstantFilter(method="invalid")  # type: ignore
+        DropConstant(method="invalid")  # type: ignore
     with pytest.raises(ValueError, match="tolerance must be None"):
-        ConstantFilter(tolerance=1e-6)
+        DropConstant(tolerance=1e-6)
     with pytest.raises(ValueError, match="threshold must be None"):
-        ConstantFilter(method="variance", threshold=1)
+        DropConstant(method="variance", threshold=1)
     with pytest.raises(ValueError, match="threshold must be positive"):
-        ConstantFilter(threshold=0)
+        DropConstant(threshold=0)
     with pytest.raises(ValueError, match="tolerance must be non-negative"):
-        ConstantFilter(method="variance", tolerance=-1.0)
+        DropConstant(method="variance", tolerance=-1.0)

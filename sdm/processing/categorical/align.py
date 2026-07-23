@@ -9,7 +9,7 @@ from sdm.tensor import TableTensor
 _HOST_MAPPED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
 
-class CategoricalAlign(Processor):
+class AlignCategories(Processor):
     """Align categorical codes to vocabularies fitted on training rows.
 
     Categorical codes are the integer indices into a column's category
@@ -24,7 +24,7 @@ class CategoricalAlign(Processor):
     categorical schema. It also removes categories that occur only outside a
     sliced training context from a jointly inferred vocabulary. Only
     categorical columns are supported; use
-    :class:`~sdm.processing.StypeDispatch` for mixed feature tables.
+    :class:`~sdm.processing.DispatchByStype` for mixed feature tables.
 
     String and unsigned integer vocabularies are matched through host metadata
     because their required tensor operations are unavailable on every device.

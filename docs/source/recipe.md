@@ -11,9 +11,9 @@ both sides of the model.
   {py:class}`~sdm.tensor.TableTensor` and returns a
   {py:class}`~sdm.tensor.TableTensor`. A *stateful* step learns parameters
   when you call `fit` (for example
-  {py:class}`~sdm.processing.StandardScale` learns each column's mean and
+  {py:class}`~sdm.processing.Standardize` learns each column's mean and
   standard deviation); a stateless one does not (for example
-  {py:class}`~sdm.processing.SoftmaxTemperature`).
+  {py:class}`~sdm.processing.Softmax`).
 
 - A small stateless transformation can be supplied directly to
   {py:class}`~sdm.processing.Sequential` as a function or lambda. It is
@@ -23,7 +23,7 @@ both sides of the model.
 - A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
   Recipes do not infer each step's non-finite input contract. Place imputation
   or cleanup before processors that do not explicitly document non-finite
-  support; for example, use {py:class}`~sdm.processing.MeanImpute` before
+  support; for example, use {py:class}`~sdm.processing.ImputeMean` before
   downstream numerical processors that expect finite input.
 
 - A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
@@ -41,9 +41,9 @@ both sides of the model.
 import torch
 
 from sdm import TableTensor
-from sdm.processing import Recipe, StandardScale
+from sdm.processing import Recipe, Standardize
 
-recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
+recipe = Recipe(features=[Standardize()], target=[Standardize()])
 ```
 
 For a small stateless transformation, pass a callable directly to
@@ -53,7 +53,7 @@ For a small stateless transformation, pass a callable directly to
 from sdm.processing import Sequential
 
 features = Sequential(
-    StandardScale(),
+    Standardize(),
     lambda table: table.replace_blocks(
         numerical=table.numerical.clamp_min(0),
     ),

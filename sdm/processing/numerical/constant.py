@@ -7,10 +7,10 @@ from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
-ConstantFilterMethod = Literal["unique", "variance"]
+DropConstantMethod = Literal["unique", "variance"]
 
 
-class ConstantFilter(Processor):
+class DropConstant(Processor):
     """Remove non-informative numerical columns learned during fit.
 
     With ``method="unique"``, columns are retained when they have more than
@@ -40,7 +40,7 @@ class ConstantFilter(Processor):
 
     def __init__(
         self,
-        method: ConstantFilterMethod = "unique",
+        method: DropConstantMethod = "unique",
         *,
         threshold: int | None = None,
         tolerance: float | None = None,
