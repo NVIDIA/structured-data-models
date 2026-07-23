@@ -92,19 +92,19 @@ class CellEmbedder(torch.nn.Module):
             **factory_kwargs,
         )
         self.y_embedder_lookup: Embedding | Sequential | None = None
-        if is_classifier and max_classes is not None:
+        if max_classes is None:
+            self.y_embedder_lookup = Sequential(
+                Linear(1, 6, **factory_kwargs),
+                GELU(approximate="tanh"),
+                Linear(6, channels, **factory_kwargs),
+            )
+        else:
             if max_classes <= 0:
                 raise ValueError("max_classes must be positive")
             self.y_embedder_lookup = Embedding(
                 max_classes,
                 channels,
                 **factory_kwargs,
-            )
-        if not is_classifier:
-            self.y_embedder_lookup = Sequential(
-                Linear(1, 6, **factory_kwargs),
-                GELU(approximate="tanh"),
-                Linear(6, channels, **factory_kwargs),
             )
 
     def _group(self, x: Tensor, d: Tensor | None = None) -> Tensor:
