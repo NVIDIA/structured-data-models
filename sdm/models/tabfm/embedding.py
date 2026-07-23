@@ -198,7 +198,7 @@ class CellEmbedder(torch.nn.Module):
             ):
                 raise ValueError("train_size must be an integer [B] tensor")
 
-            target = target.long().clamp(
+            target = target.clamp(
                 0,
                 self.y_embedder_lookup.num_embeddings - 1,
             )
