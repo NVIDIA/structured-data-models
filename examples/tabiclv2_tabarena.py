@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Self
 
 import numpy as np
 import pandas as pd
@@ -45,38 +46,21 @@ class SDMTabICLv2System(ExternalSystemModel):
         memory_limit: float | None,
         time_limit: float | None,
         random_state: int | None,
-    ) -> SDMTabICLv2System:
-        del (
-            eval_metric,
-            validation_metadata,
-            num_cpus,
-            memory_limit,
-            time_limit,
+    ) -> Self:
+        random_state: int = 42 if random_state is None else random_state
+        generator = torch.Generator(device=self._device).manual_seed(
+            random_state
         )
-        if problem_type not in {"binary", "multiclass", "regression"}:
-            raise ValueError(
-                f"Unsupported TabArena problem type '{problem_type}'"
-            )
+        self._device = torch.device(
+            "cuda" if num_gpus is not None and num_gpus > 0 else "cpu"
+        )
 
-        self._feature_stypes = infer_stypes(X)
-        use_cuda = num_gpus is not None and num_gpus > 0
-        if use_cuda and not torch.cuda.is_available():
-            raise RuntimeError(
-                "TabArena requested a GPU but CUDA is unavailable"
-            )
-        self._device = torch.device("cuda" if use_cuda else "cpu")
-        generator = None
-        if random_state is not None:
-            generator = torch.Generator(device=self._device).manual_seed(
-                random_state
-            )
+        self.stypes = infer_stypes(X)
         self._target_name = target_name or "__target__"
-        self._target_stype = (
-            Stype.numerical
-            if problem_type == "regression"
-            else Stype.categorical
-        )
-        if problem_type != "regression":
+        if problem_type == "regression":
+            self._target_stype = Stype.numerical
+        else:
+            self._target_stype = Stype.categorical
             self._class_labels_by_key = _class_labels_by_key(y)
             self._tabarena_class_order = _tabarena_class_order(
                 y,
@@ -87,7 +71,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         self.model.fit(
             x=TableTensor.from_pandas(
                 df=X,
-                stypes=self._feature_stypes,
+                stypes=self.stypes,
                 device=self._device,
             ),
             y=TableTensor.from_pandas(
@@ -160,12 +144,6 @@ def _labels_from_prediction_columns(
     *,
     labels_by_key: dict[str, object],
 ) -> list[object]:
-    missing = [column for column in columns if column not in labels_by_key]
-    if missing:
-        raise RuntimeError(
-            "TabICLv2 returned class columns absent from the fitted target "
-            f"labels: {missing}"
-        )
     return [labels_by_key[column] for column in columns]
 
 
@@ -193,15 +171,6 @@ def _order_probabilities_for_tabarena(
 ) -> pd.DataFrame:
     expected = pd.Index(class_order)
     actual = probabilities.columns
-    if actual.has_duplicates:
-        raise RuntimeError(
-            "TabICLv2 returned duplicate class-probability columns"
-        )
-    if expected.has_duplicates:
-        raise RuntimeError(
-            "TabArena's class-label contract contains duplicate labels"
-        )
-
     missing = expected.difference(actual).tolist()
     unexpected = actual.difference(expected).tolist()
     if missing or unexpected:
