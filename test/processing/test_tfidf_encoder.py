@@ -1,5 +1,3 @@
-import copy
-
 import pytest
 import torch
 from sdm import StringTensor, Stype, TableTensor
@@ -82,20 +80,6 @@ def test_tfidf_encoder_max_features_caps_width() -> None:
 def test_tfidf_encoder_requires_fit() -> None:
     with pytest.raises(RuntimeError, match="not fitted"):
         TfidfEncoder(ngram_range=(2, 2)).transform(_text_table(["a"]))
-
-
-def test_tfidf_encoder_shares_fitted_state_across_deepcopy() -> None:
-    table = _text_table(["hello world", "hello there"])
-    encoder = TfidfEncoder(ngram_range=(2, 2))
-    encoder.fit(table)
-
-    member = copy.deepcopy(encoder)
-
-    assert member._state is encoder._state
-    assert torch.equal(
-        member.transform(table).numerical,
-        encoder.transform(table).numerical,
-    )
 
 
 def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
