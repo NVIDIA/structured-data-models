@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self
 
-from sdm.processing.base import Processor, SharedState
+from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
@@ -44,52 +44,38 @@ class TfidfEncoder(Processor):
         self.ngram_range = ngram_range
         self.max_features = max_features
         self.lowercase = lowercase
-        # Learned per text column: the n-gram vocabulary and its aligned idf.
-        # Held in `SharedState` so ensemble members share one fitted copy
-        # instead of duplicating it through `copy.deepcopy`.
-        self._state: SharedState[tuple[list[pa.Array], list[Tensor]]] = (
-            SharedState(([], []))
-        )
-
-    @property
-    def _vocabularies(self) -> list[pa.Array]:
-        return self._state.value[0]
-
-    @property
-    def _idfs(self) -> list[Tensor]:
-        return self._state.value[1]
+        self._vocabularies: list[pa.Array] = []
+        self._idfs: list[Tensor] = []
 
     def get_extra_state(self) -> dict[str, Any]:
         """Package the fitted state for :meth:`~torch.nn.Module.state_dict`.
 
         The fitted state lives outside PyTorch's parameter/buffer registries
-        (see ``_state``), so it is exported here instead. Vocabularies are
+        (``self._vocabularies`` / ``self._idfs``),
+        so it is exported here instead. Vocabularies are
         stored as plain ``(data, offset)`` tensor pairs to keep checkpoints
         loadable under ``torch.load(weights_only=True)``.
         """
-        vocabularies, idfs = self._state.value
         return {
             "vocabularies": [
                 StringTensor.from_arrow(vocabulary).data_offset
-                for vocabulary in vocabularies
+                for vocabulary in self._vocabularies
             ],
-            "idfs": list(idfs),
+            "idfs": list(self._idfs),
             "fitted": self._fitted,
         }
 
     def set_extra_state(self, state: dict[str, Any]) -> None:
         """Restore the fitted state from a checkpoint."""
-        self._state.value = (
-            [
-                StringTensor(
-                    data=data,
-                    offset=offset,
-                    size=(offset.numel() - 1,),
-                ).to_arrow()
-                for data, offset in state["vocabularies"]
-            ],
-            list(state["idfs"]),
-        )
+        self._vocabularies = [
+            StringTensor(
+                data=data,
+                offset=offset,
+                size=(offset.numel() - 1,),
+            ).to_arrow()
+            for data, offset in state["vocabularies"]
+        ]
+        self._idfs = list(state["idfs"])
         self._fitted = state["fitted"]
 
     def _apply(
@@ -97,13 +83,11 @@ class TfidfEncoder(Processor):
         fn: Callable[[Tensor], Tensor],
         recurse: bool = True,
     ) -> Self:
-        # `.to()`/`.cuda()`/`.half()` only walk parameters and buffers, so
-        # route the idf tensors inside `SharedState` through `fn` as well.
-        # The arrow vocabularies stay host-side (used by CPU arrow kernels
-        # only). Since the state is shared, this moves it for all ensemble
-        # members at once.
-        vocabularies, idfs = self._state.value
-        self._state.value = (vocabularies, [fn(idf) for idf in idfs])
+        r"""Idf tensors are not registered as buffers/parameters so
+        `.to()`/`.cuda()`/`.half()` won't move them to the correct storage.
+        This method applies tensor transformation to parameter.
+        """
+        self._idfs = [fn(idf) for idf in self._idfs]
         return super()._apply(fn, recurse=recurse)
 
     def _column_ngrams(
@@ -125,7 +109,8 @@ class TfidfEncoder(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         device = table.numerical.device
-        self._state.value = ([], [])
+        self._vocabularies = []
+        self._idfs = []
         for column in range(table.text.size(-1)):
             flat, offsets = self._column_ngrams(table, column)
             n_docs = offsets.numel() - 1
