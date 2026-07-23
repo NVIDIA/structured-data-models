@@ -13,11 +13,11 @@ US_PER_HOUR = 60 * US_PER_MINUTE
 US_PER_DAY = 24 * US_PER_HOUR
 
 
-class EncodeCalendar(Processor):
-    r"""Separate timestamps into numerical calendar features.
+class CalendarParts(Processor):
+    r"""Separate timestamps into numerical calendar parts.
 
     Args:
-        features: The datetime features to extract.
+        features: The calendar parts to extract.
     """
 
     supported_stypes = frozenset({Stype.datetime})

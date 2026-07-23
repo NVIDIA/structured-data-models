@@ -25,7 +25,7 @@ from sdm.processing.categorical import (
     ShuffleCategories,
     ImputeCategories,
 )
-from sdm.processing.datetime import EncodeCalendar
+from sdm.processing.datetime import CalendarParts
 from sdm.processing.output import ReduceEstimators, Softmax
 from sdm.processing.recipe import Recipe
 
@@ -50,7 +50,7 @@ __all__ = [
     "AlignCategories",
     "ShuffleCategories",
     "ImputeCategories",
-    "EncodeCalendar",
+    "CalendarParts",
     "ReduceEstimators",
     "Softmax",
     "Recipe",
