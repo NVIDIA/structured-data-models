@@ -4,13 +4,12 @@ from typing import Any, cast
 import pyarrow as pa
 import pyarrow.compute as pc
 import torch
-from torch import Tensor
-from typing_extensions import Self
-
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
+from torch import Tensor
+from typing_extensions import Self
 
 
 class TfidfEncoder(Processor):

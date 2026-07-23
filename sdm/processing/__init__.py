@@ -10,8 +10,7 @@ from sdm.processing.common import (
     FeaturePermute,
     ToNumerical,
 )
-from sdm.processing.recipe import Recipe
-from sdm.processing.tfidf_encoder import TfidfEncoder
+from sdm.processing.text.tfidf_encoder import TfidfEncoder
 from sdm.processing.numerical import (
     Clip,
     QuantileClip,
