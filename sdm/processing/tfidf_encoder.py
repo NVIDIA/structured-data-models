@@ -43,6 +43,8 @@ class TfidfEncoder(Processor):
         super().__init__()
         self.ngram_range = ngram_range
         self.max_features = max_features
+        if max_features is not None and max_features < 0:
+            raise ValueError("`max_features` must be non-negative or None.")
         self.lowercase = lowercase
         self._vocabularies: list[pa.Array] = []
         self._idfs: list[Tensor] = []
@@ -136,7 +138,11 @@ class TfidfEncoder(Processor):
                 n_docs=n_docs,
                 device=device,
             )
-            vocabulary, idf = self._prune(vocabulary, idf)
+            # Total corpus occurrences per n-gram
+            term_counts = torch.bincount(
+                codes, minlength=vocab_size
+            )  # [vocab_size]
+            vocabulary, idf = self._prune(vocabulary, idf, term_counts)
             self._vocabularies.append(vocabulary)
             self._idfs.append(idf)
 
@@ -162,11 +168,19 @@ class TfidfEncoder(Processor):
         self,
         vocabulary: pa.Array,
         idf: Tensor,
+        term_counts: Tensor,
     ) -> tuple[pa.Array, Tensor]:
-        """Keep the ``max_features`` most frequent n-grams (lowest idf)."""
+        """Keep the ``max_features`` n-grams with the highest term frequency.
+
+        Ranking follows scikit-learn's ``max_features``: n-grams are ordered by
+        their total corpus occurrence count. Ties break by vocabulary order via
+        a stable sort so the selection is deterministic. ``idf`` is carried
+        along only as the weight aligned to each retained n-gram.
+        """
         if self.max_features is None or len(vocabulary) <= self.max_features:
             return vocabulary, idf
-        keep = idf.argsort()[: self.max_features].sort().values
+        ranked = term_counts.argsort(descending=True, stable=True)
+        keep = ranked[: self.max_features].sort().values
         return vocabulary.take(pa.array(keep.tolist())), idf[keep]
 
     def _transform(self, table: TableTensor) -> TableTensor:

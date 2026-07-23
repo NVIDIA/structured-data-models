@@ -316,13 +316,79 @@ class StringTensor(VarLenTensor):
             raise NotImplementedError(
                 "'character_ngrams' only supports one-dimensional input"
             )
+
+        min_n, max_n = ngram_range
+        if min_n < 1 or max_n < min_n:
+            raise ValueError("'ngram_range' must satisfy 1 <= min_n <= max_n.")
+
         if self.is_cuda:
-            # TODO Add cuDF-based GPU implementation via
-            # `Series.str.character_ngrams`.
-            raise NotImplementedError(
-                "'character_ngrams' is not yet implemented for CUDA tensors"
+            return self._cuda_character_ngrams(ngram_range, lowercase)
+
+        return self._arrow_character_ngrams(ngram_range, lowercase)
+
+    def _cuda_character_ngrams(
+        self,
+        ngram_range: tuple[int, int],
+        lowercase: bool = True,
+    ) -> tuple[Self, Tensor]:
+        import cudf
+        import cupy as cp
+        from torch.utils.dlpack import from_dlpack
+
+        min_n, max_n = ngram_range
+        n_docs = self.numel()
+        s = self.to_cudf()  # n_docs documents
+        if lowercase:
+            s = s.str.lower()
+        # Collapse every whitespace run to a single space and trim, so each
+        # document splits into words on single spaces (matches str.split()).
+        s = s.str.replace(r"\s+", " ", regex=True).str.strip()
+
+        words = s.str.split(" ")  # list column, n_docs rows
+        doc_index = cudf.Series(  # source doc of each word
+            cp.repeat(cp.arange(n_docs), words.list.len().to_cupy())
+        )
+        flat_words = words.explode().reset_index(drop=True)
+        keep = flat_words.str.len() > 0
+        flat_words = flat_words[keep].reset_index(drop=True)
+        doc_index = doc_index[keep].reset_index(drop=True)
+        padded = " " + flat_words + " "
+        pad_len = padded.str.len()
+
+        parts: list[cudf.DataFrame] = []
+        for n in range(min_n, max_n + 1):
+            grams = padded.str.character_ngrams(n)
+            long = cudf.DataFrame({"doc": doc_index, "gram": grams}).explode(
+                "gram"
+            )
+            parts.append(long.dropna(subset=["gram"]))
+            short = pad_len < n
+            parts.append(
+                cudf.DataFrame(
+                    {"doc": doc_index[short], "gram": padded[short]}
+                )
             )
 
+        flat = cudf.concat(parts, ignore_index=True).sort_values(
+            "doc", kind="stable"
+        )
+
+        counts = (
+            flat.groupby("doc").size().reindex(range(n_docs), fill_value=0)
+        )
+        offset = torch.zeros(n_docs + 1, dtype=torch.int64, device=self.device)
+        offset[1:] = from_dlpack(counts.cumsum().astype("int64").to_dlpack())
+
+        ngrams = self.from_cudf(
+            flat["gram"].reset_index(drop=True), device=self.device
+        )
+        return ngrams, offset
+
+    def _arrow_character_ngrams(
+        self,
+        ngram_range: tuple[int, int],
+        lowercase: bool = True,
+    ) -> tuple[Self, Tensor]:
         min_n, max_n = ngram_range
         whitespace = re.compile(r"\s\s+")
         ngrams: list[str] = []
