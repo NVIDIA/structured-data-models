@@ -120,10 +120,7 @@ def test_pipeline_accepts_nested_sequential_with_callable() -> None:
 
 
 def test_pipeline_rejects_invalid_step() -> None:
-    with pytest.raises(
-        TypeError,
-        match=r"step 0.*Processor or callable.*object",
-    ):
+    with pytest.raises(TypeError, match=r"Element 0"):
         Sequential(cast(Any, object()))
 
 

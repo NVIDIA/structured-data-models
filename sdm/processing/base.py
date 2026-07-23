@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import abc
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, cast
 
 import torch
 from typing_extensions import Self
@@ -8,6 +10,9 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 SupportedStypes: TypeAlias = frozenset[Stype]
+
+if TYPE_CHECKING:
+    from sdm.processing import Sequential
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -126,6 +131,20 @@ class Processor(torch.nn.Module, abc.ABC):
             Transformed table.
         """
         return self.fit(table, generator=generator).transform(table)
+
+    def __add__(self, other: object) -> Sequential:
+        from sdm.processing import Sequential
+
+        if not isinstance(other, Processor) and not callable(other):
+            return NotImplemented
+        return Sequential(self, cast(Processor, other))
+
+    def __radd__(self, other: object) -> Sequential:
+        from sdm.processing import Sequential
+
+        if not isinstance(other, Processor) and not callable(other):
+            return NotImplemented
+        return Sequential(self, cast(Processor, other))
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"

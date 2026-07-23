@@ -82,7 +82,7 @@ class _TaskResolver(Processor, InvertibleMixin):
         return self.processor.__repr__(indent=indent)
 
 
-@dataclass(frozen=True, init=False, repr=False)
+@dataclass(init=False, repr=False)
 class Recipe:
     """Processing contract around an external model boundary.
 
@@ -174,7 +174,7 @@ class Recipe:
         elif isinstance(output, Sequential):
             direct_paths = {
                 str(index)
-                for index, step in enumerate(output.steps)
+                for index, step in enumerate(output)
                 if isinstance(step, TaskDispatch)
             }
         else:
