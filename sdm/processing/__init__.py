@@ -33,7 +33,6 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "SharedState",
     "Sequential",
     "Choice",
     "StypeDispatch",
