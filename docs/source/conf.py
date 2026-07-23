@@ -5,6 +5,7 @@ from importlib.metadata import version as package_version
 from pathlib import Path
 
 from sphinx.application import Sphinx
+from sphinx.ext.autosummary import generate
 from sphinx.ext.autosummary.generate import AutosummaryEntry
 
 project = "Structured Data Models"
@@ -62,8 +63,6 @@ def _render_jinja(app: Sphinx, docname: str, source: list[str]) -> None:
 
 
 def _patch_autosummary_jinja(app: Sphinx) -> None:
-    from sphinx.ext.autosummary import generate
-
     def find_autosummary_in_files(
         filenames: list[str],
     ) -> list[AutosummaryEntry]:
