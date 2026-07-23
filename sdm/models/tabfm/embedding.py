@@ -20,6 +20,8 @@ import torch
 from torch import Tensor
 from torch.nn import Linear
 
+from sdm.tensor import TableTensor
+
 
 class CellEmbedder(torch.nn.Module):
     """Embed grouped numerical and categorical cells for TabFM v1.0.0.
@@ -148,8 +150,8 @@ class CellEmbedder(torch.nn.Module):
         """Embed numerical and categorical cells.
 
         Args:
-            x: Feature tensor with shape ``[B, T, H]``.
-            cat_mask: Optional categorical mask with shape ``[B, H]``.
+            x: Input table with numerical and categorical blocks of shape
+                ``[B, T, C]``. The blocks are concatenated in that order.
             d: Optional active feature counts with shape ``[B]``. Grouping
                 wraps by these counts and padded output columns are zeroed.
 
@@ -157,23 +159,26 @@ class CellEmbedder(torch.nn.Module):
             Cell embeddings with shape ``[B, T, H, E]``. ``E`` is
             ``channels``.
         """
-        if x.dim() != 3 or not x.is_floating_point():
-            raise ValueError("x must be a floating-point [B, T, H] tensor")
-        batch_size, _, num_features = x.shape
-        if cat_mask is not None and (
-            cat_mask.shape != (batch_size, num_features)
-            or cat_mask.dtype != torch.bool
-        ):
-            raise ValueError("cat_mask must be a boolean [B, H] tensor")
+        numerical = x.numerical
+        categorical = x.categorical.as_tensor()
+        features = torch.cat(
+            [numerical, categorical.to(dtype=numerical.dtype)],
+            dim=-1,
+        )
+        batch_size, _, num_features = features.shape
+        cat_mask = (
+            torch.arange(num_features, device=features.device)
+            >= numerical.size(-1)
+        ).expand(batch_size, -1)
         if d is not None and (
             d.shape != (batch_size,) or d.is_floating_point()
         ):
             raise ValueError("d must be an integer [B] tensor")
 
-        cell = self._embed(x=x, cat_mask=cat_mask, d=d)
+        cell = self._embed(x=features, cat_mask=cat_mask, d=d)
         output = cell
         if d is not None:
-            feature_index = torch.arange(num_features, device=x.device)
+            feature_index = torch.arange(num_features, device=features.device)
             active = feature_index[None, :] < d[:, None]
             output = output.masked_fill(~active[:, None, :, None], 0)
         return output
