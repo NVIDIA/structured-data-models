@@ -12,15 +12,21 @@ import torch
 from sdm import Stype, TableTensor
 
 benchmark = SimpleNamespace(
-    **run_path(
-        str(
-            Path(__file__).parents[2]
-            / "benchmarks"
-            / "kumorfm"
-            / "relbench_benchmark.py"
-        )
-    )
+    **run_path(str(Path(__file__).parents[2] / "examples" / "kumorfm.py"))
 )
+
+
+def test_cli_defaults_to_fit_predict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        ["kumorfm", "--dataset", "rel-f1", "--task", "driver-dnf"],
+    )
+
+    args = benchmark._parse_args()
+
+    assert args.interface == "fit-predict"
 
 
 @pytest.mark.parametrize(
