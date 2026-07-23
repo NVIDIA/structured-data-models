@@ -151,7 +151,7 @@ class CellEmbedder(torch.nn.Module):
     def forward(
         self,
         x: Tensor,
-        target: Tensor | None = None,
+        y: Tensor | None = None,
         train_size: Tensor | None = None,
         cat_mask: Tensor | None = None,
         d: Tensor | None = None,
