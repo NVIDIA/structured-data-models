@@ -46,6 +46,8 @@ class Sequential(Processor, InvertibleMixin):
                 f"Element must be a 'Processor' or callable "
                 f"(got '{type(processor).__name__}')"
             )
+
+        self._fitted = False
         return self
 
     def extend(self, processors: Iterable[ProcessorLike]) -> Self:
