@@ -9,7 +9,7 @@ Overview
 
    * - Model
      - Release Date
-     - Parameters
+     - Parameter Count
      - Code License
      - Weights License
    * - :class:`~sdm.models.TabICLv2` (`Paper <https://arxiv.org/abs/2602.11139>`__)

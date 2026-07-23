@@ -1094,6 +1094,40 @@ def test_from_pandas() -> None:
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
+@onlyCUDA
+def test_from_pandas_id_cuda() -> None:
+    df = pd.DataFrame(
+        {
+            "user_id": [0, 1, 2],
+            "item_id": ["a", "b", "c"],
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"user_id": "id", "item_id": "id"},
+        device="cuda",
+    )
+
+    assert tensor.size() == (3, 2)
+    assert tensor.device.type == "cuda"
+    assert tensor.id.device == tensor.device
+    assert tensor.id[:, 0].equal(torch.tensor([0, 1, 2], device=tensor.device))
+
+
+@onlyCUDA
+def test_to_device_without_index() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age"]},
+        numerical=torch.randn(3, 1),
+    )
+
+    out = tensor.to("cuda")
+    assert isinstance(out, TableTensor)
+    assert out.device.type == "cuda"
+    assert out.id.device == out.device
+
+
 def test_text() -> None:
     data = {
         "age": [0.0, 1.0, 2.0],
