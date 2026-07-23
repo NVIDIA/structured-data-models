@@ -30,7 +30,7 @@ class CellEmbedder(torch.nn.Module):
 
     Args:
         channels: Number of output channels per cell.
-        max_classes: Maximum number of classification classes.
+        max_classes: Maximum number of classes.
         feature_group_size: Number of cyclically shifted features per group.
         num_frequencies: Number of Fourier frequencies per group slot.
         device: Device on which to create parameters and buffers.
