@@ -3,7 +3,7 @@ from sdm.processing import (
     Choice,
     Clip,
     ClipBySigma,
-    DropConstant,
+    DropConstantColumns,
     Identity,
     ImputeMean,
     PowerTransform,
@@ -41,7 +41,7 @@ def default_recipe() -> Recipe:
             StypeDispatch(  # TODO Support `id` as passthrough.
                 numerical=[
                     ImputeMean(),
-                    DropConstant(),
+                    DropConstantColumns(),
                     Standardize(epsilon=1e-6),
                     Clip(min_value=-100.0, max_value=100.0),
                     Choice(Identity(), PowerTransform()),

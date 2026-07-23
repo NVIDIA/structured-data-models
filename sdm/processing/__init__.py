@@ -2,11 +2,11 @@
 
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.common import (
-    Sequential,
-    Choice,
     Identity,
+    Sequential,
     StypeDispatch,
     TaskDispatch,
+    Choice,
     ToNumerical,
     ShuffleColumns,
 )
@@ -18,7 +18,7 @@ from sdm.processing.numerical import (
     PowerTransform,
     QuantileTransform,
     Standardize,
-    DropConstant,
+    DropConstantColumns,
 )
 from sdm.processing.categorical import (
     AlignCategories,
@@ -32,16 +32,13 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "Sequential",
-    "Choice",
     "Identity",
+    "Sequential",
     "StypeDispatch",
     "TaskDispatch",
+    "Choice",
     "ToNumerical",
     "ShuffleColumns",
-    "AlignCategories",
-    "ShuffleCategories",
-    "ImputeCategories",
     "Clip",
     "ClipByQuantiles",
     "ClipBySigma",
@@ -49,7 +46,10 @@ __all__ = [
     "PowerTransform",
     "QuantileTransform",
     "Standardize",
-    "DropConstant",
+    "DropConstantColumns",
+    "AlignCategories",
+    "ShuffleCategories",
+    "ImputeCategories",
     "EncodeCalendar",
     "ReduceEstimators",
     "Softmax",

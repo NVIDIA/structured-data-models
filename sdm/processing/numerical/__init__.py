@@ -7,7 +7,7 @@ from sdm.processing.numerical.impute import ImputeMean
 from sdm.processing.numerical.power import PowerTransform
 from sdm.processing.numerical.quantile import QuantileTransform
 from sdm.processing.numerical.standardize import Standardize
-from sdm.processing.numerical.constant import DropConstant
+from sdm.processing.numerical.constant import DropConstantColumns
 
 __all__ = [
     "Clip",
@@ -17,5 +17,5 @@ __all__ = [
     "PowerTransform",
     "QuantileTransform",
     "Standardize",
-    "DropConstant",
+    "DropConstantColumns",
 ]
