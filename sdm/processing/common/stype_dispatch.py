@@ -10,7 +10,7 @@ from sdm.processing._callable import (
     as_processor,
 )
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.sequential import Sequential
+from sdm.processing.common.sequential import Sequential
 from sdm.tensor import TableTensor
 
 

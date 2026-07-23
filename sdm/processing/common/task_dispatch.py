@@ -4,7 +4,7 @@ from typing import Literal, cast
 import torch
 
 from sdm.processing.base import Processor
-from sdm.processing.sequential import Sequential
+from sdm.processing.common.sequential import Sequential
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
