@@ -25,13 +25,13 @@ Overview
      - `BSD-3-Clause <https://github.com/soda-inria/tabicl/blob/main/LICENSE>`__
      - `BSD-3-Clause <https://huggingface.co/jingang/TabICL>`__
 
-References
-----------
+Model API
+---------
 
 .. autosummary::
    :toctree: generated
    :nosignatures:
 
 {% for name in api_names("sdm.models") %}
-   sdm.models.{{ name }}
+   ~sdm.models.{{ name }}
 {% endfor %}
