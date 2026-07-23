@@ -1,7 +1,7 @@
 ﻿TaskDispatch
 ============
 
-.. currentmodule:: sdm.processing.task_dispatch
+.. currentmodule:: sdm.processing.common
 
 .. autoclass:: TaskDispatch
    :members:

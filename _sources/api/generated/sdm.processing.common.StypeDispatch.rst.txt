@@ -1,7 +1,7 @@
 ﻿StypeDispatch
 =============
 
-.. currentmodule:: sdm.processing.stype_dispatch
+.. currentmodule:: sdm.processing.common
 
 .. autoclass:: StypeDispatch
    :members:

@@ -94,11 +94,11 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.sequential.Sequential.html">Sequential</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.choice.Choice.html">Choice</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.stype_dispatch.StypeDispatch.html">StypeDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.task_dispatch.TaskDispatch.html">TaskDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Sequential.html">Sequential</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.FeaturePermute.html">FeaturePermute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html">Clip</a></li>
@@ -205,20 +205,20 @@ data-aria-dark="Switch to auto color mode">
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.sequential.Sequential.html#sdm.processing.sequential.Sequential" title="sdm.processing.sequential.Sequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Sequential</span></code></a></p></td>
-<td><p>Apply processors and stateless callables in sequence.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.choice.Choice.html#sdm.processing.choice.Choice" title="sdm.processing.choice.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
-<td><p>Delegate to one option drawn uniformly at random.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.stype_dispatch.StypeDispatch.html#sdm.processing.stype_dispatch.StypeDispatch" title="sdm.processing.stype_dispatch.StypeDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a></p></td>
-<td><p>Apply separate processor pipelines to columns grouped by semantic type.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.task_dispatch.TaskDispatch.html#sdm.processing.task_dispatch.TaskDispatch" title="sdm.processing.task_dispatch.TaskDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a></p></td>
-<td><p>Route model output by the transformed target's semantic type.</p></td>
-</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Identity.html#sdm.processing.common.Identity" title="sdm.processing.common.Identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Identity</span></code></a></p></td>
 <td><p>Return inputs unchanged.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.Sequential.html#sdm.processing.common.Sequential" title="sdm.processing.common.Sequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Sequential</span></code></a></p></td>
+<td><p>Apply processors and stateless callables in sequence.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Choice.html#sdm.processing.common.Choice" title="sdm.processing.common.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
+<td><p>Delegate to one option drawn uniformly at random.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.StypeDispatch.html#sdm.processing.common.StypeDispatch" title="sdm.processing.common.StypeDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a></p></td>
+<td><p>Apply separate processor pipelines to columns grouped by semantic type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.TaskDispatch.html#sdm.processing.common.TaskDispatch" title="sdm.processing.common.TaskDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a></p></td>
+<td><p>Route model output by the transformed target's semantic type.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.FeaturePermute.html#sdm.processing.common.FeaturePermute" title="sdm.processing.common.FeaturePermute"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FeaturePermute</span></code></a></p></td>
 <td><p>Permute the numerical feature columns.</p></td>
@@ -334,7 +334,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=20eb6340"></script>
+      <script src="../_static/documentation_options.js?v=454a1448"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

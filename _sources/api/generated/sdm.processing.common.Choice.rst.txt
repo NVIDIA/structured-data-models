@@ -1,7 +1,7 @@
 ﻿Choice
 ======
 
-.. currentmodule:: sdm.processing.choice
+.. currentmodule:: sdm.processing.common
 
 .. autoclass:: Choice
    :members:
