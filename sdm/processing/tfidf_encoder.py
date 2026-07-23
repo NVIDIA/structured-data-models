@@ -83,9 +83,10 @@ class TfidfEncoder(Processor):
         fn: Callable[[Tensor], Tensor],
         recurse: bool = True,
     ) -> Self:
-        r"""Idf tensors are not registered as buffers/parameters so
+        r"""Transform idf tensors to buffers/parameters.
+
+        Idf tensors are not registered as buffers/parameters so
         `.to()`/`.cuda()`/`.half()` won't move them to the correct storage.
-        This method applies tensor transformation to parameter.
         """
         self._idfs = [fn(idf) for idf in self._idfs]
         return super()._apply(fn, recurse=recurse)
