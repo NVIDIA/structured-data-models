@@ -99,5 +99,6 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 ## Processors
 
 1. Name the main operation first, e.g., `ShuffleColumns` over `ColumnShuffle`.
-2. Use established names when they exist, e.g., `Sequential`, `Choice`, or `PowerTransform`.
+2. Use established names when they exist, e.g., `Sequential` or `Choice`, or adapt them in style, e.g., `PowerTransform` over `PowerTransformer`.
+   Avoid API-role suffixes such as `*Transformer`, `*Encoder`, `*Imputer` or `*Scaler`.
 3. Keep names short when the shorter form is already clear, e.g., `Softmax` over `ApplySoftmax`, but specialize when needed, e.g., `DropConstantColumns` over `DropConstant`.
