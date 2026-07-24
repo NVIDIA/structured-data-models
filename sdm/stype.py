@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from enum import Enum
 from typing import TYPE_CHECKING, Any, TypeAlias
 
+import numpy as np
 import pyarrow as pa
 
 if TYPE_CHECKING:
@@ -52,6 +53,7 @@ _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 def infer_stypes(
     table: pa.Table | pd.DataFrame | cudf.DataFrame,
     overrides: Mapping[str, StypeLike] | None = None,
+    allowed_stypes: set[Stype] | None = None,
 ) -> dict[str, StypeLike]:
     r"""Infer semantic types from raw data statistics.
 
@@ -71,30 +73,46 @@ def infer_stypes(
         table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
             :class:`cudf.DataFrame`.
         overrides: Optional semantic type overrides by column name.
+        allowed_stypes: Optional set of semantic types eligible for
+            inference. Inferring :attr:`Stype.text` requires sampling
+            column values, so text is only considered when
+            :attr:`Stype.text` is included; otherwise string columns fall
+            back to :attr:`Stype.categorical`. If ``None``, text is not
+            inferred.
 
     Returns:
         Dictionary mapping column names to inferred semantic type.
     """
     overrides = overrides or {}
+    sample = None
 
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
+            if allowed_stypes and Stype.text in allowed_stypes:
+                sample = table.sample(n=min(10000, len(table)))
             table = pa.Schema.from_pandas(table, preserve_index=False)
 
     if importlib.util.find_spec("cudf") is not None:
         import cudf
 
         if isinstance(table, cudf.DataFrame):
+            if allowed_stypes and Stype.text in allowed_stypes:
+                sample = table.sample(n=min(10000, len(table)))
             return {
                 column: Stype(overrides[column])
                 if column in overrides
-                else _infer_cudf_stype(column, dtype)
+                else _infer_cudf_stype(column, dtype, sample)
                 for column, dtype in table.dtypes.items()
             }
 
     if isinstance(table, pa.Table):
+        if allowed_stypes and Stype.text in allowed_stypes:
+            n = min(10_000, table.num_rows)
+            rng = np.random.default_rng()
+            idx = rng.choice(table.num_rows, size=n, replace=False)
+            sample = table.take(idx)
         table = table.schema
 
     if not isinstance(table, pa.Schema):
@@ -106,12 +124,16 @@ def infer_stypes(
     return {
         field.name: Stype(overrides[field.name])
         if field.name in overrides
-        else _infer_arrow_stype(field.name, field.type)
+        else _infer_arrow_stype(field.name, field.type, sample)
         for field in table
     }
 
 
-def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
+def _infer_arrow_stype(
+    name: str,
+    dtype: pa.DataType,
+    sample: pa.Table,
+) -> Stype:
     if (
         pa.types.is_integer(dtype)
         or pa.types.is_string(dtype)
@@ -127,6 +149,13 @@ def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
         return Stype.numerical
 
     if (
+        pa.types.is_string(dtype) or pa.types.is_large_string(dtype)
+    ) and sample is not None:
+        if _infer_arrow_text_stype(name, sample):
+            return Stype.text
+        return Stype.categorical
+
+    if (
         pa.types.is_string(dtype)
         or pa.types.is_large_string(dtype)
         or pa.types.is_boolean(dtype)
@@ -140,7 +169,11 @@ def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     raise TypeError(f"Unsupported Arrow type '{dtype}' for column '{name}'")
 
 
-def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
+def _infer_cudf_stype(
+    name: str,
+    dtype: Any,
+    sample: cudf.DataFrame | None = None,
+) -> Stype:
     import cudf
     from cudf.api.types import (
         is_bool_dtype,
@@ -163,11 +196,12 @@ def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
     ):
         return Stype.numerical
 
-    if (
-        is_string_dtype(dtype)
-        or is_bool_dtype(dtype)
-        or isinstance(dtype, cudf.CategoricalDtype)
-    ):
+    if is_bool_dtype(dtype) or isinstance(dtype, cudf.CategoricalDtype):
+        return Stype.categorical
+
+    if is_string_dtype(dtype) and sample is not None:
+        if _infer_cudf_text_stype(name, sample):
+            return Stype.text
         return Stype.categorical
 
     if is_datetime64_any_dtype(dtype):
@@ -178,3 +212,42 @@ def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
 
 def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
+
+
+def _infer_arrow_text_stype(
+    name: str,
+    sample: pa.Table | pd.DataFrame,
+) -> bool:
+    column = sample[name]
+    values = (
+        column.to_pylist()
+        if isinstance(column, pa.ChunkedArray)
+        else column.tolist()
+    )
+    values = [v for v in values if isinstance(v, str)]  # drop nulls / non-str
+    if not values:
+        return False
+
+    # cardinality
+    unique_ratio = len(set(values)) / len(values)
+    words = [word for value in values for word in value.split()]
+    if not words:
+        return False
+    # average word count per cell
+    avg_words = sum(len(v.split()) for v in values) / len(values)
+
+    return unique_ratio > 0.01 and avg_words >= 3
+
+
+def _infer_cudf_text_stype(name: str, sample) -> bool:
+    column = sample[name]
+    values = column.dropna()
+
+    if values.empty:
+        return False
+
+    unique_ratio = values.nunique() / len(values)
+    word_counts = values.str.token_count()
+    avg_words = word_counts.mean()
+
+    return unique_ratio > 0.01 and avg_words >= 3

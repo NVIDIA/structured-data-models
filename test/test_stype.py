@@ -126,3 +126,81 @@ def test_overrides() -> None:
         "age": Stype.numerical,
         "account_number": Stype.id,
     }
+
+
+def test_text_detection_arrow() -> None:
+    table = pa.table(
+        {
+            "review": pa.array(
+                [
+                    "the product broke after one week of use",
+                    "excellent value and very fast shipping thanks",
+                    "arrived damaged and support was unhelpful sadly",
+                ],
+                type=pa.string(),
+            ),
+            "color": pa.array(["red", "blue", "green"], type=pa.string()),
+        }
+    )
+
+    assert infer_stypes(table, allowed_stypes={Stype.text}) == {
+        "review": Stype.text,
+        "color": Stype.categorical,
+    }
+
+
+def test_text_detection_pandas() -> None:
+    df = pd.DataFrame(
+        {
+            "review": pd.Series(
+                [
+                    "the product broke after one week of use",
+                    "excellent value and very fast shipping thanks",
+                    "arrived damaged and support was unhelpful sadly",
+                ],
+                dtype="string",
+            ),
+            "color": pd.Series(["red", "blue", "green"], dtype="string"),
+        }
+    )
+
+    assert infer_stypes(df, allowed_stypes={Stype.text}) == {
+        "review": Stype.text,
+        "color": Stype.categorical,
+    }
+
+
+def test_text_not_inferred_when_not_allowed() -> None:
+    table = pa.table(
+        {
+            "review": pa.array(
+                ["the product broke after one week of use"] * 3,
+                type=pa.string(),
+            ),
+        }
+    )
+
+    assert infer_stypes(table) == {"review": Stype.categorical}
+
+
+@onlyCUDA
+def test_text_detection_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    df = cudf.DataFrame(
+        {
+            "review": cudf.Series(
+                [
+                    "the product broke after one week of use",
+                    "excellent value and very fast shipping thanks",
+                    "arrived damaged and support was unhelpful sadly",
+                ]
+            ),
+            "color": cudf.Series(["red", "blue", "green"]),
+        }
+    )
+
+    assert infer_stypes(df, allowed_stypes={Stype.text}) == {
+        "review": Stype.text,
+        "color": Stype.categorical,
+    }
