@@ -48,10 +48,10 @@ def test_sampler_forwards_temporal_strategy(
 
     monkeypatch.setattr(torch.ops.pyg, "hetero_neighbor_sample", capture)
     sampler = temporal_data.sampler(
-        temporal=TemporalSamplingConfig(
-            time_columns={"first": "time", "second": "time"},
-            strategy="uniform",
-        )
+        temporal={
+            "time_columns": {"first": "time", "second": "time"},
+            "strategy": "uniform",
+        }
     )
     task_table = TableTensor.from_pandas(
         df=pd.DataFrame(

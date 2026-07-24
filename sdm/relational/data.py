@@ -239,7 +239,7 @@ class RelationalData(DeviceMixin):
 
     def sampler(
         self,
-        temporal: TemporalSamplingConfig | None = None,
+        temporal: TemporalSamplingConfig | dict[str, Any] | None = None,
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
@@ -275,10 +275,20 @@ class RelationalData(DeviceMixin):
             )
 
         Args:
-            temporal: Temporal sampling configuration. A row in a time-aware
-                table can only be sampled if its timestamp does not exceed the
-                query timestamp.
+            temporal: Temporal sampling configuration or a dictionary of its
+                constructor arguments. A row in a time-aware table can only
+                be sampled if its timestamp does not exceed the query
+                timestamp.
         """
+        from sdm.relational.sampler import (  # noqa: PLC0415
+            TemporalSamplingConfig,
+        )
+
+        if temporal is not None and not isinstance(
+            temporal, TemporalSamplingConfig
+        ):
+            temporal = TemporalSamplingConfig(**temporal)
+
         if self.device.type == "cuda":
             from sdm.relational.cugraph_sampler import (  # noqa: PLC0415
                 CuGraphRelationalSampler,
