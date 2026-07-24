@@ -94,11 +94,11 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Sequential.html">Sequential</a></li>
-<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Choice.html">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.numerical.Clip.html">Clip</a></li>
@@ -188,10 +188,10 @@ data-aria-dark="Switch to auto color mode">
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Processor</span></code></a></p></td>
-<td><p>Fittable, table-in/table-out transform.</p></td>
+<td><p>Base processor for tensor-aware table transformations.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p></td>
-<td><p>Adds <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code> to a <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code>.</p></td>
+<td><p>Extend a <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code> by an inverse transformation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Recipe</span></code></a></p></td>
 <td><p>Processing contract around an external model boundary.</p></td>
@@ -205,20 +205,20 @@ data-aria-dark="Switch to auto color mode">
 <div class="table-wrapper autosummary longtable docutils container">
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Sequential.html#sdm.processing.common.Sequential" title="sdm.processing.common.Sequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Sequential</span></code></a></p></td>
-<td><p>Apply processors and stateless callables in sequence.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.Choice.html#sdm.processing.common.Choice" title="sdm.processing.common.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
-<td><p>Delegate to one option drawn uniformly at random.</p></td>
-</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Identity.html#sdm.processing.common.Identity" title="sdm.processing.common.Identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Identity</span></code></a></p></td>
 <td><p>Return inputs unchanged.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.StypeDispatch.html#sdm.processing.common.StypeDispatch" title="sdm.processing.common.StypeDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.Sequential.html#sdm.processing.common.Sequential" title="sdm.processing.common.Sequential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Sequential</span></code></a></p></td>
+<td><p>Apply processors and callables in sequence.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.StypeDispatch.html#sdm.processing.common.StypeDispatch" title="sdm.processing.common.StypeDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a></p></td>
 <td><p>Apply separate processor pipelines to columns grouped by semantic type.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.TaskDispatch.html#sdm.processing.common.TaskDispatch" title="sdm.processing.common.TaskDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.TaskDispatch.html#sdm.processing.common.TaskDispatch" title="sdm.processing.common.TaskDispatch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a></p></td>
 <td><p>Route model output by the transformed target's semantic type.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.common.Choice.html#sdm.processing.common.Choice" title="sdm.processing.common.Choice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Choice</span></code></a></p></td>
+<td><p>Delegate to one option drawn uniformly at random.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.common.ToNumerical.html#sdm.processing.common.ToNumerical" title="sdm.processing.common.ToNumerical"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ToNumerical</span></code></a></p></td>
 <td><p>Move categorical columns into the numerical block.</p></td>
@@ -334,7 +334,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=fe1495b4"></script>
+      <script src="../_static/documentation_options.js?v=aa2c663c"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

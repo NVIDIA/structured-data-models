@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Choice - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Identity" href="sdm.processing.common.Identity.html" /><link rel="prev" title="Sequential" href="sdm.processing.common.Sequential.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Choice - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="ToNumerical" href="sdm.processing.common.ToNumerical.html" /><link rel="prev" title="TaskDispatch" href="sdm.processing.common.TaskDispatch.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -94,11 +94,11 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Choice</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
@@ -146,8 +146,6 @@ data-aria-dark="Switch to auto color mode">
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.processing.common.Choice"><code class="docutils literal notranslate"><span class="pre">Choice</span></code></a><ul>
 <li><a class="reference internal" href="#sdm.processing.common.Choice.selected"><code class="docutils literal notranslate"><span class="pre">Choice.selected</span></code></a></li>
-<li><a class="reference internal" href="#sdm.processing.common.Choice.get_extra_state"><code class="docutils literal notranslate"><span class="pre">Choice.get_extra_state()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.processing.common.Choice.set_extra_state"><code class="docutils literal notranslate"><span class="pre">Choice.set_extra_state()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -207,45 +205,6 @@ callable accepts and returns a <a class="reference internal" href="sdm.tensor.Ta
 <dd><p>The drawn option.</p>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.processing.common.Choice.get_extra_state">
-<span class="sig-name descname"><span class="pre">get_extra_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#sdm.processing.common.Choice.get_extra_state" title="Link to this definition">#</a></dt>
-<dd><p>Return any extra state to include in the module’s state_dict.</p>
-<p>Implement this and a corresponding <a class="reference internal" href="#sdm.processing.common.Choice.set_extra_state" title="sdm.processing.common.Choice.set_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">set_extra_state()</span></code></a> for your module
-if you need to store extra state. This function is called when building the
-module’s <cite>state_dict()</cite>.</p>
-<p>Note that extra state should be picklable to ensure working serialization
-of the state_dict. We only provide backwards compatibility guarantees
-for serializing Tensors; other objects may break backwards compatibility if
-their serialized pickled form changes.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Any extra state to store in the module’s state_dict</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.processing.common.Choice.set_extra_state">
-<span class="sig-name descname"><span class="pre">set_extra_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#sdm.processing.common.Choice.set_extra_state" title="Link to this definition">#</a></dt>
-<dd><p>Set extra state contained in the loaded <cite>state_dict</cite>.</p>
-<p>This function is called from <code class="xref py py-func docutils literal notranslate"><span class="pre">load_state_dict()</span></code> to handle any extra state
-found within the <cite>state_dict</cite>. Implement this function and a corresponding
-<a class="reference internal" href="#sdm.processing.common.Choice.get_extra_state" title="sdm.processing.common.Choice.get_extra_state"><code class="xref py py-func docutils literal notranslate"><span class="pre">get_extra_state()</span></code></a> for your module if you need to store extra state within its
-<cite>state_dict</cite>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>state</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Extra state from the <cite>state_dict</cite></p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>None</p>
-</dd>
-</dl>
-</dd></dl>
-
 </dd></dl>
 
 </section>
@@ -256,16 +215,16 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.common.Sequential.html">
+    <a href="sdm.processing.common.TaskDispatch.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Sequential</div></div>
+        <span>Previous</span><div class="title">TaskDispatch</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.common.Identity.html">
+    <a href="sdm.processing.common.ToNumerical.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Identity</div>
+        <div class="title">ToNumerical</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -274,7 +233,7 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=fe1495b4"></script>
+      <script src="../../_static/documentation_options.js?v=aa2c663c"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
