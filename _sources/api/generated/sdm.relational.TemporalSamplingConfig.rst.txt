@@ -1,0 +1,8 @@
+﻿TemporalSamplingConfig
+======================
+
+.. currentmodule:: sdm.relational
+
+.. autoclass:: TemporalSamplingConfig
+   :members:
+   :show-inheritance:

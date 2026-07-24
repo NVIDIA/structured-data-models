@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>RelationalSampler - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="sdm.processing" href="../processing.html" /><link rel="prev" title="RelatedTables" href="sdm.relational.RelatedTables.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>RelationalSampler - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="TemporalSamplingConfig" href="sdm.relational.TemporalSamplingConfig.html" /><link rel="prev" title="RelatedTables" href="sdm.relational.RelatedTables.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -88,6 +88,9 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.relational.TaskLink.html">TaskLink</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.relational.RelatedTables.html">RelatedTables</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">RelationalSampler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.relational.TemporalSamplingConfig.html">TemporalSamplingConfig</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.relational.TemporalStrategy.html">sdm.relational.TemporalStrategy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.relational.CuGraphRelationalSampler.html">CuGraphRelationalSampler</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../processing.html">sdm.processing</a><ul>
@@ -186,16 +189,16 @@ data-aria-dark="Switch to auto color mode">
 <h1>RelationalSampler<a class="headerlink" href="#relationalsampler" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.relational.RelationalSampler">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.relational.</span></span><span class="sig-name descname"><span class="pre">RelationalSampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.relational.RelationalData.html#sdm.relational.RelationalData" title="sdm.relational.data.RelationalData"><span class="pre">RelationalData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.14)"><span class="pre">Mapping</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.relational.RelationalSampler" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.relational.</span></span><span class="sig-name descname"><span class="pre">RelationalSampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.relational.RelationalData.html#sdm.relational.RelationalData" title="sdm.relational.data.RelationalData"><span class="pre">RelationalData</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">temporal</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.relational.TemporalSamplingConfig.html#sdm.relational.TemporalSamplingConfig" title="sdm.relational.sampler.TemporalSamplingConfig"><span class="pre">TemporalSamplingConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.relational.RelationalSampler" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Subgraph sampler over relational data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>data</strong> (<a class="reference internal" href="sdm.relational.RelationalData.html#sdm.relational.RelationalData" title="sdm.relational.data.RelationalData"><em>RelationalData</em></a>) – The collection of named tables and their relationships.</p></li>
-<li><p><strong>time_columns</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.14)"><em>Mapping</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Mapping from table name to the datetime column used for
-temporal sampling. A row in a time-aware table can only be sampled
-if its timestamp does not exceed the query timestamp.</p></li>
+<li><p><strong>temporal</strong> (<a class="reference internal" href="sdm.relational.TemporalSamplingConfig.html#sdm.relational.TemporalSamplingConfig" title="sdm.relational.sampler.TemporalSamplingConfig"><em>TemporalSamplingConfig</em></a><em> | </em><em>None</em>) – Temporal sampling configuration. A row in a time-aware table
+can only be sampled if its timestamp does not exceed the query
+timestamp.</p></li>
 </ul>
 </dd>
 </dl>
@@ -236,10 +239,10 @@ query timestamp for temporal sampling.</p></li>
         <span>Previous</span><div class="title">RelatedTables</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="../processing.html">
+    <a href="sdm.relational.TemporalSamplingConfig.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">sdm.processing</div>
+        <div class="title">TemporalSamplingConfig</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -248,7 +251,7 @@ query timestamp for temporal sampling.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=9b6532d7"></script>
+      <script src="../../_static/documentation_options.js?v=b9ef40d8"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
