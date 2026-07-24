@@ -40,8 +40,13 @@ class ICLModel(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
+    #: Semantic types supported for input feature columns in this model.
     supported_feature_stypes: ClassVar[frozenset[Stype]]
+
+    #: Semantic types supported for target columns in this model.
     supported_target_stypes: ClassVar[frozenset[Stype]]
+
+    #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
     def __init__(self) -> None:
@@ -83,8 +88,8 @@ class ICLModel(torch.nn.Module, ABC):
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
-            The processed prediction after
-            ``recipe_output([E, ..., R_query, *])``.
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -278,10 +283,6 @@ class ICLModel(torch.nn.Module, ABC):
             caches.append(cache)
         self._caches = caches
 
-    def clear(self) -> None:
-        r"""Clears cached in-context examples and the fitted recipe."""
-        self._caches = None
-
     @_maybe_inference_mode()
     def predict(
         self,
@@ -300,9 +301,8 @@ class ICLModel(torch.nn.Module, ABC):
             related_tables: Related context for query examples.
 
         Returns:
-        Returns:
-            The processed prediction after
-            ``recipe_output([E, ..., R, *])``.
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
@@ -373,6 +373,10 @@ class ICLModel(torch.nn.Module, ABC):
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
         out = cast(TableTensor, out.to(x_i.dtype))
         return recipe.output.transform(out)
+
+    def clear(self) -> None:
+        r"""Clear cached context state created by :meth:`fit`."""
+        self._caches = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device

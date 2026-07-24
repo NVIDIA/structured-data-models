@@ -35,6 +35,7 @@ html_theme_options = {
 }
 autosummary_generate = True
 autosummary_context = {"import_module": importlib.import_module}
+autodoc_member_order = "bysource"
 autodoc_typehints = "both"
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
