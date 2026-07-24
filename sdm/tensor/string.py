@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
-from torch.utils.dlpack import from_dlpack
 from typing_extensions import Self, override
 
 from sdm.tensor import VarLenTensor
@@ -291,82 +290,6 @@ class StringTensor(VarLenTensor):
             device=device,
             size=size,
         )
-
-    def character_ngrams_cuda(
-        self,
-        ngram_range: tuple[int, int],
-        lowercase: bool = True,
-    ) -> tuple[Self, Tensor]:
-        r"""Split each string into word-boundary character n-grams on GPU.
-
-        Device-native counterpart to the CPU/Arrow implementation in
-        :class:`~sdm.processing.text.tfidf_encoder.TfidfEncoder`; requires a
-        CUDA tensor and an installed cuDF. Mirrors scikit-learn's
-        ``analyzer='char_wb'``: each whitespace-delimited word is padded with a
-        single space on both sides before windowing, so a word shorter than
-        ``n`` still yields one n-gram.
-
-        Returns a flat :class:`StringTensor` holding every n-gram of every
-        document, together with an ``offset`` tensor of length ``numel() + 1``
-        where document ``d``'s n-grams are ``flat[offset[d]:offset[d + 1]]``.
-        The n-grams within a document are unordered and may differ in order
-        from the CPU implementation; only the per-document grouping is stable.
-
-        Args:
-            ngram_range: Inclusive ``(min_n, max_n)`` window sizes.
-            lowercase: Lowercase each string before windowing.
-        """
-        import cudf
-        import cupy as cp
-
-        min_n, max_n = ngram_range
-        n_docs = self.numel()
-        s = self.to_cudf()  # n_docs documents
-        if lowercase:
-            s = s.str.lower()
-        # Collapse every whitespace run to a single space and trim, so each
-        # document splits into words on single spaces (matches str.split()).
-        s = s.str.replace(r"\s+", " ", regex=True).str.strip()
-
-        words = s.str.split(" ")  # list column, n_docs rows
-        doc_index = cudf.Series(  # source doc of each word
-            cp.repeat(cp.arange(n_docs), words.list.len().to_cupy())
-        )
-        flat_words = words.explode().reset_index(drop=True)
-        keep = flat_words.str.len() > 0
-        flat_words = flat_words[keep].reset_index(drop=True)
-        doc_index = doc_index[keep].reset_index(drop=True)
-        padded = " " + flat_words + " "
-        pad_len = padded.str.len()
-
-        parts: list[cudf.DataFrame] = []
-        for n in range(min_n, max_n + 1):
-            grams = padded.str.character_ngrams(n)
-            long = cudf.DataFrame({"doc": doc_index, "gram": grams}).explode(
-                "gram"
-            )
-            parts.append(long.dropna(subset=["gram"]))
-            short = pad_len < n
-            parts.append(
-                cudf.DataFrame(
-                    {"doc": doc_index[short], "gram": padded[short]}
-                )
-            )
-
-        flat = cudf.concat(parts, ignore_index=True).sort_values(
-            "doc", kind="stable"
-        )
-
-        counts = (
-            flat.groupby("doc").size().reindex(range(n_docs), fill_value=0)
-        )
-        offset = torch.zeros(n_docs + 1, dtype=torch.int64, device=self.device)
-        offset[1:] = from_dlpack(counts.cumsum().astype("int64").to_dlpack())
-
-        ngrams = self.from_cudf(
-            flat["gram"].reset_index(drop=True), device=self.device
-        )
-        return ngrams, offset
 
     @override
     def item(self) -> str:  # type: ignore

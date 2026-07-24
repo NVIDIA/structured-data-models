@@ -10,6 +10,7 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
 from torch import Tensor
+from torch.utils.dlpack import from_dlpack
 from typing_extensions import Self
 
 
@@ -43,11 +44,16 @@ class TfidfEncoder(Processor):
         super().__init__()
         self.ngram_range = ngram_range
         self.max_features = max_features
-        if max_features is not None and max_features < 0:
-            raise ValueError("`max_features` must be non-negative or None.")
         self.lowercase = lowercase
         self._vocabularies: list[pa.Array] = []
         self._idfs: list[Tensor] = []
+
+        min_n, max_n = self.ngram_range
+        if min_n < 1 or max_n < min_n:
+            raise ValueError("'ngram_range' must satisfy 1 <= min_n <= max_n.")
+
+        if max_features is not None and max_features < 0:
+            raise ValueError("`max_features` must be non-negative or None.")
 
     def get_extra_state(self) -> dict[str, Any]:
         """Package the fitted state for :meth:`~torch.nn.Module.state_dict`.
@@ -93,19 +99,6 @@ class TfidfEncoder(Processor):
         self._idfs = [fn(idf) for idf in self._idfs]
         return super()._apply(fn, recurse=recurse)
 
-    def _column_ngrams(
-        self,
-        table: TableTensor,
-        column: int,
-    ) -> tuple[StringTensor, Tensor]:
-        """Tokenize one text column into ``(flat_ngrams, offsets)``."""
-        column_text = cast(StringTensor, table.text[:, column])
-        return self._character_ngrams(
-            column_text,
-            self.ngram_range,
-            lowercase=self.lowercase,
-        )
-
     def _character_ngrams(
         self,
         tensor: StringTensor,
@@ -115,9 +108,9 @@ class TfidfEncoder(Processor):
     ) -> tuple[StringTensor, Tensor]:
         r"""Split each string into word-boundary character n-grams.
 
-        Mirrors scikit-learn's ``analyzer='char_wb'``: each whitespace-
-        delimited word is padded with a single space on both sides before
-        windowing, so a word shorter than ``n`` still yields one n-gram.
+        Each whitespace-delimited word is padded with a single space on
+        both sides before windowing, so a word shorter than ``n`` still
+        yields one n-gram.
 
         Returns a flat :class:`StringTensor` holding every n-gram of every
         document, together with an ``offset`` tensor of length ``numel() + 1``
@@ -133,13 +126,10 @@ class TfidfEncoder(Processor):
                 "'character_ngrams' only supports one-dimensional input"
             )
 
-        min_n, max_n = ngram_range
-        if min_n < 1 or max_n < min_n:
-            raise ValueError("'ngram_range' must satisfy 1 <= min_n <= max_n.")
-
         if tensor.is_cuda:
-            return tensor.character_ngrams_cuda(ngram_range, lowercase)
+            return self._character_ngrams_cuda(tensor, ngram_range, lowercase)
 
+        min_n, max_n = ngram_range
         whitespace = re.compile(r"\s\s+")
         ngrams: list[str] = []
         offsets: list[int] = [0]
@@ -167,6 +157,88 @@ class TfidfEncoder(Processor):
         offset = torch.tensor(offsets, dtype=torch.int64, device=tensor.device)
         return flat, offset
 
+    def _character_ngrams_cuda(
+        self,
+        tensor: StringTensor,
+        ngram_range: tuple[int, int],
+        lowercase: bool = True,
+    ) -> tuple[StringTensor, Tensor]:
+        r"""Split each string into word-boundary character n-grams on GPU.
+
+        Device-native counterpart to the CPU/Arrow implementation in
+        :class:`~sdm.processing.text.tfidf_encoder.TfidfEncoder`; requires a
+        CUDA tensor and an installed cuDF. Mirrors scikit-learn's
+        ``analyzer='char_wb'``: each whitespace-delimited word is padded with a
+        single space on both sides before windowing, so a word shorter than
+        ``n`` still yields one n-gram.
+
+        Returns a flat :class:`StringTensor` holding every n-gram of every
+        document, together with an ``offset`` tensor of length ``numel() + 1``
+        where document ``d``'s n-grams are ``flat[offset[d]:offset[d + 1]]``.
+        The n-grams within a document are unordered and may differ in order
+        from the CPU implementation; only the per-document grouping is stable.
+
+        Args:
+            tensor: StringTensor.
+            ngram_range: Inclusive ``(min_n, max_n)`` window sizes.
+            lowercase: Lowercase each string before windowing.
+        """
+        import cudf
+        import cupy as cp
+
+        min_n, max_n = ngram_range
+        n_docs = tensor.numel()
+        s = tensor.to_cudf()  # n_docs documents
+        if lowercase:
+            s = s.str.lower()
+        # Collapse every whitespace run to a single space and trim, so each
+        # document splits into words on single spaces (matches str.split()).
+        s = s.str.replace(r"\s+", " ", regex=True).str.strip()
+
+        words = s.str.split(" ")
+        doc_index = cudf.Series(
+            cp.repeat(cp.arange(n_docs), words.list.len().to_cupy())
+        )
+        flat_words = words.explode().reset_index(drop=True)
+        keep = flat_words.str.len() > 0
+        flat_words = flat_words[keep].reset_index(drop=True)
+        doc_index = doc_index[keep].reset_index(drop=True)
+        padded = " " + flat_words + " "
+        pad_len = padded.str.len()
+
+        parts: list[cudf.DataFrame] = []
+        for n in range(min_n, max_n + 1):
+            grams = padded.str.character_ngrams(n)
+            long = cudf.DataFrame({"doc": doc_index, "gram": grams}).explode(
+                "gram"
+            )
+            parts.append(long.dropna(subset=["gram"]))
+            short = pad_len < n
+            parts.append(
+                cudf.DataFrame(
+                    {"doc": doc_index[short], "gram": padded[short]}
+                )
+            )
+
+        flat = cudf.concat(parts, ignore_index=True).sort_values(
+            "doc", kind="stable"
+        )
+
+        counts = (
+            flat.groupby("doc").size().reindex(range(n_docs), fill_value=0)
+        )
+        offset = torch.zeros(
+            n_docs + 1,
+            dtype=torch.int64,
+            device=tensor.device,
+        )
+        offset[1:] = from_dlpack(counts.cumsum().astype("int64").to_dlpack())
+
+        ngrams = tensor.from_cudf(
+            flat["gram"].reset_index(drop=True), device=tensor.device
+        )
+        return ngrams, offset
+
     def _fit(
         self,
         table: TableTensor,
@@ -177,16 +249,28 @@ class TfidfEncoder(Processor):
         self._vocabularies = []
         self._idfs = []
         for column in range(table.text.size(-1)):
-            flat, offsets = self._column_ngrams(table, column)
+            column_text = cast(StringTensor, table.text[:, column])
+            flat, offsets = self._character_ngrams(
+                column_text,
+                self.ngram_range,
+                lowercase=self.lowercase,
+            )
             n_docs = offsets.numel() - 1
 
-            # Factorize n-grams into codes + the unique vocabulary (arrow C++).
-            encoded = flat.to_arrow().dictionary_encode()
-            vocabulary = encoded.dictionary
+            # Factorize n-grams into codes + the unique vocabulary
+            if flat.is_cuda:
+                encoded = flat.to_cudf().astype("category")
+                vocabulary = encoded.cat.categories.to_arrow()
+                codes = torch.from_dlpack(
+                    encoded.cat.codes.astype("int64").to_dlpack()
+                ).to(device)
+            else:
+                encoded = flat.to_arrow().dictionary_encode()
+                vocabulary = encoded.dictionary
+                codes = arrow_as_tensor(
+                    encoded.indices, dtype=torch.int64, device=device
+                )  # [n_ngrams]
             vocab_size = len(vocabulary)
-            codes = arrow_as_tensor(
-                encoded.indices, dtype=torch.int64, device=device
-            )  # [n_ngrams]
             # Map each n-gram back to its document via the offsets.
             doc_ids = torch.repeat_interleave(
                 torch.arange(n_docs, device=device),
@@ -264,17 +348,34 @@ class TfidfEncoder(Processor):
                 n_rows * vocab_size, dtype=dtype, device=device
             )
             if vocab_size > 0:
-                flat, offsets = self._column_ngrams(table, column)
+                column_text = cast(StringTensor, table.text[:, column])
+                flat, offsets = self._character_ngrams(
+                    column_text,
+                    self.ngram_range,
+                    lowercase=self.lowercase,
+                )
                 # Map n-grams to fitted vocab indices; unseen -> -1 (dropped).
-                codes = arrow_as_tensor(
-                    pc.call_function(
-                        "index_in",
-                        [flat.to_arrow()],
-                        options=pc.SetLookupOptions(value_set=vocabulary),
-                    ).fill_null(-1),
-                    dtype=torch.int64,
-                    device=device,
-                )  # [n_ngrams]
+                if flat.is_cuda:
+                    import cudf
+
+                    encoded = (
+                        flat.to_cudf()
+                        .astype(cudf.CategoricalDtype(categories=vocabulary))
+                        .cat.codes
+                    )
+                    codes = torch.from_dlpack(
+                        encoded.astype("int64").to_dlpack()
+                    ).to(device)
+                else:
+                    codes = arrow_as_tensor(
+                        pc.call_function(
+                            "index_in",
+                            [flat.to_arrow()],
+                            options=pc.SetLookupOptions(value_set=vocabulary),
+                        ).fill_null(-1),
+                        dtype=torch.int64,
+                        device=device,
+                    )  # [n_ngrams]
                 doc_ids = torch.repeat_interleave(
                     torch.arange(n_rows, device=device),
                     offsets.diff().to(device),
