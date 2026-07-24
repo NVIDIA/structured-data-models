@@ -1,5 +1,4 @@
 import re
-from collections.abc import Callable
 from typing import Any, cast
 
 import pyarrow as pa
@@ -11,7 +10,6 @@ from sdm.tensor import StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
 from torch import Tensor
 from torch.utils.dlpack import from_dlpack
-from typing_extensions import Self
 
 
 class TfidfEncoder(Processor):
@@ -46,7 +44,7 @@ class TfidfEncoder(Processor):
         self.max_features = max_features
         self.lowercase = lowercase
         self._vocabularies: list[pa.Array] = []
-        self._idfs: list[Tensor] = []
+        self._register_load_state_dict_pre_hook(self._recreate_idf_buffers)
 
         min_n, max_n = self.ngram_range
         if min_n < 1 or max_n < min_n:
@@ -59,7 +57,7 @@ class TfidfEncoder(Processor):
         """Package the fitted state for :meth:`~torch.nn.Module.state_dict`.
 
         The fitted state lives outside PyTorch's parameter/buffer registries
-        (``self._vocabularies`` / ``self._idfs``),
+        (``self._vocabularies``),
         so it is exported here instead. Vocabularies are
         stored as plain ``(data, offset)`` tensor pairs to keep checkpoints
         loadable under ``torch.load(weights_only=True)``.
@@ -69,7 +67,6 @@ class TfidfEncoder(Processor):
                 StringTensor.from_arrow(vocabulary).data_offset
                 for vocabulary in self._vocabularies
             ],
-            "idfs": list(self._idfs),
             "fitted": self._fitted,
         }
 
@@ -83,21 +80,19 @@ class TfidfEncoder(Processor):
             ).to_arrow()
             for data, offset in state["vocabularies"]
         ]
-        self._idfs = list(state["idfs"])
         self._fitted = state["fitted"]
 
-    def _apply(
+    def _recreate_idf_buffers(
         self,
-        fn: Callable[[Tensor], Tensor],
-        recurse: bool = True,
-    ) -> Self:
-        r"""Transform idf tensors to buffers/parameters.
-
-        Idf tensors are not registered as buffers/parameters so
-        `.to()`/`.cuda()`/`.half()` won't move them to the correct storage.
-        """
-        self._idfs = [fn(idf) for idf in self._idfs]
-        return super()._apply(fn, recurse=recurse)
+        state_dict: dict[str, Any],
+        prefix: str,
+    ):
+        """Restore buffers from a checkpoint."""
+        idf_keys = [
+            key for key in state_dict if key.startswith(f"{prefix}idf_")
+        ]
+        for key in idf_keys:
+            self.register_buffer(key[len(prefix) :], state_dict[key])
 
     def _character_ngrams(
         self,
@@ -247,7 +242,14 @@ class TfidfEncoder(Processor):
     ) -> None:
         device = table.numerical.device
         self._vocabularies = []
-        self._idfs = []
+
+        # clean up stale buffers from previous fit
+        stale_idfs = [
+            name for name in self._buffers if name.startswith("idf_")
+        ]
+        for name in stale_idfs:
+            delattr(self, name)
+
         for column in range(table.text.size(-1)):
             column_text = cast(StringTensor, table.text[:, column])
             flat, offsets = self._character_ngrams(
@@ -284,13 +286,12 @@ class TfidfEncoder(Processor):
                 n_docs=n_docs,
                 device=device,
             )
-            # Total corpus occurrences per n-gram
             term_counts = torch.bincount(
                 codes, minlength=vocab_size
             )  # [vocab_size]
             vocabulary, idf = self._prune(vocabulary, idf, term_counts)
             self._vocabularies.append(vocabulary)
-            self._idfs.append(idf)
+            self.register_buffer(f"idf_{column}", idf)
 
     def _idf(
         self,
@@ -332,7 +333,9 @@ class TfidfEncoder(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         device = table.numerical.device
         dtype = (
-            self._idfs[0].dtype if self._idfs else torch.get_default_dtype()
+            self.get_buffer("idf_0").dtype
+            if self._vocabularies
+            else torch.get_default_dtype()
         )
         text_names = table.columns[Stype.text]
         n_rows = table.text.size(0)
@@ -341,7 +344,7 @@ class TfidfEncoder(Processor):
         names: list[str] = []
         for column in range(table.text.size(-1)):
             vocabulary = self._vocabularies[column]
-            idf = self._idfs[column]
+            idf = getattr(self, f"idf_{column}")
             vocab_size = len(vocabulary)
 
             counts = torch.zeros(
