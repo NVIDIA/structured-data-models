@@ -53,6 +53,7 @@ def default_recipe() -> Recipe:  # noqa: D103
             ReduceEstimators(method="mean"),
             TaskDispatch(
                 classification=Softmax(temperature=0.9),
+                regression=Identity(),
             ),
         ],
     )
