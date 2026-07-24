@@ -15,6 +15,8 @@ from sdm.relational import (
     RelationalData,
     TaskLink,
     RelatedTables,
+    TemporalSamplingConfig,
+    TemporalStrategy,
 )
 
 try:
@@ -35,5 +37,7 @@ __all__ = [
     "RelationalData",
     "TaskLink",
     "RelatedTables",
+    "TemporalSamplingConfig",
+    "TemporalStrategy",
     "__version__",
 ]

@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import torch
 from torch import Tensor
 from typing_extensions import Self, override
@@ -325,8 +326,6 @@ def _sort(
 
     if inp.dim() != 1:
         raise NotImplementedError("'sort' only supports one-dimensional input")
-
-    import pyarrow.compute as pc
 
     out = pc.call_function(  # TODO Add GPU implementation
         "array_sort_indices",

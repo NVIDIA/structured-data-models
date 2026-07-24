@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from html import escape
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
@@ -358,8 +359,6 @@ class RelatedTables(DeviceMixin):
         return out
 
     def _repr_html_(self) -> str:
-        from html import escape
-
         import pandas as pd
 
         rows = [

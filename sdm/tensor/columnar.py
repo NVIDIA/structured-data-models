@@ -72,7 +72,11 @@ class ColumnarTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
-        from sdm.tensor import CategoricalTensor, TableTensor
+        # Avoid a circular import through `sdm.tensor`.
+        from sdm.tensor import (  # noqa: PLC0415
+            CategoricalTensor,
+            TableTensor,
+        )
 
         if size is not None and len(size) == 0:
             raise ValueError("Expected 'size' to be non-empty")
