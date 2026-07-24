@@ -90,15 +90,12 @@ class TabICLv2(ICLModel):
         device: The device.
     """
 
-    #:
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
-    #:
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
-    #:
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(

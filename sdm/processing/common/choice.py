@@ -72,10 +72,12 @@ class Choice(Processor, InvertibleMixin):
             )
         return fn(table)
 
-    def get_extra_state(self) -> int | None:  # noqa: D102
+    def get_extra_state(self) -> int | None:
+        r""":meta private:"""  # noqa: D415
         return self._index
 
-    def set_extra_state(self, state: int | None) -> None:  # noqa: D102
+    def set_extra_state(self, state: int | None) -> None:
+        r""":meta private:"""  # noqa: D415
         if state is not None and not 0 <= state < len(self.options):
             raise ValueError(
                 f"Cannot restore drawn option {state} on "

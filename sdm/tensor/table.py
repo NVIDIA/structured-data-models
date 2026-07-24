@@ -596,6 +596,16 @@ class TableTensor(Tensor):
         yield Stype.text, self._text
         yield Stype.id, self._id
 
+    def as_tensor(self) -> Tensor:
+        r"""Return the only active semantic-type block as a tensor."""
+        tensors = [tensor for _, tensor in self.items() if tensor.size(-1) > 0]
+        if len(tensors) != 1:
+            raise RuntimeError(
+                f"'as_tensor()' requires a '{self.__class__.__name__}' with "
+                f"exactly one active semantic type (got {len(tensors)})"
+            )
+        return tensors[0]
+
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
         r"""Return typed column blocks per semantic type."""

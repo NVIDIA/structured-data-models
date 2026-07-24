@@ -119,15 +119,12 @@ class KumoRFM(ICLModel):
         device: The device.
     """  # noqa: E501
 
-    #:
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.datetime}
     )
-    #:
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
-    #:
     supports_related_tables: ClassVar[bool] = True
 
     _checkpoint_filenames: ClassVar[dict[str, str]] = {
