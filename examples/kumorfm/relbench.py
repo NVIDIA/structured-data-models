@@ -105,4 +105,7 @@ for query in tqdm(task_tables[-1].split(args.batch_size)):
     else:
         out = out["q500"].as_tensor().view(-1)  # Median prediction.
     metric.update(out, y_query.as_tensor().view(-1))
-print(f"AUROC: {metric.compute():.4f}")
+if context.stype(task.target_col) == "categorical":
+    print(f"AUROC: {metric.compute():.4f}")
+else:
+    print(f"MAE: {metric.compute():.4f}")
