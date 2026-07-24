@@ -1,8 +1,8 @@
-﻿Power
-=====
+﻿QuantileTransform
+=================
 
 .. currentmodule:: sdm.processing.numerical
 
-.. autoclass:: Power
+.. autoclass:: QuantileTransform
    :members:
    :show-inheritance:

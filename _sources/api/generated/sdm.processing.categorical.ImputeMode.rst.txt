@@ -1,8 +1,8 @@
-﻿CategoryShuffle
-===============
+﻿ImputeMode
+==========
 
 .. currentmodule:: sdm.processing.categorical
 
-.. autoclass:: CategoryShuffle
+.. autoclass:: ImputeMode
    :members:
    :show-inheritance:

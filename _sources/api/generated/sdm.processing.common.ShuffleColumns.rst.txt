@@ -1,8 +1,8 @@
-﻿FeaturePermute
+﻿ShuffleColumns
 ==============
 
 .. currentmodule:: sdm.processing.common
 
-.. autoclass:: FeaturePermute
+.. autoclass:: ShuffleColumns
    :members:
    :show-inheritance:

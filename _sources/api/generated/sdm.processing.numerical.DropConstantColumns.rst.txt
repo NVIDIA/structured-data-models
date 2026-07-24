@@ -1,8 +1,8 @@
-﻿StandardScale
-=============
+﻿DropConstantColumns
+===================
 
 .. currentmodule:: sdm.processing.numerical
 
-.. autoclass:: StandardScale
+.. autoclass:: DropConstantColumns
    :members:
    :show-inheritance:

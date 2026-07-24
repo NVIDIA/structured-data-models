@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>QuantileClip - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="SigmaClip" href="sdm.processing.numerical.SigmaClip.html" /><link rel="prev" title="Clip" href="sdm.processing.numerical.Clip.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ReduceEstimators - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="Softmax" href="sdm.processing.output.Softmax.html" /><link rel="prev" title="AddCalendarFields" href="sdm.processing.datetime.AddCalendarFields.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -19,7 +19,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="QuantileClip"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="ReduceEstimators"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -94,27 +94,27 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.FeaturePermute.html">FeaturePermute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">QuantileClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.SigmaClip.html">SigmaClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.MeanImpute.html">MeanImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Power.html">Power</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Quantile.html">Quantile</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ConstantFilter.html">ConstantFilter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoricalAlign.html">CategoricalAlign</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoricalImpute.html">CategoricalImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoryShuffle.html">CategoryShuffle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.EncodeDatetime.html">EncodeDatetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.EnsembleReduce.html">EnsembleReduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Standardize.html">Standardize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">ReduceEstimators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../nn.html">sdm.nn</a><ul>
@@ -144,7 +144,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.numerical.QuantileClip"><code class="docutils literal notranslate"><span class="pre">QuantileClip</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.output.ReduceEstimators"><code class="docutils literal notranslate"><span class="pre">ReduceEstimators</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -166,7 +166,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">QuantileClip</strong>
+        <strong itemprop="name">ReduceEstimators</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -179,23 +179,24 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="quantileclip">
-<h1>QuantileClip<a class="headerlink" href="#quantileclip" title="Link to this heading">#</a></h1>
+          <section id="reduceestimators">
+<h1>ReduceEstimators<a class="headerlink" href="#reduceestimators" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.numerical.QuantileClip">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.numerical.</span></span><span class="sig-name descname"><span class="pre">QuantileClip</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q_low</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q_high</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.numerical.QuantileClip" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="sdm.processing.output.ReduceEstimators">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.output.</span></span><span class="sig-name descname"><span class="pre">ReduceEstimators</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'mean'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'mean'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.output.ReduceEstimators" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Clamp feature columns to fitted quantile bounds.</p>
-<p>Values outside the fitted bounds are discarded, so this processor is not
-invertible. Quantile bounds are fitted independently for each feature
-column.</p>
+<p>Reduce the leading ensemble dimension of model outputs.</p>
+<p>Input must be a numerical output table with shape <code class="docutils literal notranslate"><span class="pre">[E,</span> <span class="pre">...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code>.
+<code class="docutils literal notranslate"><span class="pre">E</span></code> is the non-empty leading ensemble dimension, <code class="docutils literal notranslate"><span class="pre">R</span></code> is the row
+dimension, and <code class="docutils literal notranslate"><span class="pre">O</span></code> is the output-column dimension. The result has shape
+<code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">R,</span> <span class="pre">O]</span></code> and retains the input column schema, device, and floating
+dtype.</p>
+<p>Place processors that support stacked outputs before this processor.
+Processors after it receive an already-reduced output table.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>q_low</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Lower quantile in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code> used as the per-column lower bound.</p></li>
-<li><p><strong>q_high</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Upper quantile in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">1]</span></code> used as the per-column upper
-bound. Must satisfy <code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">&lt;=</span> <span class="pre">q_low</span> <span class="pre">&lt;=</span> <span class="pre">q_high</span> <span class="pre">&lt;=</span> <span class="pre">1</span></code>.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'mean'</em><em>]</em>) – Reduction applied across ensemble members. Currently only
+<code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code> is supported.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -208,16 +209,16 @@ bound. Must satisfy <code class="docutils literal notranslate"><span class="pre"
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.numerical.Clip.html">
+    <a href="sdm.processing.datetime.AddCalendarFields.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">Clip</div></div>
+        <span>Previous</span><div class="title">AddCalendarFields</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.numerical.SigmaClip.html">
+    <a href="sdm.processing.output.Softmax.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">SigmaClip</div>
+        <div class="title">Softmax</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -226,7 +227,7 @@ bound. Must satisfy <code class="docutils literal notranslate"><span class="pre"
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=7478678b"></script>
+      <script src="../../_static/documentation_options.js?v=0f40e71b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

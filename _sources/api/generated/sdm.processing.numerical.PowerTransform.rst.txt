@@ -1,8 +1,8 @@
-﻿QuantileClip
-============
+﻿PowerTransform
+==============
 
 .. currentmodule:: sdm.processing.numerical
 
-.. autoclass:: QuantileClip
+.. autoclass:: PowerTransform
    :members:
    :show-inheritance:

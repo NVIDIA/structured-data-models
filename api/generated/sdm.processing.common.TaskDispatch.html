@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TaskDispatch - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="FeaturePermute" href="sdm.processing.common.FeaturePermute.html" /><link rel="prev" title="StypeDispatch" href="sdm.processing.common.StypeDispatch.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TaskDispatch - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="ToNumerical" href="sdm.processing.common.ToNumerical.html" /><link rel="prev" title="StypeDispatch" href="sdm.processing.common.StypeDispatch.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -94,27 +94,27 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">TaskDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.FeaturePermute.html">FeaturePermute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileClip.html">QuantileClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.SigmaClip.html">SigmaClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.MeanImpute.html">MeanImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Power.html">Power</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Quantile.html">Quantile</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ConstantFilter.html">ConstantFilter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoricalAlign.html">CategoricalAlign</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoricalImpute.html">CategoricalImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoryShuffle.html">CategoryShuffle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.EncodeDatetime.html">EncodeDatetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.EnsembleReduce.html">EnsembleReduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Standardize.html">Standardize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../nn.html">sdm.nn</a><ul>
@@ -261,10 +261,10 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
         <span>Previous</span><div class="title">StypeDispatch</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.common.FeaturePermute.html">
+    <a href="sdm.processing.common.ToNumerical.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">FeaturePermute</div>
+        <div class="title">ToNumerical</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -273,7 +273,7 @@ found within the <cite>state_dict</cite>. Implement this function and a correspo
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=7478678b"></script>
+      <script src="../../_static/documentation_options.js?v=0f40e71b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

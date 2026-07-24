@@ -1,8 +1,8 @@
-﻿Quantile
-========
+﻿ClipQuantiles
+=============
 
 .. currentmodule:: sdm.processing.numerical
 
-.. autoclass:: Quantile
+.. autoclass:: ClipQuantiles
    :members:
    :show-inheritance:

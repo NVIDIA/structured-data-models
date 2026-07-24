@@ -1,8 +1,8 @@
-﻿CategoricalImpute
+﻿ShuffleCategories
 =================
 
 .. currentmodule:: sdm.processing.categorical
 
-.. autoclass:: CategoricalImpute
+.. autoclass:: ShuffleCategories
    :members:
    :show-inheritance:

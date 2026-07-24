@@ -94,27 +94,27 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.FeaturePermute.html">FeaturePermute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Clip.html">Clip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.QuantileClip.html">QuantileClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.SigmaClip.html">SigmaClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.MeanImpute.html">MeanImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Power.html">Power</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Quantile.html">Quantile</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ConstantFilter.html">ConstantFilter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.CategoricalAlign.html">CategoricalAlign</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.CategoricalImpute.html">CategoricalImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.CategoryShuffle.html">CategoryShuffle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.datetime.EncodeDatetime.html">EncodeDatetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.EnsembleReduce.html">EnsembleReduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.Standardize.html">Standardize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.processing.output.Softmax.html">Softmax</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="api/nn.html">sdm.nn</a><ul>
@@ -189,9 +189,9 @@ both sides of the model.</p>
 <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> and returns a
 <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>. A <em>stateful</em> step learns parameters
 when you call <code class="docutils literal notranslate"><span class="pre">fit</span></code> (for example
-<code class="xref py py-class docutils literal notranslate"><span class="pre">StandardScale</span></code> learns each column’s mean and
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Standardize</span></code> learns each column’s mean and
 standard deviation); a stateless one does not (for example
-<code class="xref py py-class docutils literal notranslate"><span class="pre">SoftmaxTemperature</span></code>).</p></li>
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Softmax</span></code>).</p></li>
 <li><p>A small stateless transformation can be supplied directly to
 <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code> as a function or lambda. It is
 normalized to a stateless processor and participates in the usual
@@ -199,7 +199,7 @@ normalized to a stateless processor and participates in the usual
 <li><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code> is an ordered list of steps.
 Recipes do not infer each step’s non-finite input contract. Place imputation
 or cleanup before processors that do not explicitly document non-finite
-support; for example, use <code class="xref py py-class docutils literal notranslate"><span class="pre">MeanImpute</span></code> before
+support; for example, use <code class="xref py py-class docutils literal notranslate"><span class="pre">ImputeMean</span></code> before
 downstream numerical processors that expect finite input.</p></li>
 <li><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code> bundles three pipelines, reached as
 attributes:</p>
@@ -218,9 +218,9 @@ target inverse (for example turning logits into probabilities).</p></li>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 </span><span data-line="2">
 </span><span data-line="3"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">TableTensor</span>
-</span><span data-line="4"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Recipe</span><span class="p">,</span> <span class="n">StandardScale</span>
+</span><span data-line="4"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Recipe</span><span class="p">,</span> <span class="n">Standardize</span>
 </span><span data-line="5">
-</span><span data-line="6"><span class="n">recipe</span> <span class="o">=</span> <span class="n">Recipe</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()],</span> <span class="n">target</span><span class="o">=</span><span class="p">[</span><span class="n">StandardScale</span><span class="p">()])</span>
+</span><span data-line="6"><span class="n">recipe</span> <span class="o">=</span> <span class="n">Recipe</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="n">Standardize</span><span class="p">()],</span> <span class="n">target</span><span class="o">=</span><span class="p">[</span><span class="n">Standardize</span><span class="p">()])</span>
 </span></pre></div>
 </div>
 <p>For a small stateless transformation, pass a callable directly to
@@ -228,7 +228,7 @@ target inverse (for example turning logits into probabilities).</p></li>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequential</span>
 </span><span data-line="2">
 </span><span data-line="3"><span class="n">features</span> <span class="o">=</span> <span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="4">    <span class="n">StandardScale</span><span class="p">(),</span>
+</span><span data-line="4">    <span class="n">Standardize</span><span class="p">(),</span>
 </span><span data-line="5">    <span class="k">lambda</span> <span class="n">table</span><span class="p">:</span> <span class="n">table</span><span class="o">.</span><span class="n">replace_blocks</span><span class="p">(</span>
 </span><span data-line="6">        <span class="n">numerical</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">numerical</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
 </span><span data-line="7">    <span class="p">),</span>
@@ -279,7 +279,7 @@ back to the original space:</p>
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=7478678b"></script>
+      <script src="_static/documentation_options.js?v=0f40e71b"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>

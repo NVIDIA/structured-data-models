@@ -1,8 +1,8 @@
-﻿SigmaClip
-=========
+﻿Standardize
+===========
 
 .. currentmodule:: sdm.processing.numerical
 
-.. autoclass:: SigmaClip
+.. autoclass:: Standardize
    :members:
    :show-inheritance:

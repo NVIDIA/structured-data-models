@@ -1,8 +1,8 @@
-﻿SoftmaxTemperature
-==================
+﻿ReduceEstimators
+================
 
 .. currentmodule:: sdm.processing.output
 
-.. autoclass:: SoftmaxTemperature
+.. autoclass:: ReduceEstimators
    :members:
    :show-inheritance:

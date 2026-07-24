@@ -1,8 +1,8 @@
-﻿EncodeDatetime
-==============
+﻿AddCalendarFields
+=================
 
 .. currentmodule:: sdm.processing.datetime
 
-.. autoclass:: EncodeDatetime
+.. autoclass:: AddCalendarFields
    :members:
    :show-inheritance:

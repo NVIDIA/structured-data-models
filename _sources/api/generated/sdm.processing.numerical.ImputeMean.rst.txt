@@ -1,8 +1,8 @@
-﻿MeanImpute
+﻿ImputeMean
 ==========
 
 .. currentmodule:: sdm.processing.numerical
 
-.. autoclass:: MeanImpute
+.. autoclass:: ImputeMean
    :members:
    :show-inheritance:

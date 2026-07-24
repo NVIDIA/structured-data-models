@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ConstantFilter - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="CategoricalAlign" href="sdm.processing.categorical.CategoricalAlign.html" /><link rel="prev" title="StandardScale" href="sdm.processing.numerical.StandardScale.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>AlignCategories - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="ShuffleCategories" href="sdm.processing.categorical.ShuffleCategories.html" /><link rel="prev" title="DropConstantColumns" href="sdm.processing.numerical.DropConstantColumns.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -19,7 +19,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="ConstantFilter"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="AlignCategories"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -94,27 +94,27 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Choice.html">Choice</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.FeaturePermute.html">FeaturePermute</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ToNumerical.html">ToNumerical</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.ShuffleColumns.html">ShuffleColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileClip.html">QuantileClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.SigmaClip.html">SigmaClip</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.MeanImpute.html">MeanImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Power.html">Power</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Quantile.html">Quantile</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.StandardScale.html">StandardScale</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">ConstantFilter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoricalAlign.html">CategoricalAlign</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoricalImpute.html">CategoricalImpute</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.CategoryShuffle.html">CategoryShuffle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.EncodeDatetime.html">EncodeDatetime</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.EnsembleReduce.html">EnsembleReduce</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.SoftmaxTemperature.html">SoftmaxTemperature</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Standardize.html">Standardize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.DropConstantColumns.html">DropConstantColumns</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">AlignCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.Softmax.html">Softmax</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../nn.html">sdm.nn</a><ul>
@@ -144,7 +144,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.numerical.ConstantFilter"><code class="docutils literal notranslate"><span class="pre">ConstantFilter</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.categorical.AlignCategories"><code class="docutils literal notranslate"><span class="pre">AlignCategories</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -166,7 +166,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">ConstantFilter</strong>
+        <strong itemprop="name">AlignCategories</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -179,35 +179,30 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="constantfilter">
-<h1>ConstantFilter<a class="headerlink" href="#constantfilter" title="Link to this heading">#</a></h1>
+          <section id="aligncategories">
+<h1>AlignCategories<a class="headerlink" href="#aligncategories" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.numerical.ConstantFilter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.numerical.</span></span><span class="sig-name descname"><span class="pre">ConstantFilter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'unique'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'variance'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'unique'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.numerical.ConstantFilter" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="sdm.processing.categorical.AlignCategories">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.categorical.</span></span><span class="sig-name descname"><span class="pre">AlignCategories</span></span><a class="headerlink" href="#sdm.processing.categorical.AlignCategories" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Remove non-informative numerical columns learned during fit.</p>
-<p>With <code class="docutils literal notranslate"><span class="pre">method=&quot;unique&quot;</span></code>, columns are retained when they have more than
-<code class="docutils literal notranslate"><span class="pre">threshold</span></code> distinct values. When the number of samples is less than or
-equal to <code class="docutils literal notranslate"><span class="pre">threshold</span></code>, all columns are preserved.</p>
-<p>With <code class="docutils literal notranslate"><span class="pre">method=&quot;variance&quot;</span></code>, columns are retained when their sample
-standard deviation is greater than <code class="docutils literal notranslate"><span class="pre">tolerance</span></code>. Non-floating input is
-promoted to the default floating-point dtype for this calculation.</p>
-<p>Only numerical columns are supported. Convert other feature stypes before
-this step, for example with <code class="xref py py-class docutils literal notranslate"><span class="pre">ToNumerical</span></code>.
-Fitting expects data with shape <code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">C]</span></code>, where <code class="docutils literal notranslate"><span class="pre">N</span></code> is the number of
-rows and <code class="docutils literal notranslate"><span class="pre">C</span></code> is the number of numerical columns. The learned selection
-can transform later tables with shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C]</span></code>.</p>
+<p>Align categorical codes to vocabularies fitted on training rows.</p>
+<p>Categorical codes are the integer indices into a column’s category
+vocabulary stored by <code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalTensor</span></code>, following
+<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Categorical.codes.html#pandas.Categorical.codes" title="(in pandas v3.0.5)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">pandas.Categorical.codes</span></code></a> semantics; negative codes encode missing
+values. Fitting stores the category values that are actually observed in
+each categorical column. Transforming remaps input codes by category value
+to those fitted vocabularies. Missing values and categories not observed
+during fitting are encoded as <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
+<p>This allows independently tensorized training and query tables to share a
+categorical schema. It also removes categories that occur only outside a
+sliced training context from a jointly inferred vocabulary. Only
+categorical columns are supported; use
+<code class="xref py py-class docutils literal notranslate"><span class="pre">StypeDispatch</span></code> for mixed feature tables.</p>
+<p>String and unsigned integer vocabularies are matched through host metadata
+because their required tensor operations are unavailable on every device.
+This path performs linear Python work in the vocabulary size; a vectorized
+implementation may be preferable if these category types need to scale.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>method</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'unique'</em><em>, </em><em>'variance'</em><em>]</em>) – Filtering rule. <code class="docutils literal notranslate"><span class="pre">&quot;unique&quot;</span></code> uses distinct-value counts;
-<code class="docutils literal notranslate"><span class="pre">&quot;variance&quot;</span></code> uses sample standard deviation.</p></li>
-<li><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – With <code class="docutils literal notranslate"><span class="pre">method=&quot;unique&quot;</span></code>, columns with at most this many
-unique values are removed. Must be positive.</p></li>
-<li><p><strong>tolerance</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> | </em><em>None</em>) – With <code class="docutils literal notranslate"><span class="pre">method=&quot;variance&quot;</span></code>, columns with sample standard
-deviation at most this value are removed.</p></li>
-</ul>
-</dd>
 </dl>
 </dd></dl>
 
@@ -219,16 +214,16 @@ deviation at most this value are removed.</p></li>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.numerical.StandardScale.html">
+    <a href="sdm.processing.numerical.DropConstantColumns.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">StandardScale</div></div>
+        <span>Previous</span><div class="title">DropConstantColumns</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.categorical.CategoricalAlign.html">
+    <a href="sdm.processing.categorical.ShuffleCategories.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">CategoricalAlign</div>
+        <div class="title">ShuffleCategories</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -237,7 +232,7 @@ deviation at most this value are removed.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=7478678b"></script>
+      <script src="../../_static/documentation_options.js?v=0f40e71b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

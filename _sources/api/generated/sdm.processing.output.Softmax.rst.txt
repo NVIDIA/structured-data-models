@@ -1,8 +1,8 @@
-﻿EnsembleReduce
-==============
+﻿Softmax
+=======
 
 .. currentmodule:: sdm.processing.output
 
-.. autoclass:: EnsembleReduce
+.. autoclass:: Softmax
    :members:
    :show-inheritance:
