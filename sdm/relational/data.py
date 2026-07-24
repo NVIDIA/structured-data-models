@@ -280,7 +280,7 @@ class RelationalData(DeviceMixin):
                 query timestamp.
         """
         if self.device.type == "cuda":
-            from sdm.relational.cugraph_sampler import (
+            from sdm.relational.cugraph_sampler import (  # noqa: PLC0415
                 CuGraphRelationalSampler,
             )
 

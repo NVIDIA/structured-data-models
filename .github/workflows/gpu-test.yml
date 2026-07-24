@@ -63,9 +63,10 @@ jobs:
             --index-strategy=unsafe-best-match \
             '.[test]' \
             'cudf-cu13==26.6.0' \
+            'pandas<3' \
             'pylibcugraph-cu13==26.6.0'
           uv pip install \
-            --find-links=https://data.pyg.org/whl/nightly/torch-2.13.0+cu130.html \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             pyg-lib
 
       - name: GPU sanity check

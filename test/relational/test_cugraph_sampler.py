@@ -258,7 +258,7 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
     def fail(*args: Any, **kwargs: Any) -> None:
         raise AssertionError("numeric seed lookup used the cuDF join fallback")
 
-    monkeypatch.setattr("sdm.relational.cugraph_sampler._to_cudf", fail)
+    monkeypatch.setattr("sdm.relational.cugraph_sampler.join_index", fail)
 
     output = sampler(
         task_table=task_table,
@@ -486,7 +486,7 @@ def test_cugraph_sampler_does_not_export_rows_to_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _require_rapids()
-    import cudf
+    import cudf  # noqa: PLC0415
 
     data = _non_temporal_data()
     sampler = data.sampler()
