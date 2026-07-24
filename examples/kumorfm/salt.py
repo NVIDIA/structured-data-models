@@ -45,7 +45,9 @@ def run_task(task_name: str) -> None:
 
     torch.manual_seed(args.seed)
     task = get_task(SALT_DATASET, task_name, download=True)
-    db = task.dataset.get_db(upto_test_timestamp=False)
+    db = get_dataset(SALT_DATASET, download=True).get_db(
+        upto_test_timestamp=False
+    )
     data = RelationalData(
         tables={
             name: TableTensor.from_pandas(
@@ -102,9 +104,10 @@ def run_task(task_name: str) -> None:
         task_table[train_end:val_end],
         task_table[val_end:],
     )
-    context = cast(TableTensor, torch.cat(task_tables[:2], dim=0))
-    context = context[torch.randperm(len(context))[: args.context_size]]
-    sample_kwargs = {
+    context = torch.cat(task_tables[:2], dim=0)
+    perm = torch.randperm(len(context))[: args.context_size]
+    context = cast(TableTensor, context[perm])
+    kwargs = {
         "task_link": {
             "task_column": task.entity_col,
             "table": task.entity_table,
@@ -115,7 +118,7 @@ def run_task(task_name: str) -> None:
         "num_neighbors": SALT_PRESETS[task_name][0],
         "task_time_column": task.time_col,
     }
-    context, related_context = sampler(context, **sample_kwargs).to(device)
+    context, related_context = sampler(context, **kwargs).to(device)
     x_context = context.drop_columns(task.target_col)
     y_context = context[task.target_col]
 
@@ -132,7 +135,7 @@ def run_task(task_name: str) -> None:
         y_query = query[task.target_col].to(device)
         query, related_query = sampler(
             query.drop_columns(task.target_col),
-            **sample_kwargs,
+            **kwargs,
         ).to(device)
         out = model(
             x_context=x_context,
