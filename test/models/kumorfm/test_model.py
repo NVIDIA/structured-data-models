@@ -63,12 +63,12 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
     assert model.reg_model.icl_block.norm.bias is not None
     assert downloads == [
         {
-            "repo_id": "nvidia/kumorfm-2",
+            "repo_id": "nvidia/kumorfm",
             "filename": "cls-model.pt",
             "revision": "v2.1.0",
         },
         {
-            "repo_id": "nvidia/kumorfm-2",
+            "repo_id": "nvidia/kumorfm",
             "filename": "reg-model.pt",
             "revision": "v2.1.0",
         },

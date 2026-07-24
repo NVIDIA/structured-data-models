@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from html import escape
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
@@ -271,7 +272,8 @@ class RelationalData(DeviceMixin):
                 for temporal sampling. A row in a time-aware table can only be
                 sampled if its timestamp does not exceed the query timestamp.
         """
-        from sdm.relational import RelationalSampler
+        # Avoid a circular import through `sdm.relational`.
+        from sdm.relational import RelationalSampler  # noqa: PLC0415
 
         return RelationalSampler(
             data=self,
@@ -349,8 +351,6 @@ class RelationalData(DeviceMixin):
         return out
 
     def _repr_html_(self) -> str:
-        from html import escape
-
         import pandas as pd
 
         rows = [

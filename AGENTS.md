@@ -66,6 +66,10 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
   Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
 - Keep dependencies minimal in the core package.
   Heavy dependencies should be optional unless they become essential.
+- Treat packages listed in `[project].dependencies` as required at runtime.
+  Import them at module scope; do not defer or guard them with function-local
+  imports, `TYPE_CHECKING`, `try/except ImportError`, availability checks,
+  or dynamic imports. Reserve guarded imports for optional dependencies.
 - Aim for GPU acceleration in all core components.
 
 # Python/PyTorch Coding Style
@@ -99,5 +103,6 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 ## Processors
 
 1. Name the main operation first, e.g., `ShuffleColumns` over `ColumnShuffle`.
-2. Use established names when they exist, e.g., `Sequential`, `Choice`, or `PowerTransform`.
+2. Use established names when they exist, e.g., `Sequential` or `Choice`, or adapt them in style, e.g., `PowerTransform` over `PowerTransformer`.
+   Avoid API-role suffixes such as `*Transformer`, `*Encoder`, `*Imputer` or `*Scaler`.
 3. Keep names short when the shorter form is already clear, e.g., `Softmax` over `ApplySoftmax`, but specialize when needed, e.g., `DropConstantColumns` over `DropConstant`.
