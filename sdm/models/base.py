@@ -95,6 +95,7 @@ class ICLModel(torch.nn.Module, ABC):
             y_context = TableTensor.from_tensor(y_context)
         if not isinstance(x_query, TableTensor):
             x_query = TableTensor.from_tensor(x_query)
+        self._reject_missing_target_labels(y_context)
 
         if (related_context_tables is None) != (related_query_tables is None):
             raise ValueError(
@@ -217,6 +218,7 @@ class ICLModel(torch.nn.Module, ABC):
             x = TableTensor.from_tensor(x)
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
+        self._reject_missing_target_labels(y)
 
         recipe = self.default_recipe() if recipe is None else recipe
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
@@ -431,16 +433,6 @@ class ICLModel(torch.nn.Module, ABC):
                 f"'{self.__class__.__name__}' received unsupported target "
                 f"stypes: {', '.join(stype.value for stype in invalid)}"
             )
-        if y.categorical.size(-1) > 0:
-            # Missing feature codes are legal, but label embeddings index
-            # by code, so a missing target label crashes or aliases classes.
-            missing = y.categorical < 0
-            if missing.any():
-                raise ValueError(
-                    f"Context target contains missing labels (code -1) in "
-                    f"{int(missing.sum())} rows. Drop or impute these rows "
-                    f"before fitting."
-                )
 
         if related_tables is not None:
             if not self.supports_related_tables:
@@ -483,3 +475,17 @@ class ICLModel(torch.nn.Module, ABC):
                     "Expected related context and query tables to share the "
                     "same schema"
                 )
+
+    @staticmethod
+    def _reject_missing_target_labels(y: TableTensor) -> None:
+        if y.categorical.size(-1) == 0:
+            return
+        # Label embeddings index by code, so a missing target label (code
+        # -1) crashes or aliases classes. Missing feature codes stay legal.
+        missing = y.categorical < 0
+        if missing.any():
+            raise ValueError(
+                f"Context target contains missing labels (code -1) in "
+                f"{int(missing.sum())} rows. Drop or impute these rows "
+                f"before fitting."
+            )
