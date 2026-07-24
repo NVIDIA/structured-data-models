@@ -85,7 +85,9 @@ class SDMTabICLv2System(ExternalSystemModel):
                 raise RuntimeError(
                     "TabArena did not provide an ordered class-label contract"
                 )
-            self._tabarena_class_order = tuple(class_order)
+            self._class_labels_by_key = {
+                str(label): label for label in class_order
+            }
 
         self.model = TabICLv2(device=self._device)
 
@@ -118,19 +120,15 @@ class SDMTabICLv2System(ExternalSystemModel):
         return pd.Series(values, index=X.index)
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        prediction = self.model.predict(
-            TableTensor.from_pandas(
-                df=X,
-                stypes=self.stypes,
-                device=self._device,
-            )
+        table_x = TableTensor.from_pandas(
+            df=X,
+            stypes=self.stypes,
+            device=self._device,
         )
+        prediction = self.model.predict(table_x)
         values = prediction.numerical.float().cpu().numpy()
-        class_labels_by_key = {
-            str(label): label for label in self._tabarena_class_order
-        }
         labels = [
-            class_labels_by_key[column]
+            self._class_labels_by_key[column]
             for column in prediction.columns[Stype.numerical]
         ]
         probabilities = pd.DataFrame(
@@ -140,7 +138,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
         return probabilities.loc[
             :,
-            pd.Index(self._tabarena_class_order),
+            pd.Index(tuple(self._class_labels_by_key.values())),
         ]
 
 
