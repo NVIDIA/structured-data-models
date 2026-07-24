@@ -34,6 +34,7 @@ html_theme_options = {
     "github_url": "https://github.com/NVIDIA/structured-data-models",
 }
 autosummary_generate = True
+autosummary_context = {"import_module": importlib.import_module}
 autodoc_typehints = "both"
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),

@@ -77,15 +77,14 @@ class ICLModel(torch.nn.Module, ABC):
             related_context_tables: Related context for in-context examples.
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
-            num_estimators: The number of estimators for ensembling.
+            num_estimators: The number of estimators ``E`` for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
-            The processed prediction. Member outputs enter ``recipe.output``
-            stacked as ``[E, ..., R_query, *]``; the output processors
-            determine whether the leading estimator dimension remains.
+            The processed prediction after
+            ``recipe_output([E, ..., R_query, *])``.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -301,9 +300,9 @@ class ICLModel(torch.nn.Module, ABC):
             related_tables: Related context for query examples.
 
         Returns:
-            The processed prediction. Member outputs enter ``recipe.output``
-            stacked as ``[E, ..., R, *]``; the output processors determine
-            whether the leading estimator dimension remains.
+        Returns:
+            The processed prediction after
+            ``recipe_output([E, ..., R, *])``.
         """
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
