@@ -2,10 +2,10 @@ import argparse
 from typing import cast
 
 import pandas as pd
-import relbench
 import torch
-from relbench.datasets import get_dataset
-from relbench.tasks import get_task
+from relbench.base import Dataset, EntityTask, TaskType
+from relbench.datasets import get_dataset, get_dataset_names
+from relbench.tasks import get_task, get_task_names
 from sdm import (
     RelationalData,
     TableTensor,
@@ -17,110 +17,158 @@ from torchmetrics.classification import BinaryAUROC
 from torchmetrics.regression import MeanAbsoluteError
 from tqdm import tqdm
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", type=str, required=True)
-parser.add_argument("--task", type=str, required=True)
+parser = argparse.ArgumentParser(
+    description=(
+        "Benchmark KumoRFM on RelBench. Omit --dataset and --task to run "
+        "every rel-* task; rel-mimic requires access credentials."
+    )
+)
+parser.add_argument("--dataset", choices=get_dataset_names())
+parser.add_argument("--task")
 parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
+if args.task and not args.dataset:
+    parser.error("'--task' requires '--dataset'")
 
-torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Collect Relational Data #####################################################
-db = get_dataset(args.dataset, download=True).get_db(upto_test_timestamp=False)
-data = RelationalData(
-    tables={
-        name: TableTensor.from_pandas(
-            df=table.df,
-            stypes=infer_stypes(table.df),
-        )
+
+def run_task(dataset_name: str, task_name: str) -> None:
+    """Evaluate one supported RelBench task."""
+    task = get_task(dataset_name, task_name, download=True)
+    if not isinstance(task, EntityTask):
+        print(f"{dataset_name}/{task_name}: skipped (not an entity task)")
+        return
+    classification = task.task_type == TaskType.BINARY_CLASSIFICATION
+    if task.task_type not in {
+        TaskType.BINARY_CLASSIFICATION,
+        TaskType.REGRESSION,
+    }:
+        print(f"{dataset_name}/{task_name}: skipped ({task.task_type.value})")
+        return
+
+    torch.manual_seed(args.seed)
+
+    # Collect Relational Data #################################################
+    db = task.dataset.get_db(upto_test_timestamp=False)
+    data = RelationalData(
+        tables={
+            name: TableTensor.from_pandas(
+                df=table.df,
+                stypes=infer_stypes(table.df),
+            )
+            for name, table in db.table_dict.items()
+        },
+        relationships=[
+            {
+                "left_table": left_table,
+                "left_column": left_column,
+                "right_table": right_table,
+                "right_column": cast(str, db.table_dict[right_table].pkey_col),
+            }
+            for left_table, table in db.table_dict.items()
+            for left_column, right_table in (
+                table.fkey_col_to_pkey_table.items()
+            )
+        ],
+    )
+    time_columns = {
+        name: table.time_col
         for name, table in db.table_dict.items()
-    },
-    relationships=[
-        {
-            "left_table": left_table,
-            "left_column": left_column,
-            "right_table": right_table,
-            "right_column": cast(str, db.table_dict[right_table].pkey_col),
-        }
-        for left_table, table in db.table_dict.items()
-        for left_column, right_table in table.fkey_col_to_pkey_table.items()
-    ],
-)
-time_columns = {
-    name: table.time_col
-    for name, table in db.table_dict.items()
-    if table.time_col is not None
-}
-sampler = data.sampler(
-    temporal=(
-        TemporalSamplingConfig(
-            time_columns=time_columns,
-            strategy="last",
-        )
-        if time_columns
-        else None
-    ),
-)
+        if table.time_col is not None
+    }
+    sampler = data.sampler(
+        temporal=(
+            TemporalSamplingConfig(
+                time_columns=time_columns,
+                strategy="last",
+            )
+            if time_columns
+            else None
+        ),
+    )
 
-# Collect Task Table ##########################################################
-task = get_task(args.dataset, args.task, download=True)
-dfs = [
-    task.get_table(split, mask_input_cols=False).df
-    for split in ["train", "val", "test"]
-]
-task_table = TableTensor.from_pandas(
-    df=pd.concat(dfs, ignore_index=True),
-    stypes={
-        task.entity_col: "id",
-        task.time_col: "datetime",
-        task.target_col: "numerical"
-        if task.task_type == relbench.base.TaskType.REGRESSION
-        else "categorical",
-    },
+    # Collect Task Table ######################################################
+    dfs = [
+        task.get_table(split, mask_input_cols=False).df
+        for split in ["train", "val", "test"]
+    ]
+    task_table = TableTensor.from_pandas(
+        df=pd.concat(dfs, ignore_index=True),
+        stypes={
+            task.entity_col: "id",
+            task.time_col: "datetime",
+            task.target_col: (
+                "categorical" if classification else "numerical"
+            ),
+        },
+    )
+    context, query = task_table.split(
+        [len(dfs[0]) + len(dfs[1]), len(dfs[2])]
+    )
+    context = context[torch.randperm(len(context))[: args.context_size]]
+
+    # Execute Model ###########################################################
+    model = KumoRFM(device=device)
+    kwargs = {
+        "task_link": {
+            "task_column": task.entity_col,
+            "table": task.entity_table,
+            "table_column": cast(
+                str, db.table_dict[task.entity_table].pkey_col
+            ),
+        },
+        "num_neighbors": [16, 16],
+        "task_time_column": task.time_col,
+    }
+    context, related_tables = sampler(context, **kwargs).to(device)
+    model.fit(
+        x=context.drop_columns(task.target_col),
+        y=context[task.target_col],
+        related_tables=related_tables,
+        num_estimators=1,
+    )
+
+    metric = (BinaryAUROC() if classification else MeanAbsoluteError()).to(
+        device
+    )
+    for batch in tqdm(
+        query.split(args.batch_size),
+        desc=f"{dataset_name}/{task_name}",
+    ):
+        x_query = batch.drop_columns(task.target_col)
+        y_query = batch[task.target_col].to(device)
+        out = model.predict(*sampler(x_query, **kwargs).to(device))
+        if classification:
+            out = out["1"].numerical  # Positive class.
+            y_query = y_query.categorical.categories[0][
+                y_query.categorical.code
+            ]
+        else:
+            out = out["q500"].numerical  # Median prediction.
+            y_query = y_query.numerical
+        metric.update(out, y_query)
+
+    metric_name = "AUROC" if classification else "MAE"
+    print(f"{dataset_name}/{task_name} {metric_name}: {metric.compute():.4f}")
+    model.clear()
+
+
+datasets = (
+    [args.dataset]
+    if args.dataset
+    else sorted(
+        name for name in get_dataset_names() if name.startswith("rel-")
+    )
 )
-context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
-context = context[torch.randperm(len(context))[: args.context_size]]
-
-# Execute Model ###############################################################
-model = KumoRFM(device=device)
-
-kwargs = {
-    "task_link": {
-        "task_column": task.entity_col,
-        "table": task.entity_table,
-        "table_column": cast(str, db.table_dict[task.entity_table].pkey_col),
-    },
-    "num_neighbors": [16, 16],
-    "task_time_column": task.time_col,
-}
-context, related_tables = sampler(context, **kwargs).to(device)
-model.fit(
-    x=context.drop_columns(task.target_col),
-    y=context[task.target_col],
-    related_tables=related_tables,
-    num_estimators=1,
-)
-
-if task.task_type == relbench.base.TaskType.REGRESSION:
-    metric = MeanAbsoluteError().to(device)
-else:
-    metric = BinaryAUROC().to(device)
-for batch in tqdm(query.split(args.batch_size)):
-    x_query = batch.drop_columns(task.target_col)
-    y_query = batch[task.target_col].to(device)
-    out = model.predict(*sampler(x_query, **kwargs).to(device))
-    if task.task_type == relbench.base.TaskType.REGRESSION:
-        out = out["q500"].numerical  # Median prediction.
-        y_query = y_query.numerical
-    else:
-        out = out["1"].numerical  # Positive class.
-        # Decode ground-truth codes to class values:
-        y_query = y_query.categorical.categories[0][y_query.categorical.code]
-    metric.update(out, y_query)
-if task.task_type == relbench.base.TaskType.REGRESSION:
-    print(f"MAE: {metric.compute():.4f}")
-else:
-    print(f"AUROC: {metric.compute():.4f}")
+for dataset_name in datasets:
+    task_names = (
+        [args.task] if args.task else sorted(get_task_names(dataset_name))
+    )
+    for task_name in task_names:
+        run_task(dataset_name, task_name)
+        Dataset.get_db.cache_clear()
+        get_task.cache_clear()
+        get_dataset.cache_clear()
