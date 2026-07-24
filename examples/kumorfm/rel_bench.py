@@ -81,7 +81,7 @@ kwargs = {
         "table": task.entity_table,
         "table_column": cast(str, db.table_dict[task.entity_table].pkey_col),
     },
-    "num_neighbors": [0, 0],
+    "num_neighbors": [16, 16],
     "task_time_column": task.time_col,
 }
 context, related_tables = sampler(context, **kwargs).to(device)
