@@ -1,11 +1,9 @@
 r"""Run TabICLv2 on TabArena.
 
-$ uv run --group example-tabarena python examples/tabiclv2_tabarena.py \
+$ uv run --group example-tabarena python examples/tabiclv2/tab_arena.py \
     --output-root outputs/tabiclv2-tabarena \
     --subset lite \
-    --datasets blood-transfusion-service-center \
-    --num-cpus 1 \
-    --num-gpus 0
+    --datasets blood-transfusion-service-center
 
 The output directory must be empty.
 """
@@ -41,15 +39,14 @@ class SDMTabICLv2System(ExternalSystemModel):
         problem_type: str,
         eval_metric: Scorer,
         validation_metadata: ValidationMetadata,
-        num_cpus: int | None,
-        num_gpus: int | None,
         memory_limit: float | None,
         time_limit: float | None,
         random_state: int | None,
+        **_: object,
     ) -> Self:
         random_state = 42 if random_state is None else random_state
         self._device = torch.device(
-            "cuda" if num_gpus is not None and num_gpus > 0 else "cpu"
+            "cuda" if torch.cuda.is_available() else "cpu"
         )
         generator = torch.Generator(device=self._device).manual_seed(
             random_state
@@ -142,16 +139,9 @@ class SDMTabICLv2System(ExternalSystemModel):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
-    parser.add_argument("--num-cpus", type=int)
-    parser.add_argument("--num-gpus", type=int)
     parser.add_argument("--subset", nargs="+")
     parser.add_argument("--datasets", nargs="+")
     args = parser.parse_args()
-
-    if args.num_cpus is not None and args.num_cpus < 1:
-        raise ValueError("'--num-cpus' must be positive")
-    if args.num_gpus is not None and args.num_gpus < 0:
-        raise ValueError("'--num-gpus' cannot be negative")
 
     output_root = args.output_root.resolve()
     if output_root.exists() and any(output_root.iterdir()):
@@ -168,10 +158,7 @@ def main() -> None:
     experiments = TabArenaV0pt1ExperimentBundle(
         models=[(generator, 0)],
         system_experiments=True,
-    ).build_experiments(
-        num_cpus=args.num_cpus,
-        num_gpus=args.num_gpus,
-    )
+    ).build_experiments()
 
     context = TabArenaContext()
     jobs = context.build_jobs(
