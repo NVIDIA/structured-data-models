@@ -280,6 +280,7 @@ class _KumoRFM(torch.nn.Module):
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
             norm_bias=norm_bias,
+            temperature=0.9,
             **factory_kwargs,
         )
 
@@ -446,7 +447,12 @@ class _KumoRFM(torch.nn.Module):
             x = torch.cat([x_context, x_query], dim=-2)
             del x_context
             del x_query
-        return self.icl_block(x, y, cache=cache)
+        return self.icl_block(
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+        )
 
     def _embed_table(
         self,
