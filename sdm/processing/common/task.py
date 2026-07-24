@@ -101,10 +101,12 @@ class TaskDispatch(Processor):
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(table)
 
-    def get_extra_state(self) -> str | None:  # noqa: D102
+    def get_extra_state(self) -> str | None:
+        r""":meta private:"""  # noqa: D415
         return self._task
 
-    def set_extra_state(self, state: str | None) -> None:  # noqa: D102
+    def set_extra_state(self, state: str | None) -> None:
+        r""":meta private:"""  # noqa: D415
         if state is not None and state not in self.processors:
             raise ValueError(
                 f"Cannot restore unconfigured '{state}' task on "

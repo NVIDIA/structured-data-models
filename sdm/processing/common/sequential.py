@@ -10,15 +10,10 @@ from sdm.processing._callable import ProcessorLike, _CallableProcessor
 
 
 class Sequential(Processor, InvertibleMixin):
-    r"""Apply processors and stateless callables in sequence.
-
-    A ``generator`` passed to ``fit()`` or ``fit_transform()`` is passed on
-    to every step.
+    r"""Apply processors and callables in sequence.
 
     Args:
-        args: Sequence of :class:`Processor` instances or callables. Each
-            callable accepts and returns a :class:`~sdm.tensor.TableTensor`
-            and is treated as a stateless, non-invertible processor.
+        args: Sequence of :class:`Processor` instances or callables.
     """
 
     supported_stypes = frozenset(Stype)
@@ -29,7 +24,7 @@ class Sequential(Processor, InvertibleMixin):
         self.requires_fit = any(child.requires_fit for child in self)
 
     def append(self, processor: ProcessorLike) -> Self:
-        r"""Append a processor to this sequence.
+        r"""Append a processor or callable to this sequence.
 
         Args:
             processor: The processor to append.
@@ -51,7 +46,7 @@ class Sequential(Processor, InvertibleMixin):
         return self
 
     def extend(self, processors: Iterable[ProcessorLike]) -> Self:
-        r"""Append multiple processors to this sequence.
+        r"""Append multiple processors or callables to this sequence.
 
         Args:
             processors: The processors to append.
@@ -68,12 +63,13 @@ class Sequential(Processor, InvertibleMixin):
     ) -> None:
         raise NotImplementedError
 
-    def fit(  # noqa: D102
+    def fit(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
-    ) -> "Sequential":
+    ) -> Self:
+        r""":meta private:"""  # noqa: D415
         out = table
         for i, child in enumerate(self):
             if i < len(self) - 1:
@@ -90,12 +86,13 @@ class Sequential(Processor, InvertibleMixin):
             out = child.transform(out)
         return out
 
-    def fit_transform(  # noqa: D102
+    def fit_transform(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
+        r""":meta private:"""  # noqa: D415
         out = table
         for child in self:
             out = child.fit_transform(out, generator=generator)
