@@ -133,14 +133,14 @@ class Processor(torch.nn.Module, abc.ABC):
         return self.fit(table, generator=generator).transform(table)
 
     def __add__(self, other: object) -> Sequential:
-        from sdm.processing import Sequential
+        from sdm.processing import Sequential  # noqa: PLC0415
 
         if not isinstance(other, Processor) and not callable(other):
             return NotImplemented
         return Sequential(self, cast(Processor, other))
 
     def __radd__(self, other: object) -> Sequential:
-        from sdm.processing import Sequential
+        from sdm.processing import Sequential  # noqa: PLC0415
 
         if not isinstance(other, Processor) and not callable(other):
             return NotImplemented
