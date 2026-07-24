@@ -9,11 +9,10 @@ from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 
-SupportedStypes: TypeAlias = frozenset[Stype]
-
-
 if TYPE_CHECKING:
     from sdm.processing import Sequential
+
+SupportedStypes: TypeAlias = frozenset[Stype]
 
 
 class Processor(torch.nn.Module, abc.ABC):
