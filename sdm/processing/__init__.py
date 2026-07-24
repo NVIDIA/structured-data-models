@@ -1,4 +1,4 @@
-"""Fittable pre/postprocessing transforms for structured data."""
+"""Processors for structured data tables."""
 
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.common import (
