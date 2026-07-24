@@ -10,7 +10,6 @@ import argparse
 import warnings
 from collections.abc import Sequence
 
-import pandas as pd
 import torch
 from relbench.base import Dataset, EntityTask
 from relbench.datasets import get_dataset, get_dataset_names
@@ -32,10 +31,6 @@ BENCHMARK_TASK_TYPES = (
     "binary_classification",
     "multiclass_classification",
 )
-
-
-class UnsupportedBenchmarkTask(Exception):
-    """A task that this benchmark script does not implement."""
 
 
 def prediction_to_tensor(
@@ -123,13 +118,13 @@ def build_relational_data(db) -> tuple[RelationalData, dict[str, list[str]]]:
 
 
 def sample_context(
-    df: pd.DataFrame,
+    df,
     *,
     context_size: int,
     task_type: str,
     target_column: str,
     seed: int,
-) -> pd.DataFrame:
+):
     """Sample context rows while retaining classification coverage."""
     context_size = min(context_size, len(df))
     ordered = df.sample(frac=1.0, random_state=seed)
@@ -215,20 +210,29 @@ def run_benchmark(
     seed: int,
 ) -> dict[str, object]:
     """Evaluate KumoRFM over a complete supported RelBench test split."""
+    import pandas as pd
+
     # AutoCompleteTask removes target and leakage columns while it is created,
     # so construct the task before materializing its database.
     task = get_task(dataset, task_name, download=True)
     if not isinstance(task, EntityTask):
-        raise UnsupportedBenchmarkTask(
-            "This benchmark supports RelBench entity tasks, not "
-            f"{task.__class__.__name__}"
-        )
+        return {
+            "dataset": dataset,
+            "task": task_name,
+            "status": "skipped",
+            "reason": "This benchmark only supports RelBench entity tasks",
+        }
 
     task_type = task.task_type.value
     if task_type not in BENCHMARK_TASK_TYPES:
-        raise UnsupportedBenchmarkTask(
-            f"This benchmark does not support task type {task_type!r}"
-        )
+        return {
+            "dataset": dataset,
+            "task": task_name,
+            "status": "skipped",
+            "reason": (
+                f"This benchmark does not support task type {task_type!r}"
+            ),
+        }
 
     num_classes = None
     if task_type == "binary_classification":
@@ -238,10 +242,15 @@ def run_benchmark(
         if num_classes is None:
             raise ValueError("Multiclass task does not declare its classes")
     if num_classes is not None and num_classes > 10:
-        raise UnsupportedBenchmarkTask(
-            f"This benchmark supports at most 10 classes, but this task has "
-            f"{num_classes}"
-        )
+        return {
+            "dataset": dataset,
+            "task": task_name,
+            "status": "skipped",
+            "reason": (
+                f"This benchmark supports at most 10 classes; task has "
+                f"{num_classes}"
+            ),
+        }
 
     db = task.dataset.get_db(upto_test_timestamp=False)
     data, skipped_columns = build_relational_data(db)
@@ -349,6 +358,7 @@ def run_benchmark(
     return {
         "dataset": dataset,
         "task": task_name,
+        "status": "completed",
         "task_type": task_type,
         "context_rows": len(context_table),
         "test_rows": len(test_table),
@@ -453,27 +463,18 @@ def main() -> None:
         )
 
     for dataset, task_name in benchmark_tasks:
-        try:
-            result = run_benchmark(
-                dataset=dataset,
-                task_name=task_name,
-                context_size=args.context_size,
-                batch_size=args.batch_size,
-                num_neighbors=args.num_neighbors,
-                interfaces=(args.interface,),
-                device=device,
-                seed=args.seed,
-            )
-            result["status"] = "completed"
-        except UnsupportedBenchmarkTask as error:
-            if args.task:
-                raise
-            result = {
-                "dataset": dataset,
-                "task": task_name,
-                "status": "skipped",
-                "reason": str(error),
-            }
+        result = run_benchmark(
+            dataset=dataset,
+            task_name=task_name,
+            context_size=args.context_size,
+            batch_size=args.batch_size,
+            num_neighbors=args.num_neighbors,
+            interfaces=(args.interface,),
+            device=device,
+            seed=args.seed,
+        )
+        if args.task and result["status"] == "skipped":
+            raise ValueError(result["reason"])
         print_result(result)
         # RelBench caches complete tasks and databases in memory.
         Dataset.get_db.cache_clear()
