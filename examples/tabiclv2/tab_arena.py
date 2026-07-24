@@ -1,15 +1,12 @@
 r"""Run TabICLv2 on TabArena.
 
-$ uv run --group example-tabarena python examples/tabiclv2/tab_arena.py \
-    --subset lite \
-    --datasets blood-transfusion-service-center
+$ uv run --group example-tabarena python examples/tabiclv2/tab_arena.py
 
 The output directory must be empty.
 """
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 from typing import Self
 
@@ -23,7 +20,6 @@ from sdm.models import TabICLv2
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.benchmark.task.metadata import ValidationMetadata
-from tabarena.benchmark.task.metadata.collection import TaskSubset
 from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import SystemConfigGenerator
 
@@ -136,11 +132,6 @@ class SDMTabICLv2System(ExternalSystemModel):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--subset", nargs="+")
-    parser.add_argument("--datasets", nargs="+")
-    args = parser.parse_args()
-
     output_root = Path(__file__).parent / "tabarena_out" / "TabICLv2"
     if output_root.exists() and any(output_root.iterdir()):
         raise FileExistsError(
@@ -159,13 +150,7 @@ def main() -> None:
     ).build_experiments()
 
     context = TabArenaContext()
-    jobs = context.build_jobs(
-        experiments,
-        task_subset=TaskSubset(
-            subset=args.subset,
-            dataset_names=args.datasets,
-        ),
-    )
+    jobs = context.build_jobs(experiments, split_indices="lite")
     context.run_jobs(
         jobs,
         expname=output_root,
