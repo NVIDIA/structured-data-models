@@ -1,7 +1,6 @@
 r"""Run TabICLv2 on TabArena.
 
 $ uv run --group example-tabarena python examples/tabiclv2/tab_arena.py \
-    --output-root outputs/tabiclv2-tabarena \
     --subset lite \
     --datasets blood-transfusion-service-center
 
@@ -138,12 +137,11 @@ class SDMTabICLv2System(ExternalSystemModel):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--subset", nargs="+")
     parser.add_argument("--datasets", nargs="+")
     args = parser.parse_args()
 
-    output_root = args.output_root.resolve()
+    output_root = Path(__file__).parent / "tabarena_out" / "TabICLv2"
     if output_root.exists() and any(output_root.iterdir()):
         raise FileExistsError(
             f"Output root {output_root} is non-empty. Choose a fresh path."
