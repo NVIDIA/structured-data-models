@@ -174,7 +174,6 @@ def test_tabiclv2_hierarchical_log_probs(
             y: torch.Tensor,
             *,
             num_classes: int | None = None,
-            head: object | None = None,
             cache: object | None = None,
         ) -> torch.Tensor:
             assert num_classes == 3

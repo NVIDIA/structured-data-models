@@ -4,7 +4,6 @@ from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
@@ -233,25 +232,13 @@ class _TabICLv2(torch.nn.Module):
         )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
+            out_channels=num_classes or num_quantiles,
             channels=num_readout_tokens * channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
             norm_bias=norm_bias,
             temperature=0.9,
             **factory_kwargs,
-        )
-        self.head = Sequential(
-            Linear(
-                in_features=num_readout_tokens * channels,
-                out_features=2 * num_readout_tokens * channels,
-                **factory_kwargs,
-            ),
-            GELU(),
-            Linear(
-                in_features=2 * num_readout_tokens * channels,
-                out_features=num_classes or num_quantiles,
-                **factory_kwargs,
-            ),
         )
 
     def forward(
@@ -270,7 +257,6 @@ class _TabICLv2(torch.nn.Module):
             x=x,
             y=y,
             num_classes=num_classes,
-            head=self.head,
             cache=cache,
         )
 
@@ -392,6 +378,6 @@ def _remap_ckpt(
             out[key.replace("icl_predictor.ln", "icl_block.norm")] = value
 
         elif key.startswith("icl_predictor.decoder."):
-            out[key.replace("icl_predictor.decoder", "head")] = value
+            out[key.replace("icl_predictor.decoder", "icl_block.head")] = value
 
     return out

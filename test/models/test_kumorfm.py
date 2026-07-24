@@ -101,7 +101,11 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
             "row_embedding.y_lin.weight",
         ),
         (False, "icl_block.y_reg_lin.bias", "icl_block.y_lin.bias"),
-        (False, "icl_block.reg_head.weight", "head.2.weight"),
+        (
+            False,
+            "icl_block.reg_head.weight",
+            "icl_block.head.2.weight",
+        ),
     ],
 )
 def test_remap_v2_1_variant_keys(
