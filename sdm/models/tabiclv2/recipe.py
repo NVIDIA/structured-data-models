@@ -19,26 +19,16 @@ from sdm.processing import (
 )
 
 
-def default_recipe() -> Recipe:
-    """Return the task-aware default recipe of the TabICLv2 model.
-
-    Composes shared :mod:`sdm.processing` processors into the
-    ``TableTensor``-to-model-input path of the original TabICLv2 model
-    (``soda-inria/tabicl``). The target semantic type selects the target and
-    output routes. For regression, the target inverse receives the complete
-    numerical model-output head. Missing and unseen categorical feature
-    values remain encoded as ``-1``.
-    """
+def default_recipe() -> Recipe:  # noqa: D103
     return Recipe(
         features=[
             StypeDispatch(
-                numerical=Identity(),
                 categorical=[
                     AlignCategories(),
                     ToNumerical(),
                 ],
             ),
-            StypeDispatch(  # TODO Support `id` as passthrough.
+            StypeDispatch(
                 numerical=[
                     ImputeMean(),
                     DropConstantColumns(),
