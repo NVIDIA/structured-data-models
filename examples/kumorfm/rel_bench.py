@@ -8,14 +8,19 @@ from relbench.datasets import get_dataset
 from relbench.tasks import get_task
 from sdm import RelationalData, TableTensor, infer_stypes
 from sdm.models import KumoRFM
+from torchmetrics.classification import BinaryAUROC
+from torchmetrics.regression import MeanAbsoluteError
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
 parser.add_argument("--task", type=str, required=True)
-parser.add_argument("--context_size", type=int, default=1000)
+parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
+parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
+torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Collect Relational Data #####################################################
@@ -63,9 +68,9 @@ for split in ["train", "val", "test"]:
     )
     task_tables.append(task_table)
 
-train_table = torch.cat(task_tables[:2], dim=0)
-perm = torch.randperm(len(train_table))[: args.context_size]
-train_table = cast(TableTensor, train_table[perm])
+context = torch.cat(task_tables[:2], dim=0)
+perm = torch.randperm(len(context))[: args.context_size]
+context = cast(TableTensor, context[perm])
 
 # Execute Model ###############################################################
 model = KumoRFM(device=device)
@@ -79,14 +84,28 @@ kwargs = {
     "num_neighbors": [16, 16],
     "task_time_column": task.time_col,
 }
-train_table, related_tables = sampler(train_table, **kwargs).to(device)
+context, related_tables = sampler(context, **kwargs).to(device)
 model.fit(
-    x=train_table.drop_columns(task.target_col),
-    y=train_table[task.target_col],
+    x=context.drop_columns(task.target_col),
+    y=context[task.target_col],
     related_tables=related_tables,
+    num_estimators=1,
 )
 
-test_table = task_tables[-1].drop_columns(task.target_col)
-for test_batch in test_table.split(args.batch_size):
-    model.predict(*sampler(test_batch, **kwargs).to(device))
-model.clear()
+if context.stype(task.target_col) == "categorical":
+    metric = BinaryAUROC().to(device)
+else:
+    metric = MeanAbsoluteError().to(device)
+for query in tqdm(task_tables[-1].split(args.batch_size)):
+    x_query = query.drop_columns(task.target_col)
+    y_query = query[task.target_col].to(device)
+    out = model.predict(*sampler(x_query, **kwargs).to(device))
+    if y_query.stype(task.target_col).value == "categorical":
+        out = out["1"].as_tensor().view(-1)  # Positive class.
+    else:
+        out = out["q500"].as_tensor().view(-1)  # Median prediction.
+    metric.update(out, y_query.as_tensor().view(-1))
+if context.stype(task.target_col) == "categorical":
+    print(f"AUROC: {metric.compute():.4f}")
+else:
+    print(f"MAE: {metric.compute():.4f}")
