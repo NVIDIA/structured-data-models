@@ -1,11 +1,7 @@
-import math
-
 import torch
 
-from sdm.processing._utils import _as_float
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 class Softmax(Processor):
@@ -19,9 +15,8 @@ class Softmax(Processor):
             higher values produce a softer distribution.
     """
 
-    requires_fit = False
-
     supported_stypes = frozenset({Stype.numerical})
+    requires_fit = False
 
     def __init__(
         self,
@@ -29,14 +24,15 @@ class Softmax(Processor):
         temperature: float = 1.0,
     ) -> None:
         super().__init__()
-        if not math.isfinite(temperature) or temperature <= 0:
-            raise ValueError("temperature must be finite and positive.")
         self.temperature = temperature
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        """Return ``softmax(table / temperature)`` over the last dimension."""
-        numerical = torch.softmax(
-            _as_float(table.numerical) / self.temperature,
-            dim=-1,
-        )
+        numerical = torch.softmax(table.numerical / self.temperature, dim=-1)
         return table.replace_blocks(numerical=numerical)
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        if self.temperature != 1.0:
+            temperature_repr = f"temperature={self.temperature}"
+        else:
+            temperature_repr = ""
+        return f"{' ' * indent}{self.__class__.__name__}({temperature_repr})"

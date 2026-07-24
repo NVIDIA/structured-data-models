@@ -49,7 +49,7 @@ class ClipSigma(Processor):
         numerical = _as_float(table.numerical)
         min_std = numerical.new_tensor(1e-6)
 
-        mean = numerical.mean(dim=0)
+        mean = numerical.mean(dim=-2, keepdim=True)
         std = torch.maximum(_std(numerical, dim=0), min_std)
         lower_bound = mean - self.threshold * std
         upper_bound = mean + self.threshold * std
@@ -87,3 +87,5 @@ class ClipSigma(Processor):
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
         numerical = torch.minimum(log_abs + self.upper_bound, clipped)
         return table.replace_blocks(numerical=numerical)
+
+    # TODO REPR

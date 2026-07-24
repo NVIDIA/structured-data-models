@@ -1,6 +1,5 @@
 from typing import Literal
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -32,9 +31,7 @@ class ReduceEstimators(Processor):
         method: Literal["mean"] = "mean",
     ) -> None:
         super().__init__()
-        # TODO: Support `method="median"` when required by a model recipe.
-        if method != "mean":
-            raise ValueError("method must be 'mean'")
+        assert method == "mean"
         self.method = method
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -43,14 +40,8 @@ class ReduceEstimators(Processor):
                 "Expected a leading ensemble dimension in an output table "
                 f"with at least 3 dimensions (got {table.dim()}D)."
             )
-        if table.size(0) == 0:
-            raise ValueError("Expected at least one ensemble member.")
-
-        numerical = _as_float(table.numerical).mean(dim=0)
-        return table.__class__(
-            columns={Stype.numerical.value: table.columns[Stype.numerical]},
-            numerical=numerical,
-        )
+        numerical = table.numerical.mean(dim=0)
+        return table.replace_blocks(numerical=numerical)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
