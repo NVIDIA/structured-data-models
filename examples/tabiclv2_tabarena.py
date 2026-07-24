@@ -61,11 +61,31 @@ class SDMTabICLv2System(ExternalSystemModel):
             self._target_stype = Stype.numerical
         else:
             self._target_stype = Stype.categorical
-            self._class_labels_by_key = _class_labels_by_key(y)
-            self._tabarena_class_order = _tabarena_class_order(
-                y,
+            if y.isna().any():
+                raise ValueError(
+                    "Classification targets must not contain missing values"
+                )
+            self._class_labels_by_key = {}
+            for label in pd.unique(y):
+                key = str(label)
+                if key in self._class_labels_by_key:
+                    raise ValueError(
+                        "Classification labels have ambiguous string "
+                        "representations: "
+                        f"{self._class_labels_by_key[key]!r} and {label!r} "
+                        f"both map to {key!r}"
+                    )
+                self._class_labels_by_key[key] = label
+            label_cleaner = LabelCleaner.construct(
                 problem_type=problem_type,
+                y=y,
             )
+            class_order = label_cleaner.ordered_class_labels
+            if class_order is None:
+                raise RuntimeError(
+                    "TabArena did not provide an ordered class-label contract"
+                )
+            self._tabarena_class_order = tuple(class_order)
 
         self.model = TabICLv2(device=self._device)
         self.model.fit(
@@ -86,7 +106,17 @@ class SDMTabICLv2System(ExternalSystemModel):
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
         values = (
-            self._predict_table(X).numerical.float().mean(dim=-1).cpu().numpy()
+            self.model.predict(
+                TableTensor.from_pandas(
+                    df=X,
+                    stypes=self.stypes,
+                    device=self._device,
+                )
+            )
+            .numerical.float()
+            .mean(dim=-1)
+            .cpu()
+            .numpy()
         )
         return pd.Series(
             values,
@@ -95,95 +125,27 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        prediction = self._predict_table(X)
-        values = prediction.numerical.float().cpu().numpy()
-        labels = _labels_from_prediction_columns(
-            prediction.columns[Stype.numerical],
-            labels_by_key=self._class_labels_by_key,
+        prediction = self.model.predict(
+            TableTensor.from_pandas(
+                df=X,
+                stypes=self.stypes,
+                device=self._device,
+            )
         )
+        values = prediction.numerical.float().cpu().numpy()
+        labels = [
+            self._class_labels_by_key[column]
+            for column in prediction.columns[Stype.numerical]
+        ]
         probabilities = pd.DataFrame(
             values,
             index=X.index,
             columns=np.asarray(labels, dtype=object),
         )
-        return _order_probabilities_for_tabarena(
-            probabilities,
-            class_order=self._tabarena_class_order,
-        )
-
-    def _predict_table(self, X: pd.DataFrame) -> TableTensor:
-        return self.model.predict(
-            TableTensor.from_pandas(
-                df=X,
-                stypes=self._feature_stypes,
-                device=self._device,
-            )
-        )
-
-
-def _class_labels_by_key(y: pd.Series) -> dict[str, object]:
-    if y.isna().any():
-        raise ValueError(
-            "Classification targets must not contain missing values"
-        )
-
-    labels: dict[str, object] = {}
-    for label in pd.unique(y):
-        key = str(label)
-        if key in labels:
-            raise ValueError(
-                "Classification labels have ambiguous string representations: "
-                f"{labels[key]!r} and {label!r} both map to {key!r}"
-            )
-        labels[key] = label
-    return labels
-
-
-def _labels_from_prediction_columns(
-    columns: tuple[str, ...],
-    *,
-    labels_by_key: dict[str, object],
-) -> list[object]:
-    return [labels_by_key[column] for column in columns]
-
-
-def _tabarena_class_order(
-    y: pd.Series,
-    *,
-    problem_type: str,
-) -> tuple[object, ...]:
-    label_cleaner = LabelCleaner.construct(
-        problem_type=problem_type,
-        y=y,
-    )
-    class_order = label_cleaner.ordered_class_labels
-    if class_order is None:
-        raise RuntimeError(
-            "TabArena did not provide an ordered class-label contract"
-        )
-    return tuple(class_order)
-
-
-def _order_probabilities_for_tabarena(
-    probabilities: pd.DataFrame,
-    *,
-    class_order: tuple[object, ...],
-) -> pd.DataFrame:
-    expected = pd.Index(class_order)
-    actual = probabilities.columns
-    missing = expected.difference(actual).tolist()
-    unexpected = actual.difference(expected).tolist()
-    if missing or unexpected:
-        details: list[str] = []
-        if missing:
-            details.append(f"missing labels: {missing}")
-        if unexpected:
-            details.append(f"unexpected labels: {unexpected}")
-        raise RuntimeError(
-            "TabICLv2 probability columns do not match TabArena's class "
-            "labels (" + "; ".join(details) + ")"
-        )
-    return probabilities.loc[:, expected]
+        return probabilities.loc[
+            :,
+            pd.Index(self._tabarena_class_order),
+        ]
 
 
 def main() -> None:
@@ -235,8 +197,6 @@ def main() -> None:
         debug_mode=True,
     )
     results = context._registered_new_results()
-    if results is None:
-        raise RuntimeError("No TabArena jobs completed successfully")
 
     report_dir = output_root / "report"
     report_dir.mkdir(parents=True, exist_ok=True)
