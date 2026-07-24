@@ -52,7 +52,7 @@ class Relationship:
             for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
-                        f"Column name '{column}' is reserved for internal "
+                        f"Column name {column!r} is reserved for internal "
                         f"row indexing"
                     )
 
@@ -168,16 +168,16 @@ class RelationalData(DeviceMixin):
             ):
                 if table not in self.tables:
                     raise ValueError(
-                        f"Expected '{table}' to be registered as a table"
+                        f"Expected {table!r} to be registered as a table"
                     )
 
                 for column in columns:
                     stype = self.tables[table].stype(column)
                     if stype != Stype.id:
                         raise ValueError(
-                            f"Expected column '{column}' in table '{table}' "
-                            f"to have semantic type '{Stype.id.value}' "
-                            f"(got '{stype.value}')"
+                            f"Expected column {column!r} in table {table!r} "
+                            f"to have semantic type {Stype.id.value!r} "
+                            f"(got {stype.value!r})"
                         )
 
     def to(self, device: torch.device | str | None) -> Self:
@@ -197,11 +197,11 @@ class RelationalData(DeviceMixin):
         if len(devices) == 0:
             raise RuntimeError(
                 f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
+                f"{self.__class__.__name__!r}"
             )
         if len(devices) > 1:
             raise RuntimeError(
-                f"Expected tables in '{self.__class__.__name__}' to be on "
+                f"Expected tables in {self.__class__.__name__!r} to be on "
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))

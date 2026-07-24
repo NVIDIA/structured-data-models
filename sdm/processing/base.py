@@ -37,14 +37,14 @@ class Processor(torch.nn.Module, abc.ABC):
             if stype not in supported_stypes and len(columns) > 0:
                 # TODO: Include all invalid columns in the error message
                 raise ValueError(
-                    f"'{self.__class__.__name__}' does not support "
-                    f"'{stype.value}' columns."
+                    f"{self.__class__.__name__!r} does not support "
+                    f"{stype.value!r} columns."
                 )
 
     def _check_is_fitted(self) -> None:
         if self.requires_fit and not self._fitted:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' is not fitted; "
+                f"{self.__class__.__name__!r} is not fitted; "
                 "call 'fit()' before."
             )
 

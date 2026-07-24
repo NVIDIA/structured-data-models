@@ -141,7 +141,7 @@ class AlignCategories(Processor):
         ):
             raise ValueError(
                 "Expected category value types to match the fitted values for "
-                f"categorical column '{column}'."
+                f"categorical column {column!r}."
             )
 
         if isinstance(actual, StringTensor):
@@ -165,7 +165,7 @@ class AlignCategories(Processor):
         if actual.dtype != expected.dtype:
             raise ValueError(
                 "Expected category value dtypes to match the fitted "
-                f"values for categorical column '{column}' "
+                f"values for categorical column {column!r} "
                 f"(got {actual.dtype} and "
                 f"{expected.dtype})."
             )

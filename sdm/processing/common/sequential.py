@@ -39,7 +39,7 @@ class Sequential(Processor, InvertibleMixin):
         else:
             raise TypeError(
                 f"Element must be a 'Processor' or callable "
-                f"(got '{type(processor).__name__}')"
+                f"(got {type(processor).__name__!r})"
             )
 
         self._fitted = False
@@ -106,7 +106,7 @@ class Sequential(Processor, InvertibleMixin):
             fn = getattr(child, "inverse_transform", None)
             if not callable(fn):
                 raise AttributeError(
-                    f"'{child.__class__.__name__}' object has no attribute "
+                    f"{child.__class__.__name__!r} object has no attribute "
                     f"'inverse_transform'"
                 )
             out = fn(out)

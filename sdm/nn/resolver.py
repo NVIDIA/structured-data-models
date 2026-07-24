@@ -45,6 +45,6 @@ def normalization_resolver(
             return cls(*args, **kwargs)
 
     raise ValueError(
-        f"Could not resolve normalization '{query}'. "
+        f"Could not resolve normalization {query!r}. "
         f"Available choices: {', '.join(cls.__name__ for cls in modules)}"
     )

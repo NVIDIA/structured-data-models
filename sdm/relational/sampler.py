@@ -73,9 +73,9 @@ class RelationalSampler:
             stype = self.data.tables[table_name].stype(column_name)
             if stype != Stype.datetime:
                 raise ValueError(
-                    f"Expected '{column_name}' in table '{table_name}' to "
-                    f"have semantic type '{Stype.datetime.value}' "
-                    f"(got '{stype.value}')"
+                    f"Expected {column_name!r} in table {table_name!r} to "
+                    f"have semantic type {Stype.datetime.value!r} "
+                    f"(got {stype.value!r})"
                 )
 
         self._row_dict: dict[tuple[str, str, str], Tensor] = {}
@@ -144,8 +144,8 @@ class RelationalSampler:
                 stype = table.stype(column)
                 if stype != Stype.id:
                     raise ValueError(
-                        f"Expected column '{column}' to have semantic type "
-                        f"'{Stype.id.value}' (got '{stype.value}')"
+                        f"Expected column {column!r} to have semantic type "
+                        f"{Stype.id.value!r} (got {stype.value!r})"
                     )
 
         if task_time_column is not None:
@@ -153,7 +153,7 @@ class RelationalSampler:
             if stype != Stype.datetime:
                 raise ValueError(
                     f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value}')"
+                    f"{Stype.datetime.value!r} (got {stype.value!r})"
                 )
 
         try:
@@ -181,7 +181,7 @@ class RelationalSampler:
 
         if not task_table.is_cpu or not self.data.is_cpu:
             raise NotImplementedError(
-                f"'{self.__class__.__name__}' requires input data on CPU"
+                f"{self.__class__.__name__!r} requires input data on CPU"
             )
 
         # Resolve entity table node indices:
@@ -203,7 +203,7 @@ class RelationalSampler:
         if not task_index.equal(expected):
             raise ValueError(
                 f"Expected each task row to match exactly one row in "
-                f"'{task_link.table}'"
+                f"{task_link.table!r}"
             )
 
         if task_time_column is not None:

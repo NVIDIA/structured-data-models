@@ -49,7 +49,7 @@ class ImputeMode(Processor):
             if observed.numel() == 0:
                 raise ValueError(
                     "Cannot fit 'ImputeMode' because categorical "
-                    f"column '{columns[index]}' has no observed values."
+                    f"column {columns[index]!r} has no observed values."
                 )
 
             counts = observed.bincount(minlength=category.numel())
@@ -89,7 +89,7 @@ class ImputeMode(Processor):
             if not actual.equal(expected):
                 raise ValueError(
                     "Expected the category vocabulary for categorical column "
-                    f"'{columns[index]}' to match the fitted values and "
+                    f"{columns[index]!r} to match the fitted values and "
                     "order. "
                     "Use 'AlignCategories' before this processor for "
                     "independently tensorized inputs."

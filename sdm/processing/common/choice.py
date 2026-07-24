@@ -39,7 +39,7 @@ class Choice(Processor, InvertibleMixin):
         """The drawn option."""
         if self._index is None:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' has no drawn option; "
+                f"{self.__class__.__name__!r} has no drawn option; "
                 "call 'fit()' before."
             )
         return cast(Processor, self.options[self._index])
@@ -67,7 +67,7 @@ class Choice(Processor, InvertibleMixin):
         fn = getattr(self.selected, "inverse_transform", None)
         if not callable(fn):
             raise AttributeError(
-                f"'{self.selected.__class__.__name__}' object has no "
+                f"{self.selected.__class__.__name__!r} object has no "
                 f"attribute 'inverse_transform'"
             )
         return fn(table)
@@ -81,7 +81,7 @@ class Choice(Processor, InvertibleMixin):
         if state is not None and not 0 <= state < len(self.options):
             raise ValueError(
                 f"Cannot restore drawn option {state} on "
-                f"'{self.__class__.__name__}' with {len(self.options)} "
+                f"{self.__class__.__name__!r} with {len(self.options)} "
                 "options."
             )
         self._index = state
