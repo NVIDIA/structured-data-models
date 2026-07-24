@@ -5,6 +5,7 @@ import torch
 from sdm.cache import Cache
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.testing import withCUDA
+from torch import Tensor
 
 
 class _StubICLBlock(ICLBlock):
@@ -12,7 +13,6 @@ class _StubICLBlock(ICLBlock):
         self,
         num_classes: int,
         predictor: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
-        temperature: float = 1.0,
     ) -> None:
         super().__init__(
             num_classes=num_classes,
@@ -21,19 +21,10 @@ class _StubICLBlock(ICLBlock):
             num_layers=0,
             num_heads=1,
             norm_bias=True,
-            temperature=temperature,
         )
         self.predictor = predictor
 
-    def _forward(
-        self,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        *,
-        cache: Cache | None,
-        cache_prefix: str,
-        batch_size_limit: int | None,
-    ) -> torch.Tensor:
+    def _forward(self, x: Tensor, y: Tensor, **_: object) -> Tensor:
         return self.predictor(x, y)
 
 
