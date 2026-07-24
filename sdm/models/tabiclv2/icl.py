@@ -91,7 +91,7 @@ class ICLBlock(torch.nn.Module):
                 "at least two"
             )
 
-        return self._predict_hierarchical(
+        return self._forward_hierarchical(
             x=x,
             y=y,
             num_classes=num_classes,
@@ -137,7 +137,7 @@ class ICLBlock(torch.nn.Module):
 
         return self.head(self.norm(x))  # [..., R_test, out_channels]
 
-    def _predict_hierarchical(
+    def _forward_hierarchical(
         self,
         x: Tensor,  # [..., R, D]
         y: Tensor,  # [..., R_train]
