@@ -205,22 +205,22 @@ class TfidfTransformer(Processor):
         pad_len = padded.str.len()
 
         parts: list[cudf.DataFrame] = []
-        for n in range(min_n, max_n + 1):
-            grams = padded.str.character_ngrams(n)
+        # 'character_ngrams' raises when no word is long enough for 'n'.
+        longest = min(max_n, int(pad_len.max())) if len(padded) > 0 else 0
+        for n in range(min_n, longest + 1):
+            grams = padded.str.character_ngrams(n, as_list=True)
             long = cudf.DataFrame({"doc": doc_index, "gram": grams}).explode(
                 "gram"
             )
             parts.append(long.dropna(subset=["gram"]))
-            short = pad_len < n
-            parts.append(
-                cudf.DataFrame(
-                    {"doc": doc_index[short], "gram": padded[short]}
-                )
-            )
 
-        flat = cudf.concat(parts, ignore_index=True).sort_values(
-            "doc", kind="stable"
+        # word shorter than min_n: count it once
+        short = pad_len < min_n
+        parts.append(
+            cudf.DataFrame({"doc": doc_index[short], "gram": padded[short]})
         )
+
+        flat = cudf.concat(parts, ignore_index=True).sort_values("doc")
 
         counts = (
             flat.groupby("doc").size().reindex(range(n_docs), fill_value=0)
