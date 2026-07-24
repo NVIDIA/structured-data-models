@@ -1,7 +1,7 @@
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.processing import InvertibleMixin, Recipe, Sequential, StandardScale
+from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize
 from sdm.testing import withCUDA
 
 
@@ -12,7 +12,7 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
 
 
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
-    recipe = Recipe(features=[StandardScale()], target=None, output=[])
+    recipe = Recipe(features=[Standardize()], target=None, output=[])
 
     assert isinstance(recipe.features, Sequential)
     assert isinstance(recipe.target, Sequential)
@@ -25,7 +25,7 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
-    recipe = Recipe(target=[StandardScale()])
+    recipe = Recipe(target=[Standardize()])
     table = _table()
 
     assert isinstance(recipe.target, Sequential)
@@ -37,7 +37,7 @@ def test_target_forward_then_inverse_round_trips() -> None:
 
 
 def test_recipe_roles_fit_transform_features_and_target() -> None:
-    recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
+    recipe = Recipe(features=[Standardize()], target=[Standardize()])
     features = _table()
     target = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
 
@@ -57,7 +57,7 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
 
 
 def test_recipe_role_fit_accepts_table() -> None:
-    recipe = Recipe(features=[StandardScale()])
+    recipe = Recipe(features=[Standardize()])
     features = _table()
 
     fitted = recipe.features.fit(features)

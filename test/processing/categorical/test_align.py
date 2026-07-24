@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.processing import CategoricalAlign
+from sdm.processing import AlignCategories
 from sdm.testing import withCUDA
 
 
@@ -26,7 +26,7 @@ def _table(
 
 
 @withCUDA
-def test_categorical_align_remaps_independent_vocabularies(
+def test_align_categories_remaps_independent_vocabularies(
     device: torch.device,
 ) -> None:
     context = _table(
@@ -40,7 +40,7 @@ def test_categorical_align_remaps_independent_vocabularies(
         device=device,
     )
 
-    output = CategoricalAlign().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
     assert torch.equal(
         output.categorical.as_tensor(),
@@ -55,13 +55,13 @@ def test_categorical_align_remaps_independent_vocabularies(
     assert output.categorical.device == device
 
 
-def test_categorical_align_removes_query_only_joint_vocabulary() -> None:
+def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     table = TableTensor.from_pandas(
         pd.DataFrame({"kind": ["red", "blue", "green", "blue"]}),
         stypes={"kind": "categorical"},
     )
 
-    processor = CategoricalAlign().fit(table[:2])
+    processor = AlignCategories().fit(table[:2])
     context = processor.transform(table[:2])
     query = processor.transform(table[2:])
 
@@ -71,13 +71,13 @@ def test_categorical_align_removes_query_only_joint_vocabulary() -> None:
     assert query.categorical.as_tensor().squeeze(-1).tolist() == [-1, 1]
 
 
-def test_categorical_align_joint_vocabulary_uses_context_order() -> None:
+def test_align_categories_joint_vocabulary_uses_context_order() -> None:
     table = TableTensor.from_pandas(
         pd.DataFrame({"kind": ["blue", "red", "blue"]}),
         stypes={"kind": "categorical"},
     )
 
-    processor = CategoricalAlign().fit(table[1:])
+    processor = AlignCategories().fit(table[1:])
     context = processor.transform(table[1:])
     query = processor.transform(table[:1])
 
@@ -87,7 +87,7 @@ def test_categorical_align_joint_vocabulary_uses_context_order() -> None:
 
 
 @withCUDA
-def test_categorical_align_numeric_values(device: torch.device) -> None:
+def test_align_categories_numeric_values(device: torch.device) -> None:
     context = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
@@ -111,7 +111,7 @@ def test_categorical_align_numeric_values(device: torch.device) -> None:
         ),
     )
 
-    output = CategoricalAlign().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
     assert torch.equal(
         output.categorical.as_tensor(),
@@ -128,7 +128,7 @@ def test_categorical_align_numeric_values(device: torch.device) -> None:
 
 
 @withCUDA
-def test_categorical_align_matches_nan_category_values(
+def test_align_categories_matches_nan_category_values(
     device: torch.device,
 ) -> None:
     context = TableTensor(
@@ -150,12 +150,12 @@ def test_categorical_align_matches_nan_category_values(
         ),
     )
 
-    output = CategoricalAlign().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [0, -1, 1]
 
 
-def test_categorical_align_scales_to_large_numeric_vocabulary() -> None:
+def test_align_categories_scales_to_large_numeric_vocabulary() -> None:
     size = 10_000
     codes = torch.arange(size, dtype=torch.int32).unsqueeze(-1)
     context = TableTensor(
@@ -173,7 +173,7 @@ def test_categorical_align_scales_to_large_numeric_vocabulary() -> None:
         ),
     )
 
-    output = CategoricalAlign().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
     assert torch.equal(
         output.categorical.as_tensor().squeeze(-1),
@@ -189,7 +189,7 @@ def test_categorical_align_scales_to_large_numeric_vocabulary() -> None:
         ("uint64", 2**63 + 1),
     ],
 )
-def test_categorical_align_unsigned_pandas_values(
+def test_align_categories_unsigned_pandas_values(
     dtype: str,
     largest: int,
 ) -> None:
@@ -206,14 +206,14 @@ def test_categorical_align_unsigned_pandas_values(
         stypes={"value": "categorical"},
     )
 
-    output = CategoricalAlign().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [1, -1, 0]
     assert output.categorical.categories[0].dtype == getattr(torch, dtype)
     assert output.categorical.categories[0].tolist() == [largest, 1]
 
 
-def test_categorical_align_all_missing_context_has_empty_vocabulary() -> None:
+def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     context = _table(
         [[-1], [-1]],
         columns=("kind",),
@@ -225,15 +225,13 @@ def test_categorical_align_all_missing_context_has_empty_vocabulary() -> None:
         categories=(("red", "green"),),
     )
 
-    output = CategoricalAlign().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
     assert output.categorical.categories[0].numel() == 0
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1, -1]
 
 
-def test_categorical_align_all_missing_pandas_context_accepts_strings() -> (
-    None
-):
+def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
     context = TableTensor.from_pandas(
         pd.DataFrame({"kind": [None, None]}),
         stypes={"kind": "categorical"},
@@ -243,14 +241,14 @@ def test_categorical_align_all_missing_pandas_context_accepts_strings() -> (
         stypes={"kind": "categorical"},
     )
 
-    output = CategoricalAlign().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
     assert output.categorical.categories[0].numel() == 0
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1]
 
 
-def test_categorical_align_rejects_changed_category_value_type() -> None:
-    processor = CategoricalAlign().fit(
+def test_align_categories_rejects_changed_category_value_type() -> None:
+    processor = AlignCategories().fit(
         _table([[0]], columns=("kind",), categories=(("red",),))
     )
     query = TableTensor(
@@ -265,7 +263,7 @@ def test_categorical_align_rejects_changed_category_value_type() -> None:
         processor.transform(query)
 
 
-def test_categorical_align_rejects_lossy_numeric_dtype_change() -> None:
+def test_align_categories_rejects_lossy_numeric_dtype_change() -> None:
     context = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
@@ -282,11 +280,11 @@ def test_categorical_align_rejects_lossy_numeric_dtype_change() -> None:
     )
 
     with pytest.raises(ValueError, match=r"value dtypes.*value"):
-        CategoricalAlign().fit(context).transform(query)
+        AlignCategories().fit(context).transform(query)
 
 
 @pytest.mark.parametrize("during_fit", [True, False])
-def test_categorical_align_rejects_out_of_range_codes(
+def test_align_categories_rejects_out_of_range_codes(
     during_fit: bool,
 ) -> None:
     invalid = _table(
@@ -296,10 +294,10 @@ def test_categorical_align_rejects_out_of_range_codes(
     )
     if during_fit:
         with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
-            CategoricalAlign().fit(invalid)
+            AlignCategories().fit(invalid)
         return
 
-    processor = CategoricalAlign().fit(
+    processor = AlignCategories().fit(
         _table([[0]], columns=("kind",), categories=(("red",),))
     )
     with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):

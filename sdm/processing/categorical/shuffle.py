@@ -8,7 +8,7 @@ from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
 
-class CategoryShuffle(Processor):
+class ShuffleCategories(Processor):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is

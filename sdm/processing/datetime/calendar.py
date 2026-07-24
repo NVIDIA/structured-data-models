@@ -13,11 +13,11 @@ US_PER_HOUR = 60 * US_PER_MINUTE
 US_PER_DAY = 24 * US_PER_HOUR
 
 
-class EncodeDatetime(Processor):
-    r"""Separate timestamps into numerical calendar features.
+class AddCalendarFields(Processor):
+    r"""Add numerical calendar fields derived from datetime columns.
 
     Args:
-        features: The datetime features to extract.
+        fields: The calendar fields to add.
     """
 
     supported_stypes = frozenset({Stype.datetime})
@@ -25,7 +25,7 @@ class EncodeDatetime(Processor):
 
     def __init__(
         self,
-        features: Sequence[
+        fields: Sequence[
             Literal[
                 "minute",
                 "hour",
@@ -36,43 +36,43 @@ class EncodeDatetime(Processor):
         ],
     ) -> None:
         super().__init__()
-        self.features = features
+        self.fields = fields
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        if table.datetime.size(-1) == 0 or len(self.features) == 0:
+        if table.datetime.size(-1) == 0 or len(self.fields) == 0:
             return table
 
         datetime = table.datetime
         na_mask = datetime == torch.iinfo(datetime.dtype).min
 
         outs: list[Tensor] = []
-        for feature in self.features:
-            if feature in ("minute", "hour"):
+        for field in self.fields:
+            if field in ("minute", "hour"):
                 time_of_day = datetime.remainder(US_PER_DAY)
-                if feature == "minute":
+                if field == "minute":
                     out = time_of_day.div(US_PER_MINUTE, rounding_mode="floor")
                     out = out.remainder(60)
                     outs.append(out)
                 else:
-                    assert feature == "hour"
+                    assert field == "hour"
                     out = time_of_day.div(US_PER_HOUR, rounding_mode="floor")
                     outs.append(out)
-            elif feature in ("weekday", "day_of_month", "month"):
+            elif field in ("weekday", "day_of_month", "month"):
                 days = datetime.div(US_PER_DAY, rounding_mode="floor")
-                if feature == "weekday":
+                if field == "weekday":
                     out = (days + 3).remainder(7)
                     outs.append(out)
                 else:
                     _, month, day = _civil_from_days(days)
-                    if feature == "month":
+                    if field == "month":
                         outs.append(month - 1)
                     else:
-                        assert feature == "day_of_month"
+                        assert field == "day_of_month"
                         outs.append(day - 1)
             else:
                 raise ValueError(
                     f"'{self.__class__.__name__}' received unsupported "
-                    f"feature '{feature}'"
+                    f"field '{field}'"
                 )
 
         out = torch.stack(outs, dim=-1).to(table.numerical.dtype)
@@ -80,9 +80,9 @@ class EncodeDatetime(Processor):
         out = out.flatten(-2, -1)
 
         columns = tuple(
-            f"{column}__{feature}"
+            f"{column}__{field}"
             for column in table.columns[Stype.datetime]
-            for feature in self.features
+            for field in self.fields
         )
 
         out_table = TableTensor(
@@ -93,12 +93,12 @@ class EncodeDatetime(Processor):
         return cast(TableTensor, torch.cat([table, out_table], dim=-1))
 
     def __repr__(self, *, indent: int = 0) -> str:
-        feature_repr = "".join(
-            f"{' ' * (indent + 2)}'{feature}',\n" for feature in self.features
+        field_repr = "".join(
+            f"{' ' * (indent + 2)}'{field}',\n" for field in self.fields
         )
         return (
             f"{' ' * indent}{self.__class__.__name__}([\n"
-            f"{feature_repr}"
+            f"{field_repr}"
             f"{' ' * indent}])"
         )
 

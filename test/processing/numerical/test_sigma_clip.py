@@ -1,12 +1,12 @@
 import pytest
 import torch
 from sdm import TableTensor
-from sdm.processing import SigmaClip
+from sdm.processing import ClipSigma
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_sigma_clip_two_stage_outlier_behavior(
+def test_clip_sigma_two_stage_outlier_behavior(
     device: torch.device,
 ) -> None:
     dtype = torch.float64
@@ -16,7 +16,7 @@ def test_sigma_clip_two_stage_outlier_behavior(
         device=device,
     )
 
-    processor = SigmaClip(threshold=1.0).fit(TableTensor.from_tensor(inp))
+    processor = ClipSigma(threshold=1.0).fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
@@ -42,7 +42,7 @@ def test_sigma_clip_two_stage_outlier_behavior(
     )
 
 
-def test_sigma_clip_matches_tabicl_reference_values() -> None:
+def test_clip_sigma_matches_tabicl_reference_values() -> None:
     dtype = torch.float64
     inp = torch.tensor(
         [
@@ -55,7 +55,7 @@ def test_sigma_clip_matches_tabicl_reference_values() -> None:
         dtype=dtype,
     )
 
-    processor = SigmaClip(threshold=1.5).fit(TableTensor.from_tensor(inp))
+    processor = ClipSigma(threshold=1.5).fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.allclose(
@@ -89,6 +89,6 @@ def test_sigma_clip_matches_tabicl_reference_values() -> None:
     )
 
 
-def test_sigma_clip_rejects_nonpositive_threshold() -> None:
+def test_clip_sigma_rejects_nonpositive_threshold() -> None:
     with pytest.raises(ValueError, match="threshold must be positive"):
-        SigmaClip(threshold=0.0)
+        ClipSigma(threshold=0.0)

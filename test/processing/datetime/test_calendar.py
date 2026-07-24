@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import torch
 from sdm import Stype, TableTensor
-from sdm.processing import EncodeDatetime
+from sdm.processing import AddCalendarFields
 
 
 def _timestamp(value: datetime) -> int:
@@ -10,7 +10,7 @@ def _timestamp(value: datetime) -> int:
     return int(value.timestamp() * 1_000_000)
 
 
-def test_datetime_features_calendar_channels_and_missing_values() -> None:
+def test_add_calendar_fields_channels_and_missing_values() -> None:
     missing = torch.iinfo(torch.int64).min
     utc = timezone.utc
     table = TableTensor(
@@ -25,8 +25,8 @@ def test_datetime_features_calendar_channels_and_missing_values() -> None:
         ),
     )
 
-    output = EncodeDatetime(
-        ["minute", "hour", "weekday", "day_of_month", "month"]
+    output = AddCalendarFields(
+        fields=["minute", "hour", "weekday", "day_of_month", "month"]
     ).transform(table)
 
     assert output.columns[Stype.datetime] == ("event_time",)

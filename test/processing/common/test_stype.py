@@ -2,10 +2,10 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
-    CategoryShuffle,
     Identity,
-    MeanImpute,
-    StandardScale,
+    ImputeMean,
+    ShuffleCategories,
+    Standardize,
     StypeDispatch,
 )
 
@@ -26,7 +26,7 @@ def _mixed_table() -> TableTensor:
 
 def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch(numerical=StandardScale())
+    dispatch = StypeDispatch(numerical=Standardize())
 
     output = dispatch.fit_transform(table)
 
@@ -84,12 +84,12 @@ def test_stype_dispatch_passes_generator_to_routes() -> None:
         ),
     )
 
-    first = CategoryShuffle(method="random")
+    first = ShuffleCategories(method="random")
     StypeDispatch(categorical=first).fit(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = CategoryShuffle(method="random")
+    second = ShuffleCategories(method="random")
     StypeDispatch(categorical=second).fit(
         table,
         generator=torch.Generator().manual_seed(0),
@@ -100,18 +100,18 @@ def test_stype_dispatch_passes_generator_to_routes() -> None:
 
 def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
     table = _mixed_table()
-    dispatch = StypeDispatch(numerical=MeanImpute())
+    dispatch = StypeDispatch(numerical=ImputeMean())
 
     output = dispatch.fit_transform(table)
 
-    with pytest.raises(TypeError, match=r"numerical.*MeanImpute"):
+    with pytest.raises(TypeError, match=r"numerical.*ImputeMean"):
         dispatch.inverse_transform(output)
 
 
 def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
     table = _mixed_table()
     dispatch = StypeDispatch(
-        numerical=StandardScale(),
+        numerical=Standardize(),
         remainder="drop",
     )
 
@@ -123,7 +123,7 @@ def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
 
 def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     table = _mixed_table()
-    processor = StandardScale()
+    processor = Standardize()
     dispatch = StypeDispatch(
         numerical=processor,
         remainder="error",
@@ -132,7 +132,7 @@ def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     with pytest.raises(ValueError, match=r"non-empty.*categorical.*no route"):
         dispatch.fit(table)
 
-    with pytest.raises(RuntimeError, match=r"StandardScale.*not fitted"):
+    with pytest.raises(RuntimeError, match=r"Standardize.*not fitted"):
         processor.transform(table.select_stypes(Stype.numerical))
 
 
@@ -158,12 +158,12 @@ def test_stype_dispatch_runs_iterable_routes() -> None:
             lambda table: table.replace_blocks(
                 numerical=table.numerical.square()
             ),
-            MeanImpute(),
-            StandardScale(),
+            ImputeMean(),
+            Standardize(),
         ],
         remainder="drop",
     )
-    expected = StandardScale().fit_transform(
+    expected = Standardize().fit_transform(
         table.select_stypes(Stype.numerical).replace_blocks(
             numerical=table.numerical.square()
         )
@@ -189,7 +189,7 @@ def test_stype_dispatch_routes_text() -> None:
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:
     dispatch = StypeDispatch(
-        numerical=StandardScale(),
+        numerical=Standardize(),
         remainder="drop",
     )
 

@@ -75,10 +75,10 @@ def _batched_interp(
     return torch.where(values >= upper_boundary, upper, result)
 
 
-class Quantile(Processor, InvertibleMixin):
+class QuantileTransform(Processor, InvertibleMixin):
     """Map feature columns through their empirical quantiles.
 
-    Quantile grids are capped by the number of fitted rows and, when
+    QuantileTransform grids are capped by the number of fitted rows and, when
     ``subsample`` is set, by ``20%`` of the subsample size to keep dense grids
     tractable.
 

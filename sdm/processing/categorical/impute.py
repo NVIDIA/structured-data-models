@@ -1,5 +1,3 @@
-from typing import Literal
-
 import torch
 
 from sdm import CategoricalTensor, Stype
@@ -8,37 +6,27 @@ from sdm.processing.categorical._categorical import _check_categorical_codes
 from sdm.tensor import TableTensor
 
 
-class CategoricalImpute(Processor):
-    """Replace missing categorical values with fitted per-column values.
+class ImputeMode(Processor):
+    """Replace missing categorical values with fitted per-column modes.
 
     Negative category codes are missing values. The fitted fill value is
-    learned independently for every categorical column and applied without
-    changing its category vocabulary.
+    the most frequent observed category code learned independently for every
+    categorical column and applied without changing its category vocabulary.
+    Ties select the lowest category code.
+
     Transform inputs must use the fitted per-column category vocabularies.
     The processor raises if they do not match. Column names are not
-    validated. Use :class:`~sdm.processing.CategoricalAlign` before this
+    validated. Use :class:`~sdm.processing.AlignCategories` before this
     processor when training and transform inputs were tensorized
     independently.
-
-    Args:
-        strategy: Imputation strategy. ``"most_frequent"`` selects the most
-            common observed category in each fitted column. Ties select the
-            lowest category code.
     """
 
     supported_stypes = frozenset({Stype.categorical})
 
-    def __init__(
-        self,
-        *,
-        strategy: Literal["most_frequent"] = "most_frequent",
-    ) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        # TODO: Add a strategy that encodes missing values as their own
-        # category instead of imputing an observed one.
-        if strategy != "most_frequent":
-            raise ValueError("strategy must be 'most_frequent'")
-        self.strategy = strategy
+        # TODO: Add a separate processor that encodes missing values as their
+        # own category instead of imputing an observed one.
         self._categories: tuple[torch.Tensor, ...] = ()
         self.register_buffer(
             "_fill_values",
@@ -60,7 +48,7 @@ class CategoricalImpute(Processor):
             observed = codes[codes >= 0].to(torch.long)
             if observed.numel() == 0:
                 raise ValueError(
-                    "Cannot fit 'CategoricalImpute' because categorical "
+                    "Cannot fit 'ImputeMode' because categorical "
                     f"column '{columns[index]}' has no observed values."
                 )
 
@@ -103,6 +91,6 @@ class CategoricalImpute(Processor):
                     "Expected the category vocabulary for categorical column "
                     f"'{columns[index]}' to match the fitted values and "
                     "order. "
-                    "Use 'CategoricalAlign' before this processor for "
+                    "Use 'AlignCategories' before this processor for "
                     "independently tensorized inputs."
                 )

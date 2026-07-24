@@ -6,7 +6,7 @@ from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.common.sequential import Sequential
-from sdm.processing.common.task_dispatch import TaskDispatch
+from sdm.processing.common.task import TaskDispatch
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -96,7 +96,7 @@ class Recipe:
     - ``output``: transforms member outputs after they have been mapped to a
       common class or target space and stacked as ``[E, ..., R, O]``. An
       explicit dimension-changing step such as
-      :class:`~sdm.processing.EnsembleReduce` removes ``E``; without one,
+      :class:`~sdm.processing.ReduceEstimators` removes ``E``; without one,
       the output remains stacked. Steps before the reducer must support
       stacked outputs, while steps after it receive already-reduced outputs.
 
@@ -164,7 +164,7 @@ class Recipe:
 
         # Common output steps can remain adjacent; nesting would require
         # defining whether dispatchers in inactive branches are resolved.
-        task_dispatcher_entries = tuple(
+        task_dispatch_entries = tuple(
             (path, module)
             for path, module in output.named_modules(remove_duplicate=False)
             if isinstance(module, TaskDispatch)
@@ -182,7 +182,7 @@ class Recipe:
 
         nested_paths = tuple(
             path
-            for path, _ in task_dispatcher_entries
+            for path, _ in task_dispatch_entries
             if path not in direct_paths
         )
         if len(nested_paths) > 0:
@@ -194,7 +194,7 @@ class Recipe:
 
         task_dispatchers = tuple(
             module
-            for path, module in task_dispatcher_entries
+            for path, module in task_dispatch_entries
             if path in direct_paths
         )
 

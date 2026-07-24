@@ -8,7 +8,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class SoftmaxTemperature(Processor):
+class Softmax(Processor):
     """Apply softmax to logits after temperature scaling.
 
     Softmax acts on the final class dimension and preserves all leading

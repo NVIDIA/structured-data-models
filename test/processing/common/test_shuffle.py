@@ -8,7 +8,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import FeaturePermute
+from sdm.processing import ShuffleColumns
 
 
 def _table() -> TableTensor:
@@ -37,11 +37,11 @@ def _mixed_table() -> TableTensor:
     )
 
 
-def test_feature_permute_shift_rotates_numerical_block() -> None:
+def test_shuffle_columns_shift_rotates_numerical_block() -> None:
     table = _table()
     torch.manual_seed(3)  # draws a cyclic offset of 1 for three columns
 
-    output = FeaturePermute(method="shift").fit_transform(table)
+    output = ShuffleColumns(method="shift").fit_transform(table)
 
     assert isinstance(output, TableTensor)
     assert output.columns[Stype.numerical] == ("x1", "x2", "x0")
@@ -52,17 +52,17 @@ def test_feature_permute_shift_rotates_numerical_block() -> None:
 
 
 @pytest.mark.parametrize("method", ["shift", "random"])
-def test_feature_permute_is_reproducible_with_generator(
+def test_shuffle_columns_is_reproducible_with_generator(
     method: Literal["shift", "random"],
 ) -> None:
     table = _table()
 
-    first = FeaturePermute(method=method)
+    first = ShuffleColumns(method=method)
     first_output = first.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = FeaturePermute(method=method)
+    second = ShuffleColumns(method=method)
     second_output = second.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),

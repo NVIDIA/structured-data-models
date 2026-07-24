@@ -5,8 +5,8 @@ import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     Identity,
-    SoftmaxTemperature,
-    StandardScale,
+    Softmax,
+    Standardize,
     TaskDispatch,
 )
 
@@ -34,13 +34,13 @@ def _numerical_table(
 
 def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     dispatch = TaskDispatch(
-        classification=SoftmaxTemperature(),
+        classification=Softmax(),
         regression=[Identity()],
     )
     output = _numerical_table(("a", "b"))
     description = dedent("""\
         TaskDispatch(
-          classification: SoftmaxTemperature(),
+          classification: Softmax(),
           regression: Sequential(
             Identity(),
           ),
@@ -61,7 +61,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     assert repr(dispatch) == description
 
     restored = TaskDispatch(
-        classification=SoftmaxTemperature(),
+        classification=Softmax(),
         regression=[Identity()],
     )
     restored.load_state_dict(dispatch.state_dict())
@@ -77,7 +77,7 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
         TaskDispatch()
 
     with pytest.raises(ValueError, match=r"regression.*requires fit"):
-        TaskDispatch(regression=StandardScale())
+        TaskDispatch(regression=Standardize())
 
     dispatch = TaskDispatch(regression=Identity())
     output = _numerical_table()

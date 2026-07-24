@@ -7,9 +7,9 @@ from sdm import TableTensor
 from sdm.processing import (
     Choice,
     Identity,
-    MeanImpute,
-    Quantile,
-    StandardScale,
+    ImputeMean,
+    QuantileTransform,
+    Standardize,
 )
 
 
@@ -21,7 +21,7 @@ def _table() -> TableTensor:
 
 
 def test_choice_draws_at_fit() -> None:
-    choice = Choice(Identity(), StandardScale())
+    choice = Choice(Identity(), Standardize())
 
     with pytest.raises(RuntimeError, match="no drawn option"):
         _ = choice.selected
@@ -58,15 +58,15 @@ def test_choice_rejects_invalid_option() -> None:
 def test_choice_keeps_state_dict_keys_independent_of_the_draw() -> None:
     table = _table()
     torch.manual_seed(0)
-    first = Choice(Identity(), StandardScale()).fit(table)
+    first = Choice(Identity(), Standardize()).fit(table)
     torch.manual_seed(1)
-    second = Choice(Identity(), StandardScale()).fit(table)
+    second = Choice(Identity(), Standardize()).fit(table)
 
     assert set(first.state_dict()) == set(second.state_dict())
 
 
 def test_choice_delegates_fit_transform_and_inverse() -> None:
-    choice = Choice(StandardScale())
+    choice = Choice(Standardize())
     table = _table()
 
     transformed = choice.fit_transform(table)
@@ -78,7 +78,7 @@ def test_choice_delegates_fit_transform_and_inverse() -> None:
 
 
 def test_choice_inverse_requires_invertible_selected() -> None:
-    choice = Choice(MeanImpute())
+    choice = Choice(ImputeMean())
     table = _table()
 
     choice.fit(table)
@@ -91,31 +91,37 @@ def test_choice_is_reproducible_with_generator() -> None:
     table = _table()
 
     # Seed 1 draws the second option, whose fit consumes the generator.
-    first = Choice(Identity(), Quantile(n_quantiles=6, subsample=16)).fit(
+    first = Choice(
+        Identity(),
+        QuantileTransform(n_quantiles=6, subsample=16),
+    ).fit(
         table,
         generator=torch.Generator().manual_seed(1),
     )
-    second = Choice(Identity(), Quantile(n_quantiles=6, subsample=16)).fit(
+    second = Choice(
+        Identity(),
+        QuantileTransform(n_quantiles=6, subsample=16),
+    ).fit(
         table,
         generator=torch.Generator().manual_seed(1),
     )
 
-    assert isinstance(first.selected, Quantile)
+    assert isinstance(first.selected, QuantileTransform)
     assert type(first.selected) is type(second.selected)
     assert torch.equal(first.selected.quantiles, second.selected.quantiles)
 
 
 def test_choice_repr_shows_all_options() -> None:
-    choice = Choice(Identity(), StandardScale())
+    choice = Choice(Identity(), Standardize())
 
     assert "Identity" in repr(choice)
-    assert "StandardScale" in repr(choice)
+    assert "Standardize" in repr(choice)
 
 
 def test_choice_copies_draw_independently_at_fit() -> None:
     template = Choice(
         Identity(),
-        Quantile(output_distribution="normal"),
+        QuantileTransform(output_distribution="normal"),
     )
     copies = [copy.deepcopy(template) for _ in range(8)]
 
@@ -124,4 +130,4 @@ def test_choice_copies_draw_independently_at_fit() -> None:
         choice.fit(_table())
 
     picks = {type(choice.selected).__name__ for choice in copies}
-    assert picks == {"Identity", "Quantile"}
+    assert picks == {"Identity", "QuantileTransform"}

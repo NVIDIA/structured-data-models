@@ -6,7 +6,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class EnsembleReduce(Processor):
+class ReduceEstimators(Processor):
     """Reduce the leading ensemble dimension of model outputs.
 
     Input must be a numerical output table with shape ``[E, ..., R, O]``.

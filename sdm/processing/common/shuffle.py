@@ -8,7 +8,7 @@ from sdm.processing.base import InvertibleMixin, Processor
 from sdm.tensor import TableTensor
 
 
-class FeaturePermute(Processor, InvertibleMixin):
+class ShuffleColumns(Processor, InvertibleMixin):
     """Permute the numerical feature columns.
 
     The permutation is drawn when the processor is fitted; pass

@@ -6,13 +6,13 @@ import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
-    FeaturePermute,
-    MeanImpute,
-    Power,
-    Quantile,
+    ImputeMean,
+    PowerTransform,
+    QuantileTransform,
     Sequential,
-    SoftmaxTemperature,
-    StandardScale,
+    ShuffleColumns,
+    Softmax,
+    Standardize,
 )
 
 
@@ -55,7 +55,7 @@ def test_empty_pipeline_returns_input_table() -> None:
 def test_pipeline_transforms_numerical() -> None:
     table = _table()
 
-    output = Sequential(StandardScale()).fit_transform(table)
+    output = Sequential(Standardize()).fit_transform(table)
 
     assert not torch.equal(output.numerical, table.numerical)
 
@@ -93,9 +93,9 @@ def test_pipeline_mixes_processors_and_callables() -> None:
     )
     pipeline = Sequential(
         lambda table: table.replace_blocks(numerical=table.numerical.square()),
-        StandardScale(),
+        Standardize(),
     )
-    expected = StandardScale().fit_transform(
+    expected = Standardize().fit_transform(
         table.replace_blocks(numerical=table.numerical.square())
     )
 
@@ -130,9 +130,9 @@ def test_pipeline_rejects_invalid_step() -> None:
 def test_pipeline_passes_generator_to_steps() -> None:
     table = _table(torch.arange(200.0).view(100, 2))
 
-    def _fit(seed: int) -> tuple[FeaturePermute, Quantile]:
-        permute = FeaturePermute(method="random")
-        quantile = Quantile(n_quantiles=6, subsample=32)
+    def _fit(seed: int) -> tuple[ShuffleColumns, QuantileTransform]:
+        permute = ShuffleColumns(method="random")
+        quantile = QuantileTransform(n_quantiles=6, subsample=32)
         Sequential(permute, quantile).fit(
             table,
             generator=torch.Generator().manual_seed(seed),
@@ -148,10 +148,10 @@ def test_pipeline_passes_generator_to_steps() -> None:
 
 def test_repr() -> None:
     assert repr(Sequential()) == "Sequential()"
-    assert repr(Sequential(StandardScale(), Power())) == dedent("""\
+    assert repr(Sequential(Standardize(), PowerTransform())) == dedent("""\
         Sequential(
-          StandardScale(),
-          Power(),
+          Standardize(),
+          PowerTransform(),
         )""")
     assert repr(Sequential(lambda table: table)) == dedent("""\
         Sequential(
@@ -160,32 +160,32 @@ def test_repr() -> None:
 
 
 def test_pipeline_checks_fitted_state() -> None:
-    pipeline = Sequential(SoftmaxTemperature(), StandardScale())
+    pipeline = Sequential(Softmax(), Standardize())
 
     with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
         pipeline.transform(_table())
 
 
 def test_pipeline_rejects_unsupported_stype() -> None:
-    pipeline = Sequential(StandardScale())
+    pipeline = Sequential(Standardize())
 
     with pytest.raises(ValueError, match="categorical"):
         pipeline.fit_transform(_mixed_table())
 
 
 def test_inverse_transform_rejects_non_invertible_step() -> None:
-    processor = Sequential(MeanImpute())
+    processor = Sequential(ImputeMean())
     transformed = processor.fit_transform(_table())
 
     with pytest.raises(
         AttributeError,
-        match=r"MeanImpute.*inverse_transform",
+        match=r"ImputeMean.*inverse_transform",
     ):
         processor.inverse_transform(transformed)
 
 
 def test_inverse_transform_runs_steps_in_reverse_order() -> None:
-    # Power and StandardScale do not commute, so the round trip only
+    # PowerTransform and Standardize do not commute, so the round trip only
     # reconstructs the input if the inverse applies the steps in reverse.
     table = _table(
         torch.tensor(
@@ -193,7 +193,7 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
         )
     )
 
-    pipeline = Sequential(Power(), StandardScale())
+    pipeline = Sequential(PowerTransform(), Standardize())
     transformed = pipeline.fit_transform(table)
     restored = pipeline.inverse_transform(transformed)
 

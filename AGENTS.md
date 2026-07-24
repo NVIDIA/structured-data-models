@@ -97,3 +97,12 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
   For broadcastable constants, prefer scalar literals when PyTorch broadcasting is sufficient, and create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
 - In inference and prediction paths, avoid building autograd state unless the API explicitly needs gradients. Prefer `torch.inference_mode()` or `torch.no_grad()` for pure inference paths.
 - Benchmark CUDA changes with synchronization-aware timing. Use CUDA events, `torch.profiler`, or explicit synchronization around measurements; plain wall-clock timing of asynchronous CUDA work is not sufficient.
+
+# Naming Policy
+
+## Processors
+
+1. Name the main operation first, e.g., `ShuffleColumns` over `ColumnShuffle`.
+2. Use established names when they exist, e.g., `Sequential` or `Choice`, or adapt them in style, e.g., `PowerTransform` over `PowerTransformer`.
+   Avoid API-role suffixes such as `*Transformer`, `*Encoder`, `*Imputer` or `*Scaler`.
+3. Keep names short when the shorter form is already clear, e.g., `Softmax` over `ApplySoftmax`, but specialize when needed, e.g., `DropConstantColumns` over `DropConstant`.

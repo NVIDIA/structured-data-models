@@ -3,7 +3,7 @@ from typing import Literal
 import pytest
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import CategoryShuffle
+from sdm.processing import ShuffleCategories
 from sdm.testing import withCUDA
 
 
@@ -34,12 +34,12 @@ def _table(
     )
 
 
-def test_category_shuffle_shift_maps_single_target() -> None:
+def test_shuffle_categories_shift_maps_single_target() -> None:
     target = _table(
         [[0], [1], [2], [-1]],
         (("a", "b", "c"),),
     )
-    processor = CategoryShuffle(method="shift")
+    processor = ShuffleCategories(method="shift")
 
     output = processor.fit_transform(target)
 
@@ -60,7 +60,7 @@ def test_category_shuffle_shift_maps_single_target() -> None:
 
 
 @withCUDA
-def test_category_shuffle_random_permutes_each_categorical_column(
+def test_shuffle_categories_random_permutes_each_categorical_column(
     device: torch.device,
 ) -> None:
     features = _table(
@@ -68,7 +68,7 @@ def test_category_shuffle_random_permutes_each_categorical_column(
         (("a", "b", "c"), ("x", "y")),
         device=device,
     )
-    processor = CategoryShuffle(method="random")
+    processor = ShuffleCategories(method="random")
 
     transformed = processor.fit_transform(features)
 
@@ -105,7 +105,7 @@ def test_category_shuffle_random_permutes_each_categorical_column(
 
 
 @pytest.mark.parametrize("method", ["shift", "random"])
-def test_category_shuffle_is_reproducible_with_generator(
+def test_shuffle_categories_is_reproducible_with_generator(
     method: Literal["shift", "random"],
 ) -> None:
     features = _table(
@@ -113,11 +113,11 @@ def test_category_shuffle_is_reproducible_with_generator(
         (("a", "b", "c"), ("x", "y")),
     )
 
-    first = CategoryShuffle(method=method).fit(
+    first = ShuffleCategories(method=method).fit(
         features,
         generator=torch.Generator().manual_seed(0),
     )
-    second = CategoryShuffle(method=method).fit(
+    second = ShuffleCategories(method=method).fit(
         features,
         generator=torch.Generator().manual_seed(0),
     )
@@ -125,13 +125,13 @@ def test_category_shuffle_is_reproducible_with_generator(
     assert torch.equal(first.permutations, second.permutations)
 
 
-def test_category_shuffle_uses_category_count_and_preserves_missing() -> None:
+def test_shuffle_categories_preserves_missing() -> None:
     target = _table(
         [[0], [1], [-1]],
         (("a", "b", "c", "d"),),
     )
 
-    processor = CategoryShuffle(method="random")
+    processor = ShuffleCategories(method="random")
     output = processor.fit_transform(target)
 
     assert processor.offsets.tolist() == [0, 4]

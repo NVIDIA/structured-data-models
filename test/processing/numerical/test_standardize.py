@@ -1,11 +1,11 @@
 import torch
 from sdm import TableTensor
-from sdm.processing import StandardScale
+from sdm.processing import Standardize
 from sdm.testing import withCUDA
 
 
 @withCUDA
-def test_standard_scale_fit_transform_and_inverse_round_trip(
+def test_standardize_fit_transform_and_inverse_round_trip(
     device: torch.device,
 ) -> None:
     inp = TableTensor.from_tensor(
@@ -20,7 +20,7 @@ def test_standard_scale_fit_transform_and_inverse_round_trip(
         )
     )
 
-    processor = StandardScale().fit(inp)
+    processor = Standardize().fit(inp)
     expected_mean = torch.tensor(
         [3.0, 2.0, 7.0],
         dtype=torch.float64,
@@ -51,10 +51,10 @@ def test_standard_scale_fit_transform_and_inverse_round_trip(
 
 
 @withCUDA
-def test_standard_scale_without_mean_or_std(device: torch.device) -> None:
+def test_standardize_without_mean_or_std(device: torch.device) -> None:
     inp = torch.tensor([[1.0, 2.0], [3.0, 6.0]], device=device)
 
-    processor = StandardScale(with_mean=False, with_std=False).fit(
+    processor = Standardize(with_mean=False, with_std=False).fit(
         TableTensor.from_tensor(inp)
     )
 
@@ -66,12 +66,12 @@ def test_standard_scale_without_mean_or_std(device: torch.device) -> None:
 
 
 @withCUDA
-def test_standard_scale_single_sample_uses_unit_scale(
+def test_standardize_single_sample_uses_unit_scale(
     device: torch.device,
 ) -> None:
     inp = torch.tensor([[42.0, -2.0]], device=device)
 
-    processor = StandardScale().fit(TableTensor.from_tensor(inp))
+    processor = Standardize().fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
     assert torch.equal(processor.scale, torch.ones(2, device=device))

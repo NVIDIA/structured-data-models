@@ -7,7 +7,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class StandardScale(Processor, InvertibleMixin):
+class Standardize(Processor, InvertibleMixin):
     """Center and scale each feature column.
 
     Constant columns use a unit scale to keep the transform finite and
