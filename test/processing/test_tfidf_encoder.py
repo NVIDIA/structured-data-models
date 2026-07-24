@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import StringTensor, Stype, TableTensor
-from sdm.processing.text.tfidf_encoder import TfidfEncoder
+from sdm.processing.text.tfidf_transformer import TfidfTransformer
 from sdm.testing import onlyCUDA
 
 
@@ -22,7 +22,7 @@ def test_tfidf_encoder_outputs_numerical_block() -> None:
         ),
     )
 
-    output = TfidfEncoder(ngram_range=(2, 3)).fit_transform(table)
+    output = TfidfTransformer(ngram_range=(2, 3)).fit_transform(table)
 
     assert output.columns[Stype.text] == ()
     names = output.columns[Stype.numerical]
@@ -37,7 +37,7 @@ def test_tfidf_encoder_outputs_numerical_block() -> None:
 def test_tfidf_encoder_identical_strings_encode_identically() -> None:
     table = _text_table(["same text", "same text", "other"])
 
-    output = TfidfEncoder(ngram_range=(2, 2)).fit_transform(table)
+    output = TfidfTransformer(ngram_range=(2, 2)).fit_transform(table)
 
     assert torch.equal(output.numerical[0], output.numerical[1])
     assert not torch.equal(output.numerical[0], output.numerical[2])
@@ -46,7 +46,7 @@ def test_tfidf_encoder_identical_strings_encode_identically() -> None:
 def test_tfidf_encoder_rows_are_l2_normalized() -> None:
     table = _text_table(["short", "a much longer text cell"])
 
-    output = TfidfEncoder(ngram_range=(2, 3)).fit_transform(table)
+    output = TfidfTransformer(ngram_range=(2, 3)).fit_transform(table)
 
     assert torch.allclose(
         output.numerical.norm(dim=1),
@@ -56,7 +56,7 @@ def test_tfidf_encoder_rows_are_l2_normalized() -> None:
 
 
 def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
-    encoder = TfidfEncoder(ngram_range=(3, 3))
+    encoder = TfidfTransformer(ngram_range=(3, 3))
     encoder.fit(_text_table(["aaa bbb", "aaa ccc"]))
 
     output = encoder.transform(_text_table(["zzz yyy", "aaa bbb"]))
@@ -68,10 +68,10 @@ def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
 def test_tfidf_encoder_max_features_caps_width() -> None:
     table = _text_table(["a bunch of different words here"])
 
-    full = TfidfEncoder(ngram_range=(2, 3)).fit_transform(table)
-    capped = TfidfEncoder(ngram_range=(2, 3), max_features=5).fit_transform(
-        table
-    )
+    full = TfidfTransformer(ngram_range=(2, 3)).fit_transform(table)
+    capped = TfidfTransformer(
+        ngram_range=(2, 3), max_features=5
+    ).fit_transform(table)
 
     assert full.numerical.size(-1) > 5
     assert capped.numerical.size(-1) == 5
@@ -79,7 +79,7 @@ def test_tfidf_encoder_max_features_caps_width() -> None:
 
 def test_tfidf_encoder_requires_fit() -> None:
     with pytest.raises(RuntimeError, match="not fitted"):
-        TfidfEncoder(ngram_range=(2, 2)).transform(_text_table(["a"]))
+        TfidfTransformer(ngram_range=(2, 2)).transform(_text_table(["a"]))
 
 
 def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
@@ -89,21 +89,21 @@ def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
             [["hello world", "cat"], ["hello there", "dog"]]
         ),
     )
-    encoder = TfidfEncoder(ngram_range=(2, 3))
+    encoder = TfidfTransformer(ngram_range=(2, 3))
     expected = encoder.fit_transform(table)
 
     path = tmp_path / "encoder.pt"
     torch.save(encoder.state_dict(), path)
 
-    restored = TfidfEncoder(ngram_range=(2, 3))
+    restored = TfidfTransformer(ngram_range=(2, 3))
     restored.load_state_dict(torch.load(path, weights_only=True))
 
     assert torch.equal(restored.transform(table).numerical, expected.numerical)
 
 
 def test_tfidf_encoder_unfitted_state_dict_round_trip() -> None:
-    restored = TfidfEncoder(ngram_range=(2, 2))
-    restored.load_state_dict(TfidfEncoder(ngram_range=(2, 2)).state_dict())
+    restored = TfidfTransformer(ngram_range=(2, 2))
+    restored.load_state_dict(TfidfTransformer(ngram_range=(2, 2)).state_dict())
 
     with pytest.raises(RuntimeError, match="not fitted"):
         restored.transform(_text_table(["a"]))
@@ -111,7 +111,7 @@ def test_tfidf_encoder_unfitted_state_dict_round_trip() -> None:
 
 def test_tfidf_encoder_to_moves_fitted_state() -> None:
     table = _text_table(["hello world", "hello there"])
-    encoder = TfidfEncoder(ngram_range=(2, 2))
+    encoder = TfidfTransformer(ngram_range=(2, 2))
     encoder.fit(table)
 
     encoder.to(torch.float64)
@@ -122,7 +122,7 @@ def test_tfidf_encoder_to_moves_fitted_state() -> None:
 @onlyCUDA
 def test_tfidf_encoder_to_moves_fitted_state_cuda() -> None:
     texts = ["hello world", "hello there"]
-    encoder = TfidfEncoder(ngram_range=(2, 2))
+    encoder = TfidfTransformer(ngram_range=(2, 2))
     encoder.fit(_text_table(texts))
     query = TableTensor(
         columns={"text": ("t0",)},
@@ -141,7 +141,7 @@ def _ngrams(
     *,
     lowercase: bool = True,
 ) -> tuple[StringTensor, torch.Tensor]:
-    encoder = TfidfEncoder(ngram_range=ngram_range)
+    encoder = TfidfTransformer(ngram_range=ngram_range)
     tensor = StringTensor.from_list(values)
     return encoder._character_ngrams(tensor, ngram_range, lowercase=lowercase)
 
@@ -203,7 +203,7 @@ def test_character_ngrams_lowercases_by_default() -> None:
 
 
 def test_character_ngrams_rejects_multi_dimensional_input() -> None:
-    encoder = TfidfEncoder(ngram_range=(2, 2))
+    encoder = TfidfTransformer(ngram_range=(2, 2))
     tensor = StringTensor.from_list([["a", "b"], ["c", "d"]])
 
     with pytest.raises(NotImplementedError, match="one-dimensional"):

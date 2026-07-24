@@ -10,7 +10,7 @@ from sdm.processing.common import (
     FeaturePermute,
     ToNumerical,
 )
-from sdm.processing.text.tfidf_encoder import TfidfEncoder
+from sdm.processing.text.tfidf_transformer import TfidfTransformer
 from sdm.processing.numerical import (
     Clip,
     QuantileClip,
@@ -53,7 +53,7 @@ __all__ = [
     "EnsembleReduce",
     "SoftmaxTemperature",
     "StandardScale",
-    "TfidfEncoder",
+    "TfidfTransformer",
     "ToNumerical",
     "Recipe",
 ]

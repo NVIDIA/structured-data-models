@@ -12,7 +12,7 @@ from torch import Tensor
 from torch.utils.dlpack import from_dlpack
 
 
-class TfidfEncoder(Processor):
+class TfidfTransformer(Processor):
     r"""Encode text columns as character n-gram TF-IDF vectors.
 
     Each text column is tokenized into word-boundary character n-grams (see
@@ -21,7 +21,8 @@ class TfidfEncoder(Processor):
     column on the context table. Every column expands to a block of numerical
     features (one per fitted n-gram), and the blocks are concatenated into the
     numerical output. The idf smoothing matches scikit-learn's
-    ``smooth_idf=True`` default, and rows are L2-normalized.
+    smoothing formula (`idf(t) = ln( (1 + n_docs) / (1 + df(t)) ) + 1`)
+    default and rows are L2-normalized.
 
     Args:
         ngram_range: Inclusive ``(min_n, max_n)`` character-window sizes.
@@ -54,6 +55,7 @@ class TfidfEncoder(Processor):
             raise ValueError("`max_features` must be non-negative or None.")
 
     def get_extra_state(self) -> dict[str, Any]:
+        r""":meta private:"""  # noqa: D415
         """Package the fitted state for :meth:`~torch.nn.Module.state_dict`.
 
         The fitted state lives outside PyTorch's parameter/buffer registries
@@ -71,6 +73,7 @@ class TfidfEncoder(Processor):
         }
 
     def set_extra_state(self, state: dict[str, Any]) -> None:
+        r""":meta private:"""  # noqa: D415
         """Restore the fitted state from a checkpoint."""
         self._vocabularies = [
             StringTensor(
@@ -240,7 +243,7 @@ class TfidfEncoder(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        device = table.numerical.device
+        device = table.text.device
         self._vocabularies = []
 
         # clean up stale buffers from previous fit
@@ -331,7 +334,7 @@ class TfidfEncoder(Processor):
         return vocabulary.take(pa.array(keep.tolist())), idf[keep]
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        device = table.numerical.device
+        device = table.text.device
         dtype = (
             self.get_buffer("idf_0").dtype
             if self._vocabularies
