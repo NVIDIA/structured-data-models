@@ -2,8 +2,8 @@ import argparse
 from typing import cast
 
 import pandas as pd
+import relbench
 import torch
-from relbench.base import Dataset, EntityTask, TaskType
 from relbench.datasets import get_dataset, get_dataset_names
 from relbench.tasks import get_task, get_task_names
 from sdm import (
@@ -38,21 +38,25 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def run_task(dataset_name: str, task_name: str) -> None:
     """Evaluate one supported RelBench task."""
     task = get_task(dataset_name, task_name, download=True)
-    if not isinstance(task, EntityTask):
+    if not isinstance(task, relbench.base.EntityTask):
         print(f"{dataset_name}/{task_name}: skipped (not an entity task)")
         return
-    classification = task.task_type == TaskType.BINARY_CLASSIFICATION
     if task.task_type not in {
-        TaskType.BINARY_CLASSIFICATION,
-        TaskType.REGRESSION,
+        relbench.base.TaskType.BINARY_CLASSIFICATION,
+        relbench.base.TaskType.REGRESSION,
     }:
         print(f"{dataset_name}/{task_name}: skipped ({task.task_type.value})")
         return
+    classification = (
+        task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION
+    )
 
     torch.manual_seed(args.seed)
 
     # Collect Relational Data #################################################
-    db = task.dataset.get_db(upto_test_timestamp=False)
+    db = get_dataset(dataset_name, download=True).get_db(
+        upto_test_timestamp=False
+    )
     data = RelationalData(
         tables={
             name: TableTensor.from_pandas(
@@ -105,9 +109,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
             ),
         },
     )
-    context, query = task_table.split(
-        [len(dfs[0]) + len(dfs[1]), len(dfs[2])]
-    )
+    context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
     context = context[torch.randperm(len(context))[: args.context_size]]
 
     # Execute Model ###########################################################
@@ -151,8 +153,10 @@ def run_task(dataset_name: str, task_name: str) -> None:
             y_query = y_query.numerical
         metric.update(out, y_query)
 
-    metric_name = "AUROC" if classification else "MAE"
-    print(f"{dataset_name}/{task_name} {metric_name}: {metric.compute():.4f}")
+    if context.stype(task.target_col) == "categorical":
+        print(f"{dataset_name}/{task_name} AUROC: {metric.compute():.4f}")
+    else:
+        print(f"{dataset_name}/{task_name} MAE: {metric.compute():.4f}")
     model.clear()
 
 
@@ -169,6 +173,6 @@ for dataset_name in datasets:
     )
     for task_name in task_names:
         run_task(dataset_name, task_name)
-        Dataset.get_db.cache_clear()
+        relbench.base.Dataset.get_db.cache_clear()
         get_task.cache_clear()
         get_dataset.cache_clear()
