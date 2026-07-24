@@ -6,3 +6,64 @@
 .. autoclass:: TabICLv2
    :members:
    :show-inheritance:
+   :exclude-members: supported_feature_stypes, supported_target_stypes, supports_related_tables
+
+
+
+Capabilities
+------------
+
+.. list-table::
+
+   * - **Supported Input Feature Semantic Types**
+     - ``numerical``
+   * - **Supported Target Semantic Types**
+     - ``categorical``, ``numerical``
+   * - **Related Table Support**
+     - ❌
+
+Default Recipe
+--------------
+
+.. code-block:: python
+
+   Recipe(
+     features=Sequential(
+       StypeDispatch(
+         categorical: Sequential(
+           AlignCategories(),
+           ToNumerical(),
+         ),
+       ),
+       StypeDispatch(
+         numerical: Sequential(
+           ImputeMean(),
+           DropConstantColumns(),
+           Standardize(),
+           Clip(min_value=-100.0, max_value=100.0),
+           Choice(
+             Identity(),
+             PowerTransform(),
+           ),
+           ClipSigma(),
+           ShuffleColumns(),
+         ),
+       ),
+     ),
+     target=Sequential(
+       StypeDispatch(
+         numerical: Standardize(),
+         categorical: Sequential(
+           AlignCategories(),
+           ShuffleCategories(),
+         ),
+       ),
+     ),
+     output=Sequential(
+       ReduceEstimators(method='mean'),
+       TaskDispatch(
+         classification: Softmax(),
+         regression: Identity(),
+       ),
+     ),
+   )

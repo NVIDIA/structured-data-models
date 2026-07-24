@@ -145,13 +145,13 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.tensor.CategoricalTensor"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_arrow"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_arrow()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.to_arrow"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.to_arrow()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_cudf"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_cudf()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.to_cudf"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.to_cudf()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_tensor"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_tensor()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.as_tensor"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.as_tensor()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.categories"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.categories</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_arrow"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_arrow()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_cudf"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_cudf()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_tensor"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_tensor()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.to_arrow"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.to_arrow()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.to_cudf"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.to_cudf()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -223,23 +223,6 @@ Negative indices represent missing values.</p>
 </dd>
 </dl>
 <dl class="py method">
-<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.as_tensor">
-<span class="sig-name descname"><span class="pre">as_tensor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.as_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Return the index tensor.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.categories">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">categories</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#sdm.tensor.CategoricalTensor.categories" title="Link to this definition">#</a></dt>
-<dd><p>Return category vector for each categorical column.</p>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.from_arrow">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_arrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><span class="pre">Array</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.ChunkedArray.html#pyarrow.ChunkedArray" title="(in Apache Arrow v25.0.0)"><span class="pre">ChunkedArray</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><span class="pre">dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.from_arrow" title="Link to this definition">#</a></dt>
 <dd><p>Create tensor from a <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Array</span></code></a>.</p>
@@ -273,6 +256,20 @@ Negative indices represent missing values.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.to_arrow">
+<span class="sig-name descname"><span class="pre">to_arrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.0)"><span class="pre">Table</span></a></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.to_arrow" title="Link to this definition">#</a></dt>
+<dd><p>Convert this tensor to a two-dimensional <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Table</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>names</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Column names.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.0)"><em>Table</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.from_cudf">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_cudf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ser</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><span class="pre">cudf.Series</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><span class="pre">torch.dtype</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.from_cudf" title="Link to this definition">#</a></dt>
 <dd><p>Create tensor from a categorical <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.Series</span></code></a>.</p>
@@ -286,6 +283,20 @@ Negative indices represent missing values.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>Self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.to_cudf">
+<span class="sig-name descname"><span class="pre">to_cudf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)"><span class="pre">cudf.DataFrame</span></a></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.to_cudf" title="Link to this definition">#</a></dt>
+<dd><p>Convert this tensor to a two-dimensional <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.DataFrame</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>names</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Column names.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)">cudf.DataFrame</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -305,31 +316,20 @@ Negative indices represent missing values.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.to_arrow">
-<span class="sig-name descname"><span class="pre">to_arrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.0)"><span class="pre">Table</span></a></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.to_arrow" title="Link to this definition">#</a></dt>
-<dd><p>Convert this tensor to a two-dimensional <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Table</span></code></a>.</p>
+<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.as_tensor">
+<span class="sig-name descname"><span class="pre">as_tensor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.as_tensor" title="Link to this definition">#</a></dt>
+<dd><p>Return the index tensor.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>names</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Column names.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.0)"><em>Table</em></a></p>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a></p>
 </dd>
 </dl>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.to_cudf">
-<span class="sig-name descname"><span class="pre">to_cudf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)"><span class="pre">cudf.DataFrame</span></a></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.to_cudf" title="Link to this definition">#</a></dt>
-<dd><p>Convert this tensor to a two-dimensional <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.DataFrame</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>names</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Column names.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.DataFrame/#cudf.DataFrame" title="(in cudf v26.06)">cudf.DataFrame</a></p>
-</dd>
-</dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.categories">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">categories</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#sdm.tensor.CategoricalTensor.categories" title="Link to this definition">#</a></dt>
+<dd><p>Return category vector for each categorical column.</p>
 </dd></dl>
 
 </dd></dl>
@@ -360,7 +360,7 @@ Negative indices represent missing values.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=9c1d24a0"></script>
+      <script src="../../_static/documentation_options.js?v=fe1495b4"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

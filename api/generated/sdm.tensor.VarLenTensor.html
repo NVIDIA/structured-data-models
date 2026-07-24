@@ -145,11 +145,11 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.tensor.VarLenTensor"><code class="docutils literal notranslate"><span class="pre">VarLenTensor</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.tensor.VarLenTensor.data_offset"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.data_offset</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.VarLenTensor.from_arrow"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.from_arrow()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.VarLenTensor.from_list"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.from_list()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.VarLenTensor.from_tensor"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.from_tensor()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.VarLenTensor.from_arrow"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.from_arrow()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.VarLenTensor.to_arrow"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.to_arrow()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.VarLenTensor.from_list"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.from_list()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.VarLenTensor.data_offset"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.data_offset</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -219,13 +219,19 @@ data-aria-dark="Switch to auto color mode">
 <dd class="field-even"><p>Self</p>
 </dd>
 </dl>
-<dl class="py property">
-<dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.data_offset">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">data_offset</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#sdm.tensor.VarLenTensor.data_offset" title="Link to this definition">#</a></dt>
-<dd><p>Return contiguous data and normalized offsets.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.from_tensor">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><span class="pre">dtype</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int64</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.VarLenTensor.from_tensor" title="Link to this definition">#</a></dt>
+<dd><p>Wrap a dense tensor as fixed-size variable-length elements.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">(data,</span> <span class="pre">offset)</span></code> tuple.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tensor</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a>) – The dense tensor.</p></li>
+<li><p><strong>offset_dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><em>dtype</em></a>) – The dtype of the <code class="docutils literal notranslate"><span class="pre">offset</span></code> tensor.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Self</em></p>
 </dd>
 </dl>
 </dd></dl>
@@ -257,6 +263,17 @@ data-aria-dark="Switch to auto color mode">
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.to_arrow">
+<span class="sig-name descname"><span class="pre">to_arrow</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><span class="pre">Array</span></a></span></span><a class="headerlink" href="#sdm.tensor.VarLenTensor.to_arrow" title="Link to this definition">#</a></dt>
+<dd><p>Convert this tensor to a flat <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Array</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><em>Array</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.from_list">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><span class="pre">dtype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><span class="pre">dtype</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int64</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.VarLenTensor.from_list" title="Link to this definition">#</a></dt>
 <dd><p>Create tensor from a rectangular Python list.</p>
@@ -283,30 +300,13 @@ data-aria-dark="Switch to auto color mode">
 </dl>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.from_tensor">
-<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_tensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset_dtype</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><span class="pre">dtype</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">torch.int64</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.VarLenTensor.from_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Wrap a dense tensor as fixed-size variable-length elements.</p>
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.data_offset">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">data_offset</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#sdm.tensor.VarLenTensor.data_offset" title="Link to this definition">#</a></dt>
+<dd><p>Return contiguous data and normalized offsets.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>tensor</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a>) – The dense tensor.</p></li>
-<li><p><strong>offset_dtype</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="(in PyTorch v2.13)"><em>dtype</em></a>) – The dtype of the <code class="docutils literal notranslate"><span class="pre">offset</span></code> tensor.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><em>Self</em></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.to_arrow">
-<span class="sig-name descname"><span class="pre">to_arrow</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><span class="pre">Array</span></a></span></span><a class="headerlink" href="#sdm.tensor.VarLenTensor.to_arrow" title="Link to this definition">#</a></dt>
-<dd><p>Convert this tensor to a flat <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Array</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><em>Array</em></a></p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">(data,</span> <span class="pre">offset)</span></code> tuple.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -339,7 +339,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=9c1d24a0"></script>
+      <script src="../../_static/documentation_options.js?v=fe1495b4"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
