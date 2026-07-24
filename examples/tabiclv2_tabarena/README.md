@@ -27,6 +27,15 @@ uv pip install --python .venv/bin/python -e '.[test]' \
   -r examples/tabiclv2_tabarena/requirements.txt
 ```
 
+If `uv` is unavailable, use the equivalent pip installation:
+
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e '.[test]' \
+  -r examples/tabiclv2_tabarena/requirements.txt
+```
+
 Do not install the `tabarena` PyPI placeholder package: it does not provide the
 `tabarena.benchmark` API used by this example. The requirements file pins
 compatible TabArena and AutoGluon source revisions; update them together and
@@ -37,6 +46,21 @@ the TabICLv2 checkpoint from Hugging Face, and download selected TabArena tasks
 from OpenML. A GPU run requires CUDA-compatible PyTorch and a CUDA-capable GPU.
 Set `--num-gpus 0` to run on CPU instead; CPU runs can take substantially
 longer.
+
+If Hugging Face Xet downloads fail or are rate-limited in the current
+environment, set `HF_HUB_DISABLE_XET=1` for the command to use the standard
+download path instead.
+
+### Optional comparison reports
+
+The local runner does not require plotting dependencies. To generate TabArena
+comparison plots and leaderboard reports, install the pinned TabArena `plot`
+extra after the core requirements:
+
+```bash
+uv pip install --python .venv/bin/python \
+  'tabarena[plot] @ git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena'
+```
 
 ## Usage
 
