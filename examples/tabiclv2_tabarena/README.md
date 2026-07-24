@@ -90,6 +90,32 @@ python -m examples.tabiclv2_tabarena.run_local \
   --datasets blood-transfusion-service-center anneal QSAR_fish_toxicity
 ```
 
+### Official-policy SDM-native control
+
+Use this separate, opt-in runner to keep SDM-native preprocessing while
+matching TabICLv2's official eight-member ensemble *schedule* (four paired
+base configurations, each with `none` and `power` normalization):
+
+```bash
+python -m examples.tabiclv2_tabarena.run_official_policy \
+  --output-root outputs/tabiclv2-native-official-policy-smoke \
+  --num-cpus 1 \
+  --num-gpus 1 \
+  --subset lite \
+  --datasets blood-transfusion-service-center anneal QSAR_fish_toxicity
+```
+
+`--random-state` defaults to `42`, TabICLv2's official package default. The
+runner always uses exactly eight members and writes a distinct
+`SDMTabICLv2OfficialPolicySystem` result, so its artifacts cannot be mixed
+with the regular SDM-native runs.
+
+This is a policy-equivalent control, not an official-preprocessing control.
+Categorical code ordering, numerical/categorical block ordering, ID and
+datetime handling, SDM's tensor Yeo--Johnson implementation, and TabArena's
+upstream AutoGluon preprocessing intentionally remain different from the
+official package.
+
 For a CPU-only single-dataset smoke run:
 
 ```bash

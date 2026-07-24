@@ -83,10 +83,11 @@ class SDMTabICLv2System(ExternalSystemModel):
                 problem_type=problem_type,
             )
 
-        self.model = TabICLv2(device=self._device)
-        self.model.fit(
+        self._fit_tabicl(
             x=_table_from_frame(
-                X, stypes=self._schema.stypes, device=self._device
+                X,
+                stypes=self._schema.stypes,
+                device=self._device,
             ),
             y=_table_from_series(
                 y,
@@ -94,9 +95,17 @@ class SDMTabICLv2System(ExternalSystemModel):
                 stype=self._target_stype,
                 device=self._device,
             ),
-            num_estimators=self.num_estimators,
         )
         return self
+
+    def _fit_tabicl(self, *, x: TableTensor, y: TableTensor) -> None:
+        """Fit the standard SDM-native TabICLv2 ensemble."""
+        self.model = TabICLv2(device=self._device)
+        self.model.fit(
+            x=x,
+            y=y,
+            num_estimators=self.num_estimators,
+        )
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
         """Return indexed point predictions for a regression task."""
@@ -158,6 +167,71 @@ class SDMTabICLv2System(ExternalSystemModel):
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+
+class SDMTabICLv2OfficialPolicySystem(SDMTabICLv2System):
+    """SDM-native TabICLv2 with TabICL 2.0.1's eight-member policy.
+
+    The policy is intentionally narrower than an official TabICL run: it
+    reproduces ensemble scheduling only, while retaining SDM preprocessing.
+    """
+
+    def __init__(self, *, random_state: int = 42, **kwargs: object) -> None:
+        num_estimators = kwargs.pop("num_estimators", 8)
+        if num_estimators != 8:
+            raise ValueError(
+                "Official-policy TabICLv2 always uses exactly eight estimators"
+            )
+        super().__init__(num_estimators=8, **kwargs)
+        self.random_state = random_state
+
+    def _fit_tabicl(self, *, x: TableTensor, y: TableTensor) -> None:
+        """Fit eight explicitly scheduled recipes and restore their caches."""
+        from examples.tabiclv2_tabarena.official_policy import (
+            OfficialV2EnsemblePlan,
+            official_policy_recipe,
+        )
+
+        # Probe the shared SDM path once: ConstantFilter determines the
+        # post-filter dimensionality that the official policy schedules over.
+        probe_recipe = TabICLv2.default_recipe()
+        generator = torch.Generator(device=x.device).manual_seed(
+            self.random_state
+        )
+        effective_x = probe_recipe.features.fit_transform(
+            x,
+            generator=generator,
+        )
+        effective_y = probe_recipe.target.fit_transform(
+            y,
+            generator=generator,
+        )
+        feature_count = effective_x.numerical.size(-1)
+        class_count = (
+            effective_y.categorical.categories[0].numel()
+            if effective_y.categorical.size(-1) == 1
+            else None
+        )
+        self.ensemble_plan = OfficialV2EnsemblePlan.build(
+            feature_count=feature_count,
+            class_count=class_count,
+            random_state=self.random_state,
+        )
+        self.model = TabICLv2(device=self._device)
+        caches = []
+        for member in self.ensemble_plan.members:
+            self.model.fit(
+                x=x,
+                y=y,
+                recipe=official_policy_recipe(member),
+                num_estimators=1,
+            )
+            if self.model._caches is None:  # pragma: no cover - model guard
+                raise RuntimeError("TabICLv2 did not retain its fitted cache")
+            caches.append(self.model._caches[0])
+        if len(caches) != 8:  # pragma: no cover - plan invariant
+            raise RuntimeError("Official policy did not produce eight caches")
+        self.model._caches = caches
 
 
 def _fit_feature_schema(frame: pd.DataFrame) -> FeatureSchema:
