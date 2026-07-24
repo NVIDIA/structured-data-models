@@ -76,17 +76,14 @@ class SDMTabICLv2System(ExternalSystemModel):
                         f"both map to {key!r}"
                     )
                 class_labels_by_key[key] = label
+
             label_cleaner = LabelCleaner.construct(
                 problem_type=problem_type,
                 y=y,
             )
-            class_order = label_cleaner.ordered_class_labels
-            if class_order is None:
-                raise RuntimeError(
-                    "TabArena did not provide an ordered class-label contract"
-                )
             self._class_labels_by_key = {
-                str(label): label for label in class_order
+                str(label): label
+                for label in label_cleaner.ordered_class_labels
             }
 
         self.model = TabICLv2(device=self._device)
