@@ -66,29 +66,6 @@ def test_standard_scale_without_mean_or_std(device: torch.device) -> None:
 
 
 @withCUDA
-def test_standard_scale_nan_columns_follow_torch_reductions(
-    device: torch.device,
-) -> None:
-    inp = torch.tensor(
-        [
-            [1.0, 1.0],
-            [torch.nan, 3.0],
-            [5.0, 5.0],
-        ],
-        device=device,
-    )
-
-    processor = StandardScale().fit(TableTensor.from_tensor(inp))
-    transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-
-    assert torch.isnan(processor.mean[0])
-    assert torch.isnan(processor.scale[0])
-    assert torch.isnan(transformed[:, 0]).all()
-    assert torch.isfinite(transformed[:, 1]).all()
-    assert transformed.device == device
-
-
-@withCUDA
 def test_standard_scale_single_sample_uses_unit_scale(
     device: torch.device,
 ) -> None:

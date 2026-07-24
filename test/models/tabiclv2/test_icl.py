@@ -305,7 +305,7 @@ def test_icl_block_hierarchical_cache(
         cache=cache,
     )
     assert recorded.size() == (*batch_shape, 0, num_classes)
-    assert cache.size > 0
+    assert cache.size() > 0
 
     predicted = block(
         test_rows.clone(),

@@ -13,15 +13,13 @@ ConstantFilterMethod = Literal["unique", "variance"]
 class ConstantFilter(Processor):
     """Remove non-informative numerical columns learned during fit.
 
-    With ``method="unique"``, NaN values count as one distinct category: a
-    column containing one finite value and NaN has two unique values, while an
-    all-NaN column has one. When the number of samples is less than or equal to
-    ``threshold``, all columns are preserved.
+    With ``method="unique"``, columns are retained when they have more than
+    ``threshold`` distinct values. When the number of samples is less than or
+    equal to ``threshold``, all columns are preserved.
 
     With ``method="variance"``, columns are retained when their sample
     standard deviation is greater than ``tolerance``. Non-floating input is
-    promoted to the default floating-point dtype for this calculation. Columns
-    containing NaN have NaN standard deviation and are removed.
+    promoted to the default floating-point dtype for this calculation.
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
@@ -87,20 +85,12 @@ class ConstantFilter(Processor):
             # Any mismatch with the first row proves a second unique value.
             first = data[:1]
             different = data != first
-            if data.is_floating_point():
-                # `NaN == NaN` is false, so NaN pairs must not count as a
-                # mismatch.
-                different &= ~(data.isnan() & first.isnan())
             keep = different.any(dim=0)
         else:
             # A sorted column with k unique values has k - 1 transitions.
             values = data.sort(dim=0).values
             left, right = values[1:], values[:-1]
             changed = left != right
-            if data.is_floating_point():
-                # `NaN == NaN` is false, so adjacent NaNs must not count as a
-                # transition.
-                changed &= ~(left.isnan() & right.isnan())
             keep = changed.sum(dim=0) >= self.threshold
 
         indices = keep.nonzero().flatten().tolist()

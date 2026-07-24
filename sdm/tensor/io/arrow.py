@@ -51,7 +51,8 @@ def to_arrow(tensor: Tensor) -> pa.Array:
     Args:
         tensor: The tensor.
     """
-    from sdm.tensor import VarLenTensor
+    # Avoid a circular import through `sdm.tensor`.
+    from sdm.tensor import VarLenTensor  # noqa: PLC0415
 
     if isinstance(tensor, VarLenTensor):
         return tensor.to_arrow()
