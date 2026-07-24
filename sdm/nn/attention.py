@@ -125,8 +125,8 @@ def _chunk_attention(
     out: Tensor | None = None
     out_key: Tensor | None = None
     out_value: Tensor | None = None
-    key_size: torch.Size | None = None
-    value_size: torch.Size | None = None
+    key_size: tuple[int, ...] | None = None
+    value_size: tuple[int, ...] | None = None
     for start in range(0, batch_size, batch_size_limit):
         end = min(start + batch_size_limit, batch_size)
         chunk_result = forward(
@@ -300,6 +300,9 @@ class SDPA(torch.nn.Module):
             (MQA). Must divide ``num_query_heads``. Defaults to
             ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries via :class:`QASSMax`.
+        scale: Scaling factor passed to
+            :func:`torch.nn.functional.scaled_dot_product_attention`.
+            ``None`` uses the default value of ``1 / sqrt(channels)``.
         device: The device.
         dtype: The dtype.
     """
@@ -310,6 +313,7 @@ class SDPA(torch.nn.Module):
         num_query_heads: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
+        scale: float | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -326,6 +330,7 @@ class SDPA(torch.nn.Module):
 
         self.num_query_heads = num_query_heads
         self.num_key_value_heads = num_key_value_heads
+        self.scale = scale
         self.qassmax: QASSMax | None = None
         if qassmax:
             self.qassmax = QASSMax(
@@ -436,6 +441,10 @@ class SDPA(torch.nn.Module):
         query_size = query.size()[-3:]
         key_size = key.size()[-3:]
         value_size = value.size()[-3:]
+
+        if key_size[0] == 0:  # No key/value pairs - abort early:
+            return query.new_zeros(batch_shape + query_size)
+
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
@@ -459,6 +468,7 @@ class SDPA(torch.nn.Module):
             if attn_mask is not None
             else None,
             enable_gqa=self.num_query_heads != self.num_key_value_heads,
+            scale=self.scale,
         ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]

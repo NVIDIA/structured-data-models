@@ -61,6 +61,13 @@ def test_from_arrow() -> None:
 
 
 @onlyCUDA
+def test_from_arrow_cuda() -> None:
+    tensor = ColumnarTensor.from_arrow(pa.array([1, 2, 3]), device="cuda")
+    assert tensor.is_cuda
+    assert tensor[:, 0].equal(torch.tensor([1, 2, 3], device=tensor.device))
+
+
+@onlyCUDA
 def test_from_cudf() -> None:
     cudf = pytest.importorskip("cudf")
 
@@ -109,6 +116,24 @@ def test_to_arrow() -> None:
     }
 
 
+@onlyCUDA
+def test_to_cudf() -> None:
+    pytest.importorskip("cudf")
+
+    column1 = torch.arange(6, device="cuda").view(2, 3)
+    column2 = StringTensor.from_list(
+        [["a", "b", "c"], ["d", "e", "f"]], device="cuda"
+    )
+    tensor = ColumnarTensor((column1, column2))
+
+    df = tensor.to_cudf()
+    assert df.columns.tolist() == ["0", "1"]
+    assert df.to_arrow().to_pydict() == {
+        "0": [0, 1, 2, 3, 4, 5],
+        "1": ["a", "b", "c", "d", "e", "f"],
+    }
+
+
 def test_save_load() -> None:
     tensor = ColumnarTensor((torch.arange(3),))
 
@@ -146,6 +171,21 @@ def test_to_copy() -> None:
 
     with pytest.raises(TypeError, match="convert"):
         tensor.to(torch.float32)
+
+
+@onlyCUDA
+def test_to_cuda() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(3),
+            StringTensor.from_list(["a", "bb", "c"]),
+        )
+    )
+
+    out = tensor.to("cuda")
+    assert isinstance(out, ColumnarTensor)
+    assert out.device.type == "cuda"
+    assert out.tolist() == tensor.tolist()
 
 
 def test_view_ops() -> None:

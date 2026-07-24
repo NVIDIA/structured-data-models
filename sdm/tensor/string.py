@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import torch
 from torch import Tensor
 from typing_extensions import Self, override
@@ -113,6 +114,34 @@ class StringTensor(VarLenTensor):
             ],
             offset=int(tensor.storage_offset()),
         )
+
+    def to_cudf(self) -> cudf.Series:
+        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`."""
+        if not self.is_cuda:
+            raise RuntimeError(
+                f"Expected tensor to be on a CUDA device (got '{self.device}')"
+            )
+
+        tensor = cast(StringTensor, self.contiguous())
+
+        with torch.cuda.device(self.device):
+            import cudf
+            import pylibcudf as plc
+
+            # StringTensor stores variable-width strings in separate UTF-8
+            # data and offset buffers. Use pylibcudf to expose them without a
+            # host copy.
+            offset_column = plc.Column.from_array(obj=tensor._offset)
+            plc_column = plc.Column(
+                data_type=plc.DataType(plc.TypeId.STRING),
+                size=tensor.numel(),
+                data=plc.gpumemoryview(tensor._data),
+                mask=None,
+                null_count=0,
+                offset=int(tensor.storage_offset()),
+                children=[offset_column],
+            )
+            return cudf.Series.from_pylibcudf(plc_column)
 
     @classmethod
     def from_cudf(
@@ -297,8 +326,6 @@ def _sort(
 
     if inp.dim() != 1:
         raise NotImplementedError("'sort' only supports one-dimensional input")
-
-    import pyarrow.compute as pc
 
     out = pc.call_function(  # TODO Add GPU implementation
         "array_sort_indices",

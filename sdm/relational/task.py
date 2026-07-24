@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from html import escape
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
-from torch import Tensor
 from typing_extensions import Self
 
 from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
-from sdm.relational.data import LEFT_ROW_ID, RIGHT_ROW_ID, ROW_ID
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
 from sdm.tensor.mixin import DeviceMixin
 from sdm.tensor.table import TableSchema
 
@@ -49,7 +49,7 @@ class TaskLink:
             )
 
         for column in (*self.task_columns, *self.table_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
                         f"Column name '{column}' is reserved for internal "
@@ -114,6 +114,28 @@ class RelatedTablesSchema:
     tables: Mapping[str, TableSchema]
     relationships: tuple[Relationship, ...]
     task_links: tuple[TaskLink, ...]
+
+    def is_subset_of(self, other: RelatedTablesSchema) -> bool:
+        r"""Whether this schema is an induced subset of ``other``."""
+        for table_name, schema in self.tables.items():
+            if schema != other.tables.get(table_name):
+                return False
+
+        other_relationships = {
+            relationship
+            for relationship in other.relationships
+            if relationship.left_table in self.tables
+            and relationship.right_table in self.tables
+        }
+        if set(self.relationships) != other_relationships:
+            return False
+
+        other_task_links = {
+            task_link
+            for task_link in other.task_links
+            if task_link.table in self.tables
+        }
+        return set(self.task_links) == other_task_links
 
 
 @dataclass(frozen=True, init=False, repr=False)
@@ -187,12 +209,6 @@ class RelatedTables(DeviceMixin):
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", relationships)
         object.__setattr__(self, "task_links", task_links)
-        self.__post_init__()
-
-    def __post_init__(self) -> None:
-        for table in self.tables.values():
-            if table.dim() != 2:
-                raise ValueError("Tables need to be two-dimensional")
 
     def to(self, device: torch.device | str | None) -> Self:
         r""":meta private:"""  # noqa: D415
@@ -265,45 +281,19 @@ class RelatedTables(DeviceMixin):
             ),
         )
 
-    def edge_indices(
-        self,
-        task_table: TableTensor,
-        dtype: torch.dtype | None = None,
-        device: torch.device | str | None = None,
-    ) -> tuple[tuple[Tensor, ...], tuple[Tensor, ...]]:
-        r"""Materialize heterogeneous graph edges for table relationships.
+    def replace_tables(self, tables: Mapping[str, TableTensor]) -> Self:
+        r"""Return related tables with replaced table data.
 
         Args:
-            task_table: The task table.
-            dtype: The dtype.
-            device: The device.
-
-        Returns:
-            A ``(relationships, task_links)`` pair, each holding edge indices
-            for each relationship and task link in order.
-            Each edge index has shape ``[2, num_edges]`` and stores left/task
-            table indices in the first row and right table indices in the
-            second row.
+            tables: Related tables keyed by table name.
         """
-        edge_indices = RelationalData(
-            tables={**self.tables, TASK_TABLE: task_table},
-            relationships=(
-                *self.relationships,
-                *(
-                    Relationship(
-                        left_table=TASK_TABLE,
-                        left_columns=link.task_columns,
-                        right_table=link.table,
-                        right_columns=link.table_columns,
-                    )
-                    for link in self.task_links
-                ),
-            ),
-        ).edge_indices(dtype=dtype, device=device)
+        if tables.keys() != self.tables.keys():
+            raise ValueError("Expected 'tables' to match existing table names")
 
-        return (
-            edge_indices[: len(self.relationships)],
-            edge_indices[len(self.relationships) :],
+        return self.__class__(
+            tables=tables,
+            relationships=self.relationships,
+            task_links=self.task_links,
         )
 
     def to_graphviz(
@@ -369,8 +359,6 @@ class RelatedTables(DeviceMixin):
         return out
 
     def _repr_html_(self) -> str:
-        from html import escape
-
         import pandas as pd
 
         rows = [

@@ -12,7 +12,8 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
-from sdm.tensor.io import arrow_as_tensor, to_arrow
+from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -71,7 +72,11 @@ class ColumnarTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
-        from sdm.tensor import CategoricalTensor, TableTensor
+        # Avoid a circular import through `sdm.tensor`.
+        from sdm.tensor import (  # noqa: PLC0415
+            CategoricalTensor,
+            TableTensor,
+        )
 
         if size is not None and len(size) == 0:
             raise ValueError("Expected 'size' to be non-empty")
@@ -86,7 +91,7 @@ class ColumnarTensor(Tensor):
                 )
         columns = tuple(columns)
         size = tuple(size) if size is not None else size
-        device = torch.device(device) if device is not None else None
+        device = _resolve_device(device)
 
         for i, column in enumerate(columns):
             size = tuple(column.size()) if size is None else size
@@ -184,23 +189,46 @@ class ColumnarTensor(Tensor):
 
         return cls(columns=(column,), device=device)
 
-    def to_arrow(self, columns: Sequence[str] | None = None) -> pa.Table:
-        r"""Convert this tensor to a flat :class:`pyarrow.Table`.
+    def to_arrow(self, names: Sequence[str] | None = None) -> pa.Table:
+        r"""Convert this tensor to a two-dimensional :class:`pyarrow.Table`.
 
         Args:
-            columns: The column names.
+            names: The column names.
         """
-        if columns is None:
-            columns = tuple(str(i) for i in range(self.size(-1)))
-        elif len(columns) != self.size(-1):
+        if names is None:
+            names = tuple(str(i) for i in range(self.size(-1)))
+        elif len(names) != self.size(-1):
             raise ValueError(
-                f"Expected 'columns' to contain {self.size(-1)} entries "
-                f"(got {len(columns)})"
+                f"Expected 'names' to contain {self.size(-1)} entries "
+                f"(got {len(names)})"
             )
 
         return pa.Table.from_arrays(
             arrays=[to_arrow(column) for column in self.unbind(-1)],
-            names=columns,
+            names=names,
+        )
+
+    def to_cudf(self, names: Sequence[str] | None = None) -> cudf.DataFrame:
+        r"""Convert this tensor to a two-dimensional :class:`cudf.DataFrame`.
+
+        Args:
+            names: The column names.
+        """
+        import cudf
+
+        if names is None:
+            names = tuple(str(i) for i in range(self.size(-1)))
+        elif len(names) != self.size(-1):
+            raise ValueError(
+                f"Expected 'names' to contain {self.size(-1)} entries "
+                f"(got {len(names)})"
+            )
+
+        return cudf.DataFrame(
+            {
+                name: to_cudf(column)
+                for name, column in zip(names, self.unbind(-1))
+            },
         )
 
     # Decorators ##############################################################
@@ -325,6 +353,10 @@ def _to_copy(
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
 
+    # Wrapper dtype is a placeholder, so same dtype means no conversion:
+    if dtype == inp.dtype:
+        dtype = None
+
     if dtype is not None:
         raise TypeError(
             f"Can't convert '{inp.__class__.__name__}' to dtype '{dtype}'"
@@ -417,7 +449,10 @@ def _allclose(
         return False
 
     for column1, column2 in zip(inp._columns, other._columns):
-        if not column1.allclose(column2, rtol, atol, equal_nan):
+        if column1.is_floating_point() and column2.is_floating_point():
+            if not column1.allclose(column2, rtol, atol, equal_nan):
+                return False
+        elif not column1.equal(column2):
             return False
 
     return True

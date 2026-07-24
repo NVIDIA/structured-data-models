@@ -47,6 +47,7 @@ def test_init() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor._column_to_loc == {
@@ -77,6 +78,7 @@ def test_empty() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor._column_to_loc == {}
@@ -142,6 +144,70 @@ def test_equal() -> None:
     assert tensor1.allclose(tensor2)
 
 
+def test_equal_categorical_categories() -> None:
+    data = torch.tensor([[0], [1]], dtype=torch.int32)
+    tensor1 = TableTensor(
+        columns={"categorical": ["country"]},
+        categorical=CategoricalTensor(
+            data=data,
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+    tensor2 = TableTensor(
+        columns={"categorical": ["country"]},
+        categorical=CategoricalTensor(
+            data=data.clone(),
+            categories=(StringTensor.from_list(["x", "y"]),),
+        ),
+    )
+
+    assert tensor1.equal(tensor1.clone())
+    assert tensor1.allclose(tensor1.clone())
+
+    assert not tensor1.equal(tensor2)
+    assert not tensor1.allclose(tensor2)
+
+
+def test_allclose_discrete_blocks() -> None:
+    datetime = torch.tensor([[1_700_000_000_000_000], [1_700_000_000_000_001]])
+    tensor1 = TableTensor(
+        columns={"datetime": ["time"]},
+        datetime=datetime,
+    )
+    tensor2 = TableTensor(
+        columns={"datetime": ["time"]},
+        datetime=datetime + 60 * 1_000_000,  # 60 seconds later.
+    )
+    assert tensor1.allclose(tensor1.clone())
+    assert not tensor1.allclose(tensor2)
+
+    tensor1 = TableTensor(
+        columns={"id": ["user_id"]},
+        id=ColumnarTensor((torch.tensor([1_000_000, 2_000_000]),)),
+    )
+    tensor2 = TableTensor(
+        columns={"id": ["user_id"]},
+        id=ColumnarTensor((torch.tensor([1_000_001, 2_000_001]),)),
+    )
+    assert tensor1.allclose(tensor1.clone())
+    assert not tensor1.allclose(tensor2)
+
+
+def test_allclose_numerical_tolerances() -> None:
+    tensor1 = TableTensor(
+        columns={"numerical": ["a", "b"]},
+        numerical=torch.tensor([[1.0, float("nan")]]),
+    )
+    tensor2 = TableTensor(
+        columns={"numerical": ["a", "b"]},
+        numerical=torch.tensor([[1.0 + 1e-7, float("nan")]]),
+    )
+
+    assert not tensor1.allclose(tensor2)
+    assert tensor1.allclose(tensor2, equal_nan=True)
+    assert not tensor1.allclose(tensor2, rtol=0.0, atol=0.0, equal_nan=True)
+
+
 def test_from_tensor() -> None:
     data = torch.randn(5, 2)
     tensor = TableTensor.from_tensor(data)
@@ -150,6 +216,7 @@ def test_from_tensor() -> None:
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor.numerical.equal(data)
@@ -169,6 +236,7 @@ def test_from_tensor() -> None:
         Stype.numerical: (),
         Stype.categorical: ("0", "1"),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert tensor.categorical.as_tensor().equal(
@@ -305,6 +373,7 @@ def test_select_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert numerical.numerical is tensor.numerical
@@ -317,6 +386,7 @@ def test_select_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: ("country",),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert categorical.categorical is tensor.categorical
@@ -326,6 +396,7 @@ def test_select_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country",),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
     assert mixed.numerical is tensor.numerical
@@ -357,6 +428,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: ("country",),
         Stype.datetime: ("created_at",),
+        Stype.text: (),
         Stype.id: ("user_id",),
     }
     assert no_numerical.numerical.size() == (2, 0)
@@ -369,6 +441,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
+        Stype.text: (),
         Stype.id: ("user_id",),
     }
     assert no_categorical.numerical is tensor.numerical
@@ -379,6 +452,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: ("created_at",),
+        Stype.text: (),
         Stype.id: ("user_id",),
     }
     assert mixed.numerical.size() == (2, 0)
@@ -392,6 +466,7 @@ def test_drop_stypes() -> None:
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -458,6 +533,26 @@ def test_to_copy() -> None:
     assert out.datetime.dtype == torch.int64
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
+
+
+@withCUDA
+def test_to_dtype_preserves_empty_block_device(
+    device: torch.device,
+) -> None:
+    tensor = TableTensor.from_tensor(
+        torch.ones(2, 1, dtype=torch.float16, device=device),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to(torch.float32)
+
+    assert isinstance(out, TableTensor)
+    assert out.numerical.dtype == torch.float32
+    assert out.device == device
+    assert out.categorical.device == device
+    assert out.datetime.device == device
+    assert out.text.device == device
+    assert out.id.device == device
 
 
 def test_clone_contiguous() -> None:
@@ -608,6 +703,7 @@ def test_unbind_split() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -677,6 +773,7 @@ def test_advanced_indexing() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: (),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -695,6 +792,7 @@ def test_advanced_indexing() -> None:
         Stype.numerical: ("age",),
         Stype.categorical: ("country",),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -786,6 +884,7 @@ def test_cat_stack() -> None:
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
         Stype.datetime: (),
+        Stype.text: (),
         Stype.id: (),
     }
 
@@ -925,7 +1024,9 @@ def test_arrow() -> None:
             ]
         )
     )
-    assert tensor.categorical.equal(torch.tensor([[0], [1], [2], [0]]))
+    assert tensor.categorical.as_tensor().equal(
+        torch.tensor([[0], [1], [2], [0]])
+    )
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
     assert tensor.datetime.equal(
         torch.tensor(
@@ -988,13 +1089,66 @@ def test_from_pandas() -> None:
 
     assert tensor.size() == (2, 4)
     assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
-    assert tensor.categorical.equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.as_tensor().equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
 
 @onlyCUDA
-def test_from_cudf() -> None:
+def test_from_pandas_id_cuda() -> None:
+    df = pd.DataFrame(
+        {
+            "user_id": [0, 1, 2],
+            "item_id": ["a", "b", "c"],
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"user_id": "id", "item_id": "id"},
+        device="cuda",
+    )
+
+    assert tensor.size() == (3, 2)
+    assert tensor.device.type == "cuda"
+    assert tensor.id.device == tensor.device
+    assert tensor.id[:, 0].equal(torch.tensor([0, 1, 2], device=tensor.device))
+
+
+@onlyCUDA
+def test_to_device_without_index() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age"]},
+        numerical=torch.randn(3, 1),
+    )
+
+    out = tensor.to("cuda")
+    assert isinstance(out, TableTensor)
+    assert out.device.type == "cuda"
+    assert out.id.device == out.device
+
+
+def test_text() -> None:
+    data = {
+        "age": [0.0, 1.0, 2.0],
+        "title": ["hello world", "foo bar baz", "lorem ipsum dolor"],
+        "body": ["a b c", "d e f", "g h i"],
+    }
+
+    tensor = TableTensor.from_arrow(
+        pa.table(data),
+        stypes={"age": "numerical", "title": "text", "body": "text"},
+    )
+
+    assert tensor.size() == (3, 3)
+    assert tensor.columns[Stype.text] == ("title", "body")
+    assert tensor.text.size() == (3, 2)
+
+    assert tensor.to_arrow().to_pydict() == data
+
+
+@onlyCUDA
+def test_cudf() -> None:
     cudf = pytest.importorskip("cudf")
 
     data = {
@@ -1035,7 +1189,7 @@ def test_from_cudf() -> None:
             device=tensor.device,
         )
     )
-    assert tensor.categorical.equal(
+    assert tensor.categorical.as_tensor().equal(
         torch.tensor([[0], [1], [2], [0]], device=tensor.device)
     )
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
@@ -1056,6 +1210,9 @@ def test_from_cudf() -> None:
     assert tensor.id[:, 1].equal(
         StringTensor.from_list(["a", "b", "c", "d"], device=tensor.device)
     )
+
+    df = tensor.to_cudf()
+    assert df.to_arrow().to_pydict() == data
 
 
 @onlyCUDA

@@ -1,28 +1,22 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from html import escape
 from typing import TYPE_CHECKING, Any, cast
 
-import pyarrow as pa
 import torch
 from torch import Tensor
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
-from sdm.tensor.io import arrow_as_tensor
+from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID, join_index
 from sdm.tensor.mixin import DeviceMixin
-
-PREFIX = "sdm_internal"
-ROW_ID = f"__{PREFIX}_row_id__"
-LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
-RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
 if TYPE_CHECKING:
     import graphviz
 
-    from sdm.relational import RelationalSampler
+    from sdm.relational import RelationalSampler, TemporalSamplingConfig
 
 
 @dataclass(frozen=True, repr=False)
@@ -55,7 +49,7 @@ class Relationship:
             )
 
         for column in (*self.left_columns, *self.right_columns):
-            for reserved in (ROW_ID, LEFT_ROW_ID, RIGHT_ROW_ID):
+            for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
                         f"Column name '{column}' is reserved for internal "
@@ -228,58 +222,34 @@ class RelationalData(DeviceMixin):
             Each edge index has shape ``[2, num_edges]`` and stores left table
             indices in the first row and right table indices in the second row.
         """
-        device = self.device if device is None else device
-
-        columns: dict[str, list[str]] = defaultdict(list)
-        for rel in self.relationships:
-            columns[rel.left_table].extend(rel.left_columns)
-            columns[rel.right_table].extend(rel.right_columns)
-
-        tables = {
-            name: table[..., columns[name]].to_arrow()
-            for name, table in self.tables.items()
-            if name in columns
-        }
-
-        tables = {
-            name: table.append_column(
-                ROW_ID,
-                pa.array(torch.arange(table.num_rows, dtype=dtype).numpy()),
-            )
-            for name, table in tables.items()
-        }
-
         edge_indices: list[Tensor] = []
         for rel in self.relationships:
-            left = tables[rel.left_table]
-            left = left.select((*rel.left_columns, ROW_ID))
-            left = left.rename_columns({ROW_ID: LEFT_ROW_ID})
-            right = tables[rel.right_table]
-            right = right.select((*rel.right_columns, ROW_ID))
-            right = right.rename_columns({ROW_ID: RIGHT_ROW_ID})
-
-            joined = left.join(
-                right,
-                keys=list(rel.left_columns),
-                right_keys=list(rel.right_columns),
-                join_type="inner",
+            src, dst = join_index(
+                left_table=self.tables[rel.left_table],
+                right_table=self.tables[rel.right_table],
+                left_keys=rel.left_columns,
+                right_keys=rel.right_columns,
+                how="inner",
+                dtype=dtype,
+                device=device,
             )
-
-            src = arrow_as_tensor(joined[LEFT_ROW_ID], device=device)
-            dst = arrow_as_tensor(joined[RIGHT_ROW_ID], device=device)
             edge_indices.append(torch.stack([src, dst], dim=0))
 
         return tuple(edge_indices)
 
     def sampler(
         self,
-        time_columns: Mapping[str, str] | None = None,
+        temporal: TemporalSamplingConfig | dict[str, Any] | None = None,
     ) -> RelationalSampler:
-        r"""Create a subgraph sampler over this relational data.
+        r"""Create a device-appropriate sampler over this relational data.
 
         .. code-block:: python
 
-            from sdm import RelationalData, TableTensor
+            from sdm import (
+                RelationalData,
+                TableTensor,
+                TemporalSamplingConfig,
+            )
 
             data = RelationalData(
                 tables={
@@ -298,19 +268,43 @@ class RelationalData(DeviceMixin):
             )
 
             sampler = data.sampler(
-                time_columns={"orders": "order_date"},
+                temporal=TemporalSamplingConfig(
+                    time_columns={"orders": "order_date"},
+                    strategy="last",
+                ),
             )
 
         Args:
-            time_columns: Mapping from table name to the datetime column used
-                for temporal sampling. A row in a time-aware table can only be
-                sampled if its timestamp does not exceed the query timestamp.
+            temporal: Temporal sampling configuration or a dictionary of its
+                constructor arguments. A row in a time-aware table can only
+                be sampled if its timestamp does not exceed the query
+                timestamp.
         """
-        from sdm.relational import RelationalSampler
+        from sdm.relational.sampler import (  # noqa: PLC0415
+            TemporalSamplingConfig,
+        )
+
+        if temporal is not None and not isinstance(
+            temporal, TemporalSamplingConfig
+        ):
+            temporal = TemporalSamplingConfig(**temporal)
+
+        if self.device.type == "cuda":
+            from sdm.relational.cugraph_sampler import (  # noqa: PLC0415
+                CuGraphRelationalSampler,
+            )
+
+            return CuGraphRelationalSampler(
+                data=self,
+                temporal=temporal,
+            )
+
+        # Avoid a circular import through `sdm.relational`.
+        from sdm.relational import RelationalSampler  # noqa: PLC0415
 
         return RelationalSampler(
             data=self,
-            time_columns=time_columns,
+            temporal=temporal,
         )
 
     def to_graphviz(
@@ -384,8 +378,6 @@ class RelationalData(DeviceMixin):
         return out
 
     def _repr_html_(self) -> str:
-        from html import escape
-
         import pandas as pd
 
         rows = [
