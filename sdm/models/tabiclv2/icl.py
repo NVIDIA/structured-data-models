@@ -77,7 +77,7 @@ class ICLBlock(torch.nn.Module):
         batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if num_classes is None or num_classes <= self.num_classes:
-            return self._predict_standard(
+            return self._forward(
                 x=x,
                 y=y,
                 cache=cache,
@@ -99,7 +99,7 @@ class ICLBlock(torch.nn.Module):
             batch_size_limit=batch_size_limit,
         )
 
-    def _predict_standard(
+    def _forward(
         self,
         x: Tensor,  # [..., R, D]
         y: Tensor,  # [..., R_train]
@@ -376,7 +376,7 @@ class ICLBlock(torch.nn.Module):
         cache_prefix: str,
         batch_size_limit: int | None,
     ) -> Tensor:  # [R_test, C_node]
-        logits = self._predict_standard(
+        logits = self._forward(
             x=x,
             y=y,
             cache=cache,

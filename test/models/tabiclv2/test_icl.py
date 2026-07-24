@@ -25,7 +25,7 @@ class _StubICLBlock(ICLBlock):
         )
         self.predictor = predictor
 
-    def _predict_standard(
+    def _forward(
         self,
         x: torch.Tensor,
         y: torch.Tensor,
