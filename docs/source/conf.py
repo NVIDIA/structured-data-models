@@ -10,7 +10,7 @@ from sphinx.ext.autosummary.generate import AutosummaryEntry
 
 project = "Structured Data Models"
 author = "NVIDIA"
-copyright = f"{date.today().year}, NVIDIA"
+copyright = f"{date.today().year}, NVIDIA"  # noqa: A001
 
 try:
     release = package_version("structured-data-models")
