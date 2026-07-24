@@ -4,13 +4,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype
-from sdm.processing._callable import (
-    ProcessorCallable,
-    ProcessorRoute,
-    as_processor,
-)
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.common.sequential import Sequential
 from sdm.tensor import TableTensor
 
 
@@ -54,11 +48,11 @@ class StypeDispatch(Processor, InvertibleMixin):
     def __init__(
         self,
         *,
-        numerical: ProcessorRoute = None,
-        categorical: ProcessorRoute = None,
-        datetime: ProcessorRoute = None,
-        id: ProcessorRoute = None,
-        text: ProcessorRoute = None,
+        numerical: object = None,
+        categorical: object = None,
+        datetime: object = None,
+        id: object = None,
+        text: object = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
@@ -72,15 +66,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         ):
             if processor is None:
                 continue
-            if not isinstance(processor, Processor):
-                if callable(processor):
-                    processor = as_processor(
-                        cast(ProcessorCallable, processor),
-                        label=f"StypeDispatch route '{stype.value}'",
-                    )
-                else:
-                    processor = Sequential(*processor)
-            self.processors[stype.value] = processor
+            self.processors[stype.value] = Processor.as_processor(processor)
 
         self.remainder = remainder
         self.requires_fit = any(
