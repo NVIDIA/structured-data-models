@@ -87,8 +87,16 @@ class InvariantGNN(torch.nn.Module):
         else:
             edge_type_emb = cast(Tensor, cache["edge_type_emb"])
 
+        if graph.shared_edge_type is not None:
+            edge_type_emb = edge_type_emb[graph.shared_edge_type]
+
         for i, layer in enumerate(graph.layers):
-            src_x = self.src_lin(x)[layer.row] + edge_type_emb[layer.edge_type]
+            layer_edge_type_emb = (
+                edge_type_emb
+                if graph.shared_edge_type is not None
+                else edge_type_emb[layer.edge_type]
+            )
+            src_x = self.src_lin(x)[layer.row] + layer_edge_type_emb
             skip_x = x if layer.dst_index is None else x[layer.dst_index]
             x = self._aggregate(
                 src_x=src_x,

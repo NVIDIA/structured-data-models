@@ -21,6 +21,7 @@ class LayeredGraphLayer:  # noqa: D101
 class LayeredGraph:  # noqa: D101
     input_index: Tensor | None
     layers: tuple[LayeredGraphLayer, ...]
+    shared_edge_type: Tensor | None
     output_index: Tensor
     num_edge_types: int
 
@@ -82,7 +83,29 @@ class HomogeneousGraph:  # noqa: D101
         return LayeredGraph(
             input_index=input_index,
             layers=tuple(layers),
+            shared_edge_type=None,
             output_index=output_index,
+            num_edge_types=self.num_edge_types,
+        )
+
+    def full_layered(
+        self,
+        *,
+        num_layers: int,
+        readout_index: Tensor,
+    ) -> LayeredGraph:
+        r"""Represent full-graph message passing as repeated layers."""
+        layer = LayeredGraphLayer(
+            row=self.row,
+            colptr=self.colptr,
+            edge_type=self.edge_type,
+            dst_index=None,
+        )
+        return LayeredGraph(
+            input_index=None,
+            layers=(layer,) * num_layers,
+            shared_edge_type=self.edge_type,
+            output_index=readout_index,
             num_edge_types=self.num_edge_types,
         )
 

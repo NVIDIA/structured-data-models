@@ -25,6 +25,8 @@ class TaskGraph:  # noqa: D101
         x: TableTensor,
         related_tables: RelatedTables,
         num_hops: int | None = None,
+        *,
+        readout_scoped: bool = False,
     ) -> Self:
 
         if x.dim() != 2:
@@ -80,7 +82,7 @@ class TaskGraph:  # noqa: D101
         task_row[global_readout_index] = task_index
         frontier = torch.zeros_like(task_row, dtype=torch.bool)
         frontier[global_readout_index] = True
-        node_masks = [frontier.clone()]
+        node_masks = [frontier.clone()] if readout_scoped else None
 
         # Propagate task assignment along graph edges.
         # NOTE This assumes neighborhoods do not overlap.
@@ -93,7 +95,7 @@ class TaskGraph:  # noqa: D101
             )
             row = homogeneous_graph.row[mask]
             if row.numel() == 0:
-                if num_hops is not None:
+                if node_masks is not None and num_hops is not None:
                     node_masks.extend(
                         [node_masks[-1]] * (num_hops - propagated_hops)
                     )
@@ -104,16 +106,24 @@ class TaskGraph:  # noqa: D101
             frontier.fill_(False)
             frontier[col] = True
             propagated_hops += 1
-            node_masks.append(task_row >= 0)
+            if node_masks is not None:
+                node_masks.append(task_row >= 0)
 
         num_hops = propagated_hops if num_hops is None else num_hops
+        if node_masks is None:
+            graph = homogeneous_graph.full_layered(
+                num_layers=num_hops,
+                readout_index=global_readout_index,
+            )
+        else:
+            graph = homogeneous_graph.layered(
+                node_masks=node_masks,
+                readout_index=global_readout_index,
+            )
         return cls(
             x=x,
             related_tables=related_tables,
-            graph=homogeneous_graph.layered(
-                node_masks=node_masks,
-                readout_index=global_readout_index,
-            ),
+            graph=graph,
             readout_table=readout_table,
             readout_index=readout_index,
             task_row_by_table={

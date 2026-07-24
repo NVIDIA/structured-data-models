@@ -1,3 +1,5 @@
+from typing import Any, Literal
+
 import pytest
 import torch
 from sdm import (
@@ -17,7 +19,11 @@ from sdm.models.kumorfm.task import TaskGraph
 from sdm.testing import withCUDA
 
 
-def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("gnn_scope", ["full", "readout"])
+def test_load_from_pretrained(
+    monkeypatch: pytest.MonkeyPatch,
+    gnn_scope: Literal["full", "readout"],
+) -> None:
     downloads: list[dict[str, object]] = []
     loads: list[tuple[str, object, bool]] = []
     remaps: list[tuple[object, bool]] = []
@@ -57,9 +63,10 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(kumorfm_model, "_remap_v2_1_checkpoint", remap)
     monkeypatch.setattr(_KumoRFM, "load_state_dict", load_state_dict)
 
-    model = KumoRFM()
+    model = KumoRFM(gnn_scope=gnn_scope)
 
     assert not model.training
+    assert model.gnn_scope == gnn_scope
     assert model.reg_model.row_embedding.norm.bias is not None
     assert model.reg_model.icl_block.norm.bias is not None
     assert downloads == [
@@ -87,6 +94,48 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
         ({"True": torch.tensor(1)}, True),
         ({"False": torch.tensor(1)}, True),
     ]
+
+
+def test_gnn_scope_defaults_to_full() -> None:
+    model = KumoRFM(pretrained=False)
+
+    assert model.gnn_scope == "full"
+    assert repr(model) == "KumoRFM()"
+    untyped_model: Any = model
+    with pytest.raises(AttributeError):
+        untyped_model.gnn_scope = "readout"
+
+
+def test_gnn_scope_preserves_state_dict() -> None:
+    full = KumoRFM(
+        pretrained=False,
+        device="meta",
+        gnn_scope="full",
+    )
+    readout = KumoRFM(
+        pretrained=False,
+        device="meta",
+        gnn_scope="readout",
+    )
+
+    full_state = full.state_dict()
+    readout_state = readout.state_dict()
+    assert full_state.keys() == readout_state.keys()
+    assert readout.load_state_dict(full_state, strict=True).missing_keys == []
+    assert full.load_state_dict(readout_state, strict=True).missing_keys == []
+
+
+def test_gnn_scope_rejects_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_download(**kwargs: object) -> str:
+        pytest.fail(f"Unexpected checkpoint download: {kwargs}")
+
+    monkeypatch.setattr(kumorfm_model, "download_checkpoint", fail_download)
+    invalid_scope: Any = "invalid"
+
+    with pytest.raises(ValueError, match="'gnn_scope'"):
+        KumoRFM(gnn_scope=invalid_scope)
 
 
 @pytest.mark.parametrize(
@@ -228,45 +277,51 @@ def test_task_graph_preserves_hops_after_diameter(
             }
         ],
     )
-    homogeneous_graph = HomogeneousGraph.from_tables(
-        tables=related_tables.tables,
-        relationships=related_tables.relationships,
-    )
-    task = TaskGraph.from_input(
+    full_task = TaskGraph.from_input(
         x=x,
         related_tables=related_tables,
         num_hops=3,
     )
+    readout_task = TaskGraph.from_input(
+        x=x,
+        related_tables=related_tables,
+        num_hops=3,
+        readout_scoped=True,
+    )
 
-    assert task.num_hops == 3
-    assert len(task.graph.layers) == 3
+    assert full_task.num_hops == readout_task.num_hops == 3
+    assert len(full_task.graph.layers) == len(readout_task.graph.layers) == 3
+    assert sum(
+        layer.colptr.numel() - 1 for layer in readout_task.graph.layers
+    ) < sum(layer.colptr.numel() - 1 for layer in full_task.graph.layers)
 
-    full_mask = torch.ones(
-        homogeneous_graph.num_nodes,
-        dtype=torch.bool,
+    model = InvariantGNN(channels=8, device=device)
+    features = torch.randn(
+        sum(table.size(0) for table in related_tables.tables.values()),
+        8,
         device=device,
     )
-    full_graph = homogeneous_graph.layered(
-        node_masks=[full_mask] * 4,
-        readout_index=task.readout_index,
-    )
-    model = InvariantGNN(channels=8, device=device)
-    features = torch.randn(homogeneous_graph.num_nodes, 8, device=device)
 
-    full = model(x=features, graph=full_graph)
-    pruned = model(x=features, graph=task.graph)
+    full = model(x=features, graph=full_task.graph)
+    readout = model(x=features, graph=readout_task.graph)
 
-    torch.testing.assert_close(pruned, full, rtol=5e-3, atol=3e-5)
+    torch.testing.assert_close(readout, full, rtol=5e-3, atol=3e-5)
 
 
 @withCUDA
 @pytest.mark.parametrize("dtype", [torch.int64, torch.float32])
+@pytest.mark.parametrize("gnn_scope", ["full", "readout"])
 def test_forward(
     relational_data: RelationalData,
     device: torch.device,
     dtype: torch.dtype,
+    gnn_scope: Literal["full", "readout"],
 ) -> None:
-    model = KumoRFM(pretrained=False, device=device)
+    model = KumoRFM(
+        pretrained=False,
+        device=device,
+        gnn_scope=gnn_scope,
+    )
     if device.type == "cpu":
         assert repr(model) == "KumoRFM()"
     else:
@@ -313,6 +368,20 @@ def test_forward(
         num_hops=2,
     )
 
+    if gnn_scope == "readout":
+        model._gnn_scope = "full"
+        torch.manual_seed(1)
+        full_out = model(
+            x_context=x,
+            y_context=y,
+            x_query=x,
+            related_context_tables=related_tables,
+            related_query_tables=related_tables,
+            num_hops=2,
+        )
+        model._gnn_scope = "readout"
+        assert out.allclose(full_out, rtol=5e-3, atol=3e-5)
+
     assert out.size(-2) == 4
     assert out.dtype == x.dtype
     assert out.device == x.device
@@ -330,17 +399,35 @@ def test_forward(
         == out.size()
     )
 
+    reordered_related_tables = RelatedTables(
+        tables=dict(reversed(list(related_tables.tables.items()))),
+        relationships=related_tables.relationships[::-1],
+        task_links=related_tables.task_links[::-1],
+    )
     torch.manual_seed(1)
-    model.fit(x, y, related_tables)
-    assert model.predict(
+    model.fit(x, y, related_tables, num_hops=2)
+    predicted = model.predict(
         x=x,
-        related_tables=RelatedTables(
-            tables=dict(reversed(list(related_tables.tables.items()))),
-            relationships=related_tables.relationships[::-1],
-            task_links=related_tables.task_links[::-1],
-        ),
-    ).allclose(out)
+        related_tables=reordered_related_tables,
+    )
+    assert predicted.allclose(out)
     model.clear()
+
+    if gnn_scope == "readout":
+        model._gnn_scope = "full"
+        torch.manual_seed(1)
+        model.fit(x, y, related_tables, num_hops=2)
+        full_predicted = model.predict(
+            x=x,
+            related_tables=reordered_related_tables,
+        )
+        model._gnn_scope = "readout"
+        assert predicted.allclose(
+            full_predicted,
+            rtol=5e-3,
+            atol=3e-5,
+        )
+        model.clear()
 
 
 def test_default_recipe_preserves_ids() -> None:

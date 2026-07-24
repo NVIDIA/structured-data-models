@@ -1,6 +1,6 @@
 # ruff: noqa: D205
 from collections.abc import Sequence
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -98,9 +98,9 @@ class KumoRFM(ICLModel):
             "orders": related_tables.tables["orders"][3:],
         })
 
-        model = KumoRFM(device="cuda")
+        model = KumoRFM(device="cuda", gnn_scope="readout")
 
-        # Default in-context learning forward pass:
+        # Direct in-context learning forward pass:
         out = model(
             x_context=x_context,
             y_context=y_context,
@@ -117,6 +117,10 @@ class KumoRFM(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        gnn_scope: Scope of GNN message passing. ``"full"`` executes every
+            node in the related tables and preserves the default behavior.
+            ``"readout"`` executes only nodes that can influence the requested
+            task rows within ``num_hops``.
     """  # noqa: E501
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -136,8 +140,16 @@ class KumoRFM(ICLModel):
         self,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        gnn_scope: Literal["full", "readout"] = "full",
     ) -> None:
+        if gnn_scope not in ("full", "readout"):
+            raise ValueError(
+                "'gnn_scope' must be either 'full' or 'readout' "
+                f"(got {gnn_scope!r})"
+            )
         super().__init__()
+        self._gnn_scope: Literal["full", "readout"] = gnn_scope
 
         self.cls_model = _KumoRFM(
             num_classes=10,
@@ -156,6 +168,11 @@ class KumoRFM(ICLModel):
             self._load_from_pretrained()
 
         self.eval()
+
+    @property
+    def gnn_scope(self) -> Literal["full", "readout"]:
+        r"""The configured GNN message-passing scope."""
+        return self._gnn_scope
 
     def _load_from_pretrained(self) -> "KumoRFM":
         device = next(self.parameters()).device
@@ -212,6 +229,7 @@ class KumoRFM(ICLModel):
             cache=cache,
             generator=generator,
             num_hops=kwargs.get("num_hops"),
+            readout_scoped=self.gnn_scope == "readout",
         )
 
         if classes is None:
@@ -305,6 +323,7 @@ class _KumoRFM(torch.nn.Module):
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
         num_hops: int | None = None,
+        readout_scoped: bool = False,
     ) -> Tensor:  # [..., R_query, *]
 
         num_classes: int | None = None  # Extract `y` as tensor:
@@ -333,6 +352,7 @@ class _KumoRFM(torch.nn.Module):
                 x=x_context,
                 related_tables=related_context_tables,
                 num_hops=num_hops,
+                readout_scoped=readout_scoped,
             )
             if cache is not None and cache.is_recording:
                 cache["relationships"] = context.related_tables.relationships
@@ -362,6 +382,7 @@ class _KumoRFM(torch.nn.Module):
                     task_links=related_query_tables.task_links,
                 ),
                 num_hops=num_hops,
+                readout_scoped=readout_scoped,
             )
 
         # TODO Support computing relative time.

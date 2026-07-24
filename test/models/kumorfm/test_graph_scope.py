@@ -113,30 +113,27 @@ def _layered_graph(
     readout_index: Tensor,
     num_hops: int,
     *,
-    prune: bool,
+    readout_scoped: bool,
 ) -> LayeredGraph:
     readout_index = readout_index + graph.start_node_offsets["target"]
-    if prune:
-        active = torch.zeros(
-            graph.num_nodes,
-            dtype=torch.bool,
-            device=graph.row.device,
+    if not readout_scoped:
+        return graph.full_layered(
+            num_layers=num_hops,
+            readout_index=readout_index,
         )
-        active[readout_index] = True
-        node_masks = [active]
-        for _ in range(num_hops):
-            previous = active.clone()
-            previous[graph.row[active[graph.col]]] = True
-            node_masks.append(previous)
-            active = previous
-    else:
-        active = torch.ones(
-            graph.num_nodes,
-            dtype=torch.bool,
-            device=graph.row.device,
-        )
-        node_masks = [active] * (num_hops + 1)
 
+    active = torch.zeros(
+        graph.num_nodes,
+        dtype=torch.bool,
+        device=graph.row.device,
+    )
+    active[readout_index] = True
+    node_masks = [active]
+    for _ in range(num_hops):
+        previous = active.clone()
+        previous[graph.row[active[graph.col]]] = True
+        node_masks.append(previous)
+        active = previous
     return graph.layered(
         node_masks=node_masks,
         readout_index=readout_index,
@@ -176,42 +173,60 @@ def test_layered_graph_preserves_output(
             graph,
             readout_index,
             num_hops,
-            prune=False,
+            readout_scoped=False,
         ),
         cache=_cache(edge_type_emb),
     )
-    pruned = model(
+    readout = model(
         x=x,
         graph=_layered_graph(
             graph,
             readout_index,
             num_hops,
-            prune=True,
+            readout_scoped=True,
         ),
         cache=_cache(edge_type_emb),
     )
 
-    torch.testing.assert_close(pruned, full, rtol=5e-3, atol=3e-5)
+    torch.testing.assert_close(readout, full, rtol=5e-3, atol=3e-5)
+
+
+def test_readout_scope_reduces_message_passing_work() -> None:
+    graph, readout_index = _graph("chain", torch.device("cpu"))
+    full = _layered_graph(
+        graph,
+        readout_index,
+        num_hops=2,
+        readout_scoped=False,
+    )
+    readout = _layered_graph(
+        graph,
+        readout_index,
+        num_hops=2,
+        readout_scoped=True,
+    )
+
+    assert sum(layer.row.numel() for layer in readout.layers) < sum(
+        layer.row.numel() for layer in full.layers
+    )
+    assert sum(layer.colptr.numel() - 1 for layer in readout.layers) < sum(
+        layer.colptr.numel() - 1 for layer in full.layers
+    )
 
 
 def test_layered_graph_preserves_float64_gradients() -> None:
     graph, readout_index = _graph("cycle", torch.device("cpu"))
     full_model = InvariantGNN(channels=6, dtype=torch.float64)
-    pruned_model = copy.deepcopy(full_model)
+    readout_model = copy.deepcopy(full_model)
     full_x = torch.randn(
         graph.num_nodes,
         6,
         dtype=torch.float64,
         requires_grad=True,
     )
-    pruned_x = full_x.detach().clone().requires_grad_()
-    full_edge_type_emb = torch.randn(
-        graph.num_edge_types,
-        6,
-        dtype=torch.float64,
-        requires_grad=True,
-    )
-    pruned_edge_type_emb = full_edge_type_emb.detach().clone().requires_grad_()
+    readout_x = full_x.detach().clone().requires_grad_()
+    full_generator = torch.Generator().manual_seed(0)
+    readout_generator = torch.Generator().manual_seed(0)
 
     full = full_model(
         x=full_x,
@@ -219,39 +234,35 @@ def test_layered_graph_preserves_float64_gradients() -> None:
             graph,
             readout_index,
             num_hops=3,
-            prune=False,
+            readout_scoped=False,
         ),
-        cache=_cache(full_edge_type_emb),
+        generator=full_generator,
     )
-    pruned = pruned_model(
-        x=pruned_x,
+    readout = readout_model(
+        x=readout_x,
         graph=_layered_graph(
             graph,
             readout_index,
             num_hops=3,
-            prune=True,
+            readout_scoped=True,
         ),
-        cache=_cache(pruned_edge_type_emb),
+        generator=readout_generator,
     )
     weight = torch.randn_like(full)
     (full * weight).sum().backward()
-    (pruned * weight).sum().backward()
+    (readout * weight).sum().backward()
 
-    torch.testing.assert_close(pruned, full)
-    torch.testing.assert_close(pruned_x.grad, full_x.grad)
-    torch.testing.assert_close(
-        pruned_edge_type_emb.grad,
-        full_edge_type_emb.grad,
-    )
-    for pruned_parameter, full_parameter in zip(
-        pruned_model.parameters(),
+    torch.testing.assert_close(readout, full)
+    torch.testing.assert_close(readout_x.grad, full_x.grad)
+    for readout_parameter, full_parameter in zip(
+        readout_model.parameters(),
         full_model.parameters(),
         strict=True,
     ):
         if full_parameter.grad is None:
-            assert pruned_parameter.grad is None
+            assert readout_parameter.grad is None
         else:
             torch.testing.assert_close(
-                pruned_parameter.grad,
+                readout_parameter.grad,
                 full_parameter.grad,
             )
