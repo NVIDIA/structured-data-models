@@ -1,3 +1,5 @@
+# ruff: noqa: PLC0415
+
 """Optional tests for the local TabArena example."""
 
 from __future__ import annotations

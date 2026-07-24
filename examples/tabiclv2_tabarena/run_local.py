@@ -1,3 +1,5 @@
+# ruff: noqa: PLC0415
+
 """Run the local TabICLv2 model on TabArena in one process."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# ruff: noqa: PLC0415
+
 """Run SDM-native TabICLv2 with the official eight-member ensemble policy."""
 
 from __future__ import annotations

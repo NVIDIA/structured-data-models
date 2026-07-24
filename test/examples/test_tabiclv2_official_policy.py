@@ -1,3 +1,5 @@
+# ruff: noqa: PLC0415
+
 """Unit tests for the SDM-native official-policy TabArena control."""
 
 from __future__ import annotations
@@ -161,6 +163,7 @@ def test_official_policy_runner_uses_fixed_eight_member_contract(
 def test_official_policy_adapter_fits_eight_member_caches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    pytest.importorskip("tabarena")
     import examples.tabiclv2_tabarena.sdm_system as sdm_system
     from sdm.models import TabICLv2
 

@@ -1,3 +1,5 @@
+# ruff: noqa: PLC0415
+
 """SDM-native TabArena system adapter for local TabICLv2 evaluation."""
 
 from __future__ import annotations
@@ -8,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # noqa: TID253
 import torch
 from sdm import Stype, StypeLike, TableTensor, infer_stypes
 from sdm.models import TabICLv2
