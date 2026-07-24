@@ -47,35 +47,35 @@ class SDMTabICLv2System(ExternalSystemModel):
         time_limit: float | None,
         random_state: int | None,
     ) -> Self:
-        random_state: int = 42 if random_state is None else random_state
-        generator = torch.Generator(device=self._device).manual_seed(
-            random_state
-        )
+        random_state = 42 if random_state is None else random_state
         self._device = torch.device(
             "cuda" if num_gpus is not None and num_gpus > 0 else "cpu"
         )
+        generator = torch.Generator(device=self._device).manual_seed(
+            random_state
+        )
 
         self.stypes = infer_stypes(X)
-        self._target_name = target_name or "__target__"
+        target_name = target_name or "__target__"
         if problem_type == "regression":
-            self._target_stype = Stype.numerical
+            target_stype = Stype.numerical
         else:
-            self._target_stype = Stype.categorical
+            target_stype = Stype.categorical
             if y.isna().any():
                 raise ValueError(
                     "Classification targets must not contain missing values"
                 )
-            self._class_labels_by_key = {}
+            class_labels_by_key = {}
             for label in pd.unique(y):
                 key = str(label)
-                if key in self._class_labels_by_key:
+                if key in class_labels_by_key:
                     raise ValueError(
                         "Classification labels have ambiguous string "
                         "representations: "
-                        f"{self._class_labels_by_key[key]!r} and {label!r} "
+                        f"{class_labels_by_key[key]!r} and {label!r} "
                         f"both map to {key!r}"
                     )
-                self._class_labels_by_key[key] = label
+                class_labels_by_key[key] = label
             label_cleaner = LabelCleaner.construct(
                 problem_type=problem_type,
                 y=y,
@@ -88,41 +88,34 @@ class SDMTabICLv2System(ExternalSystemModel):
             self._tabarena_class_order = tuple(class_order)
 
         self.model = TabICLv2(device=self._device)
+
+        table_x = TableTensor.from_pandas(
+            df=X,
+            stypes=self.stypes,
+            device=self._device,
+        )
+        table_y = TableTensor.from_pandas(
+            df=y.rename(target_name).to_frame(),
+            stypes={target_name: target_stype},
+            device=self._device,
+        )
         self.model.fit(
-            x=TableTensor.from_pandas(
-                df=X,
-                stypes=self.stypes,
-                device=self._device,
-            ),
-            y=TableTensor.from_pandas(
-                df=y.rename(self._target_name).to_frame(),
-                stypes={self._target_name: self._target_stype},
-                device=self._device,
-            ),
+            x=table_x,
+            y=table_y,
             num_estimators=8,
             generator=generator,
         )
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
-        values = (
-            self.model.predict(
-                TableTensor.from_pandas(
-                    df=X,
-                    stypes=self.stypes,
-                    device=self._device,
-                )
-            )
-            .numerical.float()
-            .mean(dim=-1)
-            .cpu()
-            .numpy()
+        table_x = TableTensor.from_pandas(
+            df=X,
+            stypes=self.stypes,
+            device=self._device,
         )
-        return pd.Series(
-            values,
-            index=X.index,
-            name=self._target_name,
-        )
+        out = self.model.predict(table_x)
+        values = out.numerical.float().mean(dim=-1).cpu().numpy()
+        return pd.Series(values, index=X.index)
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
         prediction = self.model.predict(
@@ -133,8 +126,11 @@ class SDMTabICLv2System(ExternalSystemModel):
             )
         )
         values = prediction.numerical.float().cpu().numpy()
+        class_labels_by_key = {
+            str(label): label for label in self._tabarena_class_order
+        }
         labels = [
-            self._class_labels_by_key[column]
+            class_labels_by_key[column]
             for column in prediction.columns[Stype.numerical]
         ]
         probabilities = pd.DataFrame(
