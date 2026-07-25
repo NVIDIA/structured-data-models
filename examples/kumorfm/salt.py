@@ -2,12 +2,14 @@ import argparse
 from collections.abc import Sequence
 from typing import cast
 
+import pandas as pd
 import torch
 from relbench.base import Dataset
 from relbench.datasets import get_dataset
 from relbench.tasks import get_task
 from sdm import (
     RelationalData,
+    Stype,
     TableTensor,
     TemporalSamplingConfig,
     infer_stypes,
@@ -41,8 +43,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def run_task(task_name: str) -> None:
     """Evaluate one SALT task."""
-    import pandas as pd
-
     torch.manual_seed(args.seed)
     task = get_task(SALT_DATASET, task_name, download=True)
     db = get_dataset(SALT_DATASET, download=True).get_db(
@@ -52,7 +52,17 @@ def run_task(task_name: str) -> None:
         tables={
             name: TableTensor.from_pandas(
                 df=table.df,
-                stypes=infer_stypes(table.df),
+                stypes=infer_stypes(
+                    table.df,
+                    overrides={
+                        column: "id"
+                        for column in (
+                            table.pkey_col,
+                            *table.fkey_col_to_pkey_table,
+                        )
+                        if column is not None
+                    },
+                ),
             )
             for name, table in db.table_dict.items()
         },
@@ -104,6 +114,12 @@ def run_task(task_name: str) -> None:
         task_table[train_end:val_end],
         task_table[val_end:],
     )
+    class_to_index = {
+        str(value): index
+        for index, value in enumerate(
+            task_table.categorical.categories[0].tolist()
+        )
+    }
     context = torch.cat(task_tables[:2], dim=0)
     perm = torch.randperm(len(context))[: args.context_size]
     context = cast(TableTensor, context[perm])
@@ -144,7 +160,15 @@ def run_task(task_name: str) -> None:
             related_context_tables=related_context,
             related_query_tables=related_query,
         )
-        metric.update(out.as_tensor(), y_query.as_tensor().view(-1))
+        class_indices = torch.tensor(
+            [
+                class_to_index[column]
+                for column in out.columns[Stype.numerical]
+            ],
+            device=device,
+        )
+        pred = class_indices[out.numerical.argmax(dim=-1)]
+        metric.update(pred.view(-1), y_query.categorical.code.view(-1))
 
     print(f"{SALT_DATASET}/{task_name} accuracy: {metric.compute():.4f}")
     model.clear()
