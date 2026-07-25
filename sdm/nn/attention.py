@@ -125,8 +125,8 @@ def _chunk_attention(
     out: Tensor | None = None
     out_key: Tensor | None = None
     out_value: Tensor | None = None
-    key_size: torch.Size | None = None
-    value_size: torch.Size | None = None
+    key_size: tuple[int, ...] | None = None
+    value_size: tuple[int, ...] | None = None
     for start in range(0, batch_size, batch_size_limit):
         end = min(start + batch_size_limit, batch_size)
         chunk_result = forward(
@@ -441,6 +441,10 @@ class SDPA(torch.nn.Module):
         query_size = query.size()[-3:]
         key_size = key.size()[-3:]
         value_size = value.size()[-3:]
+
+        if key_size[0] == 0:  # No key/value pairs - abort early:
+            return query.new_zeros(batch_shape + query_size)
+
         query = query.expand(batch_shape + query_size).reshape(-1, *query_size)
         key = key.expand(batch_shape + key_size).reshape(-1, *key_size)
         value = value.expand(batch_shape + value_size).reshape(-1, *value_size)
@@ -693,9 +697,13 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
-        norm: The normalization layer name.
+        norm: The normalization layer name or a callable returning the
+            normalization layer. The callable is invoked once per norm site,
+            so each of the three sites gets a fresh instance. A module
+            instance is shared across all three sites.
         norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor.
+            layer constructor. Takes precedence over ``device`` and
+            ``dtype``.
         device: The device.
         dtype: The dtype.
     """
@@ -707,14 +715,15 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
-        norm: str = "layer_norm",
+        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        norm_kwargs = {**(norm_kwargs or {}), **factory_kwargs}
+        # User `norm_kwargs` win; `device`/`dtype` fill unspecified keys.
+        norm_kwargs = {**factory_kwargs, **(norm_kwargs or {})}
 
         self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
         self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)
