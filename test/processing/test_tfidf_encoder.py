@@ -55,6 +55,38 @@ def test_tfidf_encoder_rows_are_l2_normalized() -> None:
     )
 
 
+def test_tfidf_encoder_exact_values() -> None:
+    # Bigram counts per document, each word padded to " ab ":
+    #   d0 "ab"     -> {" a": 1, "ab": 1, "b ": 1}
+    #   d1 "ab ac"  -> {" a": 2, "ab": 1, "b ": 1, "ac": 1, "c ": 1}
+    #   d2 "ac"     -> {" a": 1, "ac": 1, "c ": 1}
+    # With n_docs = 3, df(" a") = 3 and df = 2 for every other n-gram, so
+    # idf = ln((1 + n_docs) / (1 + df)) + 1 gives idf(" a") = 1.0 and
+    # idf = ln(4 / 3) + 1 = 1.28768207 elsewhere. Each row is the raw
+    # n-gram count times idf, L2-normalized.
+    table = _text_table(["ab", "ab ac", "ac"])
+    encoder = TfidfTransformer(ngram_range=(2, 2))
+
+    output = encoder.fit_transform(table)
+
+    expected = {  # per n-gram, the value for d0, d1, d2
+        " a": [0.48133417, 0.61335554, 0.48133417],
+        "ab": [0.61980538, 0.39490346, 0.00000000],
+        "b ": [0.61980538, 0.39490346, 0.00000000],
+        "ac": [0.00000000, 0.39490346, 0.61980538],
+        "c ": [0.00000000, 0.39490346, 0.61980538],
+    }
+    # Vocabulary order differs between the CPU and CUDA factorization, so
+    # line the expected columns up with the fitted vocabulary.
+    vocabulary = encoder._vocabularies[0].to_pylist()
+    assert sorted(vocabulary) == sorted(expected)
+    assert torch.allclose(
+        output.numerical,
+        torch.tensor([expected[ngram] for ngram in vocabulary]).T,
+        atol=1e-6,
+    )
+
+
 def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
     encoder = TfidfTransformer(ngram_range=(3, 3))
     encoder.fit(_text_table(["aaa bbb", "aaa ccc"]))

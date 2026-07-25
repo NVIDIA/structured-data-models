@@ -89,6 +89,7 @@ class TfidfTransformer(Processor):
         self,
         state_dict: dict[str, Any],
         prefix: str,
+        *args,
     ):
         """Restore buffers from a checkpoint."""
         idf_keys = [
