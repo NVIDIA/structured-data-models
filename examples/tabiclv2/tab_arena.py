@@ -150,7 +150,7 @@ def main() -> None:
     ).build_experiments()
 
     context = TabArenaContext()
-    jobs = context.build_jobs(experiments, split_indices="lite")
+    jobs = context.build_jobs(experiments)
     context.run_jobs(
         jobs,
         expname=output_root,
