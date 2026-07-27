@@ -120,7 +120,7 @@ def test_pipeline_accepts_nested_sequential_with_callable() -> None:
 
 
 def test_pipeline_rejects_invalid_step() -> None:
-    with pytest.raises(TypeError, match=r"Element must be"):
+    with pytest.raises(TypeError, match=r"Input must be"):
         Sequential(cast(Any, object()))
 
 
@@ -152,7 +152,7 @@ def test_repr() -> None:
         )""")
     assert repr(Sequential(lambda table: table)) == dedent("""\
         Sequential(
-          lambda,
+          Callable(<lambda>),
         )""")
 
 

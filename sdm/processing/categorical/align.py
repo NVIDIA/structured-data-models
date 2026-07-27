@@ -56,7 +56,6 @@ class AlignCategories(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
         mask = table.categorical.isfinite()
         out = torch.full_like(table.categorical, -1)
 

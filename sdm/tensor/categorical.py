@@ -82,23 +82,23 @@ class CategoricalTensor(Tensor):
         r"""Create a tensor wrapper."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
-                f"Expected 'data' in '{cls.__name__}' to have dtype "
+                f"Expected 'data' in {cls.__name__!r} to have dtype "
                 f"in '{cls.ALLOWED_DTYPES}' (got '{data.dtype}')"
             )
         if data.dim() == 0:
             raise ValueError(
-                f"Expected '{cls.__name__}' to have at least one dimension"
+                f"Expected {cls.__name__!r} to have at least one dimension"
             )
         if data.size(-1) != len(categories):
             raise ValueError(
-                f"Expected the last dimension in '{cls.__name__}' to match "
+                f"Expected the last dimension in {cls.__name__!r} to match "
                 f"the number of category vectors (got {data.size(-1)} and "
                 f"{len(categories)})"
             )
         for i, category in enumerate(categories):
             if category.dim() != 1:
                 raise ValueError(
-                    f"Expected category {i} in '{cls.__name__}' to be "
+                    f"Expected category {i} in {cls.__name__!r} to be "
                     f"one-dimensional (got {category.dim()}D)"
                 )
 

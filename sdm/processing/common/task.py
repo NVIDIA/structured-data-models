@@ -1,10 +1,8 @@
-from collections.abc import Iterable
 from typing import Literal, cast
 
 import torch
 
 from sdm.processing.base import Processor
-from sdm.processing.common.sequential import Sequential
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -32,8 +30,8 @@ class TaskDispatch(Processor):
     def __init__(
         self,
         *,
-        classification: Processor | Iterable[Processor] | None = None,
-        regression: Processor | Iterable[Processor] | None = None,
+        classification: object = None,
+        regression: object = None,
     ) -> None:
         super().__init__()
         self.processors = torch.nn.ModuleDict()
@@ -43,18 +41,17 @@ class TaskDispatch(Processor):
         ):
             if processor is None:
                 continue
-            if not isinstance(processor, Processor):
-                processor = Sequential(*processor)
+            processor = Processor.as_processor(processor)
             if processor.requires_fit:
                 raise ValueError(
-                    f"'{self.__class__.__name__}' requires stateless routes, "
-                    f"but the '{task}' route requires fit."
+                    f"{self.__class__.__name__!r} requires stateless routes, "
+                    f"but the {task!r} route requires fit."
                 )
             self.processors[task] = processor
 
         if len(self.processors) == 0:
             raise ValueError(
-                f"'{self.__class__.__name__}' requires at least one route."
+                f"{self.__class__.__name__!r} requires at least one route."
             )
 
         self._task: Literal["classification", "regression"] | None = None
@@ -79,12 +76,12 @@ class TaskDispatch(Processor):
             )
             raise ValueError(
                 "Expected the transformed target to be numerical or "
-                f"categorical (got '{stype}')."
+                f"categorical (got {stype!r})."
             )
 
         if task not in self.processors:
             raise ValueError(
-                f"'{self.__class__.__name__}' has no '{task}' route; "
+                f"{self.__class__.__name__!r} has no {task!r} route; "
                 f"configure {task}=... or use 'Identity()' for a no-op."
             )
         self._task = task
@@ -95,7 +92,7 @@ class TaskDispatch(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         if self._task is None:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' has no resolved task; call "
+                f"{self.__class__.__name__!r} has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
         processor = cast(Processor, self.processors[self._task])
@@ -109,8 +106,8 @@ class TaskDispatch(Processor):
         r""":meta private:"""  # noqa: D415
         if state is not None and state not in self.processors:
             raise ValueError(
-                f"Cannot restore unconfigured '{state}' task on "
-                f"'{self.__class__.__name__}'."
+                f"Cannot restore unconfigured {state!r} task on "
+                f"{self.__class__.__name__!r}."
             )
         self._task = cast(
             Literal["classification", "regression"] | None,

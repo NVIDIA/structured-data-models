@@ -73,7 +73,7 @@ class _TaskResolver(Processor, InvertibleMixin):
         fn = getattr(self.processor, "inverse_transform", None)
         if not callable(fn):
             raise AttributeError(
-                f"'{self.processor.__class__.__name__}' object has no "
+                f"{self.processor.__class__.__name__!r} object has no "
                 "attribute 'inverse_transform'"
             )
         return fn(table)
@@ -159,7 +159,7 @@ class Recipe:
             ):
                 raise ValueError(
                     f"'TaskDispatch' is only supported in 'Recipe.output' "
-                    f"(found in '{role}')."
+                    f"(found in {role!r})."
                 )
 
         # Common output steps can remain adjacent; nesting would require
