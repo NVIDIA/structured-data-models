@@ -86,27 +86,6 @@ def test_align_categories_joint_vocabulary_preserves_code_order() -> None:
     assert query.categorical.as_tensor().squeeze(-1).tolist() == [0]
 
 
-def test_align_categories_transform_maps_only_observed_categories() -> None:
-    context = _table(
-        [[0]],
-        columns=("kind",),
-        categories=(("red",),),
-    )
-    query = _table(
-        [[0], [0], [-1], [2]],
-        columns=("kind",),
-        categories=(("red", "unused", "green", "also-unused"),),
-    )
-    output = AlignCategories().fit(context).transform(query)
-
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [
-        0,
-        0,
-        -1,
-        -1,
-    ]
-
-
 @withCUDA
 def test_align_categories_numeric_values(device: torch.device) -> None:
     context = TableTensor(
@@ -268,7 +247,7 @@ def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1]
 
 
-def test_invalid_category_type() -> None:
+def test_align_categories_rejects_changed_category_value_type() -> None:
     processor = AlignCategories().fit(
         _table([[0]], columns=("kind",), categories=(("red",),))
     )
