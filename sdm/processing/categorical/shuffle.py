@@ -89,13 +89,13 @@ class ShuffleCategories(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         offsets = self.offsets.tolist()
-        data = table.categorical.code.clone()
+        code = table.categorical.code.clone()
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
             permutation = self.permutations[
                 offsets[index] : offsets[index + 1]
             ]
-            codes = data[..., index]
+            codes = code[..., index]
             valid = codes >= 0
             if valid.any():
                 valid_codes = codes[valid].to(torch.long)
@@ -110,7 +110,7 @@ class ShuffleCategories(Processor):
             categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(
-            code=data,
+            code=code,
             categories=categories,
         )
         return table.replace_blocks(categorical=categorical)
