@@ -10,7 +10,7 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
-    StandardScale,
+    Standardize,
     StypeDispatch,
 )
 
@@ -40,6 +40,7 @@ class _RecordingModel(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:
         self.calls.append(
@@ -137,7 +138,7 @@ def _related_tables(*, query: bool) -> RelatedTables:
 
 def _recipe() -> Recipe:
     return Recipe(
-        features=StypeDispatch(numerical=StandardScale()),
+        features=StypeDispatch(numerical=Standardize()),
     )
 
 

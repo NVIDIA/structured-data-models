@@ -50,12 +50,19 @@ def join_index(
             f"(got '{left_table.device}' and '{right_table.device}')"
         )
 
+    dtype = dtype or torch.long
     device = device or left_table.device
 
     left_table = left_table[list(left_keys)]
     right_table = right_table[list(right_keys)]
     left_rows = math.prod(left_table.size()[:-1])
     right_rows = math.prod(right_table.size()[:-1])
+
+    if max(left_rows, right_rows) - 1 > torch.iinfo(dtype).max:
+        raise ValueError(
+            f"Creating row indices up to {max(left_rows, right_rows) - 1:,} "
+            f"in '{dtype}' would overflow"
+        )
 
     backend: Literal["arrow", "cudf"] = "arrow"
     if left_table.is_cuda:

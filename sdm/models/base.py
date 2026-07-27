@@ -40,8 +40,13 @@ class ICLModel(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
+    #: Semantic types supported for input feature columns in this model.
     supported_feature_stypes: ClassVar[frozenset[Stype]]
+
+    #: Semantic types supported for target columns in this model.
     supported_target_stypes: ClassVar[frozenset[Stype]]
+
+    #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
     def __init__(self) -> None:
@@ -77,17 +82,14 @@ class ICLModel(torch.nn.Module, ABC):
             related_context_tables: Related context for in-context examples.
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
-            num_estimators: The number of estimators for ensembling.
-            generator: Generator used for random draws while fitting recipe
-                processors. The same generator is passed to every estimator
-                and related-table processor. If ``None``, draws use the
-                global generator.
+            num_estimators: The number of estimators ``E`` for ensembling.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
-            The processed prediction. Member outputs enter ``recipe.output``
-            stacked as ``[E, ..., R_query, *]``; the output processors
-            determine whether the leading estimator dimension remains.
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -171,6 +173,7 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=related_context_tables_i,
                 related_query_tables=related_query_tables_i,
                 cache=None,
+                generator=generator,
                 **kwargs,
             )
             if y_context_i.numerical.size(-1) == 1:
@@ -180,6 +183,7 @@ class ICLModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        out = cast(TableTensor, out.to(x_query_i.dtype))
         return recipe.output.transform(out)
 
     @_maybe_inference_mode()
@@ -208,10 +212,8 @@ class ICLModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
-            generator: Generator used for random draws while fitting recipe
-                processors. The same generator is passed to every estimator
-                and related-table processor. If ``None``, draws use the
-                global generator.
+            generator: Pseudorandom number generator used for sampling during
+                pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
         if num_estimators < 1:
@@ -274,15 +276,12 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=related_tables_i,
                 related_query_tables=None,
                 cache=cache,
+                generator=generator,
                 **kwargs,
             )
             cache = cache.cpu().freeze()
             caches.append(cache)
         self._caches = caches
-
-    def clear(self) -> None:
-        r"""Clears cached in-context examples and the fitted recipe."""
-        self._caches = None
 
     @_maybe_inference_mode()
     def predict(
@@ -302,9 +301,8 @@ class ICLModel(torch.nn.Module, ABC):
             related_tables: Related context for query examples.
 
         Returns:
-            The processed prediction. Member outputs enter ``recipe.output``
-            stacked as ``[E, ..., R, *]``; the output processors determine
-            whether the leading estimator dimension remains.
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
@@ -363,6 +361,7 @@ class ICLModel(torch.nn.Module, ABC):
                 related_context_tables=None,
                 related_query_tables=related_tables_i,
                 cache=cache.to(x_i.device),
+                generator=None,
                 **cast(dict[str, Any], cache["kwargs"]),
             )
             if cache["classes"] is None:
@@ -372,7 +371,12 @@ class ICLModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        out = cast(TableTensor, out.to(x_i.dtype))
         return recipe.output.transform(out)
+
+    def clear(self) -> None:
+        r"""Clear cached context state created by :meth:`fit`."""
+        self._caches = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -390,6 +394,7 @@ class ICLModel(torch.nn.Module, ABC):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, *]
         pass

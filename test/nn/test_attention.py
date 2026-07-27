@@ -124,6 +124,18 @@ def test_sdpa(
     )
     torch.testing.assert_close(out, expected)
 
+    # Empty key/value sequences produce a zero attention result.
+    query = torch.randn(2, 3, num_query_heads, channels, device=device)
+    key = torch.empty(1, 0, num_key_value_heads, channels, device=device)
+    value = torch.empty(2, 0, num_key_value_heads, channels, device=device)
+    out = module(
+        query=query,
+        key=key,
+        value=value,
+    )
+    assert out.size() == query.size()
+    torch.testing.assert_close(out, torch.zeros_like(query))
+
     # Apply sequence lengths to mask keys.
     batch_size = 2
     query_len = 4
@@ -883,6 +895,52 @@ def test_transformer_block(
         rope=rotary_embedding,
     )
     torch.testing.assert_close(out1, out3)
+
+
+def test_transformer_block_norm_kwargs_precedence() -> None:
+    # User-provided `norm_kwargs` win over the `device`/`dtype` arguments.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm_kwargs={"dtype": torch.float64},
+    )
+    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+        assert next(norm.parameters()).dtype == torch.float64
+
+    # The `dtype` argument still applies when `norm_kwargs` does not set it.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm_kwargs={"eps": 1e-6},
+        dtype=torch.float64,
+    )
+    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+        assert next(norm.parameters()).dtype == torch.float64
+
+
+def test_transformer_block_norm_callable() -> None:
+    # A norm class is instantiated per site, so no site shares an instance.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm=torch.nn.RMSNorm,
+        norm_kwargs={"eps": 1e-6, "dtype": torch.float64},
+    )
+    norms = (module.q_norm, module.kv_norm, module.mlp[0])
+    for norm in norms:
+        assert isinstance(norm, torch.nn.RMSNorm)
+        assert norm.normalized_shape == (8,)
+        assert norm.eps == 1e-6
+        assert next(norm.parameters()).dtype == torch.float64
+    assert len({id(norm) for norm in norms}) == 3
+
+    param_ids = [{id(param) for param in norm.parameters()} for norm in norms]
+    assert param_ids[0].isdisjoint(param_ids[1])
+    assert param_ids[0].isdisjoint(param_ids[2])
+    assert param_ids[1].isdisjoint(param_ids[2])
 
 
 def test_transformer_block_kv_cache() -> None:

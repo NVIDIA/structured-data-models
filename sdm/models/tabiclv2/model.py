@@ -3,14 +3,13 @@
 from typing import Any, ClassVar, cast
 
 import torch
-from huggingface_hub import hf_hub_download
-from huggingface_hub.utils import LocalEntryNotFoundError
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
+from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.hierarchical_classifier import (
     HierarchicalClassifier,
 )
@@ -64,20 +63,39 @@ class TabICLv2(ICLModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
+    .. code-block:: python
+
+        from sdm import TableTensor
+        from sdm.models import TabICLv2
+
+        table = TableTensor.from_pandas(...)
+        model = TabICLv2(device="cuda")
+
+        # Default in-context learning forward pass:
+        out = model(
+            x_context=table[:300].drop_columns("target"),
+            y_context=table[:300, "target"],
+            x_query=table[300:].drop_columns("target"),
+        )
+
+        # Fit+Predict forward pass via key/value caching:
+        model.fit(
+            x=table[:300].drop_columns("target"),
+            y=table[:300, "target"],
+        )
+        out = model.predict(table[300:].drop_columns("target"))
+
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
 
-    #:
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical}
     )
-    #:
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
-    #:
     supports_related_tables: ClassVar[bool] = False
 
     def __init__(
@@ -114,17 +132,10 @@ class TabICLv2(ICLModel):
         device = next(self.parameters()).device
 
         for variant in ["classifier", "regressor"]:
-            try:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                    local_files_only=True,
-                )
-            except LocalEntryNotFoundError:
-                path = hf_hub_download(
-                    repo_id="jingang/TabICL",
-                    filename=f"tabicl-{variant}-v2-20260212.ckpt",
-                )
+            path = download_checkpoint(
+                repo_id="jingang/TabICL",
+                filename=f"tabicl-{variant}-v2-20260212.ckpt",
+            )
             ckpt = torch.load(path, map_location=device)["state_dict"]
 
             if variant == "classifier":
@@ -144,13 +155,14 @@ class TabICLv2(ICLModel):
         related_context_tables: RelatedTables | None,
         related_query_tables: RelatedTables | None,
         cache: Cache | None,
+        generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:  # [..., R_query, num_classes or 999]
 
-        if x_context is None and x_query is not None:
-            x = x_query.numerical
-        elif x_query is None and x_context is not None:
+        if x_query is None and x_context is not None:
             x = x_context.numerical
+        elif x_context is None and x_query is not None:
+            x = x_query.numerical
         else:
             assert x_context is not None
             assert x_query is not None
