@@ -111,16 +111,15 @@ else:
     metric = MeanAbsoluteError().to(device)
 for query in tqdm(task_tables[-1].split(args.batch_size)):
     x_query = query.drop_columns(task.target_col)
-    y_query = query[task.target_col].to(device)
+    y_query = query[task.target_col].as_tensor().to(device)
     out = model.predict(*sampler(x_query, **kwargs).to(device))
-    if y_query.stype(task.target_col).value == "categorical":
-        out = out["1"].as_tensor().view(-1)  # Positive class.
-        y_query = y_query.as_tensor().decode().view(-1)  # Decode ground-truth.
+    if task.task_type == relbench.base.TaskType.REGRESSION:
+        out = out["q500"].as_tensor()  # Median prediction.
     else:
-        out = out["q500"].as_tensor().view(-1)  # Median prediction.
-        y_query = y_query.as_tensor().view(-1)
-    metric.update(out, y_query)
-if context.stype(task.target_col) == "categorical":
-    print(f"AUROC: {metric.compute():.4f}")
-else:
+        out = out["1"].as_tensor()  # Positive class.
+        y_query = y_query.decode()  # Decode ground-truth.
+    metric.update(out.view(-1), y_query.view(-1))
+if task.task_type == relbench.base.TaskType.REGRESSION:
     print(f"MAE: {metric.compute():.4f}")
+else:
+    print(f"AUROC: {metric.compute():.4f}")
