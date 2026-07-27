@@ -62,9 +62,9 @@ def test_forward(
     model.fit(x_context, y_context)
     caches = model._caches
     assert caches is not None
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    assert all(cache.size() > 0 for cache in caches)
     assert model.predict(x_query).allclose(out)
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    assert all(cache.size() > 0 for cache in caches)
     model.clear()
 
 

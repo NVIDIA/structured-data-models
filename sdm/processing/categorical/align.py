@@ -69,10 +69,8 @@ class AlignCategories(Processor):
             else:
                 actual = actual.index_select(0, unique)
 
-            if (
-                isinstance(actual, StringTensor)
-                or actual.dtype in _UNSIGNED_DTYPES
-            ):
+            if isinstance(actual, StringTensor):
+                # TODO Run join once with column-index composite key.
                 left_index, right_index = join_index(
                     left_table=TableTensor(
                         columns={"id": ("id",)},
@@ -87,6 +85,13 @@ class AlignCategories(Processor):
                     dtype=out.dtype,
                 )
             else:
+                if (
+                    actual.dtype == torch.bool
+                    or actual.dtype in _UNSIGNED_DTYPES
+                ):
+                    actual = actual.to(torch.int64)
+                    expected = expected.to(torch.int64)
+
                 expected, perm = expected.sort()
                 position = torch.searchsorted(expected, actual)
                 position = position.clamp(max=expected.numel() - 1)
