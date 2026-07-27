@@ -7,7 +7,6 @@ def test_cell_embedder_adds_regression_targets_to_context_only() -> None:
     module = CellEmbedder(
         channels=4,
         num_frequencies=2,
-        is_classifier=False,
     )
     x = torch.randn(2, 5, 4)
     target = torch.randn(2, 5)
@@ -28,7 +27,7 @@ def test_cell_embedder_adds_regression_targets_to_context_only() -> None:
 
 
 def test_cell_embedder_ignores_regression_query_targets() -> None:
-    module = CellEmbedder(channels=4, num_frequencies=2, is_classifier=False)
+    module = CellEmbedder(channels=4, num_frequencies=2)
     x = torch.randn(2, 5, 4)
     target = torch.randn(2, 5)
     train_size = torch.tensor([3, 2])

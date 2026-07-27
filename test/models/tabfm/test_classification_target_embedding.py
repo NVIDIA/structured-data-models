@@ -40,19 +40,29 @@ def test_cell_embedder_ignores_query_targets() -> None:
 
 def test_cell_embedder_requires_a_valid_target_configuration() -> None:
     x = torch.randn(2, 5, 4)
-    target = torch.zeros(2, 5)
+    classification_target = torch.zeros(2, 5, dtype=torch.long)
+    regression_target = torch.zeros(2, 5)
 
-    with pytest.raises(ValueError, match="max_classes"):
+    with pytest.raises(ValueError, match="integer target"):
         CellEmbedder(channels=4)(
             x=x,
-            target=target,
+            target=classification_target,
+            train_size=torch.tensor([3, 2]),
+        )
+    with pytest.raises(ValueError, match="floating-point target"):
+        CellEmbedder(channels=4, max_classes=3)(
+            x=x,
+            target=regression_target,
             train_size=torch.tensor([3, 2]),
         )
     with pytest.raises(ValueError, match="train_size"):
-        CellEmbedder(channels=4, max_classes=3)(x=x, target=target)
+        CellEmbedder(
+            channels=4,
+            max_classes=3,
+        )(x=x, target=classification_target)
     with pytest.raises(ValueError, match="target"):
         CellEmbedder(channels=4, max_classes=3)(
             x=x,
-            target=target[:, :-1],
+            target=classification_target[:, :-1],
             train_size=torch.tensor([3, 2]),
         )

@@ -25,15 +25,15 @@ class CellEmbedder(torch.nn.Module):
     """Embed grouped numerical and categorical cells for TabFM v1.0.0.
 
     Feature groups use cyclic offsets ``2**index - 1``. Numerical and
-    categorical slots have separate learned Fourier projections. Classification
-    targets are embedded only into context rows.
+    categorical slots have separate learned Fourier projections. Integer
+    targets use a lookup table and floating-point targets use an MLP; target
+    embeddings are added only to context rows.
 
     Args:
         channels: Number of output channels per cell.
         max_classes: Maximum number of classification classes.
         feature_group_size: Number of cyclically shifted features per group.
         num_frequencies: Number of Fourier frequencies per group slot.
-        is_classifier: Whether targets are class IDs instead of scalars.
         device: Device on which to create parameters and buffers.
         dtype: Dtype of parameters and buffers.
     """
@@ -47,7 +47,6 @@ class CellEmbedder(torch.nn.Module):
         max_classes: int | None = None,
         feature_group_size: int = 3,
         num_frequencies: int = 32,
-        is_classifier: bool = True,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -64,7 +63,6 @@ class CellEmbedder(torch.nn.Module):
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
         self.feature_group_size = feature_group_size
-        self.is_classifier = is_classifier
         self.register_buffer(
             "fourier_frequencies",
             torch.zeros(
@@ -169,8 +167,9 @@ class CellEmbedder(torch.nn.Module):
 
         Args:
             x: Feature tensor with shape ``[B, T, H]``.
-            target: Optional targets with shape ``[B, T]``. Classification
-                targets require ``max_classes`` to be set.
+            target: Optional targets with shape ``[B, T]``. Integer targets
+                require ``max_classes``; floating-point targets require
+                ``max_classes=None``.
             train_size: Optional context-row counts with shape ``[B]``.
                 Required when ``target`` is supplied.
             cat_mask: Optional categorical mask with shape ``[B, H]``.
@@ -197,8 +196,6 @@ class CellEmbedder(torch.nn.Module):
         cell = self._embed(x=x, cat_mask=cat_mask, d=d)
         output = cell
         if target is not None:
-            if self.y_embedder_lookup is None:
-                raise ValueError("target requires max_classes")
             if target.shape != (batch_size, num_rows):
                 raise ValueError("target must have shape [B, T]")
             if train_size is None or (
@@ -207,18 +204,20 @@ class CellEmbedder(torch.nn.Module):
             ):
                 raise ValueError("train_size must be an integer [B] tensor")
 
-            if self.is_classifier:
-                assert isinstance(self.y_embedder_lookup, Embedding)
+            if target.is_floating_point():
+                if not isinstance(self.y_embedder_lookup, Sequential):
+                    raise ValueError("floating-point target requires max_classes=None")
+                target_embedding = self.y_embedder_lookup(
+                    target[..., None].to(cell.dtype)
+                )
+            else:
+                if not isinstance(self.y_embedder_lookup, Embedding):
+                    raise ValueError("integer target requires max_classes")
                 target = target.long().clamp(
                     0,
                     self.y_embedder_lookup.num_embeddings - 1,
                 )
                 target_embedding = self.y_embedder_lookup(target)
-            else:
-                assert isinstance(self.y_embedder_lookup, Sequential)
-                target_embedding = self.y_embedder_lookup(
-                    target[..., None].to(cell.dtype)
-                )
             row_index = torch.arange(num_rows, device=x.device)
             context = row_index[None, :] < train_size[:, None]
             output = torch.where(
