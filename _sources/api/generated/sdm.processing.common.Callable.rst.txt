@@ -1,0 +1,8 @@
+﻿Callable
+========
+
+.. currentmodule:: sdm.processing.common
+
+.. autoclass:: Callable
+   :members:
+   :show-inheritance:

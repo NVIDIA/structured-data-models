@@ -98,6 +98,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Callable.html">Callable</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Sequential.html">Sequential</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.StypeDispatch.html">StypeDispatch</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.TaskDispatch.html">TaskDispatch</a></li>
@@ -148,6 +149,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.processing.base.Processor"><code class="docutils literal notranslate"><span class="pre">Processor</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.processing.base.Processor.as_processor"><code class="docutils literal notranslate"><span class="pre">Processor.as_processor()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.fit"><code class="docutils literal notranslate"><span class="pre">Processor.fit()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.transform"><code class="docutils literal notranslate"><span class="pre">Processor.transform()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.base.Processor.forward"><code class="docutils literal notranslate"><span class="pre">Processor.forward()</span></code></a></li>
@@ -202,6 +204,23 @@ A <a class="reference internal" href="#sdm.processing.base.Processor" title="sdm
 the transformation via <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>.</p>
 <dl class="field-list simple">
 </dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.processing.base.Processor.as_processor">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">as_processor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">processor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><span class="pre">Processor</span></a></span></span><a class="headerlink" href="#sdm.processing.base.Processor.as_processor" title="Link to this definition">#</a></dt>
+<dd><p>Normalize a processor-like object to a <a class="reference internal" href="#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>processor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – A processor-like object. A <a class="reference internal" href="#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> is
+returned as-is, a callable is wrapped as a stateless processor,
+and a sequence of processor-like objects is normalized to
+<a class="reference internal" href="sdm.processing.common.Sequential.html#sdm.processing.common.Sequential" title="sdm.processing.common.Sequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a>.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.base.Processor.fit">
 <span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.processing.base.Processor.fit" title="Link to this definition">#</a></dt>
@@ -298,7 +317,7 @@ the transformation via <a class="reference internal" href="#sdm.processing.base.
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=a107eb8e"></script>
+      <script src="../../_static/documentation_options.js?v=1205baa8"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
