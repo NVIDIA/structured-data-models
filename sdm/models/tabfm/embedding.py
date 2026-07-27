@@ -206,7 +206,9 @@ class CellEmbedder(torch.nn.Module):
 
             if target.is_floating_point():
                 if not isinstance(self.y_embedder_lookup, Sequential):
-                    raise ValueError("floating-point target requires max_classes=None")
+                    raise ValueError(
+                        "floating-point target requires max_classes=None"
+                    )
                 target_embedding = self.y_embedder_lookup(
                     target[..., None].to(cell.dtype)
                 )
