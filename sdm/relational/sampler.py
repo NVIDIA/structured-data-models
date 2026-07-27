@@ -197,7 +197,7 @@ class RelationalSampler:
 
         if not task_table.is_cpu or not self.data.is_cpu:
             raise NotImplementedError(
-                f"'{self.__class__.__name__}' requires input data on CPU"
+                f"{self.__class__.__name__!r} requires input data on CPU"
             )
 
         # Resolve entity table node indices:
@@ -219,7 +219,7 @@ class RelationalSampler:
         if not task_index.equal(expected):
             raise ValueError(
                 f"Expected each task row to match exactly one row in "
-                f"'{task_link.table}'"
+                f"{task_link.table!r}"
             )
 
         if task_time_column is not None:

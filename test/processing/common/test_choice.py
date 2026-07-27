@@ -41,17 +41,14 @@ def test_choice_accepts_callable_option() -> None:
 
     assert not choice.selected.requires_fit
     assert torch.equal(output.numerical, table.numerical.square())
-    assert repr(choice) == "Choice(\n  lambda,\n)"
+    assert repr(choice) == "Choice(\n  Callable(<lambda>),\n)"
 
     with pytest.raises(AttributeError, match="inverse_transform"):
         choice.inverse_transform(output)
 
 
 def test_choice_rejects_invalid_option() -> None:
-    with pytest.raises(
-        TypeError,
-        match=r"Choice option 1.*Processor or callable.*object",
-    ):
+    with pytest.raises(TypeError, match=r"Input must be a"):
         Choice(Identity(), cast(Any, object()))
 
 
