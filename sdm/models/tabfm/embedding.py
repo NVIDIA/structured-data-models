@@ -31,7 +31,7 @@ class CellEmbedder(torch.nn.Module):
 
     Args:
         channels: Number of output channels per cell.
-        max_classes: Maximum number of classification classes.
+        max_classes: Maximum number of classes.
         feature_group_size: Number of cyclically shifted features per group.
         num_frequencies: Number of Fourier frequencies per group slot.
         device: Device on which to create parameters and buffers.
@@ -158,7 +158,7 @@ class CellEmbedder(torch.nn.Module):
     def forward(
         self,
         x: Tensor,
-        target: Tensor | None = None,
+        y: Tensor | None = None,
         train_size: Tensor | None = None,
         cat_mask: Tensor | None = None,
         d: Tensor | None = None,
@@ -204,20 +204,11 @@ class CellEmbedder(torch.nn.Module):
             ):
                 raise ValueError("train_size must be an integer [B] tensor")
 
-            if target.is_floating_point():
-                if not isinstance(self.y_embedder_lookup, Sequential):
-                    raise ValueError("floating-point target requires max_classes=None")
-                target_embedding = self.y_embedder_lookup(
-                    target[..., None].to(cell.dtype)
-                )
-            else:
-                if not isinstance(self.y_embedder_lookup, Embedding):
-                    raise ValueError("integer target requires max_classes")
-                target = target.long().clamp(
-                    0,
-                    self.y_embedder_lookup.num_embeddings - 1,
-                )
-                target_embedding = self.y_embedder_lookup(target)
+            target = target.clamp(
+                0,
+                self.y_embedder_lookup.num_embeddings - 1,
+            )
+            target_embedding = self.y_embedder_lookup(target)
             row_index = torch.arange(num_rows, device=x.device)
             context = row_index[None, :] < train_size[:, None]
             output = torch.where(
