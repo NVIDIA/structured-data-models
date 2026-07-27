@@ -28,7 +28,7 @@ def _mixed_table() -> TableTensor:
             [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
         ),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int64),
+            code=torch.tensor([[0, 1], [1, 0]], dtype=torch.int64),
             categories=(
                 StringTensor.from_list(["a", "b"]),
                 StringTensor.from_list(["small", "large"]),

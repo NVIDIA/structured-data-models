@@ -309,7 +309,7 @@ class _KumoRFM(torch.nn.Module):
 
         num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
-            y = y_context.categorical.index.squeeze(-1)
+            y = y_context.categorical.code.squeeze(-1)
             num_classes = len(y_context.categorical.categories[0])
         elif y_context is not None and y_context.numerical.size(-1) > 0:
             y = y_context.numerical.squeeze(-1)

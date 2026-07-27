@@ -81,8 +81,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
             "categorical": ("kind",),
         },
         numerical=torch.randn(8, 2, device=device),
-        categorical=CategoricalTensor(
-            data=torch.tensor(
+        categorical=CategoricalTensor(code=torch.tensor(
                 [[1], [3]], dtype=torch.int32, device=device
             ).repeat(4, 1),
             categories=(

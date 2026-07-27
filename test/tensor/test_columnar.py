@@ -25,8 +25,7 @@ def test_init() -> None:
     with pytest.raises(TypeError, match="single column tensor"):
         ColumnarTensor(
             (
-                CategoricalTensor(
-                    data=torch.randint(0, 2, (2, 1)),
+                CategoricalTensor(code=torch.randint(0, 2, (2, 1)),
                     categories=(torch.arange(2),),
                 ),
             )

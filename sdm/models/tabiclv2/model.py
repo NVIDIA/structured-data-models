@@ -171,7 +171,7 @@ class TabICLv2(ICLModel):
         y: Tensor | None = None
         classes: Tensor | None = None
         if y_context is not None and y_context.categorical.size(-1) > 0:
-            y = y_context.categorical.index.squeeze(-1)
+            y = y_context.categorical.code.squeeze(-1)
             classes = y_context.categorical.categories[0]
         elif y_context is not None and y_context.numerical.size(-1) > 0:
             y = y_context.numerical.squeeze(-1)

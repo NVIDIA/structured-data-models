@@ -70,7 +70,7 @@ class ImputeMode(Processor):
             self._fill_values.to(dtype=table.categorical.dtype),
         )
         categorical = CategoricalTensor(
-            data=data,
+            code=data,
             categories=table.categorical.categories,
         )
         return table.replace_blocks(categorical=categorical)

@@ -21,8 +21,7 @@ from sdm.testing import withCUDA
 def _categorical_target(device: torch.device | None = None) -> TableTensor:
     return TableTensor(
         columns={"categorical": ("target",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor(
+        categorical=CategoricalTensor(code=torch.tensor(
                 [[0], [1]],
                 dtype=torch.int32,
                 device=device,

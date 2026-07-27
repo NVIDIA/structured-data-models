@@ -65,7 +65,7 @@ class TableTensor(Tensor):
             },
             numerical=torch.randn(10, 2),
             categorical=CategoricalTensor(
-                data=torch.randint(0, 2, size=(10, 2)),
+                code=torch.randint(0, 2, size=(10, 2)),
                 categories=(
                     StringTensor.from_list(["USA", "Germany"]),
                     StringTensor.from_list(["enterprise", "startup"]),
@@ -204,7 +204,7 @@ class TableTensor(Tensor):
             numerical = torch.empty((*size, 0), device=device)
         if categorical is None:
             categorical = CategoricalTensor(
-                data=torch.empty((*size, 0), dtype=torch.int32, device=device),
+                code=torch.empty((*size, 0), dtype=torch.int32, device=device),
                 categories=(),
             )
         if datetime is None:
