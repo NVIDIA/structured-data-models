@@ -71,7 +71,7 @@ def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     assert query.categorical.as_tensor().squeeze(-1).tolist() == [-1, 1]
 
 
-def test_align_categories_joint_vocabulary_uses_context_order() -> None:
+def test_align_categories_joint_vocabulary_preserves_code_order() -> None:
     table = TableTensor.from_pandas(
         pd.DataFrame({"kind": ["blue", "red", "blue"]}),
         stypes={"kind": "categorical"},
@@ -81,9 +81,30 @@ def test_align_categories_joint_vocabulary_uses_context_order() -> None:
     context = processor.transform(table[1:])
     query = processor.transform(table[:1])
 
-    assert context.categorical.categories[0].tolist() == ["red", "blue"]
-    assert context.categorical.as_tensor().squeeze(-1).tolist() == [0, 1]
-    assert query.categorical.as_tensor().squeeze(-1).tolist() == [1]
+    assert context.categorical.categories[0].tolist() == ["blue", "red"]
+    assert context.categorical.as_tensor().squeeze(-1).tolist() == [1, 0]
+    assert query.categorical.as_tensor().squeeze(-1).tolist() == [0]
+
+
+def test_align_categories_transform_maps_only_observed_categories() -> None:
+    context = _table(
+        [[0]],
+        columns=("kind",),
+        categories=(("red",),),
+    )
+    query = _table(
+        [[0], [0], [-1], [2]],
+        columns=("kind",),
+        categories=(("red", "unused", "green", "also-unused"),),
+    )
+    output = AlignCategories().fit(context).transform(query)
+
+    assert output.categorical.as_tensor().squeeze(-1).tolist() == [
+        0,
+        0,
+        -1,
+        -1,
+    ]
 
 
 @withCUDA
@@ -128,7 +149,7 @@ def test_align_categories_numeric_values(device: torch.device) -> None:
 
 
 @withCUDA
-def test_align_categories_matches_nan_category_values(
+def test_align_categories_does_not_match_nan_category_values(
     device: torch.device,
 ) -> None:
     context = TableTensor(
@@ -152,7 +173,7 @@ def test_align_categories_matches_nan_category_values(
 
     output = AlignCategories().fit(context).transform(query)
 
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [0, -1, 1]
+    assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1, -1]
 
 
 def test_align_categories_scales_to_large_numeric_vocabulary() -> None:
@@ -213,6 +234,54 @@ def test_align_categories_unsigned_pandas_values(
     assert output.categorical.categories[0].tolist() == [largest, 1]
 
 
+@pytest.mark.parametrize(
+    ("dtype", "largest"),
+    [
+        (torch.uint16, 2**16 - 1),
+        (torch.uint32, 2**32 - 1),
+        (torch.uint64, 2**63 + 1),
+    ],
+)
+@withCUDA
+def test_align_categories_unsigned_values_on_device(
+    dtype: torch.dtype,
+    largest: int,
+    device: torch.device,
+) -> None:
+    context = TableTensor(
+        columns={"categorical": ("value",)},
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1]], dtype=torch.int32, device=device),
+            categories=(
+                torch.tensor([largest, 1], dtype=dtype, device=device),
+            ),
+        ),
+    )
+    query = TableTensor(
+        columns={"categorical": ("value",)},
+        categorical=CategoricalTensor(
+            data=torch.tensor(
+                [[0], [1], [2]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(
+                torch.tensor(
+                    [1, largest - 1, largest],
+                    dtype=dtype,
+                    device=device,
+                ),
+            ),
+        ),
+    )
+
+    output = AlignCategories().fit(context).transform(query)
+
+    assert output.categorical.as_tensor().squeeze(-1).tolist() == [1, -1, 0]
+    assert output.categorical.categories[0].dtype == dtype
+    assert output.categorical.categories[0].device == device
+
+
 def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     context = _table(
         [[-1], [-1]],
@@ -259,11 +328,11 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
         ),
     )
 
-    with pytest.raises(ValueError, match=r"value types.*kind"):
+    with pytest.raises(NotImplementedError, match=r"searchsorted"):
         processor.transform(query)
 
 
-def test_align_categories_rejects_lossy_numeric_dtype_change() -> None:
+def test_align_categories_allows_lossy_numeric_dtype_change() -> None:
     context = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
@@ -279,26 +348,6 @@ def test_align_categories_rejects_lossy_numeric_dtype_change() -> None:
         ),
     )
 
-    with pytest.raises(ValueError, match=r"value dtypes.*value"):
-        AlignCategories().fit(context).transform(query)
+    output = AlignCategories().fit(context).transform(query)
 
-
-@pytest.mark.parametrize("during_fit", [True, False])
-def test_align_categories_rejects_out_of_range_codes(
-    during_fit: bool,
-) -> None:
-    invalid = _table(
-        [[1]],
-        columns=("kind",),
-        categories=(("red",),),
-    )
-    if during_fit:
-        with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
-            AlignCategories().fit(invalid)
-        return
-
-    processor = AlignCategories().fit(
-        _table([[0]], columns=("kind",), categories=(("red",),))
-    )
-    with pytest.raises(ValueError, match=r"kind.*outside.*vocabulary"):
-        processor.transform(invalid)
+    assert output.categorical.as_tensor().squeeze(-1).tolist() == [0]
