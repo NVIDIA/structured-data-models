@@ -65,7 +65,6 @@ sampler = data.sampler(
     ),
 )
 
-
 # Collect Task Table ##########################################################
 task = get_task(args.dataset, args.task, download=True)
 dfs = [
@@ -105,20 +104,21 @@ model.fit(
     num_estimators=1,
 )
 
-if context.stype(task.target_col) == "categorical":
-    metric = BinaryAUROC().to(device)
-else:
+if task.task_type == relbench.base.TaskType.REGRESSION:
     metric = MeanAbsoluteError().to(device)
+else:
+    metric = BinaryAUROC().to(device)
 for batch in tqdm(query.split(args.batch_size)):
     x_query = batch.drop_columns(task.target_col)
-    y_query = batch[task.target_col].as_tensor().to(device)
+    y_query = batch[task.target_col].to(device)
     out = model.predict(*sampler(x_query, **kwargs).to(device))
     if task.task_type == relbench.base.TaskType.REGRESSION:
-        out = out["q500"].as_tensor()  # Median prediction.
+        out = out["q500"].numerical  # Median prediction.
+        y_query = y_query.numerical
     else:
-        out = out["1"].as_tensor()  # Positive class.
-        y_query = y_query.decode()  # Decode ground-truth.
-    metric.update(out.view(-1), y_query.view(-1))
+        out = out["1"].numerical  # Positive class.
+        y_query = y_query.categorical.decode()  # Decode ground-truth.
+    metric.update(out, y_query)
 if task.task_type == relbench.base.TaskType.REGRESSION:
     print(f"MAE: {metric.compute():.4f}")
 else:
