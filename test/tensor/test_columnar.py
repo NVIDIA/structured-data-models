@@ -26,7 +26,7 @@ def test_init() -> None:
         ColumnarTensor(
             (
                 CategoricalTensor(
-                    data=torch.randint(0, 2, (2, 1)),
+                    code=torch.randint(0, 2, (2, 1)),
                     categories=(torch.arange(2),),
                 ),
             )

@@ -25,7 +25,7 @@ def _table(
         columns=columns,
         numerical=numerical,
         categorical=CategoricalTensor(
-            data=torch.tensor(values, dtype=torch.int32, device=device),
+            code=torch.tensor(values, dtype=torch.int32, device=device),
             categories=tuple(
                 StringTensor.from_list(category, device=device)
                 for category in categories
@@ -45,13 +45,13 @@ def test_shuffle_categories_shift_maps_single_target() -> None:
 
     assert output.columns[Stype.categorical] == ("cat0",)
     permutation = processor.permutations
-    codes = target.categorical.as_tensor()
+    codes = target.categorical.code
     valid = codes >= 0
     assert torch.equal(
-        output.categorical.as_tensor()[valid],
+        output.categorical.code[valid],
         permutation[codes[valid].to(torch.long)].to(codes.dtype),
     )
-    assert output.categorical.as_tensor()[-1].item() == -1
+    assert output.categorical.code[-1].item() == -1
     assert (
         output.categorical.categories[0].tolist()
         == target.categorical.categories[0][permutation.argsort()].tolist()
@@ -73,8 +73,8 @@ def test_shuffle_categories_random_permutes_each_categorical_column(
     transformed = processor.fit_transform(features)
 
     offsets = processor.offsets.tolist()
-    input_codes = features.categorical.as_tensor()
-    output_codes = transformed.categorical.as_tensor()
+    input_codes = features.categorical.code
+    output_codes = transformed.categorical.code
     for index, category in enumerate(features.categorical.categories):
         permutation = processor.permutations[
             offsets[index] : offsets[index + 1]
@@ -137,5 +137,5 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert processor.offsets.tolist() == [0, 4]
     assert processor.permutations.numel() == 4
     assert output.categorical.categories[0].numel() == 4
-    assert output.categorical.as_tensor()[-1].item() == -1
+    assert output.categorical.code[-1].item() == -1
     assert output.categorical.tolist() == target.categorical.tolist()

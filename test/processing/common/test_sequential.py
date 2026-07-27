@@ -21,7 +21,7 @@ def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:
         numerical = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
     n_rows = numerical.shape[0]
     categorical = CategoricalTensor(
-        data=(torch.arange(n_rows) % 2).unsqueeze(1),
+        code=(torch.arange(n_rows) % 2).unsqueeze(1),
         categories=(StringTensor.from_list(["a", "b"]),),
     )
     return TableTensor(
