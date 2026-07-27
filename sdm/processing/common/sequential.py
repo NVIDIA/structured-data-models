@@ -86,18 +86,15 @@ class Sequential(Processor, InvertibleMixin):
             out = child.transform(out)
         return out
 
-    def fit_transform(
+    def _fit_transform(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
         out = table
         for child in self:
             out = child.fit_transform(out, generator=generator)
-        if self.requires_fit:
-            self._fitted = True
         return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:

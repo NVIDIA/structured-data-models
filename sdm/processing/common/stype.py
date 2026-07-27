@@ -118,6 +118,38 @@ class StypeDispatch(Processor, InvertibleMixin):
                 continue
             processor.fit(route_input, generator=generator)
 
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        remainder_stypes = [
+            stype
+            for stype, columns in table.columns.items()
+            if stype.value not in self.processors and len(columns) > 0
+        ]
+        self._check_remainder(remainder_stypes)
+
+        outputs: list[TableTensor] = []
+        for stype, processor in self.processors.items():
+            processor = cast(Processor, processor)
+            route_input = table.select_stypes(stype)
+            if route_input.size(-1) == 0:
+                continue
+            out = processor.fit_transform(route_input, generator=generator)
+            outputs.append(out)
+        if self.remainder == "passthrough":
+            outputs.extend(
+                table.select_stypes(stype) for stype in remainder_stypes
+            )
+        if len(outputs) == 0:
+            return table.select_columns(())
+        return cast(
+            TableTensor,
+            torch.cat(cast(list[Tensor], outputs), dim=-1),
+        )
+
     def _transform(self, table: TableTensor) -> TableTensor:
         remainder_stypes = [
             stype

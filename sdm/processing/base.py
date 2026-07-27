@@ -60,6 +60,16 @@ class Processor(torch.nn.Module, abc.ABC):
     def _transform(self, table: TableTensor) -> TableTensor:
         pass
 
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        if self.requires_fit:
+            self._fit(table, generator=generator)
+        return self._transform(table)
+
     def fit(
         self,
         table: TableTensor,
@@ -110,7 +120,11 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        return self.fit(table, generator=generator).transform(table)
+        self._check_supported_stypes(table)
+        out = self._fit_transform(table, generator=generator)
+        if self.requires_fit:
+            self._fitted = True
+        return out
 
     def __add__(self, other: object) -> Sequential:
         from sdm.processing import Sequential  # noqa: PLC0415

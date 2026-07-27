@@ -35,6 +35,7 @@ class AlignCategories(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         mask = table.categorical.isfinite()
+
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
             index = table.categorical[..., i].view(-1)
@@ -48,6 +49,37 @@ class AlignCategories(Processor):
                 category = category.index_select(0, unique)
             categories.append(category)
         self._categories = tuple(categories)
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        r""":meta private:"""  # noqa: D415
+        mask = table.categorical.isfinite()
+        out = torch.full_like(table.categorical, -1)
+
+        categories: list[Tensor] = []
+        for i, category in enumerate(table.categorical.categories):
+            index = table.categorical[..., i].view(-1)
+            unique, inverse = index[mask[..., i]].unique(return_inverse=True)
+            if unique.numel() == category.numel():
+                pass
+            elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
+                # PyTorch CPU index_select is not implemented for these dtypes.
+                category = category[unique]
+            else:
+                category = category.index_select(0, unique)
+            categories.append(category)
+
+            out[..., i][mask[..., i]] = inverse.to(out.dtype)
+
+        self._categories = tuple(categories)
+
+        return table.replace_blocks(
+            categorical=CategoricalTensor(out, categories=self._categories),
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         mask = table.categorical.isfinite()
@@ -69,10 +101,7 @@ class AlignCategories(Processor):
             else:
                 actual = actual.index_select(0, unique)
 
-            if (
-                isinstance(actual, StringTensor)
-                or actual.dtype in _UNSIGNED_DTYPES
-            ):
+            if isinstance(actual, StringTensor):
                 left_index, right_index = join_index(
                     left_table=TableTensor(
                         columns={"id": ("id",)},
@@ -87,6 +116,13 @@ class AlignCategories(Processor):
                     dtype=out.dtype,
                 )
             else:
+                if (
+                    actual.dtype == torch.bool
+                    or actual.dtype in _UNSIGNED_DTYPES
+                ):
+                    actual = actual.to(torch.int64)
+                    expected = expected.to(torch.int64)
+
                 expected, perm = expected.sort()
                 position = torch.searchsorted(expected, actual)
                 position = position.clamp(max=expected.numel() - 1)
