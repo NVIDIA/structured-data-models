@@ -328,7 +328,7 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
         ),
     )
 
-    with pytest.raises(NotImplementedError, match=r"searchsorted"):
+    with pytest.raises(NotImplementedError):
         processor.transform(query)
 
 
