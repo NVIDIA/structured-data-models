@@ -309,7 +309,7 @@ class ICLModel(torch.nn.Module, ABC):
 
         if self._caches is None:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' not yet fitted. Make sure to "
+                f"{self.__class__.__name__!r} not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
@@ -427,20 +427,20 @@ class ICLModel(torch.nn.Module, ABC):
         invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
         if len(invalid) > 0:
             raise ValueError(
-                f"'{self.__class__.__name__}' received unsupported feature "
+                f"{self.__class__.__name__!r} received unsupported feature "
                 f"stypes: {', '.join(stype.value for stype in invalid)}"
             )
         invalid = y.active_stypes - self.supported_target_stypes
         if len(invalid) > 0:
             raise ValueError(
-                f"'{self.__class__.__name__}' received unsupported target "
+                f"{self.__class__.__name__!r} received unsupported target "
                 f"stypes: {', '.join(stype.value for stype in invalid)}"
             )
 
         if related_tables is not None:
             if not self.supports_related_tables:
                 raise ValueError(
-                    f"'{self.__class__.__name__}' does not support related "
+                    f"{self.__class__.__name__!r} does not support related "
                     f"tables"
                 )
             for table_name, table in related_tables.tables.items():
@@ -448,8 +448,8 @@ class ICLModel(torch.nn.Module, ABC):
                 invalid = invalid - {Stype.id}
                 if len(invalid) > 0:
                     raise ValueError(
-                        f"'{self.__class__.__name__}' received unsupported "
-                        f"feature stypes in related table '{table_name}': "
+                        f"{self.__class__.__name__!r} received unsupported "
+                        f"feature stypes in related table {table_name!r}: "
                         f"{', '.join(stype.value for stype in invalid)}"
                     )
 

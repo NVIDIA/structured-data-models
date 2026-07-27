@@ -15,6 +15,6 @@ def _check_categorical_codes(table: TableTensor) -> None:
         codes = table.categorical[..., index]
         if (codes >= category.numel()).any():
             raise ValueError(
-                f"Categorical column '{columns[index]}' contains a code "
+                f"Categorical column {columns[index]!r} contains a code "
                 "outside its category vocabulary."
             )

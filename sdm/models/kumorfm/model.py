@@ -327,7 +327,7 @@ class _KumoRFM(torch.nn.Module):
         if x_context is not None:
             if related_context_tables is None:
                 raise ValueError(
-                    f"'{self.__class__.__name__}' requires related tables"
+                    f"{self.__class__.__name__!r} requires related tables"
                 )
             context = TaskGraph.from_input(
                 x=x_context,
@@ -342,7 +342,7 @@ class _KumoRFM(torch.nn.Module):
         if x_query is not None:
             if related_query_tables is None:
                 raise ValueError(
-                    f"'{self.__class__.__name__}' requires related tables"
+                    f"{self.__class__.__name__!r} requires related tables"
                 )
             if context is not None:
                 relationships = context.related_tables.relationships

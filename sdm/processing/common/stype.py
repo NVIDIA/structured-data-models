@@ -77,10 +77,10 @@ class StypeDispatch(Processor, InvertibleMixin):
         if self.remainder != "error" or len(remainder_stypes) == 0:
             return
 
-        names = ", ".join(f"'{stype.value}'" for stype in remainder_stypes)
+        names = ", ".join(f"{stype.value!r}" for stype in remainder_stypes)
         raise ValueError(
             f"Found non-empty input columns for semantic types {names}, but "
-            f"'{self.__class__.__name__}' has no route for them. Configure "
+            f"{self.__class__.__name__!r} has no route for them. Configure "
             "a processor for each semantic type or set "
             "remainder='passthrough' or remainder='drop'."
         )
@@ -146,8 +146,8 @@ class StypeDispatch(Processor, InvertibleMixin):
                 continue
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
-                    f"Route '{stype}' uses non-invertible processor "
-                    f"'{processor.__class__.__name__}'"
+                    f"Route {stype!r} uses non-invertible processor "
+                    f"{processor.__class__.__name__!r}"
                 )
             outputs.append(processor.inverse_transform(route_input))
 
