@@ -32,9 +32,8 @@ jobs:
         run: |
           uv build
 
-      - name: Publish distributions
+      - name: Publish to internal PyPI
+        run: uv publish --index nv-shared
         env:
-          UV_PUBLISH_PASSWORD: ${{ secrets.NVIDIA_PYPI_TOKEN }}
-          UV_PUBLISH_USERNAME: ${{ vars.NVIDIA_PYPI_USER }}
-        run: |
-          uv publish --index nv-shared --trusted-publishing never
+          UV_PUBLISH_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+          UV_PUBLISH_PASSWORD: ${{ secrets.ARTIFACTORY_TOKEN }}
