@@ -100,7 +100,7 @@ def infer_stypes(
     if not isinstance(table, pa.Schema):
         raise TypeError(
             f"Expected input to be a 'pandas.DataFrame', 'pyarrow.Table', "
-            f"or 'cudf.DataFrame' (got '{type(table).__name__}')"
+            f"or 'cudf.DataFrame' (got {type(table).__name__!r})"
         )
 
     return {
@@ -137,7 +137,7 @@ def _infer_arrow_stype(name: str, dtype: pa.DataType) -> Stype:
     if pa.types.is_timestamp(dtype) or pa.types.is_date(dtype):
         return Stype.datetime
 
-    raise TypeError(f"Unsupported Arrow type '{dtype}' for column '{name}'")
+    raise TypeError(f"Unsupported Arrow type '{dtype}' for column {name!r}")
 
 
 def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
@@ -173,7 +173,7 @@ def _infer_cudf_stype(name: str, dtype: Any) -> Stype:
     if is_datetime64_any_dtype(dtype):
         return Stype.datetime
 
-    raise TypeError(f"Unsupported cuDF type '{dtype}' for column '{name}'")
+    raise TypeError(f"Unsupported cuDF type '{dtype}' for column {name!r}")
 
 
 def _has_id_token(name: str) -> bool:

@@ -65,9 +65,6 @@ class CategoricalTensor(Tensor):
     _data: Tensor
     _categories: tuple[Tensor, ...]
 
-    # Route tensor operations through `__torch_dispatch__` only.
-    __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
-
     # Constructors ############################################################
 
     def __init__(
@@ -85,23 +82,23 @@ class CategoricalTensor(Tensor):
         r"""Create a tensor wrapper."""
         if data.dtype not in cls.ALLOWED_DTYPES:
             raise ValueError(
-                f"Expected 'data' in '{cls.__name__}' to have dtype "
+                f"Expected 'data' in {cls.__name__!r} to have dtype "
                 f"in '{cls.ALLOWED_DTYPES}' (got '{data.dtype}')"
             )
         if data.dim() == 0:
             raise ValueError(
-                f"Expected '{cls.__name__}' to have at least one dimension"
+                f"Expected {cls.__name__!r} to have at least one dimension"
             )
         if data.size(-1) != len(categories):
             raise ValueError(
-                f"Expected the last dimension in '{cls.__name__}' to match "
+                f"Expected the last dimension in {cls.__name__!r} to match "
                 f"the number of category vectors (got {data.size(-1)} and "
                 f"{len(categories)})"
             )
         for i, category in enumerate(categories):
             if category.dim() != 1:
                 raise ValueError(
-                    f"Expected category {i} in '{cls.__name__}' to be "
+                    f"Expected category {i} in {cls.__name__!r} to be "
                     f"one-dimensional (got {category.dim()}D)"
                 )
 
@@ -341,6 +338,21 @@ class CategoricalTensor(Tensor):
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._data, self._categories)
         return (self.__class__, args)
+
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Callable[..., Any],
+        types: tuple[type[Any], ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        if func is torch.isfinite or func is Tensor.isfinite:
+            assert isinstance(args[0], CategoricalTensor)
+            return args[0]._data >= 0
+
+        with torch._C.DisableTorchFunction():
+            return func(*args, **(kwargs or {}))
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
