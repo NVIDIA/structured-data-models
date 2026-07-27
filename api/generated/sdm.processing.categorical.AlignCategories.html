@@ -187,13 +187,18 @@ data-aria-dark="Switch to auto color mode">
 <h1>AlignCategories<a class="headerlink" href="#aligncategories" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.categorical.AlignCategories">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.categorical.</span></span><span class="sig-name descname"><span class="pre">AlignCategories</span></span><a class="headerlink" href="#sdm.processing.categorical.AlignCategories" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.categorical.</span></span><span class="sig-name descname"><span class="pre">AlignCategories</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sort_by</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'code'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'frequency'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'code'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.categorical.AlignCategories" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
 <p>Align categorical columns to vocabularies observed during fitting.</p>
 <p>Fitting keeps the observed category values for each column. Transforming
 remaps input codes by category value into those fitted vocabularies.
 Missing values and unseen categories are encoded as <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
 <dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>sort_by</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'code'</em><em>, </em><em>'frequency'</em><em>]</em>) – How to order fitted category vocabularies.
+<code class="docutils literal notranslate"><span class="pre">&quot;code&quot;</span></code> keeps observed categories in original order.
+<code class="docutils literal notranslate"><span class="pre">&quot;frequency&quot;</span></code> orders observed categories by descending frequency.</p>
+</dd>
 </dl>
 </dd></dl>
 
@@ -223,7 +228,7 @@ Missing values and unseen categories are encoded as <code class="docutils litera
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=335675dc"></script>
+      <script src="../../_static/documentation_options.js?v=d2107a25"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

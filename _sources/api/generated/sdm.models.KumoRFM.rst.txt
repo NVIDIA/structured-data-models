@@ -40,7 +40,7 @@ Default Recipe
        ),
        StypeDispatch(
          categorical: Sequential(
-           AlignCategories(),
+           AlignCategories(sort_by='frequency'),
            ToNumerical(),
          ),
        ),
@@ -63,7 +63,7 @@ Default Recipe
        StypeDispatch(
          numerical: Standardize(),
          categorical: Sequential(
-           AlignCategories(),
+           AlignCategories(sort_by='code'),
            ShuffleCategories(),
          ),
        ),
