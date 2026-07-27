@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype
+from sdm import CategoricalTensor, StringTensor, Stype
 from sdm.processing.base import Processor
 from sdm.processing.categorical._categorical import _check_categorical_codes
 from sdm.tensor import TableTensor
@@ -59,7 +59,10 @@ class SortCategories(Processor):
         *,
         device: torch.device,
     ) -> Tensor:
-        if category.dtype in _HOST_SORTED_DTYPES:
+        if (
+            isinstance(category, StringTensor)
+            or category.dtype in _HOST_SORTED_DTYPES
+        ):
             values = category.tolist()
             return torch.tensor(
                 sorted(range(category.numel()), key=values.__getitem__),

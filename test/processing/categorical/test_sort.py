@@ -54,7 +54,11 @@ def test_sort_categories_orders_numeric_vocabulary_on_table_device(
     table = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [2], [-1]], dtype=torch.int32, device=device),
+            data=torch.tensor(
+                [[0], [1], [2], [-1]],
+                dtype=torch.int32,
+                device=device,
+            ),
             categories=(torch.tensor([20, 10, 30], device=device),),
         ),
     )
@@ -76,7 +80,11 @@ def test_sort_categories_orders_nan_after_finite_numeric_values(
     table = TableTensor(
         columns={"categorical": ("value",)},
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1], [-1]], dtype=torch.int32, device=device),
+            data=torch.tensor(
+                [[0], [1], [-1]],
+                dtype=torch.int32,
+                device=device,
+            ),
             categories=(torch.tensor([torch.nan, 1.0], device=device),),
         ),
     )
@@ -113,7 +121,11 @@ def test_sort_categories_orders_unsigned_pandas_vocabulary(
     output = SortCategories().transform(table)
 
     assert output.categorical.categories[0].dtype == getattr(torch, dtype)
-    assert output.categorical.categories[0].tolist() == [1, largest - 1, largest]
+    assert output.categorical.categories[0].tolist() == [
+        1,
+        largest - 1,
+        largest,
+    ]
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [2, 0, 1]
 
 
@@ -131,4 +143,9 @@ def test_sort_categories_after_alignment_keeps_context_vocabulary() -> None:
     output = SortCategories().transform(align.transform(query))
 
     assert output.categorical.categories[0].tolist() == ["ant", "zebra"]
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [0, 1, -1, -1]
+    assert output.categorical.as_tensor().squeeze(-1).tolist() == [
+        0,
+        1,
+        -1,
+        -1,
+    ]

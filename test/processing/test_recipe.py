@@ -103,7 +103,7 @@ def test_tabiclv2_feature_categories_sort_without_changing_targets() -> None:
     assert feature_output.columns[Stype.numerical] == ("kind",)
     torch.testing.assert_close(
         feature_output.numerical.squeeze(-1),
-        torch.tensor([2**-0.5, -2**0.5, 2**-0.5]),
+        torch.tensor([2**-0.5, -(2**0.5), 2**-0.5]),
     )
     assert target_output.categorical.categories[0].tolist() == (
         expected_target.categorical.categories[0].tolist()
