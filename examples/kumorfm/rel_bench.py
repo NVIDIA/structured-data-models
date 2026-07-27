@@ -115,9 +115,11 @@ for query in tqdm(task_tables[-1].split(args.batch_size)):
     out = model.predict(*sampler(x_query, **kwargs).to(device))
     if y_query.stype(task.target_col).value == "categorical":
         out = out["1"].as_tensor().view(-1)  # Positive class.
+        y_query = y_query.as_tensor().decode().view(-1)  # Decode ground-truth.
     else:
         out = out["q500"].as_tensor().view(-1)  # Median prediction.
-    metric.update(out, y_query.as_tensor().view(-1))
+        y_query = y_query.as_tensor().view(-1)
+    metric.update(out, y_query)
 if context.stype(task.target_col) == "categorical":
     print(f"AUROC: {metric.compute():.4f}")
 else:

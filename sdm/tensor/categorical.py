@@ -312,6 +312,21 @@ class CategoricalTensor(Tensor):
         r"""Return category vector for each categorical column."""
         return self._categories
 
+    def decode(self) -> Tensor:
+        r"""Return category values indexed by categorical codes.
+
+        Only tensors with exactly one categorical column and no missing values
+        are eligible for decoding.
+        """
+        if self.size(-1) != 1:
+            raise RuntimeError(
+                "'decode()' requires exactly one categorical column"
+            )
+        if (self._data.view(-1) < 0).any():
+            raise RuntimeError("'decode()' does not support missing values")
+
+        return self._categories[0][self._data]
+
     # Decorators ##############################################################
 
     @classmethod
