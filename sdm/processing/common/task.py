@@ -1,10 +1,8 @@
-from collections.abc import Iterable
 from typing import Literal, cast
 
 import torch
 
 from sdm.processing.base import Processor
-from sdm.processing.common.sequential import Sequential
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -32,8 +30,8 @@ class TaskDispatch(Processor):
     def __init__(
         self,
         *,
-        classification: Processor | Iterable[Processor] | None = None,
-        regression: Processor | Iterable[Processor] | None = None,
+        classification: object = None,
+        regression: object = None,
     ) -> None:
         super().__init__()
         self.processors = torch.nn.ModuleDict()
@@ -43,8 +41,7 @@ class TaskDispatch(Processor):
         ):
             if processor is None:
                 continue
-            if not isinstance(processor, Processor):
-                processor = Sequential(*processor)
+            processor = Processor.as_processor(processor)
             if processor.requires_fit:
                 raise ValueError(
                     f"{self.__class__.__name__!r} requires stateless routes, "

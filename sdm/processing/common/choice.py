@@ -2,7 +2,6 @@ from typing import cast
 
 import torch
 
-from sdm.processing._callable import ProcessorLike, as_processor
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -25,12 +24,11 @@ class Choice(Processor, InvertibleMixin):
 
     def __init__(
         self,
-        *args: ProcessorLike,
+        *args: object,
     ) -> None:
         super().__init__()
         self.options = torch.nn.ModuleList(
-            as_processor(option, label=f"Choice option {index}")
-            for index, option in enumerate(args)
+            Processor.as_processor(arg) for arg in args
         )
         self._index: int | None = None
 
