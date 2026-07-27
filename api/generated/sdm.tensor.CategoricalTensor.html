@@ -154,7 +154,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_cudf"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_cudf()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.to_cudf"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.to_cudf()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.from_tensor"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.from_tensor()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.as_tensor"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.as_tensor()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.code"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.code</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.CategoricalTensor.categories"><code class="docutils literal notranslate"><span class="pre">CategoricalTensor.categories</span></code></a></li>
 </ul>
 </li>
@@ -196,18 +196,18 @@ data-aria-dark="Switch to auto color mode">
 <h1>CategoricalTensor<a class="headerlink" href="#categoricaltensor" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.tensor.</span></span><span class="sig-name descname"><span class="pre">CategoricalTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">categories</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.tensor.CategoricalTensor" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.tensor.</span></span><span class="sig-name descname"><span class="pre">CategoricalTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">categories</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.tensor.CategoricalTensor" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a></p>
-<p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> for categorical column data.</p>
-<p>A <a class="reference internal" href="#sdm.tensor.CategoricalTensor" title="sdm.tensor.CategoricalTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalTensor</span></code></a> stores categorical indices in <code class="docutils literal notranslate"><span class="pre">data</span></code> and one
+<p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> for categorical columns.</p>
+<p>A <a class="reference internal" href="#sdm.tensor.CategoricalTensor" title="sdm.tensor.CategoricalTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalTensor</span></code></a> stores categorical indices in <code class="docutils literal notranslate"><span class="pre">code</span></code> and one
 category vector per column in <code class="docutils literal notranslate"><span class="pre">categories</span></code>.
-Data values are direct indices into the corresponding category vector.
+Code values are direct indices into the corresponding category vector.
 Negative indices represent missing values.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 </span><span data-line="2"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">CategoricalTensor</span><span class="p">,</span> <span class="n">StringTensor</span>
 </span><span data-line="3">
 </span><span data-line="4"><span class="n">tensor</span> <span class="o">=</span> <span class="n">CategoricalTensor</span><span class="p">(</span>
-</span><span data-line="5">    <span class="n">data</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span>
+</span><span data-line="5">    <span class="n">code</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span>
 </span><span data-line="6">    <span class="n">categories</span><span class="o">=</span><span class="p">(</span>
 </span><span data-line="7">        <span class="n">StringTensor</span><span class="o">.</span><span class="n">from_list</span><span class="p">([</span><span class="s2">&quot;USA&quot;</span><span class="p">,</span> <span class="s2">&quot;GERMANY&quot;</span><span class="p">]),</span>
 </span><span data-line="8">        <span class="n">StringTensor</span><span class="o">.</span><span class="n">from_list</span><span class="p">([</span><span class="s2">&quot;enterprise&quot;</span><span class="p">,</span> <span class="s2">&quot;startup&quot;</span><span class="p">]),</span>
@@ -218,7 +218,7 @@ Negative indices represent missing values.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>Tensor</em>) – The categorical indices of shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C]</span></code>.</p></li>
+<li><p><strong>code</strong> (<em>Tensor</em>) – The categorical indices of shape <code class="docutils literal notranslate"><span class="pre">[...,</span> <span class="pre">C]</span></code>.</p></li>
 <li><p><strong>categories</strong> (<em>Sequence</em><em>[</em><em>Tensor</em><em>]</em>) – A tuple of <code class="docutils literal notranslate"><span class="pre">C</span></code> category vectors.</p></li>
 </ul>
 </dd>
@@ -319,15 +319,10 @@ Negative indices represent missing values.</p>
 </dl>
 </dd></dl>
 
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.as_tensor">
-<span class="sig-name descname"><span class="pre">as_tensor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></span></span><a class="headerlink" href="#sdm.tensor.CategoricalTensor.as_tensor" title="Link to this definition">#</a></dt>
-<dd><p>Return the index tensor.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><em>Tensor</em></a></p>
-</dd>
-</dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.tensor.CategoricalTensor.code">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">code</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></em><a class="headerlink" href="#sdm.tensor.CategoricalTensor.code" title="Link to this definition">#</a></dt>
+<dd><p>Return the categorical code tensor.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -364,7 +359,7 @@ Negative indices represent missing values.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=943aa659"></script>
+      <script src="../../_static/documentation_options.js?v=c0937e97"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
