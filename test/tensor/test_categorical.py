@@ -532,3 +532,5 @@ def test_isnan() -> None:
     expected = torch.tensor([[False, True, False], [True, False, False]])
     assert torch.isnan(tensor).equal(expected)
     assert tensor.isnan().equal(expected)
+    assert torch.isfinite(tensor).equal(~expected)
+    assert tensor.isfinite().equal(~expected)

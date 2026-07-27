@@ -65,9 +65,6 @@ class CategoricalTensor(Tensor):
     _data: Tensor
     _categories: tuple[Tensor, ...]
 
-    # Route tensor operations through `__torch_dispatch__` only.
-    __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
-
     # Constructors ############################################################
 
     def __init__(
@@ -341,6 +338,21 @@ class CategoricalTensor(Tensor):
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._data, self._categories)
         return (self.__class__, args)
+
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Callable[..., Any],
+        types: tuple[type[Any], ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        if func is torch.isfinite or func is Tensor.isfinite:
+            assert isinstance(args[0], CategoricalTensor)
+            return args[0]._data >= 0
+
+        with torch._C.DisableTorchFunction():
+            return func(*args, **(kwargs or {}))
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
