@@ -3,7 +3,6 @@ from torch import Tensor
 
 from sdm import CategoricalTensor, StringTensor, Stype
 from sdm.processing.base import Processor
-from sdm.processing.categorical._categorical import _check_categorical_codes
 from sdm.tensor import TableTensor
 
 _HOST_SORTED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
@@ -23,8 +22,6 @@ class SortCategories(Processor):
     supported_stypes = frozenset({Stype.categorical})
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        _check_categorical_codes(table)
-
         data = table.categorical.as_tensor().clone()
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
