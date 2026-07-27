@@ -102,6 +102,7 @@ class AlignCategories(Processor):
                 actual = actual.index_select(0, unique)
 
             if isinstance(actual, StringTensor):
+                # TODO Run join once with column-index composite key.
                 left_index, right_index = join_index(
                     left_table=TableTensor(
                         columns={"id": ("id",)},
