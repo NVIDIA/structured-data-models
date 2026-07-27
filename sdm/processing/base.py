@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, ClassVar, TypeAlias, cast
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
 import torch
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 
-SupportedStypes: TypeAlias = frozenset[Stype]
-
 if TYPE_CHECKING:
     from sdm.processing import Sequential
+
+SupportedStypes: TypeAlias = frozenset[Stype]
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -40,6 +41,29 @@ class Processor(torch.nn.Module, abc.ABC):
                     f"'{self.__class__.__name__}' does not support "
                     f"'{stype.value}' columns."
                 )
+
+    @staticmethod
+    def as_processor(processor: object) -> Processor:
+        r"""Normalize a processor-like object to a :class:`Processor`.
+
+        Args:
+            processor: A processor-like object. A :class:`Processor` is
+                returned as-is, a callable is wrapped as a stateless processor,
+                and a sequence of processor-like objects is normalized to
+                :class:`~sdm.processing.common.Sequential`.
+        """
+        from sdm.processing import Callable, Sequential  # noqa: PLC0415
+
+        if isinstance(processor, Processor):
+            return processor
+        if callable(processor):
+            return Callable(processor)  # type: ignore
+        if isinstance(processor, Sequence) and not isinstance(processor, str):
+            return Sequential(*processor)
+        raise TypeError(
+            f"Input must be a 'Processor', callable, or sequence of them "
+            f"(got '{type(processor).__name__}')"
+        )
 
     def _check_is_fitted(self) -> None:
         if self.requires_fit and not self._fitted:
@@ -115,16 +139,20 @@ class Processor(torch.nn.Module, abc.ABC):
     def __add__(self, other: object) -> Sequential:
         from sdm.processing import Sequential  # noqa: PLC0415
 
-        if not isinstance(other, Processor) and not callable(other):
+        try:
+            other = Processor.as_processor(other)
+        except TypeError:
             return NotImplemented
-        return Sequential(self, cast(Processor, other))
+        return Sequential(self, other)
 
     def __radd__(self, other: object) -> Sequential:
         from sdm.processing import Sequential  # noqa: PLC0415
 
-        if not isinstance(other, Processor) and not callable(other):
+        try:
+            other = Processor.as_processor(other)
+        except TypeError:
             return NotImplemented
-        return Sequential(cast(Processor, other), self)
+        return Sequential(other, self)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"
