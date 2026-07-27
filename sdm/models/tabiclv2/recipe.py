@@ -9,6 +9,7 @@ from sdm.processing import (
     PowerTransform,
     Recipe,
     ReduceEstimators,
+    SortCategories,
     ShuffleCategories,
     ShuffleColumns,
     Softmax,
@@ -25,6 +26,7 @@ def default_recipe() -> Recipe:  # noqa: D103
             StypeDispatch(
                 categorical=[
                     AlignCategories(),
+                    SortCategories(),
                     ToNumerical(),
                 ],
             ),

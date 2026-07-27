@@ -1,7 +1,14 @@
 import torch
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize
+from sdm.processing import (
+    AlignCategories,
+    InvertibleMixin,
+    Recipe,
+    Sequential,
+    ShuffleCategories,
+    Standardize,
+)
 from sdm.testing import withCUDA
 
 
@@ -68,6 +75,42 @@ def test_recipe_role_fit_accepts_table() -> None:
         transformed.numerical.mean(dim=0),
         torch.zeros(2),
         atol=1e-6,
+    )
+
+
+def test_tabiclv2_feature_categories_sort_without_changing_targets() -> None:
+    table = TableTensor(
+        columns={"categorical": ("kind",)},
+        categorical=CategoricalTensor(
+            data=torch.tensor([[0], [1], [0]]),
+            categories=(StringTensor.from_list(["zebra", "ant"]),),
+        ),
+    )
+
+    feature_output = TabICLv2.default_recipe().features.fit_transform(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+    expected_target = ShuffleCategories(method="shift").fit_transform(
+        AlignCategories().fit_transform(table),
+        generator=torch.Generator().manual_seed(0),
+    )
+    target_output = TabICLv2.default_recipe().target.fit_transform(
+        table,
+        generator=torch.Generator().manual_seed(0),
+    )
+
+    assert feature_output.columns[Stype.numerical] == ("kind",)
+    torch.testing.assert_close(
+        feature_output.numerical.squeeze(-1),
+        torch.tensor([2**-0.5, -2**0.5, 2**-0.5]),
+    )
+    assert target_output.categorical.categories[0].tolist() == (
+        expected_target.categorical.categories[0].tolist()
+    )
+    torch.testing.assert_close(
+        target_output.categorical.as_tensor(),
+        expected_target.categorical.as_tensor(),
     )
 
 
