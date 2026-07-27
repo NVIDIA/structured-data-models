@@ -1,7 +1,7 @@
 import argparse
-from collections.abc import Sequence
 from typing import cast
 
+import pandas as pd
 import relbench
 import torch
 from relbench.datasets import get_dataset
@@ -65,25 +65,25 @@ sampler = data.sampler(
     ),
 )
 
-# Collect Task Table ##########################################################
-task_tables: Sequence[TableTensor] = []
-task = get_task(args.dataset, args.task, download=True)
-for split in ["train", "val", "test"]:
-    task_table = TableTensor.from_pandas(
-        df=task.get_table(split, mask_input_cols=False).df,
-        stypes={
-            task.entity_col: "id",
-            task.time_col: "datetime",
-            task.target_col: "numerical"
-            if task.task_type == relbench.base.TaskType.REGRESSION
-            else "categorical",
-        },
-    )
-    task_tables.append(task_table)
 
-context = torch.cat(task_tables[:2], dim=0)
-perm = torch.randperm(len(context))[: args.context_size]
-context = cast(TableTensor, context[perm])
+# Collect Task Table ##########################################################
+task = get_task(args.dataset, args.task, download=True)
+dfs = [
+    task.get_table(split, mask_input_cols=False).df
+    for split in ["train", "val", "test"]
+]
+task_table = TableTensor.from_pandas(
+    df=pd.concat(dfs, ignore_index=True),
+    stypes={
+        task.entity_col: "id",
+        task.time_col: "datetime",
+        task.target_col: "numerical"
+        if task.task_type == relbench.base.TaskType.REGRESSION
+        else "categorical",
+    },
+)
+context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
+context = context[torch.randperm(len(context))[: args.context_size]]
 
 # Execute Model ###############################################################
 model = KumoRFM(device=device)
@@ -109,9 +109,9 @@ if context.stype(task.target_col) == "categorical":
     metric = BinaryAUROC().to(device)
 else:
     metric = MeanAbsoluteError().to(device)
-for query in tqdm(task_tables[-1].split(args.batch_size)):
-    x_query = query.drop_columns(task.target_col)
-    y_query = query[task.target_col].as_tensor().to(device)
+for batch in tqdm(query.split(args.batch_size)):
+    x_query = batch.drop_columns(task.target_col)
+    y_query = batch[task.target_col].as_tensor().to(device)
     out = model.predict(*sampler(x_query, **kwargs).to(device))
     if task.task_type == relbench.base.TaskType.REGRESSION:
         out = out["q500"].as_tensor()  # Median prediction.
