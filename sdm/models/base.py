@@ -279,7 +279,9 @@ class ICLModel(torch.nn.Module, ABC):
                 generator=generator,
                 **kwargs,
             )
-            cache = cache.cpu().freeze()
+            if num_estimators > 1:
+                cache = cache.cpu()
+            cache = cache.freeze()
             caches.append(cache)
         self._caches = caches
 
