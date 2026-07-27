@@ -4,13 +4,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype
-from sdm.processing._callable import (
-    ProcessorCallable,
-    ProcessorRoute,
-    as_processor,
-)
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.common.sequential import Sequential
 from sdm.tensor import TableTensor
 
 
@@ -54,11 +48,11 @@ class StypeDispatch(Processor, InvertibleMixin):
     def __init__(
         self,
         *,
-        numerical: ProcessorRoute = None,
-        categorical: ProcessorRoute = None,
-        datetime: ProcessorRoute = None,
-        id: ProcessorRoute = None,
-        text: ProcessorRoute = None,
+        numerical: object = None,
+        categorical: object = None,
+        datetime: object = None,
+        id: object = None,
+        text: object = None,
         remainder: Literal["passthrough", "drop", "error"] = "passthrough",
     ) -> None:
         super().__init__()
@@ -72,15 +66,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         ):
             if processor is None:
                 continue
-            if not isinstance(processor, Processor):
-                if callable(processor):
-                    processor = as_processor(
-                        cast(ProcessorCallable, processor),
-                        label=f"StypeDispatch route '{stype.value}'",
-                    )
-                else:
-                    processor = Sequential(*processor)
-            self.processors[stype.value] = processor
+            self.processors[stype.value] = Processor.as_processor(processor)
 
         self.remainder = remainder
         self.requires_fit = any(
@@ -91,10 +77,10 @@ class StypeDispatch(Processor, InvertibleMixin):
         if self.remainder != "error" or len(remainder_stypes) == 0:
             return
 
-        names = ", ".join(f"'{stype.value}'" for stype in remainder_stypes)
+        names = ", ".join(f"{stype.value!r}" for stype in remainder_stypes)
         raise ValueError(
             f"Found non-empty input columns for semantic types {names}, but "
-            f"'{self.__class__.__name__}' has no route for them. Configure "
+            f"{self.__class__.__name__!r} has no route for them. Configure "
             "a processor for each semantic type or set "
             "remainder='passthrough' or remainder='drop'."
         )
@@ -160,8 +146,8 @@ class StypeDispatch(Processor, InvertibleMixin):
                 continue
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
-                    f"Route '{stype}' uses non-invertible processor "
-                    f"'{processor.__class__.__name__}'"
+                    f"Route {stype!r} uses non-invertible processor "
+                    f"{processor.__class__.__name__!r}"
                 )
             outputs.append(processor.inverse_transform(route_input))
 
