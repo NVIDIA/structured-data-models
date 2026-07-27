@@ -12,6 +12,24 @@ from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
 
 
 class RowEmbedding(torch.nn.Module):
+    r"""Embed table rows with column-wise and row-wise attention.
+
+    Args:
+        num_classes: Number of categorical target classes represented
+            directly. Use zero for numerical targets.
+        channels: Number of channels in each feature-group token.
+        num_layers: Number of column-wise and row-wise transformer layers.
+        num_heads: Number of attention heads in each transformer layer.
+        group_size: Number of shifted feature columns projected into each
+            feature-group token.
+        num_inducing_points: Number of inducing points used by each
+            column-wise transformer layer.
+        num_readout_tokens: Number of learnable readout tokens per row.
+        norm_bias: Whether layer normalization modules include a bias.
+        device: Device on which parameters are initialized.
+        dtype: Data type in which parameters are initialized.
+    """
+
     def __init__(
         self,
         num_classes: int,

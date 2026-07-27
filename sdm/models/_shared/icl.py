@@ -11,6 +11,19 @@ from sdm.nn import TransformerBlock
 
 
 class ICLBlock(torch.nn.Module):
+    r"""Apply dataset-level attention for in-context prediction.
+
+    Args:
+        num_classes: Number of categorical target classes. Use zero for
+            numerical targets.
+        channels: Number of channels in each row representation.
+        num_layers: Number of transformer layers.
+        num_heads: Number of attention heads in each transformer layer.
+        norm_bias: Whether layer normalization modules include a bias.
+        device: Device on which parameters are initialized.
+        dtype: Data type in which parameters are initialized.
+    """
+
     def __init__(
         self,
         num_classes: int,
