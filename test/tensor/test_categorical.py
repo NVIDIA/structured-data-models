@@ -36,7 +36,7 @@ def test_to_copy() -> None:
     out = tensor.to(torch.int32)
     assert isinstance(out, CategoricalTensor)
     assert out.dtype == torch.int32
-    assert out.as_tensor().dtype == torch.int32
+    assert out.index.dtype == torch.int32
     for out_category, category in zip(out.categories, tensor.categories):
         assert out_category.equal(category)
         assert out_category.data_ptr() != category.data_ptr()
@@ -52,7 +52,7 @@ def test_from_arrow_string_values() -> None:
     )
 
     assert tensor.dtype == torch.int32
-    assert tensor.as_tensor().equal(torch.tensor([[0], [1], [-1], [0]]))
+    assert tensor.index.equal(torch.tensor([[0], [1], [-1], [0]]))
     assert tensor.categories[0].tolist() == ["b", "a"]
 
 
@@ -62,7 +62,7 @@ def test_from_arrow_chunked_values() -> None:
     )
 
     assert tensor.dtype == torch.int32
-    assert tensor.as_tensor().equal(torch.tensor([[0], [-1], [1], [0]]))
+    assert tensor.index.equal(torch.tensor([[0], [-1], [1], [0]]))
     assert tensor.categories[0].tolist() == ["b", "a"]
 
 
@@ -72,7 +72,7 @@ def test_from_arrow_numeric_values() -> None:
     )
 
     assert tensor.dtype == torch.int32
-    assert tensor.as_tensor().equal(torch.tensor([[0], [1], [-1], [0]]))
+    assert tensor.index.equal(torch.tensor([[0], [1], [-1], [0]]))
     assert tensor.categories[0].equal(torch.tensor([10, 20]))
 
 
@@ -82,7 +82,7 @@ def test_from_arrow_all_missing_values() -> None:
     )
 
     assert tensor.dtype == torch.int32
-    assert tensor.as_tensor().equal(torch.tensor([[-1], [-1]]))
+    assert tensor.index.equal(torch.tensor([[-1], [-1]]))
     assert tensor.categories[0].numel() == 0
 
 
@@ -93,7 +93,7 @@ def test_from_arrow_dtype() -> None:
     )
 
     assert tensor.dtype == torch.int64
-    assert tensor.as_tensor().equal(torch.tensor([[0], [1], [-1]]))
+    assert tensor.index.equal(torch.tensor([[0], [1], [-1]]))
 
 
 def test_from_arrow_small_dictionary_indices() -> None:
@@ -105,7 +105,7 @@ def test_from_arrow_small_dictionary_indices() -> None:
     tensor = CategoricalTensor.from_arrow(array)
 
     assert tensor.dtype == torch.int32
-    assert tensor.as_tensor().equal(torch.tensor([[0], [1]]))
+    assert tensor.index.equal(torch.tensor([[0], [1]]))
 
 
 @pytest.mark.parametrize("dtype", [torch.int8, torch.float32])
@@ -145,7 +145,7 @@ def test_from_arrow_cuda() -> None:
     )
 
     assert tensor.device.type == "cuda"
-    assert tensor.as_tensor().equal(
+    assert tensor.index.equal(
         torch.tensor(
             [[0], [1], [-1], [0]],
             dtype=torch.int32,
@@ -161,7 +161,7 @@ def test_from_arrow_cuda() -> None:
     )
 
     assert tensor.device.type == "cuda"
-    assert tensor.as_tensor().equal(
+    assert tensor.index.equal(
         torch.tensor(
             [[0], [1], [-1], [0]],
             dtype=torch.int32,
@@ -229,7 +229,7 @@ def test_from_cudf_string_values() -> None:
     )
 
     assert tensor.is_cuda
-    assert tensor.as_tensor().equal(
+    assert tensor.index.equal(
         torch.tensor([[0], [1], [-1], [0]], device=tensor.device)
     )
     assert tensor.categories[0].is_cuda
@@ -245,7 +245,7 @@ def test_from_cudf_numeric_values() -> None:
     )
 
     assert tensor.is_cuda
-    assert tensor.as_tensor().equal(
+    assert tensor.index.equal(
         torch.tensor([[0], [1], [-1], [0]], device=tensor.device)
     )
     assert tensor.categories[0].is_cuda
@@ -261,7 +261,7 @@ def test_from_cudf_all_missing_values() -> None:
     )
 
     assert tensor.is_cuda
-    assert tensor.as_tensor().equal(
+    assert tensor.index.equal(
         torch.tensor([[-1], [-1]], device=tensor.device)
     )
     assert tensor.categories[0].is_cuda

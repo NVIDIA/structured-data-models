@@ -239,7 +239,7 @@ def test_from_tensor() -> None:
         Stype.text: (),
         Stype.id: (),
     }
-    assert tensor.categorical.as_tensor().equal(
+    assert tensor.categorical.index.equal(
         torch.tensor([[2, 1], [0, 0], [3, 0], [1, 1]])
     )
     assert tensor.categorical.categories[0].equal(torch.tensor([-2, -1, 0, 1]))
@@ -1024,7 +1024,7 @@ def test_arrow() -> None:
             ]
         )
     )
-    assert tensor.categorical.as_tensor().equal(
+    assert tensor.categorical.index.equal(
         torch.tensor([[0], [1], [2], [0]])
     )
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
@@ -1089,7 +1089,7 @@ def test_from_pandas() -> None:
 
     assert tensor.size() == (2, 4)
     assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
-    assert tensor.categorical.as_tensor().equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.index.equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
 
@@ -1189,7 +1189,7 @@ def test_cudf() -> None:
             device=tensor.device,
         )
     )
-    assert tensor.categorical.as_tensor().equal(
+    assert tensor.categorical.index.equal(
         torch.tensor([[0], [1], [2], [0]], device=tensor.device)
     )
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]

@@ -89,7 +89,7 @@ class ShuffleCategories(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         offsets = self.offsets.tolist()
-        data = table.categorical.as_tensor().clone()
+        data = table.categorical.index.clone()
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
             permutation = self.permutations[

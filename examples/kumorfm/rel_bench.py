@@ -117,7 +117,8 @@ for batch in tqdm(query.split(args.batch_size)):
         y_query = y_query.numerical
     else:
         out = out["1"].numerical  # Positive class.
-        y_query = y_query.categorical.decode()  # Decode ground-truth.
+        # Decode ground-truth codes to class values:
+        y_query = y_query.categorical.categories[0][y_query.categorical.code]
     metric.update(out, y_query)
 if task.task_type == relbench.base.TaskType.REGRESSION:
     print(f"MAE: {metric.compute():.4f}")

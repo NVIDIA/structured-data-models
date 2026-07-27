@@ -45,7 +45,7 @@ def test_align_categories_remaps_independent_vocabularies(
     output = AlignCategories().fit(context).transform(query)
 
     assert torch.equal(
-        output.categorical.as_tensor(),
+        output.categorical.index,
         torch.tensor(
             [[-1, 1], [1, -1], [0, 1], [-1, -1]],
             dtype=torch.int32,
@@ -68,9 +68,9 @@ def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     query = processor.transform(table[2:])
 
     assert context.categorical.categories[0].tolist() == ["red", "blue"]
-    assert context.categorical.as_tensor().squeeze(-1).tolist() == [0, 1]
+    assert context.categorical.index.squeeze(-1).tolist() == [0, 1]
     assert query.categorical.categories[0].tolist() == ["red", "blue"]
-    assert query.categorical.as_tensor().squeeze(-1).tolist() == [-1, 1]
+    assert query.categorical.index.squeeze(-1).tolist() == [-1, 1]
 
 
 @pytest.mark.parametrize("sort_by", ["code", "frequency"])
@@ -88,21 +88,21 @@ def test_align_categories_joint_vocabulary_preserves_code_order(
 
     if sort_by == "code":
         assert context.categorical.categories[0].tolist() == ["blue", "red"]
-        assert context.categorical.as_tensor().squeeze(-1).tolist() == [
+        assert context.categorical.index.squeeze(-1).tolist() == [
             0,
             1,
             1,
         ]
-        assert query.categorical.as_tensor().squeeze(-1).tolist() == [1]
+        assert query.categorical.index.squeeze(-1).tolist() == [1]
     else:
         assert sort_by == "frequency"
         assert context.categorical.categories[0].tolist() == ["red", "blue"]
-        assert context.categorical.as_tensor().squeeze(-1).tolist() == [
+        assert context.categorical.index.squeeze(-1).tolist() == [
             1,
             0,
             0,
         ]
-        assert query.categorical.as_tensor().squeeze(-1).tolist() == [0]
+        assert query.categorical.index.squeeze(-1).tolist() == [0]
 
 
 @withCUDA
@@ -133,7 +133,7 @@ def test_align_categories_numeric_values(device: torch.device) -> None:
     output = AlignCategories().fit(context).transform(query)
 
     assert torch.equal(
-        output.categorical.as_tensor(),
+        output.categorical.index,
         torch.tensor(
             [[1], [-1], [0], [-1]],
             dtype=torch.int32,
@@ -171,7 +171,7 @@ def test_align_categories_does_not_match_nan_category_values(
 
     output = AlignCategories().fit(context).transform(query)
 
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1, -1]
+    assert output.categorical.index.squeeze(-1).tolist() == [-1, -1, -1]
 
 
 def test_align_categories_scales_to_large_numeric_vocabulary() -> None:
@@ -195,7 +195,7 @@ def test_align_categories_scales_to_large_numeric_vocabulary() -> None:
     output = AlignCategories().fit(context).transform(query)
 
     assert torch.equal(
-        output.categorical.as_tensor().squeeze(-1),
+        output.categorical.index.squeeze(-1),
         torch.arange(size - 1, -1, -1, dtype=torch.int32),
     )
 
@@ -227,7 +227,7 @@ def test_align_categories_unsigned_pandas_values(
 
     output = AlignCategories().fit(context).transform(query)
 
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [1, -1, 0]
+    assert output.categorical.index.squeeze(-1).tolist() == [1, -1, 0]
     assert output.categorical.categories[0].dtype == getattr(torch, dtype)
     assert output.categorical.categories[0].tolist() == [largest, 1]
 
@@ -247,7 +247,7 @@ def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     output = AlignCategories().fit(context).transform(query)
 
     assert output.categorical.categories[0].numel() == 0
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1, -1]
+    assert output.categorical.index.squeeze(-1).tolist() == [-1, -1, -1]
 
 
 def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
@@ -263,7 +263,7 @@ def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
     output = AlignCategories().fit(context).transform(query)
 
     assert output.categorical.categories[0].numel() == 0
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1]
+    assert output.categorical.index.squeeze(-1).tolist() == [-1, -1]
 
 
 def test_align_categories_rejects_changed_category_value_type() -> None:

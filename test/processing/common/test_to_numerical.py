@@ -30,7 +30,7 @@ def _table() -> TableTensor:
 def test_to_numerical_converts_categorical_stype() -> None:
     table = _table()
 
-    categorical_ids = table.categorical.as_tensor().to(table.numerical.dtype)
+    categorical_ids = table.categorical.index.to(table.numerical.dtype)
 
     output = ToNumerical().transform(table)
 
@@ -82,5 +82,5 @@ def test_to_numerical_converts_categorical_only_table() -> None:
     assert output.columns[Stype.categorical] == ()
     assert torch.equal(
         output.numerical,
-        table.categorical.as_tensor().to(table.numerical.dtype),
+        table.categorical.index.to(table.numerical.dtype),
     )

@@ -37,8 +37,8 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
         atol=1e-6,
     )
     assert torch.equal(
-        output.categorical.as_tensor(),
-        table.categorical.as_tensor(),
+        output.categorical.index,
+        table.categorical.index,
     )
 
     restored = dispatch.inverse_transform(output)
@@ -46,7 +46,7 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
     assert restored.columns == table.columns
     assert torch.allclose(restored.numerical, table.numerical)
     assert torch.equal(
-        restored.categorical.as_tensor(), table.categorical.as_tensor()
+        restored.categorical.index, table.categorical.index
     )
 
 
@@ -67,8 +67,8 @@ def test_stype_dispatch_accepts_callable_route() -> None:
         table.numerical.square(),
     )
     assert torch.equal(
-        output.categorical.as_tensor(),
-        table.categorical.as_tensor(),
+        output.categorical.index,
+        table.categorical.index,
     )
 
     with pytest.raises(TypeError, match="non-invertible"):
