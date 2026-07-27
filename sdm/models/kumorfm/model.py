@@ -10,11 +10,10 @@ from sdm import RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models._shared import ICLBlock, RowEmbedding
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
 from sdm.models.kumorfm.task import TaskGraph
-from sdm.models.tabiclv2.icl import ICLBlock
-from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
 

@@ -2,8 +2,6 @@ import pytest
 import torch
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
-from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.nn import Attention
 from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
@@ -115,40 +113,6 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     assert model._caches is caches
     assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
     model.clear()
-
-
-@withCUDA
-def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
-    row_embedding = RowEmbedding(
-        num_classes=10,
-        channels=8,
-        num_layers=2,
-        num_heads=2,
-        group_size=3,
-        num_inducing_points=4,
-        num_readout_tokens=2,
-        norm_bias=True,
-        device=device,
-    )
-    for module in row_embedding.modules():
-        # Randomly initialize to return non-zero output
-        if isinstance(module, Attention):
-            torch.nn.init.normal_(module.out_lin.weight, std=0.02)
-
-    x = torch.randn(8, 6, device=device)
-
-    # The labels 5 * a + b and 5 * b + a decompose into the digits (a, b) and
-    # (b, a) under bases [5, 5], so averaging over digits must be invariant
-    # to swapping them:
-    a = torch.tensor([4, 0, 1, 2, 3], device=device)
-    b = torch.tensor([4, 1, 2, 3, 0], device=device)
-    y = 5 * a + b
-    y_swapped = 5 * b + a
-    out = row_embedding(x, y, num_classes=25)
-    torch.testing.assert_close(
-        out,
-        row_embedding(x, y_swapped, num_classes=25),
-    )
 
 
 def test_tabiclv2_hierarchical_log_probs(
