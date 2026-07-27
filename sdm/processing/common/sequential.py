@@ -61,24 +61,12 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        raise NotImplementedError
-
-    def fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> Self:
-        r""":meta private:"""  # noqa: D415
         out = table
         for i, child in enumerate(self):
             if i < len(self) - 1:
                 out = child.fit_transform(out, generator=generator)
             else:
                 child.fit(out, generator=generator)
-        if self.requires_fit:
-            self._fitted = True
-        return self
 
     def _transform(self, table: TableTensor) -> TableTensor:
         out = table
