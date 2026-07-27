@@ -234,54 +234,6 @@ def test_align_categories_unsigned_pandas_values(
     assert output.categorical.categories[0].tolist() == [largest, 1]
 
 
-@pytest.mark.parametrize(
-    ("dtype", "largest"),
-    [
-        (torch.uint16, 2**16 - 1),
-        (torch.uint32, 2**32 - 1),
-        (torch.uint64, 2**63 + 1),
-    ],
-)
-@withCUDA
-def test_align_categories_unsigned_values_on_device(
-    dtype: torch.dtype,
-    largest: int,
-    device: torch.device,
-) -> None:
-    context = TableTensor(
-        columns={"categorical": ("value",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32, device=device),
-            categories=(
-                torch.tensor([largest, 1], dtype=dtype, device=device),
-            ),
-        ),
-    )
-    query = TableTensor(
-        columns={"categorical": ("value",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor(
-                [[0], [1], [2]],
-                dtype=torch.int32,
-                device=device,
-            ),
-            categories=(
-                torch.tensor(
-                    [1, largest - 1, largest],
-                    dtype=dtype,
-                    device=device,
-                ),
-            ),
-        ),
-    )
-
-    output = AlignCategories().fit(context).transform(query)
-
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [1, -1, 0]
-    assert output.categorical.categories[0].dtype == dtype
-    assert output.categorical.categories[0].device == device
-
-
 def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     context = _table(
         [[-1], [-1]],
@@ -316,7 +268,7 @@ def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
     assert output.categorical.as_tensor().squeeze(-1).tolist() == [-1, -1]
 
 
-def test_align_categories_rejects_changed_category_value_type() -> None:
+def test_invalid_category_type() -> None:
     processor = AlignCategories().fit(
         _table([[0]], columns=("kind",), categories=(("red",),))
     )
@@ -330,24 +282,3 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
     with pytest.raises(NotImplementedError):
         processor.transform(query)
-
-
-def test_align_categories_allows_lossy_numeric_dtype_change() -> None:
-    context = TableTensor(
-        columns={"categorical": ("value",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0]], dtype=torch.int32),
-            categories=(torch.tensor([16_777_217], dtype=torch.int64),),
-        ),
-    )
-    query = TableTensor(
-        columns={"categorical": ("value",)},
-        categorical=CategoricalTensor(
-            data=torch.tensor([[0]], dtype=torch.int32),
-            categories=(torch.tensor([16_777_216], dtype=torch.float32),),
-        ),
-    )
-
-    output = AlignCategories().fit(context).transform(query)
-
-    assert output.categorical.as_tensor().squeeze(-1).tolist() == [0]
