@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pandas as pd
 import pytest
 import torch
@@ -71,19 +73,36 @@ def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     assert query.categorical.as_tensor().squeeze(-1).tolist() == [-1, 1]
 
 
-def test_align_categories_joint_vocabulary_preserves_code_order() -> None:
+@pytest.mark.parametrize("sort_by", ["code", "frequency"])
+def test_align_categories_joint_vocabulary_preserves_code_order(
+    sort_by: Literal["code", "frequency"],
+) -> None:
     table = TableTensor.from_pandas(
-        pd.DataFrame({"kind": ["blue", "red", "blue"]}),
+        pd.DataFrame({"kind": ["blue", "red", "red", "red"]}),
         stypes={"kind": "categorical"},
     )
 
-    processor = AlignCategories().fit(table[1:])
-    context = processor.transform(table[1:])
-    query = processor.transform(table[:1])
+    processor = AlignCategories(sort_by).fit(table[:3])
+    context = processor.transform(table[:3])
+    query = processor.transform(table[3:])
 
-    assert context.categorical.categories[0].tolist() == ["blue", "red"]
-    assert context.categorical.as_tensor().squeeze(-1).tolist() == [1, 0]
-    assert query.categorical.as_tensor().squeeze(-1).tolist() == [0]
+    if sort_by == "code":
+        assert context.categorical.categories[0].tolist() == ["blue", "red"]
+        assert context.categorical.as_tensor().squeeze(-1).tolist() == [
+            0,
+            1,
+            1,
+        ]
+        assert query.categorical.as_tensor().squeeze(-1).tolist() == [1]
+    else:
+        assert sort_by == "frequency"
+        assert context.categorical.categories[0].tolist() == ["red", "blue"]
+        assert context.categorical.as_tensor().squeeze(-1).tolist() == [
+            1,
+            0,
+            0,
+        ]
+        assert query.categorical.as_tensor().squeeze(-1).tolist() == [0]
 
 
 @withCUDA

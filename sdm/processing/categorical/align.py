@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 from torch import Tensor
 
@@ -20,12 +22,21 @@ class AlignCategories(Processor):
     Fitting keeps the observed category values for each column. Transforming
     remaps input codes by category value into those fitted vocabularies.
     Missing values and unseen categories are encoded as ``-1``.
+
+    Args:
+        sort_by: How to order fitted category vocabularies.
+            ``"code"`` keeps observed categories in original order.
+            ``"frequency"`` orders observed categories by descending frequency.
     """
 
     supported_stypes = frozenset({Stype.categorical})
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        sort_by: Literal["code", "frequency"] = "code",
+    ) -> None:
         super().__init__()
+        self.sort_by = sort_by
         self._categories: tuple[Tensor, ...] = ()
 
     def _fit(
@@ -39,8 +50,15 @@ class AlignCategories(Processor):
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
             index = table.categorical[..., i].view(-1)
-            unique = index[mask[..., i]].unique()
-            if unique.numel() == category.numel():
+            if self.sort_by == "frequency":
+                unique, count = index[mask[..., i].view(-1)].unique(
+                    return_counts=True,
+                )
+                perm = count.argsort(descending=True, stable=True)
+                unique = unique[perm]
+            else:
+                unique = index[mask[..., i].view(-1)].unique()
+            if self.sort_by == "code" and unique.numel() == category.numel():
                 pass
             elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
                 # PyTorch CPU index_select is not implemented for these dtypes.
@@ -63,8 +81,21 @@ class AlignCategories(Processor):
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
             index = table.categorical[..., i].view(-1)
-            unique, inverse = index[mask[..., i]].unique(return_inverse=True)
-            if unique.numel() == category.numel():
+            if self.sort_by == "frequency":
+                unique, inverse, count = index[mask[..., i].view(-1)].unique(
+                    return_inverse=True,
+                    return_counts=True,
+                )
+                perm = count.argsort(descending=True, stable=True)
+                unique = unique[perm]
+                inv_perm = torch.empty_like(perm)
+                inv_perm[perm] = torch.arange(perm.numel(), device=perm.device)
+                inverse = inv_perm[inverse]
+            else:
+                unique, inverse = index[mask[..., i].view(-1)].unique(
+                    return_inverse=True,
+                )
+            if self.sort_by == "code" and unique.numel() == category.numel():
                 pass
             elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
                 # PyTorch CPU index_select is not implemented for these dtypes.
@@ -73,7 +104,7 @@ class AlignCategories(Processor):
                 category = category.index_select(0, unique)
             categories.append(category)
 
-            out[..., i][mask[..., i]] = inverse.to(out.dtype)
+            out[..., i].view(-1)[mask[..., i].view(-1)] = inverse.to(out.dtype)
 
         self._categories = tuple(categories)
 
@@ -89,8 +120,10 @@ class AlignCategories(Processor):
         ):
             if expected.numel() == 0:
                 continue
-            index = table.categorical[..., i]
-            unique, inverse = index[mask[..., i]].unique(return_inverse=True)
+            index = table.categorical[..., i].view(-1)
+            unique, inverse = index[mask[..., i].view(-1)].unique(
+                return_inverse=True,
+            )
             if unique.numel() == 0:
                 continue
             if unique.numel() == actual.numel():
@@ -133,8 +166,15 @@ class AlignCategories(Processor):
 
             remapped = out.new_full((actual.numel(),), fill_value=-1)
             remapped[left_index] = right_index.to(out.dtype)
-            out[..., i][mask[..., i]] = remapped[inverse]
+            out[..., i].view(-1)[mask[..., i].view(-1)] = remapped[inverse]
 
         return table.replace_blocks(
             categorical=CategoricalTensor(out, categories=self._categories),
+        )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"sort_by={self.sort_by!r}"
+            f")"
         )
