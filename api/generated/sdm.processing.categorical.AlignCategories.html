@@ -189,23 +189,10 @@ data-aria-dark="Switch to auto color mode">
 <dt class="sig sig-object py" id="sdm.processing.categorical.AlignCategories">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.categorical.</span></span><span class="sig-name descname"><span class="pre">AlignCategories</span></span><a class="headerlink" href="#sdm.processing.categorical.AlignCategories" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Align categorical codes to vocabularies fitted on training rows.</p>
-<p>Categorical codes are the integer indices into a column’s category
-vocabulary stored by <code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalTensor</span></code>, following
-<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Categorical.codes.html#pandas.Categorical.codes" title="(in pandas v3.0.5)"><code class="xref py py-attr docutils literal notranslate"><span class="pre">pandas.Categorical.codes</span></code></a> semantics; negative codes encode missing
-values. Fitting stores the category values that are actually observed in
-each categorical column. Transforming remaps input codes by category value
-to those fitted vocabularies. Missing values and categories not observed
-during fitting are encoded as <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
-<p>This allows independently tensorized training and query tables to share a
-categorical schema. It also removes categories that occur only outside a
-sliced training context from a jointly inferred vocabulary. Only
-categorical columns are supported; use
-<code class="xref py py-class docutils literal notranslate"><span class="pre">StypeDispatch</span></code> for mixed feature tables.</p>
-<p>String and unsigned integer vocabularies are matched through host metadata
-because their required tensor operations are unavailable on every device.
-This path performs linear Python work in the vocabulary size; a vectorized
-implementation may be preferable if these category types need to scale.</p>
+<p>Align categorical columns to vocabularies observed during fitting.</p>
+<p>Fitting keeps the observed category values for each column. Transforming
+remaps input codes by category value into those fitted vocabularies.
+Missing values and unseen categories are encoded as <code class="docutils literal notranslate"><span class="pre">-1</span></code>.</p>
 <dl class="field-list simple">
 </dl>
 </dd></dl>
@@ -236,7 +223,7 @@ implementation may be preferable if these category types need to scale.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=93e9f4d0"></script>
+      <script src="../../_static/documentation_options.js?v=f0bbed31"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
