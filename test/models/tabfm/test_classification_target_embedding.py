@@ -4,6 +4,26 @@ from sdm.models.tabfm.embedding import CellEmbedder
 from torch.nn import Embedding
 
 
+def test_cell_embedder_adds_classification_targets_to_context_only() -> None:
+    module = CellEmbedder(channels=2, max_classes=3, num_frequencies=2)
+    x = torch.randn(2, 5, 4)
+    target = torch.randint(0, 3, (2, 5))
+    train_size = torch.tensor([3, 2])
+
+    output = module(x=x, target=target, train_size=train_size)
+    feature_embedding = module(x=x)
+
+    assert isinstance(module.y_embedder_lookup, Embedding)
+    target_embedding = module.y_embedder_lookup(target)
+    row = torch.arange(x.size(1))[None]
+    expected = torch.where(
+        (row < train_size[:, None])[..., None, None],
+        feature_embedding + target_embedding[:, :, None],
+        feature_embedding,
+    )
+    torch.testing.assert_close(output, expected)
+
+
 def test_cell_embedder_ignores_query_targets() -> None:
     module = CellEmbedder(channels=4, max_classes=3, num_frequencies=2)
     x = torch.randn(2, 5, 4)
