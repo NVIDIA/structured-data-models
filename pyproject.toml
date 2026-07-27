@@ -71,12 +71,6 @@ fallback_version = "0.1.0.dev0"
 package = true
 exclude-newer = "7 days"
 
-[[tool.uv.index]]
-name = "nv-shared"
-url = "https://artifactory.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple"
-publish-url = "https://artifactory.nvidia.com/artifactory/api/pypi/nv-shared-pypi-local"
-explicit = true
-
 [tool.pytest.ini_options]
 addopts = [
     "--capture=no",
