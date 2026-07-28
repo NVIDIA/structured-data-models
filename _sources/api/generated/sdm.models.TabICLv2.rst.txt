@@ -31,7 +31,7 @@ Default Recipe
      features=Sequential(
        StypeDispatch(
          categorical: Sequential(
-           AlignCategories(sort_by='frequency'),
+           AlignCategories(sort_by='value'),
            ToNumerical(),
          ),
        ),
