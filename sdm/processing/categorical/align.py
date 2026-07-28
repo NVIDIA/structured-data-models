@@ -74,7 +74,7 @@ class AlignCategories(Processor):
                 unique,
                 keep_all=unique.numel() == category.numel(),
             )
-            category, perm = category.sort()
+            category, perm = self._sort_categories(category)
         else:
             category = self._select_categories(
                 category,
@@ -89,6 +89,17 @@ class AlignCategories(Processor):
             inverse = inv_perm[inverse]
 
         return category, inverse
+
+    @staticmethod
+    def _sort_categories(category: Tensor) -> tuple[Tensor, Tensor]:
+        if category.is_cuda and category.dtype in _UNSIGNED_DTYPES:
+            sort_key = category.to(torch.int64)
+            if category.dtype == torch.uint64:
+                # Map unsigned integer order onto signed integer order.
+                sort_key = sort_key.bitwise_xor(torch.iinfo(torch.int64).min)
+            perm = sort_key.argsort()
+            return category.index_select(0, perm), perm
+        return category.sort()
 
     @staticmethod
     def _select_categories(

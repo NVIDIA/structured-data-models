@@ -354,6 +354,7 @@ def test_align_categories_unsigned_pandas_values(
     assert output.categorical.categories[0].tolist() == [largest, 1]
 
 
+@withCUDA
 @pytest.mark.parametrize(
     ("dtype", "largest"),
     [
@@ -365,19 +366,20 @@ def test_align_categories_unsigned_pandas_values(
 def test_align_categories_orders_unsigned_pandas_values(
     dtype: str,
     largest: int,
+    device: torch.device,
 ) -> None:
     context = TableTensor.from_pandas(
         pd.DataFrame(
             {"value": pd.Series([largest, 1], dtype=dtype)},
         ),
         stypes={"value": "categorical"},
-    )
+    ).to(device)
     query = TableTensor.from_pandas(
         pd.DataFrame(
             {"value": pd.Series([1, largest - 1, largest], dtype=dtype)},
         ),
         stypes={"value": "categorical"},
-    )
+    ).to(device)
 
     output = AlignCategories(sort_by="value").fit(context).transform(query)
 
