@@ -216,8 +216,7 @@ def _has_id_token(name: str) -> bool:
 
 
 def _is_text_stype_arrow(column: pa.ChunkedArray) -> bool:
-    num_values = len(column) - column.null_count
-    if num_values == 0:
+    if (num_values := len(column) - column.null_count) == 0:
         return False
 
     values = pc.call_function("drop_null", [column])
@@ -225,9 +224,7 @@ def _is_text_stype_arrow(column: pa.ChunkedArray) -> bool:
     if num_unique < _TEXT_MIN_UNIQUE_VALUES:
         return False
 
-    # cardinality
-    unique_ratio = num_unique / num_values
-    if unique_ratio <= _TEXT_MIN_UNIQUE_RATIO:
+    if num_unique / num_values <= _TEXT_MIN_UNIQUE_RATIO:
         return False
 
     # average word count per distinct value
@@ -239,17 +236,13 @@ def _is_text_stype_arrow(column: pa.ChunkedArray) -> bool:
 
 
 def _is_text_stype_cudf(column: cudf.Series) -> bool:
-    num_values = column.count()
-
-    if num_values == 0:
+    if (num_values := column.count()) == 0:
         return False
 
-    num_unique = column.nunique(dropna=True)
-    if num_unique < _TEXT_MIN_UNIQUE_VALUES:
+    if (num_unique := column.nunique(dropna=True)) < _TEXT_MIN_UNIQUE_VALUES:
         return False
 
-    unique_ratio = num_unique / num_values
-    if unique_ratio <= _TEXT_MIN_UNIQUE_RATIO:
+    if num_unique / num_values <= _TEXT_MIN_UNIQUE_RATIO:
         return False
 
     unique_values = column.dropna().unique()
