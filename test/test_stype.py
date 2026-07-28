@@ -116,16 +116,26 @@ def test_from_pandas() -> None:
 def test_from_arrow() -> None:
     table = pa.table(
         {
+            "id": pa.array([1, 2], type=pa.int64()),
             "amount": pa.array([Decimal("1.25"), None]),
             "ratio": pa.array([1.0, 2.5], type=pa.float32()),
+            "name": pa.array(["a", "b"], type=pa.string()),
             "note": pa.array(["a", "b"], type=pa.large_string()),
+            "active": pa.array([True, False], type=pa.bool_()),
+            "code": pa.array(["x", "y"]).dictionary_encode(),
+            "created_at": pa.array([0, 1], type=pa.timestamp("s")),
         }
     )
 
     assert infer_stypes(table) == {
+        "id": Stype.id,
         "amount": Stype.numerical,
         "ratio": Stype.numerical,
+        "name": Stype.categorical,
         "note": Stype.categorical,
+        "active": Stype.categorical,
+        "code": Stype.categorical,
+        "created_at": Stype.datetime,
     }
 
 
@@ -135,17 +145,32 @@ def test_from_cudf() -> None:
 
     df = cudf.DataFrame(
         {
+            "id": cudf.Series([1, 2], dtype="int64"),
             "age": cudf.Series([25, 31], dtype="int32"),
+            "income": cudf.Series([1.0, 2.5], dtype="float64"),
             "amount": cudf.Series(
                 [Decimal("1.25"), Decimal("2.50")],
                 dtype=cudf.Decimal64Dtype(8, 2),
+            ),
+            "name": cudf.Series(["a", "b"]),
+            "segment": cudf.Series(["x", "y"], dtype="category"),
+            "active": cudf.Series([True, False], dtype="bool"),
+            "created_at": cudf.Series(
+                ["2026-01-01", "2026-01-02"],
+                dtype="datetime64[ns]",
             ),
         }
     )
 
     assert infer_stypes(df) == {
+        "id": Stype.id,
         "age": Stype.numerical,
+        "income": Stype.numerical,
         "amount": Stype.numerical,
+        "name": Stype.categorical,
+        "segment": Stype.categorical,
+        "active": Stype.categorical,
+        "created_at": Stype.datetime,
     }
 
 
@@ -221,6 +246,33 @@ def test_text_detection(
         "review": Stype.text,
         "color": Stype.categorical,
     }
+
+
+@onlyCUDA
+def test_text_inference_consistent_between_arrow_and_cudf() -> None:
+    cudf = pytest.importorskip("cudf")
+    values = [None, *_TEST_REVIEW_DATA["review"]]
+    arrow_table = pa.table(
+        {
+            "review": values,
+            "category": pa.array(values).dictionary_encode(),
+        }
+    )
+    cudf_table = cudf.DataFrame(
+        {
+            "review": values,
+            "category": cudf.Series(values, dtype="category"),
+        }
+    )
+
+    arrow_stypes = infer_stypes(arrow_table, allow_text=True)
+    cudf_stypes = infer_stypes(cudf_table, allow_text=True)
+
+    assert arrow_stypes == {
+        "review": Stype.text,
+        "category": Stype.categorical,
+    }
+    assert cudf_stypes == arrow_stypes
 
 
 def test_text_not_inferred_by_default(
