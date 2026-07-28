@@ -1,3 +1,5 @@
+from typing import cast
+
 import torch
 from torch import Tensor
 
@@ -97,7 +99,7 @@ def to_binary_class(
         )
 
     score = pred[str(positive_class)].numerical.squeeze(-1)
-    match = target.categories[0] == positive_class
+    match = cast(Tensor, target.categories[0] == positive_class)
     index = match.nonzero().view(-1)
     if index.numel() != 1:
         raise ValueError(
