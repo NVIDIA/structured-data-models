@@ -212,8 +212,8 @@ def test_eq(device: torch.device) -> None:
     assert (left != right).equal(~(left == right))
     assert (left != "a").equal(~(left == "a"))
 
-    left = StringTensor.from_list([["a", "b"]])
-    right = StringTensor.from_list([["a"], ["b"]])
+    left = StringTensor.from_list([["a", "b"]], device=device)
+    right = StringTensor.from_list([["a"], ["b"]], device=device)
 
     assert (left == right).equal(
         torch.tensor([[True, False], [False, True]], device=device),
