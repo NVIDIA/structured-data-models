@@ -7,9 +7,9 @@ This document defines the recommended solution for shared and vectorized Recipe 
 - `Recipe` is the only public ensemble-processing entry point and processes features, target, and related tables together.
 - `Recipe` is fitted in place; refitting replaces all fitted state only after every table has fitted successfully.
 - `EnsembleTable` stores unique variants in schema-compatible tensor groups `[V_g,...,R,C]` and maps each stable member position to one variant.
-- A private `_VariantGroupProcessor` owns one fitted Processor instance per variant group; `EnsembleTable` contains no fitted state.
+- A private `_VariantGroupProcessor` adapts a normal Processor to `EnsembleProcessor` and owns one fitted Processor instance per variant group; `EnsembleTable` contains no fitted state.
 - Every normal Processor supports independent leading dimensions and operates directly on one variant group. There is no per-member fallback.
-- Structural, composite, and stochastic Processors override the internal ensemble execution.
+- Structural, composite, and stochastic steps implement `EnsembleProcessor` directly.
 - Processors share variants only through execution provenance, never through tensor comparison or hashing.
 - `Recipe.transform_output` owns regression target inversion and classification alignment; TabICLv2 no longer performs target inversion manually.
 - Version 1 is row-preserving, table-local, immutable during `transform`, and limited to one device per execution.
@@ -87,21 +87,25 @@ The contract is strict:
 - One invocation returns a dense output with compatible shape and identical metadata for every leading position.
 - Member-specific randomness, cross-variant side effects, and variant-dependent incompatible output schemas are not allowed.
 
-An external Processor satisfies this contract or overrides internal ensemble execution; otherwise it is rejected. Unchecked callables are not wrapped automatically on the ensemble path.
+An external Processor satisfies this contract or implements `EnsembleProcessor`; otherwise it is rejected. Unchecked callables are not wrapped automatically on the ensemble path.
 
 ## Variant Groups and Packing
 
 ```python
-class _VariantGroupProcessor(torch.nn.Module):
+class EnsembleProcessor(torch.nn.Module):
+    def fit_transform(self, table: EnsembleTable, *, context: EnsembleFitContext) -> EnsembleTable: ...
+    def transform(self, table: EnsembleTable) -> EnsembleTable: ...
+    def inverse_transform(self, table: EnsembleTable) -> EnsembleTable: ...
+class _VariantGroupProcessor(EnsembleProcessor):
     def fit_transform(self, table: EnsembleTable, *, context: EnsembleFitContext) -> EnsembleTable:
         self.processors = ModuleList(copy.deepcopy(self.template) for _ in table.groups)
         groups = tuple(processor.fit_transform(group, generator=context.generator) for processor, group in zip(self.processors, table.groups))
         return table.with_groups(groups)
+def as_ensemble_processor(processor: Processor | EnsembleProcessor) -> EnsembleProcessor:
+    return processor if isinstance(processor, EnsembleProcessor) else _VariantGroupProcessor(processor)
 ```
 
-`_VariantGroupProcessor` stores group order and one Processor instance per group. `transform` and inverse transform apply these instances in the same order; query may have a different row count. A Processor that creates variants calls `EnsembleTable.pack(...)`. `pack` stacks compatible unique results, forms separate groups for incompatible schemas, and creates `member_to_variant`. The producing Processor defines only the semantic mapping; the following wrapper does not repack.
-
-Normal built-ins such as `Identity`, `Clip`, `ToNumerical`, `EncodeDatetime`, `SoftmaxTemperature`, `MeanImpute`, `StandardScale`, `QuantileClip`, `SigmaClip`, `Power`, and `CategoricalImpute` are adapted to this contract.
+All composite children are normalized through `as_ensemble_processor`. `_VariantGroupProcessor` stores group order and one Processor instance per group. `transform` and inverse transform apply these instances in the same order; query may have a different row count. A Processor that creates variants calls `EnsembleTable.pack(...)`. `pack` stacks compatible unique results, forms separate groups for incompatible schemas, and creates `member_to_variant`. The producing Processor defines only the semantic mapping; the following wrapper does not repack. Normal built-ins such as `Identity`, `Clip`, `ToNumerical`, `EncodeDatetime`, `SoftmaxTemperature`, `MeanImpute`, `StandardScale`, `QuantileClip`, `SigmaClip`, `Power`, and `CategoricalImpute` are adapted to this contract.
 
 ## Processors with Custom Ensemble Semantics
 
