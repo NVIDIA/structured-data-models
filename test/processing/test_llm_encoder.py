@@ -4,7 +4,7 @@ import pytest
 import torch
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import StypeDispatch
-from sdm.processing.text.llm_encoder import LLMEncoder
+from sdm.processing.text.llm_encoder import LLMTransformer
 from torch import Tensor
 
 
@@ -40,7 +40,7 @@ def _text_table() -> TableTensor:
 
 
 def test_llm_encoder_embeds_each_text_column() -> None:
-    output = LLMEncoder(_FakeEmbedder()).transform(_text_table())
+    output = LLMTransformer(_FakeEmbedder()).transform(_text_table())
 
     assert output.columns[Stype.numerical] == (
         "title_0",
@@ -62,7 +62,7 @@ def test_llm_encoder_embeds_each_text_column() -> None:
 
 def test_llm_encoder_rejects_wrong_encode_shape() -> None:
     with pytest.raises(ValueError, match="Expected 'encode'"):
-        LLMEncoder(_WrongShapeEmbedder()).transform(_text_table())
+        LLMTransformer(_WrongShapeEmbedder()).transform(_text_table())
 
 
 def test_llm_encoder_empty_rows_use_dim_without_encode() -> None:
@@ -75,14 +75,14 @@ def test_llm_encoder_empty_rows_use_dim_without_encode() -> None:
         ),
     )
 
-    output = LLMEncoder(_FakeEmbedder()).transform(table)
+    output = LLMTransformer(_FakeEmbedder()).transform(table)
 
     assert output.numerical.size() == (0, 2)
     assert output.columns[Stype.numerical] == ("title_0", "title_1")
 
 
 def test_llm_encoder_in_stype_dispatch_route() -> None:
-    dispatch = StypeDispatch(text=LLMEncoder(_FakeEmbedder()))
+    dispatch = StypeDispatch(text=LLMTransformer(_FakeEmbedder()))
 
     output = dispatch.fit_transform(_text_table())
 

@@ -10,7 +10,6 @@ from sdm.processing.common import (
     ToNumerical,
     ShuffleColumns,
 )
-from sdm.processing.text.tfidf_transformer import TfidfTransformer
 from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
@@ -53,7 +52,6 @@ __all__ = [
     "EnsembleReduce",
     "SoftmaxTemperature",
     "StandardScale",
-    "TfidfTransformer",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",

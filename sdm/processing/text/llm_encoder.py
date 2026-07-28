@@ -36,7 +36,7 @@ class Embedder(Protocol):
         ...
 
 
-class LLMEncoder(Processor):
+class LLMTransformer(Processor):
     r"""Encode text columns with a user-provided embedding model.
 
     Each text column is embedded cell-by-cell through ``embedder`` and
