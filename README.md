@@ -2,6 +2,16 @@
 
 Python package for structured data models.
 
+## Examples
+
+Start with the [TabICLv2 example script](examples/tabiclv2.py) or open the
+quickstart notebook in Colab:
+
+[![Open TabICL demo in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/NVIDIA/structured-data-models/blob/main/examples/TabICL_demo.ipynb)
+
+All examples are indexed in [examples/README.md](examples/README.md) and the
+[documentation examples page](docs/source/examples.md).
+
 ```python
 import torch
 from sklearn.datasets import load_breast_cancer

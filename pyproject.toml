@@ -176,6 +176,13 @@ banned-module-level-imports = [
     "T201",  # Allow print.
     "TID253",  # Example dependencies should be imported at module scope.
 ]
+"examples/**/*.ipynb" = [
+    "D103",  # Notebook helper functions do not need public docstrings.
+    "E402",  # Notebooks introduce imports near the cells that use them.
+    "E501",  # Markdown and rendered notebook cells can carry long lines.
+    "T201",  # Notebook examples use print output.
+    "TID253",  # Notebook dependencies should be imported in example cells.
+]
 "test/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
