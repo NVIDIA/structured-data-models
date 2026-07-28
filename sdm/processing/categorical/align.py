@@ -43,45 +43,44 @@ class AlignCategories(Processor):
     def _fit_category(
         self,
         category: Tensor,
-        index: Tensor,
-        mask: Tensor,
+        code: Tensor,
         *,
         return_inverse: bool,
     ) -> tuple[Tensor, Tensor | None]:
-        values = index[mask]
+        perm: Tensor | None = None
+        inverse: Tensor | None = None
         if self.sort_by == "frequency":
             if return_inverse:
-                unique, inverse, count = values.unique(
+                unique, inverse, count = code.unique(
                     return_inverse=True,
                     return_counts=True,
                 )
             else:
-                unique, count = values.unique(return_counts=True)
-                inverse = None
+                unique, count = code.unique(return_counts=True)
             perm = count.argsort(descending=True, stable=True)
             unique = unique[perm]
         else:
             if return_inverse:
-                unique, inverse = values.unique(return_inverse=True)
+                unique, inverse = code.unique(return_inverse=True)
             else:
-                unique = values.unique()
-                inverse = None
-            perm = None
+                unique = code.unique()
+
+        if unique.numel() != category.numel() or self.sort_by == "frequency":
+            if category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
+                # PyTorch CPU index_select is not implemented for these dtypes.
+                category = category[unique]
+            category = category.index_select(0, unique)
 
         if self.sort_by == "value":
-            category = self._select_categories(
-                category,
-                unique,
-                keep_all=unique.numel() == category.numel(),
-            )
-            category, perm = self._sort_categories(category)
-        else:
-            category = self._select_categories(
-                category,
-                unique,
-                keep_all=self.sort_by == "code"
-                and unique.numel() == category.numel(),
-            )
+            if category.is_cuda and category.dtype in _UNSIGNED_DTYPES:
+                key = category.to(torch.int64)
+                if category.dtype == torch.uint64:
+                    # Map unsigned integer order onto signed integer order:
+                    key = key.bitwise_xor(torch.iinfo(torch.int64).min)
+                perm = key.argsort()
+                category = category.index_select(0, perm)
+            else:
+                category, perm = category.sort()
 
         if inverse is not None and perm is not None:
             inv_perm = torch.empty_like(perm)
@@ -89,31 +88,6 @@ class AlignCategories(Processor):
             inverse = inv_perm[inverse]
 
         return category, inverse
-
-    @staticmethod
-    def _sort_categories(category: Tensor) -> tuple[Tensor, Tensor]:
-        if category.is_cuda and category.dtype in _UNSIGNED_DTYPES:
-            sort_key = category.to(torch.int64)
-            if category.dtype == torch.uint64:
-                # Map unsigned integer order onto signed integer order.
-                sort_key = sort_key.bitwise_xor(torch.iinfo(torch.int64).min)
-            perm = sort_key.argsort()
-            return category.index_select(0, perm), perm
-        return category.sort()
-
-    @staticmethod
-    def _select_categories(
-        category: Tensor,
-        index: Tensor,
-        *,
-        keep_all: bool,
-    ) -> Tensor:
-        if keep_all:
-            return category
-        if category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
-            # PyTorch CPU index_select is not implemented for these dtypes.
-            return category[index]
-        return category.index_select(0, index)
 
     def _fit(
         self,
@@ -125,14 +99,13 @@ class AlignCategories(Processor):
 
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
-            index = table.categorical[..., i].view(-1)
             category, _ = self._fit_category(
-                category,
-                index,
-                mask[..., i].view(-1),
+                category=category,
+                code=table.categorical[..., i].view(-1)[mask[..., i].view(-1)],
                 return_inverse=False,
             )
             categories.append(category)
+
         self._categories = tuple(categories)
 
     def _fit_transform(
@@ -146,11 +119,9 @@ class AlignCategories(Processor):
 
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
-            index = table.categorical[..., i].view(-1)
             category, inverse = self._fit_category(
-                category,
-                index,
-                mask[..., i].view(-1),
+                category=category,
+                code=table.categorical[..., i].view(-1)[mask[..., i].view(-1)],
                 return_inverse=True,
             )
             categories.append(category)
