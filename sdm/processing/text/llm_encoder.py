@@ -1,11 +1,16 @@
-from typing import Protocol, cast, runtime_checkable
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 import torch
-from torch import Tensor
-
-from sdm.processing.base import Processor, SharedState
+from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
+from torch import Tensor
+
+if TYPE_CHECKING:
+    import cudf
+    import pyarrow as pa
 
 
 @runtime_checkable
@@ -22,8 +27,12 @@ class Embedder(Protocol):
         """Width of the returned embeddings."""
         ...
 
-    def encode(self, strings: list[str]) -> Tensor:
-        """Embed each string into a ``[len(strings), dim]`` tensor."""
+    def encode(self, strings: cudf.Series | pa.Array) -> Tensor:
+        """Embed strings into a ``[len(strings), dim]`` tensor.
+
+        Args:
+            strings: cuDF Series or PyArrow Array of strings.
+        """
         ...
 
 
@@ -32,35 +41,41 @@ class LLMEncoder(Processor):
 
     Each text column is embedded cell-by-cell through ``embedder`` and
     expands to a block of ``embedder.dim`` numerical features; blocks are
-    concatenated in column order into the numerical output. The embedder is
-    pre-loaded by the caller and only referenced here (never copied), so
-    ensemble members share a single model instance.
+    concatenated in column order into the numerical output.
 
     Args:
         embedder: Pre-loaded :class:`Embedder` mapping a batch of strings to
             a ``[n, dim]`` embedding tensor.
+        dtype: Floating-point dtype of the returned numerical features. If
+            ``None``, uses :func:`torch.get_default_dtype`.
     """
 
     requires_fit = False
     supported_stypes = frozenset({Stype.text})
 
-    def __init__(self, embedder: Embedder) -> None:
+    def __init__(
+        self,
+        embedder: Embedder,
+        *,
+        dtype: torch.dtype | None = None,
+    ) -> None:
         super().__init__()
-        self._embedder = SharedState(embedder)
+        self._embedder = embedder
+        self._dtype = dtype
 
     @property
     def embedder(self) -> Embedder:
         """The wrapped embedding model."""
-        return self._embedder.value
+        return self._embedder
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        device = table.numerical.device
-        dtype = table.numerical.dtype
-        if not dtype.is_floating_point:
-            dtype = torch.get_default_dtype()
+        device = table.text.device
+        dtype = self._dtype or torch.get_default_dtype()
+
         text_names = table.columns[Stype.text]
         n_rows = table.text.size(0)
-        dim = self.embedder.dim
+        embedder = self.embedder
+        dim = embedder.dim
 
         blocks: list[Tensor] = []
         names: list[str] = []
@@ -69,16 +84,24 @@ class LLMEncoder(Processor):
                 block = torch.zeros((0, dim), dtype=dtype, device=device)
             else:
                 column_text = cast(StringTensor, table.text[:, column])
-                strings = column_text.to_arrow().to_pylist()
-                block = self.embedder.encode(strings)
-                if block.dim() != 2 or block.size(0) != n_rows:
+                strings = (
+                    column_text.to_cudf()
+                    if column_text.is_cuda
+                    else column_text.to_arrow()
+                )
+                block = embedder.encode(strings)
+                if (
+                    block.dim() != 2
+                    or block.size(0) != n_rows
+                    or block.size(-1) != dim
+                ):
                     raise ValueError(
-                        f"Expected 'encode' to return a [{n_rows}, dim] "
+                        f"Expected 'encode' to return a [{n_rows}, {dim}] "
                         f"tensor (got {tuple(block.size())})"
                     )
                 block = block.to(device=device, dtype=dtype)
             blocks.append(block)
-            names.extend(f"{name}_{i}" for i in range(block.size(-1)))
+            names.extend(f"{name}_{i}" for i in range(dim))
 
         numerical = (
             torch.cat(blocks, dim=-1)

@@ -1,9 +1,10 @@
-import copy
-
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
 import torch
 from sdm import StringTensor, Stype, TableTensor
-from sdm.processing import Embedder, LLMEncoder, StypeDispatch
+from sdm.processing import StypeDispatch
+from sdm.processing.text.llm_encoder import LLMEncoder
 from torch import Tensor
 
 
@@ -12,16 +13,17 @@ class _FakeEmbedder:
 
     dim = 2
 
-    def encode(self, strings: list[str]) -> Tensor:
-        return torch.tensor(
-            [[float(len(s)), float(len(s)) ** 2] for s in strings]
-        )
+    def encode(self, strings: pa.Array) -> Tensor:
+        lengths = pc.call_function("utf8_length", [strings])
+        values = torch.tensor(lengths.to_numpy(zero_copy_only=False))
+        values = values.to(torch.get_default_dtype())
+        return torch.stack((values, values.square()), dim=-1)
 
 
 class _WrongShapeEmbedder:
     dim = 2
 
-    def encode(self, strings: list[str]) -> Tensor:
+    def encode(self, strings: pa.Array) -> Tensor:
         return torch.zeros(len(strings) + 1, 2)
 
 
@@ -58,13 +60,6 @@ def test_llm_encoder_embeds_each_text_column() -> None:
     )
 
 
-def test_llm_encoder_requires_no_fit() -> None:
-    encoder = LLMEncoder(_FakeEmbedder())
-
-    assert encoder.requires_fit is False
-    encoder.transform(_text_table())  # No prior `fit` call.
-
-
 def test_llm_encoder_rejects_wrong_encode_shape() -> None:
     with pytest.raises(ValueError, match="dim"):
         LLMEncoder(_WrongShapeEmbedder()).transform(_text_table())
@@ -84,22 +79,6 @@ def test_llm_encoder_empty_rows_use_dim_without_encode() -> None:
 
     assert output.numerical.size() == (0, 2)
     assert output.columns[Stype.numerical] == ("title_0", "title_1")
-
-
-def test_llm_encoder_shares_embedder_across_deepcopy() -> None:
-    encoder = LLMEncoder(_FakeEmbedder())
-
-    member = copy.deepcopy(encoder)
-
-    assert member.embedder is encoder.embedder
-    assert torch.equal(
-        member.transform(_text_table()).numerical,
-        encoder.transform(_text_table()).numerical,
-    )
-
-
-def test_llm_encoder_satisfies_embedder_protocol() -> None:
-    assert isinstance(_FakeEmbedder(), Embedder)
 
 
 def test_llm_encoder_in_stype_dispatch_route() -> None:

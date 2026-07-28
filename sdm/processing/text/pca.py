@@ -1,5 +1,4 @@
 import torch
-
 from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.stype import Stype
@@ -23,7 +22,7 @@ class PCA(Processor):
     def __init__(self, *, dim: int) -> None:
         super().__init__()
         if dim < 1:
-            raise ValueError(f"'dim' must be positive (got {dim})")
+            raise ValueError(f"'dim' must be positive (got {dim}).")
         self.dim = dim
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("components", torch.empty(0))
@@ -35,6 +34,13 @@ class PCA(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = _as_float(table.numerical)  # [N, F]
+        if numerical.size(0) == 0:
+            raise ValueError("'PCA' requires at least one row to fit.")
+        if numerical.size(-1) == 0:
+            raise ValueError(
+                "'PCA' requires at least one numerical column to fit."
+            )
+
         self.mean = numerical.mean(dim=0)
         centered = numerical - self.mean
         # Economy SVD; right-singular vectors are the principal axes.
@@ -43,6 +49,13 @@ class PCA(Processor):
         self.components = vh[:dim].T  # [F, dim]
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if table.numerical.size(-1) != self.mean.size(0):
+            raise ValueError(
+                f"Expected 'table' to have {self.mean.size(0)} "
+                "numerical columns, "
+                f"matching the table used to fit 'PCA' "
+                f"(got {table.numerical.size(-1)})."
+            )
         numerical = _as_float(table.numerical) - self.mean
         projected = numerical @ self.components  # [N, dim]
         return table.__class__(

@@ -1,7 +1,7 @@
 import pytest
 import torch
 from sdm import Stype, TableTensor
-from sdm.processing import SliceFeatures
+from sdm.processing.text.slice_features import SliceFeatures
 
 
 def _table() -> TableTensor:
