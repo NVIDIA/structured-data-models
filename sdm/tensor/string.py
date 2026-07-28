@@ -81,7 +81,7 @@ class StringTensor(VarLenTensor):
             )
 
         if array.null_count > 0:
-            raise ValueError(f"'{cls.__name__}' cannot represent null values")
+            raise ValueError(f"{cls.__name__!r} cannot represent null values")
 
         buffers = array.buffers()
 
@@ -180,7 +180,7 @@ class StringTensor(VarLenTensor):
         # character/offset buffers plus a row offset into the offsets.
         column, _ = ser.to_pylibcudf()
         if column.null_count() > 0:
-            raise ValueError(f"'{cls.__name__}' cannot represent null values")
+            raise ValueError(f"{cls.__name__!r} cannot represent null values")
 
         # `None` or zero-length when the column holds no characters:
         chars = column.data()
@@ -254,7 +254,7 @@ class StringTensor(VarLenTensor):
                 array.append(seq)
                 return ()
             if not isinstance(seq, Sequence):
-                raise TypeError(f"'{cls.__name__}' data must contain strings")
+                raise TypeError(f"{cls.__name__!r} data must contain strings")
             if len(seq) == 0:
                 return (0,)
 
@@ -269,7 +269,7 @@ class StringTensor(VarLenTensor):
                     child_size = item_size
                 elif item_size != child_size:
                     raise ValueError(
-                        f"'{cls.__name__}' data must be rectangular"
+                        f"{cls.__name__!r} data must be rectangular"
                     )
 
             assert child_size is not None

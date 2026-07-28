@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, ClassVar, TypeAlias, cast
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
 import torch
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 
-SupportedStypes: TypeAlias = frozenset[Stype]
-
 if TYPE_CHECKING:
     from sdm.processing import Sequential
+
+SupportedStypes: TypeAlias = frozenset[Stype]
 
 
 class Processor(torch.nn.Module, abc.ABC):
@@ -37,14 +38,37 @@ class Processor(torch.nn.Module, abc.ABC):
             if stype not in supported_stypes and len(columns) > 0:
                 # TODO: Include all invalid columns in the error message
                 raise ValueError(
-                    f"'{self.__class__.__name__}' does not support "
-                    f"'{stype.value}' columns."
+                    f"{self.__class__.__name__!r} does not support "
+                    f"{stype.value!r} columns."
                 )
+
+    @staticmethod
+    def as_processor(processor: object) -> Processor:
+        r"""Normalize a processor-like object to a :class:`Processor`.
+
+        Args:
+            processor: A processor-like object. A :class:`Processor` is
+                returned as-is, a callable is wrapped as a stateless processor,
+                and a sequence of processor-like objects is normalized to
+                :class:`~sdm.processing.common.Sequential`.
+        """
+        from sdm.processing import Callable, Sequential  # noqa: PLC0415
+
+        if isinstance(processor, Processor):
+            return processor
+        if callable(processor):
+            return Callable(processor)  # type: ignore
+        if isinstance(processor, Sequence) and not isinstance(processor, str):
+            return Sequential(*processor)
+        raise TypeError(
+            f"Input must be a 'Processor', callable, or sequence of them "
+            f"(got '{type(processor).__name__}')"
+        )
 
     def _check_is_fitted(self) -> None:
         if self.requires_fit and not self._fitted:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' is not fitted; "
+                f"{self.__class__.__name__!r} is not fitted; "
                 "call 'fit()' before."
             )
 
@@ -59,6 +83,16 @@ class Processor(torch.nn.Module, abc.ABC):
     @abc.abstractmethod
     def _transform(self, table: TableTensor) -> TableTensor:
         pass
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        if self.requires_fit:
+            self._fit(table, generator=generator)
+        return self._transform(table)
 
     def fit(
         self,
@@ -110,21 +144,29 @@ class Processor(torch.nn.Module, abc.ABC):
         Returns:
             The transformed table.
         """
-        return self.fit(table, generator=generator).transform(table)
+        self._check_supported_stypes(table)
+        out = self._fit_transform(table, generator=generator)
+        if self.requires_fit:
+            self._fitted = True
+        return out
 
     def __add__(self, other: object) -> Sequential:
         from sdm.processing import Sequential  # noqa: PLC0415
 
-        if not isinstance(other, Processor) and not callable(other):
+        try:
+            other = Processor.as_processor(other)
+        except TypeError:
             return NotImplemented
-        return Sequential(self, cast(Processor, other))
+        return Sequential(self, other)
 
     def __radd__(self, other: object) -> Sequential:
         from sdm.processing import Sequential  # noqa: PLC0415
 
-        if not isinstance(other, Processor) and not callable(other):
+        try:
+            other = Processor.as_processor(other)
+        except TypeError:
             return NotImplemented
-        return Sequential(cast(Processor, other), self)
+        return Sequential(other, self)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"

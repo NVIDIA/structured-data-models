@@ -18,7 +18,7 @@ def _table(
     return TableTensor(
         columns={"categorical": columns},
         categorical=CategoricalTensor(
-            data=torch.tensor(values, dtype=torch.int32, device=device),
+            code=torch.tensor(values, dtype=torch.int32, device=device),
             categories=tuple(
                 StringTensor.from_list(category, device=device)
                 for category in categories
@@ -48,7 +48,7 @@ def test_impute_mode_uses_most_frequent_category(
         torch.tensor([0, 1], device=device),
     )
     assert torch.equal(
-        output.categorical.as_tensor(),
+        output.categorical.code,
         torch.tensor([[0, 1], [2, 0]], dtype=torch.int32, device=device),
     )
     assert output.columns[Stype.categorical] == ("kind", "segment")
@@ -69,7 +69,7 @@ def test_impute_mode_moves_fitted_processor_to_cuda() -> None:
 
     assert output.categorical.device.type == "cuda"
     assert torch.equal(
-        output.categorical.as_tensor(),
+        output.categorical.code,
         torch.tensor([[0, 0]], dtype=torch.int32, device="cuda"),
     )
 
@@ -83,7 +83,7 @@ def test_impute_mode_tie_uses_lowest_code(
     output = ImputeMode().fit_transform(table)
 
     assert torch.equal(
-        output.categorical.as_tensor(),
+        output.categorical.code,
         torch.tensor(
             [[1, 0], [0, 1], [0, 0]],
             dtype=torch.int32,

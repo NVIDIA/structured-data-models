@@ -1,7 +1,7 @@
 import argparse
-from collections.abc import Sequence
 from typing import cast
 
+import pandas as pd
 import relbench
 import torch
 from relbench.datasets import get_dataset
@@ -66,24 +66,23 @@ sampler = data.sampler(
 )
 
 # Collect Task Table ##########################################################
-task_tables: Sequence[TableTensor] = []
 task = get_task(args.dataset, args.task, download=True)
-for split in ["train", "val", "test"]:
-    task_table = TableTensor.from_pandas(
-        df=task.get_table(split, mask_input_cols=False).df,
-        stypes={
-            task.entity_col: "id",
-            task.time_col: "datetime",
-            task.target_col: "numerical"
-            if task.task_type == relbench.base.TaskType.REGRESSION
-            else "categorical",
-        },
-    )
-    task_tables.append(task_table)
-
-context = torch.cat(task_tables[:2], dim=0)
-perm = torch.randperm(len(context))[: args.context_size]
-context = cast(TableTensor, context[perm])
+dfs = [
+    task.get_table(split, mask_input_cols=False).df
+    for split in ["train", "val", "test"]
+]
+task_table = TableTensor.from_pandas(
+    df=pd.concat(dfs, ignore_index=True),
+    stypes={
+        task.entity_col: "id",
+        task.time_col: "datetime",
+        task.target_col: "numerical"
+        if task.task_type == relbench.base.TaskType.REGRESSION
+        else "categorical",
+    },
+)
+context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
+context = context[torch.randperm(len(context))[: args.context_size]]
 
 # Execute Model ###############################################################
 model = KumoRFM(device=device)
@@ -105,20 +104,23 @@ model.fit(
     num_estimators=1,
 )
 
-if context.stype(task.target_col) == "categorical":
-    metric = BinaryAUROC().to(device)
-else:
+if task.task_type == relbench.base.TaskType.REGRESSION:
     metric = MeanAbsoluteError().to(device)
-for query in tqdm(task_tables[-1].split(args.batch_size)):
-    x_query = query.drop_columns(task.target_col)
-    y_query = query[task.target_col].to(device)
-    out = model.predict(*sampler(x_query, **kwargs).to(device))
-    if y_query.stype(task.target_col).value == "categorical":
-        out = out["1"].as_tensor().view(-1)  # Positive class.
-    else:
-        out = out["q500"].as_tensor().view(-1)  # Median prediction.
-    metric.update(out, y_query.as_tensor().view(-1))
-if context.stype(task.target_col) == "categorical":
-    print(f"AUROC: {metric.compute():.4f}")
 else:
+    metric = BinaryAUROC().to(device)
+for batch in tqdm(query.split(args.batch_size)):
+    x_query = batch.drop_columns(task.target_col)
+    y_query = batch[task.target_col].to(device)
+    out = model.predict(*sampler(x_query, **kwargs).to(device))
+    if task.task_type == relbench.base.TaskType.REGRESSION:
+        out = out["q500"].numerical  # Median prediction.
+        y_query = y_query.numerical
+    else:
+        out = out["1"].numerical  # Positive class.
+        # Decode ground-truth codes to class values:
+        y_query = y_query.categorical.categories[0][y_query.categorical.code]
+    metric.update(out, y_query)
+if task.task_type == relbench.base.TaskType.REGRESSION:
     print(f"MAE: {metric.compute():.4f}")
+else:
+    print(f"AUROC: {metric.compute():.4f}")

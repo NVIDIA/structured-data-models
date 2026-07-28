@@ -185,12 +185,12 @@ banned-module-level-imports = [
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]
-"examples/*.py" = [
-    "T201",  # Allow print
+"examples/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
     "D103",  # Ignore "Missing docstring in public function"
-    "TID253",  # All dependencies used in example should be imported at  module scope.
+    "T201",  # Allow print.
+    "TID253",  # Example dependencies should be imported at module scope.
 ]
 "test/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"

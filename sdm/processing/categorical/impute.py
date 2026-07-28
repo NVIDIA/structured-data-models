@@ -49,7 +49,7 @@ class ImputeMode(Processor):
             if observed.numel() == 0:
                 raise ValueError(
                     "Cannot fit 'ImputeMode' because categorical "
-                    f"column '{columns[index]}' has no observed values."
+                    f"column {columns[index]!r} has no observed values."
                 )
 
             counts = observed.bincount(minlength=category.numel())
@@ -65,12 +65,12 @@ class ImputeMode(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         self._check_categories(table)
         _check_categorical_codes(table)
-        data = table.categorical.where(
+        code = table.categorical.where(
             table.categorical >= 0,
             self._fill_values.to(dtype=table.categorical.dtype),
         )
         categorical = CategoricalTensor(
-            data=data,
+            code=code,
             categories=table.categorical.categories,
         )
         return table.replace_blocks(categorical=categorical)
@@ -89,7 +89,7 @@ class ImputeMode(Processor):
             if not actual.equal(expected):
                 raise ValueError(
                     "Expected the category vocabulary for categorical column "
-                    f"'{columns[index]}' to match the fitted values and "
+                    f"{columns[index]!r} to match the fitted values and "
                     "order. "
                     "Use 'AlignCategories' before this processor for "
                     "independently tensorized inputs."

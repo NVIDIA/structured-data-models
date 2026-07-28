@@ -93,6 +93,23 @@ class CuGraphRelationalSampler(RelationalSampler):
         self._num_vertices = offsets[-1]
         self._num_edge_types = 2 * len(self.data.relationships)
         self._num_edges = 0
+        self._outgoing_edge_types = {
+            table_name: [] for table_name in self._table_names
+        }
+        self._neighbor_tables = {
+            table_name: set() for table_name in self._table_names
+        }
+        for i, relationship in enumerate(self.data.relationships):
+            self._outgoing_edge_types[relationship.right_table].append(2 * i)
+            self._outgoing_edge_types[relationship.left_table].append(
+                2 * i + 1
+            )
+            self._neighbor_tables[relationship.right_table].add(
+                relationship.left_table
+            )
+            self._neighbor_tables[relationship.left_table].add(
+                relationship.right_table
+            )
 
         with torch.cuda.device(self.data.device):
             self._build_graph()
@@ -137,6 +154,7 @@ class CuGraphRelationalSampler(RelationalSampler):
                     seed=seed,
                     seed_time=seed_time,
                     num_neighbors=num_neighbors,
+                    seed_table=task_link.table,
                 )
             else:
                 nodes = self._sample_non_temporal(
@@ -407,11 +425,13 @@ class CuGraphRelationalSampler(RelationalSampler):
         seed: Tensor,
         seed_time: Tensor,
         num_neighbors: Sequence[int],
+        seed_table: str,
     ) -> dict[str, tuple[Tensor, Tensor]]:
         total = self._num_vertices
         example = torch.arange(seed.numel(), device=seed.device)
         visited = (example * total + seed).unique(sorted=True)
         frontier = visited
+        possible_source_tables = {seed_table}
 
         for count in num_neighbors:
             if frontier.numel() == 0:
@@ -423,6 +443,7 @@ class CuGraphRelationalSampler(RelationalSampler):
                 frontier_example=frontier_example,
                 seed_time=seed_time,
                 count=count,
+                possible_source_tables=possible_source_tables,
             )
             if sampled.numel() == 0:
                 break
@@ -435,6 +456,11 @@ class CuGraphRelationalSampler(RelationalSampler):
             )
             frontier = sampled[~is_visited]
             visited = torch.cat((visited, frontier)).sort().values
+            possible_source_tables = {
+                neighbor
+                for table_name in possible_source_tables
+                for neighbor in self._neighbor_tables[table_name]
+            }
 
         return self._nodes_from_keys(visited)
 
@@ -464,6 +490,7 @@ class CuGraphRelationalSampler(RelationalSampler):
         frontier_example: Tensor,
         seed_time: Tensor,
         count: int,
+        possible_source_tables: set[str],
     ) -> Tensor:
         cp = self._cp
         num_examples = seed_time.numel()
@@ -480,7 +507,11 @@ class CuGraphRelationalSampler(RelationalSampler):
 
         if count == 0:
             return torch.empty(0, dtype=torch.int64, device=self.data.device)
-        fanout = np.full(self._num_edge_types, count, dtype=np.int32)
+        # cuGraph interprets fanout independently for every edge type. Avoid
+        # scheduling types whose source table cannot occur in this hop.
+        fanout = np.zeros(self._num_edge_types, dtype=np.int32)
+        for table_name in possible_source_tables:
+            fanout[self._outgoing_edge_types[table_name]] = count
 
         result = (
             self._pylibcugraph.heterogeneous_uniform_temporal_neighbor_sample(
