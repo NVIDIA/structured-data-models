@@ -131,7 +131,7 @@ def _yeojohnson_log_likelihood(
     )
 
 
-class Power(Processor, InvertibleMixin):
+class PowerTransform(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
     Args:

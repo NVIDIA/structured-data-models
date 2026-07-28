@@ -10,7 +10,7 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
-    StandardScale,
+    Standardize,
     StypeDispatch,
 )
 
@@ -138,7 +138,7 @@ def _related_tables(*, query: bool) -> RelatedTables:
 
 def _recipe() -> Recipe:
     return Recipe(
-        features=StypeDispatch(numerical=StandardScale()),
+        features=StypeDispatch(numerical=Standardize()),
     )
 
 

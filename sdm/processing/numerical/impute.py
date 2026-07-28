@@ -8,7 +8,7 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class MeanImpute(Processor):
+class ImputeMean(Processor):
     """Replace NaN feature values with fitted per-column means.
 
     Args:

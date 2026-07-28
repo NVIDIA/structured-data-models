@@ -241,7 +241,7 @@ def test_forward(
         y = TableTensor(
             columns={"categorical": ("target",)},
             categorical=CategoricalTensor(
-                data=torch.randint(0, 2, size=(4, 1), device=device),
+                code=torch.randint(0, 2, size=(4, 1), device=device),
                 categories=(torch.tensor([False, True], device=device),),
             ),
         )
