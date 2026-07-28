@@ -65,7 +65,7 @@ class TableTensor(Tensor):
             },
             numerical=torch.randn(10, 2),
             categorical=CategoricalTensor(
-                data=torch.randint(0, 2, size=(10, 2)),
+                code=torch.randint(0, 2, size=(10, 2)),
                 categories=(
                     StringTensor.from_list(["USA", "Germany"]),
                     StringTensor.from_list(["enterprise", "startup"]),
@@ -204,7 +204,7 @@ class TableTensor(Tensor):
             numerical = torch.empty((*size, 0), device=device)
         if categorical is None:
             categorical = CategoricalTensor(
-                data=torch.empty((*size, 0), dtype=torch.int32, device=device),
+                code=torch.empty((*size, 0), dtype=torch.int32, device=device),
                 categories=(),
             )
         if datetime is None:
@@ -595,16 +595,6 @@ class TableTensor(Tensor):
         yield Stype.datetime, self._datetime
         yield Stype.text, self._text
         yield Stype.id, self._id
-
-    def as_tensor(self) -> Tensor:
-        r"""Return the only active semantic-type block as a tensor."""
-        tensors = [tensor for _, tensor in self.items() if tensor.size(-1) > 0]
-        if len(tensors) != 1:
-            raise RuntimeError(
-                f"'as_tensor()' requires a {self.__class__.__name__!r} with "
-                f"exactly one active semantic type (got {len(tensors)})"
-            )
-        return tensors[0]
 
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:

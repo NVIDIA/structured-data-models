@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
 import math
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -10,6 +11,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self, override
 
+from sdm._warnings import warn_once
 from sdm.tensor import VarLenTensor
 from sdm.tensor.io import arrow_as_tensor
 
@@ -327,13 +329,33 @@ def _sort(
     if inp.dim() != 1:
         raise NotImplementedError("'sort' only supports one-dimensional input")
 
-    out = pc.call_function(  # TODO Add GPU implementation
-        "array_sort_indices",
-        [inp.to_arrow()],
-        options=pc.ArraySortOptions(
-            order="descending" if descending else "ascending",
-        ),
-    )
-    perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
+    backend: Literal["arrow", "cudf"] = "arrow"
+    if inp.is_cuda:
+        if importlib.util.find_spec("cudf") is not None:
+            backend = "cudf"
+        else:
+            warn_once(
+                key="missing-cudf-sort",
+                message=(
+                    "Falling back to a CPU-based sort because cuDF is not "
+                    "installed. Install cuDF to enable faster CUDA-based "
+                    "sorting without device synchronization."
+                ),
+            )
+
+    if backend == "arrow":
+        out = pc.call_function(
+            "array_sort_indices",
+            [inp.to_arrow()],
+            options=pc.ArraySortOptions(
+                order="descending" if descending else "ascending",
+            ),
+        )
+        perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
+    else:
+        assert backend == "cudf"
+        with torch.cuda.device(inp.device):
+            perm_ser = inp.to_cudf().argsort(ascending=not descending)
+            perm = torch.from_dlpack(perm_ser.astype("int64").to_cupy())
 
     return cast(StringTensor, inp[perm]), perm
