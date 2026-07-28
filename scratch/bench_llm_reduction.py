@@ -5,8 +5,8 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import torch
 from sdm import StringTensor, TableTensor
-from sdm.processing.pca import PCA
-from sdm.processing.slice_features import SliceFeatures
+from sdm.processing.text.pca import PCA
+from sdm.processing.text.slice_features import SliceFeatures
 from sdm.processing.text.llm_encoder import LLMEncoder
 from sklearn.decomposition import PCA as SklearnPCA
 
