@@ -18,7 +18,7 @@ def _table() -> TableTensor:
         },
         numerical=torch.tensor([[30.0, 100.0], [40.0, 200.0]]),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0, 1], [-1, 0]], dtype=torch.int64),
+            code=torch.tensor([[0, 1], [-1, 0]], dtype=torch.int64),
             categories=(
                 StringTensor.from_list(["US", "DE"]),
                 StringTensor.from_list(["small", "enterprise"]),
@@ -30,7 +30,7 @@ def _table() -> TableTensor:
 def test_to_numerical_converts_categorical_stype() -> None:
     table = _table()
 
-    categorical_ids = table.categorical.as_tensor().to(table.numerical.dtype)
+    categorical_ids = table.categorical.code.to(table.numerical.dtype)
 
     output = ToNumerical().transform(table)
 
@@ -70,7 +70,7 @@ def test_to_numerical_converts_categorical_only_table() -> None:
     table = TableTensor(
         columns={"categorical": ("country",)},
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int64),
+            code=torch.tensor([[0], [1]], dtype=torch.int64),
             categories=(StringTensor.from_list(["US", "DE"]),),
         ),
     )
@@ -82,5 +82,5 @@ def test_to_numerical_converts_categorical_only_table() -> None:
     assert output.columns[Stype.categorical] == ()
     assert torch.equal(
         output.numerical,
-        table.categorical.as_tensor().to(table.numerical.dtype),
+        table.categorical.code.to(table.numerical.dtype),
     )

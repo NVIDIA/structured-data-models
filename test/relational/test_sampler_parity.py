@@ -4,7 +4,7 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 from sdm import RelationalData, Stype, TableTensor
-from sdm.relational.sampler import RelationalSamplerOutput
+from sdm.relational.sampler import EXAMPLE_ID, RelationalSamplerOutput
 from sdm.testing import onlyCUDA
 
 
@@ -129,18 +129,21 @@ def test_pyg_and_cugraph_match_composite_seed_samples() -> None:
     data = RelationalData(
         tables={
             "users": _table(
-                {"account": [1, 2], "region": ["europe", "tokyo"]},
-                {"account": Stype.id, "region": Stype.id},
+                {
+                    "account_id": [1, 2, 3],
+                    "region": ["europe", "tokyo", "america"],
+                },
+                {"account_id": Stype.id, "region": Stype.id},
             ),
             "orders": _table(
                 {
-                    "order_id": [10, 11],
-                    "account": [1, 2],
-                    "region": ["europe", "tokyo"],
+                    "order_id": [10, 11, 12],
+                    "account_id": [1, 2, 3],
+                    "region": ["europe", "tokyo", "america"],
                 },
                 {
                     "order_id": Stype.id,
-                    "account": Stype.id,
+                    "account_id": Stype.id,
                     "region": Stype.id,
                 },
             ),
@@ -148,31 +151,52 @@ def test_pyg_and_cugraph_match_composite_seed_samples() -> None:
         relationships=[
             {
                 "left_table": "orders",
-                "left_columns": ("account", "region"),
+                "left_columns": ("account_id", "region"),
                 "right_table": "users",
-                "right_columns": ("account", "region"),
+                "right_columns": ("account_id", "region"),
             }
         ],
     )
     task_table = _table(
-        {"account": [2], "region": ["tokyo"]},
-        {"account": Stype.id, "region": Stype.id},
+        {
+            "requested_account": [3, 1, 3],
+            "requested_region": ["america", "europe", "america"],
+        },
+        {
+            "requested_account": Stype.id,
+            "requested_region": Stype.id,
+        },
     )
     task_link = {
-        "task_columns": ("account", "region"),
+        "task_columns": ("requested_account", "requested_region"),
         "table": "users",
-        "table_columns": ("account", "region"),
+        "table_columns": ("account_id", "region"),
     }
 
-    expected = _sample(data, task_table, task_link, [-1])
+    expected = _sample(data, task_table, task_link, [0])
     actual = _sample(
         data.cuda(),
         _cuda_table(task_table),
         task_link,
-        [-1],
+        [0],
     )
 
-    assert _canonical_output(actual) == _canonical_output(expected)
+    expected_associations = (
+        (0, 3, "america"),
+        (1, 1, "europe"),
+        (2, 3, "america"),
+    )
+    for output in (expected, actual):
+        users = output.cpu().related_tables.tables["users"].to_arrow()
+        values = users.select((EXAMPLE_ID, "account_id", "region")).to_pydict()
+        associations = tuple(
+            zip(
+                values[EXAMPLE_ID],
+                values["account_id"],
+                values["region"],
+            )
+        )
+        assert associations == expected_associations
 
 
 @onlyCUDA

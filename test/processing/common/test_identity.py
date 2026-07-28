@@ -20,7 +20,7 @@ def test_identity_accepts_non_numerical_stypes() -> None:
         },
         numerical=torch.tensor([[1.0], [2.0]]),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
             categories=(StringTensor.from_list(["a", "b"]),),
         ),
     )

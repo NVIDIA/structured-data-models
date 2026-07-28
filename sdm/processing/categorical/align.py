@@ -1,41 +1,42 @@
+from typing import Literal
+
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, StringTensor, Stype
-from sdm.processing.base import Processor
-from sdm.processing.categorical._categorical import _check_categorical_codes
-from sdm.tensor import TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
+from sdm.processing import Processor
+from sdm.relational.join import join_index
 
-_HOST_MAPPED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
+_UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
 
 class AlignCategories(Processor):
-    """Align categorical codes to vocabularies fitted on training rows.
+    """Align categorical columns to vocabularies observed during fitting.
 
-    Categorical codes are the integer indices into a column's category
-    vocabulary stored by :class:`~sdm.CategoricalTensor`, following
-    :attr:`pandas.Categorical.codes` semantics; negative codes encode missing
-    values. Fitting stores the category values that are actually observed in
-    each categorical column. Transforming remaps input codes by category value
-    to those fitted vocabularies. Missing values and categories not observed
-    during fitting are encoded as ``-1``.
+    Fitting keeps the observed category values for each column. Transforming
+    remaps input codes by category value into those fitted vocabularies.
+    Missing values and unseen categories are encoded as ``-1``.
 
-    This allows independently tensorized training and query tables to share a
-    categorical schema. It also removes categories that occur only outside a
-    sliced training context from a jointly inferred vocabulary. Only
-    categorical columns are supported; use
-    :class:`~sdm.processing.StypeDispatch` for mixed feature tables.
-
-    String and unsigned integer vocabularies are matched through host metadata
-    because their required tensor operations are unavailable on every device.
-    This path performs linear Python work in the vocabulary size; a vectorized
-    implementation may be preferable if these category types need to scale.
+    Args:
+        sort_by: How to order fitted category vocabularies.
+            ``"code"`` keeps observed categories in original order.
+            ``"frequency"`` orders observed categories by descending frequency.
     """
 
     supported_stypes = frozenset({Stype.categorical})
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        sort_by: Literal["code", "frequency"] = "code",
+    ) -> None:
         super().__init__()
+        self.sort_by = sort_by
         self._categories: tuple[Tensor, ...] = ()
 
     def _fit(
@@ -44,185 +45,135 @@ class AlignCategories(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        _check_categorical_codes(table)
-        categorical = table.categorical
+        mask = table.categorical.isfinite()
+
         categories: list[Tensor] = []
-        for index, category in enumerate(table.categorical.categories):
-            codes = categorical[..., index].reshape(-1)  # [num_rows]
-            positions = torch.arange(
-                end=codes.numel(),
-                device=categorical.device,
-            )  # [num_rows]
-            # [num_local_categories]
-            first_positions = torch.full(
-                size=(category.numel(),),
-                fill_value=codes.numel(),
-                dtype=torch.long,
-                device=categorical.device,
-            )
-            observed = codes >= 0
-            first_positions.scatter_reduce_(
-                dim=0,
-                index=codes[observed].to(torch.long),
-                src=positions[observed],
-                reduce="amin",
-                include_self=True,
-            )
-            # [num_observed_categories]
-            observed = (first_positions < codes.numel()).nonzero().view(-1)
-            observed = observed[first_positions[observed].argsort()]
-            categories.append(self._select_categories(category, observed))
+        for i, category in enumerate(table.categorical.categories):
+            index = table.categorical[..., i].view(-1)
+            if self.sort_by == "frequency":
+                unique, count = index[mask[..., i].view(-1)].unique(
+                    return_counts=True,
+                )
+                perm = count.argsort(descending=True, stable=True)
+                unique = unique[perm]
+            else:
+                unique = index[mask[..., i].view(-1)].unique()
+            if self.sort_by == "code" and unique.numel() == category.numel():
+                pass
+            elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
+                # PyTorch CPU index_select is not implemented for these dtypes.
+                category = category[unique]
+            else:
+                category = category.index_select(0, unique)
+            categories.append(category)
+        self._categories = tuple(categories)
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        mask = table.categorical.isfinite()
+        out = torch.full_like(table.categorical, -1)
+
+        categories: list[Tensor] = []
+        for i, category in enumerate(table.categorical.categories):
+            index = table.categorical[..., i].view(-1)
+            if self.sort_by == "frequency":
+                unique, inverse, count = index[mask[..., i].view(-1)].unique(
+                    return_inverse=True,
+                    return_counts=True,
+                )
+                perm = count.argsort(descending=True, stable=True)
+                unique = unique[perm]
+                inv_perm = torch.empty_like(perm)
+                inv_perm[perm] = torch.arange(perm.numel(), device=perm.device)
+                inverse = inv_perm[inverse]
+            else:
+                unique, inverse = index[mask[..., i].view(-1)].unique(
+                    return_inverse=True,
+                )
+            if self.sort_by == "code" and unique.numel() == category.numel():
+                pass
+            elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
+                # PyTorch CPU index_select is not implemented for these dtypes.
+                category = category[unique]
+            else:
+                category = category.index_select(0, unique)
+            categories.append(category)
+
+            out[..., i].view(-1)[mask[..., i].view(-1)] = inverse.to(out.dtype)
 
         self._categories = tuple(categories)
 
+        return table.replace_blocks(
+            categorical=CategoricalTensor(out, categories=self._categories),
+        )
+
     def _transform(self, table: TableTensor) -> TableTensor:
-        _check_categorical_codes(table)
-
-        columns = table.columns[Stype.categorical]
-        # Start from all-missing output codes; the per-column loop below only
-        # overwrites observed positions, so missing and unseen values stay -1.
+        mask = table.categorical.isfinite()
         out = torch.full_like(table.categorical, -1)
-        for index, (actual, expected) in enumerate(
-            zip(table.categorical.categories, self._categories, strict=True)
+        for i, (actual, expected) in enumerate(
+            zip(table.categorical.categories, self._categories)
         ):
-            codes = table.categorical[..., index]
-            observed = codes >= 0
-            mapping = self._category_mapping(
-                actual=actual,
-                expected=expected,
-                device=out.device,
-                column=columns[index],
-            )
-            if mapping.numel() == 0:
+            if expected.numel() == 0:
                 continue
+            index = table.categorical[..., i].view(-1)
+            unique, inverse = index[mask[..., i].view(-1)].unique(
+                return_inverse=True,
+            )
+            if unique.numel() == 0:
+                continue
+            if unique.numel() == actual.numel():
+                pass
+            elif actual.dtype in _UNSIGNED_DTYPES and actual.is_cpu:
+                # PyTorch CPU index_select is not implemented for these dtypes.
+                actual = actual[unique]
+            else:
+                actual = actual.index_select(0, unique)
 
-            remapped = mapping[codes.clamp_min(0).to(torch.long)].to(out.dtype)
-            out[..., index] = torch.where(observed, remapped, out[..., index])
+            if isinstance(actual, StringTensor):
+                # TODO Run join once with column-index composite key.
+                left_index, right_index = join_index(
+                    left_table=TableTensor(
+                        columns={"id": ("id",)},
+                        id=ColumnarTensor((actual,)),
+                    ),
+                    right_table=TableTensor(
+                        columns={"id": ("id",)},
+                        id=ColumnarTensor((expected,)),
+                    ),
+                    left_keys=["id"],
+                    right_keys=["id"],
+                    dtype=out.dtype,
+                )
+            else:
+                if (
+                    actual.dtype == torch.bool
+                    or actual.dtype in _UNSIGNED_DTYPES
+                ):
+                    actual = actual.to(torch.int64)
+                    expected = expected.to(torch.int64)
 
-        categorical = CategoricalTensor(
-            data=out,
-            categories=tuple(
-                category.to(device=out.device) for category in self._categories
-            ),
+                expected, perm = expected.sort()
+                position = torch.searchsorted(expected, actual)
+                position = position.clamp(max=expected.numel() - 1)
+                match = expected[position] == actual
+                left_index = match.nonzero().view(-1)
+                right_index = perm[position[left_index]]
+
+            remapped = out.new_full((actual.numel(),), fill_value=-1)
+            remapped[left_index] = right_index.to(out.dtype)
+            out[..., i].view(-1)[mask[..., i].view(-1)] = remapped[inverse]
+
+        return table.replace_blocks(
+            categorical=CategoricalTensor(out, categories=self._categories),
         )
-        return table.replace_blocks(categorical=categorical)
 
-    @staticmethod
-    def _select_categories(category: Tensor, index: Tensor) -> Tensor:
-        if category.dtype in _HOST_MAPPED_DTYPES:
-            values = category.tolist()
-            return torch.tensor(
-                data=[values[i] for i in index.tolist()],
-                dtype=category.dtype,
-                device=category.device,
-            )
-        return category.index_select(0, index.to(device=category.device))
-
-    @staticmethod
-    def _category_mapping(
-        actual: Tensor,
-        expected: Tensor,
-        device: torch.device,
-        column: str,
-    ) -> Tensor:
-        if expected.numel() == 0:
-            # An all-missing fit stores an empty vocabulary whose dtype is a
-            # placeholder, so value-type compatibility cannot be validated;
-            # every query value is unseen and maps to -1.
-            return torch.full(
-                size=(actual.numel(),),
-                fill_value=-1,
-                dtype=torch.long,
-                device=device,
-            )
-
-        if isinstance(actual, StringTensor) != isinstance(
-            expected, StringTensor
-        ):
-            raise ValueError(
-                "Expected category value types to match the fitted values for "
-                f"categorical column '{column}'."
-            )
-
-        if isinstance(actual, StringTensor):
-            # String columns store their category vocabulary as StringTensor.
-            # StringTensor has no element-wise equality operation. Category
-            # vocabularies are metadata, so only their values move to the host;
-            # row-wise codes remain on their original device.
-            expected_index = {
-                value: index for index, value in enumerate(expected.tolist())
-            }
-            return torch.tensor(
-                data=[
-                    expected_index.get(value, -1) for value in actual.tolist()
-                ],
-                dtype=torch.long,
-                device=device,
-            )
-
-        actual = actual.to(device=device)
-        expected = expected.to(device=device)
-        if actual.dtype != expected.dtype:
-            raise ValueError(
-                "Expected category value dtypes to match the fitted "
-                f"values for categorical column '{column}' "
-                f"(got {actual.dtype} and "
-                f"{expected.dtype})."
-            )
-        if actual.dtype in _HOST_MAPPED_DTYPES:
-            expected_index = {
-                value: index for index, value in enumerate(expected.tolist())
-            }
-            return torch.tensor(
-                data=[
-                    expected_index.get(value, -1) for value in actual.tolist()
-                ],
-                dtype=torch.long,
-                device=device,
-            )
-
-        # [num_actual_categories]
-        mapping = torch.full(
-            size=(actual.numel(),),
-            fill_value=-1,
-            dtype=torch.long,
-            device=device,
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"sort_by={self.sort_by!r}"
+            f")"
         )
-        dtype = actual.dtype
-        if dtype == torch.bool:
-            dtype = torch.uint8
-        actual = actual.to(dtype=dtype)
-        expected = expected.to(dtype=dtype)
-
-        if dtype.is_floating_point:
-            # [num_actual_categories]
-            actual_nan = actual.isnan()
-            # [num_fitted_categories]
-            expected_nan = expected.isnan()
-            mapping[actual_nan & expected_nan.any()] = expected_nan.to(
-                torch.int64
-            ).argmax()
-        else:
-            actual_nan = torch.zeros_like(actual, dtype=torch.bool)
-            expected_nan = torch.zeros_like(expected, dtype=torch.bool)
-
-        # [num_actual_non_nan] and [num_fitted_non_nan]
-        actual_indices = (~actual_nan).nonzero().view(-1)
-        expected_indices = (~expected_nan).nonzero().view(-1)
-        if actual_indices.numel() == 0 or expected_indices.numel() == 0:
-            return mapping
-
-        # [num_fitted_non_nan]
-        expected_values, permutation = expected[expected_indices].sort()
-        actual_values = actual[actual_indices]  # [num_actual_non_nan]
-        positions = torch.searchsorted(
-            sorted_sequence=expected_values,
-            input=actual_values,
-        )  # [num_actual_non_nan]
-        within_bounds = positions < expected_values.numel()
-        candidates = positions.clamp(max=expected_values.numel() - 1)
-        known = within_bounds & (expected_values[candidates] == actual_values)
-        mapping[actual_indices[known]] = expected_indices[
-            permutation[candidates[known]]
-        ]
-        return mapping
