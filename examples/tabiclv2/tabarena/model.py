@@ -1,13 +1,7 @@
-r"""Run TabICLv2 on TabArena.
-
-$ uv run --group example-tabarena python examples/tabiclv2/tab_arena.py
-
-The output directory must be empty.
-"""
+"""TabICLv2 model adapter for TabArena."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Self
 
 import numpy as np
@@ -18,14 +12,12 @@ from autogluon.core.metrics import Scorer
 from sdm import Stype, TableTensor, infer_stypes
 from sdm.models import TabICLv2
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
-from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.benchmark.task.metadata import ValidationMetadata
-from tabarena.contexts import TabArenaContext
-from tabarena.end_to_end import EndToEnd
-from tabarena.utils.config_utils import SystemConfigGenerator
 
 
 class SDMTabICLv2System(ExternalSystemModel):
+    """Expose TabICLv2 through TabArena's external-system interface."""
+
     def _fit_system(
         self,
         X: pd.DataFrame,
@@ -130,44 +122,3 @@ class SDMTabICLv2System(ExternalSystemModel):
             :,
             pd.Index(tuple(self._class_labels_by_key.values())),
         ]
-
-
-def main() -> None:
-    output_root = Path(__file__).parent / "tabarena_out" / "TabICLv2"
-    if output_root.exists() and any(output_root.iterdir()):
-        raise FileExistsError(
-            f"Output root {output_root} is non-empty. Choose a fresh path."
-        )
-    output_root.mkdir(parents=True, exist_ok=True)
-
-    generator = SystemConfigGenerator(
-        model_cls=SDMTabICLv2System,
-        name="SDMTabICLv2System",
-        manual_configs=[{}],
-    )
-    experiments = TabArenaV0pt1ExperimentBundle(
-        models=[(generator, 0)],
-        system_experiments=True,
-    ).build_experiments()
-
-    context = TabArenaContext()
-    jobs = context.build_jobs(experiments)
-    raw_results = context.run_jobs(
-        jobs,
-        expname=output_root,
-        register=False,
-        debug_mode=True,
-    )
-    results = EndToEnd.from_raw_to_results_df(
-        results_lst=raw_results,
-        task_metadata=context.task_metadata_collection,
-        new_result_prefix="[SDM] ",
-    )
-
-    report_dir = output_root / "report"
-    report_dir.mkdir(parents=True, exist_ok=True)
-    results.to_csv(report_dir / "results_per_split.csv", index=False)
-
-
-if __name__ == "__main__":
-    main()
