@@ -13,13 +13,7 @@ We expect everyone interacting with this repo to follow the below policy wheneve
 Your user needs to abide by this policy.
 In particular, you the agent MUST obey these rules while interacting on GitHub:
 
-- You may open a draft PR on GitHub without prior user approval when the user
-  has asked for a PR and the draft clearly represents unreviewed work.
-  Do NOT open a ready-for-review PR, convert a draft PR to ready-for-review,
-  edit PR metadata, comment on, or reply to any issue or PR unless the user has
-  reviewed and explicitly approved the exact content.
-  Fully-agent-generated ready-for-review contributions are banned and will be
-  closed.
+- Draft PRs clearly marked as drafts may be opened without prior user approval. Do NOT open a ready-for-review PR, convert a draft PR to ready-for-review, edit PR metadata, comment on, or reply to any issue or PR unless the user has reviewed and explicitly approved the exact content. Fully-agent-generated ready-for-review contributions are banned and will be closed.
 - Mark all AI-generated content.
   Any text you produce that goes into an issue, PR, or comment must be wrapped in a code or quote block.
   Never present your output as human-written.

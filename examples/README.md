@@ -1,13 +1,10 @@
 # Examples
 
-The examples in this directory are runnable entry points for the package. When
-adding a new top-level example file or directory, add it to this index and to
-the documentation examples page.
+This folder contains runnable examples for Structured Data Models. A good first
+script is [`tabiclv2.py`](tabiclv2.py), which shows a minimal TabICLv2 forward
+pass and cached prediction flow.
 
-| Example                                         | Format        | Purpose                                                                                    |
-| ----------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------ |
-| [examples/kumorfm/](kumorfm/)                   | Directory     | KumoRFM RelBench example runner.                                                           |
-| [examples/tabiclv2.py](tabiclv2.py)             | Python script | Minimal TabICLv2 forward pass and cached prediction flow.                                  |
-| [examples/TabICL_demo.ipynb](TabICL_demo.ipynb) | Notebook      | TabICLv2 quickstart covering regression, recipes, caching, ensembling, and classification. |
+For an interactive walkthrough, open [`TabICL_demo.ipynb`](TabICL_demo.ipynb).
+For relational data, see [`kumorfm/rel_bench.py`](kumorfm/rel_bench.py).
 
-[![Open TabICL demo in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/NVIDIA/structured-data-models/blob/main/examples/TabICL_demo.ipynb)
+When adding a top-level example, keep it runnable and add it here.

@@ -4,13 +4,9 @@ Python package for structured data models.
 
 ## Examples
 
-Start with the [TabICLv2 example script](examples/tabiclv2.py) or open the
-quickstart notebook in Colab:
-
-[![Open TabICL demo in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/NVIDIA/structured-data-models/blob/main/examples/TabICL_demo.ipynb)
-
-All examples are indexed in [examples/README.md](examples/README.md) and the
-[documentation examples page](docs/source/examples.md).
+For a quick start, run [examples/tabiclv2.py](examples/tabiclv2.py) or open the
+[TabICL quickstart notebook](examples/TabICL_demo.ipynb). More examples are
+listed in [examples/README.md](examples/README.md).
 
 ```python
 import torch

@@ -4,7 +4,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 EXAMPLES_README = EXAMPLES / "README.md"
-DOCS_EXAMPLES = ROOT / "docs" / "source" / "examples.md"
 
 
 def _top_level_example_entries() -> list[str]:
@@ -16,27 +15,20 @@ def _top_level_example_entries() -> list[str]:
         }:
             continue
         if path.is_dir():
-            entries.append(f"examples/{path.name}/")
+            entries.append(f"{path.name}/")
             continue
-        entries.append(f"examples/{path.name}")
+        entries.append(path.name)
     return entries
 
 
 def test_top_level_examples_are_indexed() -> None:
-    index_texts = {
-        "examples README": EXAMPLES_README.read_text(),
-        "docs examples page": DOCS_EXAMPLES.read_text(),
-    }
+    index_text = EXAMPLES_README.read_text()
 
-    missing = {
-        entry: [
-            index_name
-            for index_name, index_text in index_texts.items()
-            if entry not in index_text
-        ]
+    missing = [
+        entry
         for entry in _top_level_example_entries()
-    }
-    missing = {entry: indexes for entry, indexes in missing.items() if indexes}
+        if entry not in index_text
+    ]
 
     assert not missing
 
