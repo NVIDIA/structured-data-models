@@ -5,9 +5,9 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import torch
 from sdm import StringTensor, TableTensor
+from sdm.processing.text.llm_encoder import LLMEncoder
 from sdm.processing.text.pca import PCA
 from sdm.processing.text.slice_features import SliceFeatures
-from sdm.processing.text.llm_encoder import LLMEncoder
 from sklearn.decomposition import PCA as SklearnPCA
 
 rng = np.random.default_rng(0)
@@ -171,4 +171,4 @@ def bench(n: int, *, embed_dim: int, reduce_dim: int, method: str) -> None:
 
 for method in ("slice", "pca"):
     for n in (1_000, 10_000, 100_000):
-        bench(n, embed_dim=768, reduce_dim=64, method=method)
+        bench(n, embed_dim=10, reduce_dim=64, method=method)
