@@ -1,5 +1,3 @@
-from typing import cast
-
 import torch
 from torch import Tensor
 
@@ -67,7 +65,6 @@ def to_class_indices(
 def to_binary_class(
     pred: TableTensor,
     target: TableTensor | CategoricalTensor,
-    *,
     positive_class: bool | int | float | str,
 ) -> tuple[Tensor, Tensor]:
     r"""Convert binary predictions and targets to positive-class form.
@@ -100,7 +97,7 @@ def to_binary_class(
         )
 
     score = pred[str(positive_class)].numerical.squeeze(-1)
-    match = cast(Tensor, target.categories[0] == positive_class)
+    match = target.categories[0] == positive_class
     index = match.nonzero().view(-1)
     if index.numel() != 1:
         raise ValueError(
