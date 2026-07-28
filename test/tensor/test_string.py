@@ -198,6 +198,29 @@ def test_allowed_dtype() -> None:
         tensor.to(torch.float32)
 
 
+@withCUDA
+def test_eq(device: torch.device) -> None:
+    left = StringTensor.from_list(["a", "b", "a"], device=device)
+    right = StringTensor.from_list(["a", "a", "b"], device=device)
+
+    assert (left == right).equal(
+        torch.tensor([True, False, False], device=device)
+    )
+    assert (left == "a").equal(
+        torch.tensor([True, False, True], device=device)
+    )
+    assert (left != right).equal(~(left == right))
+    assert (left != "a").equal(~(left == "a"))
+
+    left = StringTensor.from_list([["a", "b"]])
+    right = StringTensor.from_list([["a"], ["b"]])
+
+    assert (left == right).equal(
+        torch.tensor([[True, False], [False, True]], device=device),
+    )
+    assert (left != right).equal(~(left == right))
+
+
 def test_to_dtype_layout_copy() -> None:
     tensor = StringTensor.from_list(["hi", "é", ""])
 
