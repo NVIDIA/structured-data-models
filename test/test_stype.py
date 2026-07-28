@@ -256,52 +256,20 @@ def cardinality_table(
     return _string_table(request.param, _TEST_CARDINALITY_DATA)
 
 
-def test_text_detection(
+def test_infer_text_stype(
     text_table: pa.Table | pd.DataFrame | cudf.DataFrame,
 ) -> None:
+    assert infer_stypes(text_table) == {  # disabled by default
+        "review": Stype.categorical,
+        "color": Stype.categorical,
+    }
     assert infer_stypes(text_table, allow_text=True) == {
         "review": Stype.text,
         "color": Stype.categorical,
     }
 
 
-@onlyCUDA
-def test_text_inference_consistent_between_arrow_and_cudf() -> None:
-    cudf = pytest.importorskip("cudf")
-    values = [None, *_TEST_REVIEW_DATA["review"]]
-    arrow_table = pa.table(
-        {
-            "review": values,
-            "category": pa.array(values).dictionary_encode(),
-        }
-    )
-    cudf_table = cudf.DataFrame(
-        {
-            "review": values,
-            "category": cudf.Series(values, dtype="category"),
-        }
-    )
-
-    arrow_stypes = infer_stypes(arrow_table, allow_text=True)
-    cudf_stypes = infer_stypes(cudf_table, allow_text=True)
-
-    assert arrow_stypes == {
-        "review": Stype.text,
-        "category": Stype.categorical,
-    }
-    assert cudf_stypes == arrow_stypes
-
-
-def test_text_not_inferred_by_default(
-    text_table: pa.Table | pd.DataFrame | cudf.DataFrame,
-) -> None:
-    assert infer_stypes(text_table) == {
-        "review": Stype.categorical,
-        "color": Stype.categorical,
-    }
-
-
-def test_text_not_inferred_below_unique_ratio(
+def test_infer_text_stype_below_unique_ratio(
     cardinality_table: pa.Table | pd.DataFrame | cudf.DataFrame,
 ) -> None:
     assert infer_stypes(cardinality_table, allow_text=True) == {
