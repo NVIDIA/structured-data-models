@@ -239,7 +239,6 @@ def _string_table(
         return pa.table(data)
 
     cudf = pytest.importorskip("cudf")
-
     return cudf.DataFrame(data)
 
 
