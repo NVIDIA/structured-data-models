@@ -396,7 +396,11 @@ class ICLBlock(torch.nn.Module):
             (local_log_probs.size(-2), num_classes),
             -torch.inf,
         )
-        return log_probs.index_copy(-1, class_ids, local_log_probs)
+        return log_probs.index_copy(
+            -1,
+            class_ids.to(torch.long),
+            local_log_probs,
+        )
 
     def _grouping(
         self,
