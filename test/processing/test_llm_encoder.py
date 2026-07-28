@@ -2,10 +2,11 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 import torch
+from torch import Tensor
+
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import StypeDispatch
 from sdm.processing.text.llm_encoder import LLMTransformer
-from torch import Tensor
 
 
 class _FakeEmbedder:

@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import Stype, TableTensor
 from sdm.processing.text.pca import PCA
 

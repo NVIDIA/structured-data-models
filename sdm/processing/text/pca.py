@@ -1,4 +1,5 @@
 import torch
+
 from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.stype import Stype

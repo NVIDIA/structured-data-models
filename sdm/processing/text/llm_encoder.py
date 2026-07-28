@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 import torch
+from torch import Tensor
+
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
-from torch import Tensor
 
 if TYPE_CHECKING:
     import cudf
