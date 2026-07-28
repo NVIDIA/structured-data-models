@@ -1,6 +1,5 @@
 import importlib.util
 import math
-import warnings
 from collections.abc import Sequence
 from typing import Literal
 
@@ -9,13 +8,12 @@ import torch
 from torch import Tensor
 
 from sdm import TableTensor
+from sdm._warnings import warn_once
 from sdm.tensor.io import arrow_as_tensor, to_cudf
 
 PREFIX = "sdm_internal"
 LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
-
-_warned = False
 
 
 def join_index(
@@ -41,7 +39,6 @@ def join_index(
     Returns:
         ``(left_index, right_index)`` pair with one entry per matched row.
     """
-    global _warned
     assert how == "inner"
 
     if left_table.device != right_table.device:
@@ -68,20 +65,15 @@ def join_index(
     if left_table.is_cuda:
         if importlib.util.find_spec("cudf") is not None:
             backend = "cudf"
-        elif torch.is_warn_always_enabled() or not _warned:
-            message = (
-                "Falling back to a CPU-based join because cuDF is not "
-                "installed. Install cuDF to enable faster CUDA-based joins "
-                "without device synchronization."
+        else:
+            warn_once(
+                key="missing-cudf-join",
+                message=(
+                    "Falling back to a CPU-based join because cuDF is not "
+                    "installed. Install cuDF to enable faster CUDA-based "
+                    "joins without device synchronization."
+                ),
             )
-            if not torch.is_warn_always_enabled():
-                message += (
-                    " This warning will be suppressed for the remainder of "
-                    "this process."
-                )
-
-            warnings.warn(message, RuntimeWarning, stacklevel=2)
-            _warned = True
 
     if backend == "arrow":
         left = left_table.to_arrow().append_column(
