@@ -41,30 +41,19 @@ _TEST_DTYPE_SAMPLE_DATA = {
 
 _TEST_REVIEW_SAMPLE_DATA = {
     "review": [
-        "the product broke after one week of use",
-        "excellent value and very fast shipping thanks",
-        "arrived damaged and support was unhelpful sadly",
+        f"review sentence number {i} with enough words" for i in range(10)
     ],
-    "color": ["red", "blue", "green"],
+    "color": ["red", "blue", "green", "yellow", "black"] * 2,
 }
 
-# ``repeated`` holds a unique ratio of exactly 0.01, ``varied`` of 0.02:
+# ``repeated`` holds too few distinct values, ``varied`` has enough distinct
+# values and a unique ratio above 0.01:
 _TEST_CARDINALITY_SAMPLE_DATA = {
     "repeated": ["the product broke after one week of use"] * 100,
     "varied": [
-        "the product broke after one week of use",
-        "excellent value and very fast shipping thanks",
+        f"review sentence number {i} with enough words" for i in range(10)
     ]
-    * 50,
-}
-
-# Exceeds the 10,000 row sampling threshold, and holds a unique ratio close
-# enough to the text cutoff that unsampled draws disagree on the stype:
-_TEST_BORDERLINE_SAMPLE_DATA = {
-    "review": [
-        f"sentence number {i} of this borderline column" for i in range(200)
-    ]
-    + ["the product broke after one week of use"] * 19800,
+    * 10,
 }
 
 
@@ -225,43 +214,19 @@ def cardinality_table(
     return _string_table(request.param, _TEST_CARDINALITY_SAMPLE_DATA)
 
 
-@pytest.fixture(params=_BACKENDS)
-def borderline_table(
-    request: pytest.FixtureRequest,
-) -> pa.Table | pd.DataFrame | cudf.DataFrame:
-    return _string_table(request.param, _TEST_BORDERLINE_SAMPLE_DATA)
-
-
-@pytest.mark.parametrize(
-    "allowed_stypes",
-    [
-        {Stype.text},
-        {Stype.categorical, Stype.text},
-    ],
-)
 def test_text_detection(
     text_table: pa.Table | pd.DataFrame | cudf.DataFrame,
-    allowed_stypes: set[Stype],
 ) -> None:
-    assert infer_stypes(text_table, allowed_stypes=allowed_stypes) == {
+    assert infer_stypes(text_table, text_sample_table=text_table) == {
         "review": Stype.text,
         "color": Stype.categorical,
     }
 
 
-@pytest.mark.parametrize(
-    "allowed_stypes",
-    [
-        None,
-        set(),
-        {Stype.categorical},
-    ],
-)
-def test_text_not_inferred_when_not_allowed(
+def test_text_not_inferred_without_sample_table(
     text_table: pa.Table | pd.DataFrame | cudf.DataFrame,
-    allowed_stypes: set[Stype] | None,
 ) -> None:
-    assert infer_stypes(text_table, allowed_stypes=allowed_stypes) == {
+    assert infer_stypes(text_table) == {
         "review": Stype.categorical,
         "color": Stype.categorical,
     }
@@ -270,22 +235,26 @@ def test_text_not_inferred_when_not_allowed(
 def test_text_not_inferred_below_unique_ratio(
     cardinality_table: pa.Table | pd.DataFrame | cudf.DataFrame,
 ) -> None:
-    assert infer_stypes(cardinality_table, allowed_stypes={Stype.text}) == {
+    assert infer_stypes(
+        cardinality_table,
+        text_sample_table=cardinality_table,
+    ) == {
         "repeated": Stype.categorical,
         "varied": Stype.text,
     }
 
 
-def test_seeded_text_inference_is_reproducible(
-    borderline_table: pa.Table | pd.DataFrame | cudf.DataFrame,
-) -> None:
-    stypes = [
-        infer_stypes(
-            borderline_table,
-            allowed_stypes={Stype.text},
-            seed=0,
-        )
-        for _ in range(5)
-    ]
+def test_text_not_inferred_below_min_unique_values() -> None:
+    table = pa.table(
+        {
+            "status": [
+                "customer accepted the promotional offer",
+                "customer rejected the promotional offer",
+            ]
+            * 50,
+        }
+    )
 
-    assert all(stype == stypes[0] for stype in stypes)
+    assert infer_stypes(table, text_sample_table=table) == {
+        "status": Stype.categorical,
+    }
