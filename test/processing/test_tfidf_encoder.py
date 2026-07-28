@@ -34,6 +34,23 @@ def test_tfidf_encoder_outputs_numerical_block() -> None:
     assert output.numerical.dtype.is_floating_point
 
 
+def test_tfidf_encoder_preserves_leading_dimensions() -> None:
+    table = TableTensor(
+        columns={"text": ("t0",)},
+        text=StringTensor.from_list(
+            [
+                [["ab"], ["ac"]],
+                [["ab"], ["bc"]],
+            ],
+        ),
+    )
+
+    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+
+    assert output.numerical.shape[:-1] == (2, 2)
+    assert output.columns[Stype.text] == ()
+
+
 def test_tfidf_encoder_identical_strings_encode_identically() -> None:
     table = _text_table(["same text", "same text", "other"])
 

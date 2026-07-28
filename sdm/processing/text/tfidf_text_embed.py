@@ -1,3 +1,4 @@
+import math
 import re
 from typing import Any, cast
 
@@ -255,7 +256,10 @@ class TfidfTextEmbed(Processor):
             delattr(self, name)
 
         for column in range(table.text.size(-1)):
-            column_text = cast(StringTensor, table.text[:, column])
+            column_text = cast(
+                StringTensor,
+                table.text[..., column].reshape(-1),
+            )
             flat, offsets = self._character_ngrams(
                 column_text,
                 self.ngram_range,
@@ -342,7 +346,8 @@ class TfidfTextEmbed(Processor):
             else torch.get_default_dtype()
         )
         text_names = table.columns[Stype.text]
-        n_rows = table.text.size(0)
+        leading_shape = table.text.shape[:-1]
+        n_rows = math.prod(leading_shape)
 
         blocks: list[Tensor] = []
         names: list[str] = []
@@ -355,7 +360,10 @@ class TfidfTextEmbed(Processor):
                 n_rows * vocab_size, dtype=dtype, device=device
             )
             if vocab_size > 0:
-                column_text = cast(StringTensor, table.text[:, column])
+                column_text = cast(
+                    StringTensor,
+                    table.text[..., column].reshape(-1),
+                )
                 flat, offsets = self._character_ngrams(
                     column_text,
                     self.ngram_range,
@@ -395,7 +403,7 @@ class TfidfTextEmbed(Processor):
 
             tfidf = counts.view(n_rows, vocab_size) * idf  # [rows, vocab]
             norm = tfidf.norm(dim=1, keepdim=True).clamp_min(1e-12)
-            blocks.append(tfidf / norm)
+            blocks.append((tfidf / norm).reshape(*leading_shape, vocab_size))
             names.extend(
                 f"{text_names[column]}_{i}" for i in range(vocab_size)
             )
@@ -403,7 +411,7 @@ class TfidfTextEmbed(Processor):
         numerical = (
             torch.cat(blocks, dim=-1)
             if blocks
-            else torch.zeros((n_rows, 0), dtype=dtype, device=device)
+            else torch.zeros((*leading_shape, 0), dtype=dtype, device=device)
         )
         return table.__class__(
             columns={Stype.numerical: tuple(names)},
