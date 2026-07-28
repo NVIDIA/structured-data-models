@@ -206,7 +206,9 @@ def test_tabiclv2_hierarchical_log_probs(
 
 
 @withCUDA
-def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
+def test_tabiclv2_many_classes_forward_and_cache(
+    device: torch.device,
+) -> None:
     model = TabICLv2(pretrained=False, device=device)
     num_classes, test_size = 11, 2
     x_context = torch.randn(num_classes, 6, device=device)
@@ -217,6 +219,7 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         device=device,
     ).unsqueeze(-1)
 
+    torch.manual_seed(1)
     out = model(x_context, y_context, x_query)
 
     assert out.size() == (test_size, num_classes)
@@ -225,6 +228,10 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         probabilities.sum(dim=-1),
         torch.ones(test_size, device=device),
     )
+
+    torch.manual_seed(1)
+    model.fit(x_context, y_context)
+    assert model.predict(x_query).allclose(out)
 
 
 @onlyCUDA

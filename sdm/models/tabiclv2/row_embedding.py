@@ -112,9 +112,11 @@ class RowEmbedding(torch.nn.Module):
         ):
             bases = _mixed_radix_bases(num_classes, self.num_classes)
             num_digits = len(bases)
-            x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
             if y.numel() > 0:
+                x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
                 y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
+            else:
+                x = x.unsqueeze(0).expand(num_digits, *x.size())
 
         if y.numel() > 0:
             if self.y_emb is not None:

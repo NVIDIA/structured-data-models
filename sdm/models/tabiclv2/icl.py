@@ -202,6 +202,8 @@ class ICLBlock(torch.nn.Module):
                 cache["icl_block.trees"] = trees
 
         log_probs = torch.stack(table_outputs)
+        # The output Softmax divides by temperature, so scale the combined
+        # log-probabilities to preserve their normalized probabilities.
         return log_probs.reshape(*batch_shape, test_size, num_classes).mul(
             self.temperature
         )

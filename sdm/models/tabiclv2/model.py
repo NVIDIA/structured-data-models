@@ -245,7 +245,7 @@ class _TabICLv2(torch.nn.Module):
         *,
         cache: Cache | None = None,
         num_classes: int | None = None,
-    ) -> Tensor:  # [..., R_test, self.num_classes or self.num_quantiles]
+    ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if not y.is_floating_point():
             assert num_classes is not None
 
