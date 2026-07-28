@@ -190,6 +190,7 @@ banned-module-level-imports = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
     "D103",  # Ignore "Missing docstring in public function"
+    "TID253",  # All dependencies used in example should be imported at  module scope.
 ]
 "test/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"

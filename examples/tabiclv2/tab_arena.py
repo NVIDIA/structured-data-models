@@ -21,6 +21,7 @@ from tabarena.benchmark.exec_models.external import ExternalSystemModel
 from tabarena.benchmark.experiment import TabArenaV0pt1ExperimentBundle
 from tabarena.benchmark.task.metadata import ValidationMetadata
 from tabarena.contexts import TabArenaContext
+from tabarena.end_to_end import EndToEnd
 from tabarena.utils.config_utils import SystemConfigGenerator
 
 
@@ -151,13 +152,17 @@ def main() -> None:
 
     context = TabArenaContext()
     jobs = context.build_jobs(experiments)
-    context.run_jobs(
+    raw_results = context.run_jobs(
         jobs,
         expname=output_root,
-        new_result_prefix="[SDM] ",
+        register=False,
         debug_mode=True,
     )
-    results = context._registered_new_results()
+    results = EndToEnd.from_raw_to_results_df(
+        results_lst=raw_results,
+        task_metadata=context.task_metadata_collection,
+        new_result_prefix="[SDM] ",
+    )
 
     report_dir = output_root / "report"
     report_dir.mkdir(parents=True, exist_ok=True)
