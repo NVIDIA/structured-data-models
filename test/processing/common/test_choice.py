@@ -3,6 +3,7 @@ from typing import Any, cast
 
 import pytest
 import torch
+
 from sdm import TableTensor
 from sdm.processing import (
     Choice,

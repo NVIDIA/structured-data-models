@@ -1,7 +1,8 @@
 import torch
+from sklearn.datasets import load_breast_cancer
+
 from sdm import TableTensor, infer_stypes
 from sdm.models import TabICLv2
-from sklearn.datasets import load_breast_cancer
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_float32_matmul_precision("high")

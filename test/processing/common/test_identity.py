@@ -1,4 +1,5 @@
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import Identity
 

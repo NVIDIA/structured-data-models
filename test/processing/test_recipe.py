@@ -1,4 +1,5 @@
 import torch
+
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize

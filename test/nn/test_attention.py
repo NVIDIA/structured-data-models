@@ -5,6 +5,8 @@ from unittest.mock import patch
 import pytest
 import torch
 import torch.nn.functional as F
+from torch import Tensor
+
 from sdm.cache import KVCacheEntry
 from sdm.nn import (
     SDPA,
@@ -14,7 +16,6 @@ from sdm.nn import (
     TransformerBlock,
 )
 from sdm.testing import withCUDA
-from torch import Tensor
 
 
 def reference_sdpa(

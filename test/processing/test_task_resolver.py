@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     Choice,

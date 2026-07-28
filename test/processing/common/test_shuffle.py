@@ -2,6 +2,7 @@ from typing import Literal
 
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     StringTensor,
