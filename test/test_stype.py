@@ -108,9 +108,27 @@ def test_infer_stypes(table: pa.Table | pd.DataFrame | cudf.DataFrame) -> None:
 
 
 def test_from_pandas() -> None:
-    df = pd.DataFrame({"city": pd.Series(["NY", None], dtype="object")})
+    df = pd.DataFrame(
+        {
+            "age": pd.Series([1, 2], dtype="int64"),
+            "income": pd.Series([1.0, 2.5], dtype="float64"),
+            "name": pd.Series(["a", "b"], dtype="string"),
+            "city": pd.Series(["NY", None], dtype="object"),
+            "segment": pd.Series(["x", "y"], dtype="category"),
+            "active": pd.Series([True, False], dtype="bool"),
+            "created_at": pd.to_datetime(["2026-01-01", "2026-01-02"]),
+        }
+    )
 
-    assert infer_stypes(df) == {"city": Stype.categorical}
+    assert infer_stypes(df) == {
+        "age": Stype.numerical,
+        "income": Stype.numerical,
+        "name": Stype.categorical,
+        "city": Stype.categorical,
+        "segment": Stype.categorical,
+        "active": Stype.categorical,
+        "created_at": Stype.datetime,
+    }
 
 
 def test_from_arrow() -> None:
