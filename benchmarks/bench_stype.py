@@ -30,7 +30,11 @@ import pyarrow as pa
 import torch
 from sdm import infer_stypes
 
-BACKENDS = ["arrow", "pandas", "cudf"]
+BACKENDS = [
+    "arrow",
+    "pandas",
+    "cudf",
+]
 ROW_COUNTS = [100, 1_000, 5_000]
 COLUMN_COUNTS = [1, 10]
 REPEATS = 5
