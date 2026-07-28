@@ -6,6 +6,24 @@ The repository provides reusable model architectures, tensor containers, preproc
 It should stay generic, modular, and lightweight.
 Do not add platform or serving abstractions unless explicitly requested.
 
+# AI Policy
+
+We support the use of AI tools to help prepare issues, pull requests, reviews, or comments.
+We expect everyone interacting with this repo to follow the below policy whenever they use AI tools.
+Your user needs to abide by this policy.
+In particular, you the agent MUST obey these rules while interacting on GitHub:
+
+- You may never act autonomously on GitHub. Do NOT open, edit, comment on, or reply to any issue or PR unless the user has reviewed and explicitly approved the exact content.
+  Fully-agent-generated contributions are banned and will be closed.
+- Mark all AI-generated content.
+  Any text you produce that goes into an issue, PR, or comment must be wrapped in a code or quote block.
+  Never present your output as human-written.
+- Never emit only raw AI text as a reply.
+  Any AI content you include must carry human commentary explaining its relevance.
+- Do not submit code the user hasn't read.
+  Keep changes minimal, strip AI artifacts and needless complexity.
+  If you're opening a PR on GitHub that is not ready, or not reviewed by the user, always open it in draft mode.
+
 # Commands
 
 - Test execution via `pytest`
@@ -37,12 +55,21 @@ Do not add platform or serving abstractions unless explicitly requested.
 
 - Keep the project PyTorch/tensor-centric.
 - Preserve dataframe ergonomics at the boundary, but move model execution onto structured tensor containers.
-- Keep model-family wrappers thin. Shared abstractions should live outside model implementations if possible.
-- Avoid mandatory config-first APIs. Direct Python composition should be the primary interface.
+- Keep model-family wrappers thin.
+  Shared abstractions should live outside model implementations if possible.
+- Avoid mandatory config-first APIs.
+  Direct Python composition should be the primary interface.
 - Add composable transformations instead of hard-coding one-off preprocessing into model wrappers.
-- Keep recipes inspectable and deterministic where possible. Any stochastic transformations should expose seed/generator control.
-- Treat preprocessing as leakage-sensitive. Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
-- Keep dependencies minimal in the core package. Heavy dependencies should be optional unless they become essential.
+- Keep recipes inspectable and deterministic where possible.
+  Any stochastic transformations should expose seed/generator control.
+- Treat preprocessing as leakage-sensitive.
+  Transformations that learn state must be scoped to the context/training portion unless explicitly designed otherwise.
+- Keep dependencies minimal in the core package.
+  Heavy dependencies should be optional unless they become essential.
+- Treat packages listed in `[project].dependencies` as required at runtime.
+  Import them at module scope; do not defer or guard them with function-local
+  imports, `TYPE_CHECKING`, `try/except ImportError`, availability checks,
+  or dynamic imports. Reserve guarded imports for optional dependencies.
 - Aim for GPU acceleration in all core components.
 
 # Python/PyTorch Coding Style
@@ -60,9 +87,22 @@ Do not add platform or serving abstractions unless explicitly requested.
 
 # CUDA / GPU Performance
 
-- Avoid host-device synchronization in model and processor hot paths. Do not use `.item()`, `.cpu()`, `.numpy()`, `print(cuda_tensor)`, or `torch.cuda.synchronize()` except at explicit API boundaries, tests, debugging, or profiler code.
-- Create tensors on the target device and preserve dtype/device. Prefer `x.new_*`, `torch.empty_like`, `torch.zeros_like`, or explicit `device=x.device, dtype=x.dtype` over CPU defaults followed by `.to(...)`.
-- Keep tensor execution vectorized and compiler-friendly. Prefer batched tensor operations over Python loops across rows, columns, heads, estimators, or sequence positions. Avoid graph breaks where a `torch.compile`-friendly formulation is straightforward.
-- Reduce allocation and memory overhead while keeping tensor operations on-device. For broadcastable constants, prefer scalar literals when PyTorch broadcasting is sufficient, and create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
+- Avoid host-device synchronization in model and processor hot paths.
+  Do not use `.item()`, `.cpu()`, `.numpy()`, `print(cuda_tensor)`, or `torch.cuda.synchronize()` except at explicit API boundaries, tests, debugging, or profiler code.
+- Create tensors on the target device and preserve dtype/device.
+  Prefer `x.new_*`, `torch.empty_like`, `torch.zeros_like`, or explicit `device=x.device, dtype=x.dtype` over CPU defaults followed by `.to(...)`.
+- Keep tensor execution vectorized and compiler-friendly. Prefer batched tensor operations over Python loops across rows, columns, heads, estimators, or sequence positions.
+  Avoid graph breaks where a `torch.compile`-friendly formulation is straightforward.
+- Reduce allocation and memory overhead while keeping tensor operations on-device.
+  For broadcastable constants, prefer scalar literals when PyTorch broadcasting is sufficient, and create tensor constants only when an operation needs a tensor input or device/dtype-specific scalar value.
 - In inference and prediction paths, avoid building autograd state unless the API explicitly needs gradients. Prefer `torch.inference_mode()` or `torch.no_grad()` for pure inference paths.
 - Benchmark CUDA changes with synchronization-aware timing. Use CUDA events, `torch.profiler`, or explicit synchronization around measurements; plain wall-clock timing of asynchronous CUDA work is not sufficient.
+
+# Naming Policy
+
+## Processors
+
+1. Name the main operation first, e.g., `ShuffleColumns` over `ColumnShuffle`.
+2. Use established names when they exist, e.g., `Sequential` or `Choice`, or adapt them in style, e.g., `PowerTransform` over `PowerTransformer`.
+   Avoid API-role suffixes such as `*Transformer`, `*Encoder`, `*Imputer` or `*Scaler`.
+3. Keep names short when the shorter form is already clear, e.g., `Softmax` over `ApplySoftmax`, but specialize when needed, e.g., `DropConstantColumns` over `DropConstant`.

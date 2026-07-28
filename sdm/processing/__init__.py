@@ -1,39 +1,41 @@
-"""Fittable pre/postprocessing transforms for structured data."""
+"""Processors for structured data tables."""
 
-from sdm.processing.base import Processor, InvertibleMixin, SharedState
-from sdm.processing.sequential import Sequential
-from sdm.processing.choice import Choice
-from sdm.processing.stype_dispatch import StypeDispatch
-from sdm.processing.task_dispatch import TaskDispatch
-from sdm.processing.recipe import Recipe
+from sdm.processing.base import Processor, InvertibleMixin
+from sdm.processing.common import (
+    Identity,
+    Sequential,
+    StypeDispatch,
+    TaskDispatch,
+    Choice,
+    ToNumerical,
+    ShuffleColumns,
+)
+from sdm.processing.text.tfidf_transformer import TfidfTransformer
 from sdm.processing.numerical import (
     Clip,
-    QuantileClip,
-    SigmaClip,
-    MeanImpute,
-    Power,
-    Quantile,
-    StandardScale,
-    ConstantFilter,
+    ClipQuantiles,
+    ClipSigma,
+    ImputeMean,
+    PowerTransform,
+    QuantileTransform,
+    Standardize,
+    DropConstantColumns,
 )
 from sdm.processing.categorical import (
-    CategoricalAlign,
-    CategoricalImpute,
-    CategoryShuffle,
+    AlignCategories,
+    ShuffleCategories,
+    ImputeMode,
 )
-from sdm.processing.datetime import EncodeDatetime
-from sdm.processing.output import EnsembleReduce, SoftmaxTemperature
-from sdm.processing.common import Identity, FeaturePermute, ToNumerical
+from sdm.processing.datetime import AddCalendarFields
+from sdm.processing.output import ReduceEstimators, Softmax
+from sdm.processing.recipe import Recipe
 
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "SharedState",
+    "Identity",
     "Sequential",
-    "Choice",
     "StypeDispatch",
-    "CategoricalAlign",
-    "CategoricalImpute",
     "TaskDispatch",
     "Clip",
     "QuantileClip",
@@ -51,7 +53,23 @@ __all__ = [
     "EnsembleReduce",
     "SoftmaxTemperature",
     "StandardScale",
-    "TfidfEncoder",
+    "TfidfTransformer",
+    "Choice",
     "ToNumerical",
+    "ShuffleColumns",
+    "Clip",
+    "ClipQuantiles",
+    "ClipSigma",
+    "ImputeMean",
+    "PowerTransform",
+    "QuantileTransform",
+    "Standardize",
+    "DropConstantColumns",
+    "AlignCategories",
+    "ShuffleCategories",
+    "ImputeMode",
+    "AddCalendarFields",
+    "ReduceEstimators",
+    "Softmax",
     "Recipe",
 ]

@@ -1,55 +1,27 @@
+from __future__ import annotations
+
 import abc
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, cast
 
 import torch
 from typing_extensions import Self
 
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
 
 SupportedStypes: TypeAlias = frozenset[Stype]
 
-T = TypeVar("T")
-
-
-class SharedState(Generic[T]):
-    """Holder whose contents are shared, not copied, across ``deepcopy``.
-
-    Ensembling duplicates a recipe per member via ``copy.deepcopy``, which
-    would also duplicate any heavy processor state it reaches (e.g. a fitted
-    vocabulary or a pretrained embedding table). State stored inside a
-    ``SharedState`` survives the copy as a reference: every member points at
-    the same underlying object.
-
-    Only use it for member-invariant state. Per-member state (e.g. random
-    draws at fit time) must stay outside so each copy keeps its own.
-
-    Args:
-        value: The initial held value.
-    """
-
-    def __init__(self, value: T) -> None:
-        self.value = value
-
-    def __deepcopy__(self, memo: dict[int, Any]) -> Self:
-        return self
-
-    def __copy__(self) -> Self:
-        return self
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.value!r})"
+if TYPE_CHECKING:
+    from sdm.processing import Sequential
 
 
 class Processor(torch.nn.Module, abc.ABC):
-    """Fittable, table-in/table-out transform.
+    r"""Base processor for tensor-aware table transformations.
 
-    Subclass and implement ``_transform`` (the transform operation). Override
-    ``_fit`` to learn state from a :class:`TableTensor` (the default is a
-    no-op). For an inverse, also mix in :class:`InvertibleMixin` and implement
-    ``_inverse_transform``. Set ``requires_fit = False`` for stateless
-    processors that can safely run without a prior ``fit`` call. Set
-    ``supported_stypes`` for processors that support non-numerical columns.
+    A :class:`Processor` defines a reusable transformation on
+    :class:`~sdm.tensor.TableTensor` for feature, target and output
+    preprocessing.
+    A :class:`Processor` learns any required state via :meth:`fit`, and applies
+    the transformation via :meth:`transform`.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
@@ -88,37 +60,17 @@ class Processor(torch.nn.Module, abc.ABC):
     def _transform(self, table: TableTensor) -> TableTensor:
         pass
 
-    def forward(self, table: TableTensor) -> TableTensor:
-        """Alias of :meth:`~Processor.transform`.
-
-        This is the :class:`torch.nn.Module` entry point, so
-        ``processor(table)`` and ``processor.transform(table)`` share the same
-        fitted-state checks.
-
-        Args:
-            table: Table to transform.
-
-        Returns:
-            Transformed table.
-        """
-        return self.transform(table)
-
     def fit(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
     ) -> Self:
-        """Fit the processor on ``table`` and return it.
+        r"""Fit the processor.
 
         Args:
-            table: Feature table used to compute the processor state.
-            generator: Generator used for random draws while fitting.
-                Container processors pass it on to their children. If
-                ``None``, draws use the global generator.
-
-        Returns:
-            This processor.
+            table: The table used to compute the processor state.
+            generator: Pseudorandom number generator used for sampling.
         """
         self._check_supported_stypes(table)
         if self.requires_fit:
@@ -127,17 +79,21 @@ class Processor(torch.nn.Module, abc.ABC):
         return self
 
     def transform(self, table: TableTensor) -> TableTensor:
-        """Transform ``table`` using the fitted processor.
+        r"""Transform ``table``.
 
         Args:
-            table: Table to transform.
+            table: The stTable to transform.
 
         Returns:
-            Transformed table.
+            The transformed table.
         """
         self._check_supported_stypes(table)
         self._check_is_fitted()
         return self._transform(table)
+
+    def forward(self, table: TableTensor) -> TableTensor:
+        r"""Alias of :meth:`transform`."""
+        return self.transform(table)
 
     def fit_transform(
         self,
@@ -145,41 +101,50 @@ class Processor(torch.nn.Module, abc.ABC):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        """Fit on ``table`` and return the transformed result.
+        r"""Fit the processor and transform ``table``.
 
         Args:
-            table: Feature table to fit on and transform.
-            generator: Generator used for random draws while fitting.
-                Container processors pass it on to their children. If
-                ``None``, draws use the global generator.
+            table: The table to fit on and transform.
+            generator: Pseudorandom number generator used for sampling.
 
         Returns:
-            Transformed table.
+            The transformed table.
         """
         return self.fit(table, generator=generator).transform(table)
+
+    def __add__(self, other: object) -> Sequential:
+        from sdm.processing import Sequential  # noqa: PLC0415
+
+        if not isinstance(other, Processor) and not callable(other):
+            return NotImplemented
+        return Sequential(self, cast(Processor, other))
+
+    def __radd__(self, other: object) -> Sequential:
+        from sdm.processing import Sequential  # noqa: PLC0415
+
+        if not isinstance(other, Processor) and not callable(other):
+            return NotImplemented
+        return Sequential(cast(Processor, other), self)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return f"{' ' * indent}{self.__class__.__name__}()"
 
 
 class InvertibleMixin(abc.ABC):
-    """Adds ``inverse_transform`` to a :class:`Processor`.
-
-    Combine with :class:`Processor` and implement ``_inverse_transform``,
-    e.g. ``class StandardScale(Processor, InvertibleMixin): ...``.
-    """
+    r"""Extend a :class:`Processor` by an inverse transformation."""
 
     @abc.abstractmethod
     def _inverse_transform(self, table: TableTensor) -> TableTensor: ...
 
     def inverse_transform(self, table: TableTensor) -> TableTensor:
-        """Invert the transform of ``table`` using the fitted processor.
+        r"""Apply the inverse transformation to ``table``.
 
         Args:
-            table: Table in transformed space.
+            table: The table in transformed representation.
 
         Returns:
-            Table mapped back to the original processor space.
+            The table restored to the representation before
+            :meth:`~Processor.transform`.
         """
         self._check_is_fitted()
         return self._inverse_transform(table)

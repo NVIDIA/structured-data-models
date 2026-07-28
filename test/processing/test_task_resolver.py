@@ -10,8 +10,8 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
-    SoftmaxTemperature,
-    StandardScale,
+    Softmax,
+    Standardize,
     TaskDispatch,
     ToNumerical,
 )
@@ -51,7 +51,7 @@ def _recipe(*, target: Processor | None = None) -> Recipe:
         target=target,
         output=[
             TaskDispatch(
-                classification=SoftmaxTemperature(),
+                classification=Softmax(),
                 regression=Identity(),
             )
         ],
@@ -94,7 +94,7 @@ def test_task_resolver_uses_final_target_type_once(
     assert converted.output.transform(output) is output
 
     scaled = Recipe(
-        target=[StandardScale()],
+        target=[Standardize()],
         output=[TaskDispatch(regression=Identity())],
     )
     numerical_target = _numerical_target(device)

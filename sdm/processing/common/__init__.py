@@ -1,7 +1,19 @@
-"""Cross-stype transforms that operate on multiple column types."""
+"""Cross-stype processors."""
 
 from sdm.processing.common.identity import Identity
-from sdm.processing.common.feature_permute import FeaturePermute
+from sdm.processing.common.sequential import Sequential
+from sdm.processing.common.stype import StypeDispatch
+from sdm.processing.common.task import TaskDispatch
+from sdm.processing.common.choice import Choice
 from sdm.processing.common.to_numerical import ToNumerical
+from sdm.processing.common.shuffle import ShuffleColumns
 
-__all__ = ["Identity", "FeaturePermute", "ToNumerical"]
+__all__ = [
+    "Identity",
+    "Sequential",
+    "StypeDispatch",
+    "TaskDispatch",
+    "Choice",
+    "ToNumerical",
+    "ShuffleColumns",
+]

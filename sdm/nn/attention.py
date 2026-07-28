@@ -697,9 +697,13 @@ class TransformerBlock(torch.nn.Module):
         num_key_value_heads: The number of key/value attention heads.
             Defaults to ``num_query_heads`` (standard multi-head attention).
         qassmax: Whether to scale queries with :class:`QASSMax`.
-        norm: The normalization layer name.
+        norm: The normalization layer name or a callable returning the
+            normalization layer. The callable is invoked once per norm site,
+            so each of the three sites gets a fresh instance. A module
+            instance is shared across all three sites.
         norm_kwargs: Additional keyword arguments passed to the normalization
-            layer constructor.
+            layer constructor. Takes precedence over ``device`` and
+            ``dtype``.
         device: The device.
         dtype: The dtype.
     """
@@ -711,14 +715,15 @@ class TransformerBlock(torch.nn.Module):
         feedforward_channels: int,
         num_key_value_heads: int | None = None,
         qassmax: bool = False,
-        norm: str = "layer_norm",
+        norm: str | Callable[..., torch.nn.Module] = "layer_norm",
         norm_kwargs: dict[str, Any] | None = None,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        norm_kwargs = {**(norm_kwargs or {}), **factory_kwargs}
+        # User `norm_kwargs` win; `device`/`dtype` fill unspecified keys.
+        norm_kwargs = {**factory_kwargs, **(norm_kwargs or {})}
 
         self.q_norm = normalization_resolver(norm, channels, **norm_kwargs)
         self.kv_norm = normalization_resolver(norm, channels, **norm_kwargs)
