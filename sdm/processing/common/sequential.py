@@ -6,7 +6,6 @@ from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 from sdm.processing import InvertibleMixin, Processor
-from sdm.processing._callable import ProcessorLike, _CallableProcessor
 
 
 class Sequential(Processor, InvertibleMixin):
@@ -18,34 +17,28 @@ class Sequential(Processor, InvertibleMixin):
 
     supported_stypes = frozenset(Stype)
 
-    def __init__(self, *args: ProcessorLike) -> None:
+    def __init__(self, *args: object) -> None:
         super().__init__()
         self.extend(args)
         self.requires_fit = any(child.requires_fit for child in self)
 
-    def append(self, processor: ProcessorLike) -> Self:
+    def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
 
         Args:
             processor: The processor to append.
         """
+        processor = Processor.as_processor(processor)
         if isinstance(processor, Sequential):
             for child in processor.children():
                 self.add_module(str(len(self)), child)
-        elif isinstance(processor, Processor):
-            self.add_module(str(len(self)), processor)
-        elif callable(processor):
-            self.add_module(str(len(self)), _CallableProcessor(processor))
         else:
-            raise TypeError(
-                f"Element must be a 'Processor' or callable "
-                f"(got '{type(processor).__name__}')"
-            )
+            self.add_module(str(len(self)), processor)
 
         self._fitted = False
         return self
 
-    def extend(self, processors: Iterable[ProcessorLike]) -> Self:
+    def extend(self, processors: Iterable[object]) -> Self:
         r"""Append multiple processors or callables to this sequence.
 
         Args:
@@ -61,24 +54,12 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        raise NotImplementedError
-
-    def fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> Self:
-        r""":meta private:"""  # noqa: D415
         out = table
         for i, child in enumerate(self):
             if i < len(self) - 1:
                 out = child.fit_transform(out, generator=generator)
             else:
                 child.fit(out, generator=generator)
-        if self.requires_fit:
-            self._fitted = True
-        return self
 
     def _transform(self, table: TableTensor) -> TableTensor:
         out = table
@@ -86,18 +67,15 @@ class Sequential(Processor, InvertibleMixin):
             out = child.transform(out)
         return out
 
-    def fit_transform(
+    def _fit_transform(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        r""":meta private:"""  # noqa: D415
         out = table
         for child in self:
             out = child.fit_transform(out, generator=generator)
-        if self.requires_fit:
-            self._fitted = True
         return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
@@ -106,7 +84,7 @@ class Sequential(Processor, InvertibleMixin):
             fn = getattr(child, "inverse_transform", None)
             if not callable(fn):
                 raise AttributeError(
-                    f"'{child.__class__.__name__}' object has no attribute "
+                    f"{child.__class__.__name__!r} object has no attribute "
                     f"'inverse_transform'"
                 )
             out = fn(out)
@@ -118,11 +96,8 @@ class Sequential(Processor, InvertibleMixin):
     def __len__(self) -> int:
         return len(self._modules)
 
-    def __iadd__(self, other: ProcessorLike | Iterable[ProcessorLike]) -> Self:
-        if isinstance(other, Processor) or callable(other):
-            self.append(cast(ProcessorLike, other))
-        else:
-            self.extend(other)
+    def __iadd__(self, other: object) -> Self:
+        self.append(Processor.as_processor(other))
         return self
 
     def __repr__(self, *, indent: int = 0) -> str:

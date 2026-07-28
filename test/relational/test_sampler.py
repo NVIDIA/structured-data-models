@@ -4,6 +4,7 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 import torch
+
 from sdm import (
     ColumnarTensor,
     RelationalData,

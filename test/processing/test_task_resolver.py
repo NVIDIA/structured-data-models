@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     Choice,
@@ -22,7 +23,7 @@ def _categorical_target(device: torch.device | None = None) -> TableTensor:
     return TableTensor(
         columns={"categorical": ("target",)},
         categorical=CategoricalTensor(
-            data=torch.tensor(
+            code=torch.tensor(
                 [[0], [1]],
                 dtype=torch.int32,
                 device=device,

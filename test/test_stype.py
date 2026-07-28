@@ -3,6 +3,7 @@ from decimal import Decimal
 import pandas as pd
 import pyarrow as pa
 import pytest
+
 from sdm import Stype, infer_stypes
 from sdm.testing import onlyCUDA
 

@@ -1,4 +1,5 @@
 import torch
+
 from sdm import TableTensor
 from sdm.processing import Standardize
 from sdm.testing import withCUDA

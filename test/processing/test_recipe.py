@@ -1,4 +1,5 @@
 import torch
+
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
 from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize
@@ -82,7 +83,7 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
         },
         numerical=torch.randn(8, 2, device=device),
         categorical=CategoricalTensor(
-            data=torch.tensor(
+            code=torch.tensor(
                 [[1], [3]], dtype=torch.int32, device=device
             ).repeat(4, 1),
             categories=(
