@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 
 import numpy as np
 import pyarrow as pa
+import pyarrow.compute as pc
 
 if TYPE_CHECKING:
     import cudf
@@ -87,42 +88,66 @@ def infer_stypes(
         Dictionary mapping column names to inferred semantic type.
     """
     overrides = overrides or {}
-    sample = None
+    infer_text = bool(allowed_stypes) and Stype.text in allowed_stypes
 
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
-            if allowed_stypes and Stype.text in allowed_stypes:
-                sample = table.sample(
-                    n=min(10000, len(table)),
-                    random_state=seed,
+            schema = pa.Schema.from_pandas(table, preserve_index=False)
+            text_columns = None
+            candidates = (
+                _text_candidates_arrow(schema, overrides) if infer_text else []
+            )
+            if candidates:
+                text_columns = _text_columns_arrow(
+                    pa.Table.from_pandas(
+                        table[candidates].sample(
+                            n=min(10000, len(table)),
+                            random_state=seed,
+                        ),
+                        preserve_index=False,
+                    )
                 )
-            table = pa.Schema.from_pandas(table, preserve_index=False)
+            return _arrow_stypes(schema, overrides, text_columns)
 
     if importlib.util.find_spec("cudf") is not None:
         import cudf
 
         if isinstance(table, cudf.DataFrame):
-            if allowed_stypes and Stype.text in allowed_stypes:
-                sample = table.sample(
-                    n=min(10000, len(table)),
-                    random_state=seed,
-                )
+            text_columns = None
+            if infer_text:
+                candidates = _text_candidates_cudf(table, overrides)
+                if candidates:
+                    sample = table[candidates].sample(
+                        n=min(10000, len(table)),
+                        random_state=seed,
+                    )
+                    text_columns = {
+                        column
+                        for column in candidates
+                        if _is_text_stype_cudf(sample[column])
+                    }
             return {
                 column: Stype(overrides[column])
                 if column in overrides
-                else _infer_cudf_stype(column, dtype, sample)
+                else _infer_cudf_stype(column, dtype, text_columns)
                 for column, dtype in table.dtypes.items()
             }
 
     if isinstance(table, pa.Table):
-        if allowed_stypes and Stype.text in allowed_stypes:
+        text_columns = None
+        candidates = (
+            _text_candidates_arrow(table.schema, overrides) if infer_text else []
+        )
+        if candidates:
             n = min(10_000, table.num_rows)
             rng = np.random.default_rng(seed)
             idx = rng.choice(table.num_rows, size=n, replace=False)
-            sample = table.take(idx)
-        table = table.schema
+            text_columns = _text_columns_arrow(
+                table.select(candidates).take(idx)
+            )
+        return _arrow_stypes(table.schema, overrides, text_columns)
 
     if not isinstance(table, pa.Schema):
         raise TypeError(
@@ -130,18 +155,26 @@ def infer_stypes(
             f"or 'cudf.DataFrame' (got '{type(table).__name__}')"
         )
 
+    return _arrow_stypes(table, overrides, None)
+
+
+def _arrow_stypes(
+    schema: pa.Schema,
+    overrides: Mapping[str, StypeLike],
+    text_columns: set[str] | None,
+) -> dict[str, StypeLike]:
     return {
         field.name: Stype(overrides[field.name])
         if field.name in overrides
-        else _infer_arrow_stype(field.name, field.type, sample)
-        for field in table
+        else _infer_arrow_stype(field.name, field.type, text_columns)
+        for field in schema
     }
 
 
 def _infer_arrow_stype(
     name: str,
     dtype: pa.DataType,
-    sample: pa.Table | pd.DataFrame | None = None,
+    text_columns: set[str] | None = None,
 ) -> Stype:
     if (
         pa.types.is_integer(dtype)
@@ -157,19 +190,12 @@ def _infer_arrow_stype(
     ):
         return Stype.numerical
 
-    if (
-        pa.types.is_string(dtype) or pa.types.is_large_string(dtype)
-    ) and sample is not None:
-        if _is_text_stype_arrow(name, sample):
+    if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
+        if text_columns is not None and name in text_columns:
             return Stype.text
         return Stype.categorical
 
-    if (
-        pa.types.is_string(dtype)
-        or pa.types.is_large_string(dtype)
-        or pa.types.is_boolean(dtype)
-        or pa.types.is_dictionary(dtype)
-    ):
+    if pa.types.is_boolean(dtype) or pa.types.is_dictionary(dtype):
         return Stype.categorical
 
     if pa.types.is_timestamp(dtype) or pa.types.is_date(dtype):
@@ -181,7 +207,7 @@ def _infer_arrow_stype(
 def _infer_cudf_stype(
     name: str,
     dtype: Any,
-    sample: cudf.DataFrame | None = None,
+    text_columns: set[str] | None = None,
 ) -> Stype:
     import cudf
     from cudf.api.types import (
@@ -208,8 +234,8 @@ def _infer_cudf_stype(
     if is_bool_dtype(dtype) or isinstance(dtype, cudf.CategoricalDtype):
         return Stype.categorical
 
-    if is_string_dtype(dtype) and sample is not None:
-        if _is_text_stype_cudf(name, sample):
+    if is_string_dtype(dtype):
+        if text_columns is not None and name in text_columns:
             return Stype.text
         return Stype.categorical
 
@@ -223,38 +249,71 @@ def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
 
 
-def _is_text_stype_arrow(
-    name: str,
-    table: pa.Table | pd.DataFrame,
-) -> bool:
-    column = table[name]
-    values = (
-        column.to_pylist()
-        if isinstance(column, pa.ChunkedArray)
-        else column.tolist()
-    )
-    values = [v for v in values if isinstance(v, str)]  # drop nulls / non-str
-    if not values:
+def _text_candidates_arrow(
+    schema: pa.Schema,
+    overrides: Mapping[str, StypeLike],
+) -> list[str]:
+    return [
+        field.name
+        for field in schema
+        if (
+            pa.types.is_string(field.type)
+            or pa.types.is_large_string(field.type)
+        )
+        and field.name not in overrides
+        and not _has_id_token(field.name)
+    ]
+
+
+def _text_columns_arrow(sample: pa.Table) -> set[str]:
+    text_columns = set()
+
+    for name in sample.column_names:
+        column = sample.column(name)
+        # `count_distinct` and `mean` both skip nulls, so no null filtering is
+        # needed beforehand:
+        count = len(column) - column.null_count
+        if count == 0:
+            continue
+
+        unique_ratio = pc.count_distinct(column).as_py() / count
+        # `utf8_split_whitespace` splits on whitespace runs without emitting
+        # empty tokens, matching `str.split()`:
+        words = pc.list_value_length(pc.utf8_split_whitespace(column))
+        avg_words = pc.mean(words).as_py()
+
+        if unique_ratio > 0.01 and avg_words >= 3:
+            text_columns.add(name)
+
+    return text_columns
+
+
+def _text_candidates_cudf(
+    table: cudf.DataFrame,
+    overrides: Mapping[str, StypeLike],
+) -> list[str]:
+    import cudf
+    from cudf.api.types import is_string_dtype
+
+    return [
+        column
+        for column, dtype in table.dtypes.items()
+        if is_string_dtype(dtype)
+        and not isinstance(dtype, cudf.CategoricalDtype)
+        and column not in overrides
+        and not _has_id_token(column)
+    ]
+
+
+def _is_text_stype_cudf(column: cudf.Series) -> bool:
+    # `count`, `nunique` and `mean` all skip nulls, so no null filtering is
+    # needed beforehand; an all-null column yields a null average word count
+    # and fails the threshold below:
+    count = column.count()
+    if count == 0:
         return False
 
-    # cardinality
-    unique_ratio = len(set(values)) / len(values)
-    # average word count per cell
-    word_counts = [len(value.split()) for value in values]
-    avg_words = sum(word_counts) / len(word_counts)
-
-    return unique_ratio > 0.01 and avg_words >= 3
-
-
-def _is_text_stype_cudf(name: str, table: cudf.DataFrame) -> bool:
-    column = table[name]
-    values = column.dropna()
-
-    if values.empty:
-        return False
-
-    unique_ratio = values.nunique() / len(values)
-    word_counts = values.str.token_count()
-    avg_words = word_counts.mean()
+    unique_ratio = column.nunique() / count
+    avg_words = column.str.token_count().mean()
 
     return unique_ratio > 0.01 and avg_words >= 3

@@ -1,10 +1,11 @@
-r"""Benchmark text stype inference across the PyArrow and cuDF backends.
+r"""Benchmark text stype inference across the PyArrow, pandas and cuDF
+backends.
 
 Usage:
 
     python benchmarks/bench_stype.py
 
-Runs every backend in turn, skipping cuDF when it is not installed.
+Runs every backend in turn, skipping those that are not installed.
 
 Each cell reports the median and 90th percentile of ``REPEATS`` calls, and
 the host-side peak allocation of a separate untimed call.
@@ -30,7 +31,7 @@ import pyarrow as pa
 import torch
 from sdm import Stype, infer_stypes
 
-BACKENDS = ["arrow", "cudf"]
+BACKENDS = ["arrow", "pandas", "cudf"]
 ROW_COUNTS = [1_000, 100_000]
 COLUMN_COUNTS = [1, 10]
 REPEATS = 5
@@ -97,6 +98,11 @@ def _table(
     if backend == "arrow":
         return pa.table(data)
 
+    if backend == "pandas":
+        import pandas as pd
+
+        return pd.DataFrame(data)
+
     import cudf
 
     return cudf.DataFrame(data)
@@ -154,7 +160,7 @@ def bench(backend: str, repeats: int) -> None:
                     )
 
                     print(
-                        f"{backend:5s} {profile:8s} {mode:8s} "
+                        f"{backend:6s} {profile:8s} {mode:8s} "
                         f"rows={num_rows:>7,} cols={num_columns:>3} "
                         f"median={median * 1e3:8.2f} ms "
                         f"p90={p90 * 1e3:8.2f} ms "
@@ -165,8 +171,8 @@ def bench(backend: str, repeats: int) -> None:
 
 def main() -> None:
     for backend in BACKENDS:
-        if backend == "cudf" and importlib.util.find_spec("cudf") is None:
-            print("cudf: not installed, skipping")
+        if backend != "arrow" and importlib.util.find_spec(backend) is None:
+            print(f"{backend}: not installed, skipping")
             continue
 
         bench(backend=backend, repeats=REPEATS)
