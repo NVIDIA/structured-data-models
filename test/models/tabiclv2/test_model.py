@@ -209,6 +209,7 @@ def test_tabiclv2_hierarchical_log_probs(
 def test_tabiclv2_many_classes_forward_and_cache(
     device: torch.device,
 ) -> None:
+    torch.manual_seed(1)
     model = TabICLv2(pretrained=False, device=device)
     num_classes, test_size = 11, 2
     x_context = torch.randn(num_classes, 6, device=device)
