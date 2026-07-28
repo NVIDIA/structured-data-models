@@ -69,7 +69,8 @@ class AlignCategories(Processor):
             if category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
                 # PyTorch CPU index_select is not implemented for these dtypes.
                 category = category[unique]
-            category = category.index_select(0, unique)
+            else:
+                category = category.index_select(0, unique)
 
         if self.sort_by == "value":
             if category.is_cuda and category.dtype in _UNSIGNED_DTYPES:
