@@ -10,7 +10,7 @@ from sdm.processing.common import (
     ToNumerical,
     ShuffleColumns,
 )
-from sdm.processing.text.tfidf_transformer import TfidfTransformer
+from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
 from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
@@ -37,21 +37,7 @@ __all__ = [
     "Sequential",
     "StypeDispatch",
     "TaskDispatch",
-    "Clip",
-    "QuantileClip",
-    "CategoryShuffle",
-    "ConstantFilter",
-    "EncodeDatetime",
-    "FeaturePermute",
-    "Identity",
-    "MeanImpute",
-    "Power",
-    "Quantile",
-    "SigmaClip",
-    "EnsembleReduce",
-    "SoftmaxTemperature",
-    "StandardScale",
-    "TfidfTransformer",
+    "TfidfTextEmbed",
     "Choice",
     "ToNumerical",
     "ShuffleColumns",

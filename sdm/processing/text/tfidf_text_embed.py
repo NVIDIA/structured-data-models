@@ -12,7 +12,7 @@ from torch import Tensor
 from torch.utils.dlpack import from_dlpack
 
 
-class TfidfTransformer(Processor):
+class TfidfTextEmbed(Processor):
     r"""Encode text columns as character n-gram TF-IDF vectors.
 
     Each text column is tokenized into word-boundary character n-grams (see
