@@ -4,9 +4,8 @@ Python package for structured data models.
 
 ## Examples
 
-For a quick start, run [examples/tabiclv2.py](examples/tabiclv2.py) or open the
-[TabICL quickstart notebook](examples/TabICL_demo.ipynb). More examples are
-listed in [examples/README.md](examples/README.md).
+For a quick start, run [examples/tabiclv2.py](examples/tabiclv2.py). More
+examples are listed in [examples/README.md](examples/README.md).
 
 ```python
 import torch

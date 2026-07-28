@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,11 +32,7 @@ def test_top_level_examples_are_indexed() -> None:
     assert not missing
 
 
-def test_example_notebooks_are_stripped() -> None:
-    for path in sorted(EXAMPLES.rglob("*.ipynb")):
-        notebook = json.loads(path.read_text())
-        for index, cell in enumerate(notebook["cells"]):
-            if cell.get("cell_type") != "code":
-                continue
-            assert cell.get("execution_count") is None, (path, index)
-            assert cell.get("outputs") == [], (path, index)
+def test_notebooks_are_not_checked_into_examples() -> None:
+    notebooks = sorted(EXAMPLES.rglob("*.ipynb"))
+
+    assert not notebooks

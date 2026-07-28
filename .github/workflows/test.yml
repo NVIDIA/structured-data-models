@@ -37,13 +37,6 @@ jobs:
         run: |
           pytest --cov=sdm --cov-config=pyproject.toml --cov-report=term-missing --durations=10
 
-      - name: Execute example notebooks
-        run: |
-          find examples -name '*.ipynb' -print0 | while IFS= read -r -d '' notebook; do
-            uv run --extra test --with nbconvert --with ipykernel --with scikit-learn \
-              jupyter nbconvert --execute --to notebook --output-dir /tmp "$notebook"
-          done
-
       # TODO: Uncomment when we make the repo public.
       # - name: Upload coverage
       #   if: ${{ runner.os == 'Linux' }}
