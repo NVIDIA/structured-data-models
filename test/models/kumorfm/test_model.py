@@ -301,7 +301,7 @@ def test_many_classes_forward_and_cache(
     target = TableTensor(
         columns={Stype.categorical: ("target",)},
         categorical=CategoricalTensor(
-            data=ids.remainder(num_classes).unsqueeze(-1),
+            code=ids.remainder(num_classes).to(torch.int32).unsqueeze(-1),
             categories=(classes,),
         ),
     )
