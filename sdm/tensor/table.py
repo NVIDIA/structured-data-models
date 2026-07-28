@@ -65,7 +65,7 @@ class TableTensor(Tensor):
             },
             numerical=torch.randn(10, 2),
             categorical=CategoricalTensor(
-                data=torch.randint(0, 2, size=(10, 2)),
+                code=torch.randint(0, 2, size=(10, 2)),
                 categories=(
                     StringTensor.from_list(["USA", "Germany"]),
                     StringTensor.from_list(["enterprise", "startup"]),
@@ -172,7 +172,7 @@ class TableTensor(Tensor):
 
             if stype == Stype.datetime and block.dtype != torch.int64:
                 raise ValueError(
-                    f"Expected '{stype.value}' block to have dtype "
+                    f"Expected {stype.value!r} block to have dtype "
                     f"'{torch.int64}' (got '{block.dtype}')"
                 )
 
@@ -181,17 +181,17 @@ class TableTensor(Tensor):
 
             if block.dim() < 2:
                 raise ValueError(
-                    f"Expected '{stype.value}' block to be at least 2D "
+                    f"Expected {stype.value!r} block to be at least 2D "
                     f"(got {block.dim()}D)"
                 )
             if size != block.size()[:-1]:
                 raise ValueError(
-                    f"Expected '{stype.value}' block size of "
+                    f"Expected {stype.value!r} block size of "
                     f"{_block_size_repr(size)} (got {tuple(block.size())})"
                 )
             if device != block.device:
                 raise ValueError(
-                    f"Expected '{stype.value}' block to be on device "
+                    f"Expected {stype.value!r} block to be on device "
                     f"'{device}' (got '{block.device}')"
                 )
 
@@ -204,7 +204,7 @@ class TableTensor(Tensor):
             numerical = torch.empty((*size, 0), device=device)
         if categorical is None:
             categorical = CategoricalTensor(
-                data=torch.empty((*size, 0), dtype=torch.int32, device=device),
+                code=torch.empty((*size, 0), dtype=torch.int32, device=device),
                 categories=(),
             )
         if datetime is None:
@@ -240,7 +240,7 @@ class TableTensor(Tensor):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
                 raise ValueError(
-                    f"Expected '{stype.value}' block to hold "
+                    f"Expected {stype.value!r} block to hold "
                     f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 
@@ -596,16 +596,6 @@ class TableTensor(Tensor):
         yield Stype.text, self._text
         yield Stype.id, self._id
 
-    def as_tensor(self) -> Tensor:
-        r"""Return the only active semantic-type block as a tensor."""
-        tensors = [tensor for _, tensor in self.items() if tensor.size(-1) > 0]
-        if len(tensors) != 1:
-            raise RuntimeError(
-                f"'as_tensor()' requires a '{self.__class__.__name__}' with "
-                f"exactly one active semantic type (got {len(tensors)})"
-            )
-        return tensors[0]
-
     @property
     def blocks(self) -> Mapping[Stype, Tensor]:
         r"""Return typed column blocks per semantic type."""
@@ -817,7 +807,7 @@ class TableTensor(Tensor):
             return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
-            f"'{func}' is not supported for '{cls.__name__}'"
+            f"'{func}' is not supported for {cls.__name__!r}"
         )
 
     def __getitem__(self, indices: Any) -> TableTensor:
@@ -1123,7 +1113,7 @@ def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
     if len(size) == 0 or size[-1] != inp.size(-1):
         _columns = "column" if inp.size(-1) == 1 else "columns"
         raise RuntimeError(
-            f"Can't reshape '{inp.__class__.__name__}' with "
+            f"Can't reshape {inp.__class__.__name__!r} with "
             f"{inp.size(-1)} {_columns} into shape {size}"
         )
 
@@ -1163,7 +1153,7 @@ def _squeeze_dims(inp: TableTensor, dim: Sequence[int]) -> TableTensor:
 
     if inp.dim() - 1 in tuple(dim % inp.dim() for dim in dims):
         raise RuntimeError(
-            f"Can't squeeze the column dimension of '{inp.__class__.__name__}'"
+            f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -1180,7 +1170,7 @@ def _unsqueeze(inp: TableTensor, dim: int) -> TableTensor:
     if dim % (inp.dim() + 1) == inp.dim():
         raise RuntimeError(
             f"Can't unsqueeze after the column dimension of "
-            f"'{inp.__class__.__name__}'"
+            f"{inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -1201,7 +1191,7 @@ def _expand(
     if len(size) == 0 or size[-1] not in (-1, inp.size(-1)):
         _columns = "column" if inp.size(-1) == 1 else "columns"
         raise RuntimeError(
-            f"Can't expand '{inp.__class__.__name__}' with "
+            f"Can't expand {inp.__class__.__name__!r} with "
             f"{inp.size(-1)} {_columns} to shape {size}"
         )
 
@@ -1231,7 +1221,7 @@ def _transpose(inp: TableTensor, dim0: int, dim1: int) -> TableTensor:
     if dim0 != dim1 and inp.dim() - 1 in (dim0, dim1):
         raise RuntimeError(
             f"Can't transpose the column dimension of "
-            f"'{inp.__class__.__name__}'"
+            f"{inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -1249,7 +1239,7 @@ def _permute(inp: TableTensor, dims: Sequence[int]) -> TableTensor:
     dims = tuple(dim % inp.dim() for dim in dims)
     if dims[-1] != inp.dim() - 1:
         raise RuntimeError(
-            f"Can't permute the column dimension of '{inp.__class__.__name__}'"
+            f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -1263,7 +1253,7 @@ def _permute(inp: TableTensor, dims: Sequence[int]) -> TableTensor:
 def _select(inp: TableTensor, dim: int, index: int) -> TableTensor:
     if _is_column_dim(inp, dim):
         raise RuntimeError(
-            f"Can't select the column dimension of '{inp.__class__.__name__}'"
+            f"Can't select the column dimension of {inp.__class__.__name__!r}"
         )
 
     blocks = {
@@ -1292,7 +1282,7 @@ def _slice(
 
     if dim % inp.dim() == inp.dim() - 1:
         raise RuntimeError(
-            f"Can't slice the column dimension of '{inp.__class__.__name__}'"
+            f"Can't slice the column dimension of {inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -1316,7 +1306,7 @@ def _narrow(
 
     if dim % inp.dim() == inp.dim() - 1:
         raise RuntimeError(
-            f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
+            f"Can't narrow the column dimension of {inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -1356,7 +1346,7 @@ def _split(
         if split_size != 1:
             raise RuntimeError(
                 f"Can only split the column dimension of "
-                f"'{inp.__class__.__name__}' with split size 1"
+                f"{inp.__class__.__name__!r} with split size 1"
             )
         return tuple(
             inp.__class__(
@@ -1392,7 +1382,7 @@ def _split_with_sizes(
 ) -> tuple[TableTensor, ...]:
     if _is_column_dim(inp, dim):
         raise RuntimeError(
-            f"Can't split the column dimension of '{inp.__class__.__name__}'"
+            f"Can't split the column dimension of {inp.__class__.__name__!r}"
         )
 
     split_sizes = tuple(split_sizes)
@@ -1418,7 +1408,7 @@ def _index_select(
 ) -> TableTensor:
     if _is_column_dim(inp, dim):
         raise RuntimeError(
-            f"Can't index the column dimension of '{inp.__class__.__name__}'"
+            f"Can't index the column dimension of {inp.__class__.__name__!r}"
         )
 
     blocks = {
@@ -1448,7 +1438,7 @@ def _index(
         if current_dim <= inp.dim() - 1 < current_dim + num_indexed_dims:
             raise RuntimeError(
                 f"Can't index the column dimension of "
-                f"'{inp.__class__.__name__}'"
+                f"{inp.__class__.__name__!r}"
             )
         current_dim += num_indexed_dims
 
@@ -1470,7 +1460,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
 
     if not all(isinstance(tensor, TableTensor) for tensor in tensors):
         raise TypeError(
-            f"Expected all tensors to be '{TableTensor.__name__}' instances"
+            f"Expected all tensors to be {TableTensor.__name__!r} instances"
         )
     tensors = cast(Sequence[TableTensor], tensors)
 
@@ -1518,14 +1508,14 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
 
     if not all(isinstance(tensor, TableTensor) for tensor in tensors):
         raise TypeError(
-            f"Expected all tensors to be '{TableTensor.__name__}' instances"
+            f"Expected all tensors to be {TableTensor.__name__!r} instances"
         )
 
     dim %= tensors[0].dim() + 1
     if dim >= tensors[0].dim():
         raise RuntimeError(
             f"Can't stack after the column dimension of "
-            f"'{tensors[0].__class__.__name__}'"
+            f"{tensors[0].__class__.__name__!r}"
         )
 
     tensors = cast(Sequence[TableTensor], tensors)

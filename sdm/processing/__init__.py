@@ -3,6 +3,7 @@
 from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.common import (
     Identity,
+    Callable,
     Sequential,
     StypeDispatch,
     TaskDispatch,
@@ -34,6 +35,7 @@ __all__ = [
     "Processor",
     "InvertibleMixin",
     "Identity",
+    "Callable",
     "Sequential",
     "StypeDispatch",
     "TaskDispatch",

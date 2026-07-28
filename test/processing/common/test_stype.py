@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
     Identity,
@@ -18,7 +19,7 @@ def _mixed_table() -> TableTensor:
         },
         numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
             categories=(StringTensor.from_list(["a", "b"]),),
         ),
     )
@@ -37,17 +38,15 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
         atol=1e-6,
     )
     assert torch.equal(
-        output.categorical.as_tensor(),
-        table.categorical.as_tensor(),
+        output.categorical.code,
+        table.categorical.code,
     )
 
     restored = dispatch.inverse_transform(output)
 
     assert restored.columns == table.columns
     assert torch.allclose(restored.numerical, table.numerical)
-    assert torch.equal(
-        restored.categorical.as_tensor(), table.categorical.as_tensor()
-    )
+    assert torch.equal(restored.categorical.code, table.categorical.code)
 
 
 def test_stype_dispatch_accepts_callable_route() -> None:
@@ -67,8 +66,8 @@ def test_stype_dispatch_accepts_callable_route() -> None:
         table.numerical.square(),
     )
     assert torch.equal(
-        output.categorical.as_tensor(),
-        table.categorical.as_tensor(),
+        output.categorical.code,
+        table.categorical.code,
     )
 
     with pytest.raises(TypeError, match="non-invertible"):
@@ -79,7 +78,7 @@ def test_stype_dispatch_passes_generator_to_routes() -> None:
     table = TableTensor(
         columns={"categorical": ("kind",)},
         categorical=CategoricalTensor(
-            data=torch.arange(6, dtype=torch.int32).unsqueeze(1),
+            code=torch.arange(6, dtype=torch.int32).unsqueeze(1),
             categories=(StringTensor.from_list(list("abcdef")),),
         ),
     )

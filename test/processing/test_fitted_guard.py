@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
@@ -72,7 +73,7 @@ def _mixed_table() -> TableTensor:
         },
         numerical=torch.tensor([[1.0], [2.0]]),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
             categories=(StringTensor.from_list(["a", "b"]),),
         ),
     )

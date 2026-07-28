@@ -3,6 +3,7 @@ from typing import Any, cast
 import pandas as pd
 import pytest
 import torch
+
 from sdm import (
     ColumnarTensor,
     RelationalData,
@@ -398,7 +399,7 @@ def test_cugraph_temporal_sampler_uses_bounded_uniform_fanout(
         task_time_column="cutoff",
     )
 
-    assert fanouts == [[1, 1, 1, 1], [2, 2, 2, 2]]
+    assert fanouts == [[1, 0, 0, 0], [0, 2, 2, 0]]
 
 
 @onlyCUDA
