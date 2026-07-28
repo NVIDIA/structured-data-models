@@ -16,7 +16,11 @@ class Recipe(torch.nn.Module):
         *,
         num_members: int,
         generator: torch.Generator | None = None,
-    ) -> tuple[EnsembleTable, EnsembleTable, EnsembleRelatedTables | None]: ...
+    ) -> tuple[
+        EnsembleTable,
+        EnsembleTable,
+        EnsembleRelatedTables | None,
+    ]: ...
 
     def transform(
         self,
@@ -39,7 +43,12 @@ class EnsembleTable:
     member_to_variant: tuple[tuple[int, int], ...]  # E -> (group, variant)
 
     @classmethod
-    def from_shared(cls, table: TableTensor, *, num_members: int) -> EnsembleTable: ...
+    def from_shared(
+        cls,
+        table: TableTensor,
+        *,
+        num_members: int,
+    ) -> EnsembleTable: ...
 
     @classmethod
     def pack(
@@ -68,7 +77,12 @@ class Processor(torch.nn.Module):
 
 class EnsembleProcessor(torch.nn.Module):
     # The complete EnsembleTable -> EnsembleTable
-    def fit_transform(self, table: EnsembleTable, *, context: EnsembleFitContext) -> EnsembleTable: ...
+    def fit_transform(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable: ...
     def transform(self, table: EnsembleTable) -> EnsembleTable: ...
     def inverse_transform(self, table: EnsembleTable) -> EnsembleTable: ...
 ```
@@ -79,20 +93,38 @@ A normal `Processor` operates independently on every leading variant position. F
 
 ```python
 class _VariantGroupProcessor(EnsembleProcessor):
-    def fit_transform(self, table: EnsembleTable, *, context: EnsembleFitContext) -> EnsembleTable:
-        self.processors = ModuleList(copy.deepcopy(self.template) for _ in table.groups)
-        groups = tuple(processor.fit_transform(group, generator=context.generator) for processor, group in zip(self.processors, table.groups))
+    def fit_transform(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        self.processors = ModuleList(
+            copy.deepcopy(self.template) for _ in table.groups
+        )
+        groups = tuple(
+            processor.fit_transform(
+                group,
+                generator=context.generator,
+            )
+            for processor, group in zip(self.processors, table.groups)
+        )
         return table.with_groups(groups)
 
-def as_ensemble_processor(processor: Processor | EnsembleProcessor) -> EnsembleProcessor:
-    return processor if isinstance(processor, EnsembleProcessor) else _VariantGroupProcessor(processor)
+def as_ensemble_processor(
+    processor: Processor | EnsembleProcessor,
+) -> EnsembleProcessor:
+    if isinstance(processor, EnsembleProcessor):
+        return processor
+    return _VariantGroupProcessor(processor)
 ```
 
 `_VariantGroupProcessor` owns one fitted normal Processor instance per input group. Query transform and inverse transform apply the same instances to groups in the same order. All composite children are normalized through `as_ensemble_processor`, so downstream components use one interface.
 
 ## Variant-Producing and Composite Processors
 
-- `Choice` stores one option per member, computes each unique selected branch once, and calls `EnsembleTable.pack` on the branch results in original member order.
+- Member-specific randomness is defined by stable `(member_id, table_scope, processor_path)` streams and remains independent of physical variant grouping and model randomness. Decisions are sampled during fit, stored by the Processor, and reused by transform and inverse transform.
+- `Choice` stores one option per member, computes each unique selected branch once, and calls `EnsembleTable.pack` on the branch results in original member order. Round-robin selects `member_id % num_options`; random selection uses the member stream.
 - `FeaturePermute` and `CategoryShuffle` store member-specific mappings, compute unique results, and call `pack`.
 - `Sequential`, `StypeDispatch`, and `TaskDispatch` pass `EnsembleTable` recursively through normalized children.
 - Only `EnsembleReduce` may aggregate the member dimension.
@@ -112,7 +144,6 @@ For `ConstantFilter → StandardScale → Choice(Identity, Power) → FeaturePer
 
 ## Open Questions
 
-- RNG contract: legacy draw order or independent streams per member, table scope, and Processor path.
 - Fit-dependent schema splits within one group: a custom `EnsembleProcessor` or a per-variant fitting adapter followed by `pack`.
 - `Sequential` contract: ensemble-only composition, or also direct execution as a normal Processor; Recipe must retain one canonical execution path.
 - Serialization of dynamically fitted group Processors and member decisions.
