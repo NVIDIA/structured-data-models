@@ -4,7 +4,6 @@ from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
 
 from sdm import RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
@@ -254,7 +253,6 @@ class _KumoRFM(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_classes = num_classes
         self.max_train_size = max_train_size
 
         self.row_embedding = RowEmbedding(
@@ -274,24 +272,13 @@ class _KumoRFM(torch.nn.Module):
         )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
+            out_channels=num_classes or num_quantiles,
             channels=num_readout_tokens * channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
             norm_bias=norm_bias,
+            temperature=0.9,
             **factory_kwargs,
-        )
-        self.head = Sequential(
-            Linear(
-                in_features=num_readout_tokens * channels,
-                out_features=2 * num_readout_tokens * channels,
-                **factory_kwargs,
-            ),
-            GELU(),
-            Linear(
-                in_features=2 * num_readout_tokens * channels,
-                out_features=num_classes or num_quantiles,
-                **factory_kwargs,
-            ),
         )
 
     def forward(
@@ -457,8 +444,12 @@ class _KumoRFM(torch.nn.Module):
             x = torch.cat([x_context, x_query], dim=-2)
             del x_context
             del x_query
-        x = self.icl_block(x, y, cache=cache)
-        return self.head(x)
+        return self.icl_block(
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+        )
 
     def _embed_table(
         self,
@@ -562,7 +553,7 @@ def _remap_v2_1_checkpoint(
         variant_replacements = (
             ("row_embedding.y_cls_lin.", "row_embedding.y_emb."),
             ("icl_block.y_cls_lin.", "icl_block.y_emb."),
-            ("icl_block.cls_head.", "head.2."),
+            ("icl_block.cls_head.", "icl_block.head.2."),
         )
     else:
         ignored_prefixes = (
@@ -573,7 +564,7 @@ def _remap_v2_1_checkpoint(
         variant_replacements = (
             ("row_embedding.y_reg_lin.", "row_embedding.y_lin."),
             ("icl_block.y_reg_lin.", "icl_block.y_lin."),
-            ("icl_block.reg_head.", "head.2."),
+            ("icl_block.reg_head.", "icl_block.head.2."),
         )
 
     prefix_replacements = (
@@ -581,7 +572,7 @@ def _remap_v2_1_checkpoint(
         ("gnn.post_lin.", "gnn.out_lin."),
         ("gnn.post_norm.", "gnn.out_norm."),
         ("icl_block.mlp.0.", "icl_block.norm."),
-        ("icl_block.mlp.1.", "head.0."),
+        ("icl_block.mlp.1.", "icl_block.head.0."),
     )
     remapped: dict[str, Tensor] = {}
 

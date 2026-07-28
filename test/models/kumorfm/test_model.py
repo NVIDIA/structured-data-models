@@ -8,6 +8,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
+from sdm.cache import Cache
 from sdm.models import KumoRFM
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
@@ -101,7 +102,11 @@ def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
             "row_embedding.y_lin.weight",
         ),
         (False, "icl_block.y_reg_lin.bias", "icl_block.y_lin.bias"),
-        (False, "icl_block.reg_head.weight", "head.2.weight"),
+        (
+            False,
+            "icl_block.reg_head.weight",
+            "icl_block.head.2.weight",
+        ),
     ],
 )
 def test_remap_v2_1_variant_keys(
@@ -279,6 +284,89 @@ def test_forward(
         ),
     ).allclose(out)
     model.clear()
+
+
+@withCUDA
+def test_many_classes_forward_and_cache(
+    relational_data: RelationalData,
+    device: torch.device,
+) -> None:
+    num_classes = 3
+    ids = torch.arange(4, device=device)
+    classes = torch.arange(num_classes, device=device)
+    task = TableTensor(
+        columns={Stype.id: ("user_id",)},
+        id=ColumnarTensor((ids,)),
+    )
+    target = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=ids.remainder(num_classes).to(torch.int32).unsqueeze(-1),
+            categories=(classes,),
+        ),
+    )
+    related_tables = RelatedTables(
+        tables=relational_data.tables,
+        relationships=relational_data.relationships,
+        task_links=[
+            {
+                "task_column": "user_id",
+                "table": "users",
+                "table_column": "user_id",
+            }
+        ],
+    )
+    model = _KumoRFM(
+        num_classes=2,
+        num_quantiles=0,
+        channels=4,
+        num_embedding_layers=1,
+        num_embedding_heads=2,
+        num_inducing_points=2,
+        group_size=2,
+        num_readout_tokens=2,
+        num_icl_layers=1,
+        num_icl_heads=2,
+        norm_bias=True,
+        device=device,
+    ).eval()
+
+    expected = model(
+        x_context=task,
+        y_context=target,
+        x_query=task[:2],
+        related_context_tables=related_tables,
+        related_query_tables=related_tables,
+        num_hops=0,
+    )
+    assert expected.size() == (2, num_classes)
+    probabilities = expected.div(0.9).exp()
+    torch.testing.assert_close(
+        probabilities.sum(dim=-1),
+        expected.new_ones(2),
+    )
+
+    cache = Cache(classes=classes)
+    recorded = model(
+        x_context=task,
+        y_context=target,
+        x_query=None,
+        related_context_tables=related_tables,
+        related_query_tables=None,
+        cache=cache,
+        num_hops=0,
+    )
+    assert recorded.size() == (0, num_classes)
+
+    predicted = model(
+        x_context=None,
+        y_context=None,
+        x_query=task[:2],
+        related_context_tables=None,
+        related_query_tables=related_tables,
+        cache=cache.freeze(),
+    )
+    torch.testing.assert_close(predicted, expected)
 
 
 def test_default_recipe_preserves_ids() -> None:

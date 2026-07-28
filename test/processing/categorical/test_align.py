@@ -73,9 +73,9 @@ def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     assert query.categorical.code.squeeze(-1).tolist() == [-1, 1]
 
 
-@pytest.mark.parametrize("sort_by", ["code", "frequency"])
-def test_align_categories_joint_vocabulary_preserves_code_order(
-    sort_by: Literal["code", "frequency"],
+@pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
+def test_align_categories_orders_joint_vocabulary(
+    sort_by: Literal["code", "frequency", "value"],
 ) -> None:
     table = TableTensor.from_pandas(
         pd.DataFrame({"kind": ["blue", "red", "red", "red"]}),
@@ -94,8 +94,7 @@ def test_align_categories_joint_vocabulary_preserves_code_order(
             1,
         ]
         assert query.categorical.code.squeeze(-1).tolist() == [1]
-    else:
-        assert sort_by == "frequency"
+    elif sort_by == "frequency":
         assert context.categorical.categories[0].tolist() == ["red", "blue"]
         assert context.categorical.code.squeeze(-1).tolist() == [
             1,
@@ -103,6 +102,51 @@ def test_align_categories_joint_vocabulary_preserves_code_order(
             0,
         ]
         assert query.categorical.code.squeeze(-1).tolist() == [0]
+    else:
+        assert sort_by == "value"
+        assert context.categorical.categories[0].tolist() == ["blue", "red"]
+        assert context.categorical.code.squeeze(-1).tolist() == [
+            0,
+            1,
+            1,
+        ]
+        assert query.categorical.code.squeeze(-1).tolist() == [1]
+
+
+@withCUDA
+def test_align_categories_orders_values(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [[0], [1], [2], [-1]],
+        columns=("kind",),
+        categories=(("zebra", "éclair", "ant", "unused"),),
+        device=device,
+    )
+    query = _table(
+        [[0], [1], [2], [-1]],
+        columns=("kind",),
+        categories=(("éclair", "zebra", "ant"),),
+        device=device,
+    )
+
+    processor = AlignCategories(sort_by="value")
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+
+    assert context_output.categorical.categories[0].tolist() == [
+        "ant",
+        "zebra",
+        "éclair",
+    ]
+    assert torch.equal(
+        context_output.categorical.code,
+        torch.tensor([[1], [2], [0], [-1]], dtype=torch.int32, device=device),
+    )
+    assert torch.equal(
+        query_output.categorical.code,
+        torch.tensor([[2], [1], [0], [-1]], dtype=torch.int32, device=device),
+    )
 
 
 @withCUDA
@@ -232,6 +276,42 @@ def test_align_categories_unsigned_pandas_values(
     assert output.categorical.categories[0].tolist() == [largest, 1]
 
 
+@withCUDA
+@pytest.mark.parametrize(
+    ("dtype", "largest"),
+    [
+        ("uint16", 2**16 - 1),
+        ("uint32", 2**32 - 1),
+        ("uint64", 2**63 + 1),
+    ],
+)
+def test_align_categories_orders_unsigned_pandas_values(
+    dtype: str,
+    largest: int,
+    device: torch.device,
+) -> None:
+    context = TableTensor.from_pandas(
+        pd.DataFrame(
+            {"value": pd.Series([largest, 1], dtype=dtype)},
+        ),
+        stypes={"value": "categorical"},
+        device=device,
+    )
+    query = TableTensor.from_pandas(
+        pd.DataFrame(
+            {"value": pd.Series([1, largest - 1, largest], dtype=dtype)},
+        ),
+        stypes={"value": "categorical"},
+        device=device,
+    )
+
+    output = AlignCategories(sort_by="value").fit(context).transform(query)
+
+    assert output.categorical.code.squeeze(-1).tolist() == [0, -1, 1]
+    assert output.categorical.categories[0].dtype == getattr(torch, dtype)
+    assert output.categorical.categories[0].tolist() == [1, largest]
+
+
 def test_align_categories_all_missing_context_has_empty_vocabulary() -> None:
     context = _table(
         [[-1], [-1]],
@@ -260,7 +340,7 @@ def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
         stypes={"kind": "categorical"},
     )
 
-    output = AlignCategories().fit(context).transform(query)
+    output = AlignCategories(sort_by="value").fit(context).transform(query)
 
     assert output.categorical.categories[0].numel() == 0
     assert output.categorical.code.squeeze(-1).tolist() == [-1, -1]
