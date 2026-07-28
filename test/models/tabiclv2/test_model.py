@@ -165,21 +165,21 @@ def test_tabiclv2_hierarchical_log_probs(
         ) -> torch.Tensor:
             return x
 
-    class StubHierarchicalClassifier(torch.nn.Module):
+    class StubICLBlock(torch.nn.Module):
         temperature = 0.9
 
         def forward(
             self,
-            row_embeddings: torch.Tensor,
+            x: torch.Tensor,
             y: torch.Tensor,
             *,
-            num_classes: int,
-            predictor: object,
+            num_classes: int | None = None,
+            cache: object | None = None,
         ) -> torch.Tensor:
             assert num_classes == 3
-            test_size = row_embeddings.size(-2) - y.size(-1)
-            log_probs = row_embeddings.new_tensor([0.15, 0.45, 0.4]).log()
-            return log_probs.expand(test_size, -1)
+            test_size = x.size(-2) - y.size(-1)
+            log_probs = x.new_tensor([0.15, 0.45, 0.4]).log()
+            return log_probs.expand(test_size, -1).mul(self.temperature)
 
     model = _TabICLv2(
         num_classes=2,
@@ -195,11 +195,7 @@ def test_tabiclv2_hierarchical_log_probs(
         norm_bias=True,
     )
     monkeypatch.setattr(model, "row_embedding", IdentityRowEmbedding())
-    monkeypatch.setattr(
-        model,
-        "hierarchical_classifier",
-        StubHierarchicalClassifier(),
-    )
+    monkeypatch.setattr(model, "icl_block", StubICLBlock())
 
     y = torch.tensor([0, 1, 2])
     out = model(torch.randn(5, 4), y, num_classes=3)
@@ -210,7 +206,10 @@ def test_tabiclv2_hierarchical_log_probs(
 
 
 @withCUDA
-def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
+def test_tabiclv2_many_classes_forward_and_cache(
+    device: torch.device,
+) -> None:
+    torch.manual_seed(1)
     model = TabICLv2(pretrained=False, device=device)
     num_classes, test_size = 11, 2
     x_context = torch.randn(num_classes, 6, device=device)
@@ -221,6 +220,7 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         device=device,
     ).unsqueeze(-1)
 
+    torch.manual_seed(1)
     out = model(x_context, y_context, x_query)
 
     assert out.size() == (test_size, num_classes)
@@ -229,6 +229,10 @@ def test_tabiclv2_many_classes_forward(device: torch.device) -> None:
         probabilities.sum(dim=-1),
         torch.ones(test_size, device=device),
     )
+
+    torch.manual_seed(1)
+    model.fit(x_context, y_context)
+    assert model.predict(x_query).allclose(out)
 
 
 @onlyCUDA
