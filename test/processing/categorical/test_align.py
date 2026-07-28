@@ -373,13 +373,15 @@ def test_align_categories_orders_unsigned_pandas_values(
             {"value": pd.Series([largest, 1], dtype=dtype)},
         ),
         stypes={"value": "categorical"},
-    ).to(device)
+        device=device,
+    )
     query = TableTensor.from_pandas(
         pd.DataFrame(
             {"value": pd.Series([1, largest - 1, largest], dtype=dtype)},
         ),
         stypes={"value": "categorical"},
-    ).to(device)
+        device=device,
+    )
 
     output = AlignCategories(sort_by="value").fit(context).transform(query)
 
