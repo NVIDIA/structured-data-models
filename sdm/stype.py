@@ -48,6 +48,7 @@ StypeLike: TypeAlias = Stype | str
 # Tokenize strings on separators (non-letters/digits) and camelCase boundaries:
 _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
+
 def infer_stypes(
     table: pa.Table | pd.DataFrame | cudf.DataFrame,
     overrides: Mapping[str, StypeLike] | None = None,
@@ -82,6 +83,10 @@ def infer_stypes(
         Dictionary mapping column names to inferred semantic type.
     """
     overrides = overrides or {}
+    if text_sample_table is not None and len(text_sample_table) > 5_000:
+        raise ValueError(
+            "`text_sample_table` must contain at most 5,000 rows."
+        )
 
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
