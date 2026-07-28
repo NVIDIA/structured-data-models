@@ -27,17 +27,82 @@ class AlignCategories(Processor):
         sort_by: How to order fitted category vocabularies.
             ``"code"`` keeps observed categories in original order.
             ``"frequency"`` orders observed categories by descending frequency.
+            ``"value"`` orders observed categories by ascending value.
     """
 
     supported_stypes = frozenset({Stype.categorical})
 
     def __init__(
         self,
-        sort_by: Literal["code", "frequency"] = "code",
+        sort_by: Literal["code", "frequency", "value"] = "code",
     ) -> None:
         super().__init__()
         self.sort_by = sort_by
         self._categories: tuple[Tensor, ...] = ()
+
+    def _fit_category(
+        self,
+        category: Tensor,
+        index: Tensor,
+        mask: Tensor,
+        *,
+        return_inverse: bool,
+    ) -> tuple[Tensor, Tensor | None]:
+        values = index[mask]
+        if self.sort_by == "frequency":
+            if return_inverse:
+                unique, inverse, count = values.unique(
+                    return_inverse=True,
+                    return_counts=True,
+                )
+            else:
+                unique, count = values.unique(return_counts=True)
+                inverse = None
+            perm = count.argsort(descending=True, stable=True)
+            unique = unique[perm]
+        else:
+            if return_inverse:
+                unique, inverse = values.unique(return_inverse=True)
+            else:
+                unique = values.unique()
+                inverse = None
+            perm = None
+
+        if self.sort_by == "value":
+            category = self._select_categories(
+                category,
+                unique,
+                keep_all=unique.numel() == category.numel(),
+            )
+            category, perm = category.sort()
+        else:
+            category = self._select_categories(
+                category,
+                unique,
+                keep_all=self.sort_by == "code"
+                and unique.numel() == category.numel(),
+            )
+
+        if inverse is not None and perm is not None:
+            inv_perm = torch.empty_like(perm)
+            inv_perm[perm] = torch.arange(perm.numel(), device=perm.device)
+            inverse = inv_perm[inverse]
+
+        return category, inverse
+
+    @staticmethod
+    def _select_categories(
+        category: Tensor,
+        index: Tensor,
+        *,
+        keep_all: bool,
+    ) -> Tensor:
+        if keep_all:
+            return category
+        if category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
+            # PyTorch CPU index_select is not implemented for these dtypes.
+            return category[index]
+        return category.index_select(0, index)
 
     def _fit(
         self,
@@ -50,21 +115,12 @@ class AlignCategories(Processor):
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
             index = table.categorical[..., i].view(-1)
-            if self.sort_by == "frequency":
-                unique, count = index[mask[..., i].view(-1)].unique(
-                    return_counts=True,
-                )
-                perm = count.argsort(descending=True, stable=True)
-                unique = unique[perm]
-            else:
-                unique = index[mask[..., i].view(-1)].unique()
-            if self.sort_by == "code" and unique.numel() == category.numel():
-                pass
-            elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
-                # PyTorch CPU index_select is not implemented for these dtypes.
-                category = category[unique]
-            else:
-                category = category.index_select(0, unique)
+            category, _ = self._fit_category(
+                category,
+                index,
+                mask[..., i].view(-1),
+                return_inverse=False,
+            )
             categories.append(category)
         self._categories = tuple(categories)
 
@@ -80,29 +136,15 @@ class AlignCategories(Processor):
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
             index = table.categorical[..., i].view(-1)
-            if self.sort_by == "frequency":
-                unique, inverse, count = index[mask[..., i].view(-1)].unique(
-                    return_inverse=True,
-                    return_counts=True,
-                )
-                perm = count.argsort(descending=True, stable=True)
-                unique = unique[perm]
-                inv_perm = torch.empty_like(perm)
-                inv_perm[perm] = torch.arange(perm.numel(), device=perm.device)
-                inverse = inv_perm[inverse]
-            else:
-                unique, inverse = index[mask[..., i].view(-1)].unique(
-                    return_inverse=True,
-                )
-            if self.sort_by == "code" and unique.numel() == category.numel():
-                pass
-            elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
-                # PyTorch CPU index_select is not implemented for these dtypes.
-                category = category[unique]
-            else:
-                category = category.index_select(0, unique)
+            category, inverse = self._fit_category(
+                category,
+                index,
+                mask[..., i].view(-1),
+                return_inverse=True,
+            )
             categories.append(category)
 
+            assert inverse is not None
             out[..., i].view(-1)[mask[..., i].view(-1)] = inverse.to(out.dtype)
 
         self._categories = tuple(categories)

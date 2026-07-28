@@ -71,6 +71,20 @@ def test_recipe_role_fit_accepts_table() -> None:
     )
 
 
+def test_tabiclv2_default_recipe_orders_features_by_value() -> None:
+    features = TableTensor(
+        columns={"categorical": ("kind",)},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [2]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["zebra", "ant", "bear"]),),
+        ),
+    )
+
+    transformed = TabICLv2.default_recipe().features.fit_transform(features)
+
+    assert transformed.numerical.squeeze(-1).argsort().tolist() == [1, 2, 0]
+
+
 @withCUDA
 def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     recipe = TabICLv2.default_recipe()
