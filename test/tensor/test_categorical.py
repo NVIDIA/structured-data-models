@@ -4,6 +4,7 @@ from typing import cast
 import pyarrow as pa
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor
 from sdm.testing import onlyCUDA, withCUDA
 

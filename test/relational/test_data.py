@@ -1,6 +1,7 @@
 from textwrap import dedent
 
 import torch
+
 from sdm import RelationalData
 from sdm.testing import withCUDA
 

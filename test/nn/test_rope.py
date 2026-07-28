@@ -3,6 +3,7 @@ from typing import Literal
 
 import pytest
 import torch
+
 from sdm.nn import RotaryEmbedding
 from sdm.testing import withCUDA
 

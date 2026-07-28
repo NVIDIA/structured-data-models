@@ -2,10 +2,11 @@ from collections.abc import Callable
 
 import pytest
 import torch
+from torch import Tensor
+
 from sdm.cache import Cache
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.testing import withCUDA
-from torch import Tensor
 
 
 class _StubICLBlock(ICLBlock):

@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 import torch
+
 from sdm import RelationalData, Stype, TableTensor, infer_stypes
 
 

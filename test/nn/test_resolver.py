@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm.nn.resolver import normalization_resolver
 
 

@@ -6,6 +6,10 @@ import relbench
 import torch
 from relbench.datasets import get_dataset
 from relbench.tasks import get_task
+from torchmetrics.classification import BinaryAUROC
+from torchmetrics.regression import MeanAbsoluteError
+from tqdm import tqdm
+
 from sdm import (
     RelationalData,
     TableTensor,
@@ -13,9 +17,6 @@ from sdm import (
     infer_stypes,
 )
 from sdm.models import KumoRFM
-from torchmetrics.classification import BinaryAUROC
-from torchmetrics.regression import MeanAbsoluteError
-from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
