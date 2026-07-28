@@ -1,545 +1,145 @@
 # Ensemble-Aware Processing: Implementation Design
 
-This document specifies the recommended solution to
-[Ensemble-Aware Processing: Problem and Goals](ensemble_aware_processing_problem.md).
+This document defines the recommended solution for shared and vectorized Recipe execution across ensemble members. The [problem definition](ensemble_aware_processing_problem.md) contains the motivation, mathematical formulation, and speed of light. API compatibility is not required.
 
 ## Decisions
 
-- `Recipe` is the only public ensemble-aware processing entry point. It receives
-  task features, target, and related tables together.
-- Every logical table has one fit scope and one Processor tree for all members.
-  Version 1 does not share fitted state across tables.
-- Processors own their ensemble semantics. `Recipe` does not contain special
-  cases for `Choice`, `Sequential`, or `StypeDispatch`.
-- Every Processor logically operates on all members `[E, ...]`.
-  `EnsembleTable` may physically store only the distinct, stack-compatible
-  variants `[V, ...]`.
-- The base Processor supplies a correct per-member fallback. Sharing and direct
-  vectorization require explicit opt-in.
-- The public model API and existing member-wise `_forward` execution remain
-  unchanged in version 1.
+- `Recipe` is the only public ensemble-processing entry point and processes features, target, and related tables together.
+- `Recipe` is fitted in place; refitting replaces all fitted state only after every table has fitted successfully.
+- `EnsembleTable` stores unique variants in schema-compatible tensor groups `[V_g,...,R,C]` and maps each stable member position to one variant.
+- A private `_VariantGroupProcessor` owns one fitted Processor instance per variant group; `EnsembleTable` contains no fitted state.
+- Every normal Processor supports independent leading dimensions and operates directly on one variant group. There is no per-member fallback.
+- Structural, composite, and stochastic Processors override the internal ensemble execution.
+- Processors share variants only through execution provenance, never through tensor comparison or hashing.
+- `Recipe.transform_output` owns regression target inversion and classification alignment; TabICLv2 no longer performs target inversion manually.
+- Version 1 is row-preserving, table-local, immutable during `transform`, and limited to one device per execution.
 
-## Public API and Ownership
-
-`Recipe` normalizes each of `features`, `target`, and `output` to one
-`Sequential`. There is no second public ensemble-processing path.
+## Recipe API
 
 ```python
-x_context, y_context, related_context = recipe.fit_transform(
-    features=x_context,
-    target=y_context,
-    related_tables=related_context_tables,
-    num_members=num_estimators,
-    generator=generator,
-)
-x_query, related_query = recipe.transform(
-    features=x_query,
-    related_tables=related_query_tables,
-)
-prediction = recipe.transform_output(raw_member_outputs)
-```
-
-The return contracts are:
-
-- `fit_transform`:
-  `tuple[EnsembleTable, EnsembleTable, EnsembleRelatedTables | None]`
-- `transform`: `tuple[EnsembleTable, EnsembleRelatedTables | None]`
-- The related-table value is `None` when no related tables were provided.
-
-The model creates one working copy of the configured Recipe with
-`copy.deepcopy`, leaving the caller's configuration unchanged. Before fitting,
-Recipe copies its unfitted feature pipeline once for every related table. The
-task table, target, and every related table therefore each own one Processor
-tree for all members. Fitted state is scoped to the concrete Processor node and
-logical table. Recipe and model caches are installed only after a completely
-successful fit.
-
-A simplified flow is:
-
-```python
-def fit_transform(
-    self,
-    *,
-    features: TableTensor,
-    target: TableTensor,
-    related_tables: RelatedTables | None,
-    num_members: int,
-    generator: torch.Generator | None = None,
-) -> tuple[EnsembleTable, EnsembleTable, EnsembleRelatedTables | None]:
-    member_ids = tuple(range(num_members))
-    x = EnsembleTable.broadcast(features, member_ids=member_ids)
-    y = EnsembleTable.broadcast(target, member_ids=member_ids)
-
-    related_processors = (
-        {
-            name: copy.deepcopy(self.features)
-            for name in related_tables.tables
-        }
-        if related_tables is not None
-        else {}
-    )
-
-    x = self.features._fit_transform_ensemble(x, generator=generator)
-    y = self.target._fit_transform_ensemble(y, generator=generator)
-
-    related_outputs = {}
-    if related_tables is not None:
-        for name, table in related_tables.tables.items():
-            inp = EnsembleTable.broadcast(table, member_ids=member_ids)
-            related_outputs[name] = related_processors[
-                name
-            ]._fit_transform_ensemble(inp, generator=generator)
-
-    self._resolve_output_task(y)
-    self._related_features = related_processors
-    self._num_members = num_members
-    return x, y, _ensemble_related(related_tables, related_outputs)
-```
-
-This example shows ownership and data flow. The exact order of RNG-consuming
-operations remains an open decision.
-
-## Ensemble Containers
-
-```python
-@dataclass(frozen=True, repr=False)
-class EnsembleTable:
-    # Stable logical IDs. Subsets retain the original IDs.
-    member_ids: tuple[int, ...]
-    # Group i contains stack-compatible variants [V_i, ..., R, C_i].
-    variant_groups: tuple[TableTensor, ...]
-    # Position in member_ids -> (group index, variant index).
-    member_to_variant: tuple[tuple[int, int], ...]
-
-    @property
-    def num_members(self) -> int: ...
-
-    def __getitem__(self, member_id: int) -> TableTensor: ...
-
-    def select_members(
+class Recipe(torch.nn.Module):
+    def fit_transform(
         self,
-        member_ids: Sequence[int],
-    ) -> EnsembleTable: ...
-
-    @classmethod
-    def broadcast(
-        cls,
-        table: TableTensor,
+        features: TableTensor,
+        target: TableTensor,
+        related_tables: RelatedTables | None = None,
         *,
-        member_ids: Sequence[int],
-    ) -> EnsembleTable: ...
-
-    @classmethod
-    def merge_members(
-        cls,
-        parts: Sequence[EnsembleTable],
-        *,
-        member_ids: Sequence[int],
-    ) -> EnsembleTable: ...
-```
-
-The invariants are:
-
-- The container semantically represents member-ordered input `[E, ..., R, C]`;
-  this shape need not be physically materialized.
-- `member_ids` remain stable through `select_members`, preserving nested
-  `Choice`, round-robin, and RNG semantics.
-- A variant group has one shape, column schema and order, stypes, stype-local
-  dtypes, categorical metadata, and device.
-- Schema or column-count changes create separate groups.
-- Multiple members may reference the same physical variant.
-- The initial input contains one variant `[1, ..., R, C]` referenced by all
-  members.
-- `table[e]` resolves stable member ID `e` and returns a `TableTensor` view where
-  possible. Version 1 supports integer member IDs only.
-- `EnsembleTable` is not a `TableTensor` subclass. `batch` remains reserved for
-  real tensor batches or chunking.
-
-Related tables retain their graph metadata:
-
-```python
-@dataclass(frozen=True, repr=False)
-class EnsembleRelatedTables:
-    tables: Mapping[str, EnsembleTable]
-    relationships: tuple[Relationship, ...]
-    task_links: tuple[TaskLink, ...]
-
-    @property
-    def num_members(self) -> int: ...
-
-    def __getitem__(self, member: int) -> RelatedTables:
-        return RelatedTables(
-            tables={
-                name: table[member]
-                for name, table in self.tables.items()
-            },
-            relationships=self.relationships,
-            task_links=self.task_links,
-        )
-```
-
-All tables have the same logical member count. `related_tables[e]` returns
-normal `TableTensor` views, so the model API does not need to change.
-
-Version 1 executes an ensemble entirely on one device. The container does not
-encode transfer or placement semantics; `.to()`, `.device`, and multi-device
-placement require a separate design.
-
-## Processor Contract
-
-Standalone Processors retain their public `TableTensor` API. Internally, every
-Processor supports ensemble hooks; the normal case is one member with one
-variant:
-
-```python
-class Processor:
-    def _fit_transform_ensemble(
-        self,
-        table: EnsembleTable,
-        *,
+        num_members: int,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable: ...
+    ) -> tuple[EnsembleTable, EnsembleTable, EnsembleRelatedTables | None]: ...
 
-    def _transform_ensemble(
+    def transform(
         self,
-        table: EnsembleTable,
+        features: TableTensor,
+        related_tables: RelatedTables | None = None,
+    ) -> tuple[EnsembleTable, EnsembleRelatedTables | None]: ...
+
+    def transform_output(self, outputs: Sequence[TableTensor]) -> TableTensor: ...
+```
+
+The model passes `num_estimators` as `num_members`. `fit_transform` builds feature, target, and related-table state temporarily and installs it atomically. `transform` uses only this state. Recipe is copied neither per member nor externally per table.
+
+## EnsembleTable
+
+```python
+class EnsembleTable:
+    groups: tuple[TableTensor, ...]  # each [V_g, ..., R, C]
+    member_to_variant: tuple[tuple[int, int], ...]  # E -> (group, variant)
+
+    @classmethod
+    def from_shared(cls, table: TableTensor, *, num_members: int) -> EnsembleTable: ...
+
+    @classmethod
+    def pack(
+        cls,
+        variants: Sequence[TableTensor],
+        member_to_input_variant: tuple[int, ...],
     ) -> EnsembleTable: ...
 
+    @property
+    def num_members(self) -> int: ...
 
-class InvertibleMixin:
-    def _inverse_transform_ensemble(
-        self,
-        table: EnsembleTable,
-    ) -> EnsembleTable: ...
+    def __getitem__(self, member_id: int) -> TableTensor:
+        group, variant = self.member_to_variant[member_id]
+        return self.groups[group][variant]
+
+    def with_groups(self, groups: tuple[TableTensor, ...]) -> EnsembleTable: ...
 ```
 
-`_fit_transform_ensemble` registers fitted state on the invoked Processor
-instance. Transform and inverse operations use only this state and align it by
-logical member ID, not by physical group index. This is required for query reuse
-and target inversion because those inputs may be grouped differently from the
-fit input.
+- `member_to_variant` has length `E`; its position is the member ID and its value `(group, variant)` addresses one leading tensor position.
+- `from_shared(table, num_members=4)` creates `groups=(table[None],)` and `member_to_variant=((0,0),)*4`.
+- Equal references mean proven sharing. An Identity/Power Choice may produce `((0,0),(0,1),(0,0),(0,1))`.
+- References are local and contain no execution history. Branch selection and fitted-state alignment belong to the fitted Processors.
+- Every referenced variant exists and is used by at least one member. Content-equal tensors are not merged without shared provenance.
+- Within one group, shape, schema, stypes, block dtypes, and categorical metadata match. Groups may differ in these properties but remain on one device in version 1.
+- `EnsembleRelatedTables` maps each table name to an `EnsembleTable`; relationships and task links remain shared metadata.
 
-Every hook processes $E$ logical members and returns exactly one associated
-result per member:
+## Normal Processor
 
-- The base class executes unknown Processors independently per member.
-- `Choice` records one option per member, groups equal options, and executes
-  their branches.
-- Directly vectorizable leaves process distinct compatible variants as
-  `[V, ..., R, C]`.
-- Compatible branch outputs may stay stacked. Different schemas or metadata
-  create separate variant groups.
-- `EnsembleReduce` is the only operation that reduces the logical member
-  dimension.
+A normal `Processor` knows neither members nor variant groups. Its tensor blocks support `[R,C]`, `[V_g,R,C]`, and additional leading dimensions. In the worst case, the sum of all `V_g` equals `E`; with sharing it is smaller.
 
-`[E, ...]` is the required semantic contract; `[V, ...]` is an optional physical
-optimization. Requiring a dense `[E, ...]` tensor would materialize and recompute
-identical members and could not represent member-dependent column counts.
+The contract is strict:
 
-| Contract             | Semantics                                                                            | Current Processors                                                                                                                                                                                               |
-| -------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| base `Processor`     | Correct independent per-member fallback; no direct vectorization                     | `Callable`, unknown and external Processors                                                                                                                                                                      |
-| deterministic fit    | No RNG use; fit and execute every distinct input variant once                        | `CategoricalAlign`, `ConstantFilter`                                                                                                                                                                             |
-| vectorized variants  | Deterministic fit plus independent execution of compatible `[V, ..., R, C]` variants | Direct: `Identity`, `Clip`, `ToNumerical`, `EncodeDatetime`, `SoftmaxTemperature`; small axis changes: `MeanImpute`, `StandardScale`, `QuantileClip`, `SigmaClip`; full adaptation: `Power`, `CategoricalImpute` |
-| custom ensemble hook | Own member-specific RNG, split, merge, or metadata semantics                         | `Choice`, `FeaturePermute`, `CategoryShuffle`, `Quantile`                                                                                                                                                        |
-| composite Processor  | Delegate `EnsembleTable` to children and combine outputs                             | `Sequential`, `StypeDispatch`, `TaskDispatch`                                                                                                                                                                    |
-| aggregation boundary | Explicitly reduce the member dimension                                               | `EnsembleReduce`                                                                                                                                                                                                 |
+- Every leading position is processed independently and never aggregated with another.
+- Rows are axis `-2` and columns are axis `-1`; fit reduces only over `-2`.
+- Fitted state preserves leading dimensions, for example `mean: [V_g,1,C]`.
+- `transform` and `inverse_transform` do not mutate fitted state.
+- One invocation returns a dense output with compatible shape and identical metadata for every leading position.
+- Member-specific randomness, cross-variant side effects, and variant-dependent incompatible output schemas are not allowed.
 
-`Quantile` needs a custom hook for RNG-based subsampling. It may use the
-deterministic path when subsampling is inactive.
+An external Processor satisfies this contract or overrides internal ensemble execution; otherwise it is rejected. Unchecked callables are not wrapped automatically on the ensemble path.
 
-The stronger contracts are required for safe `[V, ...]` vectorization. A
-`supports_stacked_variants` flag cannot guarantee independent fitted state,
-safe reuse, or compatible output metadata. No generic column-changing or
-ensemble-stype mixin is needed:
-
-- `supported_stypes` continues to validate leaf inputs.
-- `StypeDispatch` owns route split and recombination.
-- Column changes may be schema-fixed (`ToNumerical`), fit-dependent
-  (`ConstantFilter`), or member-specific (`FeaturePermute`).
-- Outputs are regrouped from their complete resulting metadata.
-
-Equivalent members do not create duplicate state. For example, `MeanImpute`
-may process a compatible `[V, R, C]` group with one fitted instance and store
-means as `[V, 1, C]`. Incompatible groups require separate fitted states; their
-representation is an open implementation question.
-
-## Execution
-
-### Deterministic Leaves
-
-In the mean/variance case, `StandardScale` needs no custom ensemble hook. A
-vectorized-variant implementation passes each compatible physical group
-`[V, ..., R, C]` through the normal implementation and registers group-specific
-state:
+## Variant Groups and Packing
 
 ```python
-class StandardScale(VectorizedVariantsMixin, Processor, InvertibleMixin):
-    def _fit(self, table: TableTensor, *, generator=None) -> None:
-        values = table.numerical
-        self.mean = values.mean(dim=-2, keepdim=True)
-        var = values.var(dim=-2, correction=0, keepdim=True)
-        self.scale = _scale_from_variance(
-            var,
-            self.mean,
-            num_rows=values.size(-2),
-        )
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(
-            numerical=(table.numerical - self.mean) / self.scale,
-        )
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(
-            numerical=table.numerical * self.scale + self.mean,
-        )
+class _VariantGroupProcessor(torch.nn.Module):
+    def fit_transform(self, table: EnsembleTable, *, context: EnsembleFitContext) -> EnsembleTable:
+        self.processors = ModuleList(copy.deepcopy(self.template) for _ in table.groups)
+        groups = tuple(processor.fit_transform(group, generator=context.generator) for processor, group in zip(self.processors, table.groups))
+        return table.with_groups(groups)
 ```
 
-The state shape is `[1, C]` for a normal input and `[V, ..., 1, C]` for
-$V$ variants.
+`_VariantGroupProcessor` stores group order and one Processor instance per group. `transform` and inverse transform apply these instances in the same order; query may have a different row count. A Processor that creates variants calls `EnsembleTable.pack(...)`. `pack` stacks compatible unique results, forms separate groups for incompatible schemas, and creates `member_to_variant`. The producing Processor defines only the semantic mapping; the following wrapper does not repack.
 
-`ConstantFilter` instead uses the deterministic-fit contract. It executes
-different variants separately because their output schemas may differ:
+Normal built-ins such as `Identity`, `Clip`, `ToNumerical`, `EncodeDatetime`, `SoftmaxTemperature`, `MeanImpute`, `StandardScale`, `QuantileClip`, `SigmaClip`, `Power`, and `CategoricalImpute` are adapted to this contract.
 
-```python
-class DeterministicFitMixin:
-    def _fit_transform_ensemble(self, table, *, generator=None):
-        fitted_groups = []
-        parts = []
-        for variant in table.unique_variants():
-            fitted = self._new_unfitted_group_instance()
-            out = fitted.fit_transform(
-                table[variant.representative_member_id]
-            )
-            part = EnsembleTable.broadcast(
-                out,
-                member_ids=variant.member_ids,
-            )
-            fitted_groups.append((variant.member_ids, fitted))
-            parts.append(part)
+## Processors with Custom Ensemble Semantics
 
-        self._register_fitted_groups(fitted_groups)
-        return EnsembleTable.merge_members(
-            parts,
-            member_ids=table.member_ids,
-        )
-```
-
-A future specialization may compute masks jointly for `[V, C]`, but outputs
-with different masks still form separate groups.
-
-### Composite and Stochastic Processors
-
-`Sequential` passes `EnsembleTable` through its steps without Processor-specific
-knowledge:
-
-```python
-class Sequential(Processor, InvertibleMixin):
-    def _fit_transform_ensemble(self, table, *, generator=None):
-        out = table
-        for step in self:
-            out = step._fit_transform_ensemble(
-                out,
-                generator=generator,
-            )
-        return out
-
-    def _transform_ensemble(self, table):
-        out = table
-        for step in self:
-            out = step._transform_ensemble(out)
-        return out
-
-    def _inverse_transform_ensemble(self, table):
-        out = table
-        for step in reversed(self):
-            out = step._inverse_transform_ensemble(out)
-        return out
-```
-
-`Choice` implements the `[E, ...]` contract itself:
-
-```python
-class Choice(Processor, InvertibleMixin):
-    def _fit_transform_ensemble(self, table, *, generator=None):
-        selected = self._select_in_reference_order(
-            member_ids=table.member_ids,
-            generator=generator,
-        )
-        self._selected_by_member = dict(
-            zip(table.member_ids, selected)
-        )
-
-        parts = []
-        for option_index in dict.fromkeys(selected):
-            member_ids = tuple(
-                member_id
-                for member_id in table.member_ids
-                if self._selected_by_member[member_id] == option_index
-            )
-            parts.append(
-                self.options[
-                    option_index
-                ]._fit_transform_ensemble(
-                    table.select_members(member_ids),
-                    generator=generator,
-                )
-            )
-        return EnsembleTable.merge_members(
-            parts,
-            member_ids=table.member_ids,
-        )
-```
-
-Round-robin uses the stable original `member_id % num_options`. Compatible
-branch outputs are stacked; incompatible outputs remain in separate groups.
-
-`StypeDispatch` selects active stype columns for every variant group, delegates
-each route to its child Processor, retains passthrough columns according to
-`remainder`, and regroups the reconstructed member outputs.
-
-`FeaturePermute` creates one permutation per member and applies compatible
-permutations jointly with `gather`. Because one `TableTensor` has one column
-order across all leading dimensions, version 1 creates one group per distinct
-order. `CategoryShuffle` follows the same principle for category mappings.
-Query transform reuses stored mappings; inverse transform uses their inverses.
-
-### RFM
-
-- Task table, target, and every related table are separate fit scopes.
-- Every related table owns one feature-Processor copy for all members.
-- Deterministic prefixes and text or categorical encoders are shared within a
-  table.
-- Feature permutations remain table-local.
-- One estimator-owned RNG plan may derive stable substreams for table-local
-  stochastic work.
-- Ownership of feature-level `Choice` across tables remains unresolved. The
-  implementation must not encode repeated same-seed resets as the contract.
-- `relationships` and `task_links` remain shared graph metadata.
-- Cross-table fitted-state sharing is outside version 1.
-
-## Model, Target, and Output Integration
-
-Processing moves before the existing member loop:
-
-```python
-recipe = copy.deepcopy(recipe)
-x_context, y_context, related_context = recipe.fit_transform(...)
-x_query, related_query = recipe.transform(...)
-
-outs = [
-    self._forward(
-        x_context=x_context[e],
-        y_context=y_context[e],
-        x_query=x_query[e],
-        related_context_tables=(
-            related_context[e]
-            if related_context is not None
-            else None
-        ),
-        related_query_tables=(
-            related_query[e]
-            if related_query is not None
-            else None
-        ),
-        cache=member_caches[e] if member_caches else None,
-        generator=generator,
-        **kwargs,
-    )
-    for e in range(num_estimators)
-]
-return recipe.transform_output(outs)
-```
-
-- `_forward`, `ICLModel.forward`, `fit`, and `predict` remain publicly
-  unchanged.
-- `fit` stores one fitted Recipe and one model/KV cache per member.
-- `predict` transforms the complete query graph once, then selects member views.
-- Regression applies the member-aligned target
-  `_inverse_transform_ensemble`.
-- Classification aligns member-specific logit columns after `CategoryShuffle`
-  into one class space.
-- Outputs are then materialized exactly once in member order as
-  `[E, ..., R, O]` and passed through `recipe.output.transform`.
+- `ConstantFilter` and `CategoricalAlign` need semantics for differing fitted output schemas when one input group contains multiple variants.
+- `Choice` stores one option per member, computes each unique branch variant once, and calls `pack` for branch outputs in original member order. Round-robin uses `member_id % num_options`.
+- `FeaturePermute` and `CategoryShuffle` store member-specific mappings, create unique outputs, and call `pack` for compatible results.
+- `Quantile` owns its RNG and variant semantics when sampling.
+- `Sequential`, `StypeDispatch`, and `TaskDispatch` delegate recursively to their children; Recipe contains no Processor-specific branches.
 - Only `EnsembleReduce` may aggregate members.
 
-## Implementation Order
+## Minimal Execution
 
-1. Add `EnsembleTable`, `EnsembleRelatedTables`, internal hooks, and the correct
-   per-member fallback.
-2. Add Recipe, `Sequential`, simple deterministic leaves, `Choice`, `Power`,
-   `FeaturePermute`, and the target/output path needed by TabICLv2.
-3. Demonstrate strict TabICLv2 parity and benchmark the target workload.
-4. Add remaining built-in Processors, `StypeDispatch`, and RFM related tables.
-5. Specify cross-table scheduling, multi-device placement, or models consuming
-   grouped inputs directly only after need is demonstrated.
+For eight members and `ConstantFilter → StandardScale → Choice(Identity, Power) → FeaturePermute → Clip`:
 
-The smallest maintainable end-to-end slice is therefore the generic container
-and Processor contract plus the hooks needed for TabICLv2, not a
-`Power`-specific cache.
+1. Recipe starts with one group `[V_0=1,N,D]` and `member_to_variant=((0,0),)*8`.
+2. `ConstantFilter` and `StandardScale` each fit the shared prefix once.
+3. `Choice` creates two branch outputs for four Identity and four Power members; `pack` forms one group `[V_0=2,N,D]`, and `Power` fits once.
+4. The following normal Processor wrapper owns one instance and processes `[V_0=2,N,D]` directly.
+5. `FeaturePermute` creates only unique branch/permutation combinations and packs compatible outputs; the `Clip` wrapper processes each resulting group directly.
+6. Query transform repeats the same variant path using stored states and decisions.
 
-## Validation
+`Recipe.transform_output` applies the fitted target inverse for regression and class alignment for classification per member; TabICLv2 has no manual special path. Materialization in member order occurs only before model or output operations requiring a dense tensor. For RFM, the task table, target, and every related table own separate fitted Processor trees. Sharing occurs between members within one table, not between tables.
 
-Parity coverage must include:
+## Implementation and Acceptance
 
-- shared deterministic prefixes and suffixes;
-- random and round-robin `Choice`;
-- `StypeDispatch`, column-count changes, and member-specific permutations;
-- query-state reuse, regression inverse transform, and class alignment;
-- `EnsembleReduce`;
-- RFM with multiple tables;
-- unknown Processor fallback;
-- negative contract tests: no sharing without opt-in, no RNG use by the
-  deterministic-fit contract, and equality of vectorized variants with
-  independent execution within the agreed tolerance.
+1. Choose the RNG contract: current-main draw order or stable streams per `(member, table_scope, processor_path)`.
+2. Implement `EnsembleTable.pack`, `_VariantGroupProcessor`, and atomic Recipe fit.
+3. Assign every built-in to the normal or custom ensemble contract; provide no silent fallback.
+4. Add `Choice`, permutations, dispatch, target inversion, output alignment, and RFM.
+5. Test parity for context, query, fitted state, raw member outputs, RNG, and dtype-specific tolerances.
+6. Profile CUDA stacking copies, kernel launches, synchronization, and peak memory.
 
-The GPU benchmark must:
+Target workload: 40k context rows, 10k query rows, 100 features, and eight members with four Power and four Identity variants. Strict-parity Recipe processing should move from approximately `0.46–0.47 s` toward `0.19–0.20 s`. Measure preprocessing and the complete model path separately until a shared end-to-end target is defined.
 
-- compare current main, sharing without vectorization, direct variant execution,
-  and the fastest valid baseline;
-- use 40k context rows, 10k query rows, 100 features, and eight members split
-  into four `Power` and four `Identity` variants;
-- measure the complete target path, including processing, member
-  materialization, model call, and output processing;
-- use GPU-resident inputs, warm-up, CUDA events, and explicit synchronization;
-- report median, p95, kernel time, transfers, synchronization, peak memory, and
-  throughput;
-- remeasure both the previous 0.46–0.47 second result and the 0.19–0.20 second
-  target using the same boundary.
+## Open Questions
 
-## Hard Boundaries
-
-- Processors preserve row count; context and query may have different row
-  counts.
-- Randomness occurs only during `fit`; `transform` does not mutate state.
-- No state is reused across tables, devices, or non-equivalent fit scopes.
-- No implicit CPU fallback, transfer, or content hashing.
-- Variants may be preserved or split; only `EnsembleReduce` aggregates members.
-- Version 1 excludes row-count changes, multi-GPU execution, and cross-table
-  fitted-state sharing.
-
-## Open Implementation Questions
-
-- **I1 — Fitted groups:** Should incompatible states be represented as normal
-  child Processors or in a generic serializable state container?
-- **I2 — RNG plan:** How is reference draw order preserved for nested and
-  data-dependent randomness? For RFM, is feature-level `Choice` owned by the
-  estimator or by each table fit scope?
-- **I3 — Group operations:** Which private select, merge, regroup, and
-  member-state alignment helpers are needed by composite Processors, query
-  transform, and target inverse transform?
-- **I4 — State lifecycle:** How do ensemble-aware states behave on refit,
-  deep-copy, serialization, freeze, and a future `.to()`?
-- **I5 — Vectorization threshold:** At what variant or table size does joint
-  execution outperform separate execution?
-
-## Alternative: Recipe-Owned Fitted Nodes
-
-A Recipe-owned `_FittedNode` could return a separate state tree containing
-child nodes and member mappings alongside each output. This makes state
-ownership explicit but introduces a second execution representation parallel
-to the Processor tree. The recommended Processor-owned design keeps fit,
-transform, inverse transform, deep-copy, and serialization semantics in the
-existing abstraction. Reconsider `_FittedNode` only if Processor-owned grouped
-state proves unmanageable during implementation.
+- RNG: legacy draw parity or separate member-scope streams.
+- Serialization of fitted Processor states and member-specific decisions.
+- Fit-dependent schema splits within one group: a custom ensemble Processor or a per-variant fitting wrapper followed by `pack`, especially for `ConstantFilter` and `CategoricalAlign`.
+- `Sequential` contract: ensemble-aware composition over `EnsembleTable` only, or also direct execution as a normal Processor on one `TableTensor`; Recipe keeps exactly one canonical execution path either way.
+- A shared acceptance boundary for preprocessing and the complete model path.

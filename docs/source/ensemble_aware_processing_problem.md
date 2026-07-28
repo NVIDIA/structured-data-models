@@ -187,10 +187,10 @@ compatible operations across tables does not require an API change.
   row-count-changing Processors are out of scope.
 - Fitted states and intermediate results are not shared across logical tables
   in version 1.
-- Unknown Processors fall back correctly to current per-member execution.
-- Built-in row-preserving Processors receive an explicit ensemble-aware path
-  where semantics permit sharing or vectorization. Otherwise, they execute once
-  per distinct variant.
+- Every supported row-preserving Processor either processes leading dimensions
+  independently or implements its own ensemble contract for structural or
+  stochastic behavior. There is no implicit per-member fallback.
+- External Processors that satisfy neither contract are rejected.
 - Strict TabICLv2 parity must be demonstrated for forward and `fit`/`predict`.
 - Target workload: 40k context rows, 10k query rows, 100 features, and eight
   members split into four `Power` and four `Identity` variants.
