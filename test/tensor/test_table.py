@@ -7,6 +7,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,

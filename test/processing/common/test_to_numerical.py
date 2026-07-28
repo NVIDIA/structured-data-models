@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,

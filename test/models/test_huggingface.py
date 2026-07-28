@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from huggingface_hub.utils import LocalEntryNotFoundError
+
 from sdm.models import _huggingface
 
 

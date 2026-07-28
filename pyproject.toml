@@ -166,6 +166,9 @@ ignore = [
     "RUF022",  # Ignore sorting __all__; order controls public docs.
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["sdm"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 

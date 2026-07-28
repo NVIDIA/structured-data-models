@@ -3,6 +3,7 @@ from typing import Any, cast
 
 import pandas as pd
 import pytest
+
 from sdm import RelationalData, Stype, TableTensor
 from sdm.relational.sampler import EXAMPLE_ID, RelationalSamplerOutput
 from sdm.testing import onlyCUDA

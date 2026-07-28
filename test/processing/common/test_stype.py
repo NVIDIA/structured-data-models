@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import (
     Identity,

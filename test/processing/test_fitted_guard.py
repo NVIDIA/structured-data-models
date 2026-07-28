@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,

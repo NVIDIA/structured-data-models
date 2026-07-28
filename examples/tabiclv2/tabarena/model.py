@@ -9,10 +9,11 @@ import pandas as pd
 import torch
 from autogluon.core.data.label_cleaner import LabelCleaner
 from autogluon.core.metrics import Scorer
-from sdm import Stype, TableTensor, infer_stypes
-from sdm.models import TabICLv2
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 from tabarena.benchmark.task.metadata import ValidationMetadata
+
+from sdm import Stype, TableTensor, infer_stypes
+from sdm.models import TabICLv2
 
 
 class SDMTabICLv2System(ExternalSystemModel):

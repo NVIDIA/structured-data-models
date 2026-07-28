@@ -2,6 +2,7 @@ from textwrap import dedent
 
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     Identity,
