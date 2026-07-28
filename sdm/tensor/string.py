@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
 import math
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -10,6 +11,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self, override
 
+from sdm._warnings import warn_once
 from sdm.tensor import VarLenTensor
 from sdm.tensor.io import arrow_as_tensor
 
@@ -81,7 +83,7 @@ class StringTensor(VarLenTensor):
             )
 
         if array.null_count > 0:
-            raise ValueError(f"'{cls.__name__}' cannot represent null values")
+            raise ValueError(f"{cls.__name__!r} cannot represent null values")
 
         buffers = array.buffers()
 
@@ -180,7 +182,7 @@ class StringTensor(VarLenTensor):
         # character/offset buffers plus a row offset into the offsets.
         column, _ = ser.to_pylibcudf()
         if column.null_count() > 0:
-            raise ValueError(f"'{cls.__name__}' cannot represent null values")
+            raise ValueError(f"{cls.__name__!r} cannot represent null values")
 
         # `None` or zero-length when the column holds no characters:
         chars = column.data()
@@ -254,7 +256,7 @@ class StringTensor(VarLenTensor):
                 array.append(seq)
                 return ()
             if not isinstance(seq, Sequence):
-                raise TypeError(f"'{cls.__name__}' data must contain strings")
+                raise TypeError(f"{cls.__name__!r} data must contain strings")
             if len(seq) == 0:
                 return (0,)
 
@@ -269,7 +271,7 @@ class StringTensor(VarLenTensor):
                     child_size = item_size
                 elif item_size != child_size:
                     raise ValueError(
-                        f"'{cls.__name__}' data must be rectangular"
+                        f"{cls.__name__!r} data must be rectangular"
                     )
 
             assert child_size is not None
@@ -327,13 +329,33 @@ def _sort(
     if inp.dim() != 1:
         raise NotImplementedError("'sort' only supports one-dimensional input")
 
-    out = pc.call_function(  # TODO Add GPU implementation
-        "array_sort_indices",
-        [inp.to_arrow()],
-        options=pc.ArraySortOptions(
-            order="descending" if descending else "ascending",
-        ),
-    )
-    perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
+    backend: Literal["arrow", "cudf"] = "arrow"
+    if inp.is_cuda:
+        if importlib.util.find_spec("cudf") is not None:
+            backend = "cudf"
+        else:
+            warn_once(
+                key="missing-cudf-sort",
+                message=(
+                    "Falling back to a CPU-based sort because cuDF is not "
+                    "installed. Install cuDF to enable faster CUDA-based "
+                    "sorting without device synchronization."
+                ),
+            )
+
+    if backend == "arrow":
+        out = pc.call_function(
+            "array_sort_indices",
+            [inp.to_arrow()],
+            options=pc.ArraySortOptions(
+                order="descending" if descending else "ascending",
+            ),
+        )
+        perm = arrow_as_tensor(out, dtype=torch.int64, device=inp.device)
+    else:
+        assert backend == "cudf"
+        with torch.cuda.device(inp.device):
+            perm_ser = inp.to_cudf().argsort(ascending=not descending)
+            perm = torch.from_dlpack(perm_ser.astype("int64").to_cupy())
 
     return cast(StringTensor, inp[perm]), perm

@@ -3,9 +3,10 @@ from typing import cast
 import pyarrow as pa
 import pytest
 import torch
+from torch import Tensor
+
 from sdm import VarLenTensor
 from sdm.testing import onlyCUDA
-from torch import Tensor
 
 
 def test_dtype_conversion() -> None:

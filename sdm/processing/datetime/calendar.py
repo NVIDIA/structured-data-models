@@ -71,8 +71,8 @@ class AddCalendarFields(Processor):
                         outs.append(day - 1)
             else:
                 raise ValueError(
-                    f"'{self.__class__.__name__}' received unsupported "
-                    f"field '{field}'"
+                    f"{self.__class__.__name__!r} received unsupported "
+                    f"field {field!r}"
                 )
 
         out = torch.stack(outs, dim=-1).to(table.numerical.dtype)
@@ -94,7 +94,7 @@ class AddCalendarFields(Processor):
 
     def __repr__(self, *, indent: int = 0) -> str:
         field_repr = "".join(
-            f"{' ' * (indent + 2)}'{field}',\n" for field in self.fields
+            f"{' ' * (indent + 2)}{field!r},\n" for field in self.fields
         )
         return (
             f"{' ' * indent}{self.__class__.__name__}([\n"

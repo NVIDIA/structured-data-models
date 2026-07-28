@@ -24,7 +24,7 @@ def default_recipe() -> Recipe:  # noqa: D103
         features=[
             StypeDispatch(
                 categorical=[
-                    AlignCategories(),
+                    AlignCategories(sort_by="value"),
                     ToNumerical(),
                 ],
             ),
