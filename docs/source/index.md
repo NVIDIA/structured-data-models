@@ -12,7 +12,8 @@ install
 :maxdepth: 1
 
 recipe
-ensemble_aware_processing
+ensemble_aware_processing_problem
+ensemble_aware_processing_design
 ```
 
 ```{toctree}
