@@ -62,6 +62,8 @@ class LLMTextEmbed(Processor):
     ) -> None:
         super().__init__()
         self._embedder = embedder
+        if dtype is not None and not dtype.is_floating_point:
+            raise ValueError(f"`dtype` must be floating-point (got {dtype}).")
         self._dtype = dtype
 
     @property
