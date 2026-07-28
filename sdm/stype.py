@@ -77,8 +77,8 @@ def infer_stypes(
         table: A :class:`pandas.DataFrame`, :class:`pyarrow.Table`, or
             :class:`cudf.DataFrame`.
         overrides: Optional semantic type overrides by column name.
-        allow_text: Whether string columns may be inferred as
-            :attr:`Stype.text`. Callers should trim ``table`` to a
+        allow_text: Whether to enable experimental inference of string
+            columns as :attr:`Stype.text`. Callers should trim ``table`` to a
             representative subset before enabling text inference, which
             requires at least 10 unique string values, a unique value ratio
             greater than 0.01, and an average of at least 3 words per unique
@@ -88,20 +88,18 @@ def infer_stypes(
         Dictionary mapping column names to inferred semantic type.
     """
     overrides = overrides or {}
+
+    schema: pa.Schema | None = None
     if importlib.util.find_spec("pandas") is not None:
         import pandas as pd
 
         if isinstance(table, pd.DataFrame):
+            # NOTE: Only text stype inference currently requires column data.
             if allow_text:
-                table = pa.Table.from_pandas(
-                    table,
-                    preserve_index=False,
-                )
+                table = pa.Table.from_pandas(table, preserve_index=False)
+                schema = table.schema
             else:
-                table = pa.Schema.from_pandas(
-                    table,
-                    preserve_index=False,
-                )
+                schema = pa.Schema.from_pandas(table, preserve_index=False)
 
     if importlib.util.find_spec("cudf") is not None:
         import cudf
@@ -113,25 +111,27 @@ def infer_stypes(
                 else _infer_cudf_stype(
                     column,
                     dtype,
-                    table if allow_text else None,
+                    table[column] if allow_text else None,
                 )
                 for column, dtype in table.dtypes.items()
             }
 
-    if not isinstance(table, (pa.Schema, pa.Table)):
+    if isinstance(table, pa.Table):
+        schema = table.schema
+
+    if schema is None:
         raise TypeError(
             f"Expected input to be a 'pandas.DataFrame', 'pyarrow.Table', "
             f"or 'cudf.DataFrame' (got '{type(table).__name__}')"
         )
 
-    schema = table.schema if isinstance(table, pa.Table) else table
     return {
         field.name: Stype(overrides[field.name])
         if field.name in overrides
         else _infer_arrow_stype(
             field.name,
             field.type,
-            table if allow_text and isinstance(table, pa.Table) else None,
+            table[field.name] if allow_text else None,
         )
         for field in schema
     }
@@ -140,7 +140,7 @@ def infer_stypes(
 def _infer_arrow_stype(
     name: str,
     dtype: pa.DataType,
-    table: pa.Table | None = None,
+    column: pa.ChunkedArray | None = None,
 ) -> Stype:
     if (
         pa.types.is_integer(dtype)
@@ -157,7 +157,7 @@ def _infer_arrow_stype(
         return Stype.numerical
 
     if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
-        if table is not None and _is_text_stype_arrow(name, table):
+        if column is not None and _is_text_stype_arrow(column):
             return Stype.text
         return Stype.categorical
 
@@ -173,7 +173,7 @@ def _infer_arrow_stype(
 def _infer_cudf_stype(
     name: str,
     dtype: Any,
-    table: cudf.DataFrame | None = None,
+    column: cudf.Series | None = None,
 ) -> Stype:
     import cudf
     from cudf.api.types import (
@@ -201,7 +201,7 @@ def _infer_cudf_stype(
         return Stype.categorical
 
     if is_string_dtype(dtype):
-        if table is not None and _is_text_stype_cudf(name, table):
+        if column is not None and _is_text_stype_cudf(column):
             return Stype.text
         return Stype.categorical
 
@@ -215,9 +215,7 @@ def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
 
 
-def _is_text_stype_arrow(name: str, table: pa.Table) -> bool:
-    column = table[name]
-
+def _is_text_stype_arrow(column: pa.ChunkedArray) -> bool:
     num_values = len(column) - column.null_count
     if num_values == 0:
         return False
@@ -240,8 +238,7 @@ def _is_text_stype_arrow(name: str, table: pa.Table) -> bool:
     return avg_words >= _TEXT_MIN_AVERAGE_WORD_COUNT
 
 
-def _is_text_stype_cudf(name: str, table: cudf.DataFrame) -> bool:
-    column = table[name]
+def _is_text_stype_cudf(column: cudf.Series) -> bool:
     num_values = column.count()
 
     if num_values == 0:
