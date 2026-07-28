@@ -39,7 +39,7 @@ _TEST_DTYPE_SAMPLE_DATA = {
     "created_at": ["2026-01-01", "2026-01-02"],
 }
 
-_TEST_REVIEW_SAMPLE_DATA = {
+_TEST_REVIEW_DATA = {
     "review": [
         f"review sentence number {i} with enough words" for i in range(10)
     ],
@@ -48,7 +48,7 @@ _TEST_REVIEW_SAMPLE_DATA = {
 
 # ``repeated`` holds too few distinct values, ``varied`` has enough distinct
 # values and a unique ratio above 0.01:
-_TEST_CARDINALITY_SAMPLE_DATA = {
+_TEST_CARDINALITY_DATA = {
     "repeated": ["the product broke after one week of use"] * 100,
     "varied": [
         f"review sentence number {i} with enough words" for i in range(10)
@@ -204,26 +204,26 @@ def _string_table(
 def text_table(
     request: pytest.FixtureRequest,
 ) -> pa.Table | pd.DataFrame | cudf.DataFrame:
-    return _string_table(request.param, _TEST_REVIEW_SAMPLE_DATA)
+    return _string_table(request.param, _TEST_REVIEW_DATA)
 
 
 @pytest.fixture(params=_BACKENDS)
 def cardinality_table(
     request: pytest.FixtureRequest,
 ) -> pa.Table | pd.DataFrame | cudf.DataFrame:
-    return _string_table(request.param, _TEST_CARDINALITY_SAMPLE_DATA)
+    return _string_table(request.param, _TEST_CARDINALITY_DATA)
 
 
 def test_text_detection(
     text_table: pa.Table | pd.DataFrame | cudf.DataFrame,
 ) -> None:
-    assert infer_stypes(text_table, text_sample_table=text_table) == {
+    assert infer_stypes(text_table, allow_text=True) == {
         "review": Stype.text,
         "color": Stype.categorical,
     }
 
 
-def test_text_not_inferred_without_sample_table(
+def test_text_not_inferred_by_default(
     text_table: pa.Table | pd.DataFrame | cudf.DataFrame,
 ) -> None:
     assert infer_stypes(text_table) == {
@@ -235,10 +235,7 @@ def test_text_not_inferred_without_sample_table(
 def test_text_not_inferred_below_unique_ratio(
     cardinality_table: pa.Table | pd.DataFrame | cudf.DataFrame,
 ) -> None:
-    assert infer_stypes(
-        cardinality_table,
-        text_sample_table=cardinality_table,
-    ) == {
+    assert infer_stypes(cardinality_table, allow_text=True) == {
         "repeated": Stype.categorical,
         "varied": Stype.text,
     }
@@ -255,6 +252,6 @@ def test_text_not_inferred_below_min_unique_values() -> None:
         }
     )
 
-    assert infer_stypes(table, text_sample_table=table) == {
+    assert infer_stypes(table, allow_text=True) == {
         "status": Stype.categorical,
     }
