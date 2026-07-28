@@ -16,8 +16,7 @@ Axes:
   the difference is the cost this inference path adds.
 * ``profile``: the column shape, since the heuristic keys off unique ratio
   and word count rather than row count alone.
-* ``rows``: straddles the 10,000 row sampling threshold in ``infer_stypes``;
-  below it the full column is inspected, above it only the sample is.
+* ``rows``: scales the caller-provided sample table used for text inference.
 * ``cols``: scales the per-column device synchronizations on cuDF.
 """
 
@@ -29,7 +28,7 @@ from typing import Any
 
 import pyarrow as pa
 import torch
-from sdm import Stype, infer_stypes
+from sdm import infer_stypes
 
 BACKENDS = ["arrow", "pandas", "cudf"]
 ROW_COUNTS = [1_000, 100_000]
@@ -71,10 +70,7 @@ PROFILES: dict[str, Callable[[int, int], list[Any]]] = {
     "mixed": _mixed,
 }
 
-MODES: dict[str, set[Stype] | None] = {
-    "text": {Stype.text},
-    "baseline": None,
-}
+MODES = ("text", "baseline")
 
 
 def _sync(backend: str) -> None:
@@ -108,10 +104,15 @@ def _table(
     return cudf.DataFrame(data)
 
 
-def _peak_mebibytes(table: Any, allowed_stypes: set[Stype] | None) -> float:
+def _infer(table: Any, mode: str) -> None:
+    text_sample_table = table if mode == "text" else None
+    infer_stypes(table, text_sample_table=text_sample_table)
+
+
+def _peak_mebibytes(table: Any, mode: str) -> float:
     # Host allocations only; device memory is invisible to tracemalloc.
     tracemalloc.start()
-    infer_stypes(table, allowed_stypes=allowed_stypes, seed=0)
+    _infer(table=table, mode=mode)
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
@@ -120,7 +121,7 @@ def _peak_mebibytes(table: Any, allowed_stypes: set[Stype] | None) -> float:
 
 def bench(backend: str, repeats: int) -> None:
     for profile in PROFILES:
-        for mode, allowed_stypes in MODES.items():
+        for mode in MODES:
             for num_rows in ROW_COUNTS:
                 for num_columns in COLUMN_COUNTS:
                     # Table construction is excluded: for cuDF it is a
@@ -133,21 +134,13 @@ def bench(backend: str, repeats: int) -> None:
                     )
 
                     # Warm up CUDA context creation and kernel loading:
-                    infer_stypes(
-                        table,
-                        allowed_stypes=allowed_stypes,
-                        seed=0,
-                    )
+                    _infer(table=table, mode=mode)
                     _sync(backend)
 
                     times = []
                     for _ in range(repeats):
                         start = time.perf_counter()
-                        infer_stypes(
-                            table,
-                            allowed_stypes=allowed_stypes,
-                            seed=0,
-                        )
+                        _infer(table=table, mode=mode)
                         _sync(backend)
                         times.append(time.perf_counter() - start)
 
@@ -156,7 +149,7 @@ def bench(backend: str, repeats: int) -> None:
                     p90 = times[int(0.9 * (len(times) - 1))]
                     peak = _peak_mebibytes(
                         table=table,
-                        allowed_stypes=allowed_stypes,
+                        mode=mode,
                     )
 
                     print(
