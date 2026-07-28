@@ -11,7 +11,7 @@ class PCA(Processor):
 
     The mean and components are fitted on the context table via a singular
     value decomposition of the centered data. The effective dimension is
-    capped at ``min(dim, num_rows, num_features)``. Output columns are named
+    capped at the numerical rank of the centered data. Output columns are named
     ``pca_0, ..., pca_{d-1}``.
 
     Args:
@@ -45,8 +45,17 @@ class PCA(Processor):
         self.mean = numerical.mean(dim=0)
         centered = numerical - self.mean
         # Economy SVD; right-singular vectors are the principal axes.
-        _, _, vh = torch.linalg.svd(centered, full_matrices=False)
-        dim = min(self.dim, vh.size(0))
+        _, singular_values, vh = torch.linalg.svd(
+            centered,
+            full_matrices=False,
+        )
+        tolerance = (
+            singular_values.max()
+            * max(centered.shape)
+            * torch.finfo(singular_values.dtype).eps
+        )
+        rank = int((singular_values > tolerance).sum())
+        dim = min(self.dim, rank)
         self.components = vh[:dim].T  # [F, dim]
 
     def _transform(self, table: TableTensor) -> TableTensor:

@@ -14,9 +14,21 @@ def _table(data: torch.Tensor) -> TableTensor:
     )
 
 
+def _full_rank_data(num_rows: int, num_columns: int) -> torch.Tensor:
+    steps = torch.linspace(
+        -1,
+        1,
+        steps=num_rows,
+        dtype=torch.get_default_dtype(),
+    )
+    return torch.stack(
+        [steps.pow(i + 1) for i in range(num_columns)],
+        dim=-1,
+    )
+
+
 def test_pca_projects_to_requested_dim() -> None:
-    torch.manual_seed(0)
-    table = _table(torch.randn(20, 5))
+    table = _table(_full_rank_data(20, 5))
 
     output = PCA(dim=2).fit_transform(table)
 
@@ -35,21 +47,35 @@ def test_pca_recovers_dominant_direction() -> None:
     assert torch.allclose(output.numerical.abs().squeeze(1), centered_norm)
 
 
-def test_pca_caps_dim_at_data_rank() -> None:
-    torch.manual_seed(0)
-    table = _table(torch.randn(20, 3))
+def test_pca_caps_dim_at_feature_count() -> None:
+    table = _table(_full_rank_data(20, 3))
 
     output = PCA(dim=99).fit_transform(table)
 
     assert output.numerical.size() == (20, 3)
 
 
-def test_pca_transform_uses_fitted_state() -> None:
-    torch.manual_seed(0)
-    pca = PCA(dim=2)
-    pca.fit(_table(torch.randn(20, 4)))
+def test_pca_caps_dim_at_centered_rank() -> None:
+    table = _table(
+        torch.tensor(
+            [
+                [1.0, 1.0],
+                [2.0, 2.0],
+            ],
+        )
+    )
 
-    new = _table(torch.randn(5, 4))
+    output = PCA(dim=2).fit_transform(table)
+
+    assert output.numerical.size() == (2, 1)
+    assert output.columns[Stype.numerical] == ("pca_0",)
+
+
+def test_pca_transform_uses_fitted_state() -> None:
+    pca = PCA(dim=2)
+    pca.fit(_table(_full_rank_data(20, 4)))
+
+    new = _table(torch.arange(20, dtype=torch.get_default_dtype()).view(5, 4))
     output1 = pca.transform(new)
     output2 = pca.transform(new)
 
@@ -58,7 +84,11 @@ def test_pca_transform_uses_fitted_state() -> None:
 
 def test_pca_requires_fit() -> None:
     with pytest.raises(RuntimeError, match="not fitted"):
-        PCA(dim=2).transform(_table(torch.randn(4, 3)))
+        PCA(dim=2).transform(
+            _table(
+                torch.arange(12, dtype=torch.get_default_dtype()).view(4, 3)
+            )
+        )
 
 
 def test_pca_rejects_non_positive_dim() -> None:

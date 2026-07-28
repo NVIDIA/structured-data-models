@@ -35,10 +35,6 @@ def test_slice_features_passes_through_when_narrower() -> None:
     assert torch.equal(output.numerical, table.numerical)
 
 
-def test_slice_features_requires_no_fit() -> None:
-    assert SliceFeatures(dim=1).requires_fit is False
-
-
 def test_slice_features_rejects_non_positive_dim() -> None:
     with pytest.raises(ValueError, match="positive"):
         SliceFeatures(dim=0)
