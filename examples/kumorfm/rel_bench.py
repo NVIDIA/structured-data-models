@@ -5,11 +5,8 @@ import pandas as pd
 import relbench
 import sdm
 import torch
-from relbench.datasets import get_dataset
-from relbench.tasks import get_task
-from torchmetrics.classification import BinaryAUROC
-from torchmetrics.regression import MeanAbsoluteError
-from tqdm import tqdm
+import torchmetrics
+import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
@@ -23,7 +20,8 @@ torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Collect Relational Data #####################################################
-db = get_dataset(args.dataset, download=True).get_db(upto_test_timestamp=False)
+dataset = relbench.datasets.get_dataset(args.dataset, download=True)
+db = dataset.get_db(upto_test_timestamp=False)
 data = sdm.RelationalData(
     tables={
         name: sdm.TableTensor.from_pandas(
@@ -60,7 +58,7 @@ sampler = data.sampler(
 )
 
 # Collect Task Table ##########################################################
-task = get_task(args.dataset, args.task, download=True)
+task = relbench.tasks.get_task(args.dataset, args.task, download=True)
 dfs = [
     task.get_table(split, mask_input_cols=False).df
     for split in ["train", "val", "test"]
@@ -99,10 +97,10 @@ model.fit(
 )
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
-    metric = MeanAbsoluteError().to(device)
+    metric = torchmetrics.regression.MeanAbsoluteError().to(device)
 else:
-    metric = BinaryAUROC().to(device)
-for batch in tqdm(query.split(args.batch_size)):
+    metric = torchmetrics.classification.BinaryAUROC().to(device)
+for batch in tqdm.tqdm(query.split(args.batch_size)):
     x_query = batch.drop_columns(task.target_col)
     y_query = batch[task.target_col].to(device)
     out = model.predict(*sampler(x_query, **kwargs).to(device))
