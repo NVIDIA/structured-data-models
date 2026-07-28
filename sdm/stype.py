@@ -156,12 +156,12 @@ def _infer_arrow_stype(
     ):
         return Stype.numerical
 
+    if pa.types.is_boolean(dtype) or pa.types.is_dictionary(dtype):
+        return Stype.categorical
+
     if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
         if column is not None and _is_text_stype_arrow(column):
             return Stype.text
-        return Stype.categorical
-
-    if pa.types.is_boolean(dtype) or pa.types.is_dictionary(dtype):
         return Stype.categorical
 
     if pa.types.is_timestamp(dtype) or pa.types.is_date(dtype):
