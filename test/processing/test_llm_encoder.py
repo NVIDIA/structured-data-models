@@ -61,7 +61,7 @@ def test_llm_encoder_embeds_each_text_column() -> None:
 
 
 def test_llm_encoder_rejects_wrong_encode_shape() -> None:
-    with pytest.raises(ValueError, match="dim"):
+    with pytest.raises(ValueError, match="Expected 'encode'"):
         LLMEncoder(_WrongShapeEmbedder()).transform(_text_table())
 
 
