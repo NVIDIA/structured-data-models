@@ -2,7 +2,7 @@ r"""Run TabICLv2 on TabArena.
 
 $ uv run --group example-tabarena python examples/tabiclv2/tabarena/main.py
 
-The output directory must be empty.
+Completed jobs in the output directory are reused.
 """
 
 from __future__ import annotations
@@ -15,10 +15,6 @@ from tabarena.contexts import TabArenaContext
 from tabarena.utils.config_utils import SystemConfigGenerator
 
 result_dir = Path(__file__).parent.parent / "tabarena_out" / "TabICLv2"
-if result_dir.exists() and any(result_dir.iterdir()):
-    raise FileExistsError(
-        f"Result directory {result_dir} is non-empty. Choose a fresh path."
-    )
 result_dir.mkdir(parents=True, exist_ok=True)
 
 generator = SystemConfigGenerator(

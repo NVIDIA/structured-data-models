@@ -118,7 +118,6 @@ class SDMTabICLv2System(ExternalSystemModel):
             index=X.index,
             columns=np.asarray(labels, dtype=object),
         )
-        return probabilities.loc[
-            :,
-            pd.Index(tuple(self._class_labels_by_key.values())),
-        ]
+        return probabilities.reindex(
+            columns=tuple(self._class_labels_by_key.values()),
+        )
