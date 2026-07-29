@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
 from sdm.testing import onlyCUDA
@@ -156,6 +157,17 @@ def test_tfidf_encoder_unfitted_state_dict_round_trip() -> None:
 
     with pytest.raises(RuntimeError, match="not fitted"):
         restored.transform(_text_table(["a"]))
+
+
+def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
+    restored = TfidfTextEmbed(ngram_range=(2, 2))
+    restored.fit(_text_table(["hello world"], ["cat dog"]))
+
+    encoder = TfidfTextEmbed(ngram_range=(2, 2))
+    encoder.fit(_text_table(["hello world"]))
+    restored.load_state_dict(encoder.state_dict(), strict=False)
+
+    assert sorted(restored._buffers) == ["idf_0"]
 
 
 def test_tfidf_encoder_to_moves_fitted_state() -> None:

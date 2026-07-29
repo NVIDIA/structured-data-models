@@ -5,20 +5,21 @@ from typing import Any, cast
 import pyarrow as pa
 import pyarrow.compute as pc
 import torch
+from torch import Tensor
+from torch.utils.dlpack import from_dlpack
+
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
-from torch import Tensor
-from torch.utils.dlpack import from_dlpack
 
 
 class TfidfTextEmbed(Processor):
     r"""Encode text columns as character n-gram TF-IDF vectors.
 
-    Each text column is tokenized into word-boundary character n-grams (see
-    :meth:`character_ngrams`), and a separate
-    vocabulary and inverse-document-frequency (idf) weighting is fitted per
+    Each text column is tokenized into word-boundary character n-grams, and a
+    separate vocabulary and inverse-document-frequency (idf) weighting is
+    fitted per
     column on the context table. Every column expands to a block of numerical
     features (one per fitted n-gram), and the blocks are concatenated into the
     numerical output. The idf smoothing matches scikit-learn's
@@ -90,9 +91,15 @@ class TfidfTextEmbed(Processor):
         self,
         state_dict: dict[str, Any],
         prefix: str,
-        *args,
-    ):
+        *args: Any,
+    ) -> None:
         """Restore buffers from a checkpoint."""
+        stale_idfs = [
+            name for name in self._buffers if name.startswith("idf_")
+        ]
+        for name in stale_idfs:
+            delattr(self, name)
+
         idf_keys = [
             key for key in state_dict if key.startswith(f"{prefix}idf_")
         ]
@@ -166,8 +173,8 @@ class TfidfTextEmbed(Processor):
         r"""Split each string into word-boundary character n-grams on GPU.
 
         Device-native counterpart to the CPU/Arrow implementation in
-        :class:`~sdm.processing.text.tfidf_encoder.TfidfEncoder`; requires a
-        CUDA tensor and an installed cuDF. Mirrors scikit-learn's
+        :class:`~sdm.processing.text.tfidf_text_embed.TfidfTextEmbed`;
+        requires a CUDA tensor and an installed cuDF. Mirrors scikit-learn's
         ``analyzer='char_wb'``: each whitespace-delimited word is padded with a
         single space on both sides before windowing, so a word shorter than
         ``n`` still yields one n-gram.
