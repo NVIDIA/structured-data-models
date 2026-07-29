@@ -27,11 +27,11 @@ df = load_breast_cancer(as_frame=True).frame
 table = sdm.TableTensor.from_pandas(
     df=df,
     stypes=sdm.infer_stypes(df),
-    device=device,
+    device="cuda",
 )
 
 # Access to a variety of pre-trained structured data models:
-model = sdm.models.TabICLv2(device=device)
+model = sdm.models.TabICLv2(device="cuda")
 
 # Default in-context learning forward pass:
 model(
