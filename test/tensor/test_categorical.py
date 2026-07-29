@@ -87,6 +87,10 @@ def test_from_arrow_chunked_large_string_values() -> None:
     assert tensor.to_arrow().to_pydict() == {
         "0": ["b", None, "a", "b"],
     }
+    assert (
+        tensor.to_arrow().column(0).chunk(0).dictionary.type
+        == pa.large_string()
+    )
 
 
 def test_from_arrow_chunked_dictionary_string_values() -> None:

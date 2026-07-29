@@ -39,7 +39,7 @@ def test_arrow() -> None:
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4]))
-    assert tensor._offset.dtype == torch.int32
+    assert tensor.to_arrow().type == pa.string()
 
     tensor = StringTensor.from_arrow(pa.array([], type=pa.string()))
     assert tensor.size() == (0,)
