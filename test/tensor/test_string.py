@@ -84,6 +84,15 @@ def test_from_arrow_chunked_strings(arrow_type: pa.DataType) -> None:
     assert tensor.to_arrow().to_pylist() == ["hi", "é", "", "abc"]
 
 
+def test_from_arrow_single_string_chunk() -> None:
+    tensor = StringTensor.from_arrow(
+        pa.chunked_array([pa.array(["hi", "é"], type=pa.string())]),
+    )
+
+    assert tensor.to_arrow().type == pa.string()
+    assert tensor.to_arrow().to_pylist() == ["hi", "é"]
+
+
 @onlyCUDA
 def test_from_cudf() -> None:
     cudf = pytest.importorskip("cudf")

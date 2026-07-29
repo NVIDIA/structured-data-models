@@ -1043,6 +1043,39 @@ def test_arrow() -> None:
     assert tensor.to_arrow().to_pydict() == data
 
 
+def test_arrow_chunked_strings() -> None:
+    tensor = TableTensor.from_arrow(
+        pa.table(
+            {
+                "category": pa.chunked_array(
+                    [pa.array(["b", None]), pa.array(["a", "b"])]
+                ),
+                "text": pa.chunked_array(
+                    [pa.array(["hi", "é"]), pa.array(["", "abc"])]
+                ),
+                "id": pa.chunked_array(
+                    [pa.array(["u1", "u2"]), pa.array(["u3", "u4"])]
+                ),
+            }
+        ),
+        stypes={
+            "category": "categorical",
+            "text": "text",
+            "id": "id",
+        },
+    )
+
+    table = tensor.to_arrow()
+    assert table.to_pydict() == {
+        "category": ["b", None, "a", "b"],
+        "text": ["hi", "é", "", "abc"],
+        "id": ["u1", "u2", "u3", "u4"],
+    }
+    assert table["category"].chunk(0).dictionary.type == pa.large_string()
+    assert table["text"].type == pa.large_string()
+    assert table["id"].type == pa.large_string()
+
+
 def test_arrow_empty() -> None:
     tensor = TableTensor.from_arrow(
         pa.table(
