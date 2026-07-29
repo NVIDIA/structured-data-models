@@ -17,7 +17,6 @@ pip install structured-data-models
 ## Quick Tour
 
 ```python
-import torch
 from sklearn.datasets import load_breast_cancer
 
 import sdm
