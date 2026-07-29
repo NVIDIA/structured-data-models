@@ -7,5 +7,6 @@ Install via:
 pip install structured-data-models
 ```
 
-For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency.
-Otherwise, some operations might fall back to a CPU backend, requiring device synchronization and unnecessary data movement.
+```{note}
+For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency to keep dataframe-style operations on GPU and avoid unnecessary data movement.
+```
