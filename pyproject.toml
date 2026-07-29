@@ -41,7 +41,13 @@ dependencies = [
     "typing_extensions",
 ]
 
-[project.optional-dependencies]
+[project.urls]
+Download = "https://github.com/NVIDIA/structured-data-models/releases"
+Homepage = "https://github.com/NVIDIA/structured-data-models"
+Repository = "https://github.com/NVIDIA/structured-data-models"
+Issues = "https://github.com/NVIDIA/structured-data-models/issues"
+
+[dependency-groups]
 test = [
     "pytest",
     "pytest-cov",
@@ -53,8 +59,10 @@ doc = [
     "sphinx",
     "sphinx-copybutton",
 ]
-
-[dependency-groups]
+dev = [
+    { include-group = "test" },
+    { include-group = "doc" },
+]
 example-tabarena = [
     "autogluon.common @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common",
     "autogluon.core @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core",
@@ -62,12 +70,6 @@ example-tabarena = [
     "autogluon.tabular @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular",
     "tabarena[plot] @ git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena",
 ]
-
-[project.urls]
-Download = "https://github.com/NVIDIA/structured-data-models/releases"
-Homepage = "https://github.com/NVIDIA/structured-data-models"
-Repository = "https://github.com/NVIDIA/structured-data-models"
-Issues = "https://github.com/NVIDIA/structured-data-models/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
