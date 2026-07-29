@@ -29,8 +29,8 @@ Each model defines a default recipe that closely mimics pre- and postprocessing 
 
 Recipes are plain Python objects, so they can be inspected, copied and modified.
 This makes it easy to keep the default model contract while changing one part of the pipeline.
-For example, {py:class}`~sdm.models.TabICLv2` does not consume raw datetime columns directly.
-To support datetime inputs, add a datetime branch that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
+For example, {py:class}`~sdm.models.TabICLv2` does not consume raw {py:attr}`~sdm.Stype.datetime` columns directly.
+To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, add a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
 
 ```python
 from sdm.models import TabICLv2
@@ -71,14 +71,14 @@ recipe = Recipe(
 )
 ```
 
-When a custom recipe is passed to an {py:class}`~sdm.models.ICLModel`, the model applies the feature, target, and output pipelines at the appropriate points in its execution.
+When a custom recipe is passed to an {py:class}`~sdm.models.ICLModel`, the model applies the feature, target, and output pipelines automatically at the appropriate points in its execution.
 
 ```python
 model = TabICLv2(device="cuda")
 model(..., recipe=recipe)
 ```
 
-You can also call the pipelines directly to inspect intermediate representations:
+You can also call the individual processors directly to inspect intermediate representations:
 
 ```python
 recipe.features.fit(table)
