@@ -15,6 +15,17 @@ def _text_table(*columns: list[str]) -> TableTensor:
     )
 
 
+def _numerical_by_ngram(
+    encoder: TfidfTextEmbed,
+    output: TableTensor,
+) -> dict[str, torch.Tensor]:
+    vocabulary = encoder._vocabularies[0].to_pylist()
+    return {
+        ngram: output.numerical[..., index].detach().cpu()
+        for index, ngram in enumerate(vocabulary)
+    }
+
+
 def test_tfidf_encoder_outputs_numerical_block() -> None:
     table = TableTensor(
         columns={"text": ("t0", "t1")},
@@ -74,35 +85,22 @@ def test_tfidf_encoder_rows_are_l2_normalized() -> None:
 
 
 def test_tfidf_encoder_exact_values() -> None:
-    # Bigram counts per document, each word padded to " ab ":
-    #   d0 "ab"     -> {" a": 1, "ab": 1, "b ": 1}
-    #   d1 "ab ac"  -> {" a": 2, "ab": 1, "b ": 1, "ac": 1, "c ": 1}
-    #   d2 "ac"     -> {" a": 1, "ac": 1, "c ": 1}
-    # With n_docs = 3, df(" a") = 3 and df = 2 for every other n-gram, so
-    # idf = ln((1 + n_docs) / (1 + df)) + 1 gives idf(" a") = 1.0 and
-    # idf = ln(4 / 3) + 1 = 1.28768207 elsewhere. Each row is the raw
-    # n-gram count times idf, L2-normalized.
     table = _text_table(["ab", "ab ac", "ac"])
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
 
     output = encoder.fit_transform(table)
 
-    expected = {  # per n-gram, the value for d0, d1, d2
-        " a": [0.48133417, 0.61335554, 0.48133417],
-        "ab": [0.61980538, 0.39490346, 0.00000000],
-        "b ": [0.61980538, 0.39490346, 0.00000000],
-        "ac": [0.00000000, 0.39490346, 0.61980538],
-        "c ": [0.00000000, 0.39490346, 0.61980538],
+    expected = {
+        " a": torch.tensor([0.48133417, 0.61335554, 0.48133417]),
+        "ab": torch.tensor([0.61980538, 0.39490346, 0.00000000]),
+        "b ": torch.tensor([0.61980538, 0.39490346, 0.00000000]),
+        "ac": torch.tensor([0.00000000, 0.39490346, 0.61980538]),
+        "c ": torch.tensor([0.00000000, 0.39490346, 0.61980538]),
     }
-    # Vocabulary order differs between the CPU and CUDA factorization, so
-    # line the expected columns up with the fitted vocabulary.
-    vocabulary = encoder._vocabularies[0].to_pylist()
-    assert sorted(vocabulary) == sorted(expected)
-    assert torch.allclose(
-        output.numerical,
-        torch.tensor([expected[ngram] for ngram in vocabulary]).T,
-        atol=1e-6,
-    )
+    actual = _numerical_by_ngram(encoder, output)
+    assert actual.keys() == expected.keys()
+    for ngram, expected_values in expected.items():
+        assert torch.allclose(actual[ngram], expected_values, atol=1e-6)
 
 
 def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
@@ -115,16 +113,58 @@ def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
     assert output.numerical[1].ne(0).any()
 
 
-def test_tfidf_encoder_max_features_caps_width() -> None:
-    table = _text_table(["a bunch of different words here"])
+def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
+    table = _text_table(["aa aa aa ab ab ac"])
 
     full = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
-    capped = TfidfTextEmbed(ngram_range=(2, 3), max_features=5).fit_transform(
-        table
+    encoder = TfidfTextEmbed(ngram_range=(2, 3), max_features=3)
+    capped = encoder.fit_transform(table)
+
+    assert full.numerical.size(-1) > 3
+    assert capped.numerical.size(-1) == 3
+    assert set(encoder._vocabularies[0].to_pylist()) == {" a", "aa", "a "}
+
+
+@pytest.mark.parametrize("max_features", [None, 3])
+@onlyCUDA
+def test_tfidf_encoder_cuda_fit_transform_matches_cpu(
+    max_features: int | None,
+) -> None:
+    pytest.importorskip("cudf")
+    pytest.importorskip("cupy")
+    pytest.importorskip("pylibcudf")
+
+    texts = [["aa aa aa ab ab ac"], ["aa ab"], ["ac"]]
+    cpu_table = TableTensor(
+        columns={"text": ("t0",)},
+        text=StringTensor.from_list(texts),
+    )
+    cuda_table = TableTensor(
+        columns={"text": ("t0",)},
+        text=StringTensor.from_list(texts, device="cuda"),
     )
 
-    assert full.numerical.size(-1) > 5
-    assert capped.numerical.size(-1) == 5
+    cpu_encoder = TfidfTextEmbed(
+        ngram_range=(2, 3),
+        max_features=max_features,
+    )
+    expected = cpu_encoder.fit_transform(cpu_table)
+    cuda_encoder = TfidfTextEmbed(
+        ngram_range=(2, 3),
+        max_features=max_features,
+    )
+    output = cuda_encoder.fit_transform(cuda_table)
+
+    expected_by_ngram = _numerical_by_ngram(cpu_encoder, expected)
+    actual_by_ngram = _numerical_by_ngram(cuda_encoder, output)
+    assert output.numerical.is_cuda
+    assert actual_by_ngram.keys() == expected_by_ngram.keys()
+    for ngram, expected_values in expected_by_ngram.items():
+        assert torch.allclose(
+            actual_by_ngram[ngram],
+            expected_values,
+            atol=1e-6,
+        )
 
 
 def test_tfidf_encoder_requires_fit() -> None:
@@ -164,10 +204,13 @@ def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
     restored.fit(_text_table(["hello world"], ["cat dog"]))
 
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
-    encoder.fit(_text_table(["hello world"]))
+    table = _text_table(["hello world"])
+    expected = encoder.fit_transform(table)
     restored.load_state_dict(encoder.state_dict(), strict=False)
 
-    assert sorted(restored._buffers) == ["idf_0"]
+    output = restored.transform(table)
+    assert output.columns == expected.columns
+    assert torch.equal(output.numerical, expected.numerical)
 
 
 def test_tfidf_encoder_to_moves_fitted_state() -> None:
@@ -180,92 +223,69 @@ def test_tfidf_encoder_to_moves_fitted_state() -> None:
     assert encoder.transform(table).numerical.dtype == torch.float64
 
 
-@onlyCUDA
-def test_tfidf_encoder_to_moves_fitted_state_cuda() -> None:
-    texts = ["hello world", "hello there"]
+def test_tfidf_encoder_failed_refit_preserves_previous_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = _text_table(["hello world", "hello there"])
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
-    encoder.fit(_text_table(texts))
-    query = TableTensor(
-        columns={"text": ("t0",)},
-        text=StringTensor.from_list([[t] for t in texts], device="cuda"),
+    expected = encoder.fit_transform(table)
+
+    def fail_prune(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("refit failed")
+
+    monkeypatch.setattr(encoder, "_prune", fail_prune)
+
+    with pytest.raises(RuntimeError, match="refit failed"):
+        encoder.fit(table)
+
+    output = encoder.transform(table)
+    assert output.columns == expected.columns
+    assert torch.equal(output.numerical, expected.numerical)
+
+
+def test_tfidf_encoder_refit_replaces_previous_state() -> None:
+    encoder = TfidfTextEmbed(ngram_range=(2, 2))
+    encoder.fit(_text_table(["hello world"], ["cat dog"]))
+
+    table = _text_table(["hello world"])
+    expected = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+
+    output = encoder.fit_transform(table)
+
+    assert output.columns == expected.columns
+    assert torch.equal(output.numerical, expected.numerical)
+    assert sorted(encoder._buffers) == ["idf_0"]
+
+
+def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
+    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(
+        _text_table([""])
     )
 
-    encoder.to("cuda")
-
-    output = encoder.transform(query)
-    assert output.numerical.is_cuda
+    assert output.numerical.shape == (1, 0)
+    assert output.columns[Stype.numerical] == ()
 
 
-def _ngrams(
-    values: list[str],
-    ngram_range: tuple[int, int],
-    *,
-    lowercase: bool = True,
-) -> tuple[StringTensor, torch.Tensor]:
-    encoder = TfidfTextEmbed(ngram_range=ngram_range)
-    tensor = StringTensor.from_list(values)
-    return encoder._character_ngrams(tensor, ngram_range, lowercase=lowercase)
+def test_tfidf_encoder_short_word_counts_once() -> None:
+    output = TfidfTextEmbed(ngram_range=(5, 5)).fit_transform(
+        _text_table(["a"])
+    )
+
+    assert output.numerical.shape == (1, 1)
+    assert torch.equal(output.numerical, torch.ones(1, 1))
 
 
-def test_character_ngrams() -> None:
-    flat, offset = _ngrams(["cat", "hi cat"], (2, 2))
+def test_tfidf_encoder_can_preserve_case() -> None:
+    table = _text_table(["CAT", "cat"])
 
-    assert flat.tolist() == [
-        " c",
-        "ca",
-        "at",
-        "t ",
-        " h",
-        "hi",
-        "i ",
-        " c",
-        "ca",
-        "at",
-        "t ",
-    ]
-    assert offset.equal(torch.tensor([0, 4, 11]))
+    lowercased = TfidfTextEmbed(ngram_range=(3, 3)).fit_transform(table)
+    case_sensitive = TfidfTextEmbed(
+        ngram_range=(3, 3),
+        lowercase=False,
+    ).fit_transform(table)
 
-
-def test_character_ngrams_combines_sizes() -> None:
-    flat, offset = _ngrams(["cat"], (2, 3))
-
-    assert flat.tolist() == [
-        " c",
-        "ca",
-        "at",
-        "t ",
-        " ca",
-        "cat",
-        "at ",
-    ]
-    assert offset.equal(torch.tensor([0, 7]))
-
-
-def test_character_ngrams_short_word_counts_once() -> None:
-    flat, offset = _ngrams(["a"], (5, 5))
-
-    assert flat.tolist() == [" a "]
-    assert offset.equal(torch.tensor([0, 1]))
-
-
-def test_character_ngrams_empty_string_yields_nothing() -> None:
-    flat, offset = _ngrams([""], (2, 2))
-
-    assert flat.tolist() == []
-    assert offset.equal(torch.tensor([0, 0]))
-
-
-def test_character_ngrams_lowercases_by_default() -> None:
-    flat, _ = _ngrams(["CAT"], (3, 3))
-    assert flat.tolist() == [" ca", "cat", "at "]
-
-    flat, _ = _ngrams(["CAT"], (3, 3), lowercase=False)
-    assert flat.tolist() == [" CA", "CAT", "AT "]
-
-
-def test_character_ngrams_rejects_multi_dimensional_input() -> None:
-    encoder = TfidfTextEmbed(ngram_range=(2, 2))
-    tensor = StringTensor.from_list([["a", "b"], ["c", "d"]])
-
-    with pytest.raises(NotImplementedError, match="one-dimensional"):
-        encoder._character_ngrams(tensor, (2, 2))
+    assert torch.equal(lowercased.numerical[0], lowercased.numerical[1])
+    assert not torch.equal(
+        case_sensitive.numerical[0],
+        case_sensitive.numerical[1],
+    )

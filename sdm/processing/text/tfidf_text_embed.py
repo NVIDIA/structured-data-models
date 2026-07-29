@@ -1,5 +1,6 @@
 import math
 import re
+from itertools import accumulate
 from typing import Any, cast
 
 import pyarrow as pa
@@ -19,12 +20,11 @@ class TfidfTextEmbed(Processor):
 
     Each text column is tokenized into word-boundary character n-grams, and a
     separate vocabulary and inverse-document-frequency (idf) weighting is
-    fitted per
-    column on the context table. Every column expands to a block of numerical
-    features (one per fitted n-gram), and the blocks are concatenated into the
-    numerical output. The idf smoothing matches scikit-learn's
-    smoothing formula (`idf(t) = ln( (1 + n_docs) / (1 + df(t)) ) + 1`)
-    default and rows are L2-normalized.
+    fitted per column on the context table. Every column expands to a set of
+    numerical features (one per fitted n-gram), and the generated columns are
+    concatenated into the numerical output. The idf smoothing matches
+    scikit-learn's smoothing formula (`idf(t) = ln( (1 + n_docs) /
+    (1 + df(t)) ) + 1`) default and rows are L2-normalized.
 
     Args:
         ngram_range: Inclusive ``(min_n, max_n)`` character-window sizes.
@@ -43,29 +43,19 @@ class TfidfTextEmbed(Processor):
         lowercase: bool = True,
     ) -> None:
         super().__init__()
+        min_n, max_n = ngram_range
+        if min_n < 1 or max_n < min_n:
+            raise ValueError("ngram_range must satisfy 1 <= min_n <= max_n.")
+        if max_features is not None and max_features <= 0:
+            raise ValueError("max_features must be positive or None.")
         self.ngram_range = ngram_range
         self.max_features = max_features
         self.lowercase = lowercase
         self._vocabularies: list[pa.Array] = []
         self._register_load_state_dict_pre_hook(self._recreate_idf_buffers)
 
-        min_n, max_n = self.ngram_range
-        if min_n < 1 or max_n < min_n:
-            raise ValueError("'ngram_range' must satisfy 1 <= min_n <= max_n.")
-
-        if max_features is not None and max_features < 0:
-            raise ValueError("`max_features` must be non-negative or None.")
-
     def get_extra_state(self) -> dict[str, Any]:
         r""":meta private:"""  # noqa: D415
-        """Package the fitted state for :meth:`~torch.nn.Module.state_dict`.
-
-        The fitted state lives outside PyTorch's parameter/buffer registries
-        (``self._vocabularies``),
-        so it is exported here instead. Vocabularies are
-        stored as plain ``(data, offset)`` tensor pairs to keep checkpoints
-        loadable under ``torch.load(weights_only=True)``.
-        """
         return {
             "vocabularies": [
                 StringTensor.from_arrow(vocabulary).data_offset
@@ -130,7 +120,8 @@ class TfidfTextEmbed(Processor):
         """
         if tensor.dim() != 1:
             raise NotImplementedError(
-                "'character_ngrams' only supports one-dimensional input"
+                "Expected tensor to be one-dimensional "
+                f"(got {tensor.dim()}D tensor)"
             )
 
         if tensor.is_cuda:
@@ -215,12 +206,18 @@ class TfidfTextEmbed(Processor):
 
         parts: list[cudf.DataFrame] = []
         # 'character_ngrams' raises when no word is long enough for 'n'.
-        longest = min(max_n, int(pad_len.max())) if len(padded) > 0 else 0
-        for n in range(min_n, longest + 1):
-            grams = padded.str.character_ngrams(n, as_list=True)
-            long = cudf.DataFrame({"doc": doc_index, "gram": grams}).explode(
-                "gram"
-            )
+        for n in range(min_n, max_n + 1):
+            eligible = pad_len >= n
+            padded_eligable = padded[eligible]
+            if len(padded_eligable) == 0:
+                continue
+            grams = padded_eligable.str.character_ngrams(n, as_list=True)
+            long = cudf.DataFrame(
+                {
+                    "doc": doc_index[eligible],
+                    "gram": grams,
+                }
+            ).explode("gram")
             parts.append(long.dropna(subset=["gram"]))
 
         # word shorter than min_n: count it once
@@ -253,14 +250,8 @@ class TfidfTextEmbed(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         device = table.text.device
-        self._vocabularies = []
-
-        # clean up stale buffers from previous fit
-        stale_idfs = [
-            name for name in self._buffers if name.startswith("idf_")
-        ]
-        for name in stale_idfs:
-            delattr(self, name)
+        vocabularies: list[pa.Array] = []
+        idfs: list[Tensor] = []
 
         for column in range(table.text.size(-1)):
             column_text = cast(
@@ -291,7 +282,7 @@ class TfidfTextEmbed(Processor):
             # Map each n-gram back to its document via the offsets.
             doc_ids = torch.repeat_interleave(
                 torch.arange(n_docs, device=device),
-                offsets.diff().to(device),
+                offsets.diff(),
             )  # [n_ngrams]
 
             idf = self._idf(
@@ -305,7 +296,17 @@ class TfidfTextEmbed(Processor):
                 codes, minlength=vocab_size
             )  # [vocab_size]
             vocabulary, idf = self._prune(vocabulary, idf, term_counts)
-            self._vocabularies.append(vocabulary)
+            vocabularies.append(vocabulary)
+            idfs.append(idf)
+
+        stale_idfs = [
+            name for name in self._buffers if name.startswith("idf_")
+        ]
+        for name in stale_idfs:
+            delattr(self, name)
+
+        self._vocabularies = vocabularies
+        for column, idf in enumerate(idfs):
             self.register_buffer(f"idf_{column}", idf)
 
     def _idf(
@@ -356,16 +357,25 @@ class TfidfTextEmbed(Processor):
         leading_shape = table.text.shape[:-1]
         n_rows = math.prod(leading_shape)
 
-        blocks: list[Tensor] = []
+        vocab_sizes = [len(vocabulary) for vocabulary in self._vocabularies]
+        column_offsets = [0, *accumulate(vocab_sizes)]
+        total_width = column_offsets[-1]
+        numerical = torch.zeros(
+            (*leading_shape, total_width),
+            dtype=dtype,
+            device=device,
+        )
+        flat_numerical = numerical.view(n_rows, total_width)
         names: list[str] = []
         for column in range(table.text.size(-1)):
             vocabulary = self._vocabularies[column]
             idf = getattr(self, f"idf_{column}")
-            vocab_size = len(vocabulary)
+            vocab_size = vocab_sizes[column]
+            column_start = column_offsets[column]
+            column_slice = flat_numerical[
+                :, column_start : column_offsets[column + 1]
+            ]
 
-            counts = torch.zeros(
-                n_rows * vocab_size, dtype=dtype, device=device
-            )
             if vocab_size > 0:
                 column_text = cast(
                     StringTensor,
@@ -400,27 +410,33 @@ class TfidfTextEmbed(Processor):
                     )  # [n_ngrams]
                 doc_ids = torch.repeat_interleave(
                     torch.arange(n_rows, device=device),
-                    offsets.diff().to(device),
+                    offsets.diff(),
                 )  # [n_ngrams]
                 mask = codes >= 0
                 flat_index = doc_ids[mask] * vocab_size + codes[mask]
-                counts.scatter_add_(
-                    0, flat_index, torch.ones_like(flat_index, dtype=dtype)
+                counts = column_slice.new_zeros(n_rows, vocab_size)
+                counts.view(-1).scatter_add_(
+                    0,
+                    flat_index,
+                    torch.ones_like(flat_index, dtype=dtype),
                 )
-
-            tfidf = counts.view(n_rows, vocab_size) * idf  # [rows, vocab]
-            norm = tfidf.norm(dim=1, keepdim=True).clamp_min(1e-12)
-            blocks.append((tfidf / norm).reshape(*leading_shape, vocab_size))
+                counts.mul_(idf)
+                norm = counts.norm(dim=1, keepdim=True).clamp_min_(1e-12)
+                column_slice.copy_(counts.div_(norm))
             names.extend(
                 f"{text_names[column]}_{i}" for i in range(vocab_size)
             )
 
-        numerical = (
-            torch.cat(blocks, dim=-1)
-            if blocks
-            else torch.zeros((*leading_shape, 0), dtype=dtype, device=device)
-        )
         return table.__class__(
             columns={Stype.numerical: tuple(names)},
             numerical=numerical,
+        )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return (
+            f"{' ' * indent}{self.__class__.__name__}("
+            f"ngram_range={self.ngram_range}, "
+            f"max_features={self.max_features}, "
+            f"lowercase={self.lowercase}"
+            ")"
         )
