@@ -22,6 +22,20 @@ ARROW_TORCH_DTYPES = {
 TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 
+def _combine_arrow_chunks(array: pa.ChunkedArray) -> pa.Array:
+    r"""Combine chunks after promoting 32-bit string offsets."""
+    if array.num_chunks == 1:
+        return array.chunk(0)
+
+    if pa.types.is_string(array.type) or (
+        pa.types.is_dictionary(array.type)
+        and pa.types.is_string(array.type.value_type)
+    ):
+        array = array.cast(pa.large_string())
+
+    return array.combine_chunks()
+
+
 def arrow_as_tensor(
     array: pa.Array | pa.ChunkedArray,
     *,
