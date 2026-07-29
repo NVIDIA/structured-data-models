@@ -172,4 +172,4 @@ Without it, these operations fall back to a CPU backend, which requires transfer
 ### Model Inputs And Outputs
 
 A {py:class}`~sdm.tensor.TableTensor` acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
-Learn more about model processing and execution in the [Recipes](recipe) and [Model Interface](model) guides.
+Learn more about model processing and execution in the [Model Interface](model) and [Recipes](recipe) guides.
