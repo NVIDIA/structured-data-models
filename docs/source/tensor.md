@@ -1,6 +1,6 @@
 # Table Semantics
 
-Structured data models operate on heterogeneous tables with all kinds of data modalities: numerical values, categories, timestamps, free-form text, identifiers, and missing values.
+Structured data models operate on heterogeneous tables across all kinds of data modalities: numerical values, categories, timestamps, free-form text, identifiers, and missing values.
 Even within one modality, values may have different physical types, *e.g.*, strings, integers, or booleans can all represent categorical data.
 Traditionally, converting such tables into numeric model inputs was left to the user.
 The [`sdm.tensor`](api/tensor) package makes that conversion natural, PyTorch-native, and GPU-ready.
@@ -13,7 +13,7 @@ This makes a table look like a tensor of shape `[..., C]` without flattening all
 In particular, it is
 
 - **dataframe-like at the boundary:** contruct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
-- **PyTorch-native in the middle:** use familar operations such as `to()`, `view()`, `unsqueeze()`, indexing, slicing, `torch.cat`, and `torch.stack`, with fast device movement and efficient transfer to accelerators.
+- **PyTorch-native in the middle:** use familar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
 - **lossless:** column names, semantic types, categorical vocabularies, string values, and missing-values are fully preserved.
 
 ## The Tensor Stack
@@ -103,6 +103,11 @@ print(table.categorical.categories[0].tolist())
 # ["US", "DE"]
 ```
 
+```{note}
+The mapping from categories to integer codes is not a stable API guarantee and may depend on the input data or backend.
+For fully deterministic category mappings, align categories at the processing level via {py:class}`~sdm.processing.categorical.AlignCategories`.
+```
+
 ### Column Semantics
 
 Because columns are stored in semantic blocks, {py:class}`~sdm.tensor.TableTensor` does not treat the original dataframe column order as a stable invariant.
@@ -138,16 +143,14 @@ For example, raw integer indexing into the column dimension is not allowed:
 table[..., 0]  # RuntimeError: can't select the column dimension
 ```
 
-### Device Movement
-
-Because the tensor implementations are {py:class}`torch.Tensor` subclasses, device movement follows the usual PyTorch style:
+Device movement follows the usual PyTorch style:
 
 ```python
 print(table.to("cuda").device)
 # cuda:0
 ```
 
-### Round-Tripping To Dataframes
+### Round-Tripping
 
 A {py:class}`~sdm.tensor.TableTensor` is intended to sit between dataframe interfaces and model code.
 You can zero-copy back to [`pandas`](https://pandas.pydata.org/docs) or [`arrow`](https://arrow.apache.org/docs) when you want to leave the tensorized runtime:
@@ -169,7 +172,7 @@ Some table tensor operations are executed by exposing tensor buffers to [``cudf`
 Without it, these operations fall back to a CPU backend, which requires transferring data from the device to the host and back.
 ```
 
-### Model Inputs And Outputs
+## Model Inputs And Outputs
 
 A {py:class}`~sdm.tensor.TableTensor` acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
 Learn more about model processing and execution in the [Model Interface](model) and [Recipes](recipe) guides.
