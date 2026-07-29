@@ -1,19 +1,18 @@
 import torch
 from sklearn.datasets import load_breast_cancer
 
-from sdm import TableTensor, infer_stypes
-from sdm.models import TabICLv2
+import sdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_float32_matmul_precision("high")
 df = load_breast_cancer(as_frame=True).frame
 
-table = TableTensor.from_pandas(
+table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=infer_stypes(df, overrides={"target": "categorical"}),
+    stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
     device=device,
 )
-model = TabICLv2(device=device)
+model = sdm.models.TabICLv2(device=device)
 # Optionally, torch.compile the model
 # model.cls_model.compile(fullgraph=True)
 
