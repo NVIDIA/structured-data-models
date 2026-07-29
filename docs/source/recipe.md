@@ -1,83 +1,88 @@
 # Recipes
 
-A {py:class}`~sdm.processing.Recipe` defines how data crosses a model boundary:
-it transforms inputs into the space your model expects and maps the model's
-outputs back to the original space, keeping the same auditable transforms on
-both sides of the model.
+A {py:class}`~sdm.processing.recipe.Recipe` defines how data crosses a model boundary: it transforms inputs into the space a model expects and maps the model's outputs back to the original space, keeping the same auditable transforms on both sides of the model.
 
 ## Concepts
 
-- A **step** is a {py:class}`~sdm.processing.Processor` that transforms a
-  {py:class}`~sdm.tensor.TableTensor` and returns a
-  {py:class}`~sdm.tensor.TableTensor`. A *stateful* step learns parameters
-  when you call `fit` (for example
-  {py:class}`~sdm.processing.Standardize` learns each column's mean and
-  standard deviation); a stateless one does not (for example
-  {py:class}`~sdm.processing.Softmax`).
+The basic unit of a recipe is a {py:class}`~sdm.processing.base.Processor`.
+A list of all available processors grouped by their domain and semantic type is outlined in the [API reference](api/processing).
 
-- A small stateless transformation can be supplied directly to
-  {py:class}`~sdm.processing.Sequential` as a function or lambda. It is
-  normalized to a stateless processor and participates in the usual
-  `fit` and `transform` flow, but does not support `inverse_transform`.
+- A {py:class}`~sdm.processing.base.Processor` transforms a {py:class}`~sdm.tensor.TableTensor` and returns a new {py:class}`~sdm.tensor.TableTensor`.
+- A **stateful** {py:class}`~sdm.processing.base.Processor` learns state when you call {py:meth}`~sdm.processing.base.Processor.fit` (*e.g.*, {py:class}`~sdm.processing.numerical.Standardize` learns each column's mean and standard deviation); a **stateless** one does not (*e.g.*, {py:class}`~sdm.processing.output.Softmax`).
 
-- A {py:class}`~sdm.processing.Sequential` is an ordered list of steps.
-  Recipes do not infer each step's non-finite input contract. Place imputation
-  or cleanup before processors that do not explicitly document non-finite
-  support; for example, use {py:class}`~sdm.processing.ImputeMean` before
-  downstream numerical processors that expect finite input.
+A {py:class}`~sdm.processing.base.Processor` is fully composable:
 
-- A {py:class}`~sdm.processing.Recipe` bundles three pipelines, reached as
-  attributes:
+- A {py:class}`~sdm.processing.common.Sequential` processor applies a sequence of processors.
+- A {py:class}`~sdm.processing.common.StypeDispatch` processor applies a processor per [semantic type](api/generated/sdm.Stype).
+- A {py:class}`~sdm.processing.common.TaskDispatch` processor applies a processor per task (*e.g.*, classification or regression).
 
-  - `features` — model inputs, transformed before the model.
-  - `target` — labels, transformed before the model and inverted after it to
-    map predictions back to the original space; every step must be invertible.
-  - `output` — the model output, an optional forward-only cleanup after the
-    target inverse (for example turning logits into probabilities).
+Processors let you define powerful recipes that manage the full pre-processing pipeline of input features and targets, as well as post-processing pipelines of model outputs.
+In particular:
+
+- [`Recipe.features`](api/generated/sdm.processing.recipe.Recipe): a {py:class}`~sdm.processing.base.Processor` that operates on model inputs, transformed before the model.
+- [`Recipe.target`](api/generated/sdm.processing.recipe.Recipe): a {py:class}`~sdm.processing.base.Processor` that operates on targets, transformed before the model. For regression tasks, it is also used to invert model outputs back to their original space.
+- [`Recipe.output`](api/generated/sdm.processing.recipe.Recipe): a {py:class}`~sdm.processing.base.Processor` that operates on model outputs (after the target inverse in regression tasks), *e.g.*, to reduce outputs from multiple estimators or to turn logits into probabilities.
 
 ## Usage
 
+Each model defines a default recipe that closely mimics pre- and postprocessing routines of its official implementation (*e.g.*, take a look at the default recipe of {py:class}`~sdm.models.TabICLv2`).
+
+Recipes are plain Python objects, so they can be inspected, copied and modified.
+This makes it easy to keep the default model contract while changing one part of the pipeline.
+For example, {py:class}`~sdm.models.TabICLv2` does not consume raw {py:attr}`~sdm.Stype.datetime` columns directly.
+To support {py:attr}`~sdm.Stype.datetime` inputs, you can, *e.g.*, add a {py:attr}`~sdm.Stype.datetime` branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:
+
 ```python
-import torch
+from sdm.models import TabICLv2
+from sdm.processing import AddCalendarFields, StypeDispatch
 
-from sdm import TableTensor
-from sdm.processing import Recipe, Standardize
-
-recipe = Recipe(features=[Standardize()], target=[Standardize()])
+recipe = TabICLv2.default_recipe()
+recipe.features = StypeDispatch(
+    datetime=AddCalendarFields(
+        fields=("minute", "hour", "weekday", "day_of_month", "month"),
+    )
+) + recipe.features
 ```
 
-For a small stateless transformation, pass a callable directly to
-{py:class}`~sdm.processing.Sequential`:
+You can also define a recipe from scratch when you want full control over the
+transformations applied to features, targets, and outputs:
 
 ```python
-from sdm.processing import Sequential
+from sdm.processing import *
 
-features = Sequential(
-    Standardize(),
-    lambda table: table.replace_blocks(
-        numerical=table.numerical.clamp_min(0),
+recipe = Recipe(
+    # First impute missing values, then standardize:
+    features=[ImputeMean(), Standardize()],
+
+    target=StypeDispatch(
+        # Align and shuffle classes for classification:
+        categorical=[
+            AlignCategories(),
+            ShuffleCategories(),
+        ],
+        # Standardize the targets for regression:
+        numerical=Standardize(),
+    ),
+
+    output=TaskDispatch(
+        # Convert logits to probabilities for classification tasks:
+        classification=Softmax(temperature=0.9),
     ),
 )
 ```
 
-Fit the recipe pipelines on your labeled data and transform them in one call
-with `fit_transform`; transform later inputs with `recipe.features.transform`
-(no re-fit). Recipe pipelines accept and return
-{py:class}`~sdm.tensor.TableTensor`s.
+When a custom recipe is passed to an {py:class}`~sdm.models.ICLModel`, the model applies the feature, target, and output pipelines automatically at the appropriate points in its execution.
 
 ```python
-model_features = recipe.features.fit_transform(labeled_features)
-model_target = recipe.target.fit_transform(labels)
-model_input = recipe.features.transform(new_features)
+model = TabICLv2(device="cuda")
+model(..., recipe=recipe)
 ```
 
-The model returns a {py:class}`~sdm.tensor.TableTensor`; map its predictions
-back to the original space:
+You can also call the individual processors directly to inspect intermediate representations:
 
 ```python
-prediction = recipe.target.inverse_transform(model(model_input))
-prediction = recipe.output.transform(prediction)  # identity if `output` is empty
+recipe.features.fit(table)
+table = recipe.features.transform(table)
 ```
 
-Target steps run in reverse during the inverse, and every one must mix in
-{py:class}`~sdm.processing.InvertibleMixin`.
+## Ensembling
