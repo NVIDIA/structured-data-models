@@ -43,6 +43,7 @@ In addition to the dataframe itself, each column must be assigned a semantic typ
 
 ```python
 import sdm
+import torch
 import pandas as pd
 
 df = pd.DataFrame(
@@ -55,7 +56,7 @@ df = pd.DataFrame(
     }
 )
 
-table = TableTensor.from_pandas(
+table = sdm.TableTensor.from_pandas(
     df,
     stypes={
         "age": "numerical",
