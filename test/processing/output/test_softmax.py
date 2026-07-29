@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import TableTensor
 from sdm.processing import Softmax
 from sdm.testing import withCUDA

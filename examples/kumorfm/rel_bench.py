@@ -3,10 +3,11 @@ from typing import cast
 
 import pandas as pd
 import relbench
-import sdm
 import torch
 import torchmetrics
 import tqdm
+
+import sdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)

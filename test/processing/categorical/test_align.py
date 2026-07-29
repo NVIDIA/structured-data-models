@@ -3,6 +3,7 @@ from typing import Literal
 import pandas as pd
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import AlignCategories
 from sdm.testing import withCUDA

@@ -3,6 +3,7 @@ import io
 import pyarrow as pa
 import pytest
 import torch
+
 from sdm import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.testing import onlyCUDA
 
