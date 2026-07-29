@@ -2,6 +2,21 @@
 
 Python package for structured data models.
 
+## Installation
+
+The `structured-data-models` package is available from Python 3.10 and PyTorch 2.5 onwards.
+Install via:
+
+```bash
+pip install structured-data-models
+```
+
+> [!NOTE]
+> For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency.
+> Otherwise, some operations might fall back to a CPU backend, requiring device synchronization and unnecessary data movement.
+
+## Quick Tour
+
 ```python
 import torch
 from sklearn.datasets import load_breast_cancer
