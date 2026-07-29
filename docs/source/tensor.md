@@ -103,6 +103,11 @@ print(table.categorical.categories[0].tolist())
 # ["US", "DE"]
 ```
 
+```{note}
+The mapping from categories to integer codes is not a stable API guarantee and may depend on the input data or backend.
+For fully deterministic category mappings, align categories at the processing level via {py:class}`~sdm.processing.categorical.AlignCategories`.
+```
+
 ### Column Semantics
 
 Because columns are stored in semantic blocks, {py:class}`~sdm.tensor.TableTensor` does not treat the original dataframe column order as a stable invariant.
@@ -138,9 +143,7 @@ For example, raw integer indexing into the column dimension is not allowed:
 table[..., 0]  # RuntimeError: can't select the column dimension
 ```
 
-### Device Movement
-
-Because the tensor implementations are {py:class}`torch.Tensor` subclasses, device movement follows the usual PyTorch style:
+Device movement follows the usual PyTorch style:
 
 ```python
 print(table.to("cuda").device)
