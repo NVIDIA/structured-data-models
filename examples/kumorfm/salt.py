@@ -36,6 +36,8 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("--task", choices=SALT_PRESETS)
 parser.add_argument("--context_size", type=int, default=1_000)
+parser.add_argument("--num_neighbors", type=int)
+parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
@@ -124,6 +126,9 @@ def run_task(task_name: str) -> None:
     context = torch.cat(task_tables[:2], dim=0)
     perm = torch.randperm(len(context))[: args.context_size]
     context = cast(TableTensor, context[perm])
+    num_neighbors = SALT_PRESETS[task_name][0]
+    if args.num_neighbors is not None:
+        num_neighbors = [args.num_neighbors] * 2 + num_neighbors[2:]
     kwargs = {
         "task_link": {
             "task_column": task.entity_col,
@@ -132,7 +137,7 @@ def run_task(task_name: str) -> None:
                 str, db.table_dict[task.entity_table].pkey_col
             ),
         },
-        "num_neighbors": SALT_PRESETS[task_name][0],
+        "num_neighbors": num_neighbors,
         "task_time_column": task.time_col,
     }
     context, related_context = sampler(context, **kwargs).to(device)
@@ -160,6 +165,7 @@ def run_task(task_name: str) -> None:
             x_query=query,
             related_context_tables=related_context,
             related_query_tables=related_query,
+            num_estimators=args.num_estimators,
         )
         class_indices = torch.tensor(
             [
