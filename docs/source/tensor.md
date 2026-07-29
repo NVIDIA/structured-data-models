@@ -1,6 +1,6 @@
 # Table Semantics
 
-Structured data models operate on heterogeneous tables with all kinds of data modalities: numerical values, categories, timestamps, free-form text, identifiers, and missing values.
+Structured data models operate on heterogeneous tables across all kinds of data modalities: numerical values, categories, timestamps, free-form text, identifiers, and missing values.
 Even within one modality, values may have different physical types, *e.g.*, strings, integers, or booleans can all represent categorical data.
 Traditionally, converting such tables into numeric model inputs was left to the user.
 The [`sdm.tensor`](api/tensor) package makes that conversion natural, PyTorch-native, and GPU-ready.
@@ -150,7 +150,7 @@ print(table.to("cuda").device)
 # cuda:0
 ```
 
-### Round-Tripping To Dataframes
+### Round-Tripping
 
 A {py:class}`~sdm.tensor.TableTensor` is intended to sit between dataframe interfaces and model code.
 You can zero-copy back to [`pandas`](https://pandas.pydata.org/docs) or [`arrow`](https://arrow.apache.org/docs) when you want to leave the tensorized runtime:
@@ -172,7 +172,7 @@ Some table tensor operations are executed by exposing tensor buffers to [``cudf`
 Without it, these operations fall back to a CPU backend, which requires transferring data from the device to the host and back.
 ```
 
-### Model Inputs And Outputs
+## Model Inputs And Outputs
 
 A {py:class}`~sdm.tensor.TableTensor` acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
 Learn more about model processing and execution in the [Model Interface](model) and [Recipes](recipe) guides.
