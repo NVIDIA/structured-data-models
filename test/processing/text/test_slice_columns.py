@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm import Stype, TableTensor
-from sdm.processing.text.slice_features import SliceFeatures
+from sdm.processing.text.slice_columns import SliceColumns
 
 
 def _table() -> TableTensor:
@@ -18,7 +18,7 @@ def _table() -> TableTensor:
 
 
 def test_slice_features_keeps_leading_columns() -> None:
-    output = SliceFeatures(dim=2).transform(_table())
+    output = SliceColumns(max_columns=2).transform(_table())
 
     assert output.columns[Stype.numerical] == ("x0", "x1")
     assert torch.equal(
@@ -29,7 +29,7 @@ def test_slice_features_keeps_leading_columns() -> None:
 def test_slice_features_passes_through_when_narrower() -> None:
     table = _table()
 
-    output = SliceFeatures(dim=99).transform(table)
+    output = SliceColumns(max_columns=99).transform(table)
 
     assert output.columns == table.columns
     assert torch.equal(output.numerical, table.numerical)
@@ -37,4 +37,4 @@ def test_slice_features_passes_through_when_narrower() -> None:
 
 def test_slice_features_rejects_non_positive_dim() -> None:
     with pytest.raises(ValueError, match="positive"):
-        SliceFeatures(dim=0)
+        SliceColumns(max_columns=0)
