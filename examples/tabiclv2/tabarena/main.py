@@ -1,6 +1,6 @@
 r"""Run TabICLv2 on TabArena.
 
-$ uv run --group example-tabarena python examples/tabiclv2/tabarena/main.py
+$ python examples/tabiclv2/tabarena/main.py
 
 Completed jobs in the output directory are reused.
 """

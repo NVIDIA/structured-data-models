@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Self
 
-import numpy as np
 import pandas as pd
 import torch
 from autogluon.core.data.label_cleaner import LabelCleaner
@@ -17,7 +16,18 @@ from sdm.models import TabICLv2
 
 
 class SDMTabICLv2System(ExternalSystemModel):
-    """Expose TabICLv2 through TabArena's external-system interface."""
+    """Expose TabICLv2 through TabArena's external-system interface.
+
+    Args:
+        kwargs: Arguments forwarded to TabArena's external-system model.
+    """
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self._device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+        self.model = TabICLv2(device=self._device)
 
     def _fit_system(
         self,
@@ -33,13 +43,11 @@ class SDMTabICLv2System(ExternalSystemModel):
         random_state: int | None,
         **_: object,
     ) -> Self:
-        random_state = 42 if random_state is None else random_state
-        self._device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
-        generator = torch.Generator(device=self._device).manual_seed(
-            random_state
-        )
+        generator = None
+        if random_state is not None:
+            generator = torch.Generator(device=self._device).manual_seed(
+                random_state
+            )
 
         self.stypes = infer_stypes(X)
         target_name = target_name or "__target__"
@@ -47,22 +55,6 @@ class SDMTabICLv2System(ExternalSystemModel):
             target_stype = Stype.numerical
         else:
             target_stype = Stype.categorical
-            if y.isna().any():
-                raise ValueError(
-                    "Classification targets must not contain missing values"
-                )
-            class_labels_by_key = {}
-            for label in pd.unique(y):
-                key = str(label)
-                if key in class_labels_by_key:
-                    raise ValueError(
-                        "Classification labels have ambiguous string "
-                        "representations: "
-                        f"{class_labels_by_key[key]!r} and {label!r} "
-                        f"both map to {key!r}"
-                    )
-                class_labels_by_key[key] = label
-
             label_cleaner = LabelCleaner.construct(
                 problem_type=problem_type,
                 y=y,
@@ -71,8 +63,6 @@ class SDMTabICLv2System(ExternalSystemModel):
                 str(label): label
                 for label in label_cleaner.ordered_class_labels
             }
-
-        self.model = TabICLv2(device=self._device)
 
         table_x = TableTensor.from_pandas(
             df=X,
@@ -108,16 +98,10 @@ class SDMTabICLv2System(ExternalSystemModel):
             stypes=self.stypes,
             device=self._device,
         )
-        prediction = self.model.predict(table_x)
-        values = prediction.numerical.float().cpu().numpy()
-        labels = [
-            self._class_labels_by_key[column]
-            for column in prediction.columns[Stype.numerical]
-        ]
-        probabilities = pd.DataFrame(
-            values,
-            index=X.index,
-            columns=np.asarray(labels, dtype=object),
+        probabilities = self.model.predict(table_x).to_pandas()
+        probabilities.index = X.index
+        probabilities = probabilities.rename(
+            columns=self._class_labels_by_key,
         )
         return probabilities.reindex(
             columns=tuple(self._class_labels_by_key.values()),

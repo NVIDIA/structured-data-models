@@ -1,6 +1,6 @@
 r"""Evaluate TabICLv2 results on TabArena.
 
-$ uv run --group example-tabarena python examples/tabiclv2/tabarena/evaluate.py
+$ python examples/tabiclv2/tabarena/evaluate.py
 """
 
 from pathlib import Path
