@@ -142,6 +142,7 @@ def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
     assert output.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -184,6 +185,19 @@ def test_stype_dispatch_routes_text() -> None:
 
     assert output.columns[Stype.text] == ("review",)
     assert output.text.equal(table.text)
+
+
+def test_stype_dispatch_routes_multicategorical() -> None:
+    table = TableTensor.from_columns(
+        data={"tags": [["new", "sale"], []]},
+        stypes={"tags": "multicategorical"},
+    )
+    dispatch = StypeDispatch(multicategorical=Identity())
+
+    output = dispatch.fit_transform(table)
+
+    assert output.columns[Stype.multicategorical] == ("tags",)
+    assert output.multicategorical.equal(table.multicategorical)
 
 
 def test_stype_dispatch_uses_route_fitted_state() -> None:

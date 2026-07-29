@@ -7,6 +7,7 @@ from sdm.tensor import (
     VarLenTensor,
     StringTensor,
     CategoricalTensor,
+    MultiCategoricalTensor,
     ColumnarTensor,
     TableTensor,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "VarLenTensor",
     "StringTensor",
     "CategoricalTensor",
+    "MultiCategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
     "Relationship",

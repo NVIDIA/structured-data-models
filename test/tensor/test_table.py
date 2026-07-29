@@ -11,6 +11,7 @@ import torch
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    MultiCategoricalTensor,
     StringTensor,
     Stype,
     TableTensor,
@@ -47,6 +48,7 @@ def test_init() -> None:
     assert tensor.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -78,6 +80,7 @@ def test_empty() -> None:
     assert tensor.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -216,6 +219,7 @@ def test_from_tensor() -> None:
     assert tensor.columns == {
         Stype.numerical: ("0", "1"),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -236,6 +240,7 @@ def test_from_tensor() -> None:
     assert tensor.columns == {
         Stype.numerical: (),
         Stype.categorical: ("0", "1"),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -373,6 +378,7 @@ def test_select_stypes() -> None:
     assert numerical.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -386,6 +392,7 @@ def test_select_stypes() -> None:
     assert categorical.columns == {
         Stype.numerical: (),
         Stype.categorical: ("country",),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -396,6 +403,7 @@ def test_select_stypes() -> None:
     assert mixed.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country",),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -428,6 +436,7 @@ def test_drop_stypes() -> None:
     assert no_numerical.columns == {
         Stype.numerical: (),
         Stype.categorical: ("country",),
+        Stype.multicategorical: (),
         Stype.datetime: ("created_at",),
         Stype.text: (),
         Stype.id: ("user_id",),
@@ -441,6 +450,7 @@ def test_drop_stypes() -> None:
     assert no_categorical.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: ("created_at",),
         Stype.text: (),
         Stype.id: ("user_id",),
@@ -452,6 +462,7 @@ def test_drop_stypes() -> None:
     assert mixed.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: ("created_at",),
         Stype.text: (),
         Stype.id: ("user_id",),
@@ -466,6 +477,7 @@ def test_drop_stypes() -> None:
     assert empty.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -480,12 +492,16 @@ def test_save_load() -> None:
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country"],
+            "multicategorical": ["tags"],
             "datetime": ["created_at"],
         },
         numerical=torch.randn(3, 2),
         categorical=CategoricalTensor(
             code=torch.arange(3).view(3, 1),
             categories=(StringTensor.from_list(["USA, GER, FRA"]),),
+        ),
+        multicategorical=MultiCategoricalTensor.from_arrow(
+            pa.array([["new"], [], None])
         ),
         datetime=torch.tensor([[1], [2], [3]], dtype=torch.int64),
     )
@@ -499,6 +515,7 @@ def test_save_load() -> None:
     assert out.size() == tensor.size()
     assert out.numerical.equal(tensor.numerical)
     assert out.categorical.equal(tensor.categorical)
+    assert out.multicategorical.equal(tensor.multicategorical)
     assert out.datetime.equal(tensor.datetime)
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
@@ -703,6 +720,7 @@ def test_unbind_split() -> None:
     assert out[0].columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -773,6 +791,7 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: (),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -792,6 +811,7 @@ def test_advanced_indexing() -> None:
     assert out.columns == {
         Stype.numerical: ("age",),
         Stype.categorical: ("country",),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -884,6 +904,7 @@ def test_cat_stack() -> None:
     assert out.columns == {
         Stype.numerical: ("age", "income"),
         Stype.categorical: ("country", "segment"),
+        Stype.multicategorical: (),
         Stype.datetime: (),
         Stype.text: (),
         Stype.id: (),
@@ -992,6 +1013,7 @@ def test_arrow() -> None:
         "age": [0.0, 1.0, 2.0, 3.0],
         "income": [10.0, 11.0, 12.0, 13.0],
         "country": ["US", "CA", "", "US"],
+        "tags": [["new", "sale"], None, [], ["sale"]],
         "time": [
             datetime(2024, 1, 1, 0, 0),
             None,
@@ -1008,13 +1030,14 @@ def test_arrow() -> None:
             "age": "numerical",
             "income": "numerical",
             "country": "categorical",
+            "tags": "multicategorical",
             "time": "datetime",
             "user_id": "id",
             "item_id": "id",
         },
     )
 
-    assert tensor.size() == (4, 6)
+    assert tensor.size() == (4, 7)
     assert tensor.numerical.equal(
         torch.tensor(
             [
@@ -1027,6 +1050,12 @@ def test_arrow() -> None:
     )
     assert tensor.categorical.code.equal(torch.tensor([[0], [1], [2], [0]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
+    assert tensor.multicategorical.tolist() == [
+        [["new", "sale"]],
+        [None],
+        [[]],
+        [["sale"]],
+    ]
     assert tensor.datetime.equal(
         torch.tensor(
             [
@@ -1142,8 +1171,26 @@ def test_text() -> None:
     assert tensor.size() == (3, 3)
     assert tensor.columns[Stype.text] == ("title", "body")
     assert tensor.text.size() == (3, 2)
-
     assert tensor.to_arrow().to_pydict() == data
+
+
+def test_multicategorical() -> None:
+    table = TableTensor.from_columns(
+        data={
+            "age": [10, 20, 30],
+            "tags": [["new", "sale"], None, []],
+        },
+        stypes={"age": "numerical", "tags": "multicategorical"},
+    )
+
+    assert table.columns[Stype.multicategorical] == ("tags",)
+    assert table[["tags"]][[2, 0]].to_arrow().to_pydict() == {
+        "tags": [[], ["new", "sale"]]
+    }
+
+    out = torch.cat([table, table], dim=0)
+    assert isinstance(out, TableTensor)
+    assert out.multicategorical.tolist() == table.multicategorical.tolist() * 2
 
 
 @onlyCUDA

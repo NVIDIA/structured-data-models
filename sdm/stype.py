@@ -26,6 +26,7 @@ class Stype(str, Enum):
     Attributes:
         numerical: Numerical columns.
         categorical: Categorical columns.
+        multicategorical: List-valued categorical columns.
         datetime: Date or date-time columns.
         text: Text columns.
         id: Identifier values used to distinguish or link entities. Identifier
@@ -34,6 +35,7 @@ class Stype(str, Enum):
 
     numerical = "numerical"
     categorical = "categorical"
+    multicategorical = "multicategorical"
     datetime = "datetime"
     text = "text"
     id = "id"
@@ -68,6 +70,8 @@ def infer_stypes(
     * String, boolean and dictionary-encoded columns are inferred as
       ``categorical``. When ``allow_text is True`` and they meet our text
       heuristics, they are inferred as ``text``.
+    * Lists of supported numerical or string values are inferred as
+      ``multicategorical``.
     * Datetime columns are inferred as ``datetime``.
     * Integer or (non-dictionary) string columns are inferred as ``id`` if its
       name contains ``"id"`` as a whole word (*e.g.*, ``"user_id"``,
@@ -159,6 +163,11 @@ def _infer_arrow_stype(
     if pa.types.is_boolean(dtype) or pa.types.is_dictionary(dtype):
         return Stype.categorical
 
+    if (
+        pa.types.is_list(dtype) or pa.types.is_large_list(dtype)
+    ) and _is_multicategorical_value_type(dtype.value_type):
+        return Stype.multicategorical
+
     if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
         if column is not None and _is_text_stype_arrow(column):
             return Stype.text
@@ -200,6 +209,9 @@ def _infer_cudf_stype(
     if is_bool_dtype(dtype) or isinstance(dtype, cudf.CategoricalDtype):
         return Stype.categorical
 
+    if isinstance(dtype, cudf.ListDtype):
+        return Stype.multicategorical
+
     if is_string_dtype(dtype):
         if column is not None and _is_text_stype_cudf(column):
             return Stype.text
@@ -213,6 +225,18 @@ def _infer_cudf_stype(
 
 def _has_id_token(name: str) -> bool:
     return "id" in (word.lower() for word in _WORD_PATTERN.split(name))
+
+
+def _is_multicategorical_value_type(dtype: pa.DataType) -> bool:
+    if pa.types.is_dictionary(dtype):
+        dtype = dtype.value_type
+    return (
+        pa.types.is_integer(dtype)
+        or pa.types.is_floating(dtype)
+        or pa.types.is_string(dtype)
+        or pa.types.is_large_string(dtype)
+        or pa.types.is_null(dtype)
+    )
 
 
 def _is_text_stype_arrow(column: pa.ChunkedArray) -> bool:

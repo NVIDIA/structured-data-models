@@ -108,6 +108,20 @@ def test_infer_stypes(table: pa.Table | pd.DataFrame | cudf.DataFrame) -> None:
     }
 
 
+def test_infer_stypes_rejects_unsupported_list_values() -> None:
+    with pytest.raises(TypeError, match="Unsupported Arrow type"):
+        infer_stypes(
+            pa.table(
+                {
+                    "nested": pa.array(
+                        [[[1]], [[2]]],
+                        type=pa.list_(pa.list_(pa.int64())),
+                    )
+                }
+            )
+        )
+
+
 def test_from_pandas() -> None:
     df = pd.DataFrame(
         {
@@ -155,6 +169,23 @@ def test_from_arrow() -> None:
         "active": Stype.categorical,
         "code": Stype.categorical,
         "created_at": Stype.datetime,
+    }
+
+
+def test_infer_multicategorical_stype() -> None:
+    table = pa.table(
+        {
+            "tags": pa.array([["a"], ["b"]], type=pa.list_(pa.string())),
+            "large_tags": pa.array(
+                [["a"], ["b"]],
+                type=pa.large_list(pa.string()),
+            ),
+        }
+    )
+
+    assert infer_stypes(table) == {
+        "tags": Stype.multicategorical,
+        "large_tags": Stype.multicategorical,
     }
 
 

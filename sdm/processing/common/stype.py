@@ -31,6 +31,9 @@ class StypeDispatch(Processor, InvertibleMixin):
         categorical: Processor or stateless callable route for categorical
             columns. An iterable is normalized to
             :class:`~sdm.processing.Sequential`.
+        multicategorical: Processor or stateless callable route for
+            list-valued categorical columns. An iterable is normalized to
+            :class:`~sdm.processing.Sequential`.
         datetime: Processor or stateless callable route for datetime columns.
             An iterable is normalized to
             :class:`~sdm.processing.Sequential`.
@@ -50,6 +53,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         *,
         numerical: object = None,
         categorical: object = None,
+        multicategorical: object = None,
         datetime: object = None,
         id: object = None,
         text: object = None,
@@ -60,6 +64,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         for stype, processor in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
+            (Stype.multicategorical, multicategorical),
             (Stype.datetime, datetime),
             (Stype.text, text),
             (Stype.id, id),

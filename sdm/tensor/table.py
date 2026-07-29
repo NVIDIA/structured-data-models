@@ -14,7 +14,13 @@ from torch import Tensor
 from typing_extensions import Self, override
 
 from sdm import Stype, StypeLike
-from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm.tensor import (
+    CategoricalTensor,
+    ColumnarTensor,
+    MultiCategoricalTensor,
+    StringTensor,
+    VarLenTensor,
+)
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.mixin import _resolve_device
 
@@ -110,6 +116,8 @@ class TableTensor(Tensor):
         text: The text column block of shape ``[..., C_text]``.
         id: The identifier column block of shape ``[..., C_id]``.
         device: The device.
+        multicategorical: The list-valued categorical column block of shape
+            ``[..., C_multi]``.
     """
 
     HANDLED_FUNCTIONS: ClassVar[
@@ -118,6 +126,7 @@ class TableTensor(Tensor):
 
     _numerical: Tensor
     _categorical: CategoricalTensor
+    _multicategorical: MultiCategoricalTensor
     _datetime: Tensor
     _text: StringTensor
     _id: ColumnarTensor
@@ -139,6 +148,7 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        multicategorical: MultiCategoricalTensor | None = None,
     ) -> None:
         pass
 
@@ -152,6 +162,7 @@ class TableTensor(Tensor):
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
         device: torch.device | str | None = None,
+        multicategorical: MultiCategoricalTensor | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
         if size is not None and len(size) == 0:
@@ -163,6 +174,7 @@ class TableTensor(Tensor):
         for stype, block in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
+            (Stype.multicategorical, multicategorical),
             (Stype.datetime, datetime),
             (Stype.text, text),
             (Stype.id, id),
@@ -207,6 +219,15 @@ class TableTensor(Tensor):
                 code=torch.empty((*size, 0), dtype=torch.int32, device=device),
                 categories=(),
             )
+        if multicategorical is None:
+            multicategorical = MultiCategoricalTensor(
+                code=VarLenTensor(
+                    data=torch.empty(0, dtype=torch.int32, device=device),
+                    offset=torch.zeros(1, dtype=torch.int32, device=device),
+                    size=(*size, 0),
+                ),
+                categories=(),
+            )
         if datetime is None:
             datetime = torch.empty((*size, 0), dtype=torch.long, device=device)
         if text is None:
@@ -225,6 +246,9 @@ class TableTensor(Tensor):
         columns = {
             Stype.numerical: tuple(columns.get(Stype.numerical, ())),
             Stype.categorical: tuple(columns.get(Stype.categorical, ())),
+            Stype.multicategorical: tuple(
+                columns.get(Stype.multicategorical, ())
+            ),
             Stype.datetime: tuple(columns.get(Stype.datetime, ())),
             Stype.text: tuple(columns.get(Stype.text, ())),
             Stype.id: tuple(columns.get(Stype.id, ())),
@@ -233,6 +257,7 @@ class TableTensor(Tensor):
         for stype, block in (
             (Stype.numerical, numerical),
             (Stype.categorical, categorical),
+            (Stype.multicategorical, multicategorical),
             (Stype.datetime, datetime),
             (Stype.text, text),
             (Stype.id, id),
@@ -262,6 +287,7 @@ class TableTensor(Tensor):
 
         out._numerical = numerical
         out._categorical = categorical
+        out._multicategorical = multicategorical
         out._datetime = datetime
         out._text = text
         out._id = id
@@ -316,6 +342,8 @@ class TableTensor(Tensor):
                     ).unsqueeze(-1)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_arrow(array)
+                elif stype == Stype.multicategorical:
+                    tensor = MultiCategoricalTensor.from_arrow(array)
                 elif stype == Stype.datetime:
                     array = array.cast(pa.timestamp("us"))
                     values = array.to_numpy(zero_copy_only=False)
@@ -346,8 +374,17 @@ class TableTensor(Tensor):
 
             columns.extend(self._columns[stype])
 
-            if stype in (Stype.categorical, Stype.id):
-                tensor = cast(CategoricalTensor | ColumnarTensor, tensor)
+            if stype in (
+                Stype.categorical,
+                Stype.multicategorical,
+                Stype.id,
+            ):
+                tensor = cast(
+                    CategoricalTensor
+                    | MultiCategoricalTensor
+                    | ColumnarTensor,
+                    tensor,
+                )
                 arrays.extend(tensor.to_arrow().itercolumns())
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous().cpu()
@@ -469,6 +506,11 @@ class TableTensor(Tensor):
                     tensor = tensor.to(device)
                 elif stype == Stype.categorical:
                     tensor = CategoricalTensor.from_cudf(ser, device=device)
+                elif stype == Stype.multicategorical:
+                    tensor = MultiCategoricalTensor.from_cudf(
+                        ser,
+                        device=device,
+                    )
                 elif stype == Stype.datetime:
                     ser = ser.astype("datetime64[us]", copy=False)
                     ser = ser.astype("int64", copy=False)
@@ -501,8 +543,17 @@ class TableTensor(Tensor):
             if tensor.size(-1) == 0:
                 continue
 
-            if stype in (Stype.categorical, Stype.id):
-                tensor = cast(CategoricalTensor | ColumnarTensor, tensor)
+            if stype in (
+                Stype.categorical,
+                Stype.multicategorical,
+                Stype.id,
+            ):
+                tensor = cast(
+                    CategoricalTensor
+                    | MultiCategoricalTensor
+                    | ColumnarTensor,
+                    tensor,
+                )
                 dfs.append(tensor.to_cudf(self._columns[stype]))
             elif stype == Stype.datetime:
                 tensor = tensor.movedim(-1, 0).contiguous()
@@ -574,6 +625,11 @@ class TableTensor(Tensor):
         return self._categorical
 
     @property
+    def multicategorical(self) -> MultiCategoricalTensor:
+        r"""Return the list-valued categorical column block."""
+        return self._multicategorical
+
+    @property
     def datetime(self) -> Tensor:
         r"""Return the datetime column block."""
         return self._datetime
@@ -592,6 +648,7 @@ class TableTensor(Tensor):
         r"""Yield ``(stype, block)`` pairs for typed column blocks."""
         yield Stype.numerical, self._numerical
         yield Stype.categorical, self._categorical
+        yield Stype.multicategorical, self._multicategorical
         yield Stype.datetime, self._datetime
         yield Stype.text, self._text
         yield Stype.id, self._id
@@ -619,6 +676,7 @@ class TableTensor(Tensor):
         *,
         numerical: Tensor | None = None,
         categorical: CategoricalTensor | None = None,
+        multicategorical: MultiCategoricalTensor | None = None,
         datetime: Tensor | None = None,
         text: StringTensor | None = None,
         id: ColumnarTensor | None = None,
@@ -635,6 +693,8 @@ class TableTensor(Tensor):
                 ``[..., C_num]``.
             categorical: Replacement categorical block with shape
                 ``[..., C_cat]``.
+            multicategorical: Replacement list-valued categorical block with
+                shape ``[..., C_multi]``.
             datetime: Replacement datetime block with shape ``[..., C_dt]``.
             text: Replacement text block with shape ``[..., C_text]``.
             id: Replacement identifier block with shape ``[..., C_id]``.
@@ -644,6 +704,11 @@ class TableTensor(Tensor):
             numerical=self.numerical if numerical is None else numerical,
             categorical=(
                 self.categorical if categorical is None else categorical
+            ),
+            multicategorical=(
+                self.multicategorical
+                if multicategorical is None
+                else multicategorical
             ),
             datetime=self.datetime if datetime is None else datetime,
             text=self.text if text is None else text,
@@ -792,6 +857,8 @@ class TableTensor(Tensor):
             self._datetime,
             self._text,
             self._id,
+            None,
+            self._multicategorical,
         )
         return (self.__class__, args)
 
@@ -960,7 +1027,7 @@ def _to_copy(
             device=device,
             dtype=dtype
             if (
-                stype not in (Stype.categorical,)
+                stype not in (Stype.categorical, Stype.multicategorical)
                 or dtype in (torch.int32, torch.int64)
             )
             and stype not in (Stype.datetime, Stype.text, Stype.id)
