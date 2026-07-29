@@ -286,7 +286,9 @@ class CuGraphRelationalSampler(RelationalSampler):
         # ColumnarTensor stores numeric IDs as plain tensors. String and
         # composite IDs continue through the general cuDF join below.
         if (
-            task_value.__class__ is not Tensor
+            task_value is None
+            or table_value is None
+            or task_value.__class__ is not Tensor
             or table_value.__class__ is not Tensor
             or task_value.dtype != table_value.dtype
             or task_value.dtype not in _INTEGER_DTYPES
@@ -361,9 +363,11 @@ class CuGraphRelationalSampler(RelationalSampler):
         return seed
 
     @staticmethod
-    def _id_column(table: TableTensor, column: str) -> Tensor:
-        columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
-        return columns[column]
+    def _id_column(table: TableTensor, column: str) -> Tensor | None:
+        column_index = table.columns[Stype.id].index(column)
+        if table.id.validity[column_index] is not None:
+            return None
+        return table.id.select(-1, column_index)
 
     def _sample_non_temporal(
         self,

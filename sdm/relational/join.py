@@ -85,6 +85,8 @@ def join_index(
             pa.array(torch.arange(right_rows, dtype=dtype).numpy()),
         )
 
+        left = left.drop_null()
+        right = right.drop_null()
         joined = left.join(
             right,
             keys=left_keys,
@@ -108,6 +110,8 @@ def join_index(
             torch.arange(right_rows, dtype=dtype, device=right_table.device)
         )
 
+        left = left.dropna(subset=list(left_keys))
+        right = right.dropna(subset=list(right_keys))
         joined = left.merge(
             right,
             left_on=left_keys,

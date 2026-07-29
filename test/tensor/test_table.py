@@ -1076,6 +1076,19 @@ def test_arrow_chunked_strings() -> None:
     assert table["id"].type == pa.large_string()
 
 
+def test_arrow_nullable_id() -> None:
+    data = {
+        "user_id": [1, None, 3],
+        "item_id": ["a", None, ""],
+    }
+    tensor = TableTensor.from_arrow(
+        pa.table(data),
+        stypes={"user_id": "id", "item_id": "id"},
+    )
+
+    assert tensor.to_arrow().to_pydict() == data
+
+
 def test_arrow_empty() -> None:
     tensor = TableTensor.from_arrow(
         pa.table(
@@ -1245,6 +1258,22 @@ def test_cudf() -> None:
 
     df = tensor.to_cudf()
     assert df.to_arrow().to_pydict() == data
+
+
+@onlyCUDA
+def test_cudf_nullable_id() -> None:
+    cudf = pytest.importorskip("cudf")
+
+    data = {
+        "user_id": [1, None, 3],
+        "item_id": ["a", None, ""],
+    }
+    tensor = TableTensor.from_cudf(
+        df=cudf.DataFrame(data),
+        stypes={"user_id": "id", "item_id": "id"},
+    )
+
+    assert tensor.to_cudf().to_arrow().to_pydict() == data
 
 
 @onlyCUDA

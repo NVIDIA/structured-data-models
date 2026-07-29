@@ -57,8 +57,13 @@ def test_from_arrow() -> None:
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
-    with pytest.raises(ValueError, match="cannot represent null integer"):
-        ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+    tensor = ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+    assert tensor.tolist() == [[1], [None], [3]]
+    assert tensor.validity[0] is not None
+    assert tensor.validity[0].equal(torch.tensor([True, False, True]))
+
+    tensor = ColumnarTensor.from_arrow(pa.array(["a", None, ""]))
+    assert tensor.tolist() == [["a"], [None], [""]]
 
 
 def test_from_arrow_chunked_string() -> None:
@@ -107,10 +112,11 @@ def test_from_cudf() -> None:
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
-    with pytest.raises(ValueError, match="cannot represent null integer"):
-        ColumnarTensor.from_cudf(
-            cudf.Series([1, None, 3], dtype="int64"),
-        )
+    tensor = ColumnarTensor.from_cudf(
+        cudf.Series([1, None, 3], dtype="int64"),
+    )
+    assert tensor.tolist() == [[1], [None], [3]]
+    assert tensor.to_cudf().to_arrow().to_pydict() == {"0": [1, None, 3]}
 
 
 def test_to_arrow() -> None:
@@ -124,6 +130,12 @@ def test_to_arrow() -> None:
         "0": [0, 1, 2, 3, 4, 5],
         "1": ["a", "b", "c", "d", "e", "f"],
     }
+
+    tensor = ColumnarTensor(
+        columns=(torch.tensor([1, 0, 3]),),
+        validity=(torch.tensor([True, False, True]),),
+    )
+    assert tensor.to_arrow().to_pydict() == {"0": [1, None, 3]}
 
 
 @onlyCUDA
@@ -145,7 +157,10 @@ def test_to_cudf() -> None:
 
 
 def test_save_load() -> None:
-    tensor = ColumnarTensor((torch.arange(3),))
+    tensor = ColumnarTensor(
+        columns=(torch.arange(3),),
+        validity=(torch.tensor([True, False, True]),),
+    )
 
     buffer = io.BytesIO()
     torch.save(tensor, buffer)
@@ -154,6 +169,7 @@ def test_save_load() -> None:
 
     assert isinstance(out, ColumnarTensor)
     assert out.size() == (3, 1)
+    assert out.tolist() == [[0], [None], [2]]
 
 
 def test_to_copy() -> None:
@@ -372,6 +388,39 @@ def test_cat_stack() -> None:
 
     with pytest.raises(RuntimeError, match="stack after"):
         _ = torch.stack([tensor1, tensor2], dim=-1)
+
+
+def test_nullable_ops() -> None:
+    tensor = ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+
+    out = tensor[[2, 1]]
+    assert out.tolist() == [[3], [None]]
+
+    with pytest.raises(RuntimeError, match="without losing its validity mask"):
+        tensor.select(-1, 0)
+    with pytest.raises(RuntimeError, match="without losing validity masks"):
+        tensor.unbind(-1)
+
+    out = torch.cat([tensor, tensor], dim=0)
+    assert out.tolist() == [[1], [None], [3], [1], [None], [3]]
+
+    other = ColumnarTensor.from_arrow(pa.array(["a", None, "c"]))
+    out = torch.cat([tensor, other], dim=-1)
+    assert out.tolist() == [[1, "a"], [None, None], [3, "c"]]
+
+    out = torch.stack([tensor, tensor], dim=0)
+    assert out.tolist() == [
+        [[1], [None], [3]],
+        [[1], [None], [3]],
+    ]
+
+    plain_string = ColumnarTensor.from_arrow(pa.array(["a", ""]))
+    nullable_string = ColumnarTensor.from_arrow(pa.array(["b", None]))
+    out = torch.cat([plain_string, nullable_string], dim=0)
+    assert out.tolist() == [["a"], [""], ["b"], [None]]
+
+    out = torch.stack([plain_string, nullable_string], dim=0)
+    assert out.tolist() == [[["a"], [""]], [["b"], [None]]]
 
 
 def test_tolist() -> None:
