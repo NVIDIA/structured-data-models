@@ -11,6 +11,8 @@ install
 :caption: Guides
 :maxdepth: 1
 
+tensor
+model
 recipe
 ```
 
