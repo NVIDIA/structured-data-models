@@ -47,6 +47,10 @@ class KumoRFM(ICLModel):
       Context rows carry target information, while query rows attend to the
       labeled context to produce class logits or regression quantiles.
 
+    For large sampled neighborhoods, pass ``batch_size_limit`` to
+    :meth:`forward` or :meth:`fit` to bound the flattened attention batch size.
+    A limit passed to :meth:`fit` is reused by :meth:`predict`.
+
     .. code-block:: python
 
         from sdm import RelatedTables, TableTensor
@@ -211,6 +215,7 @@ class KumoRFM(ICLModel):
             cache=cache,
             generator=generator,
             num_hops=kwargs.get("num_hops"),
+            batch_size_limit=kwargs.get("batch_size_limit"),
         )
 
         if classes is None:
@@ -292,6 +297,7 @@ class _KumoRFM(torch.nn.Module):
         cache: Cache | None = None,
         generator: torch.Generator | None = None,
         num_hops: int | None = None,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
         num_classes: int | None = None  # Extract `y` as tensor:
@@ -398,6 +404,7 @@ class _KumoRFM(torch.nn.Module):
                 cache_key=f"table_{name}",
                 cache=cache,
                 generator=generator,
+                batch_size_limit=batch_size_limit,
             )
 
         # Inter-Message Passing ###############################################
@@ -449,6 +456,7 @@ class _KumoRFM(torch.nn.Module):
             y=y,
             num_classes=num_classes,
             cache=cache,
+            batch_size_limit=batch_size_limit,
         )
 
     def _embed_table(
@@ -461,6 +469,7 @@ class _KumoRFM(torch.nn.Module):
         cache_key: str,
         cache: Cache | None,
         generator: torch.Generator | None,
+        batch_size_limit: int | None,
     ) -> tuple[Tensor, Tensor]:
         # Embed context and query rows jointly per table. Targets are injected
         # by distributing them to related tables via task-row assignment:
@@ -491,6 +500,7 @@ class _KumoRFM(torch.nn.Module):
             max_keys=self.max_train_size,
             num_classes=num_classes,
             cache=_cache,
+            batch_size_limit=batch_size_limit,
             generator=generator,
         )
 

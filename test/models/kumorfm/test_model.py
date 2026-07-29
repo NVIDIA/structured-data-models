@@ -275,7 +275,29 @@ def test_forward(
     )
 
     torch.manual_seed(1)
-    model.fit(x, y, related_tables)
+    chunked_out = model(
+        x_context=x,
+        y_context=y,
+        x_query=x,
+        related_context_tables=related_tables,
+        related_query_tables=related_tables,
+        num_hops=2,
+        batch_size_limit=1,
+    )
+    torch.testing.assert_close(chunked_out.numerical, out.numerical)
+
+    with pytest.raises(ValueError, match="must be positive"):
+        model(
+            x_context=x,
+            y_context=y,
+            x_query=x,
+            related_context_tables=related_tables,
+            related_query_tables=related_tables,
+            batch_size_limit=0,
+        )
+
+    torch.manual_seed(1)
+    model.fit(x, y, related_tables, batch_size_limit=1)
     assert model.predict(
         x=x,
         related_tables=RelatedTables(
@@ -283,7 +305,7 @@ def test_forward(
             relationships=related_tables.relationships[::-1],
             task_links=related_tables.task_links[::-1],
         ),
-    ).allclose(out)
+    ).allclose(chunked_out)
     model.clear()
 
 
@@ -339,6 +361,7 @@ def test_many_classes_forward_and_cache(
         related_context_tables=related_tables,
         related_query_tables=related_tables,
         num_hops=0,
+        batch_size_limit=1,
     )
     assert expected.size() == (2, num_classes)
     probabilities = expected.div(0.9).exp()
@@ -356,6 +379,7 @@ def test_many_classes_forward_and_cache(
         related_query_tables=None,
         cache=cache,
         num_hops=0,
+        batch_size_limit=1,
     )
     assert recorded.size() == (0, num_classes)
 
@@ -366,6 +390,7 @@ def test_many_classes_forward_and_cache(
         related_context_tables=None,
         related_query_tables=related_tables,
         cache=cache.freeze(),
+        batch_size_limit=1,
     )
     torch.testing.assert_close(predicted, expected)
 
