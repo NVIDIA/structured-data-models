@@ -152,6 +152,7 @@ data-aria-dark="Switch to auto color mode">
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#concepts">Concepts</a></li>
 <li><a class="reference internal" href="#usage">Usage</a></li>
+<li><a class="reference internal" href="#ensembling">Ensembling</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -184,80 +185,85 @@ data-aria-dark="Switch to auto color mode">
   <article class="yue" role="main">
           <section id="recipes">
 <h1>Recipes<a class="headerlink" href="#recipes" title="Link to this heading">#</a></h1>
-<p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code> defines how data crosses a model boundary:
-it transforms inputs into the space your model expects and maps the model’s
-outputs back to the original space, keeping the same auditable transforms on
-both sides of the model.</p>
+<p>A <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> defines how data crosses a model boundary: it transforms inputs into the space a model expects and maps the model’s outputs back to the original space, keeping the same auditable transforms on both sides of the model.</p>
 <section id="concepts">
 <h2>Concepts<a class="headerlink" href="#concepts" title="Link to this heading">#</a></h2>
+<p>The basic unit of a recipe is a <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>.
+A list of all available processors grouped by their domain and semantic type is outlined in the <a class="reference internal" href="api/processing.html"><span class="doc std std-doc">API reference</span></a>.</p>
 <ul class="simple">
-<li><p>A <strong>step</strong> is a <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code> that transforms a
-<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> and returns a
-<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>. A <em>stateful</em> step learns parameters
-when you call <code class="docutils literal notranslate"><span class="pre">fit</span></code> (for example
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Standardize</span></code> learns each column’s mean and
-standard deviation); a stateless one does not (for example
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Softmax</span></code>).</p></li>
-<li><p>A small stateless transformation can be supplied directly to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code> as a function or lambda. It is
-normalized to a stateless processor and participates in the usual
-<code class="docutils literal notranslate"><span class="pre">fit</span></code> and <code class="docutils literal notranslate"><span class="pre">transform</span></code> flow, but does not support <code class="docutils literal notranslate"><span class="pre">inverse_transform</span></code>.</p></li>
-<li><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code> is an ordered list of steps.
-Recipes do not infer each step’s non-finite input contract. Place imputation
-or cleanup before processors that do not explicitly document non-finite
-support; for example, use <code class="xref py py-class docutils literal notranslate"><span class="pre">ImputeMean</span></code> before
-downstream numerical processors that expect finite input.</p></li>
-<li><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code> bundles three pipelines, reached as
-attributes:</p>
-<ul>
-<li><p><code class="docutils literal notranslate"><span class="pre">features</span></code> — model inputs, transformed before the model.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">target</span></code> — labels, transformed before the model and inverted after it to
-map predictions back to the original space; every step must be invertible.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">output</span></code> — the model output, an optional forward-only cleanup after the
-target inverse (for example turning logits into probabilities).</p></li>
+<li><p>A <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> transforms a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> and returns a new <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>.</p></li>
+<li><p>A <strong>stateful</strong> <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> learns state when you call <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor.fit" title="sdm.processing.base.Processor.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a> (<em>e.g.</em>, <a class="reference internal" href="api/generated/sdm.processing.numerical.Standardize.html#sdm.processing.numerical.Standardize" title="sdm.processing.numerical.Standardize"><code class="xref py py-class docutils literal notranslate"><span class="pre">Standardize</span></code></a> learns each column’s mean and standard deviation); a <strong>stateless</strong> one does not (<em>e.g.</em>, <a class="reference internal" href="api/generated/sdm.processing.output.Softmax.html#sdm.processing.output.Softmax" title="sdm.processing.output.Softmax"><code class="xref py py-class docutils literal notranslate"><span class="pre">Softmax</span></code></a>).</p></li>
 </ul>
-</li>
+<p>A <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> is fully composable:</p>
+<ul class="simple">
+<li><p>A <a class="reference internal" href="api/generated/sdm.processing.common.Sequential.html#sdm.processing.common.Sequential" title="sdm.processing.common.Sequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code></a> processor applies a sequence of processors.</p></li>
+<li><p>A <a class="reference internal" href="api/generated/sdm.processing.common.StypeDispatch.html#sdm.processing.common.StypeDispatch" title="sdm.processing.common.StypeDispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a> processor applies a processor per <a class="reference internal" href="api/generated/sdm.Stype.html"><span class="doc std std-doc">semantic type</span></a>.</p></li>
+<li><p>A <a class="reference internal" href="api/generated/sdm.processing.common.TaskDispatch.html#sdm.processing.common.TaskDispatch" title="sdm.processing.common.TaskDispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a> processor applies a processor per task (<em>e.g.</em>, classification or regression).</p></li>
+</ul>
+<p>Processors let you define powerful recipes that manage the full pre-processing pipeline of input features and targets, as well as post-processing pipelines of model outputs.
+In particular:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">Recipe.features</span></code></span></a>: a <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> that operates on model inputs, transformed before the model.</p></li>
+<li><p><a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">Recipe.target</span></code></span></a>: a <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> that operates on targets, transformed before the model. For regression tasks, it is also used to invert model outputs back to their original space.</p></li>
+<li><p><a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">Recipe.output</span></code></span></a>: a <a class="reference internal" href="api/generated/sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> that operates on model outputs (after the target inverse in regression tasks), <em>e.g.</em>, to reduce outputs from multiple estimators or to turn logits into probabilities.</p></li>
 </ul>
 </section>
 <section id="usage">
 <h2>Usage<a class="headerlink" href="#usage" title="Link to this heading">#</a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<p>Each model defines a default recipe that closely mimics pre- and postprocessing routines of its official implementation (<em>e.g.</em>, take a look at the default recipe of <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a>).</p>
+<p>Recipes are plain Python objects, so they can be inspected, copied and modified.
+This makes it easy to keep the default model contract while changing one part of the pipeline.
+For example, <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> does not consume raw <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> columns directly.
+To support <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> inputs, you can, <em>e.g.</em>, add a <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.datetime" title="sdm.Stype.datetime"><code class="xref py py-attr docutils literal notranslate"><span class="pre">datetime</span></code></a> branch to the recipe that expands timestamps into numerical calendar features before running the rest of the default feature pipeline:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">TabICLv2</span>
+</span><span data-line="2"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">AddCalendarFields</span><span class="p">,</span> <span class="n">StypeDispatch</span>
+</span><span data-line="3">
+</span><span data-line="4"><span class="n">recipe</span> <span class="o">=</span> <span class="n">TabICLv2</span><span class="o">.</span><span class="n">default_recipe</span><span class="p">()</span>
+</span><span data-line="5"><span class="n">recipe</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">StypeDispatch</span><span class="p">(</span>
+</span><span data-line="6">    <span class="n">datetime</span><span class="o">=</span><span class="n">AddCalendarFields</span><span class="p">(</span>
+</span><span data-line="7">        <span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;minute&quot;</span><span class="p">,</span> <span class="s2">&quot;hour&quot;</span><span class="p">,</span> <span class="s2">&quot;weekday&quot;</span><span class="p">,</span> <span class="s2">&quot;day_of_month&quot;</span><span class="p">,</span> <span class="s2">&quot;month&quot;</span><span class="p">),</span>
+</span><span data-line="8">    <span class="p">)</span>
+</span><span data-line="9"><span class="p">)</span> <span class="o">+</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span>
+</span></pre></div>
+</div>
+<p>You can also define a recipe from scratch when you want full control over the
+transformations applied to features, targets, and outputs:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="o">*</span>
 </span><span data-line="2">
-</span><span data-line="3"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">TableTensor</span>
-</span><span data-line="4"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Recipe</span><span class="p">,</span> <span class="n">Standardize</span>
-</span><span data-line="5">
-</span><span data-line="6"><span class="n">recipe</span> <span class="o">=</span> <span class="n">Recipe</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="n">Standardize</span><span class="p">()],</span> <span class="n">target</span><span class="o">=</span><span class="p">[</span><span class="n">Standardize</span><span class="p">()])</span>
+</span><span data-line="3"><span class="n">recipe</span> <span class="o">=</span> <span class="n">Recipe</span><span class="p">(</span>
+</span><span data-line="4">    <span class="c1"># First impute missing values, then standardize:</span>
+</span><span data-line="5">    <span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="n">ImputeMean</span><span class="p">(),</span> <span class="n">Standardize</span><span class="p">()],</span>
+</span><span data-line="6">
+</span><span data-line="7">    <span class="n">target</span><span class="o">=</span><span class="n">StypeDispatch</span><span class="p">(</span>
+</span><span data-line="8">        <span class="c1"># Align and shuffle classes for classification:</span>
+</span><span data-line="9">        <span class="n">categorical</span><span class="o">=</span><span class="p">[</span>
+</span><span data-line="10">            <span class="n">AlignCategories</span><span class="p">(),</span>
+</span><span data-line="11">            <span class="n">ShuffleCategories</span><span class="p">(),</span>
+</span><span data-line="12">        <span class="p">],</span>
+</span><span data-line="13">        <span class="c1"># Standardize the targets for regression:</span>
+</span><span data-line="14">        <span class="n">numerical</span><span class="o">=</span><span class="n">Standardize</span><span class="p">(),</span>
+</span><span data-line="15">    <span class="p">),</span>
+</span><span data-line="16">
+</span><span data-line="17">    <span class="n">output</span><span class="o">=</span><span class="n">TaskDispatch</span><span class="p">(</span>
+</span><span data-line="18">        <span class="c1"># Convert logits to probabilities for classification tasks:</span>
+</span><span data-line="19">        <span class="n">classification</span><span class="o">=</span><span class="n">Softmax</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
+</span><span data-line="20">    <span class="p">),</span>
+</span><span data-line="21"><span class="p">)</span>
 </span></pre></div>
 </div>
-<p>For a small stateless transformation, pass a callable directly to
-<code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.processing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequential</span>
-</span><span data-line="2">
-</span><span data-line="3"><span class="n">features</span> <span class="o">=</span> <span class="n">Sequential</span><span class="p">(</span>
-</span><span data-line="4">    <span class="n">Standardize</span><span class="p">(),</span>
-</span><span data-line="5">    <span class="k">lambda</span> <span class="n">table</span><span class="p">:</span> <span class="n">table</span><span class="o">.</span><span class="n">replace_blocks</span><span class="p">(</span>
-</span><span data-line="6">        <span class="n">numerical</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">numerical</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
-</span><span data-line="7">    <span class="p">),</span>
-</span><span data-line="8"><span class="p">)</span>
+<p>When a custom recipe is passed to an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a>, the model applies the feature, target, and output pipelines automatically at the appropriate points in its execution.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model</span> <span class="o">=</span> <span class="n">TabICLv2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+</span><span data-line="2"><span class="n">model</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">recipe</span><span class="o">=</span><span class="n">recipe</span><span class="p">)</span>
 </span></pre></div>
 </div>
-<p>Fit the recipe pipelines on your labeled data and transform them in one call
-with <code class="docutils literal notranslate"><span class="pre">fit_transform</span></code>; transform later inputs with <code class="docutils literal notranslate"><span class="pre">recipe.features.transform</span></code>
-(no re-fit). Recipe pipelines accept and return
-<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>s.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model_features</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">labeled_features</span><span class="p">)</span>
-</span><span data-line="2"><span class="n">model_target</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
-</span><span data-line="3"><span class="n">model_input</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">new_features</span><span class="p">)</span>
+<p>You can also call the individual processors directly to inspect intermediate representations:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">recipe</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+</span><span data-line="2"><span class="n">table</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
 </span></pre></div>
 </div>
-<p>The model returns a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>; map its predictions
-back to the original space:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">prediction</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><span class="n">model_input</span><span class="p">))</span>
-</span><span data-line="2"><span class="n">prediction</span> <span class="o">=</span> <span class="n">recipe</span><span class="o">.</span><span class="n">output</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">prediction</span><span class="p">)</span>  <span class="c1"># identity if `output` is empty</span>
-</span></pre></div>
-</div>
-<p>Target steps run in reverse during the inverse, and every one must mix in
-<code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code>.</p>
+</section>
+<section id="ensembling">
+<h2>Ensembling<a class="headerlink" href="#ensembling" title="Link to this heading">#</a></h2>
 </section>
 </section>
 
@@ -285,7 +291,7 @@ back to the original space:</p>
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=a3cd9781"></script>
+      <script src="_static/documentation_options.js?v=350b5e25"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
