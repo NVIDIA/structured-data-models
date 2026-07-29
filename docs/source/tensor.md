@@ -13,7 +13,7 @@ This makes a table look like a tensor of shape `[..., C]` without flattening all
 In particular, it is
 
 - **dataframe-like at the boundary:** contruct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
-- **PyTorch-native in the middle:** use familar operations such as `to()`, `view()`, `unsqueeze()`, indexing, slicing, `torch.cat`, and `torch.stack`, with fast device movement and efficient transfer to accelerators.
+- **PyTorch-native in the middle:** use familar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
 - **lossless:** column names, semantic types, categorical vocabularies, string values, and missing-values are fully preserved.
 
 ## The Tensor Stack
