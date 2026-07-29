@@ -298,6 +298,16 @@ class StringTensor(VarLenTensor):
     def item(self) -> str:  # type: ignore
         return cast(str, super().item())
 
+    def __eq__(self, other: object) -> Tensor:  # type: ignore
+        if isinstance(other, str):
+            return _eq(self, other)
+        return cast(Tensor, super().__eq__(other))
+
+    def __ne__(self, other: object) -> Tensor:  # type: ignore
+        if isinstance(other, str):
+            return _ne(self, other)
+        return cast(Tensor, super().__ne__(other))
+
     def __str__(self) -> str:
         return self.item() if self.numel() == 1 else self.__repr__()
 
@@ -309,6 +319,71 @@ class StringTensor(VarLenTensor):
             out += f", device={self.device}"
         out += ")"
         return out
+
+
+@StringTensor.implements(aten.eq.Tensor)
+@StringTensor.implements(aten.eq.str)
+def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
+    if isinstance(other, Tensor) and inp.device != other.device:
+        raise RuntimeError(
+            f"Expected both tensors to be on the same device "
+            f"(got '{inp.device}' and '{other.device}')"
+        )
+
+    if not isinstance(other, StringTensor | str):
+        return torch.zeros(
+            torch.broadcast_shapes(inp.size(), other.size()),
+            dtype=torch.bool,
+            device=inp.device,
+        )
+
+    if isinstance(other, Tensor):
+        size = torch.broadcast_shapes(inp.size(), other.size())
+        inp = cast(StringTensor, inp.expand(size))
+        other = cast(StringTensor, other.expand(size))
+    else:
+        size = inp.size()
+
+    backend: Literal["arrow", "cudf"] = "arrow"
+    if inp.is_cuda:
+        if importlib.util.find_spec("cudf") is not None:
+            backend = "cudf"
+        else:
+            warn_once(
+                key="missing-cudf-eq",
+                message=(
+                    "Falling back to a CPU-based string comparison because "
+                    "cuDF is not installed. Install cuDF to enable faster "
+                    "CUDA-based string comparisons without device "
+                    "synchronization."
+                ),
+            )
+
+    if backend == "arrow":
+        out = pc.call_function(
+            "equal",
+            [
+                inp.to_arrow(),
+                other.to_arrow() if isinstance(other, StringTensor) else other,
+            ],
+        )
+        mask = arrow_as_tensor(out, dtype=torch.bool, device=inp.device)
+    else:
+        assert backend == "cudf"
+        with torch.cuda.device(inp.device):
+            if isinstance(other, StringTensor):
+                out = inp.to_cudf() == other.to_cudf()
+            else:
+                out = inp.to_cudf() == other
+            mask = torch.from_dlpack(out.to_cupy()).view(size)
+
+    return mask.view(size)
+
+
+@StringTensor.implements(aten.ne.Tensor)
+@StringTensor.implements(aten.ne.str)
+def _ne(inp: StringTensor, other: Tensor | str) -> Tensor:
+    return ~_eq(inp, other)
 
 
 @StringTensor.implements(aten.sort.default)
@@ -337,9 +412,9 @@ def _sort(
             warn_once(
                 key="missing-cudf-sort",
                 message=(
-                    "Falling back to a CPU-based sort because cuDF is not "
-                    "installed. Install cuDF to enable faster CUDA-based "
-                    "sorting without device synchronization."
+                    "Falling back to a CPU-based string sort because cuDF is "
+                    "not installed. Install cuDF to enable faster CUDA-based "
+                    "string sorting without device synchronization."
                 ),
             )
 
