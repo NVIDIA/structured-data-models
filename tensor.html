@@ -153,11 +153,10 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#the-tensor-stack">The Tensor Stack</a></li>
 <li><a class="reference internal" href="#working-with-tabletensor">Working with <code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a><ul>
 <li><a class="reference internal" href="#column-semantics">Column Semantics</a></li>
-<li><a class="reference internal" href="#device-movement">Device Movement</a></li>
-<li><a class="reference internal" href="#round-tripping-to-dataframes">Round-Tripping To Dataframes</a></li>
-<li><a class="reference internal" href="#model-inputs-and-outputs">Model Inputs And Outputs</a></li>
+<li><a class="reference internal" href="#round-tripping">Round-Tripping</a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#model-inputs-and-outputs">Model Inputs And Outputs</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -190,7 +189,7 @@ data-aria-dark="Switch to auto color mode">
   <article class="yue" role="main">
           <section id="table-semantics">
 <h1>Table Semantics<a class="headerlink" href="#table-semantics" title="Link to this heading">#</a></h1>
-<p>Structured data models operate on heterogeneous tables with all kinds of data modalities: numerical values, categories, timestamps, free-form text, identifiers, and missing values.
+<p>Structured data models operate on heterogeneous tables across all kinds of data modalities: numerical values, categories, timestamps, free-form text, identifiers, and missing values.
 Even within one modality, values may have different physical types, <em>e.g.</em>, strings, integers, or booleans can all represent categorical data.
 Traditionally, converting such tables into numeric model inputs was left to the user.
 The <a class="reference internal" href="api/tensor.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">sdm.tensor</span></code></span></a> package makes that conversion natural, PyTorch-native, and GPU-ready.
@@ -202,7 +201,7 @@ This makes a table look like a tensor of shape <code class="docutils literal not
 In particular, it is</p>
 <ul class="simple">
 <li><p><strong>dataframe-like at the boundary:</strong> contruct from <a class="reference external" href="https://pandas.pydata.org/docs"><code class="docutils literal notranslate"><span class="pre">pandas</span></code></a>, <a class="reference external" href="https://arrow.apache.org/docs"><code class="docutils literal notranslate"><span class="pre">arrow</span></code></a>, or <a class="reference external" href="https://docs.rapids.ai/api/cudf"><code class="docutils literal notranslate"><span class="pre">cudf</span></code></a> via zero-copy buffer views, and convert back when needed.</p></li>
-<li><p><strong>PyTorch-native in the middle:</strong> use familar operations such as <code class="docutils literal notranslate"><span class="pre">to()</span></code>, <code class="docutils literal notranslate"><span class="pre">view()</span></code>, <code class="docutils literal notranslate"><span class="pre">unsqueeze()</span></code>, indexing, slicing, <code class="docutils literal notranslate"><span class="pre">torch.cat</span></code>, and <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code>, with fast device movement and efficient transfer to accelerators.</p></li>
+<li><p><strong>PyTorch-native in the middle:</strong> use familar operations such as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to" title="(in PyTorch v2.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.view.html#torch.Tensor.view" title="(in PyTorch v2.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">view()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unsqueeze.html#torch.Tensor.unsqueeze" title="(in PyTorch v2.13)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a>, indexing, slicing, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.13)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>, with fast device movement and efficient transfer to accelerators.</p></li>
 <li><p><strong>lossless:</strong> column names, semantic types, categorical vocabularies, string values, and missing-values are fully preserved.</p></li>
 </ul>
 <section id="the-tensor-stack">
@@ -287,6 +286,11 @@ In addition to the dataframe itself, each column must be assigned a semantic typ
 </span><span data-line="47"><span class="c1"># [&quot;US&quot;, &quot;DE&quot;]</span>
 </span></pre></div>
 </div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The mapping from categories to integer codes is not a stable API guarantee and may depend on the input data or backend.
+For fully deterministic category mappings, align categories at the processing level via <a class="reference internal" href="api/generated/sdm.processing.categorical.AlignCategories.html#sdm.processing.categorical.AlignCategories" title="sdm.processing.categorical.AlignCategories"><code class="xref py py-class docutils literal notranslate"><span class="pre">AlignCategories</span></code></a>.</p>
+</div>
 <section id="column-semantics">
 <h3>Column Semantics<a class="headerlink" href="#column-semantics" title="Link to this heading">#</a></h3>
 <p>Because columns are stored in semantic blocks, <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> does not treat the original dataframe column order as a stable invariant.
@@ -318,17 +322,14 @@ For example, raw integer indexing into the column dimension is not allowed:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">table</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># RuntimeError: can&#39;t select the column dimension</span>
 </span></pre></div>
 </div>
-</section>
-<section id="device-movement">
-<h3>Device Movement<a class="headerlink" href="#device-movement" title="Link to this heading">#</a></h3>
-<p>Because the tensor implementations are <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> subclasses, device movement follows the usual PyTorch style:</p>
+<p>Device movement follows the usual PyTorch style:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 </span><span data-line="2"><span class="c1"># cuda:0</span>
 </span></pre></div>
 </div>
 </section>
-<section id="round-tripping-to-dataframes">
-<h3>Round-Tripping To Dataframes<a class="headerlink" href="#round-tripping-to-dataframes" title="Link to this heading">#</a></h3>
+<section id="round-tripping">
+<h3>Round-Tripping<a class="headerlink" href="#round-tripping" title="Link to this heading">#</a></h3>
 <p>A <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> is intended to sit between dataframe interfaces and model code.
 You can zero-copy back to <a class="reference external" href="https://pandas.pydata.org/docs"><code class="docutils literal notranslate"><span class="pre">pandas</span></code></a> or <a class="reference external" href="https://arrow.apache.org/docs"><code class="docutils literal notranslate"><span class="pre">arrow</span></code></a> when you want to leave the tensorized runtime:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">df</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
@@ -346,11 +347,11 @@ Some table tensor operations are executed by exposing tensor buffers to <a class
 Without it, these operations fall back to a CPU backend, which requires transferring data from the device to the host and back.</p>
 </div>
 </section>
+</section>
 <section id="model-inputs-and-outputs">
-<h3>Model Inputs And Outputs<a class="headerlink" href="#model-inputs-and-outputs" title="Link to this heading">#</a></h3>
+<h2>Model Inputs And Outputs<a class="headerlink" href="#model-inputs-and-outputs" title="Link to this heading">#</a></h2>
 <p>A <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
 Learn more about model processing and execution in the <a class="reference internal" href="model.html"><span class="doc std std-doc">Model Interface</span></a> and <a class="reference internal" href="recipe.html"><span class="doc std std-doc">Recipes</span></a> guides.</p>
-</section>
 </section>
 </section>
 
@@ -378,7 +379,7 @@ Learn more about model processing and execution in the <a class="reference inter
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=160d6da8"></script>
+      <script src="_static/documentation_options.js?v=a3cd9781"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
