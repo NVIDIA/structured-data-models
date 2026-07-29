@@ -26,7 +26,7 @@ Each subclass supports multi-dimensional shapes and strides, and preserves stand
 - {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values.
   Category mappings can be ordinary {py:class}`torch.Tensor` instances or subclasses of it, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
 - {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless, table representation whose columns are grouped by semantic type.
-  It is the main user-facing container for model inputs and outputs.
+  It is the main user-facing interface for model inputs and outputs.
 
 ## Working with {py:class}`~sdm.tensor.TableTensor`
 
@@ -37,6 +37,18 @@ A {py:class}`~sdm.tensor.TableTensor` currently supports the following semantic 
 - {py:attr}`~sdm.Stype.datetime`: timestamps stored as an integer {py:class}`torch.Tensor` containing Unix timestamps in microseconds.
 - {py:attr}`~sdm.Stype.text`: free-form strings stored as {py:class}`~sdm.tensor.StringTensor`.
 - {py:attr}`~sdm.Stype.id`: identifier columns (*e.g.*, primary keys or foreign keys) stored as a {py:class}`~sdm.tensor.ColumnarTensor`.
+
+```{figure} images/table_light.svg
+:figclass: light-only
+:width: 100%
+:align: center
+```
+
+```{figure} images/table_dark.svg
+:figclass: dark-only
+:width: 100%
+:align: center
+```
 
 A {py:class}`~sdm.tensor.TableTensor` can be created manually from tensor blocks or converted from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) dataframes.
 In addition to the dataframe itself, each column must be assigned a semantic type; use {py:func}`~sdm.infer_stypes` to infer semantic types automatically:
@@ -128,7 +140,7 @@ table[..., 0]  # RuntimeError: can't select the column dimension
 
 ### Device Movement
 
-Because the containers are tensor subclasses, device movement follows the usual PyTorch style:
+Because the tensor implementations are {py:class}`torch.Tensor` subclasses, device movement follows the usual PyTorch style:
 
 ```python
 print(table.to("cuda").device)
@@ -137,7 +149,7 @@ print(table.to("cuda").device)
 
 ### Round-Tripping To Dataframes
 
-The tensor containers are intended to sit between dataframe interfaces and model code.
+A {py:class}`~sdm.tensor.TableTensor` is intended to sit between dataframe interfaces and model code.
 You can zero-copy back to [`pandas`](https://pandas.pydata.org/docs) or [`arrow`](https://arrow.apache.org/docs) when you want to leave the tensorized runtime:
 
 ```python
@@ -160,4 +172,4 @@ Without it, these operations fall back to a CPU backend, which requires transfer
 ### Model Inputs And Outputs
 
 A {py:class}`~sdm.tensor.TableTensor` acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
-Learn more about model processing and execution in the [Recipes](recipe) and [Model Interface](model) guides.
+Learn more about model processing and execution in the [Model Interface](model) and [Recipes](recipe) guides.

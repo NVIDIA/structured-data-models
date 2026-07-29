@@ -215,7 +215,7 @@ Each subclass supports multi-dimensional shapes and strides, and preserves stand
 <li><p><a class="reference internal" href="api/generated/sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.CategoricalTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalTensor</span></code></a>: A tensor for representing categorical values via integer codes together with their mapping to original values.
 Category mappings can be ordinary <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> instances or subclasses of it, <em>e.g.</em>, <a class="reference internal" href="api/generated/sdm.tensor.StringTensor.html#sdm.tensor.StringTensor" title="sdm.tensor.StringTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringTensor</span></code></a>.</p></li>
 <li><p><a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>: Combines the tensor types above into a lossless, table representation whose columns are grouped by semantic type.
-It is the main user-facing container for model inputs and outputs.</p></li>
+It is the main user-facing interface for model inputs and outputs.</p></li>
 </ul>
 </section>
 <section id="working-with-tabletensor">
@@ -228,6 +228,14 @@ It is the main user-facing container for model inputs and outputs.</p></li>
 <li><p><a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.text" title="sdm.Stype.text"><code class="xref py py-attr docutils literal notranslate"><span class="pre">text</span></code></a>: free-form strings stored as <a class="reference internal" href="api/generated/sdm.tensor.StringTensor.html#sdm.tensor.StringTensor" title="sdm.tensor.StringTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringTensor</span></code></a>.</p></li>
 <li><p><a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.id" title="sdm.Stype.id"><code class="xref py py-attr docutils literal notranslate"><span class="pre">id</span></code></a>: identifier columns (<em>e.g.</em>, primary keys or foreign keys) stored as a <a class="reference internal" href="api/generated/sdm.tensor.ColumnarTensor.html#sdm.tensor.ColumnarTensor" title="sdm.tensor.ColumnarTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ColumnarTensor</span></code></a>.</p></li>
 </ul>
+<figure class="light-only align-center">
+<a class="reference internal image-reference" href="_images/table_light.svg"><img alt="_images/table_light.svg" src="_images/table_light.svg" style="width: 100%;" />
+</a>
+</figure>
+<figure class="dark-only align-center">
+<a class="reference internal image-reference" href="_images/table_dark.svg"><img alt="_images/table_dark.svg" src="_images/table_dark.svg" style="width: 100%;" />
+</a>
+</figure>
 <p>A <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> can be created manually from tensor blocks or converted from <a class="reference external" href="https://pandas.pydata.org/docs"><code class="docutils literal notranslate"><span class="pre">pandas</span></code></a>, <a class="reference external" href="https://arrow.apache.org/docs"><code class="docutils literal notranslate"><span class="pre">arrow</span></code></a>, or <a class="reference external" href="https://docs.rapids.ai/api/cudf"><code class="docutils literal notranslate"><span class="pre">cudf</span></code></a> dataframes.
 In addition to the dataframe itself, each column must be assigned a semantic type; use <a class="reference internal" href="api/generated/sdm.infer_stypes.html#sdm.infer_stypes" title="sdm.infer_stypes"><code class="xref py py-func docutils literal notranslate"><span class="pre">infer_stypes()</span></code></a> to infer semantic types automatically:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
@@ -313,7 +321,7 @@ For example, raw integer indexing into the column dimension is not allowed:</p>
 </section>
 <section id="device-movement">
 <h3>Device Movement<a class="headerlink" href="#device-movement" title="Link to this heading">#</a></h3>
-<p>Because the containers are tensor subclasses, device movement follows the usual PyTorch style:</p>
+<p>Because the tensor implementations are <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> subclasses, device movement follows the usual PyTorch style:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 </span><span data-line="2"><span class="c1"># cuda:0</span>
 </span></pre></div>
@@ -321,7 +329,7 @@ For example, raw integer indexing into the column dimension is not allowed:</p>
 </section>
 <section id="round-tripping-to-dataframes">
 <h3>Round-Tripping To Dataframes<a class="headerlink" href="#round-tripping-to-dataframes" title="Link to this heading">#</a></h3>
-<p>The tensor containers are intended to sit between dataframe interfaces and model code.
+<p>A <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> is intended to sit between dataframe interfaces and model code.
 You can zero-copy back to <a class="reference external" href="https://pandas.pydata.org/docs"><code class="docutils literal notranslate"><span class="pre">pandas</span></code></a> or <a class="reference external" href="https://arrow.apache.org/docs"><code class="docutils literal notranslate"><span class="pre">arrow</span></code></a> when you want to leave the tensorized runtime:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">df</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
 </span><span data-line="2"><span class="n">df</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
@@ -341,7 +349,7 @@ Without it, these operations fall back to a CPU backend, which requires transfer
 <section id="model-inputs-and-outputs">
 <h3>Model Inputs And Outputs<a class="headerlink" href="#model-inputs-and-outputs" title="Link to this heading">#</a></h3>
 <p>A <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
-Learn more about model processing and execution in the <a class="reference internal" href="recipe.html"><span class="doc std std-doc">Recipes</span></a> and <a class="reference internal" href="model.html"><span class="doc std std-doc">Model Interface</span></a> guides.</p>
+Learn more about model processing and execution in the <a class="reference internal" href="model.html"><span class="doc std std-doc">Model Interface</span></a> and <a class="reference internal" href="recipe.html"><span class="doc std std-doc">Recipes</span></a> guides.</p>
 </section>
 </section>
 </section>
@@ -370,7 +378,7 @@ Learn more about model processing and execution in the <a class="reference inter
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=7713b6a9"></script>
+      <script src="_static/documentation_options.js?v=160d6da8"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
