@@ -324,17 +324,17 @@ class StringTensor(VarLenTensor):
 @StringTensor.implements(aten.eq.Tensor)
 @StringTensor.implements(aten.eq.str)
 def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
+    if isinstance(other, Tensor) and inp.device != other.device:
+        raise RuntimeError(
+            f"Expected both tensors to be on the same device "
+            f"(got '{inp.device}' and '{other.device}')"
+        )
+
     if not isinstance(other, StringTensor | str):
         return torch.zeros(
             torch.broadcast_shapes(inp.size(), other.size()),
             dtype=torch.bool,
             device=inp.device,
-        )
-
-    if isinstance(other, Tensor) and inp.device != other.device:
-        raise RuntimeError(
-            f"Expected both tensors to be on the same device "
-            f"(got '{inp.device}' and '{other.device}')"
         )
 
     if isinstance(other, Tensor):
