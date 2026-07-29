@@ -1,6 +1,7 @@
 import pytest
-import sdm
 import torch
+
+import sdm
 
 
 @pytest.mark.parametrize(
