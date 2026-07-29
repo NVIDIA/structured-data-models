@@ -41,7 +41,7 @@ dependencies = [
     "typing_extensions",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 test = [
     "pytest",
     "pytest-cov",
@@ -53,8 +53,10 @@ doc = [
     "sphinx",
     "sphinx-copybutton",
 ]
-
-[dependency-groups]
+dev = [
+    { include-group = "test" },
+    { include-group = "doc" },
+]
 example-tabarena = [
     "autogluon.common @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common",
     "autogluon.core @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core",
