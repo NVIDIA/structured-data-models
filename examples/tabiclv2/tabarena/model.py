@@ -11,8 +11,7 @@ from autogluon.core.metrics import Scorer
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 from tabarena.benchmark.task.metadata import ValidationMetadata
 
-from sdm import Stype, TableTensor, infer_stypes
-from sdm.models import TabICLv2
+import sdm
 
 
 class SDMTabICLv2System(ExternalSystemModel):
@@ -27,7 +26,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        self.model = TabICLv2(device=self._device)
+        self.model = sdm.models.TabICLv2(device=self._device)
 
     def _fit_system(
         self,
@@ -49,12 +48,12 @@ class SDMTabICLv2System(ExternalSystemModel):
                 random_state
             )
 
-        self.stypes = infer_stypes(X)
+        self.stypes = sdm.infer_stypes(X)
         target_name = target_name or "__target__"
         if problem_type == "regression":
-            target_stype = Stype.numerical
+            target_stype = sdm.Stype.numerical
         else:
-            target_stype = Stype.categorical
+            target_stype = sdm.Stype.categorical
             label_cleaner = LabelCleaner.construct(
                 problem_type=problem_type,
                 y=y,
@@ -64,12 +63,12 @@ class SDMTabICLv2System(ExternalSystemModel):
                 for label in label_cleaner.ordered_class_labels
             }
 
-        table_x = TableTensor.from_pandas(
+        table_x = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self._device,
         )
-        table_y = TableTensor.from_pandas(
+        table_y = sdm.TableTensor.from_pandas(
             df=y.rename(target_name).to_frame(),
             stypes={target_name: target_stype},
             device=self._device,
@@ -83,7 +82,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
-        table_x = TableTensor.from_pandas(
+        table_x = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self._device,
@@ -93,7 +92,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         return pd.Series(values, index=X.index)
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        table_x = TableTensor.from_pandas(
+        table_x = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self._device,
