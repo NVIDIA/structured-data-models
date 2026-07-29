@@ -56,6 +56,17 @@ Datetime Processors
    ~sdm.processing.datetime.{{ name }}
 {% endfor %}
 
+Text Processors
+---------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.processing.text") %}
+   ~sdm.processing.text.{{ name }}
+{% endfor %}
+
 Post-Processors
 ---------------
 

@@ -27,6 +27,7 @@ from sdm.processing.categorical import (
     ImputeMode,
 )
 from sdm.processing.datetime import AddCalendarFields
+from sdm.processing.text import EmbedText
 from sdm.processing.output import ReduceEstimators, Softmax
 from sdm.processing.recipe import Recipe
 
@@ -53,6 +54,7 @@ __all__ = [
     "ShuffleCategories",
     "ImputeMode",
     "AddCalendarFields",
+    "EmbedText",
     "ReduceEstimators",
     "Softmax",
     "Recipe",
