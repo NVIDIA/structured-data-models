@@ -113,7 +113,9 @@ class Recipe:
     output dispatchers.
 
     Args:
-        features: Steps applied to model inputs before the model.
+        features: Steps applied to model inputs before the model. Inputs are
+            normalized to a :class:`~sdm.processing.Sequential` that preserves
+            identifier columns around children that do not support them.
         target: Steps applied to labels. Invertible numerical target steps map
             regression output back to the original space.
         output: Steps applied to stacked member outputs after member-local
@@ -136,6 +138,9 @@ class Recipe:
             features = Sequential()
         elif not isinstance(features, Processor):
             features = Sequential(*features)
+        if not isinstance(features, Sequential):
+            features = Sequential(features)
+        features.passthrough_stypes |= {Stype.id}
 
         if target is None:
             target = Sequential()
