@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="./">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Table Semantics - Structured Data Models</title><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Model Interface" href="model.html" /><link rel="prev" title="Installation" href="install.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Table Semantics - Structured Data Models</title><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="In-Context Learning" href="icl.html" /><link rel="prev" title="Installation" href="install.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="_static/pygments.css?v=e1a1ceaf" />
@@ -66,8 +66,8 @@ data-aria-dark="Switch to auto color mode">
 <p class="caption" role="heading" aria-level="3"><span class="caption-text">Guides</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Table Semantics</a></li>
-<li class="toctree-l1"><a class="reference internal" href="model.html">Model Interface</a></li>
-<li class="toctree-l1"><a class="reference internal" href="recipe.html">Recipes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="icl.html">In-Context Learning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="processing.html">Data Processing</a></li>
 </ul>
 <p class="caption" role="heading" aria-level="3"><span class="caption-text">API</span></p>
 <ul>
@@ -227,11 +227,11 @@ It is the main user-facing interface for model inputs and outputs.</p></li>
 <li><p><a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.text" title="sdm.Stype.text"><code class="xref py py-attr docutils literal notranslate"><span class="pre">text</span></code></a>: free-form strings stored as <a class="reference internal" href="api/generated/sdm.tensor.StringTensor.html#sdm.tensor.StringTensor" title="sdm.tensor.StringTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringTensor</span></code></a>.</p></li>
 <li><p><a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.id" title="sdm.Stype.id"><code class="xref py py-attr docutils literal notranslate"><span class="pre">id</span></code></a>: identifier columns (<em>e.g.</em>, primary keys or foreign keys) stored as a <a class="reference internal" href="api/generated/sdm.tensor.ColumnarTensor.html#sdm.tensor.ColumnarTensor" title="sdm.tensor.ColumnarTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">ColumnarTensor</span></code></a>.</p></li>
 </ul>
-<figure class="light-only align-center">
+<figure class="light-only align-default">
 <a class="reference internal image-reference" href="_images/table_light.svg"><img alt="_images/table_light.svg" src="_images/table_light.svg" style="width: 100%;" />
 </a>
 </figure>
-<figure class="dark-only align-center">
+<figure class="dark-only align-default">
 <a class="reference internal image-reference" href="_images/table_dark.svg"><img alt="_images/table_dark.svg" src="_images/table_dark.svg" style="width: 100%;" />
 </a>
 </figure>
@@ -351,7 +351,7 @@ Without it, these operations fall back to a CPU backend, which requires transfer
 <section id="model-inputs-and-outputs">
 <h2>Model Inputs And Outputs<a class="headerlink" href="#model-inputs-and-outputs" title="Link to this heading">#</a></h2>
 <p>A <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
-Learn more about model processing and execution in the <a class="reference internal" href="model.html"><span class="doc std std-doc">Model Interface</span></a> and <a class="reference internal" href="recipe.html"><span class="doc std std-doc">Recipes</span></a> guides.</p>
+You can learn more about data processing and model execution in the <a class="reference internal" href="processing.html"><span class="doc std std-doc">Data Processing</span></a> and <a class="reference internal" href="icl.html"><span class="doc std std-doc">In-Context Learning Model Interface</span></a> guides.</p>
 </section>
 </section>
 
@@ -367,10 +367,10 @@ Learn more about model processing and execution in the <a class="reference inter
         <span>Previous</span><div class="title">Installation</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="model.html">
+    <a href="icl.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">Model Interface</div>
+        <div class="title">In-Context Learning</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>
@@ -379,7 +379,7 @@ Learn more about model processing and execution in the <a class="reference inter
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=ca9f702a"></script>
+      <script src="_static/documentation_options.js?v=746c9f43"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
