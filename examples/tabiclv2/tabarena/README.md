@@ -1,6 +1,6 @@
 # TabICLv2 on TabArena
 
-This example evaluates the repository-local `TabICLv2` implementation on TabArena.
+This example evaluates `sdm.models.TabICLv2` on [TabArena](https://tabarena.ai).
 
 ## Setup
 
