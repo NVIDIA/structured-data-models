@@ -1,9 +1,4 @@
-r"""Run TabICLv2 on TabArena.
-
-$ python examples/tabiclv2/tabarena/main.py
-
-Completed jobs in the output directory are reused.
-"""
+r"""Run TabICLv2 on TabArena."""
 
 from __future__ import annotations
 

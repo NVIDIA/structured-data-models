@@ -1,7 +1,4 @@
-r"""Evaluate TabICLv2 results on TabArena.
-
-$ python examples/tabiclv2/tabarena/evaluate.py
-"""
+r"""Evaluate TabICLv2 results on TabArena."""
 
 from pathlib import Path
 
