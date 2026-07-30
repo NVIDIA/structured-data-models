@@ -1,4 +1,4 @@
-# In-Context Learning Interface
+# In-Context Learning
 
 ```{figure} images/pipeline_light.svg
 :figclass: light-only

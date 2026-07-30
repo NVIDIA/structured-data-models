@@ -12,8 +12,8 @@ install
 :maxdepth: 1
 
 tensor
-model
-recipe
+icl
+processing
 ```
 
 ```{toctree}
