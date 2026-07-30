@@ -15,7 +15,7 @@ uv pip install -e .
 Install the source revisions of AutoGluon and TabArena used by this example:
 
 ```bash
-uv pip install \
+pip install \
   "autogluon.common @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common" \
   "autogluon.core @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core" \
   "autogluon.features @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features" \
