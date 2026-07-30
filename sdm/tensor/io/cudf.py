@@ -21,7 +21,8 @@ def to_cudf(
     """
     import cudf
 
-    from sdm.tensor import StringTensor
+    # Avoid a circular import through `sdm.tensor`.
+    from sdm.tensor import StringTensor  # noqa: PLC0415
 
     if not tensor.is_cuda:
         raise ValueError(

@@ -1,6 +1,6 @@
 """Output postprocessing transforms."""
 
-from sdm.processing.output.ensemble_reduce import EnsembleReduce
-from sdm.processing.output.postprocess import SoftmaxTemperature
+from sdm.processing.output.reduce import ReduceEstimators
+from sdm.processing.output.softmax import Softmax
 
-__all__ = ["EnsembleReduce", "SoftmaxTemperature"]
+__all__ = ["ReduceEstimators", "Softmax"]

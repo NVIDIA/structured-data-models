@@ -1,37 +1,52 @@
-import torch
+from collections.abc import Iterable, Iterator
+from typing import cast
 
-from sdm.processing._callable import ProcessorLike, as_processor
-from sdm.processing.base import InvertibleMixin, Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+import torch
+from typing_extensions import Self
+
+from sdm import Stype, TableTensor
+from sdm.processing import InvertibleMixin, Processor
 
 
 class Sequential(Processor, InvertibleMixin):
-    r"""Apply processors and stateless callables in sequence.
-
-    A ``generator`` passed to ``fit()`` or ``fit_transform()`` is passed on
-    to every step.
+    r"""Apply processors and callables in sequence.
 
     Args:
-        args: Sequence of :class:`Processor` instances or callables. Each
-            callable accepts and returns a :class:`~sdm.tensor.TableTensor`
-            and is treated as a stateless, non-invertible processor.
+        args: Sequence of :class:`Processor` instances or callables.
     """
 
     supported_stypes = frozenset(Stype)
 
-    def __init__(
-        self,
-        *args: ProcessorLike,
-    ) -> None:
+    def __init__(self, *args: object) -> None:
         super().__init__()
-        self.steps = tuple(
-            as_processor(step, label=f"Sequential step {index}")
-            for index, step in enumerate(args)
-        )
-        for i, step in enumerate(self.steps):
-            self.add_module(str(i), step)
-        self.requires_fit = any(step.requires_fit for step in self.steps)
+        self.extend(args)
+        self.requires_fit = any(child.requires_fit for child in self)
+
+    def append(self, processor: object) -> Self:
+        r"""Append a processor or callable to this sequence.
+
+        Args:
+            processor: The processor to append.
+        """
+        processor = Processor.as_processor(processor)
+        if isinstance(processor, Sequential):
+            for child in processor.children():
+                self.add_module(str(len(self)), child)
+        else:
+            self.add_module(str(len(self)), processor)
+
+        self._fitted = False
+        return self
+
+    def extend(self, processors: Iterable[object]) -> Self:
+        r"""Append multiple processors or callables to this sequence.
+
+        Args:
+            processors: The processors to append.
+        """
+        for processor in processors:
+            self.append(processor)
+        return self
 
     def _fit(
         self,
@@ -40,61 +55,57 @@ class Sequential(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         out = table
-        for step in self.steps:
-            out = step.fit_transform(out, generator=generator)
-
-    def fit(  # noqa: D102
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> "Sequential":
-        out = table
-        for step in self.steps:
-            out = step.fit_transform(out, generator=generator)
-        if self.requires_fit:
-            self._fitted = True
-        return self
+        for i, child in enumerate(self):
+            if i < len(self) - 1:
+                out = child.fit_transform(out, generator=generator)
+            else:
+                child.fit(out, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         out = table
-        for step in self.steps:
-            out = step.transform(out)
+        for child in self:
+            out = child.transform(out)
         return out
 
-    def fit_transform(  # noqa: D102
+    def _fit_transform(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
         out = table
-        for step in self.steps:
-            out = step.fit_transform(out, generator=generator)
-        if self.requires_fit:
-            self._fitted = True
+        for child in self:
+            out = child.fit_transform(out, generator=generator)
         return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         out = table
-        for step in self.steps[::-1]:
-            fn = getattr(step, "inverse_transform", None)
+        for child in reversed(list(self)):
+            fn = getattr(child, "inverse_transform", None)
             if not callable(fn):
                 raise AttributeError(
-                    f"'{step.__class__.__name__}' object has no attribute "
-                    f"'inverse_transform"
+                    f"{child.__class__.__name__!r} object has no attribute "
+                    f"'inverse_transform'"
                 )
             out = fn(out)
         return out
 
+    def __iter__(self) -> Iterator[Processor]:
+        return cast(Iterator[Processor], self.children())
+
+    def __len__(self) -> int:
+        return len(self._modules)
+
+    def __iadd__(self, other: object) -> Self:
+        self.append(Processor.as_processor(other))
+        return self
+
     def __repr__(self, *, indent: int = 0) -> str:
-        if len(self.steps) == 0:
+        if len(self) == 0:
             return super().__repr__(indent=indent)
-        reprs = ",\n".join(
-            [step.__repr__(indent=indent + 2) for step in self.steps]
+        reprs = "".join(
+            [f"{child.__repr__(indent=indent + 2)},\n" for child in self]
         )
         return (
-            f"{' ' * indent}{self.__class__.__name__}(\n"
-            f"{reprs},\n"
-            f"{' ' * indent})"
+            f"{' ' * indent}{self.__class__.__name__}(\n{reprs}{' ' * indent})"
         )

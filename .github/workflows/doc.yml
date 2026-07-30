@@ -28,7 +28,7 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install --torch-backend=cpu '.[doc]'
+          uv pip install --torch-backend=cpu --group=doc .
 
       - name: Build documentation
         working-directory: ./docs

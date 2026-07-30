@@ -2,7 +2,6 @@ from typing import cast
 
 import torch
 
-from sdm.processing._callable import ProcessorLike, as_processor
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -25,12 +24,11 @@ class Choice(Processor, InvertibleMixin):
 
     def __init__(
         self,
-        *args: ProcessorLike,
+        *args: object,
     ) -> None:
         super().__init__()
         self.options = torch.nn.ModuleList(
-            as_processor(option, label=f"Choice option {index}")
-            for index, option in enumerate(args)
+            Processor.as_processor(arg) for arg in args
         )
         self._index: int | None = None
 
@@ -39,7 +37,7 @@ class Choice(Processor, InvertibleMixin):
         """The drawn option."""
         if self._index is None:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' has no drawn option; "
+                f"{self.__class__.__name__!r} has no drawn option; "
                 "call 'fit()' before."
             )
         return cast(Processor, self.options[self._index])
@@ -67,19 +65,21 @@ class Choice(Processor, InvertibleMixin):
         fn = getattr(self.selected, "inverse_transform", None)
         if not callable(fn):
             raise AttributeError(
-                f"'{self.selected.__class__.__name__}' object has no "
+                f"{self.selected.__class__.__name__!r} object has no "
                 f"attribute 'inverse_transform'"
             )
         return fn(table)
 
-    def get_extra_state(self) -> int | None:  # noqa: D102
+    def get_extra_state(self) -> int | None:
+        r""":meta private:"""  # noqa: D415
         return self._index
 
-    def set_extra_state(self, state: int | None) -> None:  # noqa: D102
+    def set_extra_state(self, state: int | None) -> None:
+        r""":meta private:"""  # noqa: D415
         if state is not None and not 0 <= state < len(self.options):
             raise ValueError(
                 f"Cannot restore drawn option {state} on "
-                f"'{self.__class__.__name__}' with {len(self.options)} "
+                f"{self.__class__.__name__!r} with {len(self.options)} "
                 "options."
             )
         self._index = state

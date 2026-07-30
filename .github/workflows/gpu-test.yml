@@ -17,7 +17,7 @@ permissions:
 jobs:
   pytest-gpu:
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
@@ -56,13 +56,44 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install --torch-backend=cu130 '.[test]' cudf-cu13
+          RAPIDS_INDEX_URL="${NV_GHA_RUNNERS_PYPI_ANACONDA_CACHE_URL:-https://pypi.nvidia.com}"
+          uv pip install \
+            --torch-backend=cu130 \
+            --extra-index-url="${RAPIDS_INDEX_URL}" \
+            --index-strategy=unsafe-best-match \
+            --group=test \
+            . \
+            'cudf-cu13>=26.6' \
+            'pandas<3' \
+            'pylibcugraph-cu13>=26.6'
+          uv pip install \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
+            pyg-lib
 
       - name: GPU sanity check
         run: |
           nvidia-smi
-          python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available to torch'"
-          python -c "import cudf; print('cudf', cudf.__version__)"
+          python - <<'PY'
+          from importlib.metadata import version
+
+          import cudf
+          import cupy
+          import pyg_lib
+          import pylibcugraph
+          import torch
+
+          assert torch.cuda.is_available(), "CUDA not available to torch"
+          assert hasattr(pylibcugraph, "heterogeneous_uniform_neighbor_sample")
+          assert hasattr(
+              pylibcugraph,
+              "heterogeneous_uniform_temporal_neighbor_sample",
+          )
+          print("torch", torch.__version__)
+          print("cudf", cudf.__version__)
+          print("cupy", cupy.__version__)
+          print("pylibcugraph", version("pylibcugraph-cu13"))
+          print("pyg-lib", version("pyg-lib"))
+          PY
 
       - name: Run tests
         env:

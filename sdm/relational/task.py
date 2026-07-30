@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from html import escape
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
@@ -51,7 +52,7 @@ class TaskLink:
             for reserved in (LEFT_ROW_ID, RIGHT_ROW_ID):
                 if column == reserved:
                     raise ValueError(
-                        f"Column name '{column}' is reserved for internal "
+                        f"Column name {column!r} is reserved for internal "
                         f"row indexing"
                     )
 
@@ -227,11 +228,11 @@ class RelatedTables(DeviceMixin):
         if len(devices) == 0:
             raise RuntimeError(
                 f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
+                f"{self.__class__.__name__!r}"
             )
         if len(devices) > 1:
             raise RuntimeError(
-                f"Expected tables in '{self.__class__.__name__}' to be on "
+                f"Expected tables in {self.__class__.__name__!r} to be on "
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
@@ -358,8 +359,6 @@ class RelatedTables(DeviceMixin):
         return out
 
     def _repr_html_(self) -> str:
-        from html import escape
-
         import pandas as pd
 
         rows = [

@@ -41,7 +41,13 @@ dependencies = [
     "typing_extensions",
 ]
 
-[project.optional-dependencies]
+[project.urls]
+Download = "https://github.com/NVIDIA/structured-data-models/releases"
+Homepage = "https://github.com/NVIDIA/structured-data-models"
+Repository = "https://github.com/NVIDIA/structured-data-models"
+Issues = "https://github.com/NVIDIA/structured-data-models/issues"
+
+[dependency-groups]
 test = [
     "pytest",
     "pytest-cov",
@@ -53,12 +59,17 @@ doc = [
     "sphinx",
     "sphinx-copybutton",
 ]
-
-[project.urls]
-Download = "https://github.com/NVIDIA/structured-data-models/releases"
-Homepage = "https://github.com/NVIDIA/structured-data-models"
-Repository = "https://github.com/NVIDIA/structured-data-models"
-Issues = "https://github.com/NVIDIA/structured-data-models/issues"
+dev = [
+    { include-group = "test" },
+    { include-group = "doc" },
+]
+example-tabarena = [
+    "autogluon.common @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common",
+    "autogluon.core @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core",
+    "autogluon.features @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features",
+    "autogluon.tabular @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular",
+    "tabarena[plot] @ git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -70,6 +81,10 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
+
+[tool.uv.dependency-groups]
+# TODO Unpin Python version once TabArena supports Python 3.14.
+example-tabarena = { requires-python = ">=3.11,<3.14" }
 
 [tool.pytest.ini_options]
 addopts = [
@@ -132,12 +147,14 @@ select = [
     "I",    # import sorting
     "NPY",  # numpy-specific rules
     "PIE",  # flake8-pie
+    "PLC0415",  # pylint: imports should be at module scope
     "PT",   # pytest style
     "RET",  # return statement style
     "RUF",  # ruff-specific rules
     "SIM",  # simplification
     "T10",  # flake8-debugger
     "T20",  # flake8-print
+    "TID253",  # flake8-tidy-imports: keep optional imports lazy
     "UP",   # pyupgrade
     "W",    # pycodestyle warnings
     "YTT",  # flake8-2020
@@ -151,21 +168,42 @@ ignore = [
     "RUF022",  # Ignore sorting __all__; order controls public docs.
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["sdm"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.flake8-builtins]
 ignorelist = ["id"]
 
+[tool.ruff.lint.flake8-tidy-imports]
+banned-module-level-imports = [
+    "cudf",
+    "cupy",
+    "graphviz",
+    "pandas",
+    "pyg_lib",
+    "pylibcudf",
+    "pytest",
+]
+
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I"]
-"docs/source/conf.py" = ["A001"]
+"examples/**/*.py" = [
+    "D101",  # Ignore "Missing docstring in public class"
+    "D102",  # Ignore "Missing docstring in public method"
+    "D103",  # Ignore "Missing docstring in public function"
+    "T201",  # Allow print.
+    "TID253",  # Example dependencies should be imported at module scope.
+]
 "test/**/*.py" = [
     "D101",  # Ignore "Missing docstring in public class"
     "D102",  # Ignore "Missing docstring in public method"
     "D103",  # Ignore "Missing docstring in public function"
     "D104",  # Ignore "Missing docstring in public package"
     "D106",  # Ignore "Missing docstring in public nested class"
+    "TID253",  # Test dependencies should be imported at module scope.
 ]
 
 [tool.ty.analysis]
@@ -175,4 +213,5 @@ allowed-unresolved-imports = [
     "pyg_lib.**",
     "pylibcudf.**",
     "graphviz.**",
+    "pylibcugraph.**",
 ]

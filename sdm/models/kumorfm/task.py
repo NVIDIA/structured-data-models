@@ -70,7 +70,7 @@ class TaskGraph:  # noqa: D101
         ):
             raise ValueError(
                 f"Expected each task row to match exactly one distinct row in "
-                f"'{readout_table}'"
+                f"{readout_table!r}"
             )
 
         task_row = readout_index.new_full((graph.num_nodes,), fill_value=-1)

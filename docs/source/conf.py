@@ -5,11 +5,12 @@ from importlib.metadata import version as package_version
 from pathlib import Path
 
 from sphinx.application import Sphinx
+from sphinx.ext.autosummary import generate
 from sphinx.ext.autosummary.generate import AutosummaryEntry
 
 project = "Structured Data Models"
 author = "NVIDIA"
-copyright = f"{date.today().year}, NVIDIA"
+copyright = f"{date.today().year}, NVIDIA"  # noqa: A001
 
 try:
     release = package_version("structured-data-models")
@@ -35,7 +36,10 @@ html_theme_options = {
     "github_url": "https://github.com/NVIDIA/structured-data-models",
 }
 autosummary_generate = True
+autosummary_context = {"import_module": importlib.import_module}
+autodoc_member_order = "bysource"
 autodoc_typehints = "both"
+suppress_warnings = ["config.cache"]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
@@ -64,8 +68,6 @@ def _render_jinja(app: Sphinx, docname: str, source: list[str]) -> None:
 
 
 def _patch_autosummary_jinja(app: Sphinx) -> None:
-    from sphinx.ext.autosummary import generate
-
     def find_autosummary_in_files(
         filenames: list[str],
     ) -> list[AutosummaryEntry]:

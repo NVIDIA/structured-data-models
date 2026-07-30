@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import ColumnarTensor, TableTensor
 from sdm.relational.join import join_index
 from sdm.testing import withCUDA

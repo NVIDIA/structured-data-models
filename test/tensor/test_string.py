@@ -3,6 +3,7 @@ from typing import cast
 import pyarrow as pa
 import pytest
 import torch
+
 from sdm import StringTensor
 from sdm.testing import onlyCUDA, withCUDA
 
@@ -196,6 +197,29 @@ def test_allowed_dtype() -> None:
 
     with pytest.raises(TypeError, match="Can't convert"):
         tensor.to(torch.float32)
+
+
+@withCUDA
+def test_eq(device: torch.device) -> None:
+    left = StringTensor.from_list(["a", "b", "a"], device=device)
+    right = StringTensor.from_list(["a", "a", "b"], device=device)
+
+    assert (left == right).equal(
+        torch.tensor([True, False, False], device=device)
+    )
+    assert (left == "a").equal(
+        torch.tensor([True, False, True], device=device)
+    )
+    assert (left != right).equal(~(left == right))
+    assert (left != "a").equal(~(left == "a"))
+
+    left = StringTensor.from_list([["a", "b"]], device=device)
+    right = StringTensor.from_list([["a"], ["b"]], device=device)
+
+    assert (left == right).equal(
+        torch.tensor([[True, False], [False, True]], device=device),
+    )
+    assert (left != right).equal(~(left == right))
 
 
 def test_to_dtype_layout_copy() -> None:

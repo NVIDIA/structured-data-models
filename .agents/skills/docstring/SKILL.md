@@ -93,7 +93,7 @@ r"""
   (e.g., dtypes like ``torch.int32`` resolve to the ``dtype-doc`` label).
   Never guess label names: search the linked documentation for a fitting
   target by dumping the project's inventory, e.g.
-  ``uv run --extra doc python -m sphinx.ext.intersphinx https://docs.pytorch.org/docs/stable/objects.inv | grep -i dtype``.
+  ``uv run --no-default-groups --group doc python -m sphinx.ext.intersphinx https://docs.pytorch.org/docs/stable/objects.inv | grep -i dtype``.
 """
 ```
 
