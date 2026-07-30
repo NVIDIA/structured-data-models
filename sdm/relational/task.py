@@ -148,28 +148,54 @@ class RelatedTables(DeviceMixin):
     The ``task_links`` describe how rows in the model input match to rows in
     the related tables.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelatedTables, TableTensor
 
         data = RelatedTables(
             tables={
-                "users": TableTensor.from_pandas(...),
-                "orders": TableTensor.from_pandas(...),
-                "items": TableTensor.from_pandas(...),
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1]},
+                    stypes={"user_id": "id"},
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 1],
+                        "item_id": [10, 11],
+                    },
+                    stypes={
+                        "user_id": "id",
+                        "item_id": "id",
+                    },
+                ),
+                "items": TableTensor.from_columns(
+                    {"item_id": [10, 11]},
+                    stypes={"item_id": "id"},
+                ),
             },
             relationships=[
                 # Foreign key from orders to users:
-                dict(left_table="orders", left_column="user_id",
-                     right_table="users", right_column="user_id"),
+                dict(
+                    left_table="orders",
+                    left_column="user_id",
+                    right_table="users",
+                    right_column="user_id",
+                ),
                 # Foreign key from orders to items:
-                dict(left_table="orders", left_column="item_id",
-                     right_table="items", right_column="item_id"),
+                dict(
+                    left_table="orders",
+                    left_column="item_id",
+                    right_table="items",
+                    right_column="item_id",
+                ),
             ],
             task_links=[
                 # Foreign key in the task table to users:
-                dict(task_column="ENTITY", table="users",
-                     table_column="user_id")
+                dict(
+                    task_column="ENTITY",
+                    table="users",
+                    table_column="user_id",
+                )
             ],
         )
 
