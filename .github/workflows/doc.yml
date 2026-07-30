@@ -36,6 +36,13 @@ jobs:
         run: |
           uv run sphinx-build -M doctest "source" "build" -W --keep-going
 
+      - name: Upload documentation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: documentation
+          path: docs/build/html
+          retention-days: 1
+
       - name: Push documentation to gh-pages
         if: github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v4
