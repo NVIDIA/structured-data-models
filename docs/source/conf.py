@@ -22,6 +22,7 @@ extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
@@ -59,13 +60,15 @@ def api_names(module_name: str) -> list[str]:
 
 
 def _render_jinja(app: Sphinx, docname: str, source: list[str]) -> None:
-    source[0] = app.builder.templates.render_string(
-        source[0],
-        {"api_names": api_names},
+    renderer = generate.AutosummaryRenderer(app)
+    source[0] = renderer.env.from_string(source[0]).render(
+        api_names=api_names,
     )
 
 
 def _patch_autosummary_jinja(app: Sphinx) -> None:
+    renderer = generate.AutosummaryRenderer(app)
+
     def find_autosummary_in_files(
         filenames: list[str],
     ) -> list[AutosummaryEntry]:
@@ -75,9 +78,8 @@ def _patch_autosummary_jinja(app: Sphinx) -> None:
                 encoding=app.config.source_encoding,
                 errors="ignore",
             )
-            source = app.builder.templates.render_string(
-                source,
-                {"api_names": api_names},
+            source = renderer.env.from_string(source).render(
+                api_names=api_names,
             )
             documented.extend(
                 generate.find_autosummary_in_lines(
