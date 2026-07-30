@@ -221,7 +221,10 @@ class ColumnarTensor(Tensor):
 
         valid = None
         if ser._column.null_count > 0:
-            valid = torch.from_dlpack(ser.notna().to_dlpack()).to(device)
+            valid = torch.from_dlpack(ser.notna().to_dlpack()).to(
+                device=device,
+                dtype=torch.bool,
+            )
 
         if is_string_dtype(ser.dtype):
             if valid is not None:
