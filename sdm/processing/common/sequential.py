@@ -5,10 +5,16 @@ import torch
 from typing_extensions import Self
 
 from sdm import Stype, TableTensor
-from sdm.processing import InvertibleMixin, Processor
+from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.ensemble import (
+    EnsembleFitContext,
+    EnsembleProcessor,
+    EnsembleTable,
+    as_ensemble_processor,
+)
 
 
-class Sequential(Processor, InvertibleMixin):
+class Sequential(EnsembleProcessor, InvertibleMixin):
     r"""Apply processors and callables in sequence.
 
     Args:
@@ -76,6 +82,44 @@ class Sequential(Processor, InvertibleMixin):
         out = table
         for child in self:
             out = child.fit_transform(out, generator=generator)
+        return out
+
+    def fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        r"""Fit and transform all children in Recipe order."""
+        for name, child in tuple(self._modules.items()):
+            self._modules[name] = as_ensemble_processor(cast(Processor, child))
+
+        out = table
+        for index, child in enumerate(self):
+            out = cast(EnsembleProcessor, child).fit_transform_ensemble(
+                out,
+                context=context.child(str(index)),
+            )
+        return out
+
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        r"""Transform an ensemble through all fitted children."""
+        out = table
+        for child in self:
+            out = cast(EnsembleProcessor, child).transform_ensemble(out)
+        return out
+
+    def inverse_transform_members(
+        self,
+        tables: Iterable[TableTensor],
+    ) -> tuple[TableTensor, ...]:
+        r"""Apply fitted child inverses in reverse order."""
+        out = tuple(tables)
+        for child in reversed(list(self)):
+            out = cast(
+                EnsembleProcessor,
+                child,
+            ).inverse_transform_members(out)
         return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:

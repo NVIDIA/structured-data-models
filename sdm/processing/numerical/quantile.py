@@ -1,10 +1,16 @@
-from typing import Literal
+from collections.abc import Sequence
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm.processing._utils import _as_float
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import InvertibleMixin
+from sdm.processing.ensemble import (
+    EnsembleFitContext,
+    EnsembleProcessor,
+    EnsembleTable,
+)
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -75,7 +81,7 @@ def _batched_interp(
     return torch.where(values >= upper_boundary, upper, result)
 
 
-class QuantileTransform(Processor, InvertibleMixin):
+class QuantileTransform(EnsembleProcessor, InvertibleMixin):
     """Map feature columns through their empirical quantiles.
 
     QuantileTransform grids are capped by the number of fitted rows and, when
@@ -92,7 +98,6 @@ class QuantileTransform(Processor, InvertibleMixin):
     """
 
     supported_stypes = frozenset({Stype.numerical})
-    member_specific_fit = True
 
     def __init__(
         self,
@@ -117,6 +122,9 @@ class QuantileTransform(Processor, InvertibleMixin):
 
         self.register_buffer("quantiles", torch.empty(0))
         self.register_buffer("references", torch.empty(0))
+        self.processors = torch.nn.ModuleList()
+        self._member_to_processor: tuple[int, ...] = ()
+        self._processor_positions: tuple[int, ...] = ()
 
     def _subsample_indices(
         self,
@@ -162,6 +170,90 @@ class QuantileTransform(Processor, InvertibleMixin):
             input_sample,
             self.references,
             dim=0,
+        )
+
+    def fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        r"""Fit sampled grids per member and share deterministic grids."""
+        self.processors = torch.nn.ModuleList()
+        variants: list[TableTensor] = []
+        positions: list[int] = []
+        member_to_processor: list[int] = []
+        keys: dict[tuple[object, ...], int] = {}
+        for position, member_id in enumerate(context.member_ids):
+            before = table[position]
+            stochastic = (
+                self.subsample is not None and self.subsample < before.size(-2)
+            )
+            key = (
+                ("member", member_id)
+                if stochastic
+                else ("variant", table.member_to_variant[position])
+            )
+            processor_index = keys.get(key)
+            if processor_index is None:
+                processor_index = len(variants)
+                keys[key] = processor_index
+                processor = self.__class__(
+                    n_quantiles=self._n_quantiles,
+                    subsample=self.subsample,
+                    output_distribution=self.output_distribution,
+                )
+                processor.fit(
+                    before,
+                    generator=(
+                        context.generator_for(
+                            member_id,
+                            device=before.device,
+                        )
+                        if stochastic
+                        else None
+                    ),
+                )
+                self.processors.append(processor)
+                positions.append(position)
+                variants.append(processor.transform(before))
+            member_to_processor.append(processor_index)
+
+        self._member_to_processor = tuple(member_to_processor)
+        self._processor_positions = tuple(positions)
+        return EnsembleTable.pack(
+            variants=variants,
+            member_to_input_variant=self._member_to_processor,
+        )
+
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        r"""Transform members with their fitted quantile grids."""
+        variants = tuple(
+            cast(QuantileTransform, processor).transform(table[position])
+            for processor, position in zip(
+                self.processors,
+                self._processor_positions,
+            )
+        )
+        return EnsembleTable.pack(
+            variants=variants,
+            member_to_input_variant=self._member_to_processor,
+        )
+
+    def inverse_transform_members(
+        self,
+        tables: Sequence[TableTensor],
+    ) -> tuple[TableTensor, ...]:
+        r"""Invert members with their fitted quantile grids."""
+        return tuple(
+            cast(
+                QuantileTransform,
+                self.processors[processor_index],
+            ).inverse_transform(table)
+            for table, processor_index in zip(
+                tables,
+                self._member_to_processor,
+            )
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

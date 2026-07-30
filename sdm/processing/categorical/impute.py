@@ -22,7 +22,6 @@ class ImputeMode(Processor):
     """
 
     supported_stypes = frozenset({Stype.categorical})
-    supports_leading_variants = True
 
     def __init__(self) -> None:
         super().__init__()

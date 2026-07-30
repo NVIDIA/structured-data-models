@@ -40,7 +40,6 @@ class _UnsupportedProcessor(Processor):
 
 class _CenterUnlessNegative(Processor):
     supported_stypes = frozenset({Stype.numerical})
-    supports_leading_variants = True
 
     def __init__(self) -> None:
         super().__init__()
@@ -509,7 +508,7 @@ def test_impute_mean_fits_each_leading_variant_independently() -> None:
     )
 
 
-def test_unsupported_processor_after_member_split_fails_clearly() -> None:
+def test_processor_after_member_split_preserves_each_member() -> None:
     recipe = Recipe(
         features=Sequential(
             Choice(
@@ -521,12 +520,18 @@ def test_unsupported_processor_after_member_split_fails_clearly() -> None:
         )
     )
 
-    with pytest.raises(TypeError, match="ensemble-compatible"):
-        recipe.fit_transform(
-            _numerical([[1.0], [2.0], [3.0]]),
-            _target(classification=False),
-            num_members=2,
-        )
+    features = _numerical([[1.0], [2.0], [3.0]])
+    transformed, _, _ = recipe.fit_transform(
+        features,
+        _target(classification=False),
+        num_members=2,
+    )
+
+    torch.testing.assert_close(transformed[0].numerical, features.numerical)
+    torch.testing.assert_close(
+        transformed[1].numerical,
+        torch.zeros_like(features.numerical),
+    )
 
 
 def test_failed_refit_keeps_the_previous_complete_recipe_plan() -> None:

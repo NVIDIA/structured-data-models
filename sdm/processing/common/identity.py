@@ -7,7 +7,6 @@ class Identity(Processor, InvertibleMixin):
     r"""Return inputs unchanged."""
 
     supported_stypes = frozenset(Stype)
-    supports_leading_variants = True
     requires_fit = False
 
     def _transform(self, table: TableTensor) -> TableTensor:

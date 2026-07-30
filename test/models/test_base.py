@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -7,8 +8,10 @@ from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
+    EnsembleFitContext,
+    EnsembleProcessor,
+    EnsembleTable,
     InvertibleMixin,
-    Processor,
     Recipe,
     Standardize,
     StypeDispatch,
@@ -53,28 +56,36 @@ class _UnsupportedRecordingModel(_RecordingModel):
     supports_related_tables = False
 
 
-class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
+class _GeneratorRecordingProcessor(EnsembleProcessor, InvertibleMixin):
     supported_stypes = frozenset(Stype)
-    member_specific_fit = True
     draws: ClassVar[list[torch.Tensor]] = []
 
     @classmethod
     def reset(cls) -> None:
         cls.draws.clear()
 
-    def _fit(
+    def fit_transform_ensemble(
         self,
-        table: TableTensor,
+        table: EnsembleTable,
         *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        self.draws.append(torch.rand((), generator=generator))
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        for member_id in context.member_ids:
+            generator = context.generator_for(member_id)
+            self.draws.append(torch.rand((), generator=generator))
+        return table
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
         return table
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return table
+
+    def inverse_transform_members(
+        self,
+        tables: Sequence[TableTensor],
+    ) -> tuple[TableTensor, ...]:
+        return tuple(tables)
 
 
 def _table(

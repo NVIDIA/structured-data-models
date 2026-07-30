@@ -21,7 +21,6 @@ class AddCalendarFields(Processor):
     """
 
     supported_stypes = frozenset({Stype.datetime})
-    supports_leading_variants = True
     requires_fit = False
 
     def __init__(

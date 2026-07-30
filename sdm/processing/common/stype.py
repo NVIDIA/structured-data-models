@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Literal, cast
 
 import torch
@@ -5,10 +6,49 @@ from torch import Tensor
 
 from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.ensemble import (
+    EnsembleFitContext,
+    EnsembleProcessor,
+    EnsembleTable,
+    as_ensemble_processor,
+)
 from sdm.tensor import TableTensor
 
 
-class StypeDispatch(Processor, InvertibleMixin):
+def _combine_parts(
+    parts: Sequence[EnsembleTable],
+    *,
+    empty_source: EnsembleTable,
+) -> EnsembleTable:
+    if len(parts) == 0:
+        return empty_source.map_variants(
+            lambda table: table.select_columns(())
+        )
+
+    variants: list[TableTensor] = []
+    keys: dict[tuple[tuple[int, int], ...], int] = {}
+    member_to_variant: list[int] = []
+    for member in range(parts[0].num_members):
+        key = tuple(part.member_to_variant[member] for part in parts)
+        if key not in keys:
+            keys[key] = len(variants)
+            tables = [part[member] for part in parts]
+            variants.append(
+                cast(
+                    TableTensor,
+                    torch.cat(cast(list[Tensor], tables), dim=-1),
+                )
+                if len(tables) > 1
+                else tables[0]
+            )
+        member_to_variant.append(keys[key])
+    return EnsembleTable.pack(
+        variants=variants,
+        member_to_input_variant=member_to_variant,
+    )
+
+
+class StypeDispatch(EnsembleProcessor, InvertibleMixin):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
 
     For each configured route, the matching columns are selected into a
@@ -72,6 +112,7 @@ class StypeDispatch(Processor, InvertibleMixin):
         self.requires_fit = any(
             processor.requires_fit for processor in self.processors.values()
         )
+        self._active_routes: tuple[str, ...] = ()
 
     def _check_remainder(self, remainder_stypes: list[Stype]) -> None:
         if self.remainder != "error" or len(remainder_stypes) == 0:
@@ -161,6 +202,99 @@ class StypeDispatch(Processor, InvertibleMixin):
             TableTensor,
             torch.cat(cast(list[Tensor], outputs), dim=-1),
         )
+
+    def _route_input(
+        self,
+        table: EnsembleTable,
+        stype: str,
+    ) -> EnsembleTable:
+        return table.map_variants(lambda variant: variant.select_stypes(stype))
+
+    def _remainder_input(self, table: EnsembleTable) -> EnsembleTable:
+        configured = frozenset(self.processors)
+
+        def select(variant: TableTensor) -> TableTensor:
+            remainder = tuple(
+                stype
+                for stype, columns in variant.columns.items()
+                if stype.value not in configured and len(columns) > 0
+            )
+            self._check_remainder(list(remainder))
+            if len(remainder) == 0:
+                return variant.select_columns(())
+            return variant.select_stypes(remainder)
+
+        return table.map_variants(select)
+
+    def fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        r"""Fit active semantic-type routes and combine their outputs."""
+        for stype, route in tuple(self.processors.items()):
+            self.processors[stype] = as_ensemble_processor(
+                cast(Processor, route)
+            )
+
+        route_inputs = {
+            stype: self._route_input(table, stype) for stype in self.processors
+        }
+        self._active_routes = tuple(
+            stype
+            for stype, route_input in route_inputs.items()
+            if any(
+                variant.size(-1) > 0
+                for _, variant in route_input.iter_variants()
+            )
+        )
+
+        parts = [
+            cast(
+                EnsembleProcessor,
+                self.processors[stype],
+            ).fit_transform_ensemble(
+                route_inputs[stype],
+                context=context.child(stype),
+            )
+            for stype in self._active_routes
+        ]
+        if self.remainder == "passthrough":
+            parts.append(self._remainder_input(table))
+        elif self.remainder == "error":
+            self._remainder_input(table)
+        return _combine_parts(parts, empty_source=table)
+
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        r"""Transform active routes and combine their outputs."""
+        parts = [
+            cast(
+                EnsembleProcessor,
+                self.processors[stype],
+            ).transform_ensemble(self._route_input(table, stype))
+            for stype in self._active_routes
+        ]
+        if self.remainder == "passthrough":
+            parts.append(self._remainder_input(table))
+        elif self.remainder == "error":
+            self._remainder_input(table)
+        return _combine_parts(parts, empty_source=table)
+
+    def inverse_transform_members(
+        self,
+        tables: Sequence[TableTensor],
+    ) -> tuple[TableTensor, ...]:
+        r"""Invert the single active semantic-type route."""
+        if len(self._active_routes) != 1:
+            raise NotImplementedError(
+                "Ensemble inverse transform requires one active "
+                "StypeDispatch route."
+            )
+        return cast(
+            EnsembleProcessor,
+            self.processors[self._active_routes[0]],
+        ).inverse_transform_members(tables)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         if self.remainder == "drop":

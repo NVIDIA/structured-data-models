@@ -18,7 +18,6 @@ class Clip(Processor):
     """
 
     supported_stypes = frozenset({Stype.numerical})
-    supports_leading_variants = True
     requires_fit = False
 
     def __init__(

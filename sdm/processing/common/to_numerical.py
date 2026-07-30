@@ -21,7 +21,6 @@ class ToNumerical(Processor):
     """
 
     requires_fit = False
-    supports_leading_variants = True
     supported_stypes = frozenset({Stype.numerical, Stype.categorical})
 
     def _transform(self, table: TableTensor) -> TableTensor:

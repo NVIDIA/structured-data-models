@@ -17,7 +17,6 @@ class ImputeMean(Processor):
     """
 
     supported_stypes = frozenset({Stype.numerical})
-    supports_leading_variants = True
 
     def __init__(
         self,

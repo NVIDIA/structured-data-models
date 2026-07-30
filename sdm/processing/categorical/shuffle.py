@@ -1,14 +1,21 @@
-from typing import Literal
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype
-from sdm.processing.base import Processor
+from sdm.processing.ensemble import (
+    EnsembleFitContext,
+    EnsembleProcessor,
+    EnsembleTable,
+)
 from sdm.tensor import TableTensor
 
 
-class ShuffleCategories(Processor):
+class ShuffleCategories(EnsembleProcessor):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
@@ -26,7 +33,6 @@ class ShuffleCategories(Processor):
     """
 
     supported_stypes = frozenset({Stype.categorical})
-    member_specific_fit = True
 
     def __init__(
         self,
@@ -44,6 +50,9 @@ class ShuffleCategories(Processor):
             "offsets",
             torch.zeros(1, dtype=torch.long),
         )
+        self.processors = torch.nn.ModuleList()
+        self._member_to_processor: tuple[int, ...] = ()
+        self._processor_positions: tuple[int, ...] = ()
 
     def _fit(
         self,
@@ -86,6 +95,129 @@ class ShuffleCategories(Processor):
             offsets,
             dtype=torch.long,
             device=device,
+        )
+
+    def _planned_permutations(
+        self,
+        table: EnsembleTable,
+        context: EnsembleFitContext,
+    ) -> tuple[tuple[tuple[int, ...], ...], ...] | None:
+        if context.planner is None:
+            return None
+        return context.planner.category_permutations(
+            member_ids=context.member_ids,
+            category_counts=tuple(
+                tuple(
+                    category.numel()
+                    for category in table[position].categorical.categories
+                )
+                for position in range(table.num_members)
+            ),
+            table_scope=context.table_scope,
+            processor_path=context.processor_path,
+        )
+
+    @staticmethod
+    def _set_permutations(
+        processor: ShuffleCategories,
+        table: TableTensor,
+        permutations: Sequence[Sequence[int]],
+    ) -> None:
+        permutations = tuple(tuple(value) for value in permutations)
+        counts = tuple(
+            category.numel() for category in table.categorical.categories
+        )
+        if len(permutations) != len(counts) or any(
+            sorted(permutation) != list(range(count))
+            for permutation, count in zip(permutations, counts)
+        ):
+            raise ValueError(
+                "The ensemble plan returned an invalid category permutation."
+            )
+        offsets = [0]
+        for count in counts:
+            offsets.append(offsets[-1] + count)
+        processor.permutations = torch.tensor(
+            tuple(index for value in permutations for index in value),
+            dtype=torch.long,
+            device=table.device,
+        )
+        processor.offsets = torch.tensor(
+            offsets,
+            dtype=torch.long,
+            device=table.device,
+        )
+        processor._fitted = True
+
+    def fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        r"""Fit member category mappings and pack compatible outputs."""
+        planned = self._planned_permutations(table, context)
+        if planned is not None and len(planned) != table.num_members:
+            raise ValueError(
+                "The ensemble plan must return one mapping per member."
+            )
+
+        self.processors = torch.nn.ModuleList()
+        variants: list[TableTensor] = []
+        positions: list[int] = []
+        member_to_processor: list[int] = []
+        keys: dict[tuple[object, ...], int] = {}
+        for position, member_id in enumerate(context.member_ids):
+            before = table[position]
+            processor = self.__class__(method=self.method)
+            if planned is None:
+                processor.fit(
+                    before,
+                    generator=context.generator_for(
+                        member_id,
+                        device=before.device,
+                    ),
+                )
+                mapping_key: tuple[object, ...] = ("member", member_id)
+            else:
+                self._set_permutations(
+                    processor,
+                    before,
+                    planned[position],
+                )
+                mapping_key = tuple(
+                    tuple(permutation) for permutation in planned[position]
+                )
+
+            key = (table.member_to_variant[position], mapping_key)
+            processor_index = keys.get(key)
+            if processor_index is None:
+                processor_index = len(variants)
+                keys[key] = processor_index
+                self.processors.append(processor)
+                positions.append(position)
+                variants.append(processor.transform(before))
+            member_to_processor.append(processor_index)
+
+        self._member_to_processor = tuple(member_to_processor)
+        self._processor_positions = tuple(positions)
+        return EnsembleTable.pack(
+            variants=variants,
+            member_to_input_variant=self._member_to_processor,
+        )
+
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        r"""Apply the fitted member category mappings."""
+        variants = tuple(
+            cast(ShuffleCategories, processor).transform(table[position])
+            for processor, position in zip(
+                self.processors,
+                self._processor_positions,
+            )
+        )
+        return EnsembleTable.pack(
+            variants=variants,
+            member_to_input_variant=self._member_to_processor,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

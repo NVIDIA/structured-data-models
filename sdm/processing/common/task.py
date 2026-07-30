@@ -3,11 +3,17 @@ from typing import Literal, cast
 import torch
 
 from sdm.processing.base import Processor
+from sdm.processing.ensemble import (
+    EnsembleFitContext,
+    EnsembleProcessor,
+    EnsembleTable,
+    as_ensemble_processor,
+)
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class TaskDispatch(Processor):
+class TaskDispatch(EnsembleProcessor):
     """Route model output by the transformed target's semantic type.
 
     When used in :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
@@ -97,6 +103,31 @@ class TaskDispatch(Processor):
             )
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(table)
+
+    def _ensemble_route(self) -> EnsembleProcessor:
+        if self._task is None:
+            raise RuntimeError("TaskDispatch has no resolved task.")
+        route = as_ensemble_processor(
+            cast(Processor, self.processors[self._task])
+        )
+        self.processors[self._task] = route
+        return route
+
+    def fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        r"""Fit and transform the resolved task route."""
+        return self._ensemble_route().fit_transform_ensemble(
+            table,
+            context=context.child(self._task or "task"),
+        )
+
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        r"""Transform through the resolved task route."""
+        return self._ensemble_route().transform_ensemble(table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

@@ -1,34 +1,26 @@
 # Ensemble-Aware Processing: Implementation Design
 
-The implementation keeps one logical member order while storing only proven-distinct table variants. Work remains shared until a Processor introduces a different decision or schema.
+This document defines the components and interactions for shared and vectorized Recipe execution across ensemble members. The [problem definition](ensemble_aware_processing_problem.md) contains motivation, correctness constraints, scope, and performance goals.
 
-```text
-TableTensor
-    │ Recipe.fit_transform(num_members=E)
-    ▼
-EnsembleTable: one shared variant ── deterministic/vectorized Processors ──┐
-    │ Choice or member-specific mapping                                   │
-    ├── branch/group A ── compatible variants execute together            │
-    └── branch/group B ── incompatible schemas execute separately         │
-                                                                         ▼
-Model scheduler: compatible member groups or singleton fallback
-                                                                         │
-member-aligned outputs ── TargetDecode ── ReduceEstimators ──────────────┘
-```
+## Recipe
 
-## Recipe owns the graph
+`Recipe` is the public owner of the feature, target, related-table, and output processing paths:
 
 ```python
 class Recipe(torch.nn.Module):
     def fit_transform(
         self,
-        features: TableTensor,  # [R, C] with variable-schema steps
-        target: TableTensor,  # [R, 1] with variable-schema steps
+        features: TableTensor,
+        target: TableTensor,
         related_tables: RelatedTables | None = None,
         *,
         num_members: int,
         generator: torch.Generator | None = None,
-    ) -> tuple[EnsembleTable, EnsembleTable, EnsembleRelatedTables | None]: ...
+    ) -> tuple[
+        EnsembleTable,
+        EnsembleTable,
+        EnsembleRelatedTables | None,
+    ]: ...
 
     def transform(
         self,
@@ -39,85 +31,108 @@ class Recipe(torch.nn.Module):
     def transform_output(self, outputs: Sequence[TableTensor]) -> TableTensor: ...
 ```
 
-`fit_transform` creates a shared `EnsembleTable` for each logical input table, builds temporary fitted Processor trees, and installs the complete plan only after every path succeeds. `transform` reuses exactly those trees and member decisions. Each related table gets its own feature tree and RNG scope; no fitted state crosses table boundaries.
+`fit_transform` creates one shared `EnsembleTable` per logical table, invokes the root Processors through `fit_transform_ensemble`, builds all fitted Processor trees temporarily, and installs them atomically. `transform` reuses those trees and their member decisions. Each related table has its own fitted tree; fitted state is not shared across tables.
 
-## Ensemble representation
+`transform_output` applies the member-aligned fitted target inverse for regression or class alignment for classification, then runs the output pipeline. TabICLv2 does not perform target inversion manually.
+
+## EnsembleTable
 
 ```python
-@dataclass(frozen=True)
 class EnsembleTable:
-    groups: tuple[TableTensor, ...]  # each [V_g, R, C] in version 1
-    member_to_variant: tuple[tuple[int, int], ...]  # member -> (group, variant)
+    groups: tuple[TableTensor, ...]  # each [V_g, ..., R, C]
+    member_to_variant: tuple[tuple[int, int], ...]  # E -> (group, variant)
+
+    @classmethod
+    def from_shared(
+        cls,
+        table: TableTensor,
+        *,
+        num_members: int,
+    ) -> EnsembleTable: ...
+
+    @classmethod
+    def pack(
+        cls,
+        variants: Sequence[TableTensor],
+        member_to_input_variant: tuple[int, ...],
+    ) -> EnsembleTable: ...
+
+    def __getitem__(self, member_id: int) -> TableTensor:
+        group, variant = self.member_to_variant[member_id]
+        return self.groups[group][variant]
+
+    def with_groups(self, groups: tuple[TableTensor, ...]) -> EnsembleTable: ...
 ```
 
-- A group contains unique variants with compatible shape, schema, stypes, dtypes, device, and categorical metadata. Version 1 accepts one unbatched logical table per Recipe call when variable-schema processors are present; the leading group dimension is reserved for proven ensemble variants.
-- `member_to_variant` preserves stable member order and proven sharing.
-- `from_shared(table, num_members=E)` stores one view referenced by all members.
-- `pack(variants, member_to_input_variant)` groups compatible results without comparing tensor values.
-- `materialize(member_ids)` creates a physical leading member dimension only at a consumer boundary.
-- Singleton groups and singleton materializations use `unsqueeze` views; true multi-variant groups use stacking.
-- `EnsembleRelatedTables` maps table names to `EnsembleTable` while sharing relationships and task links.
+Each group contains unique variants with compatible shape, schema, stypes, dtypes, and categorical metadata. `member_to_variant` maps the stable member position to `(group, variant)`; equal references represent proven sharing. `pack` groups compatible unique results and creates separate groups for incompatible results. It never merges variants by comparing tensor contents.
 
-## Processor contracts
+`EnsembleRelatedTables` maps table names to `EnsembleTable`; relationships and task links remain shared graph metadata.
+
+## Processor Contracts
 
 ```python
-class Processor(torch.nn.Module):
-    supports_leading_variants: ClassVar[bool] = False
-    member_specific_fit: ClassVar[bool] = False
-
-
 class EnsembleProcessor(Processor):
+    def fit_ensemble(self, table: EnsembleTable, *, context: EnsembleFitContext) -> Self: ...
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable: ...
+    def fit_transform_ensemble(self, table: EnsembleTable, *, context: EnsembleFitContext) -> EnsembleTable: ...
+
+class VariableSchemaBatchMixin:
+    def fit_batch(self, batch: TableTensor, *, generator: torch.Generator | None = None) -> Self: ...
+    def transform_batch(self, batch: TableTensor) -> tuple[TableTensor, ...]: ...
+```
+
+`EnsembleProcessor` retains the inherited `TableTensor → TableTensor` API; the bridge to its ensemble methods is an implementation detail outside this initial specification. Invertible implementations also expose `inverse_transform_ensemble`. A normal `Processor` operates independently on every leading variant position and retains fitted state such as `[V_g,1,C]`; member-routing, composite, or stochastic operations implement `EnsembleProcessor` directly. A `VariableSchemaBatchMixin` remains a normal `Processor`, exposes an explicit batch path when fitted output schemas may differ by batch position, and preserves the single-table `TableTensor` return type.
+
+## Processor Adapter
+
+```python
+class _EnsembleProcessorAdapter(EnsembleProcessor):
     def fit_transform_ensemble(
         self,
         table: EnsembleTable,
         *,
         context: EnsembleFitContext,
-    ) -> EnsembleTable: ...
+    ) -> EnsembleTable:
+        self.processors = ModuleList(
+            copy.deepcopy(self.template) for _ in table.groups
+        )
+        if isinstance(self.template, VariableSchemaBatchMixin):
+            ...
 
-    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable: ...
+        else...
+
+
+def as_ensemble_processor(
+    processor: Processor,
+) -> EnsembleProcessor:
+    if isinstance(processor, EnsembleProcessor):
+        return processor
+    return _EnsembleProcessorAdapter(processor)
 ```
 
-`EnsembleProcessor` remains a normal `Processor`: scalar `TableTensor` calls are represented internally as a one-member `EnsembleTable` and return a scalar `TableTensor`.
+`_EnsembleProcessorAdapter` adapts a normal Processor to the ensemble contract and owns one fitted instance per input group. For a `VariableSchemaBatchMixin`, its private variable-schema path requires one output per batch position and passes those outputs with the composed member mapping to `pack`; `DropConstantColumns` uses this path so mask calculation remains vectorized. Query transform and inverse transform select the same path and apply the same instances to groups in the same order. All composite children are normalized through `as_ensemble_processor`, so downstream components use one interface.
 
-`as_ensemble_processor` normalizes every node to one execution contract:
+## Variant-Producing and Composite Processors
 
-- A leaf with `supports_leading_variants=True` is wrapped by `_EnsembleProcessorAdapter`, fitted once per compatible group, and processes its leading variants independently.
-- A `VariableSchemaBatchMixin` implements `fit_batch`/`transform_batch` on `[V, R, C]`, returning one table per leading variant; the adapter then repacks compatible schemas. `DropConstantColumns` and `AlignCategories` use this path.
-- `member_specific_fit=True` creates one fitted child per member when fitted state must remain member-local and no specialized structural implementation exists.
-- A leaf satisfying none of these contracts raises `TypeError`; there is no silent scalar fallback.
-- The adapter rejects row-count changes.
+- Member-specific randomness is defined by stable `(member_id, table_scope, processor_path)` streams and remains independent of physical variant grouping and model randomness. Decisions are sampled during fit, stored by the Processor, and reused by transform and inverse transform.
+- `Choice` stores one option per member, computes each unique selected branch once, and calls `EnsembleTable.pack` on the branch results in original member order. Round-robin selects `member_id % num_options`; random selection uses the member stream.
+- `ShuffleColumns` and `ShuffleCategories` store member-specific mappings, compute unique results, and call `pack`.
+- `Sequential`, `StypeDispatch`, and `TaskDispatch` pass `EnsembleTable` recursively through normalized children.
+- Only `ReduceEstimators` may aggregate the member dimension.
 
-## Structural and stochastic nodes
+The producer owns the semantic member-to-result mapping. `pack` owns physical grouping. The group-preserving adapter does not repack; variant producers and the variable-schema adapter do.
 
-- `Sequential` passes the current `EnsembleTable` through normalized children.
-- `StypeDispatch` routes each semantic type as an `EnsembleTable`, executes active routes, and recombines member-aligned results.
-- `TaskDispatch` is resolved from the fitted target before execution and uses one consistent task branch.
-- `Choice(selection="round_robin")` selects `member_id % len(options)`; random choice uses stable member streams. Each selected branch is computed once for its selected subset and merged back in member order.
-- `ShuffleColumns` and `ShuffleCategories` store member-specific mappings, deduplicate equal mappings, and vectorize compatible distinct results.
-- An optional `EnsemblePlanner` supplies exact model-family reference plans without hard-coding them into generic Processors. TabICLv2 uses it for paired normalization plus Latin feature and shifted class permutations.
+## Tasks
 
-## RNG ownership
+| Task                          | Scope                                                                                                                                                                 | Owner                                                                           |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Recipe and output integration | Update `Recipe.fit_transform`/`transform`, atomic state, related tables, and `transform_output` including target inverse and class alignment.                         | TBD                                                                             |
+| Ensemble container            | Implement `EnsembleTable`, `pack`, member lookup, and related-table container.                                                                                        | Ramona Bendias DE                                                               |
+| Custom ensemble nodes         | Add `EnsembleProcessor` behavior for `Choice`, `Sequential`, `StypeDispatch`, `TaskDispatch`, `ShuffleColumns`, `ShuffleCategories`, and sampled `QuantileTransform`. | Jana Gagacheva (`Choice`/`Sequential`/`StypeDispatch`); remaining ownership TBD |
+| Processor adapter             | Implement `_EnsembleProcessorAdapter` and `VariableSchemaBatchMixin` with one fitted instance per input group and transform/inverse reuse.                            | TBD                                                                             |
+| Vectorized leaf Processors    | Update normal Processors to accept independent leading variant dimensions `[V_g,...,R,C]`.                                                                            | Ramona Bendias DE                                                               |
+| Validation                    | Cover member RNG, schema grouping, context/query state reuse, target inverse, raw member parity, and CUDA performance.                                                | TBD                                                                             |
 
-`EnsembleFitContext` derives deterministic streams from the root seed, stable member ID, logical table scope, and Processor path. Grouping or repacking therefore cannot change a member's decision. Fit stores every decision; transform and inverse transform never resample it. On automatic CUDA OOM retry, model execution restores the generator state before running the sequential schedule.
+## Open Questions
 
-## Model scheduling
-
-`ICLModel.forward` and `fit` accept `ensemble_mode="parallel" | "sequential" | "auto"`. A model core opts into a leading ensemble dimension with `supports_vectorized_ensemble=True`; otherwise every schedule uses singleton model calls. If grouped calls consume a generator, the model must additionally opt into `supports_vectorized_ensemble_rng=True` and guarantee member-wise RNG equivalence.
-
-- `parallel` groups members with compatible feature, target, and related-table execution signatures, materializes each group, and invokes a vectorized model core.
-- `sequential` invokes the same fitted Recipe plan but materializes and executes one member at a time.
-- `auto` attempts parallel execution and retries sequentially only after a CUDA OOM, releasing cached GPU memory first.
-- A model with `supports_vectorized_ensemble=False` always receives scalar members. KumoRFM currently uses this mode: its preprocessing is shared, while its relational model core remains sequential.
-
-## Output semantics
-
-`Recipe.transform_output` keeps outputs in stable member order. `TargetDecode` explicitly maps regression values through each member's fitted target inverse or aligns classification logits to canonical classes and is required before `ReduceEstimators`. Compatible stateless steps before reduction process the stacked estimator dimension directly. `ReduceEstimators` must be a direct output step, may occur at most once, and is the only member aggregation boundary. Fitted output nodes, ambiguous nested reductions, feature/target reductions, member-specific work after reduction, and decode after reduction fail during Recipe validation.
-
-## Boundaries and follow-up
-
-- Supported now: row-preserving processing, variable column schemas, table-local related state, strict TabICLv2 reference planning, deterministic materialization, direct and cached model execution, and CUDA OOM fallback.
-- Not supported: row-changing Processors, cross-table fitted-state reuse, cross-device groups, multi-GPU scheduling, or a vectorized KumoRFM model core.
-- Serialization of dynamically fitted group Processors and member decisions needs an explicit stable format before it becomes a public persistence contract.
-- `StypeDispatch` inverse transformation currently requires one active route for the complete ensemble.
-
-An alternative was to keep fitted Recipe copies and add a cache above them. That can reuse selected states but retains duplicate execution trees, does not carry intermediate provenance, and cannot vectorize later distinct variants directly. The Processor-level ensemble contract is preferred because sharing, splitting, fitting, transform, and inverse transform use one representation and one execution path.
+- Serialization of dynamically fitted group Processors and member decisions.

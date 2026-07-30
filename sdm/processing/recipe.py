@@ -226,12 +226,9 @@ class Recipe(torch.nn.Module):
         self.output = output
         self._ensemble_features: EnsembleProcessor | None = None
         self.ensemble_planner = ensemble_planner
-        self._ensemble_target: EnsembleProcessor | None = None
         self._ensemble_related = torch.nn.ModuleList()
         self._related_table_names: tuple[str, ...] = ()
         self._ensemble_output: Processor | None = None
-        self._canonical_classes: tuple[object, ...] | None = None
-        self._class_indices: tuple[torch.Tensor, ...] = ()
         self._num_members = 0
 
     @staticmethod
@@ -547,14 +544,20 @@ class Recipe(torch.nn.Module):
                 planner,
             )
 
+        for module in output_processor.modules():
+            if isinstance(module, TargetDecode):
+                module._bind(
+                    target=target_processor,
+                    canonical_classes=canonical_classes,
+                    class_indices=class_indices,
+                    num_members=num_members,
+                )
+
         # Install the complete fitted graph only after every table succeeds.
         self._ensemble_features = feature_processor
-        self._ensemble_target = target_processor
         self._ensemble_related = related_processors
         self._related_table_names = tuple(related_table_names)
         self._ensemble_output = output_processor
-        self._canonical_classes = canonical_classes
-        self._class_indices = class_indices
         self._num_members = num_members
         return transformed_features, transformed_target, transformed_related
 
@@ -616,76 +619,25 @@ class Recipe(torch.nn.Module):
             )
         return transformed_features, transformed_related
 
-    def _decode_targets(
-        self,
-        outputs: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
-        assert self._ensemble_target is not None
-        if self._canonical_classes is None:
-            return self._ensemble_target.inverse_transform_members(outputs)
-
-        columns = tuple(str(value) for value in self._canonical_classes)
-        decoded: list[TableTensor] = []
-        for output, indices in zip(outputs, self._class_indices):
-            if output.numerical.size(-1) != indices.numel():
-                raise ValueError(
-                    "Model output width does not match the fitted class count."
-                )
-            decoded.append(
-                TableTensor(
-                    columns={Stype.numerical: columns},
-                    numerical=output.numerical.index_select(-1, indices),
-                )
-            )
-        return tuple(decoded)
-
     def transform_output(
         self,
         outputs: Sequence[TableTensor],
     ) -> TableTensor:
-        r"""Decode and postprocess member-aligned model outputs.
+        r"""Run the fitted output pipeline on member-aligned outputs.
 
         Args:
             outputs: One model output table per stable member.
         """
         if self._ensemble_output is None:
             raise RuntimeError(
-                "'Recipe' is not fitted; call 'fit_transform()' before."
+                "Recipe is not fitted; call fit_transform() first."
             )
-        current: tuple[TableTensor, ...] | TableTensor = tuple(outputs)
-        if len(current) != self._num_members:
-            raise ValueError("Expected one model output per fitted member.")
-
-        steps = self._steps(self._ensemble_output)
-
-        def members() -> tuple[TableTensor, ...]:
-            if not isinstance(current, TableTensor):
-                return current
-            return tuple(current[index] for index in range(self._num_members))
-
-        reduced = False
-        for step in steps:
-            if isinstance(step, TargetDecode):
-                current = self._decode_targets(members())
-                continue
-            if isinstance(step, ReduceEstimators):
-                if not isinstance(current, TableTensor):
-                    current = _stack_physical(current)
-                current = step.transform(current)
-                reduced = True
-                continue
-            if reduced:
-                current = step.transform(cast(TableTensor, current))
-            elif step.supports_leading_variants:
-                if not isinstance(current, TableTensor):
-                    current = _stack_physical(current)
-                current = step.transform(current)
-            else:
-                current = tuple(step.transform(table) for table in members())
-
-        if isinstance(current, TableTensor):
-            return current
-        return _stack_physical(cast(tuple[TableTensor, ...], current))
+        outputs = tuple(outputs)
+        if len(outputs) != self._num_members:
+            raise ValueError(
+                "Expected one model output per fitted ensemble member."
+            )
+        return self._ensemble_output.transform(_stack_physical(outputs))
 
     def __repr__(self) -> str:
         return (
