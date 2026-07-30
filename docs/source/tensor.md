@@ -41,13 +41,11 @@ A {py:class}`~sdm.tensor.TableTensor` currently supports the following semantic 
 ```{figure} images/table_light.svg
 :figclass: light-only
 :width: 100%
-:align: center
 ```
 
 ```{figure} images/table_dark.svg
 :figclass: dark-only
 :width: 100%
-:align: center
 ```
 
 A {py:class}`~sdm.tensor.TableTensor` can be created manually from tensor blocks or converted from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) dataframes.
@@ -123,11 +121,8 @@ print(table[["age", "country"]].size())
 print(table[:2].size())
 # torch.Size([2, 5])
 
-print(table[:2].size())
-# torch.Size([2, 5])
-
-print(table.unsqueeze(0).size())
-# torch.Size([1, 3, 5])
+print(table.unsqueeze(0).expand(2, -1, -1).size())
+# torch.Size([2, 3, 5])
 
 print(torch.cat([table, table], dim=0).size())
 # torch.Size([6, 5])
@@ -175,4 +170,4 @@ Without it, these operations fall back to a CPU backend, which requires transfer
 ## Model Inputs And Outputs
 
 A {py:class}`~sdm.tensor.TableTensor` acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
-Learn more about model processing and execution in the [Model Interface](model) and [Recipes](recipe) guides.
+You can learn more about data processing and model execution in the [Data Processing](processing) and [In-Context Learning Model Interface](icl) guides.
