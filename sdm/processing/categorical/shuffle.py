@@ -26,6 +26,7 @@ class ShuffleCategories(Processor):
     """
 
     supported_stypes = frozenset({Stype.categorical})
+    member_specific_fit = True
 
     def __init__(
         self,

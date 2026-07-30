@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Literal, cast
 
 import torch
 
@@ -8,7 +8,7 @@ from sdm.tensor import TableTensor
 
 
 class Choice(Processor, InvertibleMixin):
-    """Delegate to one option drawn uniformly at random.
+    """Delegate to one selected option.
 
     The option is drawn when the processor is fitted; pass ``generator``
     to ``fit()`` to make it reproducible. The generator is also passed on
@@ -18,18 +18,28 @@ class Choice(Processor, InvertibleMixin):
     Args:
         args: Sequence of candidate processors or stateless callables. Each
             callable accepts and returns a :class:`~sdm.tensor.TableTensor`.
+        selection: ``"random"`` draws an option during fit. ``"round_robin"``
+            assigns option ``member_id % len(options)`` in ensemble execution
+            and selects the first option for the scalar API.
     """
 
     supported_stypes = frozenset(Stype)
+    member_specific_fit = True
 
     def __init__(
         self,
         *args: object,
+        selection: Literal["random", "round_robin"] = "random",
     ) -> None:
         super().__init__()
+        if len(args) == 0:
+            raise ValueError("'Choice' requires at least one option.")
+        if selection not in {"random", "round_robin"}:
+            raise ValueError("selection must be 'random' or 'round_robin'.")
         self.options = torch.nn.ModuleList(
             Processor.as_processor(arg) for arg in args
         )
+        self.selection = selection
         self._index: int | None = None
 
     @property
@@ -48,14 +58,17 @@ class Choice(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._index = int(
-            torch.randint(
-                len(self.options),
-                (1,),
-                generator=generator,
-                device=table.device,
-            ).item()
-        )
+        if self.selection == "round_robin":
+            self._index = 0
+        else:
+            self._index = int(
+                torch.randint(
+                    len(self.options),
+                    (1,),
+                    generator=generator,
+                    device=table.device,
+                ).item()
+            )
         self.selected.fit(table, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -89,8 +102,8 @@ class Choice(Processor, InvertibleMixin):
             cast(Processor, option).__repr__(indent=indent + 2)
             for option in self.options
         )
-        return (
-            f"{' ' * indent}{self.__class__.__name__}(\n"
-            f"{inner},\n"
-            f"{' ' * indent})"
-        )
+        prefix = " " * indent
+        if self.selection != "random":
+            option_prefix = " " * (indent + 2)
+            inner += f",\n{option_prefix}selection={self.selection!r}"
+        return f"{prefix}{self.__class__.__name__}(\n{inner},\n{prefix})"

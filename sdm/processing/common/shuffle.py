@@ -18,17 +18,21 @@ class ShuffleColumns(Processor, InvertibleMixin):
 
     Args:
         method: Permutation strategy. ``"shift"`` cyclically shifts the
-            columns by a drawn offset, and ``"random"`` permutes the columns
-            with a drawn permutation.
+            columns by a drawn offset, ``"random"`` draws a permutation, and
+            ``"latin"`` uses an ensemble planner (or identity for scalar
+            execution).
     """
 
     supported_stypes = frozenset({Stype.numerical})
+    member_specific_fit = True
 
     def __init__(
         self,
-        method: Literal["shift", "random"] = "shift",
+        method: Literal["shift", "random", "latin"] = "shift",
     ) -> None:
         super().__init__()
+        if method not in {"shift", "random", "latin"}:
+            raise ValueError("method must be 'shift', 'random', or 'latin'")
         self.method = method
         self.register_buffer(
             "permutation",
@@ -43,7 +47,7 @@ class ShuffleColumns(Processor, InvertibleMixin):
     ) -> None:
         n_features = table.numerical.size(-1)
         device = table.numerical.device
-        if n_features <= 1:
+        if n_features <= 1 or self.method == "latin":
             self.permutation = torch.arange(n_features, device=device)
         elif self.method == "shift":
             offset = torch.randint(

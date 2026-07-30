@@ -1,16 +1,19 @@
 import contextlib
 import copy
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import replace
-from typing import Any, ClassVar, cast
+from collections.abc import Iterator
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin, Processor, Recipe
+from sdm.processing import (
+    EnsembleRelatedTables,
+    EnsembleTable,
+    Recipe,
+)
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
@@ -49,11 +52,286 @@ class ICLModel(torch.nn.Module, ABC):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
+    #: Whether the model core accepts a leading ensemble dimension.
+    supports_vectorized_ensemble: ClassVar[bool] = False
+
+    #: Whether grouped execution preserves member-local generator semantics.
+    #:
+    #: Leave this disabled when ``_forward`` consumes ``generator`` in a way
+    #: whose draws depend on the leading ensemble shape. Such models use the
+    #: singleton schedule whenever a generator is supplied.
+    supports_vectorized_ensemble_rng: ClassVar[bool] = False
+
     def __init__(self) -> None:
         super().__init__()
 
-        # One cache per ensemble member.
         self._caches: list[Cache] | None = None
+
+    @staticmethod
+    def _validate_ensemble_mode(
+        ensemble_mode: str,
+    ) -> Literal["auto", "parallel", "sequential"]:
+        if ensemble_mode not in {"auto", "parallel", "sequential"}:
+            raise ValueError(
+                "'ensemble_mode' must be 'auto', 'parallel', or 'sequential'."
+            )
+        return cast(
+            Literal["auto", "parallel", "sequential"],
+            ensemble_mode,
+        )
+
+    @staticmethod
+    def _table_execution_signature(table: TableTensor) -> tuple[object, ...]:
+        return (
+            tuple(table.size()[:-1]),
+            tuple(
+                (
+                    stype,
+                    type(block),
+                    block.dtype,
+                    block.size(-1),
+                )
+                for stype, block in table.items()
+            ),
+            tuple(
+                category.numel() for category in table.categorical.categories
+            ),
+        )
+
+    @classmethod
+    def _related_execution_signature(
+        cls,
+        tables: EnsembleRelatedTables | None,
+        member: int,
+    ) -> tuple[object, ...] | None:
+        if tables is None:
+            return None
+        return tuple(
+            (
+                name,
+                cls._table_execution_signature(table[member]),
+            )
+            for name, table in sorted(tables.tables.items())
+        )
+
+    @classmethod
+    def _execution_groups(
+        cls,
+        *,
+        ensemble_mode: Literal["parallel", "sequential"],
+        x_context: EnsembleTable,
+        y_context: EnsembleTable,
+        x_query: EnsembleTable | None,
+        related_context_tables: EnsembleRelatedTables | None,
+        related_query_tables: EnsembleRelatedTables | None,
+    ) -> tuple[tuple[int, ...], ...]:
+        if (
+            ensemble_mode == "sequential"
+            or not cls.supports_vectorized_ensemble
+        ):
+            return tuple((member,) for member in range(x_context.num_members))
+
+        groups: dict[tuple[object, ...], list[int]] = {}
+        for member in range(x_context.num_members):
+            signature = (
+                cls._table_execution_signature(x_context[member]),
+                cls._table_execution_signature(y_context[member]),
+                cls._table_execution_signature(x_query[member])
+                if x_query is not None
+                else None,
+                cls._related_execution_signature(
+                    related_context_tables,
+                    member,
+                ),
+                cls._related_execution_signature(
+                    related_query_tables,
+                    member,
+                ),
+            )
+            groups.setdefault(signature, []).append(member)
+        return tuple(tuple(members) for members in groups.values())
+
+    @classmethod
+    def _materialize_table(
+        cls,
+        table: EnsembleTable,
+        members: tuple[int, ...],
+    ) -> TableTensor:
+        if cls.supports_vectorized_ensemble:
+            return table.materialize(members)
+        return table[members[0]]
+
+    @classmethod
+    def _materialize_related(
+        cls,
+        tables: EnsembleRelatedTables | None,
+        members: tuple[int, ...],
+    ) -> RelatedTables | None:
+        if tables is None:
+            return None
+        if cls.supports_vectorized_ensemble:
+            return tables.materialize(members)
+        return tables.member(members[0])
+
+    def _validate_ensemble_inputs(
+        self,
+        *,
+        x_context: EnsembleTable,
+        y_context: EnsembleTable,
+        x_query: EnsembleTable | None,
+        related_context_tables: EnsembleRelatedTables | None,
+        related_query_tables: EnsembleRelatedTables | None,
+    ) -> None:
+        for member in range(x_context.num_members):
+            context_related = (
+                related_context_tables.member(member)
+                if related_context_tables is not None
+                else None
+            )
+            self._validate_context(
+                x=x_context[member],
+                y=y_context[member],
+                related_tables=context_related,
+            )
+            if x_query is None:
+                continue
+            query_related = (
+                related_query_tables.member(member)
+                if related_query_tables is not None
+                else None
+            )
+            self._validate_query(
+                x_context=x_context[member].schema,
+                x_query=x_query[member],
+                related_context_tables=(
+                    context_related.schema
+                    if context_related is not None
+                    else None
+                ),
+                related_query_tables=query_related,
+            )
+
+    def _forward_ensemble(
+        self,
+        *,
+        x_context: EnsembleTable,
+        y_context: EnsembleTable,
+        x_query: EnsembleTable,
+        related_context_tables: EnsembleRelatedTables | None,
+        related_query_tables: EnsembleRelatedTables | None,
+        ensemble_mode: Literal["parallel", "sequential"],
+        generator: torch.Generator | None,
+        kwargs: dict[str, Any],
+    ) -> tuple[TableTensor, ...]:
+        groups = self._execution_groups(
+            ensemble_mode=ensemble_mode,
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+        )
+        if generator is not None and not self.supports_vectorized_ensemble_rng:
+            groups = tuple((member,) for group in groups for member in group)
+        outputs: list[TableTensor | None] = [None] * x_context.num_members
+        for members in groups:
+            out = self._forward(
+                x_context=self._materialize_table(x_context, members),
+                y_context=self._materialize_table(y_context, members),
+                x_query=self._materialize_table(x_query, members),
+                related_context_tables=self._materialize_related(
+                    related_context_tables,
+                    members,
+                ),
+                related_query_tables=self._materialize_related(
+                    related_query_tables,
+                    members,
+                ),
+                cache=None,
+                generator=generator,
+                **kwargs,
+            )
+            if not self.supports_vectorized_ensemble:
+                outputs[members[0]] = out
+                continue
+            if out.size(0) != len(members):
+                raise RuntimeError(
+                    "Model output did not preserve the leading ensemble "
+                    "dimension."
+                )
+            for local, member in enumerate(members):
+                outputs[member] = out[local]
+        return tuple(cast(TableTensor, output) for output in outputs)
+
+    def _fit_ensemble_caches(
+        self,
+        *,
+        recipe: Recipe,
+        x_context: EnsembleTable,
+        y_context: EnsembleTable,
+        related_context_tables: EnsembleRelatedTables | None,
+        ensemble_mode: Literal["parallel", "sequential"],
+        generator: torch.Generator | None,
+        kwargs: dict[str, Any],
+    ) -> list[Cache]:
+        groups = self._execution_groups(
+            ensemble_mode=ensemble_mode,
+            x_context=x_context,
+            y_context=y_context,
+            x_query=None,
+            related_context_tables=related_context_tables,
+            related_query_tables=None,
+        )
+        if generator is not None and not self.supports_vectorized_ensemble_rng:
+            groups = tuple((member,) for group in groups for member in group)
+        caches: list[Cache] = []
+        for members in groups:
+            x_batch = self._materialize_table(x_context, members)
+            y_batch = self._materialize_table(y_context, members)
+            related_batch = self._materialize_related(
+                related_context_tables,
+                members,
+            )
+            cache = Cache(
+                recipe=recipe,
+                member_ids=members,
+                x_schemas=tuple(
+                    x_context[member].schema for member in members
+                ),
+                related_tables_schemas=tuple(
+                    (
+                        related_context_tables.member(member).schema
+                        if related_context_tables is not None
+                        else None
+                    )
+                    for member in members
+                ),
+                related_table_names=(
+                    tuple(related_context_tables.tables)
+                    if related_context_tables is not None
+                    else None
+                ),
+                classes=(
+                    y_batch.categorical.categories[0]
+                    if y_batch.categorical.size(-1) > 0
+                    else None
+                ),
+                kwargs=kwargs,
+            )
+            self._forward(
+                x_context=x_batch,
+                y_context=y_batch,
+                x_query=None,
+                related_context_tables=related_batch,
+                related_query_tables=None,
+                cache=cache,
+                generator=generator,
+                **kwargs,
+            )
+            if x_context.num_members > 1:
+                cache = cache.cpu()
+            caches.append(cache.freeze())
+        return caches
 
     @_maybe_inference_mode()
     def forward(
@@ -66,6 +344,7 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        ensemble_mode: Literal["auto", "parallel", "sequential"] = "auto",
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
@@ -81,8 +360,12 @@ class ICLModel(torch.nn.Module, ABC):
                 ``[..., R_query, D]`` with ``R_query`` rows and ``D`` columns.
             related_context_tables: Related context for in-context examples.
             related_query_tables: Related context for query examples.
-            recipe: The recipe for pre- and post-processing.
+            recipe: The recipe for pre- and post-processing. If ``None``, the
+                model's default recipe is applied.
             num_estimators: The number of estimators ``E`` for ensembling.
+            ensemble_mode: Whether compatible members execute in parallel,
+                sequentially, or in parallel with automatic CUDA out-of-memory
+                fallback.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -91,6 +374,7 @@ class ICLModel(torch.nn.Module, ABC):
             The processed prediction after applying ``recipe.output`` to the
             stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
+        ensemble_mode = self._validate_ensemble_mode(ensemble_mode)
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x_context, TableTensor):
@@ -112,79 +396,70 @@ class ICLModel(torch.nn.Module, ABC):
                 tables=related_context_tables.tables
             )
 
-        recipe = self.default_recipe() if recipe is None else recipe
-        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
-
-        outs: Sequence[TableTensor] = []
-        for recipe in recipes:
-            x_context_i = recipe.features.fit_transform(
+        template = self.default_recipe() if recipe is None else recipe
+        fitted_recipe = copy.deepcopy(template)
+        x_context_ensemble, y_context_ensemble, related_context_ensemble = (
+            fitted_recipe.fit_transform(
                 x_context,
-                generator=generator,
-            )
-            y_context_i = recipe.target.fit_transform(
                 y_context,
+                related_context_tables,
+                num_members=num_estimators,
                 generator=generator,
             )
-            x_query_i = recipe.features.transform(x_query)
+        )
+        x_query_ensemble, related_query_ensemble = fitted_recipe.transform(
+            x_query,
+            related_query_tables,
+        )
+        self._validate_ensemble_inputs(
+            x_context=x_context_ensemble,
+            y_context=y_context_ensemble,
+            x_query=x_query_ensemble,
+            related_context_tables=related_context_ensemble,
+            related_query_tables=related_query_ensemble,
+        )
 
-            related_context_tables_i = related_query_tables_i = None
-            if related_context_tables is not None:
-                related_processors = {
-                    table_name: copy.deepcopy(recipe.features)
-                    for table_name in related_context_tables.tables
-                }
-                related_context_tables_i = replace(
-                    related_context_tables,
-                    tables={
-                        name: related_processors[name].fit_transform(
-                            t,
-                            generator=generator,
-                        )
-                        for name, t in related_context_tables.tables.items()
-                    },
-                )
-                assert related_query_tables is not None
-                related_query_tables_i = replace(
-                    related_query_tables,
-                    tables={
-                        name: related_processors[name].transform(t)
-                        for name, t in related_query_tables.tables.items()
-                    },
-                )
-
-            self._validate_context(
-                x=x_context_i,
-                y=y_context_i,
-                related_tables=related_context_tables_i,
-            )
-            self._validate_query(
-                x_context=x_context_i.schema,
-                x_query=x_query_i,
-                related_context_tables=related_context_tables_i.schema
-                if related_context_tables_i is not None
-                else None,
-                related_query_tables=related_query_tables_i,
-            )
-
-            out = self._forward(
-                x_context=x_context_i,
-                y_context=y_context_i,
-                x_query=x_query_i,
-                related_context_tables=related_context_tables_i,
-                related_query_tables=related_query_tables_i,
-                cache=None,
+        execution_mode = (
+            "parallel" if ensemble_mode == "auto" else ensemble_mode
+        )
+        generator_state = (
+            generator.get_state()
+            if ensemble_mode == "auto" and generator is not None
+            else None
+        )
+        try:
+            outputs = self._forward_ensemble(
+                x_context=x_context_ensemble,
+                y_context=y_context_ensemble,
+                x_query=x_query_ensemble,
+                related_context_tables=related_context_ensemble,
+                related_query_tables=related_query_ensemble,
+                ensemble_mode=execution_mode,
                 generator=generator,
-                **kwargs,
+                kwargs=kwargs,
             )
-            if y_context_i.numerical.size(-1) == 1:
-                if not isinstance(recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                out = recipe.target.inverse_transform(out)
-            outs.append(out)
+        except torch.cuda.OutOfMemoryError:
+            if ensemble_mode != "auto":
+                raise
+            if generator_state is not None:
+                assert generator is not None
+                generator.set_state(generator_state)
+            torch.cuda.empty_cache()
+            outputs = self._forward_ensemble(
+                x_context=x_context_ensemble,
+                y_context=y_context_ensemble,
+                x_query=x_query_ensemble,
+                related_context_tables=related_context_ensemble,
+                related_query_tables=related_query_ensemble,
+                ensemble_mode="sequential",
+                generator=generator,
+                kwargs=kwargs,
+            )
 
-        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        out = cast(TableTensor, out.to(x_query_i.dtype))
-        return recipe.output.transform(out)
+        outputs = tuple(
+            cast(TableTensor, output.to(x_query.dtype)) for output in outputs
+        )
+        return fitted_recipe.transform_output(outputs)
 
     @_maybe_inference_mode()
     def fit(
@@ -195,6 +470,7 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
+        ensemble_mode: Literal["auto", "parallel", "sequential"] = "auto",
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> None:
@@ -209,13 +485,17 @@ class ICLModel(torch.nn.Module, ABC):
             y: The targets of in-context examples with shape
                 ``[..., R, 1]``.
             related_tables: Related context for in-context examples.
-            recipe: The recipe for pre- and post-processing. If ``None``, no
-                recipe is applied.
+            recipe: The recipe for pre- and post-processing. If ``None``, the
+                model's default recipe is applied.
             num_estimators: The number of estimators for ensembling.
+            ensemble_mode: Whether compatible members execute in parallel,
+                sequentially, or in parallel with automatic CUDA out-of-memory
+                fallback.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
         """
+        ensemble_mode = self._validate_ensemble_mode(ensemble_mode)
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
         if not isinstance(x, TableTensor):
@@ -223,66 +503,57 @@ class ICLModel(torch.nn.Module, ABC):
         if not isinstance(y, TableTensor):
             y = TableTensor.from_tensor(y)
 
-        recipe = self.default_recipe() if recipe is None else recipe
-        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
+        template = self.default_recipe() if recipe is None else recipe
+        fitted_recipe = copy.deepcopy(template)
+        x_ensemble, y_ensemble, related_ensemble = fitted_recipe.fit_transform(
+            x,
+            y,
+            related_tables,
+            num_members=num_estimators,
+            generator=generator,
+        )
+        self._validate_ensemble_inputs(
+            x_context=x_ensemble,
+            y_context=y_ensemble,
+            x_query=None,
+            related_context_tables=related_ensemble,
+            related_query_tables=None,
+        )
 
-        self.clear()
-        caches: list[Cache] = []
-        for recipe in recipes:
-            x_i = recipe.features.fit_transform(x, generator=generator)
-            y_i = recipe.target.fit_transform(y, generator=generator)
-
-            related_tables_i = None
-            related_processors = None
-            if related_tables is not None:
-                related_processors = {
-                    table_name: copy.deepcopy(recipe.features)
-                    for table_name in related_tables.tables
-                }
-                related_tables_i = replace(
-                    related_tables,
-                    tables={
-                        name: related_processors[name].fit_transform(
-                            t,
-                            generator=generator,
-                        )
-                        for name, t in related_tables.tables.items()
-                    },
-                )
-
-            self._validate_context(
-                x=x_i,
-                y=y_i,
-                related_tables=related_tables_i,
-            )
-
-            cache = Cache(
-                recipe=recipe,
-                x_schema=x_i.schema,
-                related_processors=related_processors,
-                related_tables_schema=related_tables_i.schema
-                if related_tables_i is not None
-                else None,
-                classes=y_i.categorical.categories[0]
-                if y_i.categorical.size(-1) > 0
-                else None,
+        execution_mode = (
+            "parallel" if ensemble_mode == "auto" else ensemble_mode
+        )
+        generator_state = (
+            generator.get_state()
+            if ensemble_mode == "auto" and generator is not None
+            else None
+        )
+        try:
+            caches = self._fit_ensemble_caches(
+                recipe=fitted_recipe,
+                x_context=x_ensemble,
+                y_context=y_ensemble,
+                related_context_tables=related_ensemble,
+                ensemble_mode=execution_mode,
+                generator=generator,
                 kwargs=kwargs,
             )
-
-            self._forward(
-                x_context=x_i,
-                y_context=y_i,
-                x_query=None,
-                related_context_tables=related_tables_i,
-                related_query_tables=None,
-                cache=cache,
+        except torch.cuda.OutOfMemoryError:
+            if ensemble_mode != "auto":
+                raise
+            if generator_state is not None:
+                assert generator is not None
+                generator.set_state(generator_state)
+            torch.cuda.empty_cache()
+            caches = self._fit_ensemble_caches(
+                recipe=fitted_recipe,
+                x_context=x_ensemble,
+                y_context=y_ensemble,
+                related_context_tables=related_ensemble,
+                ensemble_mode="sequential",
                 generator=generator,
-                **kwargs,
+                kwargs=kwargs,
             )
-            if num_estimators > 1:
-                cache = cache.cpu()
-            cache = cache.freeze()
-            caches.append(cache)
         self._caches = caches
 
     @_maybe_inference_mode()
@@ -315,66 +586,78 @@ class ICLModel(torch.nn.Module, ABC):
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
+        first_cache = self._caches[0]
+        recipe = cast(Recipe, first_cache["recipe"])
+        fitted_related_names = cast(
+            tuple[str, ...] | None,
+            first_cache["related_table_names"],
+        )
+        if (related_tables is None) != (fitted_related_names is None):
+            raise ValueError("Expected related tables to be provided together")
         if related_tables is not None:
-            if self._caches[0]["related_tables_schema"] is None:
+            assert fitted_related_names is not None
+            if len(fitted_related_names) == 0:
                 raise ValueError(
                     "Expected related tables to be provided together"
                 )
             related_tables = related_tables.select_tables(
-                tables=cast(
-                    RelatedTablesSchema,
-                    self._caches[0]["related_tables_schema"],
-                ).tables,
+                tables=fitted_related_names,
             )
 
-        outs: Sequence[TableTensor] = []
+        x_ensemble, related_ensemble = recipe.transform(x, related_tables)
+        outputs: list[TableTensor | None] = [None] * x_ensemble.num_members
         for cache in self._caches:
-            recipe = cast(Recipe, cache["recipe"])
-            x_i = recipe.features.transform(x)
-
-            related_tables_i = None
-            if related_tables is not None:
-                related_processors = cast(
-                    Mapping[str, Processor],
-                    cache["related_processors"],
-                )
-                related_tables_i = replace(
-                    related_tables,
-                    tables={
-                        name: related_processors[name].transform(t)
-                        for name, t in related_tables.tables.items()
-                    },
-                )
-
-            self._validate_query(
-                x_context=cast(TableSchema, cache["x_schema"]),
-                x_query=x_i,
-                related_context_tables=cast(
-                    RelatedTablesSchema,
-                    cache["related_tables_schema"],
-                ),
-                related_query_tables=related_tables_i,
+            members = cast(tuple[int, ...], cache["member_ids"])
+            x_schemas = cast(tuple[TableSchema, ...], cache["x_schemas"])
+            related_schemas = cast(
+                tuple[RelatedTablesSchema | None, ...],
+                cache["related_tables_schemas"],
             )
+            for local, member in enumerate(members):
+                self._validate_query(
+                    x_context=x_schemas[local],
+                    x_query=x_ensemble[member],
+                    related_context_tables=related_schemas[local],
+                    related_query_tables=(
+                        related_ensemble.member(member)
+                        if related_ensemble is not None
+                        else None
+                    ),
+                )
 
             out = self._forward(
                 x_context=None,
                 y_context=None,
-                x_query=x_i,
+                x_query=self._materialize_table(x_ensemble, members),
                 related_context_tables=None,
-                related_query_tables=related_tables_i,
-                cache=cache.to(x_i.device),
+                related_query_tables=self._materialize_related(
+                    related_ensemble,
+                    members,
+                ),
+                cache=cache.to(x_ensemble.device),
                 generator=None,
                 **cast(dict[str, Any], cache["kwargs"]),
             )
-            if cache["classes"] is None:
-                if not isinstance(recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                out = recipe.target.inverse_transform(out)
-            outs.append(out)
+            if not self.supports_vectorized_ensemble:
+                outputs[members[0]] = cast(
+                    TableTensor,
+                    out.to(x.dtype),
+                )
+                continue
+            if out.size(0) != len(members):
+                raise RuntimeError(
+                    "Model output did not preserve the leading ensemble "
+                    "dimension."
+                )
+            for local, member in enumerate(members):
+                outputs[member] = cast(
+                    TableTensor,
+                    out[local].to(x.dtype),
+                )
 
-        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        out = cast(TableTensor, out.to(x_i.dtype))
-        return recipe.output.transform(out)
+        return recipe.transform_output(
+            tuple(cast(TableTensor, output) for output in outputs)
+        )
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""

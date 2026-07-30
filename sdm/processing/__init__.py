@@ -1,6 +1,14 @@
 """Processors for structured data tables."""
 
 from sdm.processing.base import Processor, InvertibleMixin
+from sdm.processing.ensemble import (
+    EnsembleProcessor,
+    VariableSchemaBatchMixin,
+    EnsembleFitContext,
+    EnsemblePlanner,
+    EnsembleTable,
+    EnsembleRelatedTables,
+)
 from sdm.processing.common import (
     Identity,
     Callable,
@@ -27,12 +35,22 @@ from sdm.processing.categorical import (
     ImputeMode,
 )
 from sdm.processing.datetime import AddCalendarFields
-from sdm.processing.output import ReduceEstimators, Softmax
+from sdm.processing.output import (
+    TargetDecode,
+    ReduceEstimators,
+    Softmax,
+)
 from sdm.processing.recipe import Recipe
 
 __all__ = [
     "Processor",
     "InvertibleMixin",
+    "EnsembleProcessor",
+    "VariableSchemaBatchMixin",
+    "EnsembleFitContext",
+    "EnsemblePlanner",
+    "EnsembleTable",
+    "EnsembleRelatedTables",
     "Identity",
     "Callable",
     "Sequential",
@@ -53,6 +71,7 @@ __all__ = [
     "ShuffleCategories",
     "ImputeMode",
     "AddCalendarFields",
+    "TargetDecode",
     "ReduceEstimators",
     "Softmax",
     "Recipe",

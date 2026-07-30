@@ -12,6 +12,6 @@ def default_recipe() -> Recipe:  # noqa: D103
             fields=("minute", "hour", "weekday", "day_of_month", "month"),
         )
     )
-    recipe = tabiclv2_recipe()
+    recipe = tabiclv2_recipe(reference_ensemble=False)
     recipe.features = datetime_processor + recipe.features
     return recipe

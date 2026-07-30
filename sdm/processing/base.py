@@ -26,6 +26,11 @@ class Processor(torch.nn.Module, abc.ABC):
     """
 
     supported_stypes: ClassVar[SupportedStypes]
+    #: Whether leading variant positions are processed independently in one
+    #: tensor operation.
+    supports_leading_variants: ClassVar[bool] = False
+    #: Whether fitting requires distinct state for every ensemble member.
+    member_specific_fit: ClassVar[bool] = False
     requires_fit: bool = True
 
     def __init__(self) -> None:

@@ -1,7 +1,8 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
+from typing_extensions import Self
 
 from sdm import (
     CategoricalTensor,
@@ -10,13 +11,14 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import Processor
+from sdm.processing.base import Processor
+from sdm.processing.ensemble import VariableSchemaBatchMixin
 from sdm.relational.join import join_index
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
 
-class AlignCategories(Processor):
+class AlignCategories(Processor, VariableSchemaBatchMixin):
     """Align categorical columns to vocabularies observed during fitting.
 
     Fitting keeps the observed category values for each column. Transforming
@@ -39,6 +41,7 @@ class AlignCategories(Processor):
         super().__init__()
         self.sort_by = sort_by
         self._categories: tuple[Tensor, ...] = ()
+        self._batch_processors = torch.nn.ModuleList()
 
     def _fit_category(
         self,
@@ -194,6 +197,53 @@ class AlignCategories(Processor):
 
         return table.replace_blocks(
             categorical=CategoricalTensor(out, categories=self._categories),
+        )
+
+    def _check_batch(self, table: TableTensor) -> None:
+        self._check_supported_stypes(table)
+        if table.dim() != 3:
+            raise ValueError(
+                "'AlignCategories' batch methods expect shape [V, R, C]."
+            )
+
+    def fit_batch(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        r"""Fit one categorical vocabulary per leading variant.
+
+        Args:
+            table: Variant batch with shape ``[V, R, C]``.
+            generator: Optional pseudorandom number generator.
+        """
+        self._check_batch(table)
+        self._batch_processors = torch.nn.ModuleList()
+        for index in range(table.size(0)):
+            processor = self.__class__(sort_by=self.sort_by)
+            processor.fit(table[index], generator=generator)
+            self._batch_processors.append(processor)
+        return self
+
+    def transform_batch(
+        self,
+        table: TableTensor,
+    ) -> tuple[TableTensor, ...]:
+        r"""Apply each fitted vocabulary to its leading variant.
+
+        Args:
+            table: Variant batch with shape ``[V, R, C]``.
+        """
+        self._check_batch(table)
+        if table.size(0) != len(self._batch_processors):
+            raise ValueError(
+                "Expected the fitted number of leading variants "
+                f"(got {table.size(0)})."
+            )
+        return tuple(
+            cast(Processor, processor).transform(table[index])
+            for index, processor in enumerate(self._batch_processors)
         )
 
     def __repr__(self, *, indent: int = 0) -> str:

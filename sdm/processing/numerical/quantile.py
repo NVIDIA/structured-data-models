@@ -92,6 +92,7 @@ class QuantileTransform(Processor, InvertibleMixin):
     """
 
     supported_stypes = frozenset({Stype.numerical})
+    member_specific_fit = True
 
     def __init__(
         self,

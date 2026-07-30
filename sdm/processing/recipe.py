@@ -1,5 +1,6 @@
-from collections.abc import Iterable
-from dataclasses import dataclass
+import copy
+from collections.abc import Iterable, Sequence
+from typing import cast
 
 import torch
 from typing_extensions import Self
@@ -7,6 +8,19 @@ from typing_extensions import Self
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.common.sequential import Sequential
 from sdm.processing.common.task import TaskDispatch
+from sdm.processing.ensemble import (
+    EnsembleFitContext,
+    EnsemblePlanner,
+    EnsembleProcessor,
+    EnsembleRelatedTables,
+    EnsembleTable,
+    VariableSchemaBatchMixin,
+    _stack_physical,
+    as_ensemble_processor,
+)
+from sdm.processing.output.reduce import ReduceEstimators
+from sdm.processing.output.target import TargetDecode
+from sdm.relational import RelatedTables
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -82,8 +96,7 @@ class _TaskResolver(Processor, InvertibleMixin):
         return self.processor.__repr__(indent=indent)
 
 
-@dataclass(init=False, repr=False)
-class Recipe:
+class Recipe(torch.nn.Module):
     """Processing contract around an external model boundary.
 
     A recipe bundles three processing pipelines, one per role the data plays
@@ -100,14 +113,14 @@ class Recipe:
       the output remains stacked. Steps before the reducer must support
       stacked outputs, while steps after it receive already-reduced outputs.
 
-    Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
-    steps are invertible, ``inverse_transform``. Call them directly, e.g.
-    ``recipe.features.transform(table)`` or
-    ``recipe.target.inverse_transform(prediction)``. Recipes do not infer each
-    step's non-finite input contract; order steps so values are imputed before
-    processors that do not explicitly document non-finite support. When
-    ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
-    ``target`` also selects its task-specific output route.
+    Each configured pipeline remains a normal Processor and can be fitted and
+    called independently. Ensemble :meth:`fit_transform` instead fits private
+    execution trees; reuse those through :meth:`transform` and
+    :meth:`transform_output`. Recipes do not infer each step's non-finite input
+    contract; order steps so values are imputed before processors that do not
+    explicitly document non-finite support. When ``output`` contains
+    :class:`~sdm.processing.TaskDispatch`, fitting ``target`` also selects its
+    task-specific output route.
 
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
@@ -119,6 +132,8 @@ class Recipe:
         output: Steps applied to stacked member outputs after member-local
             mappings. Estimator reduction, when desired, is an explicit step
             in this pipeline.
+        ensemble_planner: Optional coordinator for member decisions spanning
+            more than one Processor path.
     """
 
     features: Processor
@@ -130,8 +145,10 @@ class Recipe:
         features: Processor | Iterable[Processor] | None = None,
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
+        *,
+        ensemble_planner: EnsemblePlanner | None = None,
     ) -> None:
-
+        super().__init__()
         if features is None:
             features = Sequential()
         elif not isinstance(features, Processor):
@@ -204,9 +221,471 @@ class Recipe:
                 task_dispatchers=task_dispatchers,
             )
 
-        object.__setattr__(self, "features", features)
-        object.__setattr__(self, "target", target)
-        object.__setattr__(self, "output", output)
+        self.features = features
+        self.target = target
+        self.output = output
+        self._ensemble_features: EnsembleProcessor | None = None
+        self.ensemble_planner = ensemble_planner
+        self._ensemble_target: EnsembleProcessor | None = None
+        self._ensemble_related = torch.nn.ModuleList()
+        self._related_table_names: tuple[str, ...] = ()
+        self._ensemble_output: Processor | None = None
+        self._canonical_classes: tuple[object, ...] | None = None
+        self._class_indices: tuple[torch.Tensor, ...] = ()
+        self._num_members = 0
+
+    @staticmethod
+    def _steps(processor: Processor) -> tuple[Processor, ...]:
+        if isinstance(processor, Sequential):
+            return tuple(processor)
+        return (processor,)
+
+    def _validate_ensemble_composition(self) -> None:
+        for role, processor in (
+            ("features", self.features),
+            ("target", self.target),
+        ):
+            if any(
+                isinstance(module, ReduceEstimators)
+                for module in processor.modules()
+            ):
+                raise ValueError(
+                    "'ReduceEstimators' is only supported in Recipe.output "
+                    f"(found in {role!r})."
+                )
+
+        steps = self._steps(self.output)
+
+        direct_reducers = tuple(
+            index
+            for index, step in enumerate(steps)
+            if isinstance(step, ReduceEstimators)
+        )
+        all_reducers = tuple(
+            module
+            for module in self.output.modules()
+            if isinstance(module, ReduceEstimators)
+        )
+        if len(all_reducers) > len(direct_reducers):
+            raise ValueError(
+                "'ReduceEstimators' must be a direct Recipe.output step."
+            )
+        if len(direct_reducers) > 1:
+            raise ValueError(
+                "Recipe.output supports at most one 'ReduceEstimators'."
+            )
+
+        direct_decoders = tuple(
+            index
+            for index, step in enumerate(steps)
+            if isinstance(step, TargetDecode)
+        )
+        all_decoders = tuple(
+            module
+            for module in self.output.modules()
+            if isinstance(module, TargetDecode)
+        )
+        if len(all_decoders) > len(direct_decoders):
+            raise ValueError(
+                "'TargetDecode' must be a direct Recipe.output step."
+            )
+        if len(direct_decoders) > 1:
+            raise ValueError(
+                "Recipe.output supports at most one 'TargetDecode'."
+            )
+        fitted_output_node = next(
+            (
+                (path, module)
+                for path, module in self.output.named_modules(
+                    remove_duplicate=False
+                )
+                if isinstance(module, Processor)
+                and module.requires_fit
+                and not isinstance(module, Sequential)
+            ),
+            None,
+        )
+        if fitted_output_node is not None:
+            path, module = fitted_output_node
+            location = path or "<root>"
+            raise ValueError(
+                "Recipe.output supports only stateless processors; "
+                f"{module.__class__.__name__!r} at {location!r} requires "
+                "fit."
+            )
+
+        if len(direct_reducers) == 0:
+            return
+
+        reducer = direct_reducers[0]
+        if any(
+            isinstance(step, TargetDecode) for step in steps[reducer + 1 :]
+        ):
+            raise ValueError(
+                "'TargetDecode' must run before 'ReduceEstimators'."
+            )
+        if len(direct_decoders) == 0:
+            raise ValueError(
+                "'TargetDecode' is required before 'ReduceEstimators'."
+            )
+
+    @staticmethod
+    def _target_processor(processor: Processor) -> Processor:
+        if isinstance(processor, _TaskResolver):
+            return processor.processor
+        return processor
+
+    @staticmethod
+    def _task_from_target(table: TableTensor) -> str:
+        if table.size(-1) != 1:
+            raise ValueError(
+                "Expected the transformed target to contain exactly one "
+                f"column (got {table.size(-1)} columns)."
+            )
+        if table.numerical.size(-1) == 1:
+            return "regression"
+        if table.categorical.size(-1) == 1:
+            return "classification"
+        raise ValueError(
+            "Expected the transformed target to be numerical or categorical."
+        )
+
+    @staticmethod
+    def _validate_variable_schema_input(
+        *,
+        role: str,
+        table: TableTensor,
+        processor: Processor,
+    ) -> None:
+        if table.dim() == 2 or not any(
+            isinstance(module, VariableSchemaBatchMixin)
+            for module in processor.modules()
+        ):
+            return
+        raise ValueError(
+            f"Ensemble Recipe {role} with variable-schema processors expects "
+            "one logical table with shape [R, C]; additional leading input "
+            "dimensions are not supported."
+        )
+
+    def _build_class_plan(
+        self,
+        raw_target: TableTensor,
+        transformed_target: EnsembleTable,
+        planner: EnsemblePlanner | None,
+    ) -> tuple[tuple[object, ...], tuple[torch.Tensor, ...]]:
+        local_values = tuple(
+            tuple(
+                transformed_target[member].categorical.categories[0].tolist()
+            )
+            for member in range(transformed_target.num_members)
+        )
+        planned_classes = (
+            planner.canonical_classes() if planner is not None else None
+        )
+        if planned_classes is None:
+            raw_values = tuple(raw_target.categorical.categories[0].tolist())
+            canonical = tuple(
+                value for value in raw_values if value in local_values[0]
+            )
+            if len(canonical) != len(local_values[0]):
+                canonical = local_values[0]
+        else:
+            canonical = planned_classes
+
+        indices: list[torch.Tensor] = []
+        for member, values in enumerate(local_values):
+            if len(values) != len(canonical) or any(
+                value not in values for value in canonical
+            ):
+                raise ValueError(
+                    "Expected every classification member to contain the "
+                    "same fitted classes."
+                )
+            indices.append(
+                torch.tensor(
+                    [values.index(value) for value in canonical],
+                    dtype=torch.long,
+                    device=transformed_target[member].device,
+                )
+            )
+        return canonical, tuple(indices)
+
+    def fit_transform(
+        self,
+        features: TableTensor,
+        target: TableTensor,
+        related_tables: RelatedTables | None = None,
+        *,
+        num_members: int,
+        generator: torch.Generator | None = None,
+    ) -> tuple[
+        EnsembleTable,
+        EnsembleTable,
+        EnsembleRelatedTables | None,
+    ]:
+        r"""Fit all Recipe paths and transform context data.
+
+        Args:
+            features: Context feature table. Variable-schema paths require
+                shape ``[R, C]``.
+            target: Context target table. Variable-schema paths require
+                shape ``[R, 1]``.
+            related_tables: Optional related context tables.
+            num_members: Positive number of ensemble members.
+            generator: Optional root generator for fit-time randomness.
+        """
+        if num_members < 1:
+            raise ValueError("'num_members' needs to be positive.")
+        self._validate_ensemble_composition()
+        self._validate_variable_schema_input(
+            role="features",
+            table=features,
+            processor=self.features,
+        )
+        self._validate_variable_schema_input(
+            role="target",
+            table=target,
+            processor=self._target_processor(self.target),
+        )
+        if related_tables is not None:
+            for table_name, table in related_tables.tables.items():
+                self._validate_variable_schema_input(
+                    role=f"related table {table_name!r}",
+                    table=table,
+                    processor=self.features,
+                )
+
+        feature_processor = as_ensemble_processor(copy.deepcopy(self.features))
+        target_processor = as_ensemble_processor(
+            copy.deepcopy(self._target_processor(self.target))
+        )
+        output_processor = copy.deepcopy(self.output)
+
+        planner = copy.deepcopy(self.ensemble_planner)
+        feature_context = EnsembleFitContext.create(
+            num_members=num_members,
+            table_scope="features",
+            generator=generator,
+            planner=planner,
+        )
+        if planner is not None:
+            planner.initialize(
+                features=features,
+                target=target,
+                num_members=num_members,
+                seed=feature_context.base_seed,
+            )
+        target_context = EnsembleFitContext.create(
+            num_members=num_members,
+            table_scope="target",
+            base_seed=feature_context.base_seed,
+            planner=planner,
+        )
+        transformed_features = feature_processor.fit_transform_ensemble(
+            EnsembleTable.from_shared(
+                features,
+                num_members=num_members,
+            ),
+            context=feature_context,
+        )
+        transformed_target = target_processor.fit_transform_ensemble(
+            EnsembleTable.from_shared(
+                target,
+                num_members=num_members,
+            ),
+            context=target_context,
+        )
+
+        tasks = {
+            self._task_from_target(transformed_target[member])
+            for member in range(num_members)
+        }
+        if len(tasks) != 1:
+            raise ValueError(
+                "All ensemble members must resolve to the same task type."
+            )
+        task = next(iter(tasks))
+        for module in output_processor.modules():
+            if isinstance(module, TaskDispatch):
+                module._resolve(transformed_target[0])
+
+        related_processors = torch.nn.ModuleList()
+        related_table_names: list[str] = []
+        transformed_related: EnsembleRelatedTables | None = None
+        if related_tables is not None:
+            related_outputs: dict[str, EnsembleTable] = {}
+            for table_name, table in related_tables.tables.items():
+                processor = as_ensemble_processor(copy.deepcopy(self.features))
+                related_processors.append(processor)
+                related_table_names.append(table_name)
+                context = EnsembleFitContext.create(
+                    num_members=num_members,
+                    table_scope=f"related:{table_name}",
+                    base_seed=feature_context.base_seed,
+                    planner=planner,
+                )
+                related_outputs[table_name] = processor.fit_transform_ensemble(
+                    EnsembleTable.from_shared(
+                        table,
+                        num_members=num_members,
+                    ),
+                    context=context,
+                )
+            transformed_related = EnsembleRelatedTables(
+                tables=related_outputs,
+                relationships=related_tables.relationships,
+                task_links=related_tables.task_links,
+            )
+
+        canonical_classes: tuple[object, ...] | None = None
+        class_indices: tuple[torch.Tensor, ...] = ()
+        if task == "classification":
+            canonical_classes, class_indices = self._build_class_plan(
+                target,
+                transformed_target,
+                planner,
+            )
+
+        # Install the complete fitted graph only after every table succeeds.
+        self._ensemble_features = feature_processor
+        self._ensemble_target = target_processor
+        self._ensemble_related = related_processors
+        self._related_table_names = tuple(related_table_names)
+        self._ensemble_output = output_processor
+        self._canonical_classes = canonical_classes
+        self._class_indices = class_indices
+        self._num_members = num_members
+        return transformed_features, transformed_target, transformed_related
+
+    def transform(
+        self,
+        features: TableTensor,
+        related_tables: RelatedTables | None = None,
+    ) -> tuple[EnsembleTable, EnsembleRelatedTables | None]:
+        r"""Transform query tables with the fitted ensemble plan.
+
+        Args:
+            features: Query feature table. Variable-schema paths require
+                shape ``[R, C]``.
+            related_tables: Optional related query tables.
+        """
+        if self._ensemble_features is None:
+            raise RuntimeError(
+                "'Recipe' is not fitted; call 'fit_transform()' before."
+            )
+        self._validate_variable_schema_input(
+            role="features",
+            table=features,
+            processor=self.features,
+        )
+        transformed_features = self._ensemble_features.transform_ensemble(
+            EnsembleTable.from_shared(
+                features,
+                num_members=self._num_members,
+            )
+        )
+
+        transformed_related: EnsembleRelatedTables | None = None
+        if related_tables is not None:
+            for table_name, table in related_tables.tables.items():
+                self._validate_variable_schema_input(
+                    role=f"related table {table_name!r}",
+                    table=table,
+                    processor=self.features,
+                )
+            fitted_related = dict(
+                zip(self._related_table_names, self._ensemble_related)
+            )
+            tables = {
+                name: cast(
+                    EnsembleProcessor,
+                    fitted_related[name],
+                ).transform_ensemble(
+                    EnsembleTable.from_shared(
+                        table,
+                        num_members=self._num_members,
+                    )
+                )
+                for name, table in related_tables.tables.items()
+            }
+            transformed_related = EnsembleRelatedTables(
+                tables=tables,
+                relationships=related_tables.relationships,
+                task_links=related_tables.task_links,
+            )
+        return transformed_features, transformed_related
+
+    def _decode_targets(
+        self,
+        outputs: Sequence[TableTensor],
+    ) -> tuple[TableTensor, ...]:
+        assert self._ensemble_target is not None
+        if self._canonical_classes is None:
+            return self._ensemble_target.inverse_transform_members(outputs)
+
+        columns = tuple(str(value) for value in self._canonical_classes)
+        decoded: list[TableTensor] = []
+        for output, indices in zip(outputs, self._class_indices):
+            if output.numerical.size(-1) != indices.numel():
+                raise ValueError(
+                    "Model output width does not match the fitted class count."
+                )
+            decoded.append(
+                TableTensor(
+                    columns={Stype.numerical: columns},
+                    numerical=output.numerical.index_select(-1, indices),
+                )
+            )
+        return tuple(decoded)
+
+    def transform_output(
+        self,
+        outputs: Sequence[TableTensor],
+    ) -> TableTensor:
+        r"""Decode and postprocess member-aligned model outputs.
+
+        Args:
+            outputs: One model output table per stable member.
+        """
+        if self._ensemble_output is None:
+            raise RuntimeError(
+                "'Recipe' is not fitted; call 'fit_transform()' before."
+            )
+        current: tuple[TableTensor, ...] | TableTensor = tuple(outputs)
+        if len(current) != self._num_members:
+            raise ValueError("Expected one model output per fitted member.")
+
+        steps = self._steps(self._ensemble_output)
+
+        def members() -> tuple[TableTensor, ...]:
+            if not isinstance(current, TableTensor):
+                return current
+            return tuple(current[index] for index in range(self._num_members))
+
+        reduced = False
+        for step in steps:
+            if isinstance(step, TargetDecode):
+                current = self._decode_targets(members())
+                continue
+            if isinstance(step, ReduceEstimators):
+                if not isinstance(current, TableTensor):
+                    current = _stack_physical(current)
+                current = step.transform(current)
+                reduced = True
+                continue
+            if reduced:
+                current = step.transform(cast(TableTensor, current))
+            elif step.supports_leading_variants:
+                if not isinstance(current, TableTensor):
+                    current = _stack_physical(current)
+                current = step.transform(current)
+            else:
+                current = tuple(step.transform(table) for table in members())
+
+        if isinstance(current, TableTensor):
+            return current
+        return _stack_physical(cast(tuple[TableTensor, ...], current))
 
     def __repr__(self) -> str:
         return (

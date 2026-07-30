@@ -27,7 +27,6 @@ extensions = [
     "sphinx_copybutton",
 ]
 myst_enable_extensions = ["dollarmath"]
-exclude_patterns = ["AGENTS.md"]
 templates_path = ["_templates"]
 html_theme = "shibuya"
 html_title = project

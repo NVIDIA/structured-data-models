@@ -102,19 +102,26 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     x_query = torch.randn(*batch_shape, R_query, C)
     y_context = torch.randn(*batch_shape, R_context, 1)
 
-    out = model(x_context, y_context, x_query, num_estimators=2)
-    assert out.size() == (*batch_shape, R_query, 999)
+    direct = model(
+        x_context,
+        y_context,
+        x_query,
+        num_estimators=3,
+        generator=torch.Generator().manual_seed(1),
+    )
+    assert direct.size() == (*batch_shape, R_query, 999)
 
-    model.fit(x_context, y_context, num_estimators=3)
-    caches = model._caches
-    assert caches is not None
-    assert len(caches) == 3
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    model.fit(
+        x_context,
+        y_context,
+        num_estimators=3,
+        generator=torch.Generator().manual_seed(1),
+    )
+    first = model.predict(x_query)
+    repeated = model.predict(x_query)
 
-    out = model.predict(x_query)
-    assert out.size() == (*batch_shape, R_query, 999)
-    assert model._caches is caches
-    assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    torch.testing.assert_close(first.numerical, direct.numerical)
+    torch.testing.assert_close(repeated.numerical, first.numerical)
     model.clear()
 
 

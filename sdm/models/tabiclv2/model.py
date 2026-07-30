@@ -99,6 +99,8 @@ class TabICLv2(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_related_tables: ClassVar[bool] = False
+    supports_vectorized_ensemble: ClassVar[bool] = True
+    supports_vectorized_ensemble_rng: ClassVar[bool] = True
 
     def __init__(
         self,

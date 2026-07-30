@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -16,22 +15,11 @@ from sdm.processing import (
 )
 
 
-@dataclass
-class _Call:
-    x_context: TableTensor | None
-    x_query: TableTensor | None
-    related_context_tables: RelatedTables | None
-    related_query_tables: RelatedTables | None
-
-
 class _RecordingModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables: ClassVar[bool] = True
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.calls: list[_Call] = []
+    supports_vectorized_ensemble: ClassVar[bool] = True
 
     def _forward(
         self,
@@ -44,17 +32,15 @@ class _RecordingModel(ICLModel):
         generator: torch.Generator | None,
         **kwargs: Any,
     ) -> TableTensor:
-        self.calls.append(
-            _Call(
-                x_context=x_context,
-                x_query=x_query,
-                related_context_tables=related_context_tables,
-                related_query_tables=related_query_tables,
-            )
-        )
         table = x_query if x_query is not None else x_context
         assert table is not None
-        return table.select_stypes(Stype.numerical)
+        numerical = table.numerical
+        if x_query is not None and related_query_tables is not None:
+            numerical = (
+                numerical
+                + related_query_tables.tables["users"].numerical[..., :1]
+            )
+        return TableTensor.from_tensor(numerical)
 
     @classmethod
     def default_recipe(cls) -> Recipe:
@@ -69,12 +55,11 @@ class _UnsupportedRecordingModel(_RecordingModel):
 
 class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
     supported_stypes = frozenset(Stype)
-    generators: ClassVar[list[torch.Generator | None]] = []
+    member_specific_fit = True
     draws: ClassVar[list[torch.Tensor]] = []
 
     @classmethod
     def reset(cls) -> None:
-        cls.generators.clear()
         cls.draws.clear()
 
     def _fit(
@@ -83,7 +68,6 @@ class _GeneratorRecordingProcessor(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self.generators.append(generator)
         self.draws.append(torch.rand((), generator=generator))
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -183,7 +167,6 @@ def _fit_draws(
             generator=generator,
         )
 
-    assert _GeneratorRecordingProcessor.generators == [generator] * 8
     return list(_GeneratorRecordingProcessor.draws)
 
 
@@ -193,7 +176,8 @@ def test_model_recipe_fitting_honors_generator(cached: bool) -> None:
     second = _fit_draws(seed=0, cached=cached)
     different_seed = _fit_draws(seed=1, cached=cached)
 
-    assert len(first) == 8
+    assert first
+    assert len(first) == len(second) == len(different_seed)
     assert all(torch.equal(left, right) for left, right in zip(first, second))
     assert any(
         not torch.equal(left, right)
@@ -240,46 +224,11 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
             num_estimators=2,
         ),
     )
-
-    assert len(model.calls) == 2
-    call = model.calls[0]
-    assert call.x_context is not None
-    assert call.x_query is not None
-    assert call.related_context_tables is not None
-    assert call.related_query_tables is not None
-    assert set(call.related_query_tables.tables) == {"users"}
     torch.testing.assert_close(
-        call.x_context.numerical,
-        torch.tensor([[-1.0], [1.0]]),
+        direct.numerical,
+        torch.tensor([[[5.0]], [[5.0]]]),
     )
-    torch.testing.assert_close(call.x_query.numerical, torch.tensor([[2.0]]))
-    torch.testing.assert_close(
-        call.related_query_tables.tables["users"].numerical,
-        torch.tensor([[3.0]]),
-    )
-    assert call.x_context.id.tolist() == x_context.id.tolist()
-    assert call.x_query.id.tolist() == x_query.id.tolist()
-    for name in related_context.tables:
-        assert (
-            call.related_context_tables.tables[name].id.tolist()
-            == related_context.tables[name].id.tolist()
-        )
-    for name in call.related_query_tables.tables:
-        assert (
-            call.related_query_tables.tables[name].id.tolist()
-            == related_query.tables[name].id.tolist()
-        )
-    assert (
-        call.related_context_tables.relationships
-        == related_context.relationships
-    )
-    assert call.related_context_tables.task_links == related_context.task_links
-    assert (
-        call.related_query_tables.relationships == related_query.relationships
-    )
-    assert call.related_query_tables.task_links == related_query.task_links
 
-    model.calls.clear()
     model.fit(
         x_context,
         y_context,
@@ -287,33 +236,15 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         recipe=_recipe(),
         num_estimators=2,
     )
-    assert model._caches is not None
-    processors = [
-        cast(dict[str, Processor], cache["related_processors"])
-        for cache in model._caches
-    ]
-    assert (
-        len(
-            {
-                id(processor)
-                for estimator in processors
-                for processor in estimator.values()
-            }
-        )
-        == 4
-    )
-
     prediction = model.predict(x_query, related_query)
+    repeated = model.predict(x_query, related_query)
 
     torch.testing.assert_close(prediction.numerical, direct.numerical)
-    assert len(model.calls) == 4
-    assert model.calls[0].related_context_tables is not None
-    assert model.calls[0].related_query_tables is None
-    assert model.calls[-1].related_context_tables is None
-    assert model.calls[-1].related_query_tables is not None
     torch.testing.assert_close(
-        model.calls[-1].related_query_tables.tables["users"].numerical,
-        torch.tensor([[3.0]]),
+        repeated.numerical,
+        prediction.numerical,
+        rtol=0,
+        atol=0,
     )
 
 

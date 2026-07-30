@@ -17,6 +17,7 @@ class ImputeMean(Processor):
     """
 
     supported_stypes = frozenset({Stype.numerical})
+    supports_leading_variants = True
 
     def __init__(
         self,
@@ -36,7 +37,11 @@ class ImputeMean(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = _as_float(table.numerical)
-        mean = torch.nanmean(numerical, dim=0)
+        mean = torch.nanmean(
+            numerical,
+            dim=-2,
+            keepdim=numerical.dim() > 2,
+        )
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
     def _transform(self, table: TableTensor) -> TableTensor:

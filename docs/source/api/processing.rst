@@ -12,6 +12,20 @@ Processor API
    ~sdm.processing.base.InvertibleMixin
    ~sdm.processing.recipe.Recipe
 
+Ensemble Execution API
+----------------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+   ~sdm.processing.ensemble.EnsembleProcessor
+   ~sdm.processing.ensemble.VariableSchemaBatchMixin
+   ~sdm.processing.ensemble.EnsembleFitContext
+   ~sdm.processing.ensemble.EnsemblePlanner
+   ~sdm.processing.ensemble.EnsembleTable
+   ~sdm.processing.ensemble.EnsembleRelatedTables
+
 Common Processors
 -----------------
 
