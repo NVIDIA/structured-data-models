@@ -112,7 +112,7 @@ This gives foundation models extra context without changing the core ICL structu
 
 For example, a row in `x_context` or `x_query` might ask for a prediction about one entity at a particular time, such as whether a user will churn next month.
 Through {py:class}`~sdm.relational.RelatedTables`, that row can be linked to the corresponding user record, that user's past behavior, and any other records connected through the relational schema.
-The model can use this relational neighborhood as context for the prediction task, without requiring manual flattening related information into one single wide table.
+The model can use this relational neighborhood as context for the prediction task, without requiring manual flattening of related information into one single wide table.
 
 Specifically, {py:class}`~sdm.relational.RelatedTables` consist of three components:
 
