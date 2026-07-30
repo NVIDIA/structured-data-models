@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Self
+from typing import Self
 
 import pandas as pd
 import torch
@@ -25,18 +25,7 @@ def _create_model(device: torch.device) -> sdm.models.TabICLv2:
 
 
 class SDMTabICLv2System(ExternalSystemModel):
-    """Expose TabICLv2 through TabArena's external-system interface.
-
-    Args:
-        kwargs: Arguments forwarded to TabArena's external-system model.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self._device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
-        self.model = _create_model(device=self._device)
+    """Expose TabICLv2 through TabArena's external-system interface."""
 
     def _fit_system(
         self,
@@ -52,6 +41,10 @@ class SDMTabICLv2System(ExternalSystemModel):
         random_state: int | None,
         **_: object,
     ) -> Self:
+        self._device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+        self.model = _create_model(device=self._device)
         generator = None
         if random_state is not None:
             generator = torch.Generator(device=self._device).manual_seed(
