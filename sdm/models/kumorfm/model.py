@@ -22,8 +22,12 @@ class KumoRFM(ICLModel):
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
-    .. image:: https://arxiv.org/html/2604.12596v1/x3.png
-        :align: center
+    .. figure:: /images/rfm_light.svg
+        :figclass: light-only
+        :width: 100%
+
+    .. figure:: /images/rfm_dark.svg
+        :figclass: dark-only
         :width: 100%
 
     :class:`KumoRFM` extends the in-context learning structure of tabular
