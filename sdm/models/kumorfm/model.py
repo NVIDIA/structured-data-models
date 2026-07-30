@@ -51,7 +51,7 @@ class KumoRFM(ICLModel):
       Context rows carry target information, while query rows attend to the
       labeled context to produce class logits or regression quantiles.
 
-    .. testcode:: cuda-to-cpu
+    .. testcode:: offline-cpu
 
         from sdm import RelatedTables, TableTensor
         from sdm.models import KumoRFM
@@ -104,7 +104,7 @@ class KumoRFM(ICLModel):
             "orders": related_tables.tables["orders"][3:],
         })
 
-        model = KumoRFM(pretrained=False, device="cuda")
+        model = KumoRFM(device="cuda")
 
         # Default in-context learning forward pass:
         out = model(

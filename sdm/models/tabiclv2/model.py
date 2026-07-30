@@ -65,7 +65,7 @@ class TabICLv2(ICLModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
-    .. testcode:: cuda-to-cpu
+    .. testcode:: offline-cpu
 
         from sdm import TableTensor
         from sdm.models import TabICLv2
@@ -83,7 +83,7 @@ class TabICLv2(ICLModel):
             },
             device="cuda",
         )
-        model = TabICLv2(pretrained=False, device="cuda")
+        model = TabICLv2(device="cuda")
 
         # Default in-context learning forward pass:
         out = model(
