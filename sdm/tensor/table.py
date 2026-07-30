@@ -75,7 +75,7 @@ class TableTensor(Tensor):
 
         print(table)
         # TableTensor (
-        #   size=(2, 4),
+        #   size=(10, 4),
         #   blocks={
         #     numerical (2): ['age', 'income'],
         #     categorical (2): ['country', 'segment'],
@@ -87,7 +87,7 @@ class TableTensor(Tensor):
         assert features.size() == (10, 2)
 
         # Normal PyTorch indexing still works on row/batch dimensions:
-        batch = table[[1, O, 2], ["income", "segment"]]
+        batch = table[[1, 0, 2], ["income", "segment"]]
         assert batch.size() == (3, 2)
 
         # Semantic blocks stay separate for model input:
@@ -95,11 +95,11 @@ class TableTensor(Tensor):
         x_cat = table.categorical
 
         # Tensor ops preserve the table container:
-        stacked = torch.stack([table, tablel, dim=0)
-        assert stacked.size () == (2, 2, 4)
+        stacked = torch.stack([table, table], dim=0)
+        assert stacked.size() == (2, 10, 4)
 
         # Column-wise cat extends the schema:
-        wide = torch.cat([table, table2], dim=-1)
+        wide = torch.cat([table[["age"]], table[["country"]]], dim=-1)
 
     Args:
         size: The shape of the tensor ``[..., C]``.
