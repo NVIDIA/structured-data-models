@@ -51,7 +51,7 @@ class KumoRFM(ICLModel):
       Context rows carry target information, while query rows attend to the
       labeled context to produce class logits or regression quantiles.
 
-    .. testcode:: offline-cpu
+    .. testcode:: cuda-to-cpu
 
         from sdm import RelatedTables, TableTensor
         from sdm.models import KumoRFM

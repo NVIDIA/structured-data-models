@@ -94,14 +94,14 @@ def _patch_autosummary_jinja(app: Sphinx) -> None:
     generate.find_autosummary_in_files = find_autosummary_in_files  # type: ignore
 
 
-def _run_model_doctests_offline_on_cpu(
+def _run_cuda_doctests_on_cpu(
     _app: Sphinx,
     doctree: Node,
 ) -> None:
     for node in doctree.findall(nodes.literal_block):
         if node.get("testnodetype") != "testcode":
             continue
-        if "offline-cpu" not in node.get("groups", ()):
+        if "cuda-to-cpu" not in node.get("groups", ()):
             continue
 
         # HTML renders the node text; the doctest builder executes "test".
@@ -118,4 +118,4 @@ def setup(app: Sphinx) -> None:
     """Register Jinja rendering for dynamic autosummary lists."""
     app.connect("builder-inited", _patch_autosummary_jinja, priority=400)
     app.connect("source-read", _render_jinja)
-    app.connect("doctree-read", _run_model_doctests_offline_on_cpu)
+    app.connect("doctree-read", _run_cuda_doctests_on_cpu)

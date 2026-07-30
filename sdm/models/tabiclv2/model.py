@@ -65,7 +65,7 @@ class TabICLv2(ICLModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
-    .. testcode:: offline-cpu
+    .. testcode:: cuda-to-cpu
 
         from sdm import TableTensor
         from sdm.models import TabICLv2
