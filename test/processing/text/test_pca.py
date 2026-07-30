@@ -73,13 +73,15 @@ def test_pca_caps_dim_at_centered_rank() -> None:
 
 def test_pca_transform_uses_fitted_state() -> None:
     pca = PCA(dim=2)
-    pca.fit(_table(_full_rank_data(20, 4)))
+    fit_table = _table(_full_rank_data(20, 4))
+    pca.fit(fit_table)
 
-    new = _table(torch.arange(20, dtype=torch.get_default_dtype()).view(5, 4))
-    output1 = pca.transform(new)
-    output2 = pca.transform(new)
+    # Held-out rows shifted away from the fitted mean stay off-center;
+    # recentering per call would zero the projection mean instead.
+    held_out = _table(_full_rank_data(20, 4) + 1.0)
 
-    assert torch.equal(output1.numerical, output2.numerical)
+    assert pca.transform(fit_table).numerical.mean(dim=0).abs().max() < 1e-5
+    assert pca.transform(held_out).numerical.mean(dim=0).abs().min() > 1e-2
 
 
 def test_pca_requires_fit() -> None:

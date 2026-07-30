@@ -41,6 +41,8 @@ class PCA(Processor):
             raise ValueError(
                 "'PCA' requires at least one numerical column to fit."
             )
+        if numerical.dtype in (torch.float16, torch.bfloat16):
+            numerical = numerical.to(torch.float32)
 
         self.mean = numerical.mean(dim=0)
         centered = numerical - self.mean
