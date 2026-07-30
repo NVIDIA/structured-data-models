@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Any, Self
 
 import pandas as pd
 import torch
-from autogluon.core.data.label_cleaner import LabelCleaner
+from autogluon.core.data import LabelCleaner
 from autogluon.core.metrics import Scorer
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
 from tabarena.benchmark.task.metadata import ValidationMetadata
@@ -31,7 +31,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         kwargs: Arguments forwarded to TabArena's external-system model.
     """
 
-    def __init__(self, **kwargs: object) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
@@ -64,13 +64,9 @@ class SDMTabICLv2System(ExternalSystemModel):
             target_stype = sdm.Stype.numerical
         else:
             target_stype = sdm.Stype.categorical
-            label_cleaner = LabelCleaner.construct(
-                problem_type=problem_type,
-                y=y,
-            )
+            cleaner = LabelCleaner.construct(problem_type=problem_type, y=y)
             self._class_labels_by_key = {
-                str(label): label
-                for label in label_cleaner.ordered_class_labels
+                str(label): label for label in cleaner.ordered_class_labels
             }
 
         table_x = sdm.TableTensor.from_pandas(

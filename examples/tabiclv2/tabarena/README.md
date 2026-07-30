@@ -7,7 +7,7 @@ This example evaluates `sdm.models.TabICLv2` on [TabArena](https://tabarena.ai).
 Install the source revisions of AutoGluon and TabArena used by this example:
 
 ```bash
-pip install \
+pip install structured-data-models \
   "autogluon.common @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common" \
   "autogluon.core @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core" \
   "autogluon.features @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features" \
