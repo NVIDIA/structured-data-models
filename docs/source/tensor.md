@@ -121,11 +121,8 @@ print(table[["age", "country"]].size())
 print(table[:2].size())
 # torch.Size([2, 5])
 
-print(table[:2].size())
-# torch.Size([2, 5])
-
-print(table.unsqueeze(0).size())
-# torch.Size([1, 3, 5])
+print(table.unsqueeze(0).expand(2, -1, -1).size())
+# torch.Size([2, 3, 5])
 
 print(torch.cat([table, table], dim=0).size())
 # torch.Size([6, 5])
