@@ -27,5 +27,4 @@ context.build_and_run_jobs(
     experiments,
     expname=result_dir,
     register=False,
-    debug_mode=True,
 )
