@@ -18,6 +18,7 @@ from sdm.relational import (
     TemporalSamplingConfig,
     TemporalStrategy,
 )
+from sdm import evaluation, models
 
 try:
     __version__ = version("structured-data-models")
@@ -39,5 +40,7 @@ __all__ = [
     "RelatedTables",
     "TemporalSamplingConfig",
     "TemporalStrategy",
+    "evaluation",
+    "models",
     "__version__",
 ]
