@@ -101,4 +101,112 @@ Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where
 
 Since predictions are returned as {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
 
-In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to align and convert prediction columns back to class indices (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
+In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to it (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
+
+## Relational Context
+
+So far, we have described the single-table in-context learning paradigm.
+A key design point of the `structured-data-models` package is that the same interface extends to relational prediction via the concept of {py:class}`~sdm.relational.RelatedTables`.
+A {py:class}`~sdm.relational.RelatedTables` object provides additional relational context: a set of tables, relationships among those tables, and task links that act as entry points from rows in `x_context` and `x_query` into the related tables.
+This gives foundation models extra context without changing the core ICL structure.
+
+For example, a row in `x_context` or `x_query` might ask for a prediction about one entity at a particular time, such as whether a user will churn next month.
+Through {py:class}`~sdm.relational.RelatedTables`, that row can be linked to the corresponding user record, that user's past behavior, and any other records connected through the relational schema.
+The model can use this relational neighborhood as context for the prediction task, without requiring manual flattening of related information into one single wide table.
+
+Specifically, {py:class}`~sdm.relational.RelatedTables` consist of three components:
+
+- `tables`: mapping from table names to {py:class}`~sdm.tensor.TableTensor` objects containing the tabular data of related tables.
+- `relationships`: (\[{py:class}`~sdm.relational.Relationship`\]): join relationships among the related tables.
+  Supports single columns or composite keys.
+- `task_links` (\[{py:class}`~sdm.relational.TaskLink`\]): entry points from rows in `x_context` and `x_query` into the related tables.
+  Supports single columns or composite keys.
+
+A {py:class}`~sdm.relational.Relationship` is defined by columns marked as {py:attr}`~sdm.Stype.id` semantic type.
+An {py:attr}`~sdm.Stype.id` column can represent a primary key, a foreign key, or another identifier used to match rows.
+Importantly, {py:attr}`~sdm.Stype.id` columns are used only to establish relationships among tables and are **not** used as input features during model processing:
+
+```python
+import sdm
+
+x_context = sdm.TableTensor.from_columns(
+    {"user_id": [0, 1, 2, 3]},
+    stypes={"user_id": "id"},
+    device="cuda",
+)
+
+related_context_tables = sdm.RelatedTables(
+    tables={
+        "users": sdm.TableTensor.from_columns(
+            {"user_id": [0, 1, 2, 3], "age": [42, 23, 31, 26]},
+            stypes={"user_id": "id", "age": "numerical"},
+            device="cuda",
+        ),
+        "orders": sdm.TableTensor.from_columns(
+            {"user_id": [0, 0, 1, 3, 3, 3], "amount": [9.99, 4.99, ...]},
+            stypes={"user_id": "id", "amount": "numerical"},
+            device="cuda",
+        ),
+    },
+    relationships=[{
+        "left_table": "orders",
+        "left_columns": "user_id",
+        "right_table": "users",
+        "right_columns": "user_id",
+    }],
+    task_links=[{
+        "task_columns": "user_id",
+        "table": "users",
+        "table_columns": "user_id",
+    }],
+)
+```
+
+In some tasks, each row in `x_context` or `x_query` should receive its own disjoint relational context.
+For example, two prediction rows may refer to the same user but different prediction times.
+As such, each row should only be linked to the related records available at its prediction time, preventing temporal leakage.
+{py:class}`~sdm.relational.RelatedTables` support this by allowing {py:class}`~sdm.relational.Relationship` and {py:class}`~sdm.relational.TaskLink` objects to be defined with composite keys.
+
+For this, we add a primary-key column to `x_context` and `x_query`, and add the same value as a foreign key to every row in the {py:class}`~sdm.relational.RelatedTables` that belongs to that specific example.
+This makes it possible to represent disjoint relational neighborhoods for different rows in `x_context` and `x_query` even when they refer to the same entity or share parts of the same local neighborhood.
+
+```python
+sdm.RelatedTables(
+    tables=...,
+    relationships=[{
+        "left_table": "orders",
+        "left_columns": ("task_id", "user_id"),
+        "right_table": "users",
+        "right_columns": ("task_id", "user_id"),
+    }, ...],
+    task_links=[{
+        "task_columns": ("task_id", "user_id"),
+        "table": "users",
+        "table_columns": ("task_id", "user_id"),
+    }],
+)
+```
+
+{py:class}`~sdm.relational.RelatedTables` are then passed through the same ICL interface of the {py:class}`~sdm.models.ICLModel`:
+
+```python
+# Default in-context learning forward pass:
+out = model(
+    x_context=x_context,
+    y_context=y_context,
+    x_query=x_query,
+    related_context_tables=related_context_tables,
+    related_query_tables=related_query_tables,
+)
+
+# Fit+Predict forward pass:
+model.fit(x_context, y_context, related_context_tables)
+out = model.predict(x_query, related_query_tables)
+```
+
+The {py:attr}`~sdm.models.ICLModel.supports_related_tables` attribute denotes whether an {py:class}`~sdm.models.ICLModel` supports relational context.
+For example, {py:class}`~sdm.models.KumoRFM` consumes the `x_context` and `x_query` together with related tables, propagates information through its induced relational subgraph, and then predicts the query rows from the labeled context rows.
+
+To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporal-aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
+Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
+The full relational sampling and prediction flow is shown in [`examples/kumorfm/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumorfm/rel_bench.py).
