@@ -26,14 +26,15 @@ jobs:
           python-version: '3.10'
           activate-environment: true
 
-      - name: Install package
-        run: |
-          uv pip install --torch-backend=cpu --group=doc .
-
       - name: Build documentation
         working-directory: ./docs
         run: |
-          uv run --no-project sphinx-build -M html "source" "build" -W --keep-going
+          uv run sphinx-build -M html "source" "build" -W --keep-going
+
+      - name: Run doctests
+        working-directory: ./docs
+        run: |
+          uv run sphinx-build -M doctest "source" "build" -W --keep-going
 
       - name: Push documentation to gh-pages
         if: github.event_name == 'push'
