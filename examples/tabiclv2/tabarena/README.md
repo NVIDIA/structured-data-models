@@ -23,7 +23,7 @@ Run the benchmark:
 python examples/tabiclv2/tabarena/main.py
 ```
 
-Completed jobs in the output directory are reused. Evaluate the results with:
+Evaluate the results with:
 
 ```bash
 python examples/tabiclv2/tabarena/evaluate.py
