@@ -16,21 +16,20 @@ from sdm.tensor.io import arrow_as_tensor
 
 
 class TfidfTextEmbed(Processor):
-    r"""Encode text columns as character n-gram TF-IDF vectors.
+    """Encode text columns as character n-gram TF-IDF vectors.
 
-    Each text column is tokenized into word-boundary character n-grams, and a
-    separate vocabulary and inverse-document-frequency (idf) weighting is
-    fitted per column on the context table. Every column expands to a set of
-    numerical features (one per fitted n-gram), and the generated columns are
-    concatenated into the numerical output. The idf smoothing matches
-    scikit-learn's smoothing formula (`idf(t) = ln( (1 + n_docs) /
-    (1 + df(t)) ) + 1`) default and rows are L2-normalized.
+    Tokenization follows scikit-learn's ``char_wb`` analyzer: whitespace-
+    delimited words are space-padded before windowing, so a word shorter than
+    ``n`` still yields one n-gram. Fit learns a vocabulary and smoothed idf
+    weights per text column. Transform replaces text with concatenated
+    numerical features (one per retained n-gram), applies those idf weights,
+    L2-normalizes each row, and ignores n-grams unseen at fit time.
 
     Args:
         ngram_range: Inclusive ``(min_n, max_n)`` character-window sizes.
         max_features: If set, keep only this many most frequent n-grams per
             column. ``None`` keeps the full vocabulary.
-        lowercase: Lowercase each string before tokenizing.
+        lowercase: If ``True``, lowercase text before tokenizing.
     """
 
     supported_stypes = frozenset({Stype.text})
@@ -103,21 +102,6 @@ class TfidfTextEmbed(Processor):
         *,
         lowercase: bool = True,
     ) -> tuple[StringTensor, Tensor]:
-        r"""Split each string into word-boundary character n-grams.
-
-        Each whitespace-delimited word is padded with a single space on
-        both sides before windowing, so a word shorter than ``n`` still
-        yields one n-gram.
-
-        Returns a flat :class:`StringTensor` holding every n-gram of every
-        document, together with an ``offset`` tensor of length ``numel() + 1``
-        where document ``d``'s n-grams are ``flat[offset[d]:offset[d + 1]]``.
-
-        Args:
-            tensor: StringTensor.
-            ngram_range: Inclusive ``(min_n, max_n)`` window sizes.
-            lowercase: Lowercase each string before windowing.
-        """
         if tensor.dim() != 1:
             raise NotImplementedError(
                 "Expected tensor to be one-dimensional "
@@ -161,26 +145,6 @@ class TfidfTextEmbed(Processor):
         ngram_range: tuple[int, int],
         lowercase: bool = True,
     ) -> tuple[StringTensor, Tensor]:
-        r"""Split each string into word-boundary character n-grams on GPU.
-
-        Device-native counterpart to the CPU/Arrow implementation in
-        :class:`~sdm.processing.text.tfidf_text_embed.TfidfTextEmbed`;
-        requires a CUDA tensor and an installed cuDF. Mirrors scikit-learn's
-        ``analyzer='char_wb'``: each whitespace-delimited word is padded with a
-        single space on both sides before windowing, so a word shorter than
-        ``n`` still yields one n-gram.
-
-        Returns a flat :class:`StringTensor` holding every n-gram of every
-        document, together with an ``offset`` tensor of length ``numel() + 1``
-        where document ``d``'s n-grams are ``flat[offset[d]:offset[d + 1]]``.
-        The n-grams within a document are unordered and may differ in order
-        from the CPU implementation; only the per-document grouping is stable.
-
-        Args:
-            tensor: StringTensor.
-            ngram_range: Inclusive ``(min_n, max_n)`` window sizes.
-            lowercase: Lowercase each string before windowing.
-        """
         import cudf
         import cupy as cp
 
@@ -285,17 +249,33 @@ class TfidfTextEmbed(Processor):
                 offsets.diff(),
             )  # [n_ngrams]
 
-            idf = self._idf(
-                doc_ids=doc_ids,
-                codes=codes,
-                vocab_size=vocab_size,
-                n_docs=n_docs,
-                device=device,
-            )
+            # Smoothed idf per n-gram from its document frequency: count each
+            # n-gram once per document, then apply sklearn's smoothing.
+            if vocab_size == 0:
+                idf = torch.empty(0, device=device)
+            else:
+                unique_codes = (
+                    doc_ids * vocab_size + codes
+                ).unique() % vocab_size
+                document_freq = torch.bincount(
+                    unique_codes, minlength=vocab_size
+                )
+                idf = ((1 + n_docs) / (1 + document_freq)).log() + 1.0
             term_counts = torch.bincount(
                 codes, minlength=vocab_size
             )  # [vocab_size]
-            vocabulary, idf = self._prune(vocabulary, idf, term_counts)
+
+            # Keep the max_features n-grams with the highest term frequency,
+            # matching scikit-learn: rank by corpus occurrence, break ties by
+            # vocabulary order via a stable sort.
+            if (
+                self.max_features is not None
+                and len(vocabulary) > self.max_features
+            ):
+                ranked = term_counts.argsort(descending=True, stable=True)
+                keep = ranked[: self.max_features].sort().values
+                vocabulary = vocabulary.take(pa.array(keep.tolist()))
+                idf = idf[keep]
             vocabularies.append(vocabulary)
             idfs.append(idf)
 
@@ -308,43 +288,6 @@ class TfidfTextEmbed(Processor):
         self._vocabularies = vocabularies
         for column, idf in enumerate(idfs):
             self.register_buffer(f"idf_{column}", idf)
-
-    def _idf(
-        self,
-        *,
-        doc_ids: Tensor,
-        codes: Tensor,
-        vocab_size: int,
-        n_docs: int,
-        device: torch.device,
-    ) -> Tensor:
-        """Smoothed idf per n-gram from its document frequency."""
-        if vocab_size == 0:
-            return torch.empty(0, device=device)
-        # Count each n-gram once per document: dedup (doc, code) pairs, then
-        # tally per code.  # [n_unique_pairs]
-        unique_codes = (doc_ids * vocab_size + codes).unique() % vocab_size
-        document_freq = torch.bincount(unique_codes, minlength=vocab_size)
-        return ((1 + n_docs) / (1 + document_freq)).log() + 1.0
-
-    def _prune(
-        self,
-        vocabulary: pa.Array,
-        idf: Tensor,
-        term_counts: Tensor,
-    ) -> tuple[pa.Array, Tensor]:
-        """Keep the ``max_features`` n-grams with the highest term frequency.
-
-        Ranking follows scikit-learn's ``max_features``: n-grams are ordered by
-        their total corpus occurrence count. Ties break by vocabulary order via
-        a stable sort so the selection is deterministic. ``idf`` is carried
-        along only as the weight aligned to each retained n-gram.
-        """
-        if self.max_features is None or len(vocabulary) <= self.max_features:
-            return vocabulary, idf
-        ranked = term_counts.argsort(descending=True, stable=True)
-        keep = ranked[: self.max_features].sort().values
-        return vocabulary.take(pa.array(keep.tolist())), idf[keep]
 
     def _transform(self, table: TableTensor) -> TableTensor:
         device = table.text.device

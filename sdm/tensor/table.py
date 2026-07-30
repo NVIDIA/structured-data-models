@@ -437,6 +437,42 @@ class TableTensor(Tensor):
         )
 
     @classmethod
+    def from_text(
+        cls,
+        text: StringTensor | str | Sequence[Any],
+        columns: Sequence[str] | None = None,
+        *,
+        device: torch.device | str | None = None,
+    ) -> Self:
+        r"""Create tensor from text values.
+
+        Scalar and one-dimensional inputs are interpreted as a single text
+        column.
+
+        Args:
+            text: The text values or text tensor.
+            columns: The column names of the text values.
+            device: The device.
+        """
+        if not isinstance(text, StringTensor):
+            text = StringTensor.from_list(text, device=device)
+        elif device is not None:
+            text = cast(StringTensor, text.to(device))
+
+        if text.dim() == 0:
+            text = text.unsqueeze(0).unsqueeze(-1)
+        elif text.dim() == 1:
+            text = text.unsqueeze(-1)
+
+        if columns is None:
+            columns = [str(i) for i in range(text.size(-1))]
+
+        return cls(
+            columns={Stype.text: columns},
+            text=text,
+        )
+
+    @classmethod
     def from_cudf(
         cls,
         df: cudf.DataFrame,
