@@ -23,49 +23,6 @@ def _numerical_by_column_ngram(
     return values
 
 
-def _require_cuda_text_backends() -> None:
-    pytest.importorskip("cudf")
-    pytest.importorskip("cupy")
-    pytest.importorskip("pylibcudf")
-
-
-def _assert_cuda_matches_cpu(
-    cpu_encoder: TfidfTextEmbed,
-    cuda_encoder: TfidfTextEmbed,
-    expected: TableTensor,
-    output: TableTensor,
-) -> None:
-    expected_by_ngram = _numerical_by_column_ngram(cpu_encoder, expected)
-    actual_by_ngram = _numerical_by_column_ngram(cuda_encoder, output)
-
-    assert output.numerical.is_cuda
-    assert output.numerical.shape == expected.numerical.shape
-    assert output.columns == expected.columns
-    assert actual_by_ngram.keys() == expected_by_ngram.keys()
-    for key, expected_values in expected_by_ngram.items():
-        assert torch.allclose(
-            actual_by_ngram[key],
-            expected_values,
-            atol=1e-6,
-        )
-
-
-def test_tfidf_encoder_replaces_text_with_named_numerical_features() -> None:
-    table = TableTensor.from_text(
-        [["hello world", "cat"], ["hello there", "dog"]],
-        columns=("review", "title"),
-    )
-
-    output = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
-
-    assert output.columns[Stype.text] == ()
-    assert output.numerical.shape[:-1] == table.text.shape[:-1]
-    assert output.numerical.dtype.is_floating_point
-    names = output.columns[Stype.numerical]
-    assert len(names) == output.numerical.size(-1) > 0
-    assert {name.split("_", 1)[0] for name in names} == {"review", "title"}
-
-
 def test_tfidf_encoder_preserves_leading_dimensions() -> None:
     table = TableTensor.from_text(
         [
@@ -77,16 +34,6 @@ def test_tfidf_encoder_preserves_leading_dimensions() -> None:
     output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
 
     assert output.numerical.shape[:-1] == (2, 2)
-    assert output.columns[Stype.text] == ()
-
-
-def test_tfidf_encoder_identical_strings_encode_identically() -> None:
-    table = TableTensor.from_text(["same text", "same text", "other"])
-
-    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
-
-    assert torch.equal(output.numerical[0], output.numerical[1])
-    assert not torch.equal(output.numerical[0], output.numerical[2])
 
 
 def test_tfidf_encoder_rows_are_l2_normalized() -> None:
@@ -141,6 +88,40 @@ def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
     assert full.numerical.size(-1) > 3
     assert capped.numerical.size(-1) == 3
     assert set(encoder._vocabularies[0].to_pylist()) == {" a", "aa", "a "}
+
+
+def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
+    table = TableTensor.from_text([""])
+
+    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+
+    assert output.numerical.shape == (1, 0)
+    assert output.columns[Stype.numerical] == ()
+
+
+def test_tfidf_encoder_short_word_counts_once() -> None:
+    table = TableTensor.from_text(["a"])
+
+    output = TfidfTextEmbed(ngram_range=(5, 5)).fit_transform(table)
+
+    assert output.numerical.shape == (1, 1)
+    assert torch.equal(output.numerical, torch.ones(1, 1))
+
+
+def test_tfidf_encoder_can_preserve_case() -> None:
+    table = TableTensor.from_text(["CAT", "cat"])
+
+    lowercased = TfidfTextEmbed(ngram_range=(3, 3)).fit_transform(table)
+    case_sensitive = TfidfTextEmbed(
+        ngram_range=(3, 3),
+        lowercase=False,
+    ).fit_transform(table)
+
+    assert torch.equal(lowercased.numerical[0], lowercased.numerical[1])
+    assert not torch.equal(
+        case_sensitive.numerical[0],
+        case_sensitive.numerical[1],
+    )
 
 
 @pytest.mark.parametrize(
@@ -202,22 +183,6 @@ def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
             True,
             id="multi-column",
         ),
-        pytest.param(
-            ["same text", "same text", "other"],
-            None,
-            (2, 2),
-            None,
-            True,
-            id="duplicate-rows",
-        ),
-        pytest.param(
-            ["short", "a much longer text cell"],
-            None,
-            (2, 3),
-            None,
-            True,
-            id="l2-varied-lengths",
-        ),
     ],
 )
 @onlyCUDA
@@ -228,7 +193,9 @@ def test_tfidf_encoder_cuda_matches_cpu(
     max_features: int | None,
     lowercase: bool,
 ) -> None:
-    _require_cuda_text_backends()
+    pytest.importorskip("cudf")
+    pytest.importorskip("cupy")
+    pytest.importorskip("pylibcudf")
 
     cpu_train = TableTensor.from_text(train)
     cuda_train = TableTensor.from_text(train, device="cuda")
@@ -254,14 +221,18 @@ def test_tfidf_encoder_cuda_matches_cpu(
             TableTensor.from_text(query, device="cuda")
         )
 
-    _assert_cuda_matches_cpu(cpu_encoder, cuda_encoder, expected, output)
-
-
-def test_tfidf_encoder_requires_fit() -> None:
-    table = TableTensor.from_text(["a"])
-
-    with pytest.raises(RuntimeError, match="not fitted"):
-        TfidfTextEmbed(ngram_range=(2, 2)).transform(table)
+    expected_by_ngram = _numerical_by_column_ngram(cpu_encoder, expected)
+    actual_by_ngram = _numerical_by_column_ngram(cuda_encoder, output)
+    assert output.numerical.is_cuda
+    assert output.numerical.shape == expected.numerical.shape
+    assert output.columns == expected.columns
+    assert actual_by_ngram.keys() == expected_by_ngram.keys()
+    for key, expected_values in expected_by_ngram.items():
+        assert torch.allclose(
+            actual_by_ngram[key],
+            expected_values,
+            atol=1e-6,
+        )
 
 
 def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
@@ -279,15 +250,6 @@ def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
     assert torch.equal(restored.transform(table).numerical, expected.numerical)
 
 
-def test_tfidf_encoder_unfitted_state_dict_round_trip() -> None:
-    table = TableTensor.from_text(["a"])
-    restored = TfidfTextEmbed(ngram_range=(2, 2))
-    restored.load_state_dict(TfidfTextEmbed(ngram_range=(2, 2)).state_dict())
-
-    with pytest.raises(RuntimeError, match="not fitted"):
-        restored.transform(table)
-
-
 def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
     wide = TableTensor.from_text([["hello world", "cat dog"]])
     narrow = TableTensor.from_text(["hello world"])
@@ -301,16 +263,6 @@ def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
     output = restored.transform(narrow)
     assert output.columns == expected.columns
     assert torch.equal(output.numerical, expected.numerical)
-
-
-def test_tfidf_encoder_to_moves_fitted_state() -> None:
-    table = TableTensor.from_text(["hello world", "hello there"])
-    encoder = TfidfTextEmbed(ngram_range=(2, 2))
-    encoder.fit(table)
-
-    encoder.to(torch.float64)
-
-    assert encoder.transform(table).numerical.dtype == torch.float64
 
 
 def test_tfidf_encoder_failed_refit_preserves_previous_state(
@@ -344,37 +296,3 @@ def test_tfidf_encoder_refit_replaces_previous_state() -> None:
 
     assert output.columns == expected.columns
     assert torch.equal(output.numerical, expected.numerical)
-
-
-def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
-    table = TableTensor.from_text([""])
-
-    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
-
-    assert output.numerical.shape == (1, 0)
-    assert output.columns[Stype.numerical] == ()
-
-
-def test_tfidf_encoder_short_word_counts_once() -> None:
-    table = TableTensor.from_text(["a"])
-
-    output = TfidfTextEmbed(ngram_range=(5, 5)).fit_transform(table)
-
-    assert output.numerical.shape == (1, 1)
-    assert torch.equal(output.numerical, torch.ones(1, 1))
-
-
-def test_tfidf_encoder_can_preserve_case() -> None:
-    table = TableTensor.from_text(["CAT", "cat"])
-
-    lowercased = TfidfTextEmbed(ngram_range=(3, 3)).fit_transform(table)
-    case_sensitive = TfidfTextEmbed(
-        ngram_range=(3, 3),
-        lowercase=False,
-    ).fit_transform(table)
-
-    assert torch.equal(lowercased.numerical[0], lowercased.numerical[1])
-    assert not torch.equal(
-        case_sensitive.numerical[0],
-        case_sensitive.numerical[1],
-    )

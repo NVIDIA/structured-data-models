@@ -454,22 +454,27 @@ class TableTensor(Tensor):
             columns: The column names of the text values.
             device: The device.
         """
-        if not isinstance(text, StringTensor):
-            text = StringTensor.from_list(text, device=device)
-        elif device is not None:
-            text = cast(StringTensor, text.to(device))
+        if isinstance(text, StringTensor):
+            text_tensor = text
+            if device is not None:
+                text_tensor = cast(StringTensor, text_tensor.to(device))
+        else:
+            text_tensor = StringTensor.from_list(text, device=device)
 
-        if text.dim() == 0:
-            text = text.unsqueeze(0).unsqueeze(-1)
-        elif text.dim() == 1:
-            text = text.unsqueeze(-1)
+        if text_tensor.dim() == 0:
+            text_tensor = cast(
+                StringTensor,
+                text_tensor.unsqueeze(0).unsqueeze(-1),
+            )
+        elif text_tensor.dim() == 1:
+            text_tensor = cast(StringTensor, text_tensor.unsqueeze(-1))
 
         if columns is None:
-            columns = [str(i) for i in range(text.size(-1))]
+            columns = [str(i) for i in range(text_tensor.size(-1))]
 
         return cls(
             columns={Stype.text: columns},
-            text=text,
+            text=text_tensor,
         )
 
     @classmethod

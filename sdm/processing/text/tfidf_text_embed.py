@@ -231,8 +231,15 @@ class TfidfTextEmbed(Processor):
 
             # Factorize n-grams into codes + the unique vocabulary
             if flat.is_cuda:
-                encoded = flat.to_cudf().astype("category")
-                vocabulary = encoded.cat.categories.to_arrow()
+                import cudf
+
+                values = flat.to_cudf()
+                vocabulary = values.drop_duplicates(
+                    ignore_index=True
+                ).to_arrow()
+                encoded = values.astype(
+                    cudf.CategoricalDtype(categories=vocabulary)
+                )
                 codes = torch.from_dlpack(
                     encoded.cat.codes.astype("int64").to_dlpack()
                 ).to(device)
@@ -355,7 +362,7 @@ class TfidfTextEmbed(Processor):
                     torch.arange(n_rows, device=device),
                     offsets.diff(),
                 )  # [n_ngrams]
-                mask = codes >= 0
+                mask = (codes >= 0) & (codes < vocab_size)
                 flat_index = doc_ids[mask] * vocab_size + codes[mask]
                 counts = column_slice.new_zeros(n_rows, vocab_size)
                 counts.view(-1).scatter_add_(
