@@ -7,9 +7,7 @@ from typing import Self
 import pandas as pd
 import torch
 from autogluon.core.data import LabelCleaner
-from autogluon.core.metrics import Scorer
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
-from tabarena.benchmark.task.metadata import ValidationMetadata
 
 import sdm
 
@@ -34,10 +32,6 @@ class SDMTabICLv2System(ExternalSystemModel):
         *,
         target_name: str,
         problem_type: str,
-        eval_metric: Scorer,
-        validation_metadata: ValidationMetadata,
-        memory_limit: float | None,
-        time_limit: float | None,
         random_state: int | None,
         **_: object,
     ) -> Self:
