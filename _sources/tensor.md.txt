@@ -12,9 +12,9 @@ The last dimension refers to the named column dimension `C`, while preceding dim
 This makes a table look like a tensor of shape `[..., C]` without flattening all columns into one dense array of a single data type.
 In particular, it is
 
-- **dataframe-like at the boundary:** contruct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
-- **PyTorch-native in the middle:** use familar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
-- **lossless:** column names, semantic types, categorical vocabularies, string values, and missing-values are fully preserved.
+- **dataframe-like at the boundary:** construct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
+- **PyTorch-native in the middle:** use familiar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
+- **lossless:** column names, semantic types, categorical vocabularies, string values, and missing values are fully preserved.
 
 ## The Tensor Stack
 
@@ -25,7 +25,7 @@ Each subclass supports multi-dimensional shapes and strides, and preserves stand
 - {py:class}`~sdm.tensor.StringTensor`: A specialized {py:class}`~sdm.tensor.VarLenTensor` for representing UTF-8 strings.
 - {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values.
   Category mappings can be ordinary {py:class}`torch.Tensor` instances or subclasses of it, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
-- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless, table representation whose columns are grouped by semantic type.
+- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless table representation whose columns are grouped by semantic type.
   It is the main user-facing interface for model inputs and outputs.
 
 ## Working with {py:class}`~sdm.tensor.TableTensor`

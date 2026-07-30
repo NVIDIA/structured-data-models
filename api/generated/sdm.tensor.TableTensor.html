@@ -249,7 +249,7 @@ The last dimension represents named columns.</p>
 </span><span data-line="17">
 </span><span data-line="18"><span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
 </span><span data-line="19"><span class="c1"># TableTensor (</span>
-</span><span data-line="20"><span class="c1">#   size=(2, 4),</span>
+</span><span data-line="20"><span class="c1">#   size=(10, 4),</span>
 </span><span data-line="21"><span class="c1">#   blocks={</span>
 </span><span data-line="22"><span class="c1">#     numerical (2): [&#39;age&#39;, &#39;income&#39;],</span>
 </span><span data-line="23"><span class="c1">#     categorical (2): [&#39;country&#39;, &#39;segment&#39;],</span>
@@ -261,7 +261,7 @@ The last dimension represents named columns.</p>
 </span><span data-line="29"><span class="k">assert</span> <span class="n">features</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 </span><span data-line="30">
 </span><span data-line="31"><span class="c1"># Normal PyTorch indexing still works on row/batch dimensions:</span>
-</span><span data-line="32"><span class="n">batch</span> <span class="o">=</span> <span class="n">table</span><span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="n">O</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;income&quot;</span><span class="p">,</span> <span class="s2">&quot;segment&quot;</span><span class="p">]]</span>
+</span><span data-line="32"><span class="n">batch</span> <span class="o">=</span> <span class="n">table</span><span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;income&quot;</span><span class="p">,</span> <span class="s2">&quot;segment&quot;</span><span class="p">]]</span>
 </span><span data-line="33"><span class="k">assert</span> <span class="n">batch</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 </span><span data-line="34">
 </span><span data-line="35"><span class="c1"># Semantic blocks stay separate for model input:</span>
@@ -269,11 +269,11 @@ The last dimension represents named columns.</p>
 </span><span data-line="37"><span class="n">x_cat</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">categorical</span>
 </span><span data-line="38">
 </span><span data-line="39"><span class="c1"># Tensor ops preserve the table container:</span>
-</span><span data-line="40"><span class="n">stacked</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">table</span><span class="p">,</span> <span class="n">tablel</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-</span><span data-line="41"><span class="k">assert</span> <span class="n">stacked</span><span class="o">.</span><span class="n">size</span> <span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+</span><span data-line="40"><span class="n">stacked</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">table</span><span class="p">,</span> <span class="n">table</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span><span data-line="41"><span class="k">assert</span> <span class="n">stacked</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
 </span><span data-line="42">
 </span><span data-line="43"><span class="c1"># Column-wise cat extends the schema:</span>
-</span><span data-line="44"><span class="n">wide</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">table</span><span class="p">,</span> <span class="n">table2</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+</span><span data-line="44"><span class="n">wide</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">table</span><span class="p">[[</span><span class="s2">&quot;age&quot;</span><span class="p">]],</span> <span class="n">table</span><span class="p">[[</span><span class="s2">&quot;country&quot;</span><span class="p">]]],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
 </span></pre></div>
 </div>
 <dl class="field-list simple">
@@ -683,7 +683,7 @@ constructor.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=6e4a532d"></script>
+      <script src="../../_static/documentation_options.js?v=2e0c1b4f"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
