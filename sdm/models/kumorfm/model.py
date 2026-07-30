@@ -51,7 +51,7 @@ class KumoRFM(ICLModel):
       Context rows carry target information, while query rows attend to the
       labeled context to produce class logits or regression quantiles.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelatedTables, TableTensor
         from sdm.models import KumoRFM
@@ -59,7 +59,6 @@ class KumoRFM(ICLModel):
         task_table = TableTensor.from_columns(
             {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
             stypes={"user_id": "id", "churn": "categorical"},
-            device="cuda",
         )
 
         related_tables = RelatedTables(
@@ -67,12 +66,13 @@ class KumoRFM(ICLModel):
                 "users": TableTensor.from_columns(
                     {"user_id": [0, 1, 2, 3], "age": [42, 23, 31, 26]},
                     stypes={"user_id": "id", "age": "numerical"},
-                    device="cuda",
                 ),
                 "orders": TableTensor.from_columns(
-                    {"user_id": [0, 0, 1, 3, 3, 3], "amount": [9.99, 4.99, ...]},
+                    {
+                        "user_id": [0, 0, 1, 3, 3, 3],
+                        "amount": [9.99, 4.99, 12.99, 7.99, 3.99, 5.99],
+                    },
                     stypes={"user_id": "id", "amount": "numerical"},
-                    device="cuda",
                 ),
             },
             relationships=[{
@@ -101,7 +101,7 @@ class KumoRFM(ICLModel):
             "orders": related_tables.tables["orders"][3:],
         })
 
-        model = KumoRFM(device="cuda")
+        model = KumoRFM(pretrained=False)
 
         # Default in-context learning forward pass:
         out = model(
@@ -112,15 +112,25 @@ class KumoRFM(ICLModel):
             related_query_tables=related_query_tables,
             num_hops=1,
         )
+        assert out.size() == (2, 2)
 
         # Fit+Predict forward pass via key/value caching:
-        model.fit(x_context, y_context, related_context_tables, num_hops=1)
-        out = model.predict(x_query, related_query_tables)
+        model.fit(
+            x=x_context,
+            y=y_context,
+            related_tables=related_context_tables,
+            num_hops=1,
+        )
+        out = model.predict(
+            x=x_query,
+            related_tables=related_query_tables,
+        )
+        assert out.size() == (2, 2)
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
-    """  # noqa: E501
+    """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.datetime}
