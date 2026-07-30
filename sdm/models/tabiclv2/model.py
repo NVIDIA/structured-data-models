@@ -20,7 +20,13 @@ class TabICLv2(ICLModel):
     Scalable, and Open Tabular Foundation Model"
     <https://arxiv.org/abs/2602.11139>`_ paper.
 
-    .. image:: https://arxiv.org/html/2602.11139v1/x2.png
+    .. figure:: /images/tabicl_light.svg
+        :figclass: light-only
+        :align: center
+        :width: 600px
+
+    .. figure:: /images/tabicl_dark.svg
+        :figclass: dark-only
         :align: center
         :width: 600px
 
