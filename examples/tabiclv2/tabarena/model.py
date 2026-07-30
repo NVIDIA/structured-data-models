@@ -13,6 +13,16 @@ from tabarena.benchmark.task.metadata import ValidationMetadata
 
 import sdm
 
+_model: sdm.models.TabICLv2 | None = None
+
+
+def _create_model(device: torch.device) -> sdm.models.TabICLv2:
+    global _model
+
+    if _model is None:
+        _model = sdm.models.TabICLv2(device=device)
+    return _model
+
 
 class SDMTabICLv2System(ExternalSystemModel):
     """Expose TabICLv2 through TabArena's external-system interface.
@@ -26,7 +36,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        self.model = sdm.models.TabICLv2(device=self._device)
+        self.model = _create_model(device=self._device)
 
     def _fit_system(
         self,
