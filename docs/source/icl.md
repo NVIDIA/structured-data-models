@@ -62,7 +62,7 @@ model.fit(
     x=table[:300].drop_columns("target"),
     y=table[:300, "target"],
 )
-for batch in table[300].drop_columns.split(batch_size):
+for batch in table[300:].drop_columns("target").split(batch_size):
     out = model.predict(batch)
 model.clear()
 ```
