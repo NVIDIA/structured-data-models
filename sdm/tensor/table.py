@@ -54,9 +54,10 @@ class TableTensor(Tensor):
     while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
-    .. code-block:: python
+    .. testcode::
 
-        from sdm import TableTensor, CategoricalTensor, StringTensor
+        import torch
+        from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 
         table = TableTensor(
             columns={
@@ -72,15 +73,6 @@ class TableTensor(Tensor):
                 ),
             ),
         )
-
-        print(table)
-        # TableTensor (
-        #   size=(10, 4),
-        #   blocks={
-        #     numerical (2): ['age', 'income'],
-        #     categorical (2): ['country', 'segment'],
-        #   },
-        # )
 
         # DataFrame-like column selection, but still tensor-native:
         features = table[["age", "country"]]
@@ -280,17 +272,17 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Create a tensor from a :class:`pyarrow.Table`.
 
-        .. code-block:: python
+        .. testcode::
 
             import pyarrow as pa
             from sdm import TableTensor
 
-            table = pa.table({
+            arrow_table = pa.table({
                 "age": pa.array([25, 31, 42], type=pa.int64()),
                 "city": pa.array(["SF", "NYC", "SF"], type=pa.string()),
             })
             tensor = TableTensor.from_arrow(
-                table=table,
+                table=arrow_table,
                 stypes={"age": "numerical", "city": "categorical"},
             )
 
@@ -715,12 +707,12 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Return a table with ``stypes`` columns removed.
 
-        .. code-block:: python
+        .. testcode::
 
             assert table.columns[Stype.categorical] == ("country", "segment")
-            table = table.drop_stypes("categorical")
-            assert table.columns[Stype.categorical] == ()
-            assert table.columns[Stype.numerical] == ("age", "income")
+            result = table.drop_stypes("categorical")
+            assert result.columns[Stype.categorical] == ()
+            assert result.columns[Stype.numerical] == ("age", "income")
 
         Args:
             stypes: The semantic type or semantic types to drop.
@@ -740,11 +732,11 @@ class TableTensor(Tensor):
     def select_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table containing only ``columns``.
 
-        .. code-block:: python
+        .. testcode::
 
-            assert table.size() == (2, 4)
-            table = table.select_columns(["age", "country"])
-            assert table.size() == (2, 2)
+            assert table.size() == (10, 4)
+            result = table.select_columns(["age", "country"])
+            assert result.size() == (10, 2)
 
         Args:
             columns: The columns to select.
@@ -783,11 +775,11 @@ class TableTensor(Tensor):
     def drop_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table with ``columns`` removed.
 
-        .. code-block:: python
+        .. testcode::
 
-            assert table.size() == (2, 4)
-            table = table.remove_columns(["age", "country"])
-            assert table.size() == (2, 2)
+            assert table.size() == (10, 4)
+            result = table.drop_columns(["age", "country"])
+            assert result.size() == (10, 2)
 
         Args:
             columns: The columns to drop.
