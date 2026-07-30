@@ -130,8 +130,8 @@ Importantly, {py:attr}`~sdm.Stype.id` columns are used only to establish relatio
 import sdm
 
 x_context = sdm.TableTensor.from_columns(
-    {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
-    stypes={"user_id": "id", "churn": "categorical"},
+    {"user_id": [0, 1, 2, 3]},
+    stypes={"user_id": "id"},
     device="cuda",
 )
 
