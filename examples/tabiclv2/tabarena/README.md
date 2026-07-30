@@ -4,14 +4,6 @@ This example evaluates the repository-local `TabICLv2` implementation on TabAren
 
 ## Setup
 
-From the repository root, create a Python 3.11–3.13 environment and install SDM:
-
-```bash
-uv venv --python 3.13
-source .venv/bin/activate
-uv pip install -e .
-```
-
 Install the source revisions of AutoGluon and TabArena used by this example:
 
 ```bash
