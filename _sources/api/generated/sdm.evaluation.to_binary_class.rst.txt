@@ -1,0 +1,6 @@
+﻿to\_binary\_class
+=================
+
+.. currentmodule:: sdm.evaluation
+
+.. autofunction:: to_binary_class

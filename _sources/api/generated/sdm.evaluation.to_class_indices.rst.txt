@@ -1,0 +1,6 @@
+﻿to\_class\_indices
+==================
+
+.. currentmodule:: sdm.evaluation
+
+.. autofunction:: to_class_indices

@@ -138,6 +138,11 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoRFM.html">KumoRFM</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="api/evaluation.html">sdm.evaluation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_class_indices.html">to_class_indices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_binary_class.html">to_binary_class</a></li>
+</ul>
+</li>
 </ul>
 
         </div>
@@ -149,7 +154,13 @@ data-aria-dark="Switch to auto color mode">
     <button class="rside-close js-menu xl:hidden" aria-label="Close Table of Contents" type="button" aria-controls="rside" aria-expanded="false">
       <i class="i-lucide close"></i>
     </button>
-    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
+    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#the-icl-interface">The ICL Interface</a></li>
+<li><a class="reference internal" href="#model-concepts">Model Concepts</a></li>
+<li><a class="reference internal" href="#ensembling">Ensembling</a></li>
+<li><a class="reference internal" href="#model-outputs">Model Outputs</a></li>
+</ul>
+</div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
   <div class="rside-overlay js-menu" role="button" aria-label="Close Table of Contents" aria-controls="rside" aria-expanded="false"></div>
   <main class="sy-main w-full max-sm:max-w-full print:pt-6">
@@ -180,6 +191,14 @@ data-aria-dark="Switch to auto color mode">
   <article class="yue" role="main">
           <section id="in-context-learning">
 <h1>In-Context Learning<a class="headerlink" href="#in-context-learning" title="Link to this heading">#</a></h1>
+<p>In-Context Learning (ICL) treats predictions on structured data (<em>e.g.</em>, tabular, relational, time series) as an inference-time task: a model receives labeled context rows together with unlabeled query rows, and predicts the query targets without updating its weights.
+The <code class="docutils literal notranslate"><span class="pre">structured-data-models</span></code> package groups and unifies such foundation models behind a single interface:</p>
+<ol class="arabic simple">
+<li><p>Convert dataframe-like data into a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> (see <a class="reference internal" href="tensor.html"><span class="doc std std-doc">here</span></a> for the accompanying tutorial).</p></li>
+<li><p>Optionally define pre- and post-processing routines through a <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> (see <a class="reference internal" href="processing.html"><span class="doc std std-doc">here</span></a> for the accompanying tutorial).</p></li>
+<li><p>Instantiate and run an in-context model from <a class="reference internal" href="api/models.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">sdm.models</span></code></span></a>.</p></li>
+<li><p>Receive predictions as a <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>.</p></li>
+</ol>
 <figure class="light-only align-default">
 <a class="reference internal image-reference" href="_images/pipeline_light.svg"><img alt="_images/pipeline_light.svg" src="_images/pipeline_light.svg" style="width: 100%;" />
 </a>
@@ -188,6 +207,83 @@ data-aria-dark="Switch to auto color mode">
 <a class="reference internal image-reference" href="_images/pipeline_dark.svg"><img alt="_images/pipeline_dark.svg" src="_images/pipeline_dark.svg" style="width: 100%;" />
 </a>
 </figure>
+<section id="the-icl-interface">
+<h2>The ICL Interface<a class="headerlink" href="#the-icl-interface" title="Link to this heading">#</a></h2>
+<p>A In-Context Learning task is described by <strong>context features</strong>, <strong>context targets</strong>, and <strong>query features</strong>, while model-specific details are handled by the model implementation and its pre- and post-processing <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a>.
+As a result, single-table and multi-table models can share the same prediction workflow while consuming different forms of context.</p>
+<p>Specifically, an in-context learning task has three core inputs, as defined in the <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> base class:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">x_context</span></code> (<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> | <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>): feature rows with observed targets.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">y_context</span></code> (<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> | <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>): the target column for those context rows.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">x_query</span></code> (<a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> | <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>): feature rows whose targets should be predicted.</p></li>
+</ul>
+<p>The context rows are not used to update model weights.
+They are examples supplied at inference time, and the model predicts query rows by attending to that labeled context:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_breast_cancer</span>
+</span><span data-line="2">
+</span><span data-line="3"><span class="kn">import</span><span class="w"> </span><span class="nn">sdm</span>
+</span><span data-line="4">
+</span><span data-line="5"><span class="n">df</span> <span class="o">=</span> <span class="n">load_breast_cancer</span><span class="p">(</span><span class="n">as_frame</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">frame</span>
+</span><span data-line="6">
+</span><span data-line="7"><span class="n">table</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">TableTensor</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span>
+</span><span data-line="8">    <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+</span><span data-line="9">    <span class="n">stypes</span><span class="o">=</span><span class="n">sdm</span><span class="o">.</span><span class="n">infer_stypes</span><span class="p">(</span><span class="n">df</span><span class="p">),</span>
+</span><span data-line="10">    <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+</span><span data-line="11"><span class="p">)</span>
+</span><span data-line="12">
+</span><span data-line="13"><span class="n">model</span> <span class="o">=</span> <span class="n">sdm</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">TabICLv2</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+</span><span data-line="14"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
+</span><span data-line="15">    <span class="n">x_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
+</span><span data-line="16">    <span class="n">y_context</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">],</span>
+</span><span data-line="17">    <span class="n">x_query</span><span class="o">=</span><span class="n">table</span><span class="p">[</span><span class="mi">300</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
+</span><span data-line="18"><span class="p">)</span>
+</span></pre></div>
+</div>
+<p>This one-shot <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> call is the most direct form of the interface.
+When the same context is reused for many query batches, call <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a> once and then call <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> for each query batch.
+This records reusable model state, including key/value projections, and avoids recomputing the context side of the model for every prediction:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+</span><span data-line="2">    <span class="n">x</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">),</span>
+</span><span data-line="3">    <span class="n">y</span><span class="o">=</span><span class="n">table</span><span class="p">[:</span><span class="mi">300</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">],</span>
+</span><span data-line="4"><span class="p">)</span>
+</span><span data-line="5"><span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">table</span><span class="p">[</span><span class="mi">300</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+</span><span data-line="6">    <span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+</span><span data-line="7"><span class="n">model</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+</span></pre></div>
+</div>
+<p>The cached interface has the same prediction contract as the one-shot call.
+Use one-shot <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> calls for one-time calls when tasks change frequently, and use the <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>+<a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.predict" title="sdm.models.ICLModel.predict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predict()</span></code></a> flow for large batch predictions over a single fixed task.</p>
+</section>
+<section id="model-concepts">
+<h2>Model Concepts<a class="headerlink" href="#model-concepts" title="Link to this heading">#</a></h2>
+<p>Structured data foundation models are not bound to a specific task type.
+The same <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> instance can, <em>e.g.</em>, consume both classification and regression targets, depending on the input data it receives.
+The <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.supported_target_stypes" title="sdm.models.ICLModel.supported_target_stypes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">supported_target_stypes</span></code></a> attribute of an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> denotes which target semantic types the model accepts.
+For example, a <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.categorical" title="sdm.Stype.categorical"><code class="xref py py-attr docutils literal notranslate"><span class="pre">categorical</span></code></a> target is treated as classification, while a <a class="reference internal" href="api/generated/sdm.Stype.html#sdm.Stype.numerical" title="sdm.Stype.numerical"><code class="xref py py-attr docutils literal notranslate"><span class="pre">numerical</span></code></a> target is treated as regression.</p>
+<p>Similarly, there are no task-specific constructor arguments when creating an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a>.
+Instead, task behavior is determined at the data boundary.
+A single <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a> can express task-specific pre- and post-processing through <a class="reference internal" href="api/generated/sdm.processing.common.StypeDispatch.html#sdm.processing.common.StypeDispatch" title="sdm.processing.common.StypeDispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">StypeDispatch</span></code></a> and <a class="reference internal" href="api/generated/sdm.processing.common.TaskDispatch.html#sdm.processing.common.TaskDispatch" title="sdm.processing.common.TaskDispatch"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskDispatch</span></code></a>.
+While each model provides a default recipe, users can fully control or modify how inputs and outputs are processed (see <a class="reference internal" href="processing.html"><span class="doc std std-doc">here</span></a> for more information).</p>
+<p>Lastly, the <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.supported_feature_stypes" title="sdm.models.ICLModel.supported_feature_stypes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">supported_feature_stypes</span></code></a> attribute denotes which feature semantic types a model accepts after pre-processing.
+Semantic types outside this set need to be converted, dropped, or otherwise handled by the recipe before they reach the model.
+For example, <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> can only consume numerical features internally, so it is the recipe’s job to convert any other semantic type into a numerical representation before it reaches the model, <em>e.g.</em>, via <a class="reference internal" href="api/generated/sdm.processing.common.ToNumerical.html#sdm.processing.common.ToNumerical" title="sdm.processing.common.ToNumerical"><code class="xref py py-class docutils literal notranslate"><span class="pre">ToNumerical</span></code></a> on categorical columns.</p>
+</section>
+<section id="ensembling">
+<h2>Ensembling<a class="headerlink" href="#ensembling" title="Link to this heading">#</a></h2>
+<p>The interface of an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> additionally supports estimator ensembling through the <code class="docutils literal notranslate"><span class="pre">num_estimators</span></code> argument in <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> and <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>.
+When a recipe contains stochastic processors, such as <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a>, pre-processing produces different transformed views of the same task, and model outputs are stacked for post-processing.</p>
+</section>
+<section id="model-outputs">
+<h2>Model Outputs<a class="headerlink" href="#model-outputs" title="Link to this heading">#</a></h2>
+<p>Predictions are returned as a general <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>, where the output schema depends on the task, model, and post-processing routine of the <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a>:</p>
+<ul class="simple">
+<li><p>Classification predictions are generally returned as numerical probabilities, where each target category corresponds to one column in the output.</p></li>
+<li><p>Regression predictions are generally model-dependent.
+For example, <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> outputs numerical quantiles named <code class="docutils literal notranslate"><span class="pre">&quot;q001&quot;</span></code> through <code class="docutils literal notranslate"><span class="pre">&quot;q999&quot;</span></code>, from which the (approximate) mean prediction can be derived via <code class="docutils literal notranslate"><span class="pre">out.numerical.mean(dim=-1)</span></code> and the median prediction is available via <code class="docutils literal notranslate"><span class="pre">out[&quot;q500&quot;].numerical</span></code>.</p></li>
+</ul>
+<p>Since predictions are returned as <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>, you can zero-copy them to <a class="reference external" href="https://pandas.pydata.org/docs"><code class="docutils literal notranslate"><span class="pre">pandas</span></code></a>, <a class="reference external" href="https://arrow.apache.org/docs"><code class="docutils literal notranslate"><span class="pre">arrow</span></code></a>, or <a class="reference external" href="https://docs.rapids.ai/api/cudf"><code class="docutils literal notranslate"><span class="pre">cudf</span></code></a> via <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.to_pandas" title="sdm.tensor.TableTensor.to_pandas"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_pandas()</span></code></a>, <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.to_arrow" title="sdm.tensor.TableTensor.to_arrow"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_arrow()</span></code></a>, <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.to_cudf" title="sdm.tensor.TableTensor.to_cudf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_cudf()</span></code></a> for further downstream processing.</p>
+<p>In order to simplify metric calculation (<em>e.g.</em>, via <a class="reference external" href="https://lightning.ai/docs/torchmetrics"><code class="docutils literal notranslate"><span class="pre">torchmetrics</span></code></a>), we provide helper functions in the <a class="reference internal" href="api/evaluation.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">sdm.evaluation</span></code></span></a> package to align and convert prediction columns back to class indices (see <a class="reference internal" href="api/generated/sdm.evaluation.to_class_indices.html#sdm.evaluation.to_class_indices" title="sdm.evaluation.to_class_indices"><code class="xref py py-func docutils literal notranslate"><span class="pre">to_class_indices()</span></code></a> and <a class="reference internal" href="api/generated/sdm.evaluation.to_binary_class.html#sdm.evaluation.to_binary_class" title="sdm.evaluation.to_binary_class"><code class="xref py py-func docutils literal notranslate"><span class="pre">to_binary_class()</span></code></a>).</p>
+</section>
 </section>
 
         </article><button class="back-to-top" type="button">
@@ -214,7 +310,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=d0da933c"></script>
+      <script src="_static/documentation_options.js?v=a59f4cd7"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>

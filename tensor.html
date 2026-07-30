@@ -138,6 +138,11 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.models.KumoRFM.html">KumoRFM</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="api/evaluation.html">sdm.evaluation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_class_indices.html">to_class_indices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/sdm.evaluation.to_binary_class.html">to_binary_class</a></li>
+</ul>
+</li>
 </ul>
 
         </div>
@@ -304,17 +309,14 @@ You can slice, index, reshape, stack, concatenate, and move tables between devic
 </span><span data-line="4"><span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
 </span><span data-line="5"><span class="c1"># torch.Size([2, 5])</span>
 </span><span data-line="6">
-</span><span data-line="7"><span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
-</span><span data-line="8"><span class="c1"># torch.Size([2, 5])</span>
+</span><span data-line="7"><span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+</span><span data-line="8"><span class="c1"># torch.Size([2, 3, 5])</span>
 </span><span data-line="9">
-</span><span data-line="10"><span class="nb">print</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
-</span><span data-line="11"><span class="c1"># torch.Size([1, 3, 5])</span>
+</span><span data-line="10"><span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">table</span><span class="p">,</span> <span class="n">table</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+</span><span data-line="11"><span class="c1"># torch.Size([6, 5])</span>
 </span><span data-line="12">
-</span><span data-line="13"><span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">table</span><span class="p">,</span> <span class="n">table</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
-</span><span data-line="14"><span class="c1"># torch.Size([6, 5])</span>
-</span><span data-line="15">
-</span><span data-line="16"><span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">table</span><span class="p">[[</span><span class="s2">&quot;age&quot;</span><span class="p">]],</span> <span class="n">table</span><span class="p">[[</span><span class="s2">&quot;country&quot;</span><span class="p">]]],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
-</span><span data-line="17"><span class="c1"># torch.Size([3, 2])</span>
+</span><span data-line="13"><span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">table</span><span class="p">[[</span><span class="s2">&quot;age&quot;</span><span class="p">]],</span> <span class="n">table</span><span class="p">[[</span><span class="s2">&quot;country&quot;</span><span class="p">]]],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">size</span><span class="p">())</span>
+</span><span data-line="14"><span class="c1"># torch.Size([3, 2])</span>
 </span></pre></div>
 </div>
 <p>However, operations that would destroy column semantics are rejected.
@@ -379,7 +381,7 @@ You can learn more about data processing and model execution in the <a class="re
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=d0da933c"></script>
+      <script src="_static/documentation_options.js?v=a59f4cd7"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
