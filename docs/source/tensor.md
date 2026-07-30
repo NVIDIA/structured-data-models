@@ -41,13 +41,11 @@ A {py:class}`~sdm.tensor.TableTensor` currently supports the following semantic 
 ```{figure} images/table_light.svg
 :figclass: light-only
 :width: 100%
-:align: center
 ```
 
 ```{figure} images/table_dark.svg
 :figclass: dark-only
 :width: 100%
-:align: center
 ```
 
 A {py:class}`~sdm.tensor.TableTensor` can be created manually from tensor blocks or converted from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) dataframes.

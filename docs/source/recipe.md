@@ -86,3 +86,13 @@ table = recipe.features.transform(table)
 ```
 
 ## Ensembling
+
+```{figure} images/ensemble_light.svg
+:figclass: light-only
+:width: 100%
+```
+
+```{figure} images/ensemble_dark.svg
+:figclass: dark-only
+:width: 100%
+```
