@@ -164,12 +164,11 @@ related_context_tables = sdm.RelatedTables(
 
 In some tasks, each row in `x_context` or `x_query` should receive its own disjoint relational context.
 For example, two prediction rows may refer to the same user but different prediction times.
-As such, each row should only be linked to the behavior available at its prediction time.
+As such, each row should only be linked to the related records available at its prediction time, preventing temporal leakage.
 {py:class}`~sdm.relational.RelatedTables` support this by allowing {py:class}`~sdm.relational.Relationship` and {py:class}`~sdm.relational.TaskLink` objects to be defined with composite keys.
 
-A common pattern is to add a primary-key column to `x_context` and `x_query`, and to add the same value as a foreign key to every row in the {py:class}`~sdm.relational.RelatedTables` that belongs to that specific example.
+For this, we add a primary-key column to `x_context` and `x_query`, and add the same value as a foreign key to every row in the {py:class}`~sdm.relational.RelatedTables` that belongs to that specific example.
 This makes it possible to represent disjoint relational neighborhoods for different rows in `x_context` and `x_query` even when they refer to the same entity or share parts of the same local neighborhood.
-Such task-scoped keys are useful for leakage-sensitive settings, *e.g.*, when each prediction time should only see related records that were available before that time:
 
 ```python
 sdm.RelatedTables(
@@ -188,7 +187,7 @@ sdm.RelatedTables(
 )
 ```
 
-{py:class}`~sdm.relational.RelatedTables` are then passed through the same ICL interface:
+{py:class}`~sdm.relational.RelatedTables` are then passed through the same ICL interface of the {py:class}`~sdm.models.ICLModel`:
 
 ```python
 # Default in-context learning forward pass:
@@ -209,5 +208,5 @@ The {py:attr}`~sdm.models.ICLModel.supports_related_tables` attribute denotes wh
 For example, {py:class}`~sdm.models.KumoRFM` consumes the `x_context` and `x_query` together with related tables, propagates information through its induced relational subgraph, and then predicts the query rows from the labeled context rows.
 
 To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporal-aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
-Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up a user-specified number of hops and neighbors.
+Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
 The full relational sampling and prediction flow is shown in [`examples/kumorfm/rel_bench.py`](https://github.com/structured-data-models/structured-data-models/blob/main/examples/kumorfm/rel_bench.py).
