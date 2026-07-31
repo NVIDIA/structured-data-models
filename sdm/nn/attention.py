@@ -13,15 +13,11 @@ from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 from sdm.nn.resolver import normalization_resolver
 
-DEFAULT_BATCH_SIZE_LIMIT = 65_535
-
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
     if batch_size_limit is None:
-        return DEFAULT_BATCH_SIZE_LIMIT
-    if batch_size_limit <= 0:
-        raise ValueError("`batch_size_limit` must be positive")
-    return batch_size_limit
+        return 65_535
+    return min(batch_size_limit, 65_535)
 
 
 def _batch_chunk(
