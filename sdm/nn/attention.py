@@ -365,9 +365,8 @@ class SDPA(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            batch_size_limit: Maximum number of broadcast batch elements
-                processed at once during non-compiled evaluation. ``None``
-                uses the default limit.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
@@ -603,11 +602,8 @@ class Attention(torch.nn.Module):
                 projection.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
-            batch_size_limit: Maximum flattened batch size processed at once
-                during non-compiled evaluation. ``None`` uses the default
-                limit. Cache-producing calls are chunked only when the
-                key/value batch shape already matches the broadcast batch
-                shape, preserving the cache shape.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -806,11 +802,8 @@ class TransformerBlock(torch.nn.Module):
                 projection.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
-            batch_size_limit: Maximum flattened batch size processed at once
-                during non-compiled evaluation. ``None`` uses the default
-                limit. Cache-producing calls are chunked only when the
-                key/value batch shape already matches the broadcast batch
-                shape, preserving the cache shape.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is

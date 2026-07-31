@@ -352,29 +352,6 @@ def test_sdpa_batch_size_limit() -> None:
     torch.testing.assert_close(out, expected)
 
 
-def test_sdpa_default_batch_size_limit() -> None:
-    module = SDPA(channels=3, num_query_heads=2).eval()
-    query = torch.randn(5, 3, 2, 3)
-    key = torch.randn(5, 4, 2, 3)
-    value = torch.randn(5, 4, 2, 3)
-
-    with (
-        patch("sdm.nn.attention.DEFAULT_BATCH_SIZE_LIMIT", 2),
-        patch.object(
-            F,
-            "scaled_dot_product_attention",
-            wraps=F.scaled_dot_product_attention,
-        ) as sdpa,
-    ):
-        module(query=query, key=key, value=value)
-
-    assert [call.kwargs["query"].size(0) for call in sdpa.call_args_list] == [
-        2,
-        2,
-        1,
-    ]
-
-
 def test_batch_size_limit_autocast_dtype() -> None:
     sdpa = SDPA(channels=3, num_query_heads=2).eval()
     query = torch.randn(5, 3, 2, 3)
