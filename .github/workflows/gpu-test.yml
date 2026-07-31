@@ -1,6 +1,7 @@
 name: GPU Test
 
 on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -61,7 +62,8 @@ jobs:
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --index-strategy=unsafe-best-match \
-            '.[test]' \
+            --group=test \
+            . \
             'cudf-cu13>=26.6' \
             'pandas<3' \
             'pylibcugraph-cu13>=26.6'

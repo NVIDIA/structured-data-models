@@ -116,7 +116,7 @@ class Processor(torch.nn.Module, abc.ABC):
         r"""Transform ``table``.
 
         Args:
-            table: The stTable to transform.
+            table: The table to transform.
 
         Returns:
             The transformed table.

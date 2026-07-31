@@ -1,6 +1,7 @@
 name: Test
 
 on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -29,7 +30,7 @@ jobs:
       - name: Install package
         run: |
           # `-e` for coverage report.
-          uv pip install --torch-backend=cpu -e '.[test]'
+          uv pip install --torch-backend=cpu --group=test -e .
 
       - name: Run tests
         env:
