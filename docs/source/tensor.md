@@ -12,9 +12,9 @@ The last dimension refers to the named column dimension `C`, while preceding dim
 This makes a table look like a tensor of shape `[..., C]` without flattening all columns into one dense array of a single data type.
 In particular, it is
 
-- **dataframe-like at the boundary:** contruct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
-- **PyTorch-native in the middle:** use familar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
-- **lossless:** column names, semantic types, categorical vocabularies, string values, and missing-values are fully preserved.
+- **dataframe-like at the boundary:** construct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
+- **PyTorch-native in the middle:** use familiar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
+- **lossless:** column names, semantic types, categorical vocabularies, string values, and missing values are fully preserved.
 
 ## The Tensor Stack
 
@@ -25,7 +25,7 @@ Each subclass supports multi-dimensional shapes and strides, and preserves stand
 - {py:class}`~sdm.tensor.StringTensor`: A specialized {py:class}`~sdm.tensor.VarLenTensor` for representing UTF-8 strings.
 - {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values.
   Category mappings can be ordinary {py:class}`torch.Tensor` instances or subclasses of it, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
-- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless, table representation whose columns are grouped by semantic type.
+- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless table representation whose columns are grouped by semantic type.
   It is the main user-facing interface for model inputs and outputs.
 
 ## Working with {py:class}`~sdm.tensor.TableTensor`
@@ -41,13 +41,11 @@ A {py:class}`~sdm.tensor.TableTensor` currently supports the following semantic 
 ```{figure} images/table_light.svg
 :figclass: light-only
 :width: 100%
-:align: center
 ```
 
 ```{figure} images/table_dark.svg
 :figclass: dark-only
 :width: 100%
-:align: center
 ```
 
 A {py:class}`~sdm.tensor.TableTensor` can be created manually from tensor blocks or converted from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) dataframes.
@@ -123,11 +121,8 @@ print(table[["age", "country"]].size())
 print(table[:2].size())
 # torch.Size([2, 5])
 
-print(table[:2].size())
-# torch.Size([2, 5])
-
-print(table.unsqueeze(0).size())
-# torch.Size([1, 3, 5])
+print(table.unsqueeze(0).expand(2, -1, -1).size())
+# torch.Size([2, 3, 5])
 
 print(torch.cat([table, table], dim=0).size())
 # torch.Size([6, 5])
@@ -175,4 +170,4 @@ Without it, these operations fall back to a CPU backend, which requires transfer
 ## Model Inputs And Outputs
 
 A {py:class}`~sdm.tensor.TableTensor` acts as the primary abstraction for model inputs and outputs, and flows through GPU-accelerated preprocessing and ensembling.
-Learn more about model processing and execution in the [Model Interface](model) and [Recipes](recipe) guides.
+You can learn more about data processing and model execution in the [Data Processing](processing) and [In-Context Learning Model Interface](icl) guides.

@@ -1,4 +1,4 @@
-# Recipes
+# Data Processing
 
 A {py:class}`~sdm.processing.recipe.Recipe` defines how data crosses a model boundary: it transforms inputs into the space a model expects and maps the model's outputs back to the original space, keeping the same auditable transforms on both sides of the model.
 
@@ -86,3 +86,13 @@ table = recipe.features.transform(table)
 ```
 
 ## Ensembling
+
+```{figure} images/ensemble_light.svg
+:figclass: light-only
+:width: 100%
+```
+
+```{figure} images/ensemble_dark.svg
+:figclass: dark-only
+:width: 100%
+```

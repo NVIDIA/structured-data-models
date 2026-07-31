@@ -44,7 +44,7 @@ class CategoricalTensor(Tensor):
     Code values are direct indices into the corresponding category vector.
     Negative indices represent missing values.
 
-    .. code-block:: python
+    .. testcode::
 
         import torch
         from sdm import CategoricalTensor, StringTensor
@@ -132,7 +132,7 @@ class CategoricalTensor(Tensor):
     ) -> Self:
         r"""Create tensor from a :class:`pyarrow.Array`.
 
-        .. code-block:: python
+        .. testcode::
 
             import pyarrow as pa
             from sdm import CategoricalTensor
@@ -140,12 +140,8 @@ class CategoricalTensor(Tensor):
             array = pa.array(["foo", None, "bar"])
             tensor = CategoricalTensor.from_arrow(array)
 
-            print(tensor)
-            >>> tensor([[ 0],
-            >>>         [-1],
-            >>>         [ 1]])
-            print(tensor.categories[0].tolist())
-            >>> ['foo', 'bar']
+            assert tensor.code.tolist() == [[0], [-1], [1]]
+            assert tensor.categories[0].tolist() == ["foo", "bar"]
 
         Args:
             array: The :class:`pyarrow.Array` or

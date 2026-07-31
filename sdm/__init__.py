@@ -16,7 +16,6 @@ from sdm.relational import (
     TaskLink,
     RelatedTables,
     TemporalSamplingConfig,
-    TemporalStrategy,
 )
 from sdm import evaluation, models
 
@@ -39,7 +38,6 @@ __all__ = [
     "TaskLink",
     "RelatedTables",
     "TemporalSamplingConfig",
-    "TemporalStrategy",
     "evaluation",
     "models",
     "__version__",
