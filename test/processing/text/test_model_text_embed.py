@@ -10,36 +10,30 @@ from torch import Tensor
 
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import StypeDispatch
-from sdm.processing.text.llm_text_embed import LLMTextEmbed
+from sdm.processing.text.model_text_embed import ModelTextEmbed
 from sdm.testing import onlyCUDA
 
 if TYPE_CHECKING:
     import cudf
 
 
-class _FakeEmbedder:
-    """Deterministic embedder: [len(s), len(s) ** 2] per string."""
+class _FakeEmbeddingModel(torch.nn.Module):
+    """Deterministic model: [len(s), len(s) ** 2] per string."""
 
-    dim = 2
-
-    def encode(self, strings: pa.Array) -> Tensor:
+    def forward(self, strings: pa.Array) -> Tensor:
         lengths = pc.call_function("utf8_length", [strings])
         values = torch.tensor(lengths.to_numpy(zero_copy_only=False))
         values = values.to(torch.get_default_dtype())
         return torch.stack((values, values.square()), dim=-1)
 
 
-class _WrongShapeEmbedder:
-    dim = 2
-
-    def encode(self, strings: pa.Array) -> Tensor:
+class _WrongShapeEmbeddingModel(torch.nn.Module):
+    def forward(self, strings: pa.Array) -> Tensor:
         return torch.zeros(len(strings) + 1, 2)
 
 
-class _CudfEmbedder:
-    dim = 2
-
-    def encode(self, strings: cudf.Series) -> Tensor:
+class _CudfEmbeddingModel(torch.nn.Module):
+    def forward(self, strings: cudf.Series) -> Tensor:
         lengths = torch.from_dlpack(
             strings.str.len().astype("float32").to_dlpack()
         )
@@ -59,7 +53,10 @@ def _text_table() -> TableTensor:
 
 
 def test_llm_text_embed_embeds_each_text_column() -> None:
-    output = LLMTextEmbed(_FakeEmbedder()).transform(_text_table())
+    output = ModelTextEmbed(
+        _FakeEmbeddingModel(),
+        embedding_dim=2,
+    ).transform(_text_table())
 
     assert output.columns[Stype.numerical] == (
         "title_0",
@@ -79,12 +76,17 @@ def test_llm_text_embed_embeds_each_text_column() -> None:
     )
 
 
-def test_llm_text_embed_rejects_wrong_encode_shape() -> None:
-    with pytest.raises(ValueError, match="Expected 'encode'"):
-        LLMTextEmbed(_WrongShapeEmbedder()).transform(_text_table())
+def test_llm_text_embed_rejects_wrong_model_shape() -> None:
+    with pytest.raises(ValueError, match="Expected 'embedding_model'"):
+        ModelTextEmbed(
+            _WrongShapeEmbeddingModel(),
+            embedding_dim=2,
+        ).transform(_text_table())
 
 
-def test_llm_text_embed_empty_rows_use_dim_without_encode() -> None:
+def test_llm_text_embed_empty_rows_use_embedding_dim_without_model_call() -> (
+    None
+):
     table = TableTensor(
         columns={"text": ("title",)},
         text=StringTensor(
@@ -94,7 +96,10 @@ def test_llm_text_embed_empty_rows_use_dim_without_encode() -> None:
         ),
     )
 
-    output = LLMTextEmbed(_FakeEmbedder()).transform(table)
+    output = ModelTextEmbed(
+        _FakeEmbeddingModel(),
+        embedding_dim=2,
+    ).transform(table)
 
     assert output.numerical.size() == (0, 2)
     assert output.columns[Stype.numerical] == ("title_0", "title_1")
@@ -111,7 +116,10 @@ def test_llm_text_embed_uses_cudf_for_cuda_text() -> None:
         ),
     )
 
-    output = LLMTextEmbed(_CudfEmbedder()).transform(table)
+    output = ModelTextEmbed(
+        _CudfEmbeddingModel(),
+        embedding_dim=2,
+    ).transform(table)
 
     assert output.numerical.device.type == "cuda"
     assert output.columns[Stype.numerical] == ("title_0", "title_1")
@@ -122,7 +130,12 @@ def test_llm_text_embed_uses_cudf_for_cuda_text() -> None:
 
 
 def test_llm_text_embed_in_stype_dispatch_route() -> None:
-    dispatch = StypeDispatch(text=LLMTextEmbed(_FakeEmbedder()))
+    dispatch = StypeDispatch(
+        text=ModelTextEmbed(
+            _FakeEmbeddingModel(),
+            embedding_dim=2,
+        )
+    )
 
     output = dispatch.fit_transform(_text_table())
 
