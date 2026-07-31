@@ -86,13 +86,6 @@ Lastly, the {py:attr}`~sdm.models.ICLModel.supported_feature_stypes` attribute d
 Semantic types outside this set need to be converted, dropped, or otherwise handled by the recipe before they reach the model.
 For example, {py:class}`~sdm.models.TabICLv2` can only consume numerical features internally, so it is the recipe's job to convert any other semantic type into a numerical representation before it reaches the model, *e.g.*, via {py:class}`~sdm.processing.common.ToNumerical` on categorical columns.
 
-## Ensembling
-
-The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
-When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
-
-## Model Outputs
-
 Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where the output schema depends on the task, model, and post-processing routine of the {py:class}`~sdm.processing.recipe.Recipe`:
 
 - Classification predictions are generally returned as numerical probabilities, where each target category corresponds to one column in the output.
@@ -102,6 +95,25 @@ Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where
 Since predictions are returned as {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, and {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
 
 In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to them (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
+
+## Ensembling
+
+The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
+When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
+
+## Autocasting
+
+An {py:class}`~sdm.models.ICLModel` does **not** enable mixed-precision autocasting by default.
+Instead, the model respects the caller’s active PyTorch autocast context.
+For example, to run the model forward pass in [`torch.bfloat16`](https://docs.pytorch.org/docs/stable/tensor_attributes) mixed precision on CUDA with [`torch.amp.autocast()`](https://docs.pytorch.org/docs/stable/amp):
+
+```python
+with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+    out = model(...)
+```
+
+Pre-processing and post-processing routines remain outside the model’s autocast policy.
+They will run with the dtypes of the model inputs.
 
 ## Relational Context
 
