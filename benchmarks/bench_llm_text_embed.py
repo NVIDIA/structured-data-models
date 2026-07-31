@@ -19,6 +19,7 @@ instead of joining all text columns into one synthetic ``__text__`` column.
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import statistics
 import time
@@ -109,6 +110,16 @@ def _download_strable(dataset: str) -> tuple[str, dict[str, Any]]:
     return data_path, config
 
 
+def _load_arrow_dataset(
+    args: argparse.Namespace,
+) -> tuple[pa.Table, dict[str, Any]]:
+    data_path, config = _download_strable(args.dataset)
+    table = pq.read_table(data_path)
+    if args.max_rows is not None:
+        table = table.slice(0, args.max_rows)
+    return table, config
+
+
 def _arrow_text_columns(
     table: pa.Table,
     target_name: str | None,
@@ -120,6 +131,21 @@ def _arrow_text_columns(
         if pa.types.is_string(field.type) or pa.types.is_large_string(
             field.type
         ):
+            columns.append(field.name)
+    return columns
+
+
+def _arrow_numeric_columns(
+    table: pa.Table,
+    target_name: str | None,
+    text_columns: Sequence[str],
+) -> list[str]:
+    text_column_set = set(text_columns)
+    columns: list[str] = []
+    for field in table.schema:
+        if field.name == target_name or field.name in text_column_set:
+            continue
+        if pa.types.is_integer(field.type) or pa.types.is_floating(field.type):
             columns.append(field.name)
     return columns
 
@@ -328,16 +354,20 @@ def _report(
             f.write(json.dumps(result) + "\n")
 
 
-def _run_model(
+def _emit_result(result: dict[str, Any], args: argparse.Namespace) -> None:
+    print(json.dumps(result, indent=2))  # noqa: T201
+    if args.out is not None:
+        with open(args.out, "a") as f:
+            f.write(json.dumps(result) + "\n")
+
+
+def _make_embedding_processor(
     model_name: str,
     table: TableTensor,
-    text_columns: Sequence[str],
     args: argparse.Namespace,
-) -> None:
+) -> tuple[ModelTextEmbed, float, int]:
     device = torch.device(args.device)
     dtype = _resolve_dtype(args.dtype)
-    if device.type == "cuda":
-        torch.cuda.reset_peak_memory_stats()
 
     start = time.perf_counter()
     model = SentenceTransformerEmbeddingModel(
@@ -355,6 +385,24 @@ def _run_model(
         dtype=dtype,
     )
     setup_s = time.perf_counter() - start
+    return processor, setup_s, embedding_dim
+
+
+def _run_model(
+    model_name: str,
+    table: TableTensor,
+    text_columns: Sequence[str],
+    args: argparse.Namespace,
+) -> None:
+    device = torch.device(args.device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
+    processor, setup_s, _ = _make_embedding_processor(
+        model_name,
+        table,
+        args,
+    )
 
     latencies = _time_transform(
         processor,
@@ -375,12 +423,181 @@ def _run_model(
         text_columns=text_columns,
         args=args,
     )
+    del output, processor
+
+
+def _load_tabicl_inputs(
+    args: argparse.Namespace,
+) -> tuple[TableTensor, Tensor, Tensor | None, list[str], list[str]]:
+    text, text_columns = _load_table(args)
+    table, config = _load_arrow_dataset(args)
+    target_name = config.get("target_name")
+    if not isinstance(target_name, str):
+        raise SystemExit(
+            f"STRABLE table {args.dataset!r} config has no target_name"
+        )
+
+    target = table[target_name].to_pandas().reset_index(drop=True)
+    mask = target.notna().to_numpy()
+    labels, uniques = target[mask].factorize(sort=True)
+    if len(uniques) > 10:
+        raise SystemExit(
+            f"{len(uniques)} classes found; TabICLv2 supports at most 10."
+        )
+    y = torch.tensor(labels, dtype=torch.int64, device=args.device)
+    text = text[mask]
+
+    numeric = None
+    numeric_columns: list[str] = []
+    if args.include_numeric:
+        numeric_columns = _arrow_numeric_columns(
+            table,
+            target_name,
+            text_columns,
+        )
+        if numeric_columns:
+            numeric_table = table.select(numeric_columns).to_pandas()
+            numeric_values = numeric_table[mask].to_numpy(dtype="float32")
+            numeric = torch.tensor(
+                numeric_values,
+                dtype=torch.float32,
+                device=args.device,
+            )
+
+    return text, y, numeric, text_columns, numeric_columns
+
+
+def _cleanup_model_run(device: torch.device) -> None:
+    gc.collect()
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+
+
+def _macro_f1(pred: Tensor, target: Tensor) -> float:
+    classes = target.unique().detach().cpu()
+    pred_cpu = pred.detach().cpu()
+    target_cpu = target.detach().cpu()
+    scores: list[float] = []
+    for cls in classes:
+        pred_pos = pred_cpu == cls
+        target_pos = target_cpu == cls
+        tp = (pred_pos & target_pos).sum().item()
+        fp = (pred_pos & ~target_pos).sum().item()
+        fn = (~pred_pos & target_pos).sum().item()
+        denom = 2 * tp + fp + fn
+        scores.append(0.0 if denom == 0 else (2 * tp) / denom)
+    return float(statistics.mean(scores))
+
+
+def _split_indices(
+    y: Tensor, args: argparse.Namespace
+) -> tuple[Tensor, Tensor]:
+    from sklearn.model_selection import train_test_split  # noqa: PLC0415
+
+    indices = torch.arange(y.numel()).cpu().numpy()
+    labels = y.detach().cpu().numpy()
+    train_idx, test_idx = train_test_split(
+        indices,
+        test_size=args.test_size,
+        random_state=args.seed,
+        stratify=labels,
+    )
+    return (
+        torch.tensor(train_idx, dtype=torch.long, device=y.device),
+        torch.tensor(test_idx, dtype=torch.long, device=y.device),
+    )
+
+
+def _run_tabicl_model(
+    model_name: str,
+    table: TableTensor,
+    y: Tensor,
+    numeric: Tensor | None,
+    text_columns: Sequence[str],
+    numeric_columns: Sequence[str],
+    args: argparse.Namespace,
+) -> None:
+    from sdm.models import TabICLv2  # noqa: PLC0415
+
+    device = torch.device(args.device)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
+    processor, setup_s, _ = _make_embedding_processor(model_name, table, args)
+
+    _sync(device)
+    start = time.perf_counter()
+    embedded = processor.transform(table).numerical
+    _sync(device)
+    embedding_s = time.perf_counter() - start
+
+    features = (
+        embedded if numeric is None else torch.cat([numeric, embedded], dim=-1)
+    )
+    train_idx, test_idx = _split_indices(y, args)
+    x_train = TableTensor.from_tensor(features[train_idx])
+    x_test = TableTensor.from_tensor(features[test_idx])
+    y_train = TableTensor.from_tensor(y[train_idx].unsqueeze(-1))
+    y_test = y[test_idx]
+
+    model = TabICLv2(device=device)
+
+    _sync(device)
+    start = time.perf_counter()
+    model.fit(x=x_train, y=y_train)
+    _sync(device)
+    tabicl_fit_s = time.perf_counter() - start
+
+    start = time.perf_counter()
+    output = model.predict(x=x_test)
+    _sync(device)
+    tabicl_predict_s = time.perf_counter() - start
+    model.clear()
+
+    pred = output.numerical.argmax(dim=-1)
+    accuracy = (pred == y_test).float().mean().item()
+    result = {
+        "mode": "tabicl",
+        "dataset": args.dataset,
+        "model": model_name,
+        "rows": y.numel(),
+        "train_rows": train_idx.numel(),
+        "test_rows": test_idx.numel(),
+        "source_text_columns": list(text_columns),
+        "joined_text_columns": not args.separate_columns,
+        "numeric_columns": list(numeric_columns),
+        "include_numeric": args.include_numeric,
+        "device": args.device,
+        "table_device": args.table_device,
+        "dtype": args.dtype,
+        "embedding_batch_size": args.batch_size,
+        "feature_width": features.size(-1),
+        "embedding_width": embedded.size(-1),
+        "timing_s": {
+            "embedding_model_setup": round(setup_s, 3),
+            "embedding_transform": round(embedding_s, 3),
+            "tabicl_fit": round(tabicl_fit_s, 3),
+            "tabicl_predict": round(tabicl_predict_s, 3),
+        },
+        "accuracy": round(float(accuracy), 4),
+        "macro_f1": round(_macro_f1(pred, y_test), 4),
+    }
+    if torch.cuda.is_available() and device.type == "cuda":
+        result["peak_gpu_mb"] = round(
+            torch.cuda.max_memory_allocated() / 1024**2
+        )
+    _emit_result(result, args)
+    del model, output, processor, embedded, features
 
 
 def main() -> None:
     """Run ``ModelTextEmbed.transform`` for the requested STRABLE table."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
+    parser.add_argument(
+        "--mode", choices=["transform", "tabicl"], default="transform"
+    )
     parser.add_argument(
         "--models",
         nargs="+",
@@ -403,6 +620,9 @@ def main() -> None:
     parser.add_argument("--prompt-name", default=None)
     parser.add_argument("--trust-remote-code", action="store_true")
     parser.add_argument("--separate-columns", action="store_true")
+    parser.add_argument("--include-numeric", action="store_true")
+    parser.add_argument("--test-size", type=float, default=0.2)
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
     if args.table_device is None:
@@ -415,9 +635,27 @@ def main() -> None:
     if uses_cuda and not torch.cuda.is_available():
         raise SystemExit("CUDA is unavailable; use --device cpu.")
 
-    table, text_columns = _load_table(args)
+    if args.mode == "transform":
+        table, text_columns = _load_table(args)
+        for model_name in args.models:
+            _run_model(model_name, table, text_columns, args)
+            _cleanup_model_run(torch.device(args.device))
+        return
+
+    table, y, numeric, text_columns, numeric_columns = _load_tabicl_inputs(
+        args
+    )
     for model_name in args.models:
-        _run_model(model_name, table, text_columns, args)
+        _run_tabicl_model(
+            model_name,
+            table,
+            y,
+            numeric,
+            text_columns,
+            numeric_columns,
+            args,
+        )
+        _cleanup_model_run(torch.device(args.device))
 
 
 if __name__ == "__main__":
