@@ -94,7 +94,7 @@ When a recipe contains stochastic processors, such as {py:class}`~sdm.processing
 ## Autocasting
 
 An {py:class}`~sdm.models.ICLModel` does **not** enable mixed-precision autocasting by default.
-Instead, the model respects the caller’s active PyTorch autocast context, and precision is controlled explicitly at the call site.
+Instead, the model respects the caller’s active PyTorch autocast context.
 For example, to run the model forward pass in [`torch.bfloat16`](https://docs.pytorch.org/docs/stable/tensor_attributes) mixed precision on CUDA with [`torch.amp.autocast()`](https://docs.pytorch.org/docs/stable/amp), run:
 
 ```python
