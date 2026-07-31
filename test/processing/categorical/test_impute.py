@@ -33,11 +33,17 @@ def test_impute_mode_uses_most_frequent_category(
     device: torch.device,
 ) -> None:
     context = _table(
-        [[0, 1], [0, -1], [1, 1], [-1, 0]],
+        [
+            [[0, 1], [0, -1], [1, 1], [-1, 0]],
+            [[2, 0], [2, 0], [1, 1], [-1, 1]],
+        ],
         device=device,
     )
     query = _table(
-        [[-1, -1], [2, 0]],
+        [
+            [[-1, -1], [2, 0]],
+            [[-1, -1], [0, 1]],
+        ],
         device=device,
     )
     processor = ImputeMode().fit(context)
@@ -46,11 +52,15 @@ def test_impute_mode_uses_most_frequent_category(
 
     assert torch.equal(
         processor._fill_values,
-        torch.tensor([0, 1], device=device),
+        torch.tensor([[[0, 1]], [[2, 0]]], device=device),
     )
     assert torch.equal(
         output.categorical.code,
-        torch.tensor([[0, 1], [2, 0]], dtype=torch.int32, device=device),
+        torch.tensor(
+            [[[0, 1], [2, 0]], [[2, 0], [0, 1]]],
+            dtype=torch.int32,
+            device=device,
+        ),
     )
     assert output.columns[Stype.categorical] == ("kind", "segment")
     for actual, expected in zip(
@@ -58,35 +68,6 @@ def test_impute_mode_uses_most_frequent_category(
         query.categorical.categories,
     ):
         assert torch.equal(actual, expected)
-
-
-@withCUDA
-def test_impute_mode_fits_leading_batches_independently(
-    device: torch.device,
-) -> None:
-    context = _table(
-        [
-            [[0, 0], [0, -1], [1, 1]],
-            [[2, 1], [2, 1], [-1, 0]],
-        ],
-        device=device,
-    )
-    query = _table(
-        [[[-1, -1]], [[-1, -1]]],
-        device=device,
-    )
-
-    processor = ImputeMode().fit(context)
-    output = processor.transform(query)
-
-    assert torch.equal(
-        output.categorical.code,
-        torch.tensor(
-            [[[0, 0]], [[2, 1]]],
-            dtype=torch.int32,
-            device=device,
-        ),
-    )
 
 
 @onlyCUDA

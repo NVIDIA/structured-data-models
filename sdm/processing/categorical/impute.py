@@ -52,11 +52,16 @@ class ImputeMode(Processor):
                     f"column {columns[index]!r} has no observed values."
                 )
 
-            one_hot = torch.nn.functional.one_hot(
-                codes.clamp_min(0).to(torch.long),
-                num_classes=category.numel(),
+            counts = torch.zeros(
+                (*codes.shape[:-1], category.numel()),
+                dtype=torch.long,
+                device=codes.device,
             )
-            counts = (one_hot * observed.unsqueeze(-1)).sum(dim=-2)
+            counts.scatter_add_(
+                -1,
+                codes.clamp_min(0).to(torch.long),
+                observed.to(torch.long),
+            )
             fill_values.append(counts.argmax(dim=-1))
 
         self._fill_values = (
