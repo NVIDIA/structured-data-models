@@ -89,7 +89,7 @@ For example, {py:class}`~sdm.models.TabICLv2` can only consume numerical feature
 ## Ensembling
 
 The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
-When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs are stacked for post-processing.
+When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
 
 ## Model Outputs
 
