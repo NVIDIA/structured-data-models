@@ -115,7 +115,7 @@ with torch.amp.autocast("cuda", dtype=torch.bfloat16):
 ```
 
 Pre-processing and post-processing routines remain outside the model’s autocast policy.
-They run with the dtypes of their inputs.
+They will run with the dtypes of the model inputs.
 
 ## Relational Context
 
