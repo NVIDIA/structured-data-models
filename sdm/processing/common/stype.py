@@ -7,9 +7,8 @@ from torch import Tensor
 from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.ensemble import (
-    EnsembleFitContext,
     EnsembleProcessor,
-    as_ensemble_processor,
+    EnsembleProcessorAdapter,
 )
 from sdm.tensor import EnsembleTable, TableTensor
 
@@ -47,6 +46,7 @@ def _combine_parts(
     return EnsembleTable.pack(
         representations=representations,
         member_representation_ids=member_representation_ids,
+        member_ids=empty_source._member_ids,
     )
 
 
@@ -241,11 +241,11 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         r"""Fit active semantic-type routes and combine their outputs."""
         for stype, route in tuple(self.processors.items()):
-            self.processors[stype] = as_ensemble_processor(
+            self.processors[stype] = EnsembleProcessorAdapter.adapt(
                 cast(Processor, route)
             )
 
@@ -267,7 +267,7 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
                 self.processors[stype],
             ).fit_transform_ensemble(
                 route_inputs[stype],
-                context=context.child(stype),
+                generator=generator,
             )
             for stype in self._active_routes
         ]

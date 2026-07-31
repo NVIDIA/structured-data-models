@@ -9,10 +9,7 @@ from torch import Tensor
 
 from sdm import EnsembleTable, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
-from sdm.processing import (
-    EnsembleRelatedTables,
-    Recipe,
-)
+from sdm.processing import Recipe
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
@@ -110,8 +107,6 @@ class ICLModel(torch.nn.Module, ABC):
         x_context: EnsembleTable,
         y_context: EnsembleTable,
         x_query: EnsembleTable | None,
-        related_context_tables: EnsembleRelatedTables | None,
-        related_query_tables: EnsembleRelatedTables | None,
     ) -> tuple[tuple[int, ...], ...]:
         if ensemble_mode == "sequential" or not allow_groups:
             return tuple((member,) for member in range(x_context.num_members))
@@ -126,32 +121,6 @@ class ICLModel(torch.nn.Module, ABC):
                     if x_query is not None
                     else None
                 ),
-                (
-                    tuple(
-                        (
-                            name,
-                            cls._ensemble_group_key(table, member),
-                        )
-                        for name, table in sorted(
-                            related_context_tables.tables.items()
-                        )
-                    )
-                    if related_context_tables is not None
-                    else None
-                ),
-                (
-                    tuple(
-                        (
-                            name,
-                            cls._ensemble_group_key(table, member),
-                        )
-                        for name, table in sorted(
-                            related_query_tables.tables.items()
-                        )
-                    )
-                    if related_query_tables is not None
-                    else None
-                ),
             )
             groups.setdefault(signature, []).append(member)
         return tuple(tuple(members) for members in groups.values())
@@ -162,12 +131,12 @@ class ICLModel(torch.nn.Module, ABC):
         x_context: EnsembleTable,
         y_context: EnsembleTable,
         x_query: EnsembleTable | None,
-        related_context_tables: EnsembleRelatedTables | None,
-        related_query_tables: EnsembleRelatedTables | None,
+        related_context_tables: tuple[RelatedTables, ...] | None,
+        related_query_tables: tuple[RelatedTables, ...] | None,
     ) -> None:
         for member in range(x_context.num_members):
             context_related = (
-                related_context_tables.member(member)
+                related_context_tables[member]
                 if related_context_tables is not None
                 else None
             )
@@ -179,7 +148,7 @@ class ICLModel(torch.nn.Module, ABC):
             if x_query is None:
                 continue
             query_related = (
-                related_query_tables.member(member)
+                related_query_tables[member]
                 if related_query_tables is not None
                 else None
             )
@@ -201,8 +170,8 @@ class ICLModel(torch.nn.Module, ABC):
         x_context: EnsembleTable | None,
         y_context: EnsembleTable | None,
         x_query: EnsembleTable | None,
-        related_context_tables: EnsembleRelatedTables | None,
-        related_query_tables: EnsembleRelatedTables | None,
+        related_context_tables: tuple[RelatedTables, ...] | None,
+        related_query_tables: tuple[RelatedTables, ...] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         kwargs: dict[str, Any],
@@ -223,12 +192,12 @@ class ICLModel(torch.nn.Module, ABC):
                 if x_query is not None
                 else None,
                 related_context_tables=(
-                    related_context_tables.member(member)
+                    related_context_tables[member]
                     if related_context_tables is not None
                     else None
                 ),
                 related_query_tables=(
-                    related_query_tables.member(member)
+                    related_query_tables[member]
                     if related_query_tables is not None
                     else None
                 ),
@@ -245,8 +214,8 @@ class ICLModel(torch.nn.Module, ABC):
         x_context: EnsembleTable,
         y_context: EnsembleTable,
         x_query: EnsembleTable,
-        related_context_tables: EnsembleRelatedTables | None,
-        related_query_tables: EnsembleRelatedTables | None,
+        related_context_tables: tuple[RelatedTables, ...] | None,
+        related_query_tables: tuple[RelatedTables, ...] | None,
         ensemble_mode: Literal["parallel", "sequential"],
         generator: torch.Generator | None,
         kwargs: dict[str, Any],
@@ -260,8 +229,6 @@ class ICLModel(torch.nn.Module, ABC):
             x_context=x_context,
             y_context=y_context,
             x_query=x_query,
-            related_context_tables=related_context_tables,
-            related_query_tables=related_query_tables,
         )
         outputs: list[TableTensor | None] = [None] * x_context.num_members
         for members in groups:
@@ -291,7 +258,7 @@ class ICLModel(torch.nn.Module, ABC):
         recipe: Recipe,
         x_context: EnsembleTable,
         y_context: EnsembleTable,
-        related_context_tables: EnsembleRelatedTables | None,
+        related_context_tables: tuple[RelatedTables, ...] | None,
         ensemble_mode: Literal["parallel", "sequential"],
         generator: torch.Generator | None,
         kwargs: dict[str, Any],
@@ -305,8 +272,6 @@ class ICLModel(torch.nn.Module, ABC):
             x_context=x_context,
             y_context=y_context,
             x_query=None,
-            related_context_tables=related_context_tables,
-            related_query_tables=None,
         )
         caches: list[Cache] = []
         for members in groups:
@@ -320,14 +285,14 @@ class ICLModel(torch.nn.Module, ABC):
                 ),
                 related_tables_schemas=tuple(
                     (
-                        related_context_tables.member(member).schema
+                        related_context_tables[member].schema
                         if related_context_tables is not None
                         else None
                     )
                     for member in members
                 ),
                 related_table_names=(
-                    tuple(related_context_tables.tables)
+                    tuple(related_context_tables[0].tables)
                     if related_context_tables is not None
                     else None
                 ),
@@ -646,7 +611,7 @@ class ICLModel(torch.nn.Module, ABC):
                     x_query=x_ensemble.representation(member),
                     related_context_tables=related_schemas[local],
                     related_query_tables=(
-                        related_ensemble.member(member)
+                        related_ensemble[member]
                         if related_ensemble is not None
                         else None
                     ),

@@ -2,7 +2,7 @@
 
 ## Outcome
 
-On an NVIDIA L4, the optimized eight-member TabICLv2 Recipe processes 40k context + 10k query rows with 100 features in **129.3 ms median for classification** and **123.0 ms for regression**. The measured processing path is below the earlier 190–200 ms reference, while the optimization target remains the fastest valid implementation rather than a fixed runtime.
+On an NVIDIA L4, the optimized eight-member TabICLv2 Recipe processes 40k context + 10k query rows with 100 features in **128.6 ms median for classification** and **123.9 ms for regression**. The measured processing path is below the earlier 190–200 ms reference, while the optimization target remains the fastest valid implementation rather than a fixed runtime.
 
 These are practical production baselines, not theoretical hardware speed-of-light results. No independent minimum-computation CUDA implementation was added. In a preprocessing-only memory search, all eight members completed at **3.45 million total rows** and first failed at **3.50 million rows** on this 22.0 GiB L4. This boundary excludes the model forward pass and output postprocessing.
 
@@ -21,33 +21,33 @@ These are practical production baselines, not theoretical hardware speed-of-ligh
 
 | Task           | CPU Recipe median / p95 | L4 Recipe median / p95 | GPU speedup | L4 Recipe summed kernels | L4 Recipe peak delta / absolute | Recipe throughput |
 | -------------- | ----------------------: | ---------------------: | ----------: | -----------------------: | ------------------------------: | ----------------: |
-| Classification |      2282.3 / 2288.6 ms |       129.3 / 132.3 ms |       17.6× |                 103.9 ms |               292.7 / 313.0 MiB |    386,599 rows/s |
-| Regression     |      2651.7 / 2863.5 ms |       123.0 / 126.7 ms |       21.6× |                 119.3 ms |               914.9 / 973.2 MiB |    406,615 rows/s |
+| Classification |      2265.4 / 2304.7 ms |       128.6 / 129.8 ms |       17.6× |                 104.0 ms |               292.7 / 313.0 MiB |    388,693 rows/s |
+| Regression     |      2618.8 / 3057.2 ms |       123.9 / 126.0 ms |       21.1× |                 118.7 ms |               914.9 / 973.2 MiB |    403,554 rows/s |
 
 ### L4 Recipe stages
 
 | Task                        | Fit + context transform | Query transform | Output transform |  Complete Recipe |
 | --------------------------- | ----------------------: | --------------: | ---------------: | ---------------: |
-| Classification median / p95 |          94.9 / 95.9 ms |  29.7 / 31.5 ms |   0.87 / 1.18 ms | 129.3 / 132.3 ms |
-| Regression median / p95     |          85.5 / 86.6 ms |  29.9 / 31.0 ms | 10.08 / 10.13 ms | 123.0 / 126.7 ms |
+| Classification median / p95 |          93.9 / 94.7 ms |  29.6 / 32.6 ms |   0.66 / 0.76 ms | 128.6 / 129.8 ms |
+| Regression median / p95     |          86.8 / 90.6 ms |  29.7 / 42.6 ms |  9.94 / 10.00 ms | 123.9 / 126.0 ms |
 
 | Task           | Recipe enqueue median | Final synchronization wait | CUDA-event median |
 | -------------- | --------------------: | -------------------------: | ----------------: |
-| Classification |             129.31 ms |                    0.02 ms |         129.31 ms |
-| Regression     |             114.98 ms |                    8.10 ms |         122.96 ms |
+| Classification |             128.62 ms |                    0.02 ms |         128.62 ms |
+| Regression     |             115.86 ms |                    8.04 ms |         123.89 ms |
 
 ### Dominant Processor timings on L4
 
 | Operation                           |     Median / p95 | Enqueue / final sync wait | Summed kernels | Peak allocation |
 | ----------------------------------- | ---------------: | ------------------------: | -------------: | --------------: |
-| `PowerTransform.fit`                | 32.74 / 34.46 ms |           29.26 / 3.57 ms |       62.57 ms |        81.5 MiB |
-| `PowerTransform.fit_transform`      | 33.63 / 35.32 ms |           29.53 / 4.07 ms |       65.38 ms |        81.5 MiB |
-| `AlignCategories.fit_transform`     |   5.95 / 6.33 ms |            5.93 / 0.01 ms |        2.66 ms |         4.6 MiB |
-| `AlignCategories.transform`         |   7.66 / 8.50 ms |            7.65 / 0.01 ms |        3.02 ms |         1.1 MiB |
-| `PowerTransform.inverse_transform`  |   1.86 / 1.88 ms |            1.00 / 0.86 ms |        3.69 ms |       142.6 MiB |
-| `ClipSigma.fit_transform`           |   1.04 / 1.48 ms |            0.95 / 0.09 ms |        1.61 ms |        54.3 MiB |
-| `DropConstantColumns.fit_transform` |   0.70 / 0.74 ms |            0.69 / 0.01 ms |        0.58 ms |        13.6 MiB |
-| `ShuffleColumns.fit_transform`      |   0.41 / 0.53 ms |            0.39 / 0.01 ms |        0.06 ms |        13.6 MiB |
+| `PowerTransform.fit`                | 32.60 / 32.77 ms |           30.04 / 2.59 ms |       61.74 ms |        81.5 MiB |
+| `PowerTransform.fit_transform`      | 33.50 / 34.04 ms |           30.86 / 2.81 ms |       64.92 ms |        81.5 MiB |
+| `AlignCategories.fit_transform`     |   6.08 / 6.83 ms |            6.07 / 0.01 ms |        2.66 ms |         4.6 MiB |
+| `AlignCategories.transform`         |   7.85 / 8.79 ms |            7.84 / 0.01 ms |        3.02 ms |         1.1 MiB |
+| `PowerTransform.inverse_transform`  |   1.85 / 1.88 ms |            1.00 / 0.85 ms |        3.65 ms |       142.6 MiB |
+| `ClipSigma.fit_transform`           |   1.04 / 1.18 ms |            0.94 / 0.10 ms |        1.63 ms |        54.3 MiB |
+| `DropConstantColumns.fit_transform` |   0.71 / 0.78 ms |            0.69 / 0.01 ms |        0.58 ms |        13.6 MiB |
+| `ShuffleColumns.fit_transform`      |   0.41 / 0.59 ms |            0.40 / 0.01 ms |        0.06 ms |        13.6 MiB |
 
 `PowerTransform.fit` remains the dominant individual GPU Processor. Kernel time comes from a separate profiled execution and sums individual kernel durations, so it is not directly additive with wall time and may be larger when kernels overlap.
 
@@ -57,9 +57,9 @@ Profiling exposed redundant stacking before and after the fitted target inverse.
 
 | Metric                   |     Before |     After |  Improvement |
 | ------------------------ | ---------: | --------: | -----------: |
-| Regression output median |   48.65 ms |  10.08 ms |        4.83× |
+| Regression output median |   48.65 ms |   9.94 ms |        4.89× |
 | Output peak allocation   | 1524.4 MiB | 914.6 MiB |       −40.0% |
-| Complete Recipe median   |   217.4 ms |  123.0 ms | 43.4% faster |
+| Complete Recipe median   |   217.4 ms |  123.9 ms | 43.0% faster |
 
 The generic multiple-fitted-state inverse path remains for genuinely distinct target states; only the single proven-shared state avoids repacking.
 
@@ -67,8 +67,19 @@ The generic multiple-fitted-state inverse path remains for genuinely distinct ta
 
 | Task           | H2D median / p95 | D2H median / p95 |
 | -------------- | ---------------: | ---------------: |
-| Classification |   3.49 / 4.19 ms |   3.54 / 8.59 ms |
-| Regression     |   3.41 / 3.86 ms |   3.53 / 3.84 ms |
+| Classification |   3.53 / 4.08 ms |   3.66 / 4.05 ms |
+| Regression     |   3.53 / 3.90 ms |   3.62 / 3.93 ms |
+
+### TabICLv2 model schedule trade-off
+
+This separate end-to-end model measurement uses 1k context + 256 query rows, 100 features, eight estimators, GPU-resident inputs, two warm-ups, five repetitions, and synchronized wall time. It is intentionally smaller than the 50k Recipe workload because the real model cannot execute that full shape in parallel on this L4.
+
+| Task           | Parallel median / p95 | Sequential median / p95 | Parallel peak allocated | Sequential peak allocated |
+| -------------- | --------------------: | ----------------------: | ----------------------: | ------------------------: |
+| Classification |    1031.9 / 1045.5 ms |      1030.9 / 1054.7 ms |              5767.5 MiB |                 927.2 MiB |
+| Regression     |    1028.7 / 1047.4 ms |      1020.2 / 1040.3 ms |              5768.2 MiB |                 934.6 MiB |
+
+At this shape, sequential model execution preserves throughput within measurement noise while reducing peak allocated GPU memory by about 84%. Both schedules reuse the same ensemble-aware Recipe preprocessing; only model-core materialization and execution differ.
 
 ## L4 preprocessing memory boundary
 
@@ -83,7 +94,7 @@ The result establishes a **3.45–3.50 million-row bracket** for this exact shap
 
 ## Canonical RFM processing
 
-The canonical relational dataset uses `customers`, `orders`, and `products` tables and includes primary and foreign IDs, datetimes, numerical and categorical features, missing values, constant features, outliers, and unseen query categories. Exact tables, columns, blocks, codes, and category metadata are compared before timing. The cuDF environment uses Python 3.12.3, cuDF 26.6.0, CuPy 14.1.1, pylibcudf 26.6.0, PyTorch 2.13.0+cu130, and CUDA 13.0.
+The canonical relational dataset uses `customers`, `orders`, and `products` tables and includes primary and foreign IDs, datetimes, numerical and categorical features, missing values, constant features, outliers, and unseen query categories. Dedicated RFM parity tests compare columns and numerical outputs between parallel, sequential, and cached public execution before the separately timed benchmark. The cuDF environment uses Python 3.12.3, cuDF 26.6.0, CuPy 14.1.1, pylibcudf 26.6.0, PyTorch 2.13.0+cu130, and CUDA 13.0.
 
 ### TabICLv2-aligned 50k task-row workload
 
@@ -91,8 +102,8 @@ This workload uses the same 40k context + 10k query task-row count as the TabICL
 
 | Task           | CPU with cuDF median / p95 | L4 with cuDF median / p95 | GPU speedup | L4 without cuDF median / p95 | cuDF median effect | L4 cuDF kernels | L4 cuDF peak delta |
 | -------------- | -------------------------: | ------------------------: | ----------: | ---------------------------: | -----------------: | --------------: | -----------------: |
-| Classification |           685.3 / 794.5 ms |          308.5 / 323.2 ms |       2.22× |             271.4 / 352.8 ms |       13.7% slower |        43.67 ms |          46.32 MiB |
-| Regression     |           696.0 / 885.8 ms |          334.9 / 353.5 ms |       2.08× |             302.9 / 308.4 ms |       10.5% slower |        42.14 ms |          46.01 MiB |
+| Classification |           756.7 / 866.2 ms |          314.0 / 384.9 ms |       2.41× |             273.1 / 318.5 ms |       15.0% slower |        44.22 ms |          37.69 MiB |
+| Regression     |           749.7 / 781.9 ms |          340.8 / 359.8 ms |       2.20× |             297.4 / 300.5 ms |       14.6% slower |        42.45 ms |          41.86 MiB |
 
 The exact `kumo-ml` default cannot execute this shape: `RunMode.FAST` limits context and query to 1k rows each. Even non-FAST context is limited to 10k rows, so the 40k/10k reference comparison is intentionally reported only for SDM preprocessing.
 
@@ -100,14 +111,16 @@ The exact `kumo-ml` default cannot execute this shape: `RunMode.FAST` limits con
 
 The original canonical workload uses 5k context + 1k query task rows, eight estimators, and 1k products.
 
-| Task / device        | Ensemble-shared median / p95 | Member-isolated median / p95 | Shared speedup | Shared summed kernels |  Shared peak delta |
-| -------------------- | ---------------------------: | ---------------------------: | -------------: | --------------------: | -----------------: |
-| Classification / CPU |             298.2 / 330.5 ms |           1193.4 / 1290.3 ms |          4.00× |                     — |             28 KiB |
-| Regression / CPU     |             254.6 / 312.8 ms |           1159.7 / 1250.6 ms |          4.55× |                     — | allocator-retained |
-| Classification / L4  |             300.7 / 310.3 ms |           1680.1 / 1818.2 ms |          5.59× |              38.65 ms |           5.58 MiB |
-| Regression / L4      |             334.4 / 340.1 ms |           1580.4 / 1738.2 ms |          4.73× |              37.18 ms |           5.53 MiB |
+`member_isolated` repeats the public single-member Recipe eight times as a cost baseline. Stochastic draws are consumed in a different traversal order, so behavioral parity is established by the public parallel/sequential RFM tests rather than by comparing these benchmark outputs.
 
-A matched Python 3.12/PyTorch 2.13 control without cuDF measured 265.3 ms classification and 297.7 ms regression for shared L4 execution. cuDF therefore made the shared medians 13.3% and 12.3% slower; member-isolated medians were 22.6% and 19.8% slower. CPU medians changed by only low single-digit percentages. For the 50k task-row workload, cuDF remained 13.7% and 10.5% slower on L4. cuDF removes the CPU fallback warnings, but the extra columnar conversion, launch, and synchronization overhead outweighs that benefit at both tested sizes. Shared kernel time increased by only 1.61 ms classification and 1.08 ms regression at 6k rows while wall time increased by 35–37 ms, locating most of the slowdown outside GPU kernels. cuDF should remain optional and should not be selected unconditionally for these shapes without a lower-overhead path or a demonstrated crossover.
+| Task / device        | Ensemble-shared median / p95 | Member-isolated median / p95 | Shared speedup | Shared summed kernels | Shared peak delta |
+| -------------------- | ---------------------------: | ---------------------------: | -------------: | --------------------: | ----------------: |
+| Classification / CPU |             325.2 / 456.1 ms |           1293.7 / 1488.7 ms |          3.98× |                     — |            48 KiB |
+| Regression / CPU     |             269.0 / 361.1 ms |           1241.9 / 1334.5 ms |          4.62× |                     — |             4 KiB |
+| Classification / L4  |             327.2 / 426.8 ms |           1752.1 / 1887.7 ms |          5.35× |              39.19 ms |          4.71 MiB |
+| Regression / L4      |             337.9 / 353.2 ms |           1686.0 / 1855.3 ms |          4.99× |              37.59 ms |          4.99 MiB |
+
+A matched Python 3.10/PyTorch 2.13 control without cuDF measured 281.4 ms classification and 312.6 ms regression for shared L4 execution. cuDF therefore made the shared medians 16.3% and 8.1% slower; member-isolated medians were 24.9% and 17.6% slower. CPU effects were mixed. For the 50k task-row workload, cuDF remained 15.0% and 14.6% slower on L4. cuDF removes the CPU fallback warnings, but the extra columnar conversion, launch, and synchronization overhead outweighs that benefit at both tested sizes. Shared kernel time changed by less than 1.7 ms at 6k rows while wall time increased by 25–46 ms, locating most of the slowdown outside GPU kernels. cuDF should remain optional and should not be selected unconditionally for these shapes without a lower-overhead path or a demonstrated crossover.
 
 ### Original `kumo-ml` default reference
 
@@ -138,7 +151,7 @@ Observed default-path ratios are directional, not parity claims: SDM is 2.48× c
 
 - Keep the provenance-aware `EnsembleTable`, structural `EnsembleProcessor` nodes, normal-Processor adapter, and variable-schema mixin: each represents a current design invariant and has direct test coverage.
 - The next Processor optimization target is `PowerTransform.fit`; a custom kernel is justified only if standard PyTorch compilation/fusion cannot reduce its measured 33 ms latency.
-- RFM GPU improvement requires reducing string/join conversion and orchestration overhead; merely installing cuDF is 10–23% slower in the tested GPU workloads.
+- RFM GPU improvement requires reducing string/join conversion and orchestration overhead; merely installing cuDF is 8–25% slower in the tested GPU workloads.
 - Serialization of dynamically fitted ensemble trees and decisions remains an explicit design open question.
 - The current sequential model schedule does not provide a Recipe-level preprocessing fallback. Workloads beyond the measured preprocessing bracket require fewer rows or members until a chunked or sequential Recipe execution path is implemented.
 - No cross-table fitted-state sharing, content hashing, multi-GPU execution, row-changing Processor support, or speculative schema wrapper was added.

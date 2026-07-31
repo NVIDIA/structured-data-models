@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype
-from sdm.processing.ensemble import (
-    EnsembleFitContext,
-    EnsembleProcessor,
-)
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.tensor import EnsembleTable, TableTensor
 
 
@@ -36,11 +33,18 @@ class ShuffleCategories(EnsembleProcessor):
     def __init__(
         self,
         method: Literal["shift", "random"] = "shift",
+        *,
+        _ensemble_permutations: Callable[
+            ...,
+            Sequence[Sequence[Sequence[int]]],
+        ]
+        | None = None,
     ) -> None:
         super().__init__()
         if method not in {"shift", "random"}:
             raise ValueError("method must be 'shift' or 'random'")
         self.method = method
+        self._ensemble_permutations = _ensemble_permutations
         self.register_buffer(
             "permutations",
             torch.empty(0, dtype=torch.long),
@@ -103,51 +107,17 @@ class ShuffleCategories(EnsembleProcessor):
         )
         self._offset_values = tuple(offsets)
 
-    @staticmethod
-    def _set_permutations(
-        processor: ShuffleCategories,
-        table: TableTensor,
-        permutations: Sequence[Sequence[int]],
-    ) -> None:
-        permutations = tuple(tuple(value) for value in permutations)
-        counts = tuple(
-            category.numel() for category in table.categorical.categories
-        )
-        if len(permutations) != len(counts) or any(
-            sorted(permutation) != list(range(count))
-            for permutation, count in zip(permutations, counts)
-        ):
-            raise ValueError(
-                "The ensemble plan returned an invalid category permutation."
-            )
-        offsets = [0]
-        for count in counts:
-            offsets.append(offsets[-1] + count)
-        processor.permutations = torch.tensor(
-            tuple(index for value in permutations for index in value),
-            dtype=torch.long,
-            device=table.device,
-        )
-        processor.offsets = torch.tensor(
-            offsets,
-            dtype=torch.long,
-            device=table.device,
-        )
-        processor._mapping = permutations
-        processor._offset_values = tuple(offsets)
-        processor._fitted = True
-
     def fit_transform_ensemble(
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         r"""Fit member category mappings and pack compatible outputs."""
         planned = (
-            context._plan.category_permutations(
-                member_ids=context.member_ids,
-                category_counts=tuple(
+            self._ensemble_permutations(
+                table._member_ids,
+                tuple(
                     tuple(
                         category.numel()
                         for category in table.representation(
@@ -156,35 +126,43 @@ class ShuffleCategories(EnsembleProcessor):
                     )
                     for position in range(table.num_members)
                 ),
-                table_scope=context.table_scope,
             )
-            if context._plan is not None
+            if self._ensemble_permutations is not None
             else None
         )
-        if planned is not None and len(planned) != table.num_members:
-            raise ValueError(
-                "The ensemble plan must return one mapping per member."
-            )
-
         self.processors = torch.nn.ModuleList()
         representations: list[TableTensor] = []
         positions: list[int] = []
         member_to_processor: list[int] = []
         keys: dict[tuple[object, ...], int] = {}
-        for position, member_id in enumerate(context.member_ids):
+        for position, _ in enumerate(table._member_ids):
             before = table.representation(position)
             processor = self.__class__(method=self.method)
             if planned is None:
-                processor.fit(
-                    before,
-                    generator=context.generator_for(member_id),
-                )
+                processor.fit(before, generator=generator)
             else:
-                self._set_permutations(
-                    processor,
-                    before,
-                    planned[position],
+                processor._mapping = tuple(
+                    tuple(value) for value in planned[position]
                 )
+                offsets = [0]
+                for mapping in processor._mapping:
+                    offsets.append(offsets[-1] + len(mapping))
+                processor.permutations = torch.tensor(
+                    tuple(
+                        index
+                        for mapping in processor._mapping
+                        for index in mapping
+                    ),
+                    dtype=torch.long,
+                    device=before.device,
+                )
+                processor.offsets = torch.tensor(
+                    offsets,
+                    dtype=torch.long,
+                    device=before.device,
+                )
+                processor._offset_values = tuple(offsets)
+                processor._fitted = True
 
             key = (
                 table._member_locations[position],
@@ -204,6 +182,7 @@ class ShuffleCategories(EnsembleProcessor):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=self._member_to_processor,
+            member_ids=table._member_ids,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -220,6 +199,7 @@ class ShuffleCategories(EnsembleProcessor):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=self._member_to_processor,
+            member_ids=table._member_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

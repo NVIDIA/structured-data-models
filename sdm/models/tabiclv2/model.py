@@ -12,15 +12,15 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import EnsembleRelatedTables, Recipe
-from sdm.processing.ensemble_table import _stack_positional
+from sdm.processing import Recipe
+from sdm.tensor.ensemble import _stack_tables
 
 
 def _materialize_positional(
     table: EnsembleTable,
     members: tuple[int, ...],
 ) -> TableTensor:
-    return _stack_positional(
+    return _stack_tables(
         tuple(table.representation(member) for member in members)
     )
 
@@ -191,8 +191,8 @@ class TabICLv2(ICLModel):
         x_context: EnsembleTable | None,
         y_context: EnsembleTable | None,
         x_query: EnsembleTable | None,
-        related_context_tables: EnsembleRelatedTables | None,
-        related_query_tables: EnsembleRelatedTables | None,
+        related_context_tables: tuple[RelatedTables, ...] | None,
+        related_query_tables: tuple[RelatedTables, ...] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         kwargs: dict[str, Any],
@@ -213,16 +213,8 @@ class TabICLv2(ICLModel):
                 if x_query is not None
                 else None
             ),
-            related_context_tables=(
-                related_context_tables.materialize(members)
-                if related_context_tables is not None
-                else None
-            ),
-            related_query_tables=(
-                related_query_tables.materialize(members)
-                if related_query_tables is not None
-                else None
-            ),
+            related_context_tables=None,
+            related_query_tables=None,
             cache=cache,
             generator=generator,
             **kwargs,

@@ -25,133 +25,106 @@ from sdm.processing import (
 
 
 class _TabICLv2EnsemblePlan:
-    """Reproduce TabICL's paired normalization and permutation plan."""
+    """Build the coupled member permutations required by TabICLv2."""
 
     def __init__(self) -> None:
         self._num_members = 0
         self._seed = 0
-        self._canonical_classes: tuple[object, ...] | None = None
+        self._classes: tuple[object, ...] | None = None
         self._num_features: int | None = None
         self._feature_permutations: tuple[tuple[int, ...], ...] = ()
         self._class_permutations: tuple[tuple[int, ...] | None, ...] = ()
 
     def initialize(
         self,
-        *,
         target: TableTensor,
         num_members: int,
         seed: int,
     ) -> None:
         self._num_members = num_members
         self._seed = seed
-        if target.categorical.size(-1) == 1:
-            aligned = AlignCategories(sort_by="value").fit_transform(target)
-            self._canonical_classes = tuple(
-                aligned.categorical.categories[0].tolist()
+        self._classes = (
+            tuple(
+                AlignCategories(sort_by="value")
+                .fit_transform(target)
+                .categorical.categories[0]
+                .tolist()
             )
-        else:
-            self._canonical_classes = None
+            if target.categorical.size(-1) == 1
+            else None
+        )
         self._num_features = None
-        self._feature_permutations = ()
-        self._class_permutations = ()
-
-    def canonical_classes(self) -> tuple[object, ...] | None:
-        return self._canonical_classes
 
     @staticmethod
     def _latin_permutations(
         num_features: int,
-        *,
         seed: int,
     ) -> list[list[int]]:
         rng = random.Random(seed)
 
-        def reduced_latin_square(symbols: list[int]) -> list[list[int]]:
+        def square(symbols: list[int]) -> list[list[int]]:
             if len(symbols) == 1:
                 return [symbols]
             symbol = rng.choice(symbols)
             symbols.remove(symbol)
-            square = reduced_latin_square(symbols)
-            square.append(square[0].copy())
-            for index in range(len(square)):
-                square[index].insert(index, symbol)
-            return square
+            rows = square(symbols)
+            rows.append(rows[0].copy())
+            for index, row in enumerate(rows):
+                row.insert(index, symbol)
+            return rows
 
-        square = reduced_latin_square(list(range(num_features)))
-        rng.shuffle(square)
-        transposed = list(zip(*square))
-        rng.shuffle(transposed)
-        return [list(permutation) for permutation in transposed]
+        rows = square(list(range(num_features)))
+        rng.shuffle(rows)
+        columns = list(zip(*rows))
+        rng.shuffle(columns)
+        return [list(permutation) for permutation in columns]
 
     def _build(self, num_features: int) -> None:
         if self._num_features == num_features:
             return
-        if num_features < 1:
-            raise ValueError(
-                "TabICLv2 requires at least one non-constant feature."
-            )
-
         if self._num_members == 1:
-            feature_patterns = [list(range(num_features))]
+            features = [list(range(num_features))]
         elif num_features <= 4000:
-            feature_patterns = self._latin_permutations(
-                num_features,
-                seed=self._seed,
-            )
+            features = self._latin_permutations(num_features, self._seed)
         else:
             rng = random.Random(self._seed)
             indices = list(range(num_features))
-            feature_patterns = [
+            features = [
                 rng.sample(indices, num_features)
                 for _ in range(self._num_members)
             ]
 
-        if self._canonical_classes is None:
-            class_patterns: list[list[int] | None] = [None]
+        if self._classes is None:
+            classes: list[list[int] | None] = [None]
         else:
-            num_classes = len(self._canonical_classes)
-            if self._num_members == 1:
-                class_patterns = [list(range(num_classes))]
-            else:
-                indices = list(range(num_classes))
-                class_patterns = [
+            indices = list(range(len(self._classes)))
+            classes = (
+                [indices]
+                if self._num_members == 1
+                else [
                     indices[-offset:] + indices[:-offset]
-                    for offset in range(num_classes)
+                    for offset in range(len(indices))
                 ]
-
-        paired = list(itertools.product(feature_patterns, class_patterns))
-        random.Random(self._seed).shuffle(paired)
-        member_pairs = [pair for pair in paired for _ in ("none", "power")][
-            : self._num_members
-        ]
-        if len(member_pairs) != self._num_members:
-            raise ValueError(
-                "The requested TabICLv2 ensemble has more members than "
-                "the reference permutation plan can produce."
             )
 
+        pairs = list(itertools.product(features, classes))
+        random.Random(self._seed).shuffle(pairs)
+        members = [pair for pair in pairs for _ in range(2)][
+            : self._num_members
+        ]
         self._num_features = num_features
         self._feature_permutations = tuple(
-            tuple(feature) for feature, _ in member_pairs
+            tuple(feature) for feature, _ in members
         )
         self._class_permutations = tuple(
-            None if classes is None else tuple(classes)
-            for _, classes in member_pairs
+            None if values is None else tuple(values) for _, values in members
         )
 
     def column_permutations(
         self,
-        *,
         member_ids: tuple[int, ...],
         num_columns: tuple[int, ...],
-        table_scope: str,
-    ) -> tuple[tuple[int, ...], ...] | None:
-        if table_scope != "features":
-            return None
-        if len(set(num_columns)) != 1:
-            raise ValueError(
-                "TabICLv2's reference plan requires one feature width."
-            )
+    ) -> tuple[tuple[int, ...], ...]:
         self._build(num_columns[0])
         return tuple(
             self._feature_permutations[member] for member in member_ids
@@ -159,22 +132,11 @@ class _TabICLv2EnsemblePlan:
 
     def category_permutations(
         self,
-        *,
         member_ids: tuple[int, ...],
         category_counts: tuple[tuple[int, ...], ...],
-        table_scope: str,
-    ) -> tuple[tuple[tuple[int, ...], ...], ...] | None:
-        if table_scope != "target" or self._canonical_classes is None:
-            return None
-        num_classes = len(self._canonical_classes)
-        if any(counts != (num_classes,) for counts in category_counts):
-            raise ValueError(
-                "TabICLv2's reference plan requires one target category."
-            )
-        if self._num_features is None:
-            raise RuntimeError(
-                "Feature planning must run before target permutation planning."
-            )
+    ) -> tuple[tuple[tuple[int, ...], ...], ...]:
+        del category_counts
+        assert self._num_features is not None
         permutations = []
         for member in member_ids:
             permutation = self._class_permutations[member]
@@ -184,6 +146,7 @@ class _TabICLv2EnsemblePlan:
 
 
 def default_recipe(*, reference_ensemble: bool = True) -> Recipe:  # noqa: D103
+    plan = _TabICLv2EnsemblePlan() if reference_ensemble else None
     recipe = Recipe(
         features=[
             StypeDispatch(
@@ -207,7 +170,12 @@ def default_recipe(*, reference_ensemble: bool = True) -> Recipe:  # noqa: D103
                     ),
                     ClipSigma(threshold=4.0),
                     ShuffleColumns(
-                        method="latin" if reference_ensemble else "shift"
+                        method="latin" if reference_ensemble else "shift",
+                        _ensemble_permutations=(
+                            plan.column_permutations
+                            if plan is not None
+                            else None
+                        ),
                     ),
                 ],
             ),
@@ -216,7 +184,14 @@ def default_recipe(*, reference_ensemble: bool = True) -> Recipe:  # noqa: D103
             StypeDispatch(
                 categorical=[
                     AlignCategories(sort_by="value"),
-                    ShuffleCategories(method="shift"),
+                    ShuffleCategories(
+                        method="shift",
+                        _ensemble_permutations=(
+                            plan.category_permutations
+                            if plan is not None
+                            else None
+                        ),
+                    ),
                 ],
                 numerical=Standardize(),
             ),
@@ -230,6 +205,5 @@ def default_recipe(*, reference_ensemble: bool = True) -> Recipe:  # noqa: D103
             ),
         ],
     )
-    if reference_ensemble:
-        recipe._ensemble_plan = _TabICLv2EnsemblePlan()
+    recipe._ensemble_plan = plan
     return recipe

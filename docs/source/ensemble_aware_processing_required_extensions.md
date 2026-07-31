@@ -2,11 +2,16 @@
 
 The pre-implementation [design](ensemble_aware_processing_design.md) and [problem statement](ensemble_aware_processing_problem.md) remain the normative specification and are not changed to match the implementation. The following narrow extensions are required by reference parity or the public model contract.
 
+## Simplified Execution Contract
+
+- The generic architecture is limited to `EnsembleProcessor`, `EnsembleTable`, `EnsembleProcessorAdapter`, and `VariableSchemaBatchMixin`.
+- `EnsembleFitContext`, a generic planning protocol, capability flags, and duplicate internal Processor implementations are not required. `EnsembleTable` retains stable logical member ids while selected branches are processed, and ensemble methods receive the normal optional `torch.Generator` directly.
+- Recipe returns one existing `RelatedTables` value per member instead of adding an ensemble-specific related-table container. Each logical table still owns a separate fitted Processor tree.
+
 ## TabICLv2 Paired Member Plan
 
-- The generic contract derives stochastic decisions from member, table-scope, and Processor-path streams.
 - TabICLv2 additionally pairs normalization, feature permutations, and class permutations in one reference ensemble plan. Independent Processor streams cannot reproduce those cross-path pairings.
-- A private TabICLv2 plan therefore supplies the paired permutations through EnsembleFitContext. It is not public Recipe metadata, and generic Choice and shuffle semantics remain unchanged.
+- A private TabICLv2 plan therefore supplies paired permutations directly to the existing shuffle Processors. It is the only model-specific planning exception and does not add a generic execution abstraction.
 
 ## TabICLv2 Positional Model Materialization
 

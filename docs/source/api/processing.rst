@@ -20,9 +20,9 @@ Ensemble Execution API
    :nosignatures:
 
    ~sdm.processing.ensemble.EnsembleProcessor
+   ~sdm.processing.ensemble.EnsembleProcessorAdapter
    ~sdm.processing.ensemble.VariableSchemaBatchMixin
-   ~sdm.processing.ensemble.EnsembleFitContext
-   ~sdm.processing.ensemble_table.EnsembleRelatedTables
+   ~sdm.tensor.ensemble.EnsembleTable
 
 Common Processors
 -----------------

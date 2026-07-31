@@ -5,9 +5,8 @@ import torch
 
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.ensemble import (
-    EnsembleFitContext,
     EnsembleProcessor,
-    as_ensemble_processor,
+    EnsembleProcessorAdapter,
 )
 from sdm.stype import Stype
 from sdm.tensor import EnsembleTable, TableTensor
@@ -18,6 +17,7 @@ def _merge_outputs(
     selections: Sequence[int],
     positions: Mapping[int, Sequence[int]],
     outputs: Mapping[int, EnsembleTable],
+    member_ids: Sequence[int],
 ) -> EnsembleTable:
     local_positions = {
         option: {position: local for local, position in enumerate(selected)}
@@ -42,6 +42,7 @@ def _merge_outputs(
     return EnsembleTable.pack(
         representations=representations,
         member_representation_ids=member_representation_ids,
+        member_ids=member_ids,
     )
 
 
@@ -126,29 +127,33 @@ class Choice(EnsembleProcessor, InvertibleMixin):
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         r"""Fit each selected option once for its member subset."""
         for index, option in enumerate(tuple(self.options)):
-            self.options[index] = as_ensemble_processor(
+            self.options[index] = EnsembleProcessorAdapter.adapt(
                 cast(Processor, option)
             )
 
         if self.selection == "round_robin":
             self._selections = tuple(
                 member_id % len(self.options)
-                for member_id in context.member_ids
+                for member_id in table._member_ids
             )
         else:
+            random_device = (
+                table.device if generator is None else generator.device
+            )
             self._selections = tuple(
                 int(
                     torch.randint(
                         len(self.options),
                         (1,),
-                        generator=context.generator_for(member_id),
+                        generator=generator,
+                        device=random_device,
                     ).item()
                 )
-                for member_id in context.member_ids
+                for _ in table._member_ids
             )
         self._positions = {
             option: tuple(
@@ -164,9 +169,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
                 self.options[option],
             ).fit_transform_ensemble(
                 table._select_members(positions),
-                context=context._select_members(positions).child(
-                    f"option{option}"
-                ),
+                generator=generator,
             )
             for option, positions in self._positions.items()
         }
@@ -174,6 +177,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             selections=self._selections,
             positions=self._positions,
             outputs=outputs,
+            member_ids=table._member_ids,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -189,6 +193,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             selections=self._selections,
             positions=self._positions,
             outputs=outputs,
+            member_ids=table._member_ids,
         )
 
     def inverse_transform_ensemble(
@@ -207,6 +212,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             selections=self._selections,
             positions=self._positions,
             outputs=outputs,
+            member_ids=table._member_ids,
         )
 
     def get_extra_state(self) -> int | None:

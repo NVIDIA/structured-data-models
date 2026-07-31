@@ -19,7 +19,6 @@ from sdm.processing import (
     Choice,
     Clip,
     DropConstantColumns,
-    EnsembleRelatedTables,
     Identity,
     Recipe,
     ReduceEstimators,
@@ -71,8 +70,8 @@ class _VectorizedFirstFeatureModel(_FirstFeatureModel):
         x_context: EnsembleTable | None,
         y_context: EnsembleTable | None,
         x_query: EnsembleTable | None,
-        related_context_tables: EnsembleRelatedTables | None,
-        related_query_tables: EnsembleRelatedTables | None,
+        related_context_tables: tuple[RelatedTables, ...] | None,
+        related_query_tables: tuple[RelatedTables, ...] | None,
         cache: Cache | None,
         generator: torch.Generator | None,
         kwargs: dict[str, Any],
@@ -91,16 +90,8 @@ class _VectorizedFirstFeatureModel(_FirstFeatureModel):
             x_query=(
                 x_query.materialize(members) if x_query is not None else None
             ),
-            related_context_tables=(
-                related_context_tables.materialize(members)
-                if related_context_tables is not None
-                else None
-            ),
-            related_query_tables=(
-                related_query_tables.materialize(members)
-                if related_query_tables is not None
-                else None
-            ),
+            related_context_tables=None,
+            related_query_tables=None,
             cache=cache,
             generator=generator,
             **kwargs,

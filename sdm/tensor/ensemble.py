@@ -7,7 +7,51 @@ from typing import cast
 import torch
 from typing_extensions import Self
 
+from sdm.stype import Stype
+from sdm.tensor.categorical import CategoricalTensor
+from sdm.tensor.columnar import ColumnarTensor
+from sdm.tensor.string import StringTensor
 from sdm.tensor.table import TableTensor
+
+
+def _stack_tables(tables: Sequence[TableTensor]) -> TableTensor:
+    """Stack positional table data while retaining the first schema."""
+    tables = tuple(tables)
+    if len(tables) == 0:
+        raise ValueError("Expected at least one table to stack.")
+    reference = tables[0]
+    blocks: dict[Stype, torch.Tensor] = {}
+    for stype, block in reference.items():
+        if stype == Stype.categorical:
+            blocks[stype] = CategoricalTensor(
+                code=torch.stack(
+                    tuple(table.categorical.code for table in tables),
+                    dim=0,
+                ),
+                categories=reference.categorical.categories,
+            )
+        elif block.size(-1) > 0:
+            blocks[stype] = torch.stack(
+                tuple(table.blocks[stype] for table in tables),
+                dim=0,
+            )
+
+    return TableTensor(
+        size=(len(tables), *reference.size()[:-1]),
+        columns={
+            stype.value: columns
+            for stype, columns in reference.columns.items()
+        },
+        device=reference.device,
+        numerical=blocks.get(Stype.numerical),
+        categorical=cast(
+            CategoricalTensor | None,
+            blocks.get(Stype.categorical),
+        ),
+        datetime=blocks.get(Stype.datetime),
+        text=cast(StringTensor | None, blocks.get(Stype.text)),
+        id=cast(ColumnarTensor | None, blocks.get(Stype.id)),
+    )
 
 
 def _representation_key(table: TableTensor) -> tuple[object, ...]:
@@ -33,6 +77,7 @@ class EnsembleTable:
 
     _packed_representations: tuple[TableTensor, ...]
     _member_locations: tuple[tuple[int, int], ...]
+    _member_ids: tuple[int, ...]
 
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
         if num_members < 1:
@@ -47,18 +92,21 @@ class EnsembleTable:
             "_member_locations",
             ((0, 0),) * num_members,
         )
+        object.__setattr__(self, "_member_ids", tuple(range(num_members)))
 
     @classmethod
     def _from_packed_representations(
         cls,
         packed_representations: tuple[TableTensor, ...],
         member_locations: tuple[tuple[int, int], ...],
+        member_ids: tuple[int, ...],
     ) -> Self:
         table = cls.__new__(cls)
         object.__setattr__(
             table, "_packed_representations", packed_representations
         )
         object.__setattr__(table, "_member_locations", member_locations)
+        object.__setattr__(table, "_member_ids", member_ids)
         return table
 
     @classmethod
@@ -66,15 +114,20 @@ class EnsembleTable:
         cls,
         representations: Sequence[TableTensor],
         member_representation_ids: Sequence[int],
+        *,
+        member_ids: Sequence[int] | None = None,
     ) -> Self:
         r"""Pack representations by compatible metadata.
 
         Args:
             representations: Distinct results in provenance order.
             member_representation_ids: Representation index for every member.
+            member_ids: Stable logical ids for selected members.
         """
         representations = tuple(representations)
         member_representation_ids = tuple(member_representation_ids)
+        if member_ids is None:
+            member_ids = tuple(range(len(member_representation_ids)))
         if len(representations) == 0:
             raise ValueError("Expected at least one representation.")
         if len(member_representation_ids) == 0:
@@ -128,6 +181,7 @@ class EnsembleTable:
             member_locations=tuple(
                 input_locations[index] for index in member_representation_ids
             ),
+            member_ids=tuple(member_ids),
         )
 
     @property
@@ -163,7 +217,11 @@ class EnsembleTable:
                 locations[location] = len(representations)
                 representations.append(self.representation(member_id))
             member_representation_ids.append(locations[location])
-        return self.pack(representations, member_representation_ids)
+        return self.pack(
+            representations,
+            member_representation_ids,
+            member_ids=tuple(self._member_ids[index] for index in member_ids),
+        )
 
     def _replace_packed_representations(
         self,
@@ -182,6 +240,7 @@ class EnsembleTable:
         return self._from_packed_representations(
             packed_representations=packed_representations,
             member_locations=self._member_locations,
+            member_ids=self._member_ids,
         )
 
     def materialize(

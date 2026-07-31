@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Literal, cast
 
 import torch
@@ -8,10 +8,7 @@ from torch import Tensor
 
 from sdm import Stype
 from sdm.processing.base import InvertibleMixin
-from sdm.processing.ensemble import (
-    EnsembleFitContext,
-    EnsembleProcessor,
-)
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.tensor import EnsembleTable, TableTensor
 
 
@@ -35,11 +32,15 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
     def __init__(
         self,
         method: Literal["shift", "random", "latin"] = "shift",
+        *,
+        _ensemble_permutations: Callable[..., Sequence[Sequence[int]]]
+        | None = None,
     ) -> None:
         super().__init__()
         if method not in {"shift", "random", "latin"}:
             raise ValueError("method must be 'shift', 'random', or 'latin'")
         self.method = method
+        self._ensemble_permutations = _ensemble_permutations
         self.register_buffer(
             "permutation",
             torch.empty(0, dtype=torch.long),
@@ -79,68 +80,42 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         self._indices = tuple(permutation.tolist())
         self.permutation = permutation.to(device)
 
-    @staticmethod
-    def _set_permutation(
-        processor: ShuffleColumns,
-        table: TableTensor,
-        permutation: Sequence[int],
-    ) -> None:
-        permutation = tuple(permutation)
-        if sorted(permutation) != list(range(table.numerical.size(-1))):
-            raise ValueError(
-                "The ensemble plan returned an invalid column permutation."
-            )
-        processor.permutation = torch.tensor(
-            permutation,
-            dtype=torch.long,
-            device=table.device,
-        )
-        processor._indices = permutation
-        processor._fitted = True
-
     def fit_transform_ensemble(
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         r"""Fit member permutations and reuse proven-equal results."""
         planned = (
-            context._plan.column_permutations(
-                member_ids=context.member_ids,
-                num_columns=tuple(
+            self._ensemble_permutations(
+                table._member_ids,
+                tuple(
                     table.representation(position).numerical.size(-1)
                     for position in range(table.num_members)
                 ),
-                table_scope=context.table_scope,
             )
-            if context._plan is not None
+            if self._ensemble_permutations is not None
             else None
         )
-        if planned is not None and len(planned) != table.num_members:
-            raise ValueError(
-                "The ensemble plan must return one permutation per member."
-            )
-
         self.processors = torch.nn.ModuleList()
         representations: list[TableTensor] = []
         positions: list[int] = []
         member_to_processor: list[int] = []
         keys: dict[tuple[object, ...], int] = {}
-        for position, member_id in enumerate(context.member_ids):
+        for position, _ in enumerate(table._member_ids):
             before = table.representation(position)
             processor = self.__class__(method=self.method)
             if planned is None:
-                processor.fit(
-                    before,
-                    generator=context.generator_for(member_id),
-                )
+                processor.fit(before, generator=generator)
             else:
-                self._set_permutation(
-                    processor,
-                    before,
-                    planned[position],
+                processor._indices = tuple(planned[position])
+                processor.permutation = torch.tensor(
+                    processor._indices,
+                    dtype=torch.long,
+                    device=before.device,
                 )
+                processor._fitted = True
 
             key = (
                 table._member_locations[position],
@@ -160,6 +135,7 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=self._member_to_processor,
+            member_ids=table._member_ids,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -176,6 +152,7 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=self._member_to_processor,
+            member_ids=table._member_ids,
         )
 
     def inverse_transform_ensemble(
@@ -195,6 +172,7 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=tuple(range(table.num_members)),
+            member_ids=table._member_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

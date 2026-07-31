@@ -1,161 +1,17 @@
 from __future__ import annotations
 
 import copy
-import hashlib
-from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import cast
 
 import torch
 from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.ensemble_table import _stack_positional
 from sdm.tensor import EnsembleTable, TableTensor
 
 
-class _EnsemblePlan(Protocol):
-    def initialize(
-        self,
-        *,
-        target: TableTensor,
-        num_members: int,
-        seed: int,
-    ) -> None: ...
-
-    def column_permutations(
-        self,
-        *,
-        member_ids: tuple[int, ...],
-        num_columns: tuple[int, ...],
-        table_scope: str,
-    ) -> tuple[tuple[int, ...], ...] | None: ...
-
-    def category_permutations(
-        self,
-        *,
-        member_ids: tuple[int, ...],
-        category_counts: tuple[tuple[int, ...], ...],
-        table_scope: str,
-    ) -> tuple[tuple[tuple[int, ...], ...], ...] | None: ...
-
-    def canonical_classes(self) -> tuple[object, ...] | None: ...
-
-
-@dataclass(frozen=True)
-class EnsembleFitContext:
-    r"""Describe stable member identity and fit scope during execution.
-
-    Args:
-        member_ids: Global member ids aligned with the current input.
-        base_seed: Root seed for member-local random streams.
-        table_scope: Logical table fit scope.
-        processor_path: Stable path of the current processor.
-    """
-
-    member_ids: tuple[int, ...]
-    base_seed: int
-    table_scope: str
-    processor_path: tuple[str, ...] = ()
-    _plan: _EnsemblePlan | None = None
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        num_members: int,
-        table_scope: str,
-        generator: torch.Generator | None = None,
-        base_seed: int | None = None,
-        _plan: _EnsemblePlan | None = None,
-    ) -> Self:
-        r"""Create a root fit context.
-
-        Args:
-            num_members: Positive number of ensemble members.
-            table_scope: Logical table fit scope.
-            generator: Optional user-controlled root generator.
-            base_seed: Optional precomputed root seed.
-        """
-        if num_members < 1:
-            raise ValueError("'num_members' needs to be positive.")
-        if base_seed is not None and generator is not None:
-            raise ValueError("Provide either 'generator' or 'base_seed'.")
-        if base_seed is None and generator is None:
-            base_seed = int(
-                torch.empty((), dtype=torch.int64).random_().item()
-            )
-        elif base_seed is None:
-            assert generator is not None
-            base_seed = generator.initial_seed()
-        return cls(
-            member_ids=tuple(range(num_members)),
-            base_seed=base_seed,
-            table_scope=table_scope,
-            _plan=_plan,
-        )
-
-    def child(self, name: str) -> Self:
-        r"""Return a context for a child processor.
-
-        Args:
-            name: Stable child path segment.
-        """
-        return self.__class__(
-            member_ids=self.member_ids,
-            base_seed=self.base_seed,
-            table_scope=self.table_scope,
-            processor_path=(*self.processor_path, name),
-            _plan=self._plan,
-        )
-
-    def _select_members(self, positions: Sequence[int]) -> Self:
-        r"""Select local member positions.
-
-        Args:
-            positions: Positions relative to the current input.
-        """
-        return self.__class__(
-            member_ids=tuple(
-                self.member_ids[position] for position in positions
-            ),
-            base_seed=self.base_seed,
-            table_scope=self.table_scope,
-            processor_path=self.processor_path,
-            _plan=self._plan,
-        )
-
-    def generator_for(
-        self,
-        member_id: int,
-        *,
-        device: torch.device | str = "cpu",
-    ) -> torch.Generator:
-        r"""Create a stable generator for one member and processor path.
-
-        Args:
-            member_id: Global member id.
-            device: Generator device.
-        """
-        payload = repr(
-            (
-                self.base_seed,
-                member_id,
-                self.table_scope,
-                self.processor_path,
-            )
-        ).encode()
-        seed = int.from_bytes(
-            hashlib.blake2b(payload, digest_size=8).digest(),
-            byteorder="little",
-        )
-        generator = torch.Generator(device=device)
-        generator.manual_seed(seed)
-        return generator
-
-
 class VariableSchemaBatchMixin:
-    r"""Define a batched path with potentially different output schemas."""
+    r"""Process a leading batch whose members may produce different schemas."""
 
     def fit_transform_batch(
         self,
@@ -163,12 +19,7 @@ class VariableSchemaBatchMixin:
         *,
         generator: torch.Generator | None = None,
     ) -> tuple[TableTensor, ...]:
-        r"""Fit and transform representations from ``table`` independently.
-
-        Args:
-            table: Variant batch with shape ``[V, ..., R, C]``.
-            generator: Optional pseudorandom number generator.
-        """
+        r"""Fit and transform each leading table position."""
         self.fit_batch(table, generator=generator)
         return self.transform_batch(table)
 
@@ -178,38 +29,19 @@ class VariableSchemaBatchMixin:
         *,
         generator: torch.Generator | None = None,
     ) -> Self:
-        r"""Fit a variable-schema variant batch.
-
-        Args:
-            table: Variant batch with shape ``[V, ..., R, C]``.
-            generator: Optional pseudorandom number generator.
-        """
+        r"""Fit state for each leading table position."""
         raise NotImplementedError
 
     def transform_batch(
         self,
         table: TableTensor,
     ) -> tuple[TableTensor, ...]:
-        r"""Transform a variant batch into one table per variant.
-
-        Args:
-            table: Variant batch with shape ``[V, ..., R, C]``.
-        """
+        r"""Transform each leading table position."""
         raise NotImplementedError
 
 
 class EnsembleProcessor(Processor):
-    r"""Base processor for provenance-aware ensemble execution."""
-
-    @staticmethod
-    def _direct_context(
-        generator: torch.Generator | None,
-    ) -> EnsembleFitContext:
-        return EnsembleFitContext.create(
-            num_members=1,
-            table_scope="direct",
-            generator=generator,
-        )
+    r"""A Processor whose semantics depend on logical ensemble members."""
 
     def _fit(
         self,
@@ -219,16 +51,13 @@ class EnsembleProcessor(Processor):
     ) -> None:
         self.fit_transform_ensemble(
             EnsembleTable(table, num_members=1),
-            context=self._direct_context(generator),
+            generator=generator,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         ensemble = EnsembleTable(table, num_members=1)
         if not self.requires_fit:
-            return self.fit_transform_ensemble(
-                ensemble,
-                context=self._direct_context(None),
-            ).representation(0)
+            return self.fit_transform_ensemble(ensemble).representation(0)
         return self.transform_ensemble(ensemble).representation(0)
 
     def _fit_transform(
@@ -244,64 +73,41 @@ class EnsembleProcessor(Processor):
             return super()._fit_transform(table, generator=generator)
         return self.fit_transform_ensemble(
             EnsembleTable(table, num_members=1),
-            context=self._direct_context(generator),
+            generator=generator,
         ).representation(0)
-
-    def fit_ensemble(
-        self,
-        table: EnsembleTable,
-        *,
-        context: EnsembleFitContext,
-    ) -> Self:
-        r"""Fit an ensemble table.
-
-        Args:
-            table: Ensemble fit input.
-            context: Stable fit scope and member identity.
-        """
-        self.fit_transform_ensemble(table, context=context)
-        if self.requires_fit:
-            self._fitted = True
-        return self
 
     def fit_transform_ensemble(
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        r"""Fit and transform an ensemble table.
-
-        Args:
-            table: Ensemble fit input.
-            context: Stable fit scope and member identity.
-        """
+        r"""Fit and transform an ensemble table."""
         raise NotImplementedError
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        r"""Transform an ensemble table with fitted state.
-
-        Args:
-            table: Ensemble transform input.
-        """
+        r"""Transform an ensemble table with fitted state."""
         raise NotImplementedError
 
     def inverse_transform_ensemble(
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
-        r"""Inverse-transform an ensemble table.
-
-        Args:
-            table: Member-aligned transformed table.
-        """
+        r"""Inverse-transform an ensemble table."""
         raise AttributeError(
             f"{self.__class__.__name__!r} object has no attribute "
             "'inverse_transform_ensemble'"
         )
 
 
-class _EnsembleProcessorAdapter(EnsembleProcessor):
+class EnsembleProcessorAdapter(EnsembleProcessor):
+    r"""Adapt an ordinary Processor to packed ensemble representations.
+
+    One fitted Processor copy owns each packed input representation. Processors
+    implementing :class:`VariableSchemaBatchMixin` may split that
+    representation into multiple schemas.
+    """
+
     def __init__(self, processor: Processor) -> None:
         super().__init__()
         self.template = processor
@@ -309,12 +115,15 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
         self.processors = torch.nn.ModuleList()
         self._fitted_member_locations: tuple[tuple[int, int], ...] = ()
         self._fitted_packed_sizes: tuple[int, ...] = ()
-        self._variable_schema = isinstance(
-            processor,
-            VariableSchemaBatchMixin,
-        )
 
-    def _validate_row_count(
+    @classmethod
+    def adapt(cls, processor: Processor) -> EnsembleProcessor:
+        r"""Return `processor` or an adapter for an ordinary Processor."""
+        if isinstance(processor, EnsembleProcessor):
+            return processor
+        return cls(processor)
+
+    def _check_rows(
         self,
         before: TableTensor,
         after: TableTensor,
@@ -325,136 +134,128 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
                 "dimension and is not supported in ensemble Recipes."
             )
 
-    def fit_transform_ensemble(
+    def fit_transform_ensemble(  # noqa: D102
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        del context
         self.processors = torch.nn.ModuleList()
         self._fitted_member_locations = table._member_locations
         self._fitted_packed_sizes = tuple(
             group.size(0) for group in table.iter_packed_representations()
         )
 
-        if self._variable_schema:
-            return self._fit_transform_variable_schema(table)
+        if not isinstance(self.template, VariableSchemaBatchMixin):
+            outputs = []
+            for group in table.iter_packed_representations():
+                processor = copy.deepcopy(self.template)
+                output = processor.fit_transform(
+                    group,
+                    generator=generator,
+                )
+                self._check_rows(group, output)
+                self.processors.append(processor)
+                outputs.append(output)
+            return table._replace_packed_representations(tuple(outputs))
 
-        groups: list[TableTensor] = []
-        for group in table.iter_packed_representations():
-            processor = copy.deepcopy(self.template)
-            after = processor.fit_transform(group)
-            self._validate_row_count(group, after)
-            self.processors.append(processor)
-            groups.append(after)
-        return table._replace_packed_representations(tuple(groups))
-
-    def _fit_transform_variable_schema(
-        self,
-        table: EnsembleTable,
-    ) -> EnsembleTable:
         representations: list[TableTensor] = []
         offsets: list[int] = []
-        offset = 0
         for group in table.iter_packed_representations():
             processor = copy.deepcopy(self.template)
-            assert isinstance(processor, VariableSchemaBatchMixin)
-            outputs = processor.fit_transform_batch(group)
+            offsets.append(len(representations))
+            outputs = cast(
+                VariableSchemaBatchMixin,
+                processor,
+            ).fit_transform_batch(
+                group,
+                generator=generator,
+            )
             if len(outputs) != group.size(0):
                 raise RuntimeError(
-                    f"{processor.__class__.__name__!r}.fit_transform_batch() "
-                    "must return one table per input variant."
+                    f"{processor.__class__.__name__!r} must return one "
+                    "table per leading input position."
                 )
-            for index, after in enumerate(outputs):
-                before = group[index]
-                self._validate_row_count(before, after)
-            offsets.append(offset)
-            offset += len(outputs)
+            for before, output in zip(group, outputs, strict=True):
+                self._check_rows(before, output)
+            self.processors.append(processor)
             representations.extend(outputs)
-            self.processors.append(cast(Processor, processor))
 
-        member_to_input = tuple(
-            offsets[group] + variant
-            for group, variant in table._member_locations
-        )
         return EnsembleTable.pack(
-            representations=representations,
-            member_representation_ids=member_to_input,
+            representations,
+            tuple(
+                offsets[group] + variant
+                for group, variant in table._member_locations
+            ),
+            member_ids=table._member_ids,
         )
 
-    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        if len(tuple(table.iter_packed_representations())) != len(
-            self.processors
-        ):
-            raise ValueError(
-                "Expected transform input to preserve fitted ensemble "
-                "group provenance."
-            )
-        if self._variable_schema:
-            representations: list[TableTensor] = []
-            offsets: list[int] = []
-            offset = 0
+    def transform_ensemble(  # noqa: D102
+        self, table: EnsembleTable
+    ) -> EnsembleTable:
+        if not isinstance(self.template, VariableSchemaBatchMixin):
+            outputs = []
             for group, processor in zip(
-                table.iter_packed_representations(), self.processors
+                table.iter_packed_representations(),
+                self.processors,
+                strict=True,
             ):
-                assert isinstance(processor, VariableSchemaBatchMixin)
-                outputs = processor.transform_batch(group)
-                if len(outputs) != group.size(0):
-                    raise RuntimeError(
-                        f"{processor.__class__.__name__!r}."
-                        "transform_batch() must return one table per input "
-                        "variant."
-                    )
-                for index, after in enumerate(outputs):
-                    self._validate_row_count(group[index], after)
-                offsets.append(offset)
-                offset += len(outputs)
-                representations.extend(outputs)
-            return EnsembleTable.pack(
-                representations=representations,
-                member_representation_ids=tuple(
-                    offsets[group] + variant
-                    for group, variant in table._member_locations
-                ),
-            )
+                output = cast(Processor, processor).transform(group)
+                self._check_rows(group, output)
+                outputs.append(output)
+            return table._replace_packed_representations(tuple(outputs))
 
-        groups: list[TableTensor] = []
+        representations: list[TableTensor] = []
+        offsets: list[int] = []
         for group, processor in zip(
-            table.iter_packed_representations(), self.processors
+            table.iter_packed_representations(),
+            self.processors,
+            strict=True,
         ):
-            after = cast(Processor, processor).transform(group)
-            self._validate_row_count(group, after)
-            groups.append(after)
-        return table._replace_packed_representations(tuple(groups))
+            offsets.append(len(representations))
+            outputs = cast(
+                VariableSchemaBatchMixin,
+                processor,
+            ).transform_batch(group)
+            if len(outputs) != group.size(0):
+                raise RuntimeError(
+                    f"{processor.__class__.__name__!r} must return one "
+                    "table per leading input position."
+                )
+            for before, output in zip(group, outputs, strict=True):
+                self._check_rows(before, output)
+            representations.extend(outputs)
 
-    def inverse_transform_ensemble(
+        return EnsembleTable.pack(
+            representations,
+            tuple(
+                offsets[group] + variant
+                for group, variant in table._member_locations
+            ),
+            member_ids=table._member_ids,
+        )
+
+    def inverse_transform_ensemble(  # noqa: D102
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
-        if self._variable_schema:
+        if isinstance(self.template, VariableSchemaBatchMixin):
             raise TypeError("Variable-schema processors are not invertible.")
 
-        if table.num_members != len(self._fitted_member_locations):
-            raise ValueError(
-                "Expected one inverse-transform input per fitted member."
-            )
         if self._fitted_packed_sizes == (1,):
             processor = self.processors[0]
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
                     f"{processor.__class__.__name__!r} is not invertible."
                 )
-            groups = []
-            for group in table.iter_packed_representations():
-                restored = processor.inverse_transform(group)
-                self._validate_row_count(group, restored)
-                groups.append(restored)
-            return table._replace_packed_representations(tuple(groups))
+            outputs = tuple(
+                processor.inverse_transform(group)
+                for group in table.iter_packed_representations()
+            )
+            return table._replace_packed_representations(outputs)
 
         members_by_representation = [
-            [[] for _ in range(group_size)]
-            for group_size in self._fitted_packed_sizes
+            [[] for _ in range(size)] for size in self._fitted_packed_sizes
         ]
         for member, (group, variant) in enumerate(
             self._fitted_member_locations
@@ -466,6 +267,7 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
         for processor, group_members in zip(
             self.processors,
             members_by_representation,
+            strict=True,
         ):
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
@@ -474,40 +276,31 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
             rounds = max(len(members) for members in group_members)
             round_tables = []
             for round_index in range(rounds):
-                # ``[round, fitted variant, ..., row, column]`` lets the
-                # vectorized fitted state broadcast over repeated members.
-                round_tables.append(
-                    _stack_positional(
-                        tuple(
-                            table.representation(
-                                members[min(round_index, len(members) - 1)]
-                            )
-                            for members in group_members
-                        )
+                variants = tuple(
+                    table.representation(
+                        members[min(round_index, len(members) - 1)]
                     )
+                    for members in group_members
                 )
-            batch = _stack_positional(round_tables)
+                round_tables.append(
+                    EnsembleTable.pack(
+                        variants,
+                        tuple(range(len(variants))),
+                    ).materialize()
+                )
+            batch = EnsembleTable.pack(
+                round_tables,
+                tuple(range(len(round_tables))),
+            ).materialize()
             restored = processor.inverse_transform(batch)
-            self._validate_row_count(batch, restored)
-            for fitted_representation, members in enumerate(group_members):
+            self._check_rows(batch, restored)
+            for variant, members in enumerate(group_members):
                 for round_index, member in enumerate(members):
                     member_representation_ids[member] = len(representations)
-                    representations.append(
-                        restored[round_index, fitted_representation]
-                    )
+                    representations.append(restored[round_index, variant])
 
         return EnsembleTable.pack(
-            representations=representations,
-            member_representation_ids=member_representation_ids,
+            representations,
+            member_representation_ids,
+            member_ids=table._member_ids,
         )
-
-
-def as_ensemble_processor(processor: Processor) -> EnsembleProcessor:
-    r"""Return an ensemble Processor, adapting a normal leaf if needed.
-
-    Args:
-        processor: Processor to normalize.
-    """
-    if isinstance(processor, EnsembleProcessor):
-        return processor
-    return _EnsembleProcessorAdapter(processor)

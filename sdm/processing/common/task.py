@@ -4,9 +4,8 @@ import torch
 
 from sdm.processing.base import Processor
 from sdm.processing.ensemble import (
-    EnsembleFitContext,
     EnsembleProcessor,
-    as_ensemble_processor,
+    EnsembleProcessorAdapter,
 )
 from sdm.stype import Stype
 from sdm.tensor import EnsembleTable, TableTensor
@@ -125,7 +124,7 @@ class TaskDispatch(EnsembleProcessor):
     def _ensemble_route(self) -> EnsembleProcessor:
         if self._task is None:
             raise RuntimeError("TaskDispatch has no resolved task.")
-        route = as_ensemble_processor(
+        route = EnsembleProcessorAdapter.adapt(
             cast(Processor, self.processors[self._task])
         )
         self.processors[self._task] = route
@@ -135,12 +134,12 @@ class TaskDispatch(EnsembleProcessor):
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         r"""Fit and transform the resolved task route."""
         return self._ensemble_route().fit_transform_ensemble(
             table,
-            context=context.child(self._task or "task"),
+            generator=generator,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:

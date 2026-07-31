@@ -7,9 +7,8 @@ from typing_extensions import Self
 from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.ensemble import (
-    EnsembleFitContext,
     EnsembleProcessor,
-    as_ensemble_processor,
+    EnsembleProcessorAdapter,
 )
 from sdm.tensor import EnsembleTable, TableTensor
 
@@ -89,17 +88,19 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         r"""Fit and transform all children in Recipe order."""
         for name, child in tuple(self._modules.items()):
-            self._modules[name] = as_ensemble_processor(cast(Processor, child))
+            self._modules[name] = EnsembleProcessorAdapter.adapt(
+                cast(Processor, child)
+            )
 
         out = table
-        for index, child in enumerate(self):
+        for child in self:
             out = cast(EnsembleProcessor, child).fit_transform_ensemble(
                 out,
-                context=context.child(str(index)),
+                generator=generator,
             )
         return out
 

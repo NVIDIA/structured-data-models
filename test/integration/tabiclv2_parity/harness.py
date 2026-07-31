@@ -162,11 +162,11 @@ def assert_preprocessing_parity(task: Task) -> tuple[int, ...]:
     """Compare all eight member inputs at their first semantic divergence."""
     require_reference()
     # These optional packages are installed only for strict parity runs.
-    from sklearn.preprocessing import (  # noqa: PLC0415  # ty: ignore[unresolved-import]
+    from sklearn.preprocessing import (  # noqa: PLC0415
         LabelEncoder,
         StandardScaler,
     )
-    from tabicl.sklearn.preprocessing import (  # noqa: PLC0415  # ty: ignore[unresolved-import]
+    from tabicl.sklearn.preprocessing import (  # noqa: PLC0415
         EnsembleGenerator,
     )
 

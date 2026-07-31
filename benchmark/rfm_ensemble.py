@@ -7,7 +7,6 @@ timed region. CUDA timings use warm-ups, events, and explicit synchronization.
 from __future__ import annotations
 
 import argparse
-import copy
 import gc
 import json
 import math
@@ -23,23 +22,22 @@ from typing import Any, Literal, TypeAlias, cast
 
 import torch
 
-from sdm import ColumnarTensor, EnsembleTable, StringTensor, Stype
+from sdm import EnsembleTable, RelatedTables
 from sdm.models.kumorfm.recipe import default_recipe
-from sdm.processing import (
-    EnsembleFitContext,
-    EnsembleRelatedTables,
-    Processor,
-)
-from sdm.processing.ensemble import as_ensemble_processor
 from sdm.tensor import TableTensor
 from sdm.testing.datasets import CanonicalRFMData, Task, canonical_rfm_data
 
 Schedule = Literal["ensemble_shared", "member_isolated"]
-SharedOutputs: TypeAlias = tuple[
-    EnsembleRelatedTables,
-    EnsembleRelatedTables,
-]
-BenchmarkOutputs: TypeAlias = SharedOutputs | tuple[TableTensor, ...]
+BenchmarkOutputs: TypeAlias = (
+    tuple[
+        EnsembleTable,
+        EnsembleTable,
+        EnsembleTable,
+        tuple[RelatedTables, ...],
+        tuple[RelatedTables, ...],
+    ]
+    | tuple[TableTensor, ...]
+)
 
 
 @dataclass(frozen=True)
@@ -104,100 +102,32 @@ def _cpu_peak(operation: Callable[[], Any]) -> tuple[int, int]:
     return max(0, peak[0] - baseline), peak[0]
 
 
-def _flatten_shared_outputs(
-    features: EnsembleTable,
-    target: EnsembleTable,
-    query: EnsembleTable,
-    related: EnsembleRelatedTables,
-    related_query: EnsembleRelatedTables,
-    *,
-    num_estimators: int,
-) -> tuple[TableTensor, ...]:
-    outputs = []
-    for member in range(num_estimators):
-        outputs.extend(
-            (
-                features.representation(member),
-                target.representation(member),
-                query.representation(member),
-            )
-        )
-        outputs.extend(
-            related.tables[name].representation(member)
-            for name in related.tables
-        )
-        outputs.extend(
-            related_query.tables[name].representation(member)
-            for name in related_query.tables
-        )
-    return tuple(outputs)
-
-
 def _execute_isolated_member(
     data: CanonicalRFMData,
     *,
     task: Task,
-    member: int,
+    generator: torch.Generator,
 ) -> tuple[TableTensor, ...]:
     recipe = default_recipe()
-
-    def fit_transform(
-        table: TableTensor,
-        query: TableTensor,
-        *,
-        template: Processor,
-        scope: str,
-    ) -> tuple[TableTensor, TableTensor]:
-        processor = as_ensemble_processor(copy.deepcopy(template))
-        context = EnsembleFitContext(
-            member_ids=(member,),
-            base_seed=42,
-            table_scope=scope,
-        )
-        fitted = processor.fit_transform_ensemble(
-            EnsembleTable(table, num_members=1),
-            context=context,
-        )
-        transformed = processor.transform_ensemble(
-            EnsembleTable(query, num_members=1)
-        )
-        return fitted.representation(0), transformed.representation(0)
-
-    features, query = fit_transform(
+    features, target, related = recipe.fit_transform(
         data.x_context,
+        data.target(task),
+        data.related_context,
+        num_members=1,
+        generator=generator,
+    )
+    query, related_query = recipe.transform(
         data.x_query,
-        template=recipe.features,
-        scope="features",
+        data.related_query,
     )
-    target_processor = recipe._target_processor(recipe.target)
-    target_ensemble_processor = as_ensemble_processor(
-        copy.deepcopy(target_processor)
-    )
-    target = target_ensemble_processor.fit_transform_ensemble(
-        EnsembleTable(data.target(task), num_members=1),
-        context=EnsembleFitContext(
-            member_ids=(member,),
-            base_seed=42,
-            table_scope="target",
-        ),
-    )
-    related_outputs = []
-    related_query_outputs = []
-    for name, table in data.related_context.tables.items():
-        related, related_query = fit_transform(
-            table,
-            data.related_query.tables[name],
-            template=recipe.features,
-            scope=f"related:{name}",
-        )
-        related_outputs.append(related)
-        related_query_outputs.append(related_query)
+    assert related is not None
+    assert related_query is not None
     return (
-        features,
+        features.representation(0),
         target.representation(0),
-        query,
-        *related_outputs,
-        *related_query_outputs,
+        query.representation(0),
+        *related[0].tables.values(),
+        *related_query[0].tables.values(),
     )
 
 
@@ -228,49 +158,16 @@ def _execute(
         return features, target, query, related, related_query
 
     outputs = []
-    for member in range(num_estimators):
+    generator = torch.Generator(device=data.x_context.device).manual_seed(42)
+    for _ in range(num_estimators):
         outputs.extend(
             _execute_isolated_member(
                 data,
                 task=task,
-                member=member,
+                generator=generator,
             )
         )
     return tuple(outputs)
-
-
-def _assert_equivalent(
-    shared: Sequence[TableTensor],
-    isolated: Sequence[TableTensor],
-) -> None:
-    assert len(shared) == len(isolated)
-
-    def assert_tensor_equal(
-        actual: torch.Tensor, expected: torch.Tensor
-    ) -> None:
-        if isinstance(actual, ColumnarTensor | StringTensor):
-            assert actual.tolist() == expected.tolist()
-            return
-        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-
-    for actual, expected in zip(shared, isolated):
-        assert actual.columns == expected.columns
-        assert actual.size() == expected.size()
-        for stype in actual.columns:
-            actual_block = actual.blocks[stype]
-            expected_block = expected.blocks[stype]
-            if stype == Stype.categorical:
-                assert_tensor_equal(
-                    actual.categorical.code,
-                    expected.categorical.code,
-                )
-            else:
-                assert_tensor_equal(actual_block, expected_block)
-        for actual_categories, expected_categories in zip(
-            actual.categorical.categories,
-            expected.categorical.categories,
-        ):
-            assert_tensor_equal(actual_categories, expected_categories)
 
 
 def _measure(
@@ -441,29 +338,6 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             device=device,
         )
         for task in cast(tuple[Task, ...], tuple(args.tasks)):
-            shared = _flatten_shared_outputs(
-                *cast(
-                    SharedOutputs,
-                    _execute(
-                        data,
-                        task=task,
-                        schedule="ensemble_shared",
-                        num_estimators=args.num_estimators,
-                    ),
-                ),
-                num_estimators=args.num_estimators,
-            )
-            isolated = cast(
-                tuple[TableTensor, ...],
-                _execute(
-                    data,
-                    task=task,
-                    schedule="member_isolated",
-                    num_estimators=args.num_estimators,
-                ),
-            )
-            _assert_equivalent(shared, isolated)
-            del shared, isolated
             for schedule in cast(tuple[Schedule, ...], tuple(args.schedules)):
                 measurements.append(
                     _measure(

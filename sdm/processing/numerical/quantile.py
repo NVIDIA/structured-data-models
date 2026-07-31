@@ -5,10 +5,7 @@ from torch import Tensor
 
 from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin
-from sdm.processing.ensemble import (
-    EnsembleFitContext,
-    EnsembleProcessor,
-)
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.stype import Stype
 from sdm.tensor import EnsembleTable, TableTensor
 
@@ -174,7 +171,7 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         r"""Fit sampled grids per member and share deterministic grids."""
         self.processors = torch.nn.ModuleList()
@@ -182,7 +179,7 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         positions: list[int] = []
         member_to_processor: list[int] = []
         keys: dict[tuple[object, ...], int] = {}
-        for position, member_id in enumerate(context.member_ids):
+        for position, member_id in enumerate(table._member_ids):
             before = table.representation(position)
             stochastic = (
                 self.subsample is not None and self.subsample < before.size(-2)
@@ -201,16 +198,19 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
                     subsample=self.subsample,
                     output_distribution=self.output_distribution,
                 )
+                fit_generator = generator
+                if (
+                    stochastic
+                    and generator is not None
+                    and generator.device != before.device
+                ):
+                    fit_generator = torch.Generator(device=before.device)
+                    fit_generator.manual_seed(
+                        generator.initial_seed() + member_id
+                    )
                 processor.fit(
                     before,
-                    generator=(
-                        context.generator_for(
-                            member_id,
-                            device=before.device,
-                        )
-                        if stochastic
-                        else None
-                    ),
+                    generator=fit_generator if stochastic else None,
                 )
                 self.processors.append(processor)
                 positions.append(position)
@@ -222,6 +222,7 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=self._member_to_processor,
+            member_ids=table._member_ids,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -238,6 +239,7 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=self._member_to_processor,
+            member_ids=table._member_ids,
         )
 
     def inverse_transform_ensemble(
@@ -257,6 +259,7 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         return EnsembleTable.pack(
             representations=representations,
             member_representation_ids=tuple(range(table.num_members)),
+            member_ids=table._member_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

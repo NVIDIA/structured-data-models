@@ -1,6 +1,6 @@
 import copy
 from collections.abc import Iterable, Sequence
-from typing import cast
+from typing import Any, cast
 
 import torch
 from typing_extensions import Self
@@ -9,21 +9,16 @@ from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.common.sequential import Sequential
 from sdm.processing.common.task import TaskDispatch
 from sdm.processing.ensemble import (
-    EnsembleFitContext,
     EnsembleProcessor,
+    EnsembleProcessorAdapter,
     VariableSchemaBatchMixin,
-    _EnsemblePlan,
-    as_ensemble_processor,
-)
-from sdm.processing.ensemble_table import (
-    EnsembleRelatedTables,
-    _stack_positional,
 )
 from sdm.processing.output.reduce import ReduceEstimators
 from sdm.processing.output.target import TargetDecode
 from sdm.relational import RelatedTables
 from sdm.stype import Stype
 from sdm.tensor import EnsembleTable, TableTensor
+from sdm.tensor.ensemble import _stack_tables
 
 
 class _TaskResolver(Processor, InvertibleMixin):
@@ -188,7 +183,7 @@ class Recipe(torch.nn.Module):
         self.target = target
         self.output = output
         self._ensemble_features: EnsembleProcessor | None = None
-        self._ensemble_plan: _EnsemblePlan | None = None
+        self._ensemble_plan: Any | None = None
         self._ensemble_related = torch.nn.ModuleList()
         self._related_table_names: tuple[str, ...] = ()
         self._ensemble_output: Processor | None = None
@@ -236,9 +231,7 @@ class Recipe(torch.nn.Module):
 
     def _build_class_plan(
         self,
-        raw_target: TableTensor,
         transformed_target: EnsembleTable,
-        plan: _EnsemblePlan | None,
     ) -> tuple[tuple[object, ...], tuple[torch.Tensor, ...]]:
         local_values = tuple(
             tuple(
@@ -248,18 +241,7 @@ class Recipe(torch.nn.Module):
             )
             for member in range(transformed_target.num_members)
         )
-        planned_classes = (
-            plan.canonical_classes() if plan is not None else None
-        )
-        if planned_classes is None:
-            raw_values = tuple(raw_target.categorical.categories[0].tolist())
-            canonical = tuple(
-                value for value in raw_values if value in local_values[0]
-            )
-            if len(canonical) != len(local_values[0]):
-                canonical = local_values[0]
-        else:
-            canonical = planned_classes
+        canonical = tuple(sorted(local_values[0]))
 
         indices: list[torch.Tensor] = []
         for member, values in enumerate(local_values):
@@ -290,7 +272,7 @@ class Recipe(torch.nn.Module):
     ) -> tuple[
         EnsembleTable,
         EnsembleTable,
-        EnsembleRelatedTables | None,
+        tuple[RelatedTables, ...] | None,
     ]:
         r"""Fit all Recipe paths and transform context data.
 
@@ -388,43 +370,34 @@ class Recipe(torch.nn.Module):
                     processor=self.features,
                 )
 
-        feature_processor = as_ensemble_processor(copy.deepcopy(self.features))
-        target_processor = as_ensemble_processor(
-            copy.deepcopy(self._target_processor(self.target))
-        )
-
-        plan = copy.deepcopy(self._ensemble_plan)
-        feature_context = EnsembleFitContext.create(
-            num_members=num_members,
-            table_scope="features",
-            generator=generator,
-            _plan=plan,
-        )
-        if plan is not None:
-            plan.initialize(
-                target=target,
-                num_members=num_members,
-                seed=feature_context.base_seed,
+        if self._ensemble_plan is not None:
+            self._ensemble_plan.initialize(
+                target,
+                num_members,
+                (
+                    generator.initial_seed()
+                    if generator is not None
+                    else torch.initial_seed()
+                ),
             )
-        target_context = EnsembleFitContext.create(
-            num_members=num_members,
-            table_scope="target",
-            base_seed=feature_context.base_seed,
-            _plan=plan,
+        feature_template, target_template = copy.deepcopy(
+            (self.features, self._target_processor(self.target))
         )
+        feature_processor = EnsembleProcessorAdapter.adapt(feature_template)
+        target_processor = EnsembleProcessorAdapter.adapt(target_template)
         transformed_features = feature_processor.fit_transform_ensemble(
             EnsembleTable(
                 features,
                 num_members=num_members,
             ),
-            context=feature_context,
+            generator=generator,
         )
         transformed_target = target_processor.fit_transform_ensemble(
             EnsembleTable(
                 target,
                 num_members=num_members,
             ),
-            context=target_context,
+            generator=generator,
         )
 
         tasks = {
@@ -441,39 +414,39 @@ class Recipe(torch.nn.Module):
 
         related_processors = torch.nn.ModuleList()
         related_table_names: list[str] = []
-        transformed_related: EnsembleRelatedTables | None = None
+        transformed_related: tuple[RelatedTables, ...] | None = None
         if related_tables is not None:
             related_outputs: dict[str, EnsembleTable] = {}
             for table_name, table in related_tables.tables.items():
-                processor = as_ensemble_processor(copy.deepcopy(self.features))
+                processor = EnsembleProcessorAdapter.adapt(
+                    copy.deepcopy(self.features)
+                )
                 related_processors.append(processor)
                 related_table_names.append(table_name)
-                context = EnsembleFitContext.create(
-                    num_members=num_members,
-                    table_scope=f"related:{table_name}",
-                    base_seed=feature_context.base_seed,
-                    _plan=plan,
-                )
                 related_outputs[table_name] = processor.fit_transform_ensemble(
                     EnsembleTable(
                         table,
                         num_members=num_members,
                     ),
-                    context=context,
+                    generator=generator,
                 )
-            transformed_related = EnsembleRelatedTables(
-                tables=related_outputs,
-                relationships=related_tables.relationships,
-                task_links=related_tables.task_links,
+            transformed_related = tuple(
+                RelatedTables(
+                    tables={
+                        name: table.representation(member)
+                        for name, table in related_outputs.items()
+                    },
+                    relationships=related_tables.relationships,
+                    task_links=related_tables.task_links,
+                )
+                for member in range(num_members)
             )
 
         canonical_classes: tuple[object, ...] | None = None
         class_indices: tuple[torch.Tensor, ...] = ()
         if task == "classification":
             canonical_classes, class_indices = self._build_class_plan(
-                target,
                 transformed_target,
-                plan,
             )
 
         for module in output_processor.modules():
@@ -498,7 +471,7 @@ class Recipe(torch.nn.Module):
         self,
         features: TableTensor,
         related_tables: RelatedTables | None = None,
-    ) -> tuple[EnsembleTable, EnsembleRelatedTables | None]:
+    ) -> tuple[EnsembleTable, tuple[RelatedTables, ...] | None]:
         r"""Transform query tables with the fitted ensemble plan.
 
         Args:
@@ -534,7 +507,7 @@ class Recipe(torch.nn.Module):
             )
         )
 
-        transformed_related: EnsembleRelatedTables | None = None
+        transformed_related: tuple[RelatedTables, ...] | None = None
         if related_tables is not None:
             for table_name, table in related_tables.tables.items():
                 self._validate_variable_schema_input(
@@ -557,10 +530,16 @@ class Recipe(torch.nn.Module):
                 )
                 for name, table in related_tables.tables.items()
             }
-            transformed_related = EnsembleRelatedTables(
-                tables=tables,
-                relationships=related_tables.relationships,
-                task_links=related_tables.task_links,
+            transformed_related = tuple(
+                RelatedTables(
+                    tables={
+                        name: table.representation(member)
+                        for name, table in tables.items()
+                    },
+                    relationships=related_tables.relationships,
+                    task_links=related_tables.task_links,
+                )
+                for member in range(self._num_members)
             )
         return transformed_features, transformed_related
 
@@ -584,7 +563,7 @@ class Recipe(torch.nn.Module):
             )
         if any(output.device != self._device for output in outputs):
             raise ValueError("Expected Recipe outputs on the fitted device.")
-        return self._ensemble_output.transform(_stack_positional(outputs))
+        return self._ensemble_output.transform(_stack_tables(outputs))
 
     def __repr__(self) -> str:
         return (

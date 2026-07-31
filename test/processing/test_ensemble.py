@@ -19,9 +19,7 @@ from sdm.processing import (
     ClipQuantiles,
     ClipSigma,
     DropConstantColumns,
-    EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleRelatedTables,
     Identity,
     ImputeMean,
     PowerTransform,
@@ -73,9 +71,9 @@ class _AddOneEnsemble(EnsembleProcessor):
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        del context
+        del generator
         return table._replace_packed_representations(
             tuple(
                 group.replace_blocks(numerical=group.numerical + 1)
@@ -459,11 +457,11 @@ def test_related_tables_keep_table_local_fitted_state() -> None:
     assert transformed_related is not None
     for member in range(3):
         torch.testing.assert_close(
-            transformed_related["small"].representation(member).numerical,
+            transformed_related[member].tables["small"].numerical,
             torch.tensor([[-1.2247449], [0.0], [1.2247449]]),
         )
         torch.testing.assert_close(
-            transformed_related["large"].representation(member).numerical,
+            transformed_related[member].tables["large"].numerical,
             torch.tensor([[-1.2247449], [0.0], [1.2247449]]),
         )
 
@@ -493,7 +491,9 @@ def test_related_table_names_can_match_module_attributes() -> None:
 
     assert transformed is not None
     torch.testing.assert_close(
-        transformed["items"].materialize().numerical,
+        torch.stack(
+            tuple(member.tables["items"].numerical for member in transformed)
+        ),
         torch.tensor([[[3.0]], [[3.0]]]),
     )
 
@@ -694,22 +694,6 @@ def test_recipe_rejects_mixed_execution_devices() -> None:
             _numerical([[1.0], [2.0], [3.0]]),
             target,
             num_members=2,
-        )
-
-    with pytest.raises(ValueError, match="same device"):
-        EnsembleRelatedTables(
-            tables={
-                "cpu": EnsembleTable(
-                    _numerical([[1.0]]),
-                    num_members=2,
-                ),
-                "meta": EnsembleTable(
-                    TableTensor.from_tensor(torch.ones(1, 1, device="meta")),
-                    num_members=2,
-                ),
-            },
-            relationships=(),
-            task_links=(),
         )
 
 

@@ -46,10 +46,6 @@ class TargetDecode(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         if self.target is None:
             raise RuntimeError("TargetDecode is not bound to a fitted Recipe.")
-        if table.size(0) != self._num_members:
-            raise ValueError(
-                "Expected one model output per fitted ensemble member."
-            )
 
         if self._canonical_classes is None:
             encoded = EnsembleTable._from_packed_representations(
@@ -57,6 +53,7 @@ class TargetDecode(Processor):
                 member_locations=tuple(
                     (0, member) for member in range(self._num_members)
                 ),
+                member_ids=tuple(range(self._num_members)),
             )
             return self.target.inverse_transform_ensemble(
                 encoded

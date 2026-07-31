@@ -13,7 +13,6 @@ from sdm import (
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
-    EnsembleFitContext,
     EnsembleProcessor,
     InvertibleMixin,
     Recipe,
@@ -71,10 +70,9 @@ class _GeneratorRecordingProcessor(EnsembleProcessor, InvertibleMixin):
         self,
         table: EnsembleTable,
         *,
-        context: EnsembleFitContext,
+        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        for member_id in context.member_ids:
-            generator = context.generator_for(member_id)
+        for _ in table._member_ids:
             self.draws.append(torch.rand((), generator=generator))
         return table
 
