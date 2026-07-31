@@ -272,7 +272,7 @@ For example, <a class="reference internal" href="api/generated/sdm.models.TabICL
 <section id="ensembling">
 <h2>Ensembling<a class="headerlink" href="#ensembling" title="Link to this heading">#</a></h2>
 <p>The interface of an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> additionally supports estimator ensembling through the <code class="docutils literal notranslate"><span class="pre">num_estimators</span></code> argument in <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> and <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>.
-When a recipe contains stochastic processors, such as <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a>, pre-processing produces different transformed views of the same task, and model outputs are stacked for post-processing.</p>
+When a recipe contains stochastic processors, such as <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a>, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.</p>
 </section>
 <section id="model-outputs">
 <h2>Model Outputs<a class="headerlink" href="#model-outputs" title="Link to this heading">#</a></h2>
@@ -294,6 +294,14 @@ This gives foundation models extra context without changing the core ICL structu
 <p>For example, a row in <code class="docutils literal notranslate"><span class="pre">x_context</span></code> or <code class="docutils literal notranslate"><span class="pre">x_query</span></code> might ask for a prediction about one entity at a particular time, such as whether a user will churn next month.
 Through <a class="reference internal" href="api/generated/sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.RelatedTables"><code class="xref py py-class docutils literal notranslate"><span class="pre">RelatedTables</span></code></a>, that row can be linked to the corresponding user record, that user’s past behavior, and any other records connected through the relational schema.
 The model can use this relational neighborhood as context for the prediction task, without requiring manual flattening of related information into one single wide table.</p>
+<figure class="light-only align-default">
+<a class="reference internal image-reference" href="_images/graph_light.svg"><img alt="_images/graph_light.svg" src="_images/graph_light.svg" style="width: 100%;" />
+</a>
+</figure>
+<figure class="dark-only align-default">
+<a class="reference internal image-reference" href="_images/graph_dark.svg"><img alt="_images/graph_dark.svg" src="_images/graph_dark.svg" style="width: 100%;" />
+</a>
+</figure>
 <p>Specifically, <a class="reference internal" href="api/generated/sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.RelatedTables"><code class="xref py py-class docutils literal notranslate"><span class="pre">RelatedTables</span></code></a> consist of three components:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">tables</span></code>: mapping from table names to <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> objects containing the tabular data of related tables.</p></li>
@@ -409,7 +417,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=372763c5"></script>
+      <script src="_static/documentation_options.js?v=c68609e1"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
