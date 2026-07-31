@@ -391,14 +391,13 @@ def test_batch_size_limit_autocast_dtype() -> None:
     [
         pytest.param(True, False, 2, id="training"),
         pytest.param(False, True, 2, id="compiling"),
-        pytest.param(False, False, None, id="disabled"),
         pytest.param(False, False, 5, id="within-limit"),
     ],
 )
 def test_sdpa_batch_size_limit_bypass(
     training: bool,
     compiling: bool,
-    batch_size_limit: int | None,
+    batch_size_limit: int,
 ) -> None:
     module = SDPA(channels=3, num_query_heads=2)
     module.train(training)

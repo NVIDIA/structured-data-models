@@ -91,6 +91,20 @@ For example, {py:class}`~sdm.models.TabICLv2` can only consume numerical feature
 The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
 When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
 
+## Autocasting
+
+An {py:class}`~sdm.models.ICLModel` does not enable mixed-precision autocasting by default.
+Model calls therefore run with the dtype chosen by the input tensors, model parameters unless the caller explicitly enters an autocast context.
+
+To run model execution under automatic mixed precision, wrap the ICL call explicitly:
+
+```python
+with torch.amp.autocast("cuda", dtype=torch.bfloat16):
+    out = model(...)
+```
+
+However, even in autocast mode, pre- and post-processing are performed in ``float32`` to ensure numerical stability.
+
 ## Model Outputs
 
 Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where the output schema depends on the task, model, and post-processing routine of the {py:class}`~sdm.processing.recipe.Recipe`:

@@ -88,7 +88,7 @@ class RowEmbedding(torch.nn.Module):
         max_keys: int | None = None,
         num_classes: int | None = None,
         cache: Cache | None = None,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int = 65_535,
         generator: torch.Generator | None = None,
     ) -> Tensor:  # [..., R, K * D]
         *B, R, C = x.size()
