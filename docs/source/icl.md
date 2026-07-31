@@ -89,7 +89,7 @@ For example, {py:class}`~sdm.models.TabICLv2` can only consume numerical feature
 ## Ensembling
 
 The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
-When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs are stacked for post-processing.
+When a recipe contains stochastic processors, such as {py:class}`~sdm.processing.common.ShuffleColumns`, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.
 
 ## Model Outputs
 
@@ -113,6 +113,16 @@ This gives foundation models extra context without changing the core ICL structu
 For example, a row in `x_context` or `x_query` might ask for a prediction about one entity at a particular time, such as whether a user will churn next month.
 Through {py:class}`~sdm.relational.RelatedTables`, that row can be linked to the corresponding user record, that user's past behavior, and any other records connected through the relational schema.
 The model can use this relational neighborhood as context for the prediction task, without requiring manual flattening of related information into one single wide table.
+
+```{figure} images/graph_light.svg
+:figclass: light-only
+:width: 100%
+```
+
+```{figure} images/graph_dark.svg
+:figclass: dark-only
+:width: 100%
+```
 
 Specifically, {py:class}`~sdm.relational.RelatedTables` consist of three components:
 
