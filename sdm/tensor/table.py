@@ -310,34 +310,27 @@ class TableTensor(Tensor):
             tensors: list[Tensor] = []
             for column in columns[stype]:
                 array = table.column(column)
-                try:
-                    if stype == Stype.numerical:
-                        tensor = arrow_as_tensor(
-                            array,
-                            dtype=torch.get_default_dtype(),
-                        ).unsqueeze(-1)
-                    elif stype == Stype.categorical:
-                        tensor = CategoricalTensor.from_arrow(array)
-                    elif stype == Stype.datetime:
-                        array = array.cast(pa.timestamp("us"))
-                        values = array.to_numpy(zero_copy_only=False)
-                        values = values.astype("int64")
-                        tensor = torch.from_numpy(values).unsqueeze(-1)
-                    elif stype == Stype.text:
-                        if pa.types.is_null(array.type):
-                            array = array.cast(pa.string())
-                        if array.null_count > 0:
-                            array = array.fill_null("")
-                        tensor = StringTensor.from_arrow(array)
-                        tensor = tensor.unsqueeze(-1)
-                    elif stype == Stype.id:
-                        tensor = ColumnarTensor.from_arrow(array)
-                    else:
-                        raise NotImplementedError
-                except (TypeError, ValueError) as e:
-                    raise type(e)(
-                        f"Unable to convert column '{column}': {e}"
-                    ) from e
+                if stype == Stype.numerical:
+                    tensor = arrow_as_tensor(
+                        array,
+                        dtype=torch.get_default_dtype(),
+                    ).unsqueeze(-1)
+                elif stype == Stype.categorical:
+                    tensor = CategoricalTensor.from_arrow(array)
+                elif stype == Stype.datetime:
+                    array = array.cast(pa.timestamp("us"))
+                    values = array.to_numpy(zero_copy_only=False)
+                    values = values.astype("int64")
+                    tensor = torch.from_numpy(values).unsqueeze(-1)
+                elif stype == Stype.text:
+                    if pa.types.is_null(array.type):
+                        array = array.cast(pa.string())
+                    tensor = StringTensor.from_arrow(array)
+                    tensor = tensor.unsqueeze(-1)
+                elif stype == Stype.id:
+                    tensor = ColumnarTensor.from_arrow(array)
+                else:
+                    raise NotImplementedError
                 tensors.append(tensor)
 
             blocks[stype] = torch.cat(tensors, dim=-1).to(device)
@@ -452,38 +445,31 @@ class TableTensor(Tensor):
             tensors: list[Tensor] = []
             for column in columns[stype]:
                 ser = df[column]
-                try:
-                    if stype == Stype.numerical:
-                        ser = ser.astype("float32", copy=False)
-                        if ser.null_count > 0:
-                            ser = ser.fillna(float("nan"))
-                        tensor = torch.from_dlpack(ser.to_dlpack())
-                        tensor = tensor.unsqueeze(-1).to(device)
-                    elif stype == Stype.categorical:
-                        tensor = CategoricalTensor.from_cudf(
-                            ser,
-                            device=device,
-                        )
-                    elif stype == Stype.datetime:
-                        ser = ser.astype("datetime64[us]", copy=False)
-                        ser = ser.astype("int64", copy=False)
-                        if ser.null_count > 0:
-                            ser = ser.fillna(torch.iinfo(torch.int64).min)
-                        tensor = torch.from_dlpack(ser.to_dlpack())
-                        tensor = tensor.unsqueeze(-1).to(device)
-                    elif stype == Stype.text:
-                        if ser.null_count > 0:
-                            ser = ser.fillna("")
-                        tensor = StringTensor.from_cudf(ser, device=device)
-                        tensor = tensor.unsqueeze(-1)
-                    elif stype == Stype.id:
-                        tensor = ColumnarTensor.from_cudf(ser, device=device)
-                    else:
-                        raise NotImplementedError
-                except (TypeError, ValueError) as e:
-                    raise type(e)(
-                        f"Unable to convert column '{column}': {e}"
-                    ) from e
+                if stype == Stype.numerical:
+                    ser = ser.astype("float32", copy=False)
+                    if ser.null_count > 0:
+                        ser = ser.fillna(float("nan"))
+                    tensor = torch.from_dlpack(ser.to_dlpack())
+                    tensor = tensor.unsqueeze(-1).to(device)
+                elif stype == Stype.categorical:
+                    tensor = CategoricalTensor.from_cudf(
+                        ser,
+                        device=device,
+                    )
+                elif stype == Stype.datetime:
+                    ser = ser.astype("datetime64[us]", copy=False)
+                    ser = ser.astype("int64", copy=False)
+                    if ser.null_count > 0:
+                        ser = ser.fillna(torch.iinfo(torch.int64).min)
+                    tensor = torch.from_dlpack(ser.to_dlpack())
+                    tensor = tensor.unsqueeze(-1).to(device)
+                elif stype == Stype.text:
+                    tensor = StringTensor.from_cudf(ser, device=device)
+                    tensor = tensor.unsqueeze(-1)
+                elif stype == Stype.id:
+                    tensor = ColumnarTensor.from_cudf(ser, device=device)
+                else:
+                    raise NotImplementedError
                 tensors.append(tensor)
 
             blocks[stype] = torch.cat(tensors, dim=-1)
