@@ -54,7 +54,7 @@ class TableTensor(Tensor):
     while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
-    .. testcode::
+    .. testcode:: drop_stypes, select_columns, drop_columns
 
         import torch
         from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
@@ -707,12 +707,12 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Return a table with ``stypes`` columns removed.
 
-        .. testcode::
+        .. testcode:: drop_stypes
 
             assert table.columns[Stype.categorical] == ("country", "segment")
-            result = table.drop_stypes("categorical")
-            assert result.columns[Stype.categorical] == ()
-            assert result.columns[Stype.numerical] == ("age", "income")
+            table = table.drop_stypes("categorical")
+            assert table.columns[Stype.categorical] == ()
+            assert table.columns[Stype.numerical] == ("age", "income")
 
         Args:
             stypes: The semantic type or semantic types to drop.
@@ -732,11 +732,11 @@ class TableTensor(Tensor):
     def select_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table containing only ``columns``.
 
-        .. testcode::
+        .. testcode:: select_columns
 
             assert table.size() == (10, 4)
-            result = table.select_columns(["age", "country"])
-            assert result.size() == (10, 2)
+            table = table.select_columns(["age", "country"])
+            assert table.size() == (10, 2)
 
         Args:
             columns: The columns to select.
@@ -775,11 +775,11 @@ class TableTensor(Tensor):
     def drop_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table with ``columns`` removed.
 
-        .. testcode::
+        .. testcode:: drop_columns
 
             assert table.size() == (10, 4)
-            result = table.drop_columns(["age", "country"])
-            assert result.size() == (10, 2)
+            table = table.drop_columns(["age", "country"])
+            assert table.size() == (10, 2)
 
         Args:
             columns: The columns to drop.
