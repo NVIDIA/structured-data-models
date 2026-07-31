@@ -46,6 +46,8 @@ class StringTensor(VarLenTensor):
     ) -> Self:
         r"""Create tensor from a string :class:`pyarrow.Array`.
 
+        Null values will be encoded as empty strings.
+
         .. testcode::
 
             import pyarrow as pa
@@ -83,7 +85,7 @@ class StringTensor(VarLenTensor):
             )
 
         if array.null_count > 0:
-            raise ValueError(f"{cls.__name__!r} cannot represent null values")
+            array = array.fill_null("")
 
         buffers = array.buffers()
 
@@ -117,34 +119,6 @@ class StringTensor(VarLenTensor):
             offset=int(tensor.storage_offset()),
         )
 
-    def to_cudf(self) -> cudf.Series:
-        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`."""
-        if not self.is_cuda:
-            raise RuntimeError(
-                f"Expected tensor to be on a CUDA device (got '{self.device}')"
-            )
-
-        tensor = cast(StringTensor, self.contiguous())
-
-        with torch.cuda.device(self.device):
-            import cudf
-            import pylibcudf as plc
-
-            # StringTensor stores variable-width strings in separate UTF-8
-            # data and offset buffers. Use pylibcudf to expose them without a
-            # host copy.
-            offset_column = plc.Column.from_array(obj=tensor._offset)
-            plc_column = plc.Column(
-                data_type=plc.DataType(plc.TypeId.STRING),
-                size=tensor.numel(),
-                data=plc.gpumemoryview(tensor._data),
-                mask=None,
-                null_count=0,
-                offset=int(tensor.storage_offset()),
-                children=[offset_column],
-            )
-            return cudf.Series.from_pylibcudf(plc_column)
-
     @classmethod
     def from_cudf(
         cls,
@@ -154,6 +128,8 @@ class StringTensor(VarLenTensor):
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create tensor from a string :class:`cudf.Series`.
+
+        Null values will be encoded as empty strings.
 
         Args:
             ser: The string :class:`cudf.Series` or :class:`cudf.Index`.
@@ -178,11 +154,12 @@ class StringTensor(VarLenTensor):
                 f"string type (got '{ser.dtype}')"
             )
 
+        if ser.null_count > 0:
+            ser = ser.fillna("")
+
         # `Series.to_pylibcudf` returns a zero-copy Arrow-style view: base
         # character/offset buffers plus a row offset into the offsets.
         column, _ = ser.to_pylibcudf()
-        if column.null_count() > 0:
-            raise ValueError(f"{cls.__name__!r} cannot represent null values")
 
         # `None` or zero-length when the column holds no characters:
         chars = column.data()
@@ -211,6 +188,34 @@ class StringTensor(VarLenTensor):
             size=size,
             storage_offset=column.offset(),
         )
+
+    def to_cudf(self) -> cudf.Series:
+        r"""Convert this CUDA tensor to a flat :class:`cudf.Series`."""
+        if not self.is_cuda:
+            raise RuntimeError(
+                f"Expected tensor to be on a CUDA device (got '{self.device}')"
+            )
+
+        tensor = cast(StringTensor, self.contiguous())
+
+        with torch.cuda.device(self.device):
+            import cudf
+            import pylibcudf as plc
+
+            # StringTensor stores variable-width strings in separate UTF-8
+            # data and offset buffers. Use pylibcudf to expose them without a
+            # host copy.
+            offset_column = plc.Column.from_array(obj=tensor._offset)
+            plc_column = plc.Column(
+                data_type=plc.DataType(plc.TypeId.STRING),
+                size=tensor.numel(),
+                data=plc.gpumemoryview(tensor._data),
+                mask=None,
+                null_count=0,
+                offset=int(tensor.storage_offset()),
+                children=[offset_column],
+            )
+            return cudf.Series.from_pylibcudf(plc_column)
 
     @classmethod
     @override
