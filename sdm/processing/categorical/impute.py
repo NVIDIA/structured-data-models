@@ -45,21 +45,27 @@ class ImputeMode(Processor):
         columns = table.columns[Stype.categorical]
         for index, category in enumerate(table.categorical.categories):
             codes = data[..., index]
-            observed = codes[codes >= 0].to(torch.long)
-            if observed.numel() == 0:
+            observed = codes >= 0
+            if not bool(observed.any(dim=-1).all()):
                 raise ValueError(
                     "Cannot fit 'ImputeMode' because categorical "
                     f"column {columns[index]!r} has no observed values."
                 )
 
-            counts = observed.bincount(minlength=category.numel())
-            fill_values.append(counts.argmax())
+            one_hot = torch.nn.functional.one_hot(
+                codes.clamp_min(0).to(torch.long),
+                num_classes=category.numel(),
+            )
+            counts = (one_hot * observed.unsqueeze(-1)).sum(dim=-2)
+            fill_values.append(counts.argmax(dim=-1))
 
         self._fill_values = (
-            torch.stack(fill_values)
+            torch.stack(fill_values, dim=-1)
             if len(fill_values) > 0
             else torch.empty(0, dtype=torch.long, device=data.device)
         )
+        if data.dim() > 2:
+            self._fill_values = self._fill_values.unsqueeze(-2)
         self._categories = table.categorical.categories
 
     def _transform(self, table: TableTensor) -> TableTensor:

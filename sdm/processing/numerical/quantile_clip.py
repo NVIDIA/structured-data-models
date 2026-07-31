@@ -45,7 +45,12 @@ class ClipQuantiles(Processor):
     ) -> None:
         numerical = _as_float(table.numerical)
         quantiles = numerical.new_tensor([self.q_low, self.q_high])
-        q_low, q_high = torch.quantile(numerical, quantiles, dim=0)
+        q_low, q_high = torch.quantile(
+            numerical,
+            quantiles,
+            dim=-2,
+            keepdim=numerical.dim() > 2,
+        )
         self.lower_bound = q_low
         self.upper_bound = q_high
 
