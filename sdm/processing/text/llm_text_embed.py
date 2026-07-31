@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, cast
 
 import torch
 from torch import Tensor
@@ -10,31 +10,7 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 if TYPE_CHECKING:
-    import cudf
-    import pyarrow as pa
-
-
-@runtime_checkable
-class Embedder(Protocol):
-    """Anything that maps a batch of strings to one embedding per string.
-
-    Implementations own batching, truncation, pooling, and where the model
-    runs (local module or remote endpoint); the processor only relies on
-    this interface.
-    """
-
-    @property
-    def dim(self) -> int:
-        """Width of the returned embeddings."""
-        ...
-
-    def encode(self, strings: cudf.Series | pa.Array) -> Tensor:
-        """Embed strings into a ``[len(strings), dim]`` tensor.
-
-        Args:
-            strings: cuDF Series or PyArrow Array of strings.
-        """
-        ...
+    pass
 
 
 class LLMTextEmbed(Processor):
@@ -56,20 +32,17 @@ class LLMTextEmbed(Processor):
 
     def __init__(
         self,
-        embedder: Embedder,
+        embedding_model: torch.nn.Module,
+        embedding_dim: int,
         *,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        self._embedder = embedder
+        self._embedding_model = embedding_model
+        self._embedding_dim = embedding_dim
         if dtype is not None and not dtype.is_floating_point:
             raise ValueError(f"`dtype` must be floating-point (got {dtype}).")
         self._dtype = dtype
-
-    @property
-    def embedder(self) -> Embedder:
-        """The wrapped embedding model."""
-        return self._embedder
 
     def _transform(self, table: TableTensor) -> TableTensor:
         device = table.text.device
@@ -77,8 +50,8 @@ class LLMTextEmbed(Processor):
 
         text_names = table.columns[Stype.text]
         leading_shape = table.text.shape[:-1]
-        embedder = self.embedder
-        dim = embedder.dim
+        embedder = self._embedding_model
+        dim = _embedding_dim
 
         blocks: list[Tensor] = []
         names: list[str] = []
@@ -100,7 +73,7 @@ class LLMTextEmbed(Processor):
                     if column_text.is_cuda
                     else column_text.to_arrow()
                 )
-                block = embedder.encode(strings)
+                block = embedder(strings)
                 if (
                     block.dim() != 2
                     or block.size(0) != n_values
