@@ -16,23 +16,6 @@ from sdm.processing import EnsembleRelatedTables, EnsembleTable, Recipe
 from sdm.processing.ensemble_table import _stack_positional
 
 
-def _positional_group_key(table: TableTensor) -> tuple[object, ...]:
-    return (
-        tuple(table.size()[:-1]),
-        tuple(
-            (
-                stype,
-                type(block),
-                block.dtype,
-                block.size(-1),
-            )
-            for stype, block in table.items()
-        ),
-        tuple(category.numel() for category in table.categorical.categories),
-        table.device,
-    )
-
-
 def _materialize_positional(
     table: EnsembleTable,
     members: tuple[int, ...],
@@ -161,7 +144,24 @@ class TabICLv2(ICLModel):
         table: EnsembleTable,
         member: int,
     ) -> object:
-        return _positional_group_key(table[member])
+        member_table = table[member]
+        return (
+            tuple(member_table.size()[:-1]),
+            tuple(
+                (
+                    stype,
+                    type(block),
+                    block.dtype,
+                    block.size(-1),
+                )
+                for stype, block in member_table.items()
+            ),
+            tuple(
+                category.numel()
+                for category in member_table.categorical.categories
+            ),
+            member_table.device,
+        )
 
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device

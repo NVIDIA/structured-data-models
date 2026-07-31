@@ -80,22 +80,6 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         self._indices = tuple(permutation.tolist())
         self.permutation = permutation.to(device)
 
-    def _planned_permutations(
-        self,
-        table: EnsembleTable,
-        context: EnsembleFitContext,
-    ) -> tuple[tuple[int, ...], ...] | None:
-        if context._plan is None:
-            return None
-        return context._plan.column_permutations(
-            member_ids=context.member_ids,
-            num_columns=tuple(
-                table[position].numerical.size(-1)
-                for position in range(table.num_members)
-            ),
-            table_scope=context.table_scope,
-        )
-
     @staticmethod
     def _set_permutation(
         processor: ShuffleColumns,
@@ -122,7 +106,18 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         context: EnsembleFitContext,
     ) -> EnsembleTable:
         r"""Fit member permutations and reuse proven-equal results."""
-        planned = self._planned_permutations(table, context)
+        planned = (
+            context._plan.column_permutations(
+                member_ids=context.member_ids,
+                num_columns=tuple(
+                    table[position].numerical.size(-1)
+                    for position in range(table.num_members)
+                ),
+                table_scope=context.table_scope,
+            )
+            if context._plan is not None
+            else None
+        )
         if planned is not None and len(planned) != table.num_members:
             raise ValueError(
                 "The ensemble plan must return one permutation per member."

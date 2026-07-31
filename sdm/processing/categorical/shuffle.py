@@ -104,25 +104,6 @@ class ShuffleCategories(EnsembleProcessor):
         )
         self._offset_values = tuple(offsets)
 
-    def _planned_permutations(
-        self,
-        table: EnsembleTable,
-        context: EnsembleFitContext,
-    ) -> tuple[tuple[tuple[int, ...], ...], ...] | None:
-        if context._plan is None:
-            return None
-        return context._plan.category_permutations(
-            member_ids=context.member_ids,
-            category_counts=tuple(
-                tuple(
-                    category.numel()
-                    for category in table[position].categorical.categories
-                )
-                for position in range(table.num_members)
-            ),
-            table_scope=context.table_scope,
-        )
-
     @staticmethod
     def _set_permutations(
         processor: ShuffleCategories,
@@ -164,7 +145,21 @@ class ShuffleCategories(EnsembleProcessor):
         context: EnsembleFitContext,
     ) -> EnsembleTable:
         r"""Fit member category mappings and pack compatible outputs."""
-        planned = self._planned_permutations(table, context)
+        planned = (
+            context._plan.category_permutations(
+                member_ids=context.member_ids,
+                category_counts=tuple(
+                    tuple(
+                        category.numel()
+                        for category in table[position].categorical.categories
+                    )
+                    for position in range(table.num_members)
+                ),
+                table_scope=context.table_scope,
+            )
+            if context._plan is not None
+            else None
+        )
         if planned is not None and len(planned) != table.num_members:
             raise ValueError(
                 "The ensemble plan must return one mapping per member."

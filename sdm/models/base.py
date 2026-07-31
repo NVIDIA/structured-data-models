@@ -280,42 +280,6 @@ class ICLModel(torch.nn.Module, ABC):
                 outputs[member] = output
         return tuple(cast(TableTensor, output) for output in outputs)
 
-    @staticmethod
-    def _new_ensemble_cache(
-        *,
-        recipe: Recipe,
-        members: tuple[int, ...],
-        x_context: EnsembleTable,
-        y_context: EnsembleTable,
-        related_context_tables: EnsembleRelatedTables | None,
-        kwargs: dict[str, Any],
-    ) -> Cache:
-        first_target = y_context[members[0]]
-        return Cache(
-            recipe=recipe,
-            member_ids=members,
-            x_schemas=tuple(x_context[member].schema for member in members),
-            related_tables_schemas=tuple(
-                (
-                    related_context_tables.member(member).schema
-                    if related_context_tables is not None
-                    else None
-                )
-                for member in members
-            ),
-            related_table_names=(
-                tuple(related_context_tables.tables)
-                if related_context_tables is not None
-                else None
-            ),
-            classes=(
-                first_target.categorical.categories[0]
-                if first_target.categorical.size(-1) > 0
-                else None
-            ),
-            kwargs=kwargs,
-        )
-
     def _fit_ensemble_caches(
         self,
         *,
@@ -341,12 +305,31 @@ class ICLModel(torch.nn.Module, ABC):
         )
         caches: list[Cache] = []
         for members in groups:
-            cache = self._new_ensemble_cache(
+            first_target = y_context[members[0]]
+            cache = Cache(
                 recipe=recipe,
-                members=members,
-                x_context=x_context,
-                y_context=y_context,
-                related_context_tables=related_context_tables,
+                member_ids=members,
+                x_schemas=tuple(
+                    x_context[member].schema for member in members
+                ),
+                related_tables_schemas=tuple(
+                    (
+                        related_context_tables.member(member).schema
+                        if related_context_tables is not None
+                        else None
+                    )
+                    for member in members
+                ),
+                related_table_names=(
+                    tuple(related_context_tables.tables)
+                    if related_context_tables is not None
+                    else None
+                ),
+                classes=(
+                    first_target.categorical.categories[0]
+                    if first_target.categorical.size(-1) > 0
+                    else None
+                ),
                 kwargs=kwargs,
             )
             self._forward_ensemble_group(

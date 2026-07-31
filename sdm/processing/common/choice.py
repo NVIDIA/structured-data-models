@@ -119,26 +119,6 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             )
         return fn(table)
 
-    def _select_members(
-        self,
-        context: EnsembleFitContext,
-    ) -> tuple[int, ...]:
-        if self.selection == "round_robin":
-            return tuple(
-                member_id % len(self.options)
-                for member_id in context.member_ids
-            )
-        return tuple(
-            int(
-                torch.randint(
-                    len(self.options),
-                    (1,),
-                    generator=context.generator_for(member_id),
-                ).item()
-            )
-            for member_id in context.member_ids
-        )
-
     def fit_transform_ensemble(
         self,
         table: EnsembleTable,
@@ -151,7 +131,22 @@ class Choice(EnsembleProcessor, InvertibleMixin):
                 cast(Processor, option)
             )
 
-        self._selections = self._select_members(context)
+        if self.selection == "round_robin":
+            self._selections = tuple(
+                member_id % len(self.options)
+                for member_id in context.member_ids
+            )
+        else:
+            self._selections = tuple(
+                int(
+                    torch.randint(
+                        len(self.options),
+                        (1,),
+                        generator=context.generator_for(member_id),
+                    ).item()
+                )
+                for member_id in context.member_ids
+            )
         self._positions = {
             option: tuple(
                 position
