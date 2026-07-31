@@ -1,7 +1,7 @@
 import torch
 
 from sdm import Stype, TableTensor
-from sdm.processing.numerical import SliceColumns
+from sdm.processing.common import SliceColumns
 
 
 def _table() -> TableTensor:
