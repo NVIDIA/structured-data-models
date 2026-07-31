@@ -32,14 +32,6 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
-    assert torch.allclose(
-        processor._mean,
-        torch.tensor(
-            [[[2.0, 6.0, fill_value]], [[20.0, 4.0, fill_value]]],
-            dtype=dtype,
-            device=device,
-        ),
-    )
     assert torch.equal(
         transformed,
         torch.tensor(

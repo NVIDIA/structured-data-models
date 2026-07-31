@@ -44,7 +44,7 @@ class ImputeMode(Processor):
         fill_values: list[torch.Tensor] = []
         columns = table.columns[Stype.categorical]
         for index, category in enumerate(table.categorical.categories):
-            codes = data[..., index]
+            codes = data[..., index]  # [*batch, n_samples]
             observed = codes >= 0
             if not bool(observed.any(dim=-1).all()):
                 raise ValueError(
@@ -56,12 +56,12 @@ class ImputeMode(Processor):
                 (*codes.shape[:-1], category.numel()),
                 dtype=torch.long,
                 device=codes.device,
-            )
+            )  # [*batch, n_categories]
             counts.scatter_add_(
                 -1,
                 codes.clamp_min(0).to(torch.long),
                 observed.to(torch.long),
-            )
+            )  # [*batch, n_categories]
             fill_values.append(counts.argmax(dim=-1))
 
         self._fill_values = (
