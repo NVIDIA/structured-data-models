@@ -159,8 +159,8 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.StringTensor"><code class="docutils literal notranslate"><span class="pre">StringTensor</span></code></a><ul>
 <li><a class="reference internal" href="#sdm.tensor.StringTensor.from_arrow"><code class="docutils literal notranslate"><span class="pre">StringTensor.from_arrow()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.StringTensor.to_arrow"><code class="docutils literal notranslate"><span class="pre">StringTensor.to_arrow()</span></code></a></li>
-<li><a class="reference internal" href="#sdm.tensor.StringTensor.to_cudf"><code class="docutils literal notranslate"><span class="pre">StringTensor.to_cudf()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.StringTensor.from_cudf"><code class="docutils literal notranslate"><span class="pre">StringTensor.from_cudf()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.StringTensor.to_cudf"><code class="docutils literal notranslate"><span class="pre">StringTensor.to_cudf()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.StringTensor.from_list"><code class="docutils literal notranslate"><span class="pre">StringTensor.from_list()</span></code></a></li>
 </ul>
 </li>
@@ -223,6 +223,7 @@ data-aria-dark="Switch to auto color mode">
 <dt class="sig sig-object py" id="sdm.tensor.StringTensor.from_arrow">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_arrow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><span class="pre">Array</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.ChunkedArray.html#pyarrow.ChunkedArray" title="(in Apache Arrow v25.0.0)"><span class="pre">ChunkedArray</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.StringTensor.from_arrow" title="Link to this definition">#</a></dt>
 <dd><p>Create tensor from a string <a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Array</span></code></a>.</p>
+<p>Null values will be encoded as empty strings.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 </span><span data-line="2"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">StringTensor</span>
 </span><span data-line="3">
@@ -257,20 +258,10 @@ data-aria-dark="Switch to auto color mode">
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="sdm.tensor.StringTensor.to_cudf">
-<span class="sig-name descname"><span class="pre">to_cudf</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><span class="pre">cudf.Series</span></a></span></span><a class="headerlink" href="#sdm.tensor.StringTensor.to_cudf" title="Link to this definition">#</a></dt>
-<dd><p>Convert this CUDA tensor to a flat <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.Series</span></code></a>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)">cudf.Series</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.StringTensor.from_cudf">
 <em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_cudf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ser</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><span class="pre">cudf.Series</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Index/#cudf.Index" title="(in cudf v26.06)"><span class="pre">cudf.Index</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.13)"><span class="pre">torch.device</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.StringTensor.from_cudf" title="Link to this definition">#</a></dt>
 <dd><p>Create tensor from a string <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.Series</span></code></a>.</p>
+<p>Null values will be encoded as empty strings.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -281,6 +272,17 @@ data-aria-dark="Switch to auto color mode">
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>Self</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.StringTensor.to_cudf">
+<span class="sig-name descname"><span class="pre">to_cudf</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><span class="pre">cudf.Series</span></a></span></span><a class="headerlink" href="#sdm.tensor.StringTensor.to_cudf" title="Link to this definition">#</a></dt>
+<dd><p>Convert this CUDA tensor to a flat <a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)"><code class="xref py py-class docutils literal notranslate"><span class="pre">cudf.Series</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.rapids.ai/api/cudf/stable/user_guide/api_docs/api/cudf.Series/#cudf.Series" title="(in cudf v26.06)">cudf.Series</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -340,7 +342,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=a421ac6d"></script>
+      <script src="../../_static/documentation_options.js?v=72873695"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
