@@ -74,7 +74,7 @@ class ICLBlock(torch.nn.Module):
         *,
         num_classes: int | None = None,
         cache: Cache | None = None,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if num_classes is None or num_classes <= self.num_classes:
             return self._forward(
@@ -106,7 +106,7 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache | None,
         cache_prefix: str,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None,
     ) -> Tensor:  # [..., R_test, out_channels]
         R_train = y.size(-1)
 
@@ -144,7 +144,7 @@ class ICLBlock(torch.nn.Module):
         *,
         num_classes: int,
         cache: Cache | None,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None,
     ) -> Tensor:  # [..., R_test, C]
         *batch_shape, num_rows, channels = x.size()
         train_size = y.size(-1)
@@ -216,7 +216,7 @@ class ICLBlock(torch.nn.Module):
         num_classes: int,
         cache: Cache,
         cache_prefix: str,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None,
     ) -> Tensor:  # [R_test, C]
         class_ids, local_log_probs = self._replay_node(
             test_rows=test_rows,
@@ -239,7 +239,7 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache | None,
         cache_prefix: str,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None,
     ) -> tuple[Tensor, Tensor, _Node]:  # [C_node], [R_test, C_node]
         class_ids, local_labels = train_labels.unique(
             sorted=True,
@@ -318,7 +318,7 @@ class ICLBlock(torch.nn.Module):
         *,
         cache: Cache,
         cache_prefix: str,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None,
     ) -> tuple[Tensor, Tensor]:  # [C_node], [R_test, C_node]
         class_ids = cast(Tensor, node["class_ids"])
         children = cast(list[_Node], node["children"])
@@ -376,7 +376,7 @@ class ICLBlock(torch.nn.Module):
         num_classes: int,
         cache: Cache | None,
         cache_prefix: str,
-        batch_size_limit: int | None = None,
+        batch_size_limit: int | None,
     ) -> Tensor:  # [R_test, C_node]
         logits = self._forward(
             x=x,
