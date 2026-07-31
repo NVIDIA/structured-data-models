@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm import Stype, TableTensor
-from sdm.processing.text.pca import PCA
+from sdm.processing import PCA
 
 
 def _table(data: torch.Tensor) -> TableTensor:
