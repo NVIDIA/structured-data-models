@@ -2,47 +2,51 @@
 
 Python package for structured data models.
 
+## Installation
+
+The `structured-data-models` package is available from Python 3.10 and PyTorch 2.5 onwards.
+Install via:
+
+```bash
+pip install structured-data-models
+```
+
+> [!NOTE]
+> For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency to keep dataframe-style operations on GPU and avoid unnecessary data movement.
+
+## Quick Tour
+
 ```python
-import torch
 from sklearn.datasets import load_breast_cancer
 
-from sdm import TableTensor, infer_stypes
-from sdm.models import TabICLv2
-from sdm.processing import Recipe
+import sdm
 
 df = load_breast_cancer(as_frame=True).frame
 
 # A lossless, fully tensorized representation of the raw data on GPU:
-table = TableTensor.from_pandas(
+table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=infer_stypes(df),
-    device=device,
+    stypes=sdm.infer_stypes(df),
+    device="cuda",
 )
 
 # Access to a variety of pre-trained structured data models:
-model = TabICLv2(device=device)
+model = sdm.models.TabICLv2(device="cuda")
 
-# Unified and custom recipes for pre- and post-processing:
-recipe = Recipe(
-    features=[
-        ShuffleColumns(),
-        ImputeMissing(),
-        StandardScale(),
-        SigmaClip(threshold=4.0),
-
-    ],
-    target=[
-        ShuffleClasses(),
-    ],
+# Default in-context learning forward pass:
+model(
+    x_context=table[:300].drop_columns("target"),
+    y_context=table[:300, "target"],
+    x_query=table[300:].drop_columns("target"),
+    num_estimators=8,
 )
 
-# Common execution interface:
-with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
-    model(
-        x_context=table[:300].drop_columns("target"),
-        y_context=table[:300, "target"],
-        x_query=table[300:].drop_columns("target"),
-        recipe=recipe,
-        num_estimators=8,
-    )
+# Fit + Predict forward pass via key/value caching for fast inference:
+model.fit(
+    x=table[:300].drop_columns("target"),
+    y=table[:300, "target"],
+    num_estimators=8,
+)
+model.predict(table[300:].drop_columns("target"))
+model.clear()
 ```

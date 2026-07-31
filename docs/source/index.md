@@ -11,7 +11,9 @@ install
 :caption: Guides
 :maxdepth: 1
 
-recipe
+tensor
+icl
+processing
 ```
 
 ```{toctree}
@@ -24,4 +26,5 @@ api/relational
 api/processing
 api/nn
 api/models
+api/evaluation
 ```
