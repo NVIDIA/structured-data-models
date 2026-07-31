@@ -74,7 +74,7 @@ class TabICLv2(ICLModel):
             {
                 "col0": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
                 "col1": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
-                "target": ["t", "f", "t", "f", "t", "f", "t", "f"],
+                "target": ["t", "f", "t", "f", "t", None, None, None],
             },
             stypes={
                 "col0": "numerical",
