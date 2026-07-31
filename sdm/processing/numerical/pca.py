@@ -25,8 +25,8 @@ class PCA(Processor):
         if dim < 1:
             raise ValueError(f"'dim' must be positive (got {dim}).")
         self.dim = dim
-        self.register_buffer("mean", torch.empty(0))
-        self.register_buffer("components", torch.empty(0))
+        self.register_buffer("mean", torch.empty(0), persistent=True)
+        self.register_buffer("components", torch.empty(0), persistent=True)
 
     def _fit(
         self,
