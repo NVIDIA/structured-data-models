@@ -155,9 +155,8 @@ class InducedTransformerBlock(torch.nn.Module):
                 Entries set to ``True`` participate in attention.
             return_key_value: Whether to return the computed key and value
                 projections for the final attention site alongside the output.
-            batch_size_limit: Maximum number of broadcast batch elements
-                processed at once during non-compiled evaluation. ``None``
-                disables batch chunking.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
