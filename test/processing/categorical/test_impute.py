@@ -7,7 +7,7 @@ from sdm.testing import onlyCUDA, withCUDA
 
 
 def _table(
-    values: list[list[int]],
+    values: list[list[int]] | list[list[list[int]]],
     *,
     columns: tuple[str, ...] = ("kind", "segment"),
     categories: tuple[tuple[str, ...], ...] = (
@@ -58,6 +58,35 @@ def test_impute_mode_uses_most_frequent_category(
         query.categorical.categories,
     ):
         assert torch.equal(actual, expected)
+
+
+@withCUDA
+def test_impute_mode_fits_leading_batches_independently(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [
+            [[0, 0], [0, -1], [1, 1]],
+            [[2, 1], [2, 1], [-1, 0]],
+        ],
+        device=device,
+    )
+    query = _table(
+        [[[-1, -1]], [[-1, -1]]],
+        device=device,
+    )
+
+    processor = ImputeMode().fit(context)
+    output = processor.transform(query)
+
+    assert torch.equal(
+        output.categorical.code,
+        torch.tensor(
+            [[[0, 0]], [[2, 1]]],
+            dtype=torch.int32,
+            device=device,
+        ),
+    )
 
 
 @onlyCUDA

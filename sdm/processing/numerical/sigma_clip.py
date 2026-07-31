@@ -7,9 +7,14 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-def _std(inp: Tensor, *, dim: int) -> Tensor:
+def _std(
+    inp: Tensor,
+    *,
+    dim: int,
+    keepdim: bool = False,
+) -> Tensor:
     correction = 1 if inp.size(dim) > 1 else 0
-    return inp.std(dim=dim, correction=correction)
+    return inp.std(dim=dim, correction=correction, keepdim=keepdim)
 
 
 class ClipSigma(Processor):
@@ -47,36 +52,42 @@ class ClipSigma(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = _as_float(table.numerical)
-        min_std = numerical.new_tensor(1e-6)
+        keepdim = numerical.dim() > 2
 
-        mean = numerical.mean(dim=0)
-        std = torch.maximum(_std(numerical, dim=0), min_std)
+        mean = numerical.mean(dim=-2, keepdim=keepdim)
+        std = _std(
+            numerical,
+            dim=-2,
+            keepdim=keepdim,
+        ).clamp_min(1e-6)
         lower_bound = mean - self.threshold * std
         upper_bound = mean + self.threshold * std
         outlier_mask = (numerical < lower_bound) | (numerical > upper_bound)
 
         keep = ~outlier_mask
-        count = keep.sum(dim=0)
+        count = keep.sum(dim=-2, keepdim=keepdim)
         safe_count = count.clamp_min(1)
         clean_sum = torch.where(
             keep,
             numerical,
-            torch.zeros_like(numerical),
-        ).sum(dim=0)
+            0.0,
+        ).sum(dim=-2, keepdim=keepdim)
         mean_clean = clean_sum / safe_count
         centered = torch.where(
             keep,
             numerical - mean_clean,
-            torch.zeros_like(numerical),
+            0.0,
         )
         correction = (count > 1).to(count.dtype)
         denominator = (count - correction).clamp_min(1)
-        std_clean = (centered.square().sum(dim=0) / denominator).sqrt()
+        std_clean = (
+            centered.square().sum(dim=-2, keepdim=keepdim) / denominator
+        ).sqrt()
 
         has_clean = count > 0
         self._mean = torch.where(has_clean, mean_clean, mean)
         self._std = torch.where(has_clean, std_clean, std)
-        self._std = torch.maximum(self._std, min_std)
+        self._std = self._std.clamp_min(1e-6)
         self.lower_bound = self._mean - self.threshold * self._std
         self.upper_bound = self._mean + self.threshold * self._std
 
