@@ -94,16 +94,17 @@ When a recipe contains stochastic processors, such as {py:class}`~sdm.processing
 ## Autocasting
 
 An {py:class}`~sdm.models.ICLModel` does not enable mixed-precision autocasting by default.
-Model calls therefore run with the dtype chosen by the input tensors, model parameters unless the caller explicitly enters an autocast context.
+Instead, the model respects the caller’s active PyTorch autocast context, and precision is controlled explicitly at the call site.
 
-To run model execution under automatic mixed precision, wrap the ICL call explicitly:
+For example, to run the model forward pass in :external+torch:ref:`torch.bfloat16 <dtype-doc>` mixed precision on CUDA, run:
 
 ```python
 with torch.amp.autocast("cuda", dtype=torch.bfloat16):
     out = model(...)
 ```
 
-However, even in autocast mode, pre- and post-processing are performed in ``float32`` to ensure numerical stability.
+Pre-processing and post-processing routines remain outside the model’s autocast policy.
+They run with the dtypes of their inputs.
 
 ## Model Outputs
 
