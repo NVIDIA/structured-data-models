@@ -86,6 +86,18 @@ Lastly, the {py:attr}`~sdm.models.ICLModel.supported_feature_stypes` attribute d
 Semantic types outside this set need to be converted, dropped, or otherwise handled by the recipe before they reach the model.
 For example, {py:class}`~sdm.models.TabICLv2` can only consume numerical features internally, so it is the recipe's job to convert any other semantic type into a numerical representation before it reaches the model, *e.g.*, via {py:class}`~sdm.processing.common.ToNumerical` on categorical columns.
 
+## Model Outputs
+
+Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where the output schema depends on the task, model, and post-processing routine of the {py:class}`~sdm.processing.recipe.Recipe`:
+
+- Classification predictions are generally returned as numerical probabilities, where each target category corresponds to one column in the output.
+- Regression predictions are generally model-dependent.
+  For example, {py:class}`~sdm.models.TabICLv2` outputs numerical quantiles named `"q001"` through `"q999"`, from which the (approximate) mean prediction can be derived via `out.numerical.mean(dim=-1)` and the median prediction is available via `out["q500"].numerical`.
+
+Since predictions are returned as {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, and {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
+
+In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to them (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
+
 ## Ensembling
 
 The interface of an {py:class}`~sdm.models.ICLModel` additionally supports estimator ensembling through the `num_estimators` argument in {py:meth}`~sdm.models.ICLModel.forward` and {py:meth}`~sdm.models.ICLModel.fit`.
@@ -104,18 +116,6 @@ with torch.amp.autocast("cuda", dtype=torch.bfloat16):
 
 Pre-processing and post-processing routines remain outside the model’s autocast policy.
 They run with the dtypes of their inputs.
-
-## Model Outputs
-
-Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where the output schema depends on the task, model, and post-processing routine of the {py:class}`~sdm.processing.recipe.Recipe`:
-
-- Classification predictions are generally returned as numerical probabilities, where each target category corresponds to one column in the output.
-- Regression predictions are generally model-dependent.
-  For example, {py:class}`~sdm.models.TabICLv2` outputs numerical quantiles named `"q001"` through `"q999"`, from which the (approximate) mean prediction can be derived via `out.numerical.mean(dim=-1)` and the median prediction is available via `out["q500"].numerical`.
-
-Since predictions are returned as {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, and {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
-
-In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to them (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
 
 ## Relational Context
 
