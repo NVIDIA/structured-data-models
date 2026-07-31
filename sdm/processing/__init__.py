@@ -3,7 +3,7 @@
 from sdm.processing.base import (
     Processor,
     InvertibleMixin,
-    VariableSchemaBatchMixin,
+    VariableSchemaProcessor,
 )
 from sdm.processing.common import (
     Identity,
@@ -39,7 +39,7 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "VariableSchemaBatchMixin",
+    "VariableSchemaProcessor",
     "Identity",
     "Callable",
     "Sequential",
