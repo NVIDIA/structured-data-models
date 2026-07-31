@@ -109,30 +109,43 @@ class Relationship:
 class RelationalData(DeviceMixin):
     r"""Collection of named tables and join relationships.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelationalData, TableTensor
 
         data = RelationalData(
             tables={
-                "users": TableTensor.from_pandas(...),
-                "orders": TableTensor.from_pandas(...),
-                "items": TableTensor.from_pandas(...),
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1]},
+                    stypes={"user_id": "id"},
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 1],
+                        "item_id": [10, 11],
+                    },
+                    stypes={
+                        "user_id": "id",
+                        "item_id": "id",
+                    },
+                ),
+                "items": TableTensor.from_columns(
+                    {"item_id": [10, 11]},
+                    stypes={"item_id": "id"},
+                ),
             },
             relationships=[
                 # Foreign key from orders to users:
-                dict(left_table="orders", left_column="user_id",
-                     right_table="users", right_column="user_id"),
+                dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                 # Foreign key from orders to items:
-                dict(left_table="orders", left_column="item_id",
-                     right_table="items", right_column="item_id"),
+                dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
             ],
         )
 
     Args:
         tables: Tables keyed by table name.
         relationships: Join relationships among ``tables``.
-    """
+    """  # noqa: E501
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
@@ -243,7 +256,7 @@ class RelationalData(DeviceMixin):
     ) -> RelationalSampler:
         r"""Create a device-appropriate sampler over this relational data.
 
-        .. code-block:: python
+        .. testcode::
 
             from sdm import (
                 RelationalData,
@@ -253,17 +266,32 @@ class RelationalData(DeviceMixin):
 
             data = RelationalData(
                 tables={
-                    "users": TableTensor.from_pandas(...),
-                    "orders": TableTensor.from_pandas(...),
-                    "items": TableTensor.from_pandas(...),
+                    "users": TableTensor.from_columns(
+                        {"user_id": [0, 1]},
+                        stypes={"user_id": "id"},
+                    ),
+                    "orders": TableTensor.from_columns(
+                        {
+                            "user_id": [0, 1],
+                            "item_id": [10, 11],
+                            "order_date": ["2026-01-01", "2026-01-02"],
+                        },
+                        stypes={
+                            "user_id": "id",
+                            "item_id": "id",
+                            "order_date": "datetime",
+                        },
+                    ),
+                    "items": TableTensor.from_columns(
+                        {"item_id": [10, 11]},
+                        stypes={"item_id": "id"},
+                    ),
                 },
                 relationships=[
                     # Foreign key from orders to users:
-                    dict(left_table="orders", left_column="user_id",
-                         right_table="users", right_column="user_id"),
+                    dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                     # Foreign key from orders to items:
-                    dict(left_table="orders", left_column="item_id",
-                         right_table="items", right_column="item_id"),
+                    dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
                 ],
             )
 
@@ -279,7 +307,7 @@ class RelationalData(DeviceMixin):
                 constructor arguments. A row in a time-aware table can only
                 be sampled if its timestamp does not exceed the query
                 timestamp.
-        """
+        """  # noqa: E501
         from sdm.relational.sampler import (  # noqa: PLC0415
             TemporalSamplingConfig,
         )

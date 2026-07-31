@@ -37,7 +37,7 @@ repos:
     hooks:
       - id: ty
         name: Type check Python
-        args: [--extra, test]
+        args: [--no-default-groups, --group=test]
 
   - repo: https://github.com/executablebooks/mdformat
     rev: 1.0.0
