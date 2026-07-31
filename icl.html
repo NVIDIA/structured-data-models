@@ -159,7 +159,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#the-icl-interface">The ICL Interface</a></li>
 <li><a class="reference internal" href="#model-concepts">Model Concepts</a></li>
 <li><a class="reference internal" href="#ensembling">Ensembling</a></li>
-<li><a class="reference internal" href="#model-outputs">Model Outputs</a></li>
+<li><a class="reference internal" href="#autocasting">Autocasting</a></li>
 <li><a class="reference internal" href="#relational-context">Relational Context</a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
@@ -269,14 +269,6 @@ While each model provides a default recipe, users can fully control or modify ho
 <p>Lastly, the <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.supported_feature_stypes" title="sdm.models.ICLModel.supported_feature_stypes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">supported_feature_stypes</span></code></a> attribute denotes which feature semantic types a model accepts after pre-processing.
 Semantic types outside this set need to be converted, dropped, or otherwise handled by the recipe before they reach the model.
 For example, <a class="reference internal" href="api/generated/sdm.models.TabICLv2.html#sdm.models.TabICLv2" title="sdm.models.TabICLv2"><code class="xref py py-class docutils literal notranslate"><span class="pre">TabICLv2</span></code></a> can only consume numerical features internally, so it is the recipe’s job to convert any other semantic type into a numerical representation before it reaches the model, <em>e.g.</em>, via <a class="reference internal" href="api/generated/sdm.processing.common.ToNumerical.html#sdm.processing.common.ToNumerical" title="sdm.processing.common.ToNumerical"><code class="xref py py-class docutils literal notranslate"><span class="pre">ToNumerical</span></code></a> on categorical columns.</p>
-</section>
-<section id="ensembling">
-<h2>Ensembling<a class="headerlink" href="#ensembling" title="Link to this heading">#</a></h2>
-<p>The interface of an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> additionally supports estimator ensembling through the <code class="docutils literal notranslate"><span class="pre">num_estimators</span></code> argument in <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> and <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>.
-When a recipe contains stochastic processors, such as <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a>, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.</p>
-</section>
-<section id="model-outputs">
-<h2>Model Outputs<a class="headerlink" href="#model-outputs" title="Link to this heading">#</a></h2>
 <p>Predictions are returned as a general <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>, where the output schema depends on the task, model, and post-processing routine of the <a class="reference internal" href="api/generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-class docutils literal notranslate"><span class="pre">Recipe</span></code></a>:</p>
 <ul class="simple">
 <li><p>Classification predictions are generally returned as numerical probabilities, where each target category corresponds to one column in the output.</p></li>
@@ -285,6 +277,23 @@ For example, <a class="reference internal" href="api/generated/sdm.models.TabICL
 </ul>
 <p>Since predictions are returned as <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a>, you can zero-copy them to <a class="reference external" href="https://pandas.pydata.org/docs"><code class="docutils literal notranslate"><span class="pre">pandas</span></code></a>, <a class="reference external" href="https://arrow.apache.org/docs"><code class="docutils literal notranslate"><span class="pre">arrow</span></code></a>, or <a class="reference external" href="https://docs.rapids.ai/api/cudf"><code class="docutils literal notranslate"><span class="pre">cudf</span></code></a> via <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.to_pandas" title="sdm.tensor.TableTensor.to_pandas"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_pandas()</span></code></a>, <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.to_arrow" title="sdm.tensor.TableTensor.to_arrow"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_arrow()</span></code></a>, and <a class="reference internal" href="api/generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor.to_cudf" title="sdm.tensor.TableTensor.to_cudf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_cudf()</span></code></a> for further downstream processing.</p>
 <p>In order to simplify metric calculation (<em>e.g.</em>, via <a class="reference external" href="https://lightning.ai/docs/torchmetrics"><code class="docutils literal notranslate"><span class="pre">torchmetrics</span></code></a>), we provide helper functions in the <a class="reference internal" href="api/evaluation.html"><span class="doc std std-doc"><code class="docutils literal notranslate"><span class="pre">sdm.evaluation</span></code></span></a> package to convert target columns to class indices and align prediction columns to them (see <a class="reference internal" href="api/generated/sdm.evaluation.to_class_indices.html#sdm.evaluation.to_class_indices" title="sdm.evaluation.to_class_indices"><code class="xref py py-func docutils literal notranslate"><span class="pre">to_class_indices()</span></code></a> and <a class="reference internal" href="api/generated/sdm.evaluation.to_binary_class.html#sdm.evaluation.to_binary_class" title="sdm.evaluation.to_binary_class"><code class="xref py py-func docutils literal notranslate"><span class="pre">to_binary_class()</span></code></a>).</p>
+</section>
+<section id="ensembling">
+<h2>Ensembling<a class="headerlink" href="#ensembling" title="Link to this heading">#</a></h2>
+<p>The interface of an <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> additionally supports estimator ensembling through the <code class="docutils literal notranslate"><span class="pre">num_estimators</span></code> argument in <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.forward" title="sdm.models.ICLModel.forward"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forward()</span></code></a> and <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel.fit" title="sdm.models.ICLModel.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>.
+When a recipe contains stochastic processors, such as <a class="reference internal" href="api/generated/sdm.processing.common.ShuffleColumns.html#sdm.processing.common.ShuffleColumns" title="sdm.processing.common.ShuffleColumns"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a>, pre-processing produces different transformed views of the same task, and model outputs on these views are stacked for post-processing.</p>
+</section>
+<section id="autocasting">
+<h2>Autocasting<a class="headerlink" href="#autocasting" title="Link to this heading">#</a></h2>
+<p>An <a class="reference internal" href="api/generated/sdm.models.ICLModel.html#sdm.models.ICLModel" title="sdm.models.ICLModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ICLModel</span></code></a> does <strong>not</strong> enable mixed-precision autocasting by default.
+Instead, the model respects the caller’s active PyTorch autocast context.
+For example, to run the model forward pass in <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes"><code class="docutils literal notranslate"><span class="pre">torch.bfloat16</span></code></a> mixed precision on CUDA with <a class="reference external" href="https://docs.pytorch.org/docs/stable/amp"><code class="docutils literal notranslate"><span class="pre">torch.amp.autocast()</span></code></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">amp</span><span class="o">.</span><span class="n">autocast</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">):</span>
+</span><span data-line="2">    <span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span></pre></div>
+</div>
+<p>Pre-processing and post-processing routines remain outside the model’s autocast policy.
+They will run with the dtypes of the model inputs.</p>
 </section>
 <section id="relational-context">
 <h2>Relational Context<a class="headerlink" href="#relational-context" title="Link to this heading">#</a></h2>
@@ -418,7 +427,7 @@ The full relational sampling and prediction flow is shown in <a class="reference
   </main>
 </div>
 
-      <script src="_static/documentation_options.js?v=1f343d51"></script>
+      <script src="_static/documentation_options.js?v=81b650cb"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="_static/clipboard.min.js?v=a7894cd8"></script>
