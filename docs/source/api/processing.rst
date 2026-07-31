@@ -22,9 +22,8 @@ Ensemble Execution API
    ~sdm.processing.ensemble.EnsembleProcessor
    ~sdm.processing.ensemble.VariableSchemaBatchMixin
    ~sdm.processing.ensemble.EnsembleFitContext
-   ~sdm.processing.ensemble.EnsemblePlanner
-   ~sdm.processing.ensemble.EnsembleTable
-   ~sdm.processing.ensemble.EnsembleRelatedTables
+   ~sdm.processing.ensemble_table.EnsembleTable
+   ~sdm.processing.ensemble_table.EnsembleRelatedTables
 
 Common Processors
 -----------------

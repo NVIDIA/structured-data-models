@@ -165,8 +165,8 @@ class Choice(EnsembleProcessor, InvertibleMixin):
                 EnsembleProcessor,
                 self.options[option],
             ).fit_transform_ensemble(
-                table.select_members(positions),
-                context=context.select_members(positions).child(
+                table._select_members(positions),
+                context=context._select_members(positions).child(
                     f"option{option}"
                 ),
             )
@@ -184,7 +184,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             option: cast(
                 EnsembleProcessor,
                 self.options[option],
-            ).transform_ensemble(table.select_members(positions))
+            ).transform_ensemble(table._select_members(positions))
             for option, positions in self._positions.items()
         }
         return _merge_outputs(
@@ -193,22 +193,23 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             outputs=outputs,
         )
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
+        table: EnsembleTable,
+    ) -> EnsembleTable:
         r"""Invert outputs through their selected options."""
-        outputs: list[TableTensor | None] = [None] * len(tables)
-        for option, positions in self._positions.items():
-            restored = cast(
+        outputs = {
+            option: cast(
                 EnsembleProcessor,
                 self.options[option],
-            ).inverse_transform_members(
-                tuple(tables[position] for position in positions)
-            )
-            for position, table in zip(positions, restored):
-                outputs[position] = table
-        return tuple(cast(TableTensor, table) for table in outputs)
+            ).inverse_transform_ensemble(table._select_members(positions))
+            for option, positions in self._positions.items()
+        }
+        return _merge_outputs(
+            selections=self._selections,
+            positions=self._positions,
+            outputs=outputs,
+        )
 
     def get_extra_state(self) -> int | None:
         r""":meta private:"""  # noqa: D415

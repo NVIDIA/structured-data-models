@@ -3,10 +3,8 @@ from collections.abc import Sequence
 import torch
 
 from sdm.processing.base import Processor
-from sdm.processing.ensemble import (
-    EnsembleProcessor,
-    _stack_physical,
-)
+from sdm.processing.ensemble import EnsembleProcessor
+from sdm.processing.ensemble_table import EnsembleTable
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -26,7 +24,7 @@ class TargetDecode(Processor):
         super().__init__()
         self.target: EnsembleProcessor | None = None
         self._canonical_classes: tuple[object, ...] | None = None
-        self._class_indices: tuple[torch.Tensor, ...] = ()
+        self._class_indices: torch.Tensor | None = None
         self._num_members = 0
 
     def _bind(
@@ -39,7 +37,11 @@ class TargetDecode(Processor):
     ) -> None:
         self.target = target
         self._canonical_classes = canonical_classes
-        self._class_indices = tuple(class_indices)
+        self._class_indices = (
+            torch.stack(tuple(class_indices))
+            if canonical_classes is not None
+            else None
+        )
         self._num_members = num_members
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -50,23 +52,32 @@ class TargetDecode(Processor):
                 "Expected one model output per fitted ensemble member."
             )
 
-        outputs = tuple(table[member] for member in range(self._num_members))
         if self._canonical_classes is None:
-            return _stack_physical(
-                self.target.inverse_transform_members(outputs)
+            encoded = EnsembleTable(
+                groups=(table,),
+                member_to_variant=tuple(
+                    (0, member) for member in range(self._num_members)
+                ),
             )
+            return self.target.inverse_transform_ensemble(
+                encoded
+            ).materialize()
 
-        columns = tuple(str(value) for value in self._canonical_classes)
-        decoded: list[TableTensor] = []
-        for output, indices in zip(outputs, self._class_indices):
-            if output.numerical.size(-1) != indices.numel():
-                raise ValueError(
-                    "Model output width does not match the fitted class count."
-                )
-            decoded.append(
-                TableTensor(
-                    columns={Stype.numerical: columns},
-                    numerical=output.numerical.index_select(-1, indices),
-                )
+        assert self._class_indices is not None
+        if table.numerical.size(-1) != self._class_indices.size(-1):
+            raise ValueError(
+                "Model output width does not match the fitted class count."
             )
-        return _stack_physical(decoded)
+        indices = self._class_indices.view(
+            self._num_members,
+            *([1] * (table.numerical.dim() - 2)),
+            self._class_indices.size(-1),
+        ).expand_as(table.numerical)
+        return TableTensor(
+            columns={
+                Stype.numerical: tuple(
+                    str(value) for value in self._canonical_classes
+                )
+            },
+            numerical=table.numerical.gather(-1, indices),
+        )

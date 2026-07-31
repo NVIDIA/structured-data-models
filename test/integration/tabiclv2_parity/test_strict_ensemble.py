@@ -135,44 +135,72 @@ def test_eight_member_public_forward_and_fit_predict_parity(
 
     member_recipe = default_recipe()
     member_recipe.output = TargetDecode()
-    member_direct = (
-        model(
+    member_direct: dict[str, np.ndarray] = {}
+    member_cached: dict[str, np.ndarray] = {}
+    for mode in ("parallel", "sequential"):
+        member_direct[mode] = (
+            model(
+                x_context,
+                target,
+                x_query,
+                recipe=member_recipe,
+                num_estimators=8,
+                ensemble_mode=mode,
+                generator=torch.Generator().manual_seed(42),
+            )
+            .numerical.detach()
+            .cpu()
+            .numpy()
+        )
+        model.fit(
             x_context,
             target,
-            x_query,
             recipe=member_recipe,
             num_estimators=8,
-            ensemble_mode="parallel",
+            ensemble_mode=mode,
             generator=torch.Generator().manual_seed(42),
         )
-        .numerical.detach()
-        .cpu()
-        .numpy()
-    )
-    model.fit(
-        x_context,
-        target,
-        recipe=member_recipe,
-        num_estimators=8,
-        ensemble_mode="parallel",
-        generator=torch.Generator().manual_seed(42),
-    )
-    member_cached = model.predict(x_query).numerical.detach().cpu().numpy()
-    model.clear()
+        member_cached[mode] = (
+            model.predict(x_query).numerical.detach().cpu().numpy()
+        )
+        model.clear()
 
     member_atol = 3e-4 if task == "classification" else 2e-4
     member_rtol = 4e-4 if task == "classification" else 8e-4
-    for name, candidate_members in (
-        ("direct", member_direct),
-        ("cached", member_cached),
-    ):
+    path_atol = 1e-5 if task == "classification" else 5e-5
+    path_rtol = 1e-5 if task == "classification" else 3e-4
+    for mode in ("parallel", "sequential"):
+        for name, candidate_members in (
+            ("direct", member_direct[mode]),
+            ("cached", member_cached[mode]),
+        ):
+            np.testing.assert_allclose(
+                candidate_members[list(reference_to_candidate)],
+                reference_members,
+                atol=member_atol,
+                rtol=member_rtol,
+                err_msg=(
+                    f"first divergence: member-level {name} ({mode}, {task})"
+                ),
+            )
         np.testing.assert_allclose(
-            candidate_members[list(reference_to_candidate)],
-            reference_members,
-            atol=member_atol,
-            rtol=member_rtol,
-            err_msg=f"first divergence: member-level {name} ({task})",
+            member_direct[mode],
+            member_cached[mode],
+            atol=path_atol,
+            rtol=path_rtol,
         )
+    np.testing.assert_allclose(
+        member_direct["parallel"],
+        member_direct["sequential"],
+        atol=path_atol,
+        rtol=path_rtol,
+    )
+    np.testing.assert_allclose(
+        member_cached["parallel"],
+        member_cached["sequential"],
+        atol=path_atol,
+        rtol=path_rtol,
+    )
 
     atol = 3e-5 if task == "classification" else 1e-4
     for mode in ("parallel", "sequential"):

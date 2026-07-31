@@ -53,6 +53,8 @@ class ShuffleCategories(EnsembleProcessor):
         self.processors = torch.nn.ModuleList()
         self._member_to_processor: tuple[int, ...] = ()
         self._processor_positions: tuple[int, ...] = ()
+        self._mapping: tuple[tuple[int, ...], ...] = ()
+        self._offset_values: tuple[int, ...] = (0,)
 
     def _fit(
         self,
@@ -61,33 +63,37 @@ class ShuffleCategories(EnsembleProcessor):
         generator: torch.Generator | None = None,
     ) -> None:
         device = table.categorical.device
+        random_device = device if generator is None else generator.device
         permutations: list[Tensor] = []
         offsets = [0]
         for category in table.categorical.categories:
             n_classes = category.numel()
             if n_classes <= 1:
-                permutation = torch.arange(n_classes, device=device)
+                permutation = torch.arange(n_classes, device=random_device)
             elif self.method == "shift":
                 offset = torch.randint(
                     n_classes,
                     (1,),
                     generator=generator,
-                    device=device,
+                    device=random_device,
                 )
                 permutation = (
-                    torch.arange(n_classes, device=device) - offset
+                    torch.arange(n_classes, device=random_device) - offset
                 ) % n_classes
             else:
                 permutation = torch.randperm(
                     n_classes,
                     generator=generator,
-                    device=device,
+                    device=random_device,
                 )
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 
+        self._mapping = tuple(
+            tuple(permutation.tolist()) for permutation in permutations
+        )
         self.permutations = (
-            torch.cat(permutations)
+            torch.cat(permutations).to(device)
             if len(permutations) > 0
             else torch.empty(0, dtype=torch.long, device=device)
         )
@@ -96,15 +102,16 @@ class ShuffleCategories(EnsembleProcessor):
             dtype=torch.long,
             device=device,
         )
+        self._offset_values = tuple(offsets)
 
     def _planned_permutations(
         self,
         table: EnsembleTable,
         context: EnsembleFitContext,
     ) -> tuple[tuple[tuple[int, ...], ...], ...] | None:
-        if context.planner is None:
+        if context._plan is None:
             return None
-        return context.planner.category_permutations(
+        return context._plan.category_permutations(
             member_ids=context.member_ids,
             category_counts=tuple(
                 tuple(
@@ -114,7 +121,6 @@ class ShuffleCategories(EnsembleProcessor):
                 for position in range(table.num_members)
             ),
             table_scope=context.table_scope,
-            processor_path=context.processor_path,
         )
 
     @staticmethod
@@ -147,6 +153,8 @@ class ShuffleCategories(EnsembleProcessor):
             dtype=torch.long,
             device=table.device,
         )
+        processor._mapping = permutations
+        processor._offset_values = tuple(offsets)
         processor._fitted = True
 
     def fit_transform_ensemble(
@@ -173,23 +181,19 @@ class ShuffleCategories(EnsembleProcessor):
             if planned is None:
                 processor.fit(
                     before,
-                    generator=context.generator_for(
-                        member_id,
-                        device=before.device,
-                    ),
+                    generator=context.generator_for(member_id),
                 )
-                mapping_key: tuple[object, ...] = ("member", member_id)
             else:
                 self._set_permutations(
                     processor,
                     before,
                     planned[position],
                 )
-                mapping_key = tuple(
-                    tuple(permutation) for permutation in planned[position]
-                )
 
-            key = (table.member_to_variant[position], mapping_key)
+            key = (
+                table.member_to_variant[position],
+                processor._mapping,
+            )
             processor_index = keys.get(key)
             if processor_index is None:
                 processor_index = len(variants)
@@ -221,7 +225,7 @@ class ShuffleCategories(EnsembleProcessor):
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        offsets = self.offsets.tolist()
+        offsets = self._offset_values
         code = table.categorical.code.clone()
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
@@ -230,16 +234,8 @@ class ShuffleCategories(EnsembleProcessor):
             ]
             codes = code[..., index]
             valid = codes >= 0
-            if valid.any():
-                valid_codes = codes[valid].to(torch.long)
-                max_code = int(valid_codes.max().item())
-                if max_code >= permutation.numel():
-                    raise ValueError(
-                        "Expected category codes to be less than the fitted "
-                        f"class count (got max code {max_code} and "
-                        f"{permutation.numel()})"
-                    )
-                codes[valid] = permutation[valid_codes].to(codes.dtype)
+            valid_codes = codes[valid].to(torch.long)
+            codes[valid] = permutation[valid_codes].to(codes.dtype)
             categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(

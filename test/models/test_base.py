@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -22,7 +21,6 @@ class _RecordingModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables: ClassVar[bool] = True
-    supports_vectorized_ensemble: ClassVar[bool] = True
 
     def _forward(
         self,
@@ -81,11 +79,11 @@ class _GeneratorRecordingProcessor(EnsembleProcessor, InvertibleMixin):
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return table
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
-        return tuple(tables)
+        table: EnsembleTable,
+    ) -> EnsembleTable:
+        return table
 
 
 def _table(

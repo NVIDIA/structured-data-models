@@ -21,8 +21,8 @@ def _combine_parts(
     empty_source: EnsembleTable,
 ) -> EnsembleTable:
     if len(parts) == 0:
-        return empty_source.map_variants(
-            lambda table: table.select_columns(())
+        return empty_source.with_groups(
+            tuple(group.select_columns(()) for group in empty_source.groups)
         )
 
     variants: list[TableTensor] = []
@@ -208,7 +208,9 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         table: EnsembleTable,
         stype: str,
     ) -> EnsembleTable:
-        return table.map_variants(lambda variant: variant.select_stypes(stype))
+        return table.with_groups(
+            tuple(group.select_stypes(stype) for group in table.groups)
+        )
 
     def _remainder_input(self, table: EnsembleTable) -> EnsembleTable:
         configured = frozenset(self.processors)
@@ -224,7 +226,9 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
                 return variant.select_columns(())
             return variant.select_stypes(remainder)
 
-        return table.map_variants(select)
+        return table.with_groups(
+            tuple(select(group) for group in table.groups)
+        )
 
     def fit_transform_ensemble(
         self,
@@ -244,10 +248,7 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         self._active_routes = tuple(
             stype
             for stype, route_input in route_inputs.items()
-            if any(
-                variant.size(-1) > 0
-                for _, variant in route_input.iter_variants()
-            )
+            if any(group.size(-1) > 0 for group in route_input.groups)
         )
 
         parts = [
@@ -281,10 +282,10 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
             self._remainder_input(table)
         return _combine_parts(parts, empty_source=table)
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
+        table: EnsembleTable,
+    ) -> EnsembleTable:
         r"""Invert the single active semantic-type route."""
         if len(self._active_routes) != 1:
             raise NotImplementedError(
@@ -294,7 +295,7 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         return cast(
             EnsembleProcessor,
             self.processors[self._active_routes[0]],
-        ).inverse_transform_members(tables)
+        ).inverse_transform_ensemble(table)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         if self.remainder == "drop":

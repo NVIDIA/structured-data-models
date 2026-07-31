@@ -52,16 +52,6 @@ class ICLModel(torch.nn.Module, ABC):
     #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
-    #: Whether the model core accepts a leading ensemble dimension.
-    supports_vectorized_ensemble: ClassVar[bool] = False
-
-    #: Whether grouped execution preserves member-local generator semantics.
-    #:
-    #: Leave this disabled when ``_forward`` consumes ``generator`` in a way
-    #: whose draws depend on the leading ensemble shape. Such models use the
-    #: singleton schedule whenever a generator is supplied.
-    supports_vectorized_ensemble_rng: ClassVar[bool] = False
-
     def __init__(self) -> None:
         super().__init__()
 
@@ -73,7 +63,7 @@ class ICLModel(torch.nn.Module, ABC):
     ) -> Literal["auto", "parallel", "sequential"]:
         if ensemble_mode not in {"auto", "parallel", "sequential"}:
             raise ValueError(
-                "'ensemble_mode' must be 'auto', 'parallel', or 'sequential'."
+                "ensemble_mode must be auto, parallel, or sequential."
             )
         return cast(
             Literal["auto", "parallel", "sequential"],
@@ -81,97 +71,91 @@ class ICLModel(torch.nn.Module, ABC):
         )
 
     @staticmethod
-    def _table_execution_signature(table: TableTensor) -> tuple[object, ...]:
-        return (
-            tuple(table.size()[:-1]),
-            tuple(
-                (
-                    stype,
-                    type(block),
-                    block.dtype,
-                    block.size(-1),
-                )
-                for stype, block in table.items()
-            ),
-            tuple(
-                category.numel() for category in table.categorical.categories
-            ),
-        )
+    def _ensemble_rng_state(
+        generator: torch.Generator | None,
+        device: torch.device,
+    ) -> Tensor:
+        if generator is not None:
+            return generator.get_state()
+        if device.type == "cuda":
+            return torch.cuda.get_rng_state(device)
+        return torch.random.get_rng_state()
+
+    @staticmethod
+    def _restore_ensemble_rng_state(
+        state: Tensor,
+        generator: torch.Generator | None,
+        device: torch.device,
+    ) -> None:
+        if generator is not None:
+            generator.set_state(state)
+        elif device.type == "cuda":
+            torch.cuda.set_rng_state(state, device)
+        else:
+            torch.random.set_rng_state(state)
 
     @classmethod
-    def _related_execution_signature(
+    def _ensemble_group_key(
         cls,
-        tables: EnsembleRelatedTables | None,
+        table: EnsembleTable,
         member: int,
-    ) -> tuple[object, ...] | None:
-        if tables is None:
-            return None
-        return tuple(
-            (
-                name,
-                cls._table_execution_signature(table[member]),
-            )
-            for name, table in sorted(tables.tables.items())
-        )
+    ) -> object:
+        return table.member_to_variant[member][0]
 
     @classmethod
     def _execution_groups(
         cls,
         *,
         ensemble_mode: Literal["parallel", "sequential"],
+        allow_groups: bool,
         x_context: EnsembleTable,
         y_context: EnsembleTable,
         x_query: EnsembleTable | None,
         related_context_tables: EnsembleRelatedTables | None,
         related_query_tables: EnsembleRelatedTables | None,
     ) -> tuple[tuple[int, ...], ...]:
-        if (
-            ensemble_mode == "sequential"
-            or not cls.supports_vectorized_ensemble
-        ):
+        if ensemble_mode == "sequential" or not allow_groups:
             return tuple((member,) for member in range(x_context.num_members))
 
         groups: dict[tuple[object, ...], list[int]] = {}
         for member in range(x_context.num_members):
             signature = (
-                cls._table_execution_signature(x_context[member]),
-                cls._table_execution_signature(y_context[member]),
-                cls._table_execution_signature(x_query[member])
-                if x_query is not None
-                else None,
-                cls._related_execution_signature(
-                    related_context_tables,
-                    member,
+                cls._ensemble_group_key(x_context, member),
+                cls._ensemble_group_key(y_context, member),
+                (
+                    cls._ensemble_group_key(x_query, member)
+                    if x_query is not None
+                    else None
                 ),
-                cls._related_execution_signature(
-                    related_query_tables,
-                    member,
+                (
+                    tuple(
+                        (
+                            name,
+                            cls._ensemble_group_key(table, member),
+                        )
+                        for name, table in sorted(
+                            related_context_tables.tables.items()
+                        )
+                    )
+                    if related_context_tables is not None
+                    else None
+                ),
+                (
+                    tuple(
+                        (
+                            name,
+                            cls._ensemble_group_key(table, member),
+                        )
+                        for name, table in sorted(
+                            related_query_tables.tables.items()
+                        )
+                    )
+                    if related_query_tables is not None
+                    else None
                 ),
             )
             groups.setdefault(signature, []).append(member)
         return tuple(tuple(members) for members in groups.values())
-
-    @classmethod
-    def _materialize_table(
-        cls,
-        table: EnsembleTable,
-        members: tuple[int, ...],
-    ) -> TableTensor:
-        if cls.supports_vectorized_ensemble:
-            return table.materialize(members)
-        return table[members[0]]
-
-    @classmethod
-    def _materialize_related(
-        cls,
-        tables: EnsembleRelatedTables | None,
-        members: tuple[int, ...],
-    ) -> RelatedTables | None:
-        if tables is None:
-            return None
-        if cls.supports_vectorized_ensemble:
-            return tables.materialize(members)
-        return tables.member(members[0])
 
     def _validate_ensemble_inputs(
         self,
@@ -211,6 +195,45 @@ class ICLModel(torch.nn.Module, ABC):
                 related_query_tables=query_related,
             )
 
+    def _forward_ensemble_group(
+        self,
+        *,
+        members: tuple[int, ...],
+        x_context: EnsembleTable | None,
+        y_context: EnsembleTable | None,
+        x_query: EnsembleTable | None,
+        related_context_tables: EnsembleRelatedTables | None,
+        related_query_tables: EnsembleRelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        kwargs: dict[str, Any],
+    ) -> tuple[TableTensor, ...]:
+        return tuple(
+            self._forward(
+                x_context=(
+                    x_context[member] if x_context is not None else None
+                ),
+                y_context=(
+                    y_context[member] if y_context is not None else None
+                ),
+                x_query=x_query[member] if x_query is not None else None,
+                related_context_tables=(
+                    related_context_tables.member(member)
+                    if related_context_tables is not None
+                    else None
+                ),
+                related_query_tables=(
+                    related_query_tables.member(member)
+                    if related_query_tables is not None
+                    else None
+                ),
+                cache=cache,
+                generator=generator,
+                **kwargs,
+            )
+            for member in members
+        )
+
     def _forward_ensemble(
         self,
         *,
@@ -225,43 +248,73 @@ class ICLModel(torch.nn.Module, ABC):
     ) -> tuple[TableTensor, ...]:
         groups = self._execution_groups(
             ensemble_mode=ensemble_mode,
+            allow_groups=(
+                type(self)._forward_ensemble_group
+                is not ICLModel._forward_ensemble_group
+            ),
             x_context=x_context,
             y_context=y_context,
             x_query=x_query,
             related_context_tables=related_context_tables,
             related_query_tables=related_query_tables,
         )
-        if generator is not None and not self.supports_vectorized_ensemble_rng:
-            groups = tuple((member,) for group in groups for member in group)
         outputs: list[TableTensor | None] = [None] * x_context.num_members
         for members in groups:
-            out = self._forward(
-                x_context=self._materialize_table(x_context, members),
-                y_context=self._materialize_table(y_context, members),
-                x_query=self._materialize_table(x_query, members),
-                related_context_tables=self._materialize_related(
-                    related_context_tables,
-                    members,
-                ),
-                related_query_tables=self._materialize_related(
-                    related_query_tables,
-                    members,
-                ),
+            group_outputs = self._forward_ensemble_group(
+                members=members,
+                x_context=x_context,
+                y_context=y_context,
+                x_query=x_query,
+                related_context_tables=related_context_tables,
+                related_query_tables=related_query_tables,
                 cache=None,
                 generator=generator,
-                **kwargs,
+                kwargs=kwargs,
             )
-            if not self.supports_vectorized_ensemble:
-                outputs[members[0]] = out
-                continue
-            if out.size(0) != len(members):
+            if len(group_outputs) != len(members):
                 raise RuntimeError(
-                    "Model output did not preserve the leading ensemble "
-                    "dimension."
+                    "Model ensemble execution must return one output per "
+                    "member."
                 )
-            for local, member in enumerate(members):
-                outputs[member] = out[local]
+            for member, output in zip(members, group_outputs):
+                outputs[member] = output
         return tuple(cast(TableTensor, output) for output in outputs)
+
+    @staticmethod
+    def _new_ensemble_cache(
+        *,
+        recipe: Recipe,
+        members: tuple[int, ...],
+        x_context: EnsembleTable,
+        y_context: EnsembleTable,
+        related_context_tables: EnsembleRelatedTables | None,
+        kwargs: dict[str, Any],
+    ) -> Cache:
+        first_target = y_context[members[0]]
+        return Cache(
+            recipe=recipe,
+            member_ids=members,
+            x_schemas=tuple(x_context[member].schema for member in members),
+            related_tables_schemas=tuple(
+                (
+                    related_context_tables.member(member).schema
+                    if related_context_tables is not None
+                    else None
+                )
+                for member in members
+            ),
+            related_table_names=(
+                tuple(related_context_tables.tables)
+                if related_context_tables is not None
+                else None
+            ),
+            classes=(
+                first_target.categorical.categories[0]
+                if first_target.categorical.size(-1) > 0
+                else None
+            ),
+            kwargs=kwargs,
+        )
 
     def _fit_ensemble_caches(
         self,
@@ -276,62 +329,41 @@ class ICLModel(torch.nn.Module, ABC):
     ) -> list[Cache]:
         groups = self._execution_groups(
             ensemble_mode=ensemble_mode,
+            allow_groups=(
+                type(self)._forward_ensemble_group
+                is not ICLModel._forward_ensemble_group
+            ),
             x_context=x_context,
             y_context=y_context,
             x_query=None,
             related_context_tables=related_context_tables,
             related_query_tables=None,
         )
-        if generator is not None and not self.supports_vectorized_ensemble_rng:
-            groups = tuple((member,) for group in groups for member in group)
         caches: list[Cache] = []
         for members in groups:
-            x_batch = self._materialize_table(x_context, members)
-            y_batch = self._materialize_table(y_context, members)
-            related_batch = self._materialize_related(
-                related_context_tables,
-                members,
-            )
-            cache = Cache(
+            cache = self._new_ensemble_cache(
                 recipe=recipe,
-                member_ids=members,
-                x_schemas=tuple(
-                    x_context[member].schema for member in members
-                ),
-                related_tables_schemas=tuple(
-                    (
-                        related_context_tables.member(member).schema
-                        if related_context_tables is not None
-                        else None
-                    )
-                    for member in members
-                ),
-                related_table_names=(
-                    tuple(related_context_tables.tables)
-                    if related_context_tables is not None
-                    else None
-                ),
-                classes=(
-                    y_batch.categorical.categories[0]
-                    if y_batch.categorical.size(-1) > 0
-                    else None
-                ),
+                members=members,
+                x_context=x_context,
+                y_context=y_context,
+                related_context_tables=related_context_tables,
                 kwargs=kwargs,
             )
-            self._forward(
-                x_context=x_batch,
-                y_context=y_batch,
+            self._forward_ensemble_group(
+                members=members,
+                x_context=x_context,
+                y_context=y_context,
                 x_query=None,
-                related_context_tables=related_batch,
+                related_context_tables=related_context_tables,
                 related_query_tables=None,
                 cache=cache,
                 generator=generator,
-                **kwargs,
+                kwargs=kwargs,
             )
-            if x_context.num_members > 1:
-                cache = cache.cpu()
-            caches.append(cache.freeze())
-        return caches
+            caches.append(cache)
+        if x_context.num_members > 1:
+            caches = [cache.cpu() for cache in caches]
+        return [cache.freeze() for cache in caches]
 
     @_maybe_inference_mode()
     def forward(
@@ -423,8 +455,8 @@ class ICLModel(torch.nn.Module, ABC):
             "parallel" if ensemble_mode == "auto" else ensemble_mode
         )
         generator_state = (
-            generator.get_state()
-            if ensemble_mode == "auto" and generator is not None
+            self._ensemble_rng_state(generator, x_context_ensemble.device)
+            if ensemble_mode == "auto"
             else None
         )
         try:
@@ -442,8 +474,11 @@ class ICLModel(torch.nn.Module, ABC):
             if ensemble_mode != "auto":
                 raise
             if generator_state is not None:
-                assert generator is not None
-                generator.set_state(generator_state)
+                self._restore_ensemble_rng_state(
+                    generator_state,
+                    generator,
+                    x_context_ensemble.device,
+                )
             torch.cuda.empty_cache()
             outputs = self._forward_ensemble(
                 x_context=x_context_ensemble,
@@ -524,8 +559,8 @@ class ICLModel(torch.nn.Module, ABC):
             "parallel" if ensemble_mode == "auto" else ensemble_mode
         )
         generator_state = (
-            generator.get_state()
-            if ensemble_mode == "auto" and generator is not None
+            self._ensemble_rng_state(generator, x_ensemble.device)
+            if ensemble_mode == "auto"
             else None
         )
         try:
@@ -542,8 +577,11 @@ class ICLModel(torch.nn.Module, ABC):
             if ensemble_mode != "auto":
                 raise
             if generator_state is not None:
-                assert generator is not None
-                generator.set_state(generator_state)
+                self._restore_ensemble_rng_state(
+                    generator_state,
+                    generator,
+                    x_ensemble.device,
+                )
             torch.cuda.empty_cache()
             caches = self._fit_ensemble_caches(
                 recipe=fitted_recipe,
@@ -625,34 +663,26 @@ class ICLModel(torch.nn.Module, ABC):
                     ),
                 )
 
-            out = self._forward(
+            group_outputs = self._forward_ensemble_group(
+                members=members,
                 x_context=None,
                 y_context=None,
-                x_query=self._materialize_table(x_ensemble, members),
+                x_query=x_ensemble,
                 related_context_tables=None,
-                related_query_tables=self._materialize_related(
-                    related_ensemble,
-                    members,
-                ),
+                related_query_tables=related_ensemble,
                 cache=cache.to(x_ensemble.device),
                 generator=None,
-                **cast(dict[str, Any], cache["kwargs"]),
+                kwargs=cast(dict[str, Any], cache["kwargs"]),
             )
-            if not self.supports_vectorized_ensemble:
-                outputs[members[0]] = cast(
-                    TableTensor,
-                    out.to(x.dtype),
-                )
-                continue
-            if out.size(0) != len(members):
+            if len(group_outputs) != len(members):
                 raise RuntimeError(
-                    "Model output did not preserve the leading ensemble "
-                    "dimension."
+                    "Model ensemble execution must return one output per "
+                    "member."
                 )
-            for local, member in enumerate(members):
+            for member, output in zip(members, group_outputs):
                 outputs[member] = cast(
                     TableTensor,
-                    out[local].to(x.dtype),
+                    output.to(x.dtype),
                 )
 
         return recipe.transform_output(

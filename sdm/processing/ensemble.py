@@ -2,449 +2,26 @@ from __future__ import annotations
 
 import copy
 import hashlib
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Protocol, cast
 
 import torch
 from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.relational import RelatedTables, Relationship, TaskLink
-from sdm.stype import Stype
-from sdm.tensor import (
-    CategoricalTensor,
-    ColumnarTensor,
-    StringTensor,
-    TableTensor,
-)
+from sdm.processing.ensemble_table import EnsembleTable, _stack_positional
+from sdm.tensor import TableTensor
 
 
-def _variant_metadata_key(table: TableTensor) -> tuple[object, ...]:
-    categorical = tuple(
-        (
-            id(category),
-            tuple(category.size()),
-            category.dtype,
-            category.device,
-        )
-        for category in table.categorical.categories
-    )
-    return (
-        tuple(table.size()),
-        tuple((stype, columns) for stype, columns in table.columns.items()),
-        tuple(
-            (stype, type(block), block.dtype) for stype, block in table.items()
-        ),
-        table.device,
-        categorical,
-    )
-
-
-def _stack_physical(tables: Sequence[TableTensor]) -> TableTensor:
-    if len(tables) == 0:
-        raise ValueError("Expected at least one table to materialize.")
-    if len(tables) == 1:
-        return cast(TableTensor, tables[0].unsqueeze(0))
-
-    reference = tables[0]
-    reference_size = tuple(reference.size()[:-1])
-    reference_widths = {
-        stype: block.size(-1) for stype, block in reference.items()
-    }
-    for table in tables[1:]:
-        if tuple(table.size()[:-1]) != reference_size:
-            raise ValueError(
-                "Cannot materialize ensemble members with different row or "
-                "batch dimensions."
-            )
-        widths = {stype: block.size(-1) for stype, block in table.items()}
-        if widths != reference_widths:
-            raise ValueError(
-                "Cannot materialize ensemble members with incompatible "
-                "semantic-type widths."
-            )
-        for (stype, actual), (_, expected) in zip(
-            table.items(),
-            reference.items(),
-        ):
-            if actual.dtype != expected.dtype:
-                raise ValueError(
-                    "Cannot materialize ensemble members with different "
-                    f"{stype.value!r} dtypes."
-                )
-            if actual.device != expected.device:
-                raise ValueError(
-                    "Cannot materialize ensemble members on different devices."
-                )
-
-    blocks: dict[Stype, torch.Tensor] = {}
-    for stype, reference_block in reference.items():
-        member_blocks = [table.blocks[stype] for table in tables]
-        if stype == Stype.categorical:
-            categories = reference.categorical.categories
-            expected_counts = tuple(
-                category.numel() for category in categories
-            )
-            for table in tables[1:]:
-                if (
-                    tuple(
-                        category.numel()
-                        for category in table.categorical.categories
-                    )
-                    != expected_counts
-                ):
-                    raise ValueError(
-                        "Cannot materialize categorical ensemble members "
-                        "with different class counts."
-                    )
-            code = torch.stack(
-                [table.categorical.code for table in tables],
-                dim=0,
-            )
-            blocks[stype] = CategoricalTensor(
-                code=code,
-                categories=categories,
-            )
-        elif reference_block.size(-1) > 0:
-            blocks[stype] = torch.stack(member_blocks, dim=0)
-
-    return TableTensor(
-        size=(len(tables), *reference_size),
-        columns={
-            stype.value: columns
-            for stype, columns in reference.columns.items()
-        },
-        device=reference.device,
-        numerical=blocks.get(Stype.numerical),
-        categorical=cast(
-            CategoricalTensor | None,
-            blocks.get(Stype.categorical),
-        ),
-        datetime=blocks.get(Stype.datetime),
-        text=cast(StringTensor | None, blocks.get(Stype.text)),
-        id=cast(ColumnarTensor | None, blocks.get(Stype.id)),
-    )
-
-
-@dataclass(frozen=True)
-class EnsembleTable:
-    r"""Store shared and distinct table variants for ensemble members.
-
-    Every group has shape ``[V, ..., R, C]``. The stable member mapping points
-    to a group and variant position without inferring equality from tensor
-    values.
-
-    Args:
-        groups: Compatible table variants grouped along their leading
-            dimension.
-        member_to_variant: ``(group, variant)`` location for every member.
-    """
-
-    groups: tuple[TableTensor, ...]
-    member_to_variant: tuple[tuple[int, int], ...]
-
-    def __post_init__(self) -> None:
-        if len(self.groups) == 0:
-            raise ValueError("Expected at least one ensemble group.")
-        if len(self.member_to_variant) == 0:
-            raise ValueError("Expected at least one ensemble member.")
-
-        devices = {group.device for group in self.groups}
-        if len(devices) != 1:
-            raise ValueError(
-                "Expected all ensemble groups to use the same device."
-            )
-
-        for group_index, group in enumerate(self.groups):
-            if group.dim() < 3:
-                raise ValueError(
-                    "Expected ensemble groups with shape "
-                    f"[V, ..., R, C] (group {group_index} is {group.dim()}D)."
-                )
-            if group.size(0) == 0:
-                raise ValueError(
-                    "Expected every ensemble group to be non-empty."
-                )
-
-        for member, (group, variant) in enumerate(self.member_to_variant):
-            if not 0 <= group < len(self.groups):
-                raise ValueError(
-                    f"Member {member} references unknown group {group}."
-                )
-            if not 0 <= variant < self.groups[group].size(0):
-                raise ValueError(
-                    f"Member {member} references unknown variant {variant} "
-                    f"in group {group}."
-                )
-
-    @classmethod
-    def from_shared(
-        cls,
-        table: TableTensor,
-        *,
-        num_members: int,
-    ) -> Self:
-        r"""Create an ensemble whose members share one table.
-
-        Args:
-            table: Shared table with shape ``[..., R, C]``.
-            num_members: Positive number of logical ensemble members.
-        """
-        if num_members < 1:
-            raise ValueError("'num_members' needs to be positive.")
-        group = cast(TableTensor, table.unsqueeze(0))
-        return cls(
-            groups=(group,),
-            member_to_variant=((0, 0),) * num_members,
-        )
-
-    @classmethod
-    def pack(
-        cls,
-        variants: Sequence[TableTensor],
-        member_to_input_variant: Sequence[int],
-    ) -> Self:
-        r"""Pack proven variants into compatible physical groups.
-
-        Args:
-            variants: Distinct results in provenance order.
-            member_to_input_variant: Input variant index for every member.
-        """
-        variants = tuple(variants)
-        member_to_input_variant = tuple(member_to_input_variant)
-        if len(variants) == 0:
-            raise ValueError("Expected at least one input variant.")
-        if len(member_to_input_variant) == 0:
-            raise ValueError("Expected at least one ensemble member.")
-        if any(
-            variant < 0 or variant >= len(variants)
-            for variant in member_to_input_variant
-        ):
-            raise ValueError(
-                "'member_to_input_variant' references an unknown variant."
-            )
-
-        buckets: dict[tuple[object, ...], list[int]] = {}
-        for index, table in enumerate(variants):
-            buckets.setdefault(_variant_metadata_key(table), []).append(index)
-
-        groups: list[TableTensor] = []
-        input_to_location: dict[int, tuple[int, int]] = {}
-        for indices in buckets.values():
-            group_index = len(groups)
-            group = (
-                cast(TableTensor, variants[indices[0]].unsqueeze(0))
-                if len(indices) == 1
-                else cast(
-                    TableTensor,
-                    torch.stack(
-                        [variants[index] for index in indices],
-                        dim=0,
-                    ),
-                )
-            )
-            groups.append(group)
-            input_to_location.update(
-                {
-                    input_index: (group_index, variant_index)
-                    for variant_index, input_index in enumerate(indices)
-                }
-            )
-
-        return cls(
-            groups=tuple(groups),
-            member_to_variant=tuple(
-                input_to_location[index] for index in member_to_input_variant
-            ),
-        )
-
-    @property
-    def num_members(self) -> int:
-        """Return the number of logical ensemble members."""
-        return len(self.member_to_variant)
-
-    @property
-    def device(self) -> torch.device:
-        """Return the common device of all groups."""
-        return self.groups[0].device
-
-    def __getitem__(self, member_id: int) -> TableTensor:
-        group, variant = self.member_to_variant[member_id]
-        return self.groups[group][variant]
-
-    def iter_variants(
-        self,
-    ) -> tuple[tuple[tuple[int, int], TableTensor], ...]:
-        r"""Return stored variants in group order."""
-        return tuple(
-            (
-                (group_index, variant_index),
-                group[variant_index],
-            )
-            for group_index, group in enumerate(self.groups)
-            for variant_index in range(group.size(0))
-        )
-
-    def map_variants(
-        self,
-        function: Callable[[TableTensor], TableTensor],
-    ) -> Self:
-        r"""Apply ``function`` once per stored variant.
-
-        Args:
-            function: Row-preserving table transformation.
-        """
-        entries = self.iter_variants()
-        variants = tuple(function(table) for _, table in entries)
-        location_to_input = {
-            location: index for index, (location, _) in enumerate(entries)
-        }
-        return self.pack(
-            variants=variants,
-            member_to_input_variant=tuple(
-                location_to_input[location]
-                for location in self.member_to_variant
-            ),
-        )
-
-    def select_members(self, member_ids: Sequence[int]) -> Self:
-        r"""Select members while preserving their requested order.
-
-        Args:
-            member_ids: Member positions to select.
-        """
-        member_ids = tuple(member_ids)
-        locations: dict[tuple[int, int], int] = {}
-        variants: list[TableTensor] = []
-        member_to_input: list[int] = []
-        for member_id in member_ids:
-            location = self.member_to_variant[member_id]
-            if location not in locations:
-                locations[location] = len(variants)
-                group, variant = location
-                variants.append(self.groups[group][variant])
-            member_to_input.append(locations[location])
-        return self.pack(
-            variants=variants,
-            member_to_input_variant=member_to_input,
-        )
-
-    def materialize(
-        self,
-        member_ids: Sequence[int] | None = None,
-    ) -> TableTensor:
-        r"""Materialize members without aligning permuted columns by name.
-
-        Args:
-            member_ids: Optional member positions. All members are used by
-                default.
-        """
-        if member_ids is None:
-            member_ids = tuple(range(self.num_members))
-        tables = tuple(self[member_id] for member_id in member_ids)
-        return _stack_physical(tables)
-
-    def with_groups(self, groups: tuple[TableTensor, ...]) -> Self:
-        r"""Replace physical groups while retaining the member mapping.
-
-        Args:
-            groups: Replacement groups with unchanged variant counts.
-        """
-        if len(groups) != len(self.groups) or any(
-            actual.size(0) != expected.size(0)
-            for actual, expected in zip(groups, self.groups)
-        ):
-            raise ValueError(
-                "Expected replacement groups to preserve group and variant "
-                "counts."
-            )
-        return self.__class__(
-            groups=groups,
-            member_to_variant=self.member_to_variant,
-        )
-
-
-@dataclass(frozen=True)
-class EnsembleRelatedTables:
-    r"""Store ensemble variants for every logical related table.
-
-    Args:
-        tables: Ensemble tables keyed by logical table name.
-        relationships: Shared relationships among the tables.
-        task_links: Shared links from task rows to related tables.
-    """
-
-    tables: Mapping[str, EnsembleTable]
-    relationships: tuple[Relationship, ...]
-    task_links: tuple[TaskLink, ...]
-
-    def __post_init__(self) -> None:
-        member_counts = {table.num_members for table in self.tables.values()}
-        if len(member_counts) > 1:
-            raise ValueError(
-                "Expected every related ensemble table to have the same "
-                "number of members."
-            )
-
-    def __getitem__(self, table_name: str) -> EnsembleTable:
-        return self.tables[table_name]
-
-    def member(self, member_id: int) -> RelatedTables:
-        r"""Return one member's related tables.
-
-        Args:
-            member_id: Stable member position.
-        """
-        return RelatedTables(
-            tables={
-                name: table[member_id] for name, table in self.tables.items()
-            },
-            relationships=self.relationships,
-            task_links=self.task_links,
-        )
-
-    def materialize(self, member_ids: Sequence[int]) -> RelatedTables:
-        r"""Materialize selected members for model execution.
-
-        Args:
-            member_ids: Stable member positions.
-        """
-        return RelatedTables(
-            tables={
-                name: table.materialize(member_ids)
-                for name, table in self.tables.items()
-            },
-            relationships=self.relationships,
-            task_links=self.task_links,
-        )
-
-
-class EnsemblePlanner:
-    r"""Optionally coordinate member decisions across Processor paths.
-
-    A planner is initialized once per Recipe fit. Structural Processors may
-    request explicit member mappings from it; returning ``None`` keeps their
-    normal member-local RNG semantics.
-    """
-
+class _EnsemblePlan(Protocol):
     def initialize(
         self,
         *,
-        features: TableTensor,
         target: TableTensor,
         num_members: int,
         seed: int,
-    ) -> None:
-        r"""Initialize a new fit plan.
-
-        Args:
-            features: Raw context feature table.
-            target: Raw context target table.
-            num_members: Number of logical ensemble members.
-            seed: Root fit seed.
-        """
-        del features, target, num_members, seed
+    ) -> None: ...
 
     def column_permutations(
         self,
@@ -452,18 +29,7 @@ class EnsemblePlanner:
         member_ids: tuple[int, ...],
         num_columns: tuple[int, ...],
         table_scope: str,
-        processor_path: tuple[str, ...],
-    ) -> tuple[tuple[int, ...], ...] | None:
-        r"""Return optional explicit column permutations.
-
-        Args:
-            member_ids: Stable global member ids.
-            num_columns: Column count for each member input.
-            table_scope: Logical table fit scope.
-            processor_path: Stable path of the requesting Processor.
-        """
-        del member_ids, num_columns, table_scope, processor_path
-        return None
+    ) -> tuple[tuple[int, ...], ...] | None: ...
 
     def category_permutations(
         self,
@@ -471,22 +37,9 @@ class EnsemblePlanner:
         member_ids: tuple[int, ...],
         category_counts: tuple[tuple[int, ...], ...],
         table_scope: str,
-        processor_path: tuple[str, ...],
-    ) -> tuple[tuple[tuple[int, ...], ...], ...] | None:
-        r"""Return optional explicit per-column category permutations.
+    ) -> tuple[tuple[tuple[int, ...], ...], ...] | None: ...
 
-        Args:
-            member_ids: Stable global member ids.
-            category_counts: Category counts by member and column.
-            table_scope: Logical table fit scope.
-            processor_path: Stable path of the requesting Processor.
-        """
-        del member_ids, category_counts, table_scope, processor_path
-        return None
-
-    def canonical_classes(self) -> tuple[object, ...] | None:
-        r"""Return an optional canonical observed classification order."""
-        return None
+    def canonical_classes(self) -> tuple[object, ...] | None: ...
 
 
 @dataclass(frozen=True)
@@ -498,14 +51,13 @@ class EnsembleFitContext:
         base_seed: Root seed for member-local random streams.
         table_scope: Logical table fit scope.
         processor_path: Stable path of the current processor.
-        planner: Optional cross-path member-decision planner.
     """
 
     member_ids: tuple[int, ...]
     base_seed: int
     table_scope: str
     processor_path: tuple[str, ...] = ()
-    planner: EnsemblePlanner | None = None
+    _plan: _EnsemblePlan | None = None
 
     @classmethod
     def create(
@@ -515,7 +67,7 @@ class EnsembleFitContext:
         table_scope: str,
         generator: torch.Generator | None = None,
         base_seed: int | None = None,
-        planner: EnsemblePlanner | None = None,
+        _plan: _EnsemblePlan | None = None,
     ) -> Self:
         r"""Create a root fit context.
 
@@ -524,7 +76,6 @@ class EnsembleFitContext:
             table_scope: Logical table fit scope.
             generator: Optional user-controlled root generator.
             base_seed: Optional precomputed root seed.
-            planner: Optional shared member-decision planner.
         """
         if num_members < 1:
             raise ValueError("'num_members' needs to be positive.")
@@ -541,7 +92,7 @@ class EnsembleFitContext:
             member_ids=tuple(range(num_members)),
             base_seed=base_seed,
             table_scope=table_scope,
-            planner=planner,
+            _plan=_plan,
         )
 
     def child(self, name: str) -> Self:
@@ -555,10 +106,10 @@ class EnsembleFitContext:
             base_seed=self.base_seed,
             table_scope=self.table_scope,
             processor_path=(*self.processor_path, name),
-            planner=self.planner,
+            _plan=self._plan,
         )
 
-    def select_members(self, positions: Sequence[int]) -> Self:
+    def _select_members(self, positions: Sequence[int]) -> Self:
         r"""Select local member positions.
 
         Args:
@@ -571,7 +122,7 @@ class EnsembleFitContext:
             base_seed=self.base_seed,
             table_scope=self.table_scope,
             processor_path=self.processor_path,
-            planner=self.planner,
+            _plan=self._plan,
         )
 
     def generator_for(
@@ -671,18 +222,6 @@ class EnsembleProcessor(Processor):
             context=self._direct_context(generator),
         )
 
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        output = self.fit_transform_ensemble(
-            EnsembleTable.from_shared(table, num_members=1),
-            context=self._direct_context(generator),
-        )
-        return output[0]
-
     def _transform(self, table: TableTensor) -> TableTensor:
         ensemble = EnsembleTable.from_shared(table, num_members=1)
         if not self.requires_fit:
@@ -691,6 +230,39 @@ class EnsembleProcessor(Processor):
                 context=self._direct_context(None),
             )[0]
         return self.transform_ensemble(ensemble)[0]
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        if (
+            type(self)._fit is not EnsembleProcessor._fit
+            or type(self)._transform is not EnsembleProcessor._transform
+        ):
+            return super()._fit_transform(table, generator=generator)
+        return self.fit_transform_ensemble(
+            EnsembleTable.from_shared(table, num_members=1),
+            context=self._direct_context(generator),
+        )[0]
+
+    def fit_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> Self:
+        r"""Fit an ensemble table.
+
+        Args:
+            table: Ensemble fit input.
+            context: Stable fit scope and member identity.
+        """
+        self.fit_transform_ensemble(table, context=context)
+        if self.requires_fit:
+            self._fitted = True
+        return self
 
     def fit_transform_ensemble(
         self,
@@ -714,18 +286,18 @@ class EnsembleProcessor(Processor):
         """
         raise NotImplementedError
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
-        r"""Inverse-transform member-aligned tables.
+        table: EnsembleTable,
+    ) -> EnsembleTable:
+        r"""Inverse-transform an ensemble table.
 
         Args:
-            tables: One transformed table per stable member.
+            table: Member-aligned transformed table.
         """
         raise AttributeError(
             f"{self.__class__.__name__!r} object has no attribute "
-            "'inverse_transform_members'"
+            "'inverse_transform_ensemble'"
         )
 
 
@@ -735,6 +307,8 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
         self.template = processor
         self.requires_fit = processor.requires_fit
         self.processors = torch.nn.ModuleList()
+        self._member_to_fitted_variant: tuple[tuple[int, int], ...] = ()
+        self._fitted_group_sizes: tuple[int, ...] = ()
         self._variable_schema = isinstance(
             processor,
             VariableSchemaBatchMixin,
@@ -759,6 +333,10 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
     ) -> EnsembleTable:
         del context
         self.processors = torch.nn.ModuleList()
+        self._member_to_fitted_variant = table.member_to_variant
+        self._fitted_group_sizes = tuple(
+            group.size(0) for group in table.groups
+        )
 
         if self._variable_schema:
             return self._fit_transform_variable_schema(table)
@@ -824,6 +402,8 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
                         "transform_batch() must return one table per input "
                         "variant."
                     )
+                for index, after in enumerate(outputs):
+                    self._validate_row_count(group[index], after)
                 offsets.append(offset)
                 offset += len(outputs)
                 variants.extend(outputs)
@@ -835,33 +415,80 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
                 ),
             )
 
-        groups = tuple(
-            cast(Processor, processor).transform(group)
-            for group, processor in zip(table.groups, self.processors)
-        )
-        return table.with_groups(groups)
+        groups: list[TableTensor] = []
+        for group, processor in zip(table.groups, self.processors):
+            after = cast(Processor, processor).transform(group)
+            self._validate_row_count(group, after)
+            groups.append(after)
+        return table.with_groups(tuple(groups))
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
-        tables = tuple(tables)
+        table: EnsembleTable,
+    ) -> EnsembleTable:
         if self._variable_schema:
             raise TypeError("Variable-schema processors are not invertible.")
-        if len(self.processors) != 1:
-            raise NotImplementedError(
-                "Member inverse transform across multiple fitted groups "
-                "requires a structural EnsembleProcessor."
+
+        if table.num_members != len(self._member_to_fitted_variant):
+            raise ValueError(
+                "Expected one inverse-transform input per fitted member."
             )
-        processor = self.processors[0]
-        if not isinstance(processor, InvertibleMixin):
-            raise TypeError(
-                f"{processor.__class__.__name__!r} is not invertible."
-            )
-        restored = processor.inverse_transform(_stack_physical(tables))
-        return tuple(
-            cast(TableTensor, restored[index])
-            for index in range(restored.size(0))
+        if self._fitted_group_sizes == (1,):
+            processor = self.processors[0]
+            if not isinstance(processor, InvertibleMixin):
+                raise TypeError(
+                    f"{processor.__class__.__name__!r} is not invertible."
+                )
+            groups = []
+            for group in table.groups:
+                restored = processor.inverse_transform(group)
+                self._validate_row_count(group, restored)
+                groups.append(restored)
+            return table.with_groups(tuple(groups))
+
+        members_by_variant = [
+            [[] for _ in range(group_size)]
+            for group_size in self._fitted_group_sizes
+        ]
+        for member, (group, variant) in enumerate(
+            self._member_to_fitted_variant
+        ):
+            members_by_variant[group][variant].append(member)
+
+        variants: list[TableTensor] = []
+        member_to_variant = [0] * table.num_members
+        for processor, group_members in zip(
+            self.processors,
+            members_by_variant,
+        ):
+            if not isinstance(processor, InvertibleMixin):
+                raise TypeError(
+                    f"{processor.__class__.__name__!r} is not invertible."
+                )
+            rounds = max(len(members) for members in group_members)
+            round_tables = []
+            for round_index in range(rounds):
+                # ``[round, fitted variant, ..., row, column]`` lets the
+                # vectorized fitted state broadcast over repeated members.
+                round_tables.append(
+                    _stack_positional(
+                        tuple(
+                            table[members[min(round_index, len(members) - 1)]]
+                            for members in group_members
+                        )
+                    )
+                )
+            batch = _stack_positional(round_tables)
+            restored = processor.inverse_transform(batch)
+            self._validate_row_count(batch, restored)
+            for fitted_variant, members in enumerate(group_members):
+                for round_index, member in enumerate(members):
+                    member_to_variant[member] = len(variants)
+                    variants.append(restored[round_index, fitted_variant])
+
+        return EnsembleTable.pack(
+            variants=variants,
+            member_to_input_variant=member_to_variant,
         )
 
 

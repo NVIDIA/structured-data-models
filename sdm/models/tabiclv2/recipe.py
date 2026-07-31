@@ -8,7 +8,6 @@ from sdm.processing import (
     Clip,
     ClipSigma,
     DropConstantColumns,
-    EnsemblePlanner,
     Identity,
     ImputeMean,
     PowerTransform,
@@ -25,7 +24,7 @@ from sdm.processing import (
 )
 
 
-class _TabICLv2EnsemblePlanner(EnsemblePlanner):
+class _TabICLv2EnsemblePlan:
     """Reproduce TabICL's paired normalization and permutation plan."""
 
     def __init__(self) -> None:
@@ -39,12 +38,10 @@ class _TabICLv2EnsemblePlanner(EnsemblePlanner):
     def initialize(
         self,
         *,
-        features: TableTensor,
         target: TableTensor,
         num_members: int,
         seed: int,
     ) -> None:
-        del features
         self._num_members = num_members
         self._seed = seed
         if target.categorical.size(-1) == 1:
@@ -148,9 +145,7 @@ class _TabICLv2EnsemblePlanner(EnsemblePlanner):
         member_ids: tuple[int, ...],
         num_columns: tuple[int, ...],
         table_scope: str,
-        processor_path: tuple[str, ...],
     ) -> tuple[tuple[int, ...], ...] | None:
-        del processor_path
         if table_scope != "features":
             return None
         if len(set(num_columns)) != 1:
@@ -168,9 +163,7 @@ class _TabICLv2EnsemblePlanner(EnsemblePlanner):
         member_ids: tuple[int, ...],
         category_counts: tuple[tuple[int, ...], ...],
         table_scope: str,
-        processor_path: tuple[str, ...],
     ) -> tuple[tuple[tuple[int, ...], ...], ...] | None:
-        del processor_path
         if table_scope != "target" or self._canonical_classes is None:
             return None
         num_classes = len(self._canonical_classes)
@@ -191,7 +184,7 @@ class _TabICLv2EnsemblePlanner(EnsemblePlanner):
 
 
 def default_recipe(*, reference_ensemble: bool = True) -> Recipe:  # noqa: D103
-    return Recipe(
+    recipe = Recipe(
         features=[
             StypeDispatch(
                 categorical=[
@@ -236,7 +229,7 @@ def default_recipe(*, reference_ensemble: bool = True) -> Recipe:  # noqa: D103
                 regression=Identity(),
             ),
         ],
-        ensemble_planner=(
-            _TabICLv2EnsemblePlanner() if reference_ensemble else None
-        ),
     )
+    if reference_ensemble:
+        recipe._ensemble_plan = _TabICLv2EnsemblePlan()
+    return recipe

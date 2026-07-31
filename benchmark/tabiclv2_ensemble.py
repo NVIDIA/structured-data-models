@@ -94,9 +94,13 @@ class Measurement:
     warmups: int
     median_ms: float
     p95_ms: float
+    enqueue_median_ms: float | None
+    synchronization_wait_median_ms: float | None
     cuda_event_elapsed_median_ms: float | None
+    cuda_kernel_time_ms: float | None
     peak_memory_bytes: int
     absolute_peak_memory_bytes: int
+    throughput_rows_per_second: float
 
 
 class _ProcessingBoundaryModel(ICLModel):
@@ -105,8 +109,6 @@ class _ProcessingBoundaryModel(ICLModel):
     supported_feature_stypes = frozenset({Stype.numerical})
     supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
     supports_related_tables = False
-    supports_vectorized_ensemble = True
-    supports_vectorized_ensemble_rng = True
 
     @classmethod
     def default_recipe(cls) -> Recipe:
@@ -294,6 +296,7 @@ def measure(
     repetitions: int,
     warmups: int,
     mode: str | None = None,
+    profile_kernels: bool = False,
 ) -> Measurement:
     """Measure one prepared operation with synchronized CPU/CUDA timing."""
     device = workload.device
@@ -304,6 +307,8 @@ def measure(
         del result
 
     wall: list[float] = []
+    enqueue: list[float] = []
+    synchronization_wait: list[float] = []
     cuda_elapsed: list[float] = []
     peak_delta = 0
     absolute_peak = 0
@@ -326,16 +331,43 @@ def measure(
             assert start_event is not None
             assert end_event is not None
             end_event.record()
+            enqueued = time.perf_counter_ns()
             torch.cuda.synchronize(device)
+            finished = time.perf_counter_ns()
+            enqueue.append((enqueued - started) / 1e6)
+            synchronization_wait.append((finished - enqueued) / 1e6)
             cuda_elapsed.append(start_event.elapsed_time(end_event))
             current_peak = torch.cuda.max_memory_allocated(device)
             peak_delta = max(peak_delta, current_peak - baseline)
             absolute_peak = max(absolute_peak, current_peak)
-        wall.append((time.perf_counter_ns() - started) / 1e6)
+        else:
+            finished = time.perf_counter_ns()
+        wall.append((finished - started) / 1e6)
         del result
 
     if device.type == "cpu":
         peak_delta, absolute_peak = _cpu_peak(prepare)
+
+    kernel_time: float | None = None
+    if device.type == "cuda" and profile_kernels:
+        run = prepare()
+        torch.cuda.synchronize(device)
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ]
+        ) as profiler:
+            result = run()
+            torch.cuda.synchronize(device)
+        kernel_time = (
+            sum(
+                event.self_device_time_total
+                for event in profiler.key_averages()
+            )
+            / 1000
+        )
+        del result
 
     median = statistics.median(wall)
     cuda_event_median = (
@@ -356,9 +388,17 @@ def measure(
         warmups=warmups,
         median_ms=median,
         p95_ms=_p95(wall),
+        enqueue_median_ms=(statistics.median(enqueue) if enqueue else None),
+        synchronization_wait_median_ms=(
+            statistics.median(synchronization_wait)
+            if synchronization_wait
+            else None
+        ),
         cuda_event_elapsed_median_ms=cuda_event_median,
+        cuda_kernel_time_ms=kernel_time,
         peak_memory_bytes=peak_delta,
         absolute_peak_memory_bytes=absolute_peak,
+        throughput_rows_per_second=workload.rows / (median / 1000),
     )
 
 
@@ -409,8 +449,9 @@ def benchmark_recipe(
     repetitions: int,
     warmups: int,
     modes: Sequence[Mode],
+    profile_kernels: bool,
 ) -> list[Measurement]:
-    """Measure Recipe stages and the zero-compute public model boundary."""
+    """Measure Recipe stages and the zero-compute processing boundary."""
     _assert_correct(workload, num_estimators)
     results: list[Measurement] = []
 
@@ -423,6 +464,7 @@ def benchmark_recipe(
                 num_estimators=num_estimators,
                 repetitions=repetitions,
                 warmups=warmups,
+                profile_kernels=profile_kernels,
             )
         )
 
@@ -496,12 +538,13 @@ def benchmark_recipe(
         results.append(
             measure(
                 boundary_prepare,
-                operation="public_processing_boundary",
+                operation="zero_core_processing_boundary",
                 workload=workload,
                 num_estimators=num_estimators,
                 repetitions=repetitions,
                 warmups=warmups,
                 mode=mode,
+                profile_kernels=profile_kernels,
             )
         )
     return results
@@ -529,6 +572,7 @@ def benchmark_processors(
     num_estimators: int,
     repetitions: int,
     warmups: int,
+    profile_kernels: bool,
 ) -> list[Measurement]:
     """Measure the dominant scalar Processor operations on Recipe inputs."""
     raw, power_context, power_query = _prepared_numerical_inputs(workload)
@@ -618,6 +662,7 @@ def benchmark_processors(
             num_estimators=num_estimators,
             repetitions=repetitions,
             warmups=warmups,
+            profile_kernels=profile_kernels,
         )
         for operation, prepare in cases
     ]
@@ -629,6 +674,7 @@ def benchmark_transfers(
     num_estimators: int,
     repetitions: int,
     warmups: int,
+    profile_kernels: bool,
 ) -> list[Measurement]:
     """Measure host/device transfers separately from processing operations."""
     if workload.device.type != "cuda":
@@ -657,6 +703,7 @@ def benchmark_transfers(
             num_estimators=num_estimators,
             repetitions=repetitions,
             warmups=warmups,
+            profile_kernels=profile_kernels,
         ),
         measure(
             d2h_prepare,
@@ -665,6 +712,7 @@ def benchmark_transfers(
             num_estimators=num_estimators,
             repetitions=repetitions,
             warmups=warmups,
+            profile_kernels=profile_kernels,
         ),
     ]
 
@@ -676,6 +724,7 @@ def benchmark_actual_model(
     repetitions: int,
     warmups: int,
     modes: Sequence[Mode],
+    profile_kernels: bool,
 ) -> list[Measurement]:
     """Measure the random-weight production architecture end to end."""
     model = TabICLv2(pretrained=False, device=workload.device).eval()
@@ -701,6 +750,7 @@ def benchmark_actual_model(
                 repetitions=repetitions,
                 warmups=warmups,
                 mode=mode,
+                profile_kernels=profile_kernels,
             )
         )
     return results
@@ -763,6 +813,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         repetitions=args.repetitions,
                         warmups=args.warmups,
                         modes=modes,
+                        profile_kernels=args.profile_kernels,
                     )
                 )
             if (
@@ -776,6 +827,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         num_estimators=args.num_estimators,
                         repetitions=args.repetitions,
                         warmups=args.warmups,
+                        profile_kernels=args.profile_kernels,
                     )
                 )
             if not args.only_model and args.include_transfers:
@@ -785,6 +837,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         num_estimators=args.num_estimators,
                         repetitions=args.repetitions,
                         warmups=args.warmups,
+                        profile_kernels=args.profile_kernels,
                     )
                 )
             if args.include_model:
@@ -795,6 +848,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         repetitions=args.repetitions,
                         warmups=args.warmups,
                         modes=modes,
+                        profile_kernels=args.profile_kernels,
                     )
                 )
             del workload
@@ -837,12 +891,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--categorical-features", type=int, default=10)
     parser.add_argument("--vocabulary-size", type=int, default=4_096)
     parser.add_argument("--num-estimators", type=int, default=8)
-    parser.add_argument("--repetitions", type=int, default=5)
-    parser.add_argument("--warmups", type=int, default=2)
+    parser.add_argument("--repetitions", type=int, default=20)
+    parser.add_argument("--warmups", type=int, default=5)
     parser.add_argument("--include-processors", action="store_true")
     parser.add_argument("--include-transfers", action="store_true")
     parser.add_argument("--include-model", action="store_true")
     parser.add_argument("--only-model", action="store_true")
+    parser.add_argument("--profile-kernels", action="store_true")
     parser.add_argument(
         "--output",
         type=Path,

@@ -10,13 +10,15 @@ from sdm.processing.common.sequential import Sequential
 from sdm.processing.common.task import TaskDispatch
 from sdm.processing.ensemble import (
     EnsembleFitContext,
-    EnsemblePlanner,
     EnsembleProcessor,
+    VariableSchemaBatchMixin,
+    _EnsemblePlan,
+    as_ensemble_processor,
+)
+from sdm.processing.ensemble_table import (
     EnsembleRelatedTables,
     EnsembleTable,
-    VariableSchemaBatchMixin,
-    _stack_physical,
-    as_ensemble_processor,
+    _stack_positional,
 )
 from sdm.processing.output.reduce import ReduceEstimators
 from sdm.processing.output.target import TargetDecode
@@ -132,8 +134,6 @@ class Recipe(torch.nn.Module):
         output: Steps applied to stacked member outputs after member-local
             mappings. Estimator reduction, when desired, is an explicit step
             in this pipeline.
-        ensemble_planner: Optional coordinator for member decisions spanning
-            more than one Processor path.
     """
 
     features: Processor
@@ -145,8 +145,6 @@ class Recipe(torch.nn.Module):
         features: Processor | Iterable[Processor] | None = None,
         target: Processor | Iterable[Processor] | None = None,
         output: Processor | Iterable[Processor] | None = None,
-        *,
-        ensemble_planner: EnsemblePlanner | None = None,
     ) -> None:
         super().__init__()
         if features is None:
@@ -179,41 +177,7 @@ class Recipe(torch.nn.Module):
                     f"(found in {role!r})."
                 )
 
-        # Common output steps can remain adjacent; nesting would require
-        # defining whether dispatchers in inactive branches are resolved.
-        task_dispatch_entries = tuple(
-            (path, module)
-            for path, module in output.named_modules(remove_duplicate=False)
-            if isinstance(module, TaskDispatch)
-        )
-        if isinstance(output, TaskDispatch):
-            direct_paths = {""}
-        elif isinstance(output, Sequential):
-            direct_paths = {
-                str(index)
-                for index, step in enumerate(output)
-                if isinstance(step, TaskDispatch)
-            }
-        else:
-            direct_paths = set()
-
-        nested_paths = tuple(
-            path
-            for path, _ in task_dispatch_entries
-            if path not in direct_paths
-        )
-        if len(nested_paths) > 0:
-            locations = ", ".join(repr(path) for path in nested_paths)
-            raise ValueError(
-                "'TaskDispatch' must be a direct step in 'Recipe.output'; "
-                f"nested task dispatch was found at {locations}."
-            )
-
-        task_dispatchers = tuple(
-            module
-            for path, module in task_dispatch_entries
-            if path in direct_paths
-        )
+        task_dispatchers = TaskDispatch._roots(output)
 
         if len(task_dispatchers) > 0:
             target = _TaskResolver(
@@ -225,106 +189,12 @@ class Recipe(torch.nn.Module):
         self.target = target
         self.output = output
         self._ensemble_features: EnsembleProcessor | None = None
-        self.ensemble_planner = ensemble_planner
+        self._ensemble_plan: _EnsemblePlan | None = None
         self._ensemble_related = torch.nn.ModuleList()
         self._related_table_names: tuple[str, ...] = ()
         self._ensemble_output: Processor | None = None
         self._num_members = 0
-
-    @staticmethod
-    def _steps(processor: Processor) -> tuple[Processor, ...]:
-        if isinstance(processor, Sequential):
-            return tuple(processor)
-        return (processor,)
-
-    def _validate_ensemble_composition(self) -> None:
-        for role, processor in (
-            ("features", self.features),
-            ("target", self.target),
-        ):
-            if any(
-                isinstance(module, ReduceEstimators)
-                for module in processor.modules()
-            ):
-                raise ValueError(
-                    "'ReduceEstimators' is only supported in Recipe.output "
-                    f"(found in {role!r})."
-                )
-
-        steps = self._steps(self.output)
-
-        direct_reducers = tuple(
-            index
-            for index, step in enumerate(steps)
-            if isinstance(step, ReduceEstimators)
-        )
-        all_reducers = tuple(
-            module
-            for module in self.output.modules()
-            if isinstance(module, ReduceEstimators)
-        )
-        if len(all_reducers) > len(direct_reducers):
-            raise ValueError(
-                "'ReduceEstimators' must be a direct Recipe.output step."
-            )
-        if len(direct_reducers) > 1:
-            raise ValueError(
-                "Recipe.output supports at most one 'ReduceEstimators'."
-            )
-
-        direct_decoders = tuple(
-            index
-            for index, step in enumerate(steps)
-            if isinstance(step, TargetDecode)
-        )
-        all_decoders = tuple(
-            module
-            for module in self.output.modules()
-            if isinstance(module, TargetDecode)
-        )
-        if len(all_decoders) > len(direct_decoders):
-            raise ValueError(
-                "'TargetDecode' must be a direct Recipe.output step."
-            )
-        if len(direct_decoders) > 1:
-            raise ValueError(
-                "Recipe.output supports at most one 'TargetDecode'."
-            )
-        fitted_output_node = next(
-            (
-                (path, module)
-                for path, module in self.output.named_modules(
-                    remove_duplicate=False
-                )
-                if isinstance(module, Processor)
-                and module.requires_fit
-                and not isinstance(module, Sequential)
-            ),
-            None,
-        )
-        if fitted_output_node is not None:
-            path, module = fitted_output_node
-            location = path or "<root>"
-            raise ValueError(
-                "Recipe.output supports only stateless processors; "
-                f"{module.__class__.__name__!r} at {location!r} requires "
-                "fit."
-            )
-
-        if len(direct_reducers) == 0:
-            return
-
-        reducer = direct_reducers[0]
-        if any(
-            isinstance(step, TargetDecode) for step in steps[reducer + 1 :]
-        ):
-            raise ValueError(
-                "'TargetDecode' must run before 'ReduceEstimators'."
-            )
-        if len(direct_decoders) == 0:
-            raise ValueError(
-                "'TargetDecode' is required before 'ReduceEstimators'."
-            )
+        self._device: torch.device | None = None
 
     @staticmethod
     def _target_processor(processor: Processor) -> Processor:
@@ -369,7 +239,7 @@ class Recipe(torch.nn.Module):
         self,
         raw_target: TableTensor,
         transformed_target: EnsembleTable,
-        planner: EnsemblePlanner | None,
+        plan: _EnsemblePlan | None,
     ) -> tuple[tuple[object, ...], tuple[torch.Tensor, ...]]:
         local_values = tuple(
             tuple(
@@ -378,7 +248,7 @@ class Recipe(torch.nn.Module):
             for member in range(transformed_target.num_members)
         )
         planned_classes = (
-            planner.canonical_classes() if planner is not None else None
+            plan.canonical_classes() if plan is not None else None
         )
         if planned_classes is None:
             raw_values = tuple(raw_target.categorical.categories[0].tolist())
@@ -434,7 +304,71 @@ class Recipe(torch.nn.Module):
         """
         if num_members < 1:
             raise ValueError("'num_members' needs to be positive.")
-        self._validate_ensemble_composition()
+        fit_tables = (
+            features,
+            target,
+            *(
+                related_tables.tables.values()
+                if related_tables is not None
+                else ()
+            ),
+        )
+        if len({table.device for table in fit_tables}) != 1:
+            raise ValueError(
+                "Expected all Recipe inputs to use the same device."
+            )
+        if self.output.requires_fit:
+            raise ValueError("Recipe.output processors must be stateless.")
+        output_processor = copy.deepcopy(self.output)
+        output_steps = (
+            tuple(output_processor)
+            if isinstance(output_processor, Sequential)
+            else (output_processor,)
+        )
+        direct_output_ids = {id(step) for step in output_steps}
+        decoders = sum(isinstance(step, TargetDecode) for step in output_steps)
+        reducers = sum(
+            isinstance(step, ReduceEstimators) for step in output_steps
+        )
+        if decoders > 1 or reducers > 1:
+            raise ValueError(
+                "Recipe.output supports at most one TargetDecode and one "
+                "ReduceEstimators step."
+            )
+        if any(
+            isinstance(module, (TargetDecode, ReduceEstimators))
+            and id(module) not in direct_output_ids
+            for module in output_processor.modules()
+        ):
+            raise ValueError(
+                "TargetDecode and ReduceEstimators must be direct "
+                "Recipe.output steps."
+            )
+        if decoders == 0:
+            output_processor = Sequential(TargetDecode(), output_processor)
+            output_steps = tuple(output_processor)
+        for index, step in enumerate(output_steps):
+            if isinstance(step, ReduceEstimators) and not any(
+                isinstance(previous, TargetDecode)
+                for previous in output_steps[:index]
+            ):
+                raise ValueError(
+                    "TargetDecode must precede ReduceEstimators in "
+                    "Recipe.output."
+                )
+
+        for role, processor in (
+            ("features", self.features),
+            ("target", self.target),
+        ):
+            if any(
+                isinstance(module, ReduceEstimators)
+                for module in processor.modules()
+            ):
+                raise ValueError(
+                    "ReduceEstimators is only supported in Recipe.output "
+                    f"(found in {role!r})."
+                )
         self._validate_variable_schema_input(
             role="features",
             table=features,
@@ -457,18 +391,16 @@ class Recipe(torch.nn.Module):
         target_processor = as_ensemble_processor(
             copy.deepcopy(self._target_processor(self.target))
         )
-        output_processor = copy.deepcopy(self.output)
 
-        planner = copy.deepcopy(self.ensemble_planner)
+        plan = copy.deepcopy(self._ensemble_plan)
         feature_context = EnsembleFitContext.create(
             num_members=num_members,
             table_scope="features",
             generator=generator,
-            planner=planner,
+            _plan=plan,
         )
-        if planner is not None:
-            planner.initialize(
-                features=features,
+        if plan is not None:
+            plan.initialize(
                 target=target,
                 num_members=num_members,
                 seed=feature_context.base_seed,
@@ -477,7 +409,7 @@ class Recipe(torch.nn.Module):
             num_members=num_members,
             table_scope="target",
             base_seed=feature_context.base_seed,
-            planner=planner,
+            _plan=plan,
         )
         transformed_features = feature_processor.fit_transform_ensemble(
             EnsembleTable.from_shared(
@@ -503,9 +435,8 @@ class Recipe(torch.nn.Module):
                 "All ensemble members must resolve to the same task type."
             )
         task = next(iter(tasks))
-        for module in output_processor.modules():
-            if isinstance(module, TaskDispatch):
-                module._resolve(transformed_target[0])
+        for task_dispatcher in TaskDispatch._roots(output_processor):
+            task_dispatcher._resolve(transformed_target[0])
 
         related_processors = torch.nn.ModuleList()
         related_table_names: list[str] = []
@@ -520,7 +451,7 @@ class Recipe(torch.nn.Module):
                     num_members=num_members,
                     table_scope=f"related:{table_name}",
                     base_seed=feature_context.base_seed,
-                    planner=planner,
+                    _plan=plan,
                 )
                 related_outputs[table_name] = processor.fit_transform_ensemble(
                     EnsembleTable.from_shared(
@@ -541,7 +472,7 @@ class Recipe(torch.nn.Module):
             canonical_classes, class_indices = self._build_class_plan(
                 target,
                 transformed_target,
-                planner,
+                plan,
             )
 
         for module in output_processor.modules():
@@ -559,6 +490,7 @@ class Recipe(torch.nn.Module):
         self._related_table_names = tuple(related_table_names)
         self._ensemble_output = output_processor
         self._num_members = num_members
+        self._device = features.device
         return transformed_features, transformed_target, transformed_related
 
     def transform(
@@ -576,6 +508,18 @@ class Recipe(torch.nn.Module):
         if self._ensemble_features is None:
             raise RuntimeError(
                 "'Recipe' is not fitted; call 'fit_transform()' before."
+            )
+        transform_tables = (
+            features,
+            *(
+                related_tables.tables.values()
+                if related_tables is not None
+                else ()
+            ),
+        )
+        if any(table.device != self._device for table in transform_tables):
+            raise ValueError(
+                "Expected Recipe transform inputs on the fitted device."
             )
         self._validate_variable_schema_input(
             role="features",
@@ -637,7 +581,9 @@ class Recipe(torch.nn.Module):
             raise ValueError(
                 "Expected one model output per fitted ensemble member."
             )
-        return self._ensemble_output.transform(_stack_physical(outputs))
+        if any(output.device != self._device for output in outputs):
+            raise ValueError("Expected Recipe outputs on the fitted device.")
+        return self._ensemble_output.transform(_stack_positional(outputs))
 
     def __repr__(self) -> str:
         return (

@@ -1,13 +1,14 @@
 """Processors for structured data tables."""
 
 from sdm.processing.base import Processor, InvertibleMixin
-from sdm.processing.ensemble import (
-    EnsembleProcessor,
-    VariableSchemaBatchMixin,
-    EnsembleFitContext,
-    EnsemblePlanner,
+from sdm.processing.ensemble_table import (
     EnsembleTable,
     EnsembleRelatedTables,
+)
+from sdm.processing.ensemble import (
+    EnsembleFitContext,
+    VariableSchemaBatchMixin,
+    EnsembleProcessor,
 )
 from sdm.processing.common import (
     Identity,
@@ -45,12 +46,11 @@ from sdm.processing.recipe import Recipe
 __all__ = [
     "Processor",
     "InvertibleMixin",
-    "EnsembleProcessor",
-    "VariableSchemaBatchMixin",
-    "EnsembleFitContext",
-    "EnsemblePlanner",
     "EnsembleTable",
     "EnsembleRelatedTables",
+    "EnsembleFitContext",
+    "VariableSchemaBatchMixin",
+    "EnsembleProcessor",
     "Identity",
     "Callable",
     "Sequential",

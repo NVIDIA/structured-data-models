@@ -63,7 +63,10 @@ class Measurement:
     warmups: int
     median_ms: float
     p95_ms: float
+    enqueue_median_ms: float | None
+    synchronization_wait_median_ms: float | None
     cuda_event_elapsed_median_ms: float | None
+    cuda_kernel_time_ms: float | None
     peak_memory_bytes: int
     absolute_peak_memory_bytes: int
     throughput_task_rows_per_second: float
@@ -272,6 +275,7 @@ def _measure(
     num_estimators: int,
     repetitions: int,
     warmups: int,
+    profile_kernels: bool,
 ) -> Measurement:
     device = data.x_context.device
 
@@ -290,6 +294,8 @@ def _measure(
             torch.cuda.synchronize(device)
 
     wall: list[float] = []
+    enqueue: list[float] = []
+    synchronization_wait: list[float] = []
     cuda_elapsed: list[float] = []
     peak_delta = 0
     absolute_peak = 0
@@ -310,16 +316,43 @@ def _measure(
             assert start_event is not None
             assert end_event is not None
             end_event.record()
+            enqueued = time.perf_counter_ns()
             torch.cuda.synchronize(device)
+            finished = time.perf_counter_ns()
+            enqueue.append((enqueued - started) / 1e6)
+            synchronization_wait.append((finished - enqueued) / 1e6)
             cuda_elapsed.append(start_event.elapsed_time(end_event))
             peak = torch.cuda.max_memory_allocated(device)
             peak_delta = max(peak_delta, peak - baseline)
             absolute_peak = max(absolute_peak, peak)
-        wall.append((time.perf_counter_ns() - started) / 1e6)
+        else:
+            finished = time.perf_counter_ns()
+        wall.append((finished - started) / 1e6)
         del result
 
     if device.type == "cpu":
         peak_delta, absolute_peak = _cpu_peak(operation)
+
+    kernel_time: float | None = None
+    if device.type == "cuda" and profile_kernels:
+        torch.cuda.synchronize(device)
+        with torch.profiler.profile(
+            activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+            ]
+        ) as profiler:
+            result = operation()
+            torch.cuda.synchronize(device)
+        kernel_time = (
+            sum(
+                event.self_device_time_total
+                for event in profiler.key_averages()
+            )
+            / 1000
+        )
+        del result
+
     median = statistics.median(wall)
     cuda_event = statistics.median(cuda_elapsed) if cuda_elapsed else None
     return Measurement(
@@ -342,7 +375,14 @@ def _measure(
         warmups=warmups,
         median_ms=median,
         p95_ms=_p95(wall),
+        enqueue_median_ms=(statistics.median(enqueue) if enqueue else None),
+        synchronization_wait_median_ms=(
+            statistics.median(synchronization_wait)
+            if synchronization_wait
+            else None
+        ),
         cuda_event_elapsed_median_ms=cuda_event,
+        cuda_kernel_time_ms=kernel_time,
         peak_memory_bytes=peak_delta,
         absolute_peak_memory_bytes=absolute_peak,
         throughput_task_rows_per_second=(
@@ -427,6 +467,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         num_estimators=args.num_estimators,
                         repetitions=args.repetitions,
                         warmups=args.warmups,
+                        profile_kernels=args.profile_kernels,
                     )
                 )
         del data
@@ -461,8 +502,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query-rows", type=int, default=1_000)
     parser.add_argument("--products", type=int, default=1_000)
     parser.add_argument("--num-estimators", type=int, default=8)
-    parser.add_argument("--repetitions", type=int, default=5)
-    parser.add_argument("--warmups", type=int, default=2)
+    parser.add_argument("--profile-kernels", action="store_true")
+    parser.add_argument("--repetitions", type=int, default=20)
+    parser.add_argument("--warmups", type=int, default=5)
     parser.add_argument(
         "--output",
         type=Path,

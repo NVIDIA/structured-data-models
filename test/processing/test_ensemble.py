@@ -13,14 +13,20 @@ from sdm.processing import (
     ClipQuantiles,
     ClipSigma,
     DropConstantColumns,
+    EnsembleFitContext,
+    EnsembleProcessor,
+    EnsembleRelatedTables,
     EnsembleTable,
     Identity,
     ImputeMean,
     PowerTransform,
     Processor,
+    QuantileTransform,
     Recipe,
     ReduceEstimators,
     Sequential,
+    ShuffleCategories,
+    ShuffleColumns,
     Softmax,
     Standardize,
     StypeDispatch,
@@ -28,14 +34,6 @@ from sdm.processing import (
     TaskDispatch,
     ToNumerical,
 )
-
-
-class _UnsupportedProcessor(Processor):
-    supported_stypes = frozenset({Stype.numerical})
-    requires_fit = False
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table
 
 
 class _CenterUnlessNegative(Processor):
@@ -61,6 +59,54 @@ class _CenterUnlessNegative(Processor):
         return table.replace_blocks(
             numerical=table.numerical - self.mean,
         )
+
+
+class _AddOneEnsemble(EnsembleProcessor):
+    supported_stypes = frozenset({Stype.numerical})
+
+    def fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+    ) -> EnsembleTable:
+        del context
+        return table.with_groups(
+            tuple(
+                group.replace_blocks(numerical=group.numerical + 1)
+                for group in table.groups
+            )
+        )
+
+    def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        return table.with_groups(
+            tuple(
+                group.replace_blocks(numerical=group.numerical + 2)
+                for group in table.groups
+            )
+        )
+
+
+class _DropsQueryRow(Processor):
+    supported_stypes = frozenset({Stype.numerical})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._fit_rows = 0
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        del generator
+        self._fit_rows = table.size(-2)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        if table.size(-2) == self._fit_rows:
+            return table
+        return table[..., :-1, :]
 
 
 def _numerical(values: Sequence[Sequence[float]]) -> TableTensor:
@@ -104,6 +150,57 @@ def test_ensemble_table_preserves_member_order_and_proven_sharing() -> None:
     )
 
 
+def test_ensemble_table_materializes_only_compatible_member_metadata() -> None:
+    first = _numerical([[1.0], [2.0]])
+    renamed = TableTensor.from_tensor(
+        first.numerical,
+        columns=("renamed",),
+    )
+    table = EnsembleTable.pack(
+        variants=(first, renamed),
+        member_to_input_variant=(0, 1),
+    )
+
+    with pytest.raises(ValueError, match="metadata"):
+        table.materialize()
+
+    categories = CategoricalTensor(
+        code=torch.tensor([[0], [1]], dtype=torch.int64),
+        categories=(torch.tensor([10, 20]),),
+    )
+    reordered = CategoricalTensor(
+        code=torch.tensor([[1], [0]], dtype=torch.int64),
+        categories=(torch.tensor([20, 10]),),
+    )
+    categorical = EnsembleTable.pack(
+        variants=(
+            TableTensor(
+                columns={Stype.categorical: ("kind",)},
+                categorical=categories,
+            ),
+            TableTensor(
+                columns={Stype.categorical: ("kind",)},
+                categorical=reordered,
+            ),
+        ),
+        member_to_input_variant=(0, 1),
+    )
+
+    with pytest.raises(ValueError, match="metadata"):
+        categorical.materialize()
+
+
+def test_ensemble_processor_scalar_fit_transform_runs_once() -> None:
+    table = _numerical([[1.0], [2.0]])
+    processor = _AddOneEnsemble()
+
+    fitted = processor.fit_transform(table)
+    transformed = processor.transform(table)
+
+    torch.testing.assert_close(fitted.numerical, table.numerical + 1)
+    torch.testing.assert_close(transformed.numerical, table.numerical + 2)
+
+
 def test_recipe_round_robin_choice_reuses_two_variants_for_eight_members() -> (
     None
 ):
@@ -133,6 +230,95 @@ def test_recipe_round_robin_choice_reuses_two_variants_for_eight_members() -> (
             transformed[member].numerical,
             expected,
         )
+
+
+@pytest.mark.parametrize(
+    ("processor", "features", "target"),
+    [
+        (
+            ShuffleColumns(method="shift"),
+            _numerical([[1.0, 2.0], [3.0, 4.0]]),
+            _target(classification=False),
+        ),
+        (
+            ShuffleCategories(method="shift"),
+            _numerical([[1.0], [2.0], [3.0]]),
+            _target(classification=True),
+        ),
+    ],
+    ids=("columns", "categories"),
+)
+def test_shuffle_reuses_equal_member_mappings(
+    processor: Processor,
+    features: TableTensor,
+    target: TableTensor,
+) -> None:
+    recipe = (
+        Recipe(features=processor)
+        if isinstance(processor, ShuffleColumns)
+        else Recipe(target=processor)
+    )
+    transformed_features, transformed_target, _ = recipe.fit_transform(
+        features,
+        target,
+        num_members=8,
+        generator=torch.Generator().manual_seed(9),
+    )
+    transformed = (
+        transformed_features
+        if isinstance(processor, ShuffleColumns)
+        else transformed_target
+    )
+
+    unique = {
+        (
+            tuple(table.columns.items()),
+            table.numerical.cpu().numpy().tobytes(),
+            table.categorical.code.cpu().numpy().tobytes(),
+            tuple(
+                category.cpu().numpy().tobytes()
+                for category in table.categorical.categories
+            ),
+        )
+        for table in (transformed[member] for member in range(8))
+    }
+    assert sum(group.size(0) for group in transformed.groups) == len(unique)
+
+
+def test_sampled_quantile_is_reproducible_and_member_specific() -> None:
+    features = TableTensor.from_tensor(
+        torch.arange(128, dtype=torch.float32).view(64, 2)
+    )
+    transformed = []
+    for _ in range(2):
+        recipe = Recipe(
+            features=QuantileTransform(
+                n_quantiles=4,
+                subsample=10,
+            )
+        )
+        out, _, _ = recipe.fit_transform(
+            features,
+            _target(classification=False),
+            num_members=4,
+            generator=torch.Generator().manual_seed(17),
+        )
+        transformed.append(out)
+
+    for member in range(4):
+        torch.testing.assert_close(
+            transformed[0][member].numerical,
+            transformed[1][member].numerical,
+            rtol=0,
+            atol=0,
+        )
+    assert any(
+        not torch.equal(
+            transformed[0][0].numerical,
+            transformed[0][member].numerical,
+        )
+        for member in range(1, 4)
+    )
 
 
 def test_schema_changing_processor_splits_only_incompatible_members() -> None:
@@ -234,11 +420,12 @@ def test_nested_task_dispatch_resolves_from_target(
         output=Sequential(
             TargetDecode(),
             ReduceEstimators(),
-            Sequential(
-                TaskDispatch(
+            StypeDispatch(
+                numerical=TaskDispatch(
                     classification=Softmax(),
                     regression=Identity(),
-                )
+                ),
+                remainder="error",
             ),
         )
     )
@@ -283,14 +470,11 @@ def test_target_decode_routes_members_through_fitted_choice_groups() -> None:
     recipe.fit_transform(
         _numerical([[1.0], [2.0], [3.0]]),
         _target(classification=False),
-        num_members=2,
+        num_members=8,
     )
 
     actual = recipe.transform_output(
-        (
-            TableTensor.from_tensor(torch.tensor([[0.0]])),
-            TableTensor.from_tensor(torch.tensor([[0.0]])),
-        )
+        tuple(TableTensor.from_tensor(torch.tensor([[0.0]])) for _ in range(8))
     )
 
     torch.testing.assert_close(actual.numerical, torch.tensor([[12.0]]))
@@ -358,56 +542,64 @@ def test_related_table_names_can_match_module_attributes() -> None:
 
 
 @pytest.mark.parametrize(
-    ("recipe", "message"),
+    "recipe",
     [
-        (
-            Recipe(features=ReduceEstimators()),
-            "only supported in.*output",
-        ),
-        (
-            Recipe(
-                output=Sequential(
-                    TargetDecode(),
-                    ReduceEstimators(),
-                    Choice(
-                        Identity(),
-                        Identity(),
-                        selection="round_robin",
-                    ),
-                )
-            ),
-            "output supports only stateless processors",
-        ),
-        (
-            Recipe(
-                output=Choice(
-                    ReduceEstimators(),
-                    Identity(),
-                    selection="round_robin",
-                )
-            ),
-            "ReduceEstimators.*direct",
-        ),
-        (
-            Recipe(
-                output=Sequential(
-                    ReduceEstimators(),
-                    ReduceEstimators(),
-                )
-            ),
-            "at most one.*ReduceEstimators",
-        ),
-        (
-            Recipe(output=ReduceEstimators()),
-            "TargetDecode.*required.*ReduceEstimators",
-        ),
+        Recipe(features=Sequential(Identity(), ReduceEstimators())),
+        Recipe(target=ReduceEstimators()),
     ],
 )
-def test_recipe_rejects_ambiguous_ensemble_compositions(
+def test_recipe_rejects_estimator_reduction_before_output(
     recipe: Recipe,
-    message: str,
 ) -> None:
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=r"only supported in Recipe\.output"):
+        recipe.fit_transform(
+            _numerical([[1.0], [2.0], [3.0]]),
+            _target(classification=False),
+            num_members=2,
+        )
+
+
+def test_target_decode_must_precede_estimator_reduction() -> None:
+    recipe = Recipe(output=Sequential(ReduceEstimators(), TargetDecode()))
+
+    with pytest.raises(ValueError, match="TargetDecode must precede"):
+        recipe.fit_transform(
+            _numerical([[1.0], [2.0], [3.0]]),
+            _target(classification=False),
+            num_members=2,
+        )
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        Sequential(TargetDecode(), TargetDecode()),
+        Sequential(TargetDecode(), ReduceEstimators(), ReduceEstimators()),
+    ],
+)
+def test_output_has_single_decode_and_reduction_boundaries(
+    output: Processor,
+) -> None:
+    recipe = Recipe(output=output)
+
+    with pytest.raises(ValueError, match="at most one"):
+        recipe.fit_transform(
+            _numerical([[1.0], [2.0], [3.0]]),
+            _target(classification=False),
+            num_members=2,
+        )
+
+
+@pytest.mark.parametrize(
+    "output",
+    [Standardize(), Sequential().append(Standardize())],
+)
+def test_output_processors_must_be_stateless(output: Processor) -> None:
+    recipe = Recipe(output=output)
+
+    with pytest.raises(
+        ValueError, match="output processors must be stateless"
+    ):
         recipe.fit_transform(
             _numerical([[1.0], [2.0], [3.0]]),
             _target(classification=False),
@@ -508,7 +700,7 @@ def test_impute_mean_fits_each_leading_variant_independently() -> None:
     )
 
 
-def test_processor_after_member_split_preserves_each_member() -> None:
+def test_custom_processor_contract_works_after_member_split() -> None:
     recipe = Recipe(
         features=Sequential(
             Choice(
@@ -516,7 +708,7 @@ def test_processor_after_member_split_preserves_each_member() -> None:
                 Clip(min_value=0.0, max_value=0.0),
                 selection="round_robin",
             ),
-            _UnsupportedProcessor(),
+            _CenterUnlessNegative(),
         )
     )
 
@@ -527,11 +719,53 @@ def test_processor_after_member_split_preserves_each_member() -> None:
         num_members=2,
     )
 
-    torch.testing.assert_close(transformed[0].numerical, features.numerical)
+    torch.testing.assert_close(
+        transformed[0].numerical,
+        torch.tensor([[-1.0], [0.0], [1.0]]),
+    )
     torch.testing.assert_close(
         transformed[1].numerical,
         torch.zeros_like(features.numerical),
     )
+
+
+def test_recipe_rejects_mixed_execution_devices() -> None:
+    target = TableTensor.from_tensor(torch.ones(3, 1, device="meta"))
+
+    with pytest.raises(ValueError, match="same device"):
+        Recipe().fit_transform(
+            _numerical([[1.0], [2.0], [3.0]]),
+            target,
+            num_members=2,
+        )
+
+    with pytest.raises(ValueError, match="same device"):
+        EnsembleRelatedTables(
+            tables={
+                "cpu": EnsembleTable.from_shared(
+                    _numerical([[1.0]]),
+                    num_members=2,
+                ),
+                "meta": EnsembleTable.from_shared(
+                    TableTensor.from_tensor(torch.ones(1, 1, device="meta")),
+                    num_members=2,
+                ),
+            },
+            relationships=(),
+            task_links=(),
+        )
+
+
+def test_recipe_rejects_row_changes_during_query_transform() -> None:
+    recipe = Recipe(features=_DropsQueryRow())
+    recipe.fit_transform(
+        _numerical([[1.0], [2.0], [3.0]]),
+        _target(classification=False),
+        num_members=2,
+    )
+
+    with pytest.raises(ValueError, match="row dimension"):
+        recipe.transform(_numerical([[4.0], [5.0]]))
 
 
 def test_failed_refit_keeps_the_previous_complete_recipe_plan() -> None:

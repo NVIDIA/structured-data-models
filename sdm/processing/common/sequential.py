@@ -25,8 +25,8 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
 
     def __init__(self, *args: object) -> None:
         super().__init__()
+        self.requires_fit = False
         self.extend(args)
-        self.requires_fit = any(child.requires_fit for child in self)
 
     def append(self, processor: object) -> Self:
         r"""Append a processor or callable to this sequence.
@@ -41,6 +41,7 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
         else:
             self.add_module(str(len(self)), processor)
 
+        self.requires_fit = self.requires_fit or processor.requires_fit
         self._fitted = False
         return self
 
@@ -109,17 +110,17 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
             out = cast(EnsembleProcessor, child).transform_ensemble(out)
         return out
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Iterable[TableTensor],
-    ) -> tuple[TableTensor, ...]:
+        table: EnsembleTable,
+    ) -> EnsembleTable:
         r"""Apply fitted child inverses in reverse order."""
-        out = tuple(tables)
+        out = table
         for child in reversed(list(self)):
             out = cast(
                 EnsembleProcessor,
                 child,
-            ).inverse_transform_members(out)
+            ).inverse_transform_ensemble(out)
         return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:

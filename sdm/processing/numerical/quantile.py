@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from typing import Literal, cast
 
 import torch
@@ -240,20 +239,23 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
             member_to_input_variant=self._member_to_processor,
         )
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
+        table: EnsembleTable,
+    ) -> EnsembleTable:
         r"""Invert members with their fitted quantile grids."""
-        return tuple(
+        variants = tuple(
             cast(
                 QuantileTransform,
                 self.processors[processor_index],
-            ).inverse_transform(table)
-            for table, processor_index in zip(
-                tables,
-                self._member_to_processor,
+            ).inverse_transform(table[position])
+            for position, processor_index in enumerate(
+                self._member_to_processor
             )
+        )
+        return EnsembleTable.pack(
+            variants=variants,
+            member_to_input_variant=tuple(range(table.num_members)),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

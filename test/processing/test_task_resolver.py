@@ -6,7 +6,6 @@ import torch
 
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
-    Choice,
     Identity,
     InvertibleMixin,
     Processor,
@@ -109,7 +108,7 @@ def test_task_resolver_uses_final_target_type_once(
     )
 
 
-def test_task_resolver_clears_failures_and_validates_placement() -> None:
+def test_task_resolver_clears_failures_and_supports_nested_output() -> None:
     output = _output()
     recipe = Recipe(output=[TaskDispatch(regression=Identity())])
     assert "_TaskResolver" not in repr(recipe)
@@ -127,10 +126,13 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
         Recipe(target=[TaskDispatch(regression=Identity())])
 
-    shared = TaskDispatch(regression=Identity())
-    nested = Choice(Identity(), shared)
-    with pytest.raises(ValueError, match=r"direct step.*1\.options\.1"):
-        Recipe(output=[shared, nested])
+    nested = Recipe(
+        output=TaskDispatch(
+            regression=TaskDispatch(regression=Identity()),
+        )
+    )
+    nested.target.fit(_numerical_target())
+    assert nested.output.transform(output) is output
 
 
 def test_task_resolver_copies_recipes_independently() -> None:

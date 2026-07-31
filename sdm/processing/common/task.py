@@ -20,8 +20,8 @@ class TaskDispatch(EnsembleProcessor):
     :attr:`Recipe.target <sdm.processing.Recipe.target>` resolves the route
     from the final transformed target. One numerical column selects regression
     and one categorical column selects classification. Routes must be stateless
-    because output processing has no fitting data of its own. Configure
-    ``TaskDispatch`` as a direct step in ``Recipe.output``.
+    because output processing has no fitting data of its own. Nested
+    dispatchers are resolved only within the selected route.
 
     Args:
         classification: Output processor for categorical targets. An iterable
@@ -62,6 +62,19 @@ class TaskDispatch(EnsembleProcessor):
 
         self._task: Literal["classification", "regression"] | None = None
 
+    @classmethod
+    def _roots(
+        cls,
+        module: torch.nn.Module,
+    ) -> tuple["TaskDispatch", ...]:
+        if isinstance(module, cls):
+            return (module,)
+        return tuple(
+            dispatcher
+            for child in module.children()
+            for dispatcher in cls._roots(child)
+        )
+
     def _resolve(self, target: TableTensor) -> None:
         self._reset()
         if target.size(-1) != 1:
@@ -91,9 +104,15 @@ class TaskDispatch(EnsembleProcessor):
                 f"configure {task}=... or use 'Identity()' for a no-op."
             )
         self._task = task
+        selected = cast(Processor, self.processors[task])
+        for dispatcher in self._roots(selected):
+            dispatcher._resolve(target)
 
     def _reset(self) -> None:
         self._task = None
+        for module in self.processors.modules():
+            if isinstance(module, TaskDispatch):
+                module._task = None
 
     def _transform(self, table: TableTensor) -> TableTensor:
         if self._task is None:

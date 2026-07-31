@@ -12,7 +12,32 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import Recipe
+from sdm.processing import EnsembleRelatedTables, EnsembleTable, Recipe
+from sdm.processing.ensemble_table import _stack_positional
+
+
+def _positional_group_key(table: TableTensor) -> tuple[object, ...]:
+    return (
+        tuple(table.size()[:-1]),
+        tuple(
+            (
+                stype,
+                type(block),
+                block.dtype,
+                block.size(-1),
+            )
+            for stype, block in table.items()
+        ),
+        tuple(category.numel() for category in table.categorical.categories),
+        table.device,
+    )
+
+
+def _materialize_positional(
+    table: EnsembleTable,
+    members: tuple[int, ...],
+) -> TableTensor:
+    return _stack_positional(tuple(table[member] for member in members))
 
 
 class TabICLv2(ICLModel):
@@ -99,8 +124,6 @@ class TabICLv2(ICLModel):
         {Stype.numerical, Stype.categorical}
     )
     supports_related_tables: ClassVar[bool] = False
-    supports_vectorized_ensemble: ClassVar[bool] = True
-    supports_vectorized_ensemble_rng: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -132,6 +155,14 @@ class TabICLv2(ICLModel):
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 
+    @classmethod
+    def _ensemble_group_key(
+        cls,
+        table: EnsembleTable,
+        member: int,
+    ) -> object:
+        return _positional_group_key(table[member])
+
     def _load_from_pretrained(self) -> "TabICLv2":
         device = next(self.parameters()).device
 
@@ -150,6 +181,55 @@ class TabICLv2(ICLModel):
                 self.reg_model.load_state_dict(ckpt)
 
         return self
+
+    def _forward_ensemble_group(
+        self,
+        *,
+        members: tuple[int, ...],
+        x_context: EnsembleTable | None,
+        y_context: EnsembleTable | None,
+        x_query: EnsembleTable | None,
+        related_context_tables: EnsembleRelatedTables | None,
+        related_query_tables: EnsembleRelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        kwargs: dict[str, Any],
+    ) -> tuple[TableTensor, ...]:
+        output = self._forward(
+            x_context=(
+                _materialize_positional(x_context, members)
+                if x_context is not None
+                else None
+            ),
+            y_context=(
+                _materialize_positional(y_context, members)
+                if y_context is not None
+                else None
+            ),
+            x_query=(
+                _materialize_positional(x_query, members)
+                if x_query is not None
+                else None
+            ),
+            related_context_tables=(
+                related_context_tables.materialize(members)
+                if related_context_tables is not None
+                else None
+            ),
+            related_query_tables=(
+                related_query_tables.materialize(members)
+                if related_query_tables is not None
+                else None
+            ),
+            cache=cache,
+            generator=generator,
+            **kwargs,
+        )
+        if output.size(0) != len(members):
+            raise RuntimeError(
+                "TabICLv2 must preserve the leading ensemble dimension."
+            )
+        return tuple(output[index] for index in range(len(members)))
 
     def _forward(
         self,

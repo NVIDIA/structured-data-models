@@ -23,6 +23,7 @@ Mode = Literal["parallel", "sequential"]
 class Attempt:
     """Outcome of one isolated row-count attempt."""
 
+    task: str
     rows: int
     context_rows: int
     query_rows: int
@@ -37,6 +38,7 @@ class Attempt:
 def attempt(
     model: TabICLv2,
     *,
+    task: str,
     rows: int,
     features: int,
     categorical_features: int,
@@ -44,7 +46,7 @@ def attempt(
     num_estimators: int,
     mode: Mode,
 ) -> Attempt:
-    """Run one clean classification attempt and recover from CUDA OOM."""
+    """Run one clean attempt and recover from CUDA OOM."""
     context_rows = max(2, int(rows * 0.8))
     query_rows = rows - context_rows
     if query_rows < 1:
@@ -53,7 +55,7 @@ def attempt(
     gc.collect()
     torch.cuda.empty_cache()
     workload = build_workload(
-        task="classification",
+        task=task,
         context_rows=context_rows,
         query_rows=query_rows,
         features=features,
@@ -87,6 +89,7 @@ def attempt(
     gc.collect()
     torch.cuda.empty_cache()
     return Attempt(
+        task=task,
         rows=rows,
         context_rows=context_rows,
         query_rows=query_rows,
@@ -122,6 +125,7 @@ def search(args: argparse.Namespace) -> dict[str, object]:
     while True:
         result = attempt(
             model,
+            task=args.task,
             rows=candidate,
             features=args.features,
             categorical_features=args.categorical_features,
@@ -145,6 +149,7 @@ def search(args: argparse.Namespace) -> dict[str, object]:
             candidate = _rounded_midpoint(low, high, args.resolution)
             result = attempt(
                 model,
+                task=args.task,
                 rows=candidate,
                 features=args.features,
                 categorical_features=args.categorical_features,
@@ -164,6 +169,7 @@ def search(args: argparse.Namespace) -> dict[str, object]:
     if failing_rows is not None:
         sequential_at_failure = attempt(
             model,
+            task=args.task,
             rows=failing_rows,
             features=args.features,
             categorical_features=args.categorical_features,
@@ -214,6 +220,11 @@ def search(args: argparse.Namespace) -> dict[str, object]:
 def parse_args() -> argparse.Namespace:
     """Parse the memory-search CLI."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--task",
+        choices=("classification", "regression"),
+        default="classification",
+    )
     parser.add_argument("--start-rows", type=int, default=2_000)
     parser.add_argument("--max-rows", type=int, default=100_000)
     parser.add_argument("--resolution", type=int, default=1_000)

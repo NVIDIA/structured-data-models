@@ -48,6 +48,7 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         self.processors = torch.nn.ModuleList()
         self._member_to_processor: tuple[int, ...] = ()
         self._processor_positions: tuple[int, ...] = ()
+        self._indices: tuple[int, ...] = ()
 
     def _fit(
         self,
@@ -57,40 +58,42 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
     ) -> None:
         n_features = table.numerical.size(-1)
         device = table.numerical.device
+        random_device = device if generator is None else generator.device
         if n_features <= 1 or self.method == "latin":
-            self.permutation = torch.arange(n_features, device=device)
+            permutation = torch.arange(n_features, device=random_device)
         elif self.method == "shift":
             offset = torch.randint(
                 n_features,
                 (1,),
                 generator=generator,
-                device=device,
+                device=random_device,
             )
-            self.permutation = (
-                torch.arange(n_features, device=device) + offset
+            permutation = (
+                torch.arange(n_features, device=random_device) + offset
             ) % n_features
         else:
-            self.permutation = torch.randperm(
+            permutation = torch.randperm(
                 n_features,
                 generator=generator,
-                device=device,
+                device=random_device,
             )
+        self._indices = tuple(permutation.tolist())
+        self.permutation = permutation.to(device)
 
     def _planned_permutations(
         self,
         table: EnsembleTable,
         context: EnsembleFitContext,
     ) -> tuple[tuple[int, ...], ...] | None:
-        if context.planner is None:
+        if context._plan is None:
             return None
-        return context.planner.column_permutations(
+        return context._plan.column_permutations(
             member_ids=context.member_ids,
             num_columns=tuple(
                 table[position].numerical.size(-1)
                 for position in range(table.num_members)
             ),
             table_scope=context.table_scope,
-            processor_path=context.processor_path,
         )
 
     @staticmethod
@@ -109,6 +112,7 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
             dtype=torch.long,
             device=table.device,
         )
+        processor._indices = permutation
         processor._fitted = True
 
     def fit_transform_ensemble(
@@ -135,21 +139,19 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
             if planned is None:
                 processor.fit(
                     before,
-                    generator=context.generator_for(
-                        member_id,
-                        device=before.device,
-                    ),
+                    generator=context.generator_for(member_id),
                 )
-                mapping_key: tuple[object, ...] = ("member", member_id)
             else:
                 self._set_permutation(
                     processor,
                     before,
                     planned[position],
                 )
-                mapping_key = tuple(planned[position])
 
-            key = (table.member_to_variant[position], mapping_key)
+            key = (
+                table.member_to_variant[position],
+                processor._indices,
+            )
             processor_index = keys.get(key)
             if processor_index is None:
                 processor_index = len(variants)
@@ -180,35 +182,41 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
             member_to_input_variant=self._member_to_processor,
         )
 
-    def inverse_transform_members(
+    def inverse_transform_ensemble(
         self,
-        tables: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
+        table: EnsembleTable,
+    ) -> EnsembleTable:
         r"""Invert each output with its fitted member permutation."""
-        return tuple(
+        variants = tuple(
             cast(
                 ShuffleColumns,
                 self.processors[processor_index],
-            ).inverse_transform(table)
-            for table, processor_index in zip(
-                tables,
-                self._member_to_processor,
+            ).inverse_transform(table[position])
+            for position, processor_index in enumerate(
+                self._member_to_processor
             )
+        )
+        return EnsembleTable.pack(
+            variants=variants,
+            member_to_input_variant=tuple(range(table.num_members)),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Reorder the numerical block with the fitted permutation."""
-        return self._permute(table, self.permutation)
+        return self._permute(table, self.permutation, self._indices)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return self._permute(table, self.permutation.argsort())
+        inverse = tuple(
+            sorted(range(len(self._indices)), key=self._indices.__getitem__)
+        )
+        return self._permute(table, self.permutation.argsort(), inverse)
 
     def _permute(
         self,
         table: TableTensor,
         permutation: Tensor,
+        indices: tuple[int, ...],
     ) -> TableTensor:
-        indices = permutation.tolist()
         return table.__class__(
             columns={
                 Stype.numerical.value: tuple(
