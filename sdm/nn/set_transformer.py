@@ -101,7 +101,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[False] = False,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -113,7 +113,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: Literal[True],
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -125,7 +125,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,
         *,
         return_key_value: bool,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -136,7 +136,7 @@ class InducedTransformerBlock(torch.nn.Module):
         attn_mask: Tensor | None = None,  # [..., KV]
         return_key_value: bool = False,
         *,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -156,7 +156,8 @@ class InducedTransformerBlock(torch.nn.Module):
             return_key_value: Whether to return the computed key and value
                 projections for the final attention site alongside the output.
             batch_size_limit: Maximum number of broadcast batch elements
-                processed at once during non-compiled evaluation.
+                processed at once during non-compiled evaluation. ``None``
+                uses the default limit.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is

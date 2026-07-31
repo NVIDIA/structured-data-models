@@ -13,10 +13,15 @@ from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 from sdm.nn.resolver import normalization_resolver
 
+DEFAULT_BATCH_SIZE_LIMIT = 65_535
 
-def _validate_batch_size_limit(batch_size_limit: int) -> None:
+
+def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
+    if batch_size_limit is None:
+        return DEFAULT_BATCH_SIZE_LIMIT
     if batch_size_limit <= 0:
         raise ValueError("`batch_size_limit` must be positive")
+    return batch_size_limit
 
 
 def _batch_chunk(
@@ -95,7 +100,7 @@ def _chunk_attention(
     attn_mask: Tensor | None,
     rope: RotaryEmbedding | None,
     return_key_value: bool,
-    batch_size_limit: int = 65_535,
+    batch_size_limit: int,
 ) -> Tensor | tuple[Tensor, KVCacheEntry] | None:
     batch_shape = _attention_batch_shape(
         query=query,
@@ -347,7 +352,7 @@ class SDPA(torch.nn.Module):
         seqused_key_value: Tensor | None = None,  # [...]
         attn_mask: Tensor | None = None,  # [..., Q, KV]
         *,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., Q, Hq, C]
         r"""The forward pass.
 
@@ -365,12 +370,13 @@ class SDPA(torch.nn.Module):
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
             batch_size_limit: Maximum number of broadcast batch elements
-                processed at once during non-compiled evaluation.
+                processed at once during non-compiled evaluation. ``None``
+                uses the default limit.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
-        _validate_batch_size_limit(batch_size_limit)
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
 
         if query.numel() == 0:
             return query
@@ -542,7 +548,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -555,7 +561,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -568,7 +574,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -580,7 +586,7 @@ class Attention(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -602,9 +608,10 @@ class Attention(torch.nn.Module):
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
             batch_size_limit: Maximum flattened batch size processed at once
-                during non-compiled evaluation. Cache-producing calls are
-                chunked only when the key/value batch shape already matches
-                the broadcast batch shape, preserving the cache shape.
+                during non-compiled evaluation. ``None`` uses the default
+                limit. Cache-producing calls are chunked only when the
+                key/value batch shape already matches the broadcast batch
+                shape, preserving the cache shape.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -612,7 +619,7 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        _validate_batch_size_limit(batch_size_limit)
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
         if not self.training and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
                 forward=self.forward,
@@ -744,7 +751,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[False] = False,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor: ...
 
     @overload
@@ -757,7 +764,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: Literal[True],
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> tuple[Tensor, KVCacheEntry]: ...
 
     @overload
@@ -770,7 +777,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         *,
         return_key_value: bool,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]: ...
 
     def forward(
@@ -782,7 +789,7 @@ class TransformerBlock(torch.nn.Module):
         rope: RotaryEmbedding | None = None,
         return_key_value: bool = False,
         *,
-        batch_size_limit: int = 65_535,
+        batch_size_limit: int | None = None,
     ) -> Tensor | tuple[Tensor, KVCacheEntry]:  # [..., Q, C]
         r"""The forward pass.
 
@@ -804,9 +811,10 @@ class TransformerBlock(torch.nn.Module):
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
             batch_size_limit: Maximum flattened batch size processed at once
-                during non-compiled evaluation. Cache-producing calls are
-                chunked only when the key/value batch shape already matches
-                the broadcast batch shape, preserving the cache shape.
+                during non-compiled evaluation. ``None`` uses the default
+                limit. Cache-producing calls are chunked only when the
+                key/value batch shape already matches the broadcast batch
+                shape, preserving the cache shape.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -814,7 +822,7 @@ class TransformerBlock(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        _validate_batch_size_limit(batch_size_limit)
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
         if not self.training and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
                 forward=self.forward,
