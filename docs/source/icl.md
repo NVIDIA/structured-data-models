@@ -86,8 +86,6 @@ Lastly, the {py:attr}`~sdm.models.ICLModel.supported_feature_stypes` attribute d
 Semantic types outside this set need to be converted, dropped, or otherwise handled by the recipe before they reach the model.
 For example, {py:class}`~sdm.models.TabICLv2` can only consume numerical features internally, so it is the recipe's job to convert any other semantic type into a numerical representation before it reaches the model, *e.g.*, via {py:class}`~sdm.processing.common.ToNumerical` on categorical columns.
 
-## Model Outputs
-
 Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where the output schema depends on the task, model, and post-processing routine of the {py:class}`~sdm.processing.recipe.Recipe`:
 
 - Classification predictions are generally returned as numerical probabilities, where each target category corresponds to one column in the output.
