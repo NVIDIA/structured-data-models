@@ -106,7 +106,7 @@ class TableTensor(Tensor):
         :hide:
         :options: +ELLIPSIS
 
-        TableTensor(...)
+        ...
 
     Args:
         size: The shape of the tensor ``[..., C]``.
