@@ -122,6 +122,38 @@ def as_ensemble_processor(
 
 The producer owns the semantic member-to-result mapping. `pack` owns physical grouping. The group-preserving adapter does not repack; variant producers and the variable-schema adapter do.
 
+## Lazy Member Fitting Extension
+
+The proposed extension keeps the existing `EnsembleTable` and fitted Processor tree but permits a branch to contain only a subset of the total ensemble. No separate lazy container is required.
+
+```python
+class EnsembleTable:
+    groups: tuple[TableTensor, ...]  # each [V_g, ..., R, C]
+    member_to_location: Tensor  # [E, 2], (group, position)
+```
+
+`member_to_location` is a clearer proposed name for `member_to_variant`: it describes the physical location of each member's current processed representation. Its length always equals the total ensemble size. `(-1, -1)` marks a member that is inactive in the current branch. Compatible representations remain in one group with a leading representation dimension; separate groups are required only for incompatible schemas or metadata.
+
+An ensemble-aware Processor may fit all active members or a requested subset. For each requested member, it resolves the input location and fits that data-dependent representation only if no fitted state exists. Every active member pointing to the same location shares that fitted state and is marked fitted at the same time. Sharing follows execution provenance; tensor values are never compared.
+
+```python
+class EnsembleProcessor(Processor):
+    member_to_fitted_state: Tensor  # [E], -1 if not fitted
+
+    def fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        context: EnsembleFitContext,
+        members: Sequence[int] | None = None,
+    ) -> EnsembleTable: ...
+```
+
+- Data-dependent Processors such as `Standardize` or `PowerTransform` fit at most once per active input location and reuse that state for query transformation.
+- Routing-only Processors such as `Choice`, `ShuffleColumns`, and `ShuffleCategories` create their member decisions once from ensemble size, schema, and RNG. They do not need one fitted Processor instance per member. A selected `Choice` child may still be data-dependent and is fitted lazily for the members reaching that branch.
+- `transform_ensemble` remains read-only and never triggers fitting. Adding members later requires another explicit context `fit_transform_ensemble(..., members=...)` call.
+- Branches retain a full-length member mapping; members outside the branch stay inactive, so branch results can be combined without reconstructing global member positions.
+
 ## Tasks
 
 | Task                          | Scope                                                                                                                                                                 | Owner                                                                           |
@@ -136,3 +168,4 @@ The producer owns the semantic member-to-result mapping. `pack` owns physical gr
 ## Open Questions
 
 - Serialization of dynamically fitted group Processors and member decisions.
+- Whether `member_to_variant` should be renamed to `member_to_location` publicly or retained for API compatibility when lazy member fitting is implemented.
