@@ -62,7 +62,39 @@ def test_unique_filter_with_higher_threshold(device: torch.device) -> None:
 def test_unique_filter_keeps_all_columns_with_too_few_rows() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0, 4.0], [1.0, 4.0]]))
 
-    assert DropConstantColumns(threshold=2).fit_transform(table) is table
+    output = DropConstantColumns(threshold=2).fit_transform(table)
+
+    assert output.columns == table.columns
+    torch.testing.assert_close(output.numerical, table.numerical)
+
+
+def test_unique_filter_batch_learns_each_representation() -> None:
+    context = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [[1.0, 1.0, 3.0], [1.0, 2.0, 3.0]],
+                [[1.0, 2.0, 3.0], [2.0, 2.0, 3.0]],
+            ]
+        ),
+        columns=("first", "second", "third"),
+    )
+    query = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [[4.0, 5.0, 6.0]],
+                [[7.0, 8.0, 9.0]],
+            ]
+        ),
+        columns=("first", "second", "third"),
+    )
+
+    processor = DropConstantColumns().fit_batch(context)
+    first, second = processor.transform_batch(query)
+
+    assert first.columns[Stype.numerical] == ("second",)
+    assert second.columns[Stype.numerical] == ("first",)
+    torch.testing.assert_close(first.numerical, query[0].numerical[:, 1:2])
+    torch.testing.assert_close(second.numerical, query[1].numerical[:, :1])
 
 
 @withCUDA

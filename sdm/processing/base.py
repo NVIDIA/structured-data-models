@@ -203,8 +203,6 @@ class VariableSchemaProcessor(Processor):
     transform methods therefore return one :class:`TableTensor` per entry.
     """
 
-    # TODO: Add lifecycle coverage with the first concrete implementation.
-
     def __init__(self) -> None:
         super().__init__()
         self._batch_fitted = False

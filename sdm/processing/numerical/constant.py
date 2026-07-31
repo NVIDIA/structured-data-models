@@ -4,13 +4,13 @@ import torch
 
 from sdm import Stype
 from sdm.processing._utils import _as_float
-from sdm.processing.base import Processor
+from sdm.processing.base import VariableSchemaProcessor
 from sdm.tensor import TableTensor
 
 DropConstantColumnsMethod = Literal["unique", "variance"]
 
 
-class DropConstantColumns(Processor):
+class DropConstantColumns(VariableSchemaProcessor):
     """Remove non-informative numerical columns learned during fit.
 
     With ``method="unique"``, columns are retained when they have more than
@@ -23,9 +23,11 @@ class DropConstantColumns(Processor):
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
-    Fitting expects data with shape ``[N, C]``, where ``N`` is the number of
-    rows and ``C`` is the number of numerical columns. The learned selection
-    can transform later tables with shape ``[..., C]``.
+    :meth:`~sdm.processing.Processor.fit` expects data with shape ``[R, C]``.
+    :meth:`~sdm.processing.VariableSchemaProcessor.fit_batch` expects data with
+    shape ``[B, R, C]`` and learns a separate selection for each of the ``B``
+    representations. ``R`` is the number of rows and ``C`` is the number of
+    numerical columns.
 
     Args:
         method: Filtering rule. ``"unique"`` uses distinct-value counts;
@@ -66,40 +68,61 @@ class DropConstantColumns(Processor):
         self.method = method
         self.threshold = 1 if threshold is None else threshold
         self.tolerance = 1e-6 if tolerance is None else tolerance
-        self._columns_to_keep: tuple[str, ...] = ()
+        self._columns_to_keep: tuple[tuple[str, ...], ...] = ()
 
-    def _fit(
+    def _keep_mask(self, data: torch.Tensor) -> torch.Tensor:
+        if self.method == "variance":
+            return _as_float(data).std(dim=-2) > self.tolerance
+        if data.size(-2) <= self.threshold:
+            return data.new_ones(
+                (*data.shape[:-2], data.size(-1)),
+                dtype=torch.bool,
+            )
+        if self.threshold == 1:
+            return (data != data[..., :1, :]).any(dim=-2)
+
+        values = data.sort(dim=-2).values
+        changed = values[..., 1:, :] != values[..., :-1, :]
+        return changed.sum(dim=-2) >= self.threshold
+
+    def _fit_batch(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        data = table.numerical
-
-        if self.method == "variance":
-            keep = _as_float(data).std(dim=0) > self.tolerance
-        # Preserve the schema when too few rows can exceed the threshold.
-        elif data.size(0) <= self.threshold:
-            keep = data.new_ones((data.size(-1),), dtype=torch.bool)
-        elif self.threshold == 1:
-            # Any mismatch with the first row proves a second unique value.
-            first = data[:1]
-            different = data != first
-            keep = different.any(dim=0)
-        else:
-            # A sorted column with k unique values has k - 1 transitions.
-            values = data.sort(dim=0).values
-            left, right = values[1:], values[:-1]
-            changed = left != right
-            keep = changed.sum(dim=0) >= self.threshold
-
-        indices = keep.nonzero().flatten().tolist()
+        if table.dim() != 3:
+            raise ValueError(
+                "'DropConstantColumns.fit_batch' expects shape [B, R, C]."
+            )
+        keep = self._keep_mask(table.numerical)
         columns = table.columns[Stype.numerical]
-        self._columns_to_keep = tuple(columns[index] for index in indices)
+        self._columns_to_keep = tuple(
+            tuple(
+                columns[index] for index in mask.nonzero().flatten().tolist()
+            )
+            for mask in keep
+        )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        """Drop columns rejected by the fitted filtering rule."""
+    def _transform_batch(
+        self,
+        table: TableTensor,
+    ) -> tuple[TableTensor, ...]:
+        if table.dim() != 3:
+            raise ValueError(
+                "'DropConstantColumns.transform_batch' expects shape "
+                "[B, R, C]."
+            )
+        if table.size(0) != len(self._columns_to_keep):
+            raise ValueError(
+                "Expected the fitted number of representations "
+                f"(got {table.size(0)})."
+            )
         columns = table.columns[Stype.numerical]
-        if self._columns_to_keep == columns:
-            return table
-        return table.select_columns(self._columns_to_keep)
+        output = []
+        for index, columns_to_keep in enumerate(self._columns_to_keep):
+            representation = table[index]
+            if columns_to_keep != columns:
+                representation = representation.select_columns(columns_to_keep)
+            output.append(representation)
+        return tuple(output)
