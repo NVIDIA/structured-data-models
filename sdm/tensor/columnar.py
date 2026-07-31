@@ -179,16 +179,18 @@ class ColumnarTensor(Tensor):
         if isinstance(array, pa.ChunkedArray):
             array = _combine_arrow_chunks(array)
 
+        is_string = pa.types.is_string(array.type)
+        is_large_string = pa.types.is_large_string(array.type)
         valid = None
-        if array.null_count > 0:
+        if array.null_count > 0 and (
+            pa.types.is_integer(array.type) or is_string or is_large_string
+        ):
             valid = arrow_as_tensor(
                 array.is_valid(),
                 dtype=torch.bool,
                 device=device,
             )
 
-        is_string = pa.types.is_string(array.type)
-        is_large_string = pa.types.is_large_string(array.type)
         if is_string or is_large_string:
             if valid is not None:
                 array = pc.fill_null(array, "")
@@ -217,22 +219,27 @@ class ColumnarTensor(Tensor):
             ser: The :class:`cudf.Series` or :class:`cudf.Index`.
             device: The device.
         """
-        from cudf.api.types import is_string_dtype
+        from cudf.api.types import is_integer_dtype, is_string_dtype
 
+        is_string = is_string_dtype(ser.dtype)
         valid = None
-        if ser._column.null_count > 0:
+        if ser._column.null_count > 0 and (
+            is_integer_dtype(ser.dtype) or is_string
+        ):
             valid = torch.from_dlpack(ser.notna().to_dlpack()).to(
                 device=device,
                 dtype=torch.bool,
             )
 
-        if is_string_dtype(ser.dtype):
+        if is_string:
             if valid is not None:
                 ser = ser.fillna("")
             column = StringTensor.from_cudf(ser, device=device)
         else:
             if valid is not None:
                 ser = ser.fillna(0)
+            elif ser._column.null_count > 0 and ser.dtype.kind == "f":
+                ser = ser.fillna(float("nan"))
             column = torch.from_dlpack(ser.to_dlpack()).to(device)
 
         return cls(

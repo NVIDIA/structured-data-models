@@ -65,6 +65,15 @@ def test_from_arrow() -> None:
     tensor = ColumnarTensor.from_arrow(pa.array(["a", None, ""]))
     assert tensor.tolist() == [["a"], [None], [""]]
 
+    tensor = ColumnarTensor.from_arrow(
+        pa.array([1.5, None, 3.5], type=pa.float32())
+    )
+    assert tensor.validity == (None,)
+    assert tensor[:, 0].allclose(
+        torch.tensor([1.5, float("nan"), 3.5]),
+        equal_nan=True,
+    )
+
 
 def test_from_arrow_chunked_string() -> None:
     tensor = ColumnarTensor.from_arrow(
