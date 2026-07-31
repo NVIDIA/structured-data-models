@@ -109,21 +109,24 @@ def test_clip_sigma_fits_leading_batches_independently(
     )
 
     processor = ClipSigma(threshold=1.0).fit(TableTensor.from_tensor(context))
-    query = processor.transform(
+    transformed = processor.transform(
         TableTensor.from_tensor(
-            torch.tensor([[[1.0]], [[12.0]]], device=device)
+            torch.tensor(
+                [[[-100.0], [100.0]], [[-200.0], [200.0]]],
+                dtype=torch.float64,
+                device=device,
+            )
         )
     ).numerical
 
-    assert torch.equal(
-        processor._mean,
-        torch.tensor([[[1.0]], [[12.0]]], dtype=torch.float64, device=device),
-    )
-    assert torch.equal(
-        processor._std,
-        torch.tensor([[[1.0]], [[2.0]]], dtype=torch.float64, device=device),
-    )
-    assert torch.equal(
-        query,
-        torch.tensor([[[1.0]], [[12.0]]], dtype=torch.float64, device=device),
+    torch.testing.assert_close(
+        transformed,
+        torch.tensor(
+            [
+                [[-4.61512051684126], [6.61512051684126]],
+                [[4.696695091940924], [19.303304908059076]],
+            ],
+            dtype=torch.float64,
+            device=device,
+        ),
     )
