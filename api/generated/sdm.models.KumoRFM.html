@@ -245,52 +245,55 @@ labeled context to produce class logits or regression quantiles.</p></li>
 </span><span data-line="15">            <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
 </span><span data-line="16">        <span class="p">),</span>
 </span><span data-line="17">        <span class="s2">&quot;orders&quot;</span><span class="p">:</span> <span class="n">TableTensor</span><span class="o">.</span><span class="n">from_columns</span><span class="p">(</span>
-</span><span data-line="18">            <span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="s2">&quot;amount&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">9.99</span><span class="p">,</span> <span class="mf">4.99</span><span class="p">,</span> <span class="o">...</span><span class="p">]},</span>
-</span><span data-line="19">            <span class="n">stypes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;amount&quot;</span><span class="p">:</span> <span class="s2">&quot;numerical&quot;</span><span class="p">},</span>
-</span><span data-line="20">            <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
-</span><span data-line="21">        <span class="p">),</span>
-</span><span data-line="22">    <span class="p">},</span>
-</span><span data-line="23">    <span class="n">relationships</span><span class="o">=</span><span class="p">[{</span>
-</span><span data-line="24">        <span class="s2">&quot;left_table&quot;</span><span class="p">:</span> <span class="s2">&quot;orders&quot;</span><span class="p">,</span>
-</span><span data-line="25">        <span class="s2">&quot;left_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
-</span><span data-line="26">        <span class="s2">&quot;right_table&quot;</span><span class="p">:</span> <span class="s2">&quot;users&quot;</span><span class="p">,</span>
-</span><span data-line="27">        <span class="s2">&quot;right_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
-</span><span data-line="28">    <span class="p">}],</span>
-</span><span data-line="29">    <span class="n">task_links</span><span class="o">=</span><span class="p">[{</span>
-</span><span data-line="30">        <span class="s2">&quot;task_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
-</span><span data-line="31">        <span class="s2">&quot;table&quot;</span><span class="p">:</span> <span class="s2">&quot;users&quot;</span><span class="p">,</span>
-</span><span data-line="32">        <span class="s2">&quot;table_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
-</span><span data-line="33">    <span class="p">}],</span>
-</span><span data-line="34"><span class="p">)</span>
-</span><span data-line="35">
-</span><span data-line="36"><span class="n">x_context</span> <span class="o">=</span> <span class="n">task_table</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;churn&quot;</span><span class="p">)</span>
-</span><span data-line="37"><span class="n">y_context</span> <span class="o">=</span> <span class="n">task_table</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;churn&quot;</span><span class="p">]</span>
-</span><span data-line="38"><span class="n">x_query</span> <span class="o">=</span> <span class="n">task_table</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;churn&quot;</span><span class="p">)</span>
-</span><span data-line="39">
-</span><span data-line="40"><span class="n">related_context_tables</span> <span class="o">=</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">replace_tables</span><span class="p">({</span>
-</span><span data-line="41">    <span class="s2">&quot;users&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;users&quot;</span><span class="p">][:</span><span class="mi">2</span><span class="p">],</span>
-</span><span data-line="42">    <span class="s2">&quot;orders&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;orders&quot;</span><span class="p">][:</span><span class="mi">3</span><span class="p">],</span>
-</span><span data-line="43"><span class="p">})</span>
-</span><span data-line="44"><span class="n">related_query_tables</span> <span class="o">=</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">replace_tables</span><span class="p">({</span>
-</span><span data-line="45">    <span class="s2">&quot;users&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;users&quot;</span><span class="p">][</span><span class="mi">2</span><span class="p">:],</span>
-</span><span data-line="46">    <span class="s2">&quot;orders&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;orders&quot;</span><span class="p">][</span><span class="mi">3</span><span class="p">:],</span>
-</span><span data-line="47"><span class="p">})</span>
-</span><span data-line="48">
-</span><span data-line="49"><span class="n">model</span> <span class="o">=</span> <span class="n">KumoRFM</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
-</span><span data-line="50">
-</span><span data-line="51"><span class="c1"># Default in-context learning forward pass:</span>
-</span><span data-line="52"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
-</span><span data-line="53">    <span class="n">x_context</span><span class="o">=</span><span class="n">x_context</span><span class="p">,</span>
-</span><span data-line="54">    <span class="n">y_context</span><span class="o">=</span><span class="n">y_context</span><span class="p">,</span>
-</span><span data-line="55">    <span class="n">x_query</span><span class="o">=</span><span class="n">x_query</span><span class="p">,</span>
-</span><span data-line="56">    <span class="n">related_context_tables</span><span class="o">=</span><span class="n">related_context_tables</span><span class="p">,</span>
-</span><span data-line="57">    <span class="n">related_query_tables</span><span class="o">=</span><span class="n">related_query_tables</span><span class="p">,</span>
-</span><span data-line="58">    <span class="n">num_hops</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-</span><span data-line="59"><span class="p">)</span>
-</span><span data-line="60">
-</span><span data-line="61"><span class="c1"># Fit+Predict forward pass via key/value caching:</span>
-</span><span data-line="62"><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">x_context</span><span class="p">,</span> <span class="n">y_context</span><span class="p">,</span> <span class="n">related_context_tables</span><span class="p">,</span> <span class="n">num_hops</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-</span><span data-line="63"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">x_query</span><span class="p">,</span> <span class="n">related_query_tables</span><span class="p">)</span>
+</span><span data-line="18">            <span class="p">{</span>
+</span><span data-line="19">                <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>
+</span><span data-line="20">                <span class="s2">&quot;amount&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">9.99</span><span class="p">,</span> <span class="mf">4.99</span><span class="p">,</span> <span class="mf">12.99</span><span class="p">,</span> <span class="mf">7.99</span><span class="p">,</span> <span class="mf">3.99</span><span class="p">,</span> <span class="mf">5.99</span><span class="p">],</span>
+</span><span data-line="21">            <span class="p">},</span>
+</span><span data-line="22">            <span class="n">stypes</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;amount&quot;</span><span class="p">:</span> <span class="s2">&quot;numerical&quot;</span><span class="p">},</span>
+</span><span data-line="23">            <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+</span><span data-line="24">        <span class="p">),</span>
+</span><span data-line="25">    <span class="p">},</span>
+</span><span data-line="26">    <span class="n">relationships</span><span class="o">=</span><span class="p">[{</span>
+</span><span data-line="27">        <span class="s2">&quot;left_table&quot;</span><span class="p">:</span> <span class="s2">&quot;orders&quot;</span><span class="p">,</span>
+</span><span data-line="28">        <span class="s2">&quot;left_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
+</span><span data-line="29">        <span class="s2">&quot;right_table&quot;</span><span class="p">:</span> <span class="s2">&quot;users&quot;</span><span class="p">,</span>
+</span><span data-line="30">        <span class="s2">&quot;right_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
+</span><span data-line="31">    <span class="p">}],</span>
+</span><span data-line="32">    <span class="n">task_links</span><span class="o">=</span><span class="p">[{</span>
+</span><span data-line="33">        <span class="s2">&quot;task_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
+</span><span data-line="34">        <span class="s2">&quot;table&quot;</span><span class="p">:</span> <span class="s2">&quot;users&quot;</span><span class="p">,</span>
+</span><span data-line="35">        <span class="s2">&quot;table_columns&quot;</span><span class="p">:</span> <span class="s2">&quot;user_id&quot;</span><span class="p">,</span>
+</span><span data-line="36">    <span class="p">}],</span>
+</span><span data-line="37"><span class="p">)</span>
+</span><span data-line="38">
+</span><span data-line="39"><span class="n">x_context</span> <span class="o">=</span> <span class="n">task_table</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;churn&quot;</span><span class="p">)</span>
+</span><span data-line="40"><span class="n">y_context</span> <span class="o">=</span> <span class="n">task_table</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;churn&quot;</span><span class="p">]</span>
+</span><span data-line="41"><span class="n">x_query</span> <span class="o">=</span> <span class="n">task_table</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="s2">&quot;churn&quot;</span><span class="p">)</span>
+</span><span data-line="42">
+</span><span data-line="43"><span class="n">related_context_tables</span> <span class="o">=</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">replace_tables</span><span class="p">({</span>
+</span><span data-line="44">    <span class="s2">&quot;users&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;users&quot;</span><span class="p">][:</span><span class="mi">2</span><span class="p">],</span>
+</span><span data-line="45">    <span class="s2">&quot;orders&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;orders&quot;</span><span class="p">][:</span><span class="mi">3</span><span class="p">],</span>
+</span><span data-line="46"><span class="p">})</span>
+</span><span data-line="47"><span class="n">related_query_tables</span> <span class="o">=</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">replace_tables</span><span class="p">({</span>
+</span><span data-line="48">    <span class="s2">&quot;users&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;users&quot;</span><span class="p">][</span><span class="mi">2</span><span class="p">:],</span>
+</span><span data-line="49">    <span class="s2">&quot;orders&quot;</span><span class="p">:</span> <span class="n">related_tables</span><span class="o">.</span><span class="n">tables</span><span class="p">[</span><span class="s2">&quot;orders&quot;</span><span class="p">][</span><span class="mi">3</span><span class="p">:],</span>
+</span><span data-line="50"><span class="p">})</span>
+</span><span data-line="51">
+</span><span data-line="52"><span class="n">model</span> <span class="o">=</span> <span class="n">KumoRFM</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+</span><span data-line="53">
+</span><span data-line="54"><span class="c1"># Default in-context learning forward pass:</span>
+</span><span data-line="55"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
+</span><span data-line="56">    <span class="n">x_context</span><span class="o">=</span><span class="n">x_context</span><span class="p">,</span>
+</span><span data-line="57">    <span class="n">y_context</span><span class="o">=</span><span class="n">y_context</span><span class="p">,</span>
+</span><span data-line="58">    <span class="n">x_query</span><span class="o">=</span><span class="n">x_query</span><span class="p">,</span>
+</span><span data-line="59">    <span class="n">related_context_tables</span><span class="o">=</span><span class="n">related_context_tables</span><span class="p">,</span>
+</span><span data-line="60">    <span class="n">related_query_tables</span><span class="o">=</span><span class="n">related_query_tables</span><span class="p">,</span>
+</span><span data-line="61">    <span class="n">num_hops</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+</span><span data-line="62"><span class="p">)</span>
+</span><span data-line="63">
+</span><span data-line="64"><span class="c1"># Fit+Predict forward pass via key/value caching:</span>
+</span><span data-line="65"><span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">x_context</span><span class="p">,</span> <span class="n">y_context</span><span class="p">,</span> <span class="n">related_context_tables</span><span class="p">,</span> <span class="n">num_hops</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span data-line="66"><span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">x_query</span><span class="p">,</span> <span class="n">related_query_tables</span><span class="p">)</span>
 </span></pre></div>
 </div>
 <dl class="field-list simple">
@@ -401,7 +404,7 @@ labeled context to produce class logits or regression quantiles.</p></li>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=5691abb8"></script>
+      <script src="../../_static/documentation_options.js?v=85ba587f"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

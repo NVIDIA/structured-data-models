@@ -243,12 +243,8 @@ Negative indices represent missing values.</p>
 </span><span data-line="4"><span class="n">array</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">])</span>
 </span><span data-line="5"><span class="n">tensor</span> <span class="o">=</span> <span class="n">CategoricalTensor</span><span class="o">.</span><span class="n">from_arrow</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
 </span><span data-line="6">
-</span><span data-line="7"><span class="nb">print</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
-</span><span data-line="8"><span class="o">&gt;&gt;&gt;</span> <span class="n">tensor</span><span class="p">([[</span> <span class="mi">0</span><span class="p">],</span>
-</span><span data-line="9"><span class="o">&gt;&gt;&gt;</span>         <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
-</span><span data-line="10"><span class="o">&gt;&gt;&gt;</span>         <span class="p">[</span> <span class="mi">1</span><span class="p">]])</span>
-</span><span data-line="11"><span class="nb">print</span><span class="p">(</span><span class="n">tensor</span><span class="o">.</span><span class="n">categories</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
-</span><span data-line="12"><span class="o">&gt;&gt;&gt;</span> <span class="p">[</span><span class="s1">&#39;foo&#39;</span><span class="p">,</span> <span class="s1">&#39;bar&#39;</span><span class="p">]</span>
+</span><span data-line="7"><span class="k">assert</span> <span class="n">tensor</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="o">==</span> <span class="p">[[</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+</span><span data-line="8"><span class="k">assert</span> <span class="n">tensor</span><span class="o">.</span><span class="n">categories</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;foo&quot;</span><span class="p">,</span> <span class="s2">&quot;bar&quot;</span><span class="p">]</span>
 </span></pre></div>
 </div>
 <dl class="field-list simple">
@@ -366,7 +362,7 @@ Negative indices represent missing values.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=5691abb8"></script>
+      <script src="../../_static/documentation_options.js?v=85ba587f"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
