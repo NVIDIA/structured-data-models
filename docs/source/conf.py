@@ -123,7 +123,7 @@ def _patch_autosummary_jinja(app: Sphinx) -> None:
     generate.find_autosummary_in_files = find_autosummary_in_files  # type: ignore
 
 
-def _run_cuda_doctests_on_cpu(
+def _run_on_doctree_read(
     _app: Sphinx,
     doctree: Node,
 ) -> None:
@@ -141,4 +141,4 @@ def setup(app: Sphinx) -> None:
     """Register Jinja rendering for dynamic autosummary lists."""
     app.connect("builder-inited", _patch_autosummary_jinja, priority=400)
     app.connect("source-read", _render_jinja)
-    app.connect("doctree-read", _run_cuda_doctests_on_cpu)
+    app.connect("doctree-read", _run_on_doctree_read)
