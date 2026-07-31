@@ -118,16 +118,8 @@ class KumoRFM(ICLModel):
         assert out.size() == (2, 2)
 
         # Fit+Predict forward pass via key/value caching:
-        model.fit(
-            x=x_context,
-            y=y_context,
-            related_tables=related_context_tables,
-            num_hops=1,
-        )
-        out = model.predict(
-            x=x_query,
-            related_tables=related_query_tables,
-        )
+        model.fit(x_context, y_context, related_context_tables, num_hops=1)
+        out = model.predict(x_query, related_query_tables)
         assert out.size() == (2, 2)
 
     Args:
