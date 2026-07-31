@@ -1,6 +1,0 @@
-﻿sdm.relational.TemporalStrategy
-===============================
-
-.. currentmodule:: sdm.relational
-
-.. autodata:: TemporalStrategy
