@@ -51,7 +51,7 @@ class KumoRFM(ICLModel):
       Context rows carry target information, while query rows attend to the
       labeled context to produce class logits or regression quantiles.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelatedTables, TableTensor
         from sdm.models import KumoRFM
@@ -70,7 +70,10 @@ class KumoRFM(ICLModel):
                     device="cuda",
                 ),
                 "orders": TableTensor.from_columns(
-                    {"user_id": [0, 0, 1, 3, 3, 3], "amount": [9.99, 4.99, ...]},
+                    {
+                        "user_id": [0, 0, 1, 3, 3, 3],
+                        "amount": [9.99, 4.99, 12.99, 7.99, 3.99, 5.99],
+                    },
                     stypes={"user_id": "id", "amount": "numerical"},
                     device="cuda",
                 ),
@@ -120,7 +123,7 @@ class KumoRFM(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
-    """  # noqa: E501
+    """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.datetime}

@@ -54,9 +54,10 @@ class TableTensor(Tensor):
     while exposing a single tensor-shaped table interface.
     The last dimension represents named columns.
 
-    .. code-block:: python
+    .. testcode:: drop_stypes, select_columns, drop_columns
 
-        from sdm import TableTensor, CategoricalTensor, StringTensor
+        import torch
+        from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 
         table = TableTensor(
             columns={
@@ -74,7 +75,7 @@ class TableTensor(Tensor):
         )
 
         print(table)
-        # TableTensor (
+        # TableTensor(
         #   size=(10, 4),
         #   blocks={
         #     numerical (2): ['age', 'income'],
@@ -100,6 +101,12 @@ class TableTensor(Tensor):
 
         # Column-wise cat extends the schema:
         wide = torch.cat([table[["age"]], table[["country"]]], dim=-1)
+
+    .. testoutput:: drop_stypes, select_columns, drop_columns
+        :hide:
+        :options: +ELLIPSIS
+
+        ...
 
     Args:
         size: The shape of the tensor ``[..., C]``.
@@ -280,17 +287,17 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Create a tensor from a :class:`pyarrow.Table`.
 
-        .. code-block:: python
+        .. testcode::
 
             import pyarrow as pa
             from sdm import TableTensor
 
-            table = pa.table({
+            arrow_table = pa.table({
                 "age": pa.array([25, 31, 42], type=pa.int64()),
                 "city": pa.array(["SF", "NYC", "SF"], type=pa.string()),
             })
             tensor = TableTensor.from_arrow(
-                table=table,
+                table=arrow_table,
                 stypes={"age": "numerical", "city": "categorical"},
             )
 
@@ -715,7 +722,7 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Return a table with ``stypes`` columns removed.
 
-        .. code-block:: python
+        .. testcode:: drop_stypes
 
             assert table.columns[Stype.categorical] == ("country", "segment")
             table = table.drop_stypes("categorical")
@@ -740,11 +747,11 @@ class TableTensor(Tensor):
     def select_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table containing only ``columns``.
 
-        .. code-block:: python
+        .. testcode:: select_columns
 
-            assert table.size() == (2, 4)
+            assert table.size() == (10, 4)
             table = table.select_columns(["age", "country"])
-            assert table.size() == (2, 2)
+            assert table.size() == (10, 2)
 
         Args:
             columns: The columns to select.
@@ -783,11 +790,11 @@ class TableTensor(Tensor):
     def drop_columns(self, columns: str | Iterable[str]) -> Self:
         r"""Return a table with ``columns`` removed.
 
-        .. code-block:: python
+        .. testcode:: drop_columns
 
-            assert table.size() == (2, 4)
-            table = table.remove_columns(["age", "country"])
-            assert table.size() == (2, 2)
+            assert table.size() == (10, 4)
+            table = table.drop_columns(["age", "country"])
+            assert table.size() == (10, 2)
 
         Args:
             columns: The columns to drop.
