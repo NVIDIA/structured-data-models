@@ -20,20 +20,6 @@ args = parser.parse_args()
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-def peak():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    torch.cuda.reset_peak_host_memory_stats()
-    torch.cuda.synchronize(device)
-    peak_alloc = torch.cuda.max_memory_allocated(device)
-    peak_reserved = torch.cuda.max_memory_reserved(device)
-    print(f"Allocated: {peak_alloc / 1000**2:.1f}MB")
-    print(f"Reserved: {peak_reserved / 1000**2:.1f}MB")
-
-
-peak()
-
-
 # Collect Relational Data #####################################################
 dataset = relbench.datasets.get_dataset(args.dataset, download=True)
 db = dataset.get_db(upto_test_timestamp=False)
@@ -61,8 +47,6 @@ time_columns = {
     for name, table in db.table_dict.items()
     if table.time_col is not None
 }
-print("Relational Data")
-peak()
 sampler = data.sampler(
     temporal=(
         sdm.TemporalSamplingConfig(
@@ -73,8 +57,6 @@ sampler = data.sampler(
         else None
     ),
 )
-print("Sampler Init")
-peak()
 
 # Collect Task Table ##########################################################
 task = relbench.tasks.get_task(args.dataset, args.task, download=True)
@@ -94,13 +76,9 @@ task_table = sdm.TableTensor.from_pandas(
 )
 context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
 context = context[torch.randperm(len(context))[: args.context_size]]
-print("Task Table")
-peak()
 
 # Execute Model ###############################################################
 model = sdm.models.KumoRFM(device=device)
-print("Model")
-peak()
 
 kwargs = {
     "task_link": {
@@ -112,8 +90,6 @@ kwargs = {
     "task_time_column": task.time_col,
 }
 context, related_tables = sampler(context, **kwargs).to(device)
-print("Before fit + Sampler")
-peak()
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
     model.fit(
         x=context.drop_columns(task.target_col),
@@ -121,8 +97,6 @@ with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
         related_tables=related_tables,
         num_estimators=1,
     )
-print("After fit")
-peak()
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
     metric = torchmetrics.regression.MeanAbsoluteError().to(device)
