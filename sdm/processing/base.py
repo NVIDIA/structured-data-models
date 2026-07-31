@@ -194,3 +194,66 @@ class InvertibleMixin(abc.ABC):
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
         def _check_is_fitted(self) -> None: ...
+
+
+class VariableSchemaBatchMixin(abc.ABC):
+    r"""Extend a :class:`Processor` with variable-schema batch methods.
+
+    Batch methods process the first leading dimension independently and
+    return one table per entry because the tables may have different column
+    schemas.
+    """
+
+    def fit_transform_batch(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> tuple[TableTensor, ...]:
+        r"""Fit the processor and transform a batch of representations.
+
+        Args:
+            table: Table representations with shape ``[B, ..., R, C]``, where
+                ``B`` is the number of representations, ``R`` is the number
+                of rows, and ``C`` is the number of columns.
+            generator: Pseudorandom number generator used for sampling.
+
+        Returns:
+            One transformed table per input representation.
+        """
+        self.fit_batch(table, generator=generator)
+        return self.transform_batch(table)
+
+    @abc.abstractmethod
+    def fit_batch(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        r"""Fit the processor independently on a batch of representations.
+
+        Args:
+            table: Table representations with shape ``[B, ..., R, C]``, where
+                ``B`` is the number of representations, ``R`` is the number
+                of rows, and ``C`` is the number of columns.
+            generator: Pseudorandom number generator used for sampling.
+        """
+        ...
+
+    @abc.abstractmethod
+    def transform_batch(
+        self,
+        table: TableTensor,
+    ) -> tuple[TableTensor, ...]:
+        r"""Transform a batch into one table per representation.
+
+        Args:
+            table: Table representations with shape ``[B, ..., R, C]``, where
+                ``B`` is the number of representations, ``R`` is the number
+                of rows, and ``C`` is the number of columns.
+
+        Returns:
+            One transformed table per input representation.
+        """
+        ...
