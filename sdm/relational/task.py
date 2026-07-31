@@ -175,27 +175,13 @@ class RelatedTables(DeviceMixin):
             },
             relationships=[
                 # Foreign key from orders to users:
-                dict(
-                    left_table="orders",
-                    left_column="user_id",
-                    right_table="users",
-                    right_column="user_id",
-                ),
+                dict(left_table="orders", left_column="user_id", right_table="users", right_column="user_id"),
                 # Foreign key from orders to items:
-                dict(
-                    left_table="orders",
-                    left_column="item_id",
-                    right_table="items",
-                    right_column="item_id",
-                ),
+                dict(left_table="orders", left_column="item_id", right_table="items", right_column="item_id"),
             ],
             task_links=[
                 # Foreign key in the task table to users:
-                dict(
-                    task_column="ENTITY",
-                    table="users",
-                    table_column="user_id",
-                )
+                dict(task_column="ENTITY", table="users", table_column="user_id")
             ],
         )
 
@@ -203,7 +189,7 @@ class RelatedTables(DeviceMixin):
         tables: Related tables keyed by table name.
         relationships: Join relationships among ``tables``.
         task_links: Links from task columns to related ``tables``.
-    """
+    """  # noqa: E501
 
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
