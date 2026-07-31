@@ -22,6 +22,8 @@ class EnsembleTable:
     """
 
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
+        if num_members <= 0:
+            raise ValueError("Expected 'num_members' to be positive.")
         self._packed_representations = (cast(TableTensor, table.unsqueeze(0)),)
         self._member_locations = ((0, 0),) * num_members
 
