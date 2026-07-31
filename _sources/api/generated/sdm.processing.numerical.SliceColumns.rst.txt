@@ -1,0 +1,8 @@
+﻿SliceColumns
+============
+
+.. currentmodule:: sdm.processing.numerical
+
+.. autoclass:: SliceColumns
+   :members:
+   :show-inheritance:
