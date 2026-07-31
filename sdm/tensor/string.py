@@ -154,7 +154,7 @@ class StringTensor(VarLenTensor):
                 f"string type (got '{ser.dtype}')"
             )
 
-        if ser.null_count > 0:
+        if ser.hasnans:
             ser = ser.fillna("")
 
         # `Series.to_pylibcudf` returns a zero-copy Arrow-style view: base
