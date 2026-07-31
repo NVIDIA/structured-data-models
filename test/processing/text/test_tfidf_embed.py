@@ -222,12 +222,13 @@ def test_tfidf_encoder_cuda_matches_cpu(
     pytest.importorskip("cupy")
     pytest.importorskip("pylibcudf")
 
+    num_cols = len(train[0])
     cpu_train = TableTensor(
-        columns={"text": tuple(str(i) for i in range(len(train[0])))},
+        columns={"text": tuple(str(i) for i in range(num_cols))},
         text=StringTensor.from_list(train),
     )
     cuda_train = TableTensor(
-        columns={"text": tuple(str(i) for i in range(len(train[0])))},
+        columns={"text": tuple(str(i) for i in range(num_cols))},
         text=StringTensor.from_list(train, device="cuda"),
     )
     cpu_encoder = TfidfTextEmbed(
@@ -249,13 +250,13 @@ def test_tfidf_encoder_cuda_matches_cpu(
         cuda_encoder.fit(cuda_train)
         expected = cpu_encoder.transform(
             TableTensor(
-                columns={"text": tuple(str(i) for i in range(len(query[0])))},
+                columns={"text": tuple(str(i) for i in range(num_cols))},
                 text=StringTensor.from_list(query),
             )
         )
         output = cuda_encoder.transform(
             TableTensor(
-                columns={"text": tuple(str(i) for i in range(len(query[0])))},
+                columns={"text": tuple(str(i) for i in range(num_cols))},
                 text=StringTensor.from_list(query, device="cuda"),
             )
         )
