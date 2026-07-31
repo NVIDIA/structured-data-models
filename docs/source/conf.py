@@ -32,10 +32,13 @@ extensions = [
 templates_path = ["_templates"]
 html_theme = "shibuya"
 html_title = project
+html_logo = "images/nvidia.svg"
 html_theme_options = {
     "accent_color": "green",
     "github_url": "https://github.com/NVIDIA/structured-data-models",
 }
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 autosummary_generate = True
 autosummary_context = {"import_module": importlib.import_module}
 autodoc_member_order = "bysource"

@@ -21,6 +21,7 @@ from sdm.processing.numerical import (
     QuantileTransform,
     Standardize,
     DropConstantColumns,
+    SliceColumns,
 )
 from sdm.processing.categorical import (
     AlignCategories,
@@ -51,6 +52,7 @@ __all__ = [
     "QuantileTransform",
     "Standardize",
     "DropConstantColumns",
+    "SliceColumns",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
