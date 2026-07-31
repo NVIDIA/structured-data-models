@@ -103,14 +103,16 @@ def test_eight_member_recipe_matches_tabicl_reference_plan(
     )
     assert (
         tuple(
-            transformed_features[member].columns[Stype.numerical]
+            transformed_features.representation(member).columns[
+                Stype.numerical
+            ]
             for member in range(8)
         )
         == expected_columns
     )
 
     canonicalized = tuple(
-        transformed_features[member].numerical.index_select(
+        transformed_features.representation(member).numerical.index_select(
             -1,
             torch.tensor(feature_permutations[member // 2]).argsort(),
         )
@@ -135,7 +137,9 @@ def test_eight_member_recipe_matches_tabicl_reference_plan(
         for member in range(8):
             permutation = torch.tensor(class_permutations[member // 2])
             torch.testing.assert_close(
-                transformed_target[member].categorical.code.squeeze(-1),
+                transformed_target.representation(
+                    member
+                ).categorical.code.squeeze(-1),
                 permutation[original_codes],
             )
 
@@ -157,5 +161,8 @@ def test_reference_recipe_uses_sorted_observed_classes() -> None:
 
     decoded = recipe.transform_output(outputs)
 
-    assert transformed_target[0].categorical.categories[0].numel() == 3
+    assert (
+        transformed_target.representation(0).categorical.categories[0].numel()
+        == 3
+    )
     assert decoded.columns[Stype.numerical] == ("10", "20", "30")

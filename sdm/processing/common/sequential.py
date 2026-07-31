@@ -4,14 +4,14 @@ from typing import cast
 import torch
 from typing_extensions import Self
 
-from sdm import Stype, TableTensor
+from sdm import Stype
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.ensemble import (
     EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleTable,
     as_ensemble_processor,
 )
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class Sequential(EnsembleProcessor, InvertibleMixin):

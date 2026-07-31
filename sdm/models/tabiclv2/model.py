@@ -5,14 +5,14 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import EnsembleTable, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import EnsembleRelatedTables, EnsembleTable, Recipe
+from sdm.processing import EnsembleRelatedTables, Recipe
 from sdm.processing.ensemble_table import _stack_positional
 
 
@@ -20,7 +20,9 @@ def _materialize_positional(
     table: EnsembleTable,
     members: tuple[int, ...],
 ) -> TableTensor:
-    return _stack_positional(tuple(table[member] for member in members))
+    return _stack_positional(
+        tuple(table.representation(member) for member in members)
+    )
 
 
 class TabICLv2(ICLModel):
@@ -144,7 +146,7 @@ class TabICLv2(ICLModel):
         table: EnsembleTable,
         member: int,
     ) -> object:
-        member_table = table[member]
+        member_table = table.representation(member)
         return (
             tuple(member_table.size()[:-1]),
             tuple(

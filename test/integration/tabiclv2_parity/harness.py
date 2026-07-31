@@ -210,14 +210,20 @@ def assert_preprocessing_parity(task: Task) -> tuple[int, ...]:
             candidates = []
             for member in range(8):
                 member_normalization = "none" if member % 2 == 0 else "power"
-                columns = candidate_context[member].columns[Stype.numerical]
+                columns = candidate_context.representation(member).columns[
+                    Stype.numerical
+                ]
                 member_permutation = tuple(
                     int(column.removeprefix("x")) for column in columns
                 )
                 member_target = (
-                    candidate_target[member].categorical.code.squeeze(-1)
+                    candidate_target.representation(
+                        member
+                    ).categorical.code.squeeze(-1)
                     if task == "classification"
-                    else candidate_target[member].numerical.squeeze(-1)
+                    else candidate_target.representation(
+                        member
+                    ).numerical.squeeze(-1)
                 )
                 target_matches = torch.allclose(
                     member_target,
@@ -239,8 +245,8 @@ def assert_preprocessing_parity(task: Task) -> tuple[int, ...]:
 
             actual_features = torch.cat(
                 (
-                    candidate_context[member].numerical,
-                    candidate_query[member].numerical,
+                    candidate_context.representation(member).numerical,
+                    candidate_query.representation(member).numerical,
                 ),
                 dim=-2,
             )

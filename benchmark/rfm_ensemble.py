@@ -23,12 +23,11 @@ from typing import Any, Literal, TypeAlias, cast
 
 import torch
 
-from sdm import ColumnarTensor, StringTensor, Stype
+from sdm import ColumnarTensor, EnsembleTable, StringTensor, Stype
 from sdm.models.kumorfm.recipe import default_recipe
 from sdm.processing import (
     EnsembleFitContext,
     EnsembleRelatedTables,
-    EnsembleTable,
     Processor,
 )
 from sdm.processing.ensemble import as_ensemble_processor
@@ -37,9 +36,6 @@ from sdm.testing.datasets import CanonicalRFMData, Task, canonical_rfm_data
 
 Schedule = Literal["ensemble_shared", "member_isolated"]
 SharedOutputs: TypeAlias = tuple[
-    EnsembleTable,
-    EnsembleTable,
-    EnsembleTable,
     EnsembleRelatedTables,
     EnsembleRelatedTables,
 ]
@@ -119,10 +115,20 @@ def _flatten_shared_outputs(
 ) -> tuple[TableTensor, ...]:
     outputs = []
     for member in range(num_estimators):
-        outputs.extend((features[member], target[member], query[member]))
-        outputs.extend(related.tables[name][member] for name in related.tables)
         outputs.extend(
-            related_query.tables[name][member] for name in related_query.tables
+            (
+                features.representation(member),
+                target.representation(member),
+                query.representation(member),
+            )
+        )
+        outputs.extend(
+            related.tables[name].representation(member)
+            for name in related.tables
+        )
+        outputs.extend(
+            related_query.tables[name].representation(member)
+            for name in related_query.tables
         )
     return tuple(outputs)
 
@@ -149,13 +155,13 @@ def _execute_isolated_member(
             table_scope=scope,
         )
         fitted = processor.fit_transform_ensemble(
-            EnsembleTable.from_shared(table, num_members=1),
+            EnsembleTable(table, num_members=1),
             context=context,
         )
         transformed = processor.transform_ensemble(
-            EnsembleTable.from_shared(query, num_members=1)
+            EnsembleTable(query, num_members=1)
         )
-        return fitted[0], transformed[0]
+        return fitted.representation(0), transformed.representation(0)
 
     features, query = fit_transform(
         data.x_context,
@@ -168,7 +174,7 @@ def _execute_isolated_member(
         copy.deepcopy(target_processor)
     )
     target = target_ensemble_processor.fit_transform_ensemble(
-        EnsembleTable.from_shared(data.target(task), num_members=1),
+        EnsembleTable(data.target(task), num_members=1),
         context=EnsembleFitContext(
             member_ids=(member,),
             base_seed=42,
@@ -188,7 +194,7 @@ def _execute_isolated_member(
         related_query_outputs.append(related_query)
     return (
         features,
-        target[0],
+        target.representation(0),
         query,
         *related_outputs,
         *related_query_outputs,

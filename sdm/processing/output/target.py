@@ -4,9 +4,8 @@ import torch
 
 from sdm.processing.base import Processor
 from sdm.processing.ensemble import EnsembleProcessor
-from sdm.processing.ensemble_table import EnsembleTable
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class TargetDecode(Processor):
@@ -53,9 +52,9 @@ class TargetDecode(Processor):
             )
 
         if self._canonical_classes is None:
-            encoded = EnsembleTable(
-                groups=(table,),
-                member_to_variant=tuple(
+            encoded = EnsembleTable._from_packed_representations(
+                packed_representations=(table,),
+                member_locations=tuple(
                     (0, member) for member in range(self._num_members)
                 ),
             )

@@ -10,9 +10,8 @@ from sdm import CategoricalTensor, Stype
 from sdm.processing.ensemble import (
     EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleTable,
 )
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class ShuffleCategories(EnsembleProcessor):
@@ -151,7 +150,9 @@ class ShuffleCategories(EnsembleProcessor):
                 category_counts=tuple(
                     tuple(
                         category.numel()
-                        for category in table[position].categorical.categories
+                        for category in table.representation(
+                            position
+                        ).categorical.categories
                     )
                     for position in range(table.num_members)
                 ),
@@ -166,12 +167,12 @@ class ShuffleCategories(EnsembleProcessor):
             )
 
         self.processors = torch.nn.ModuleList()
-        variants: list[TableTensor] = []
+        representations: list[TableTensor] = []
         positions: list[int] = []
         member_to_processor: list[int] = []
         keys: dict[tuple[object, ...], int] = {}
         for position, member_id in enumerate(context.member_ids):
-            before = table[position]
+            before = table.representation(position)
             processor = self.__class__(method=self.method)
             if planned is None:
                 processor.fit(
@@ -186,37 +187,39 @@ class ShuffleCategories(EnsembleProcessor):
                 )
 
             key = (
-                table.member_to_variant[position],
+                table._member_locations[position],
                 processor._mapping,
             )
             processor_index = keys.get(key)
             if processor_index is None:
-                processor_index = len(variants)
+                processor_index = len(representations)
                 keys[key] = processor_index
                 self.processors.append(processor)
                 positions.append(position)
-                variants.append(processor.transform(before))
+                representations.append(processor.transform(before))
             member_to_processor.append(processor_index)
 
         self._member_to_processor = tuple(member_to_processor)
         self._processor_positions = tuple(positions)
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=self._member_to_processor,
+            representations=representations,
+            member_representation_ids=self._member_to_processor,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
         r"""Apply the fitted member category mappings."""
-        variants = tuple(
-            cast(ShuffleCategories, processor).transform(table[position])
+        representations = tuple(
+            cast(ShuffleCategories, processor).transform(
+                table.representation(position)
+            )
             for processor, position in zip(
                 self.processors,
                 self._processor_positions,
             )
         )
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=self._member_to_processor,
+            representations=representations,
+            member_representation_ids=self._member_to_processor,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

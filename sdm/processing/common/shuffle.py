@@ -11,9 +11,8 @@ from sdm.processing.base import InvertibleMixin
 from sdm.processing.ensemble import (
     EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleTable,
 )
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
@@ -110,7 +109,7 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
             context._plan.column_permutations(
                 member_ids=context.member_ids,
                 num_columns=tuple(
-                    table[position].numerical.size(-1)
+                    table.representation(position).numerical.size(-1)
                     for position in range(table.num_members)
                 ),
                 table_scope=context.table_scope,
@@ -124,12 +123,12 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
             )
 
         self.processors = torch.nn.ModuleList()
-        variants: list[TableTensor] = []
+        representations: list[TableTensor] = []
         positions: list[int] = []
         member_to_processor: list[int] = []
         keys: dict[tuple[object, ...], int] = {}
         for position, member_id in enumerate(context.member_ids):
-            before = table[position]
+            before = table.representation(position)
             processor = self.__class__(method=self.method)
             if planned is None:
                 processor.fit(
@@ -144,37 +143,39 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
                 )
 
             key = (
-                table.member_to_variant[position],
+                table._member_locations[position],
                 processor._indices,
             )
             processor_index = keys.get(key)
             if processor_index is None:
-                processor_index = len(variants)
+                processor_index = len(representations)
                 keys[key] = processor_index
                 self.processors.append(processor)
                 positions.append(position)
-                variants.append(processor.transform(before))
+                representations.append(processor.transform(before))
             member_to_processor.append(processor_index)
 
         self._member_to_processor = tuple(member_to_processor)
         self._processor_positions = tuple(positions)
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=self._member_to_processor,
+            representations=representations,
+            member_representation_ids=self._member_to_processor,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
         r"""Apply the fitted member permutations."""
-        variants = tuple(
-            cast(ShuffleColumns, processor).transform(table[position])
+        representations = tuple(
+            cast(ShuffleColumns, processor).transform(
+                table.representation(position)
+            )
             for processor, position in zip(
                 self.processors,
                 self._processor_positions,
             )
         )
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=self._member_to_processor,
+            representations=representations,
+            member_representation_ids=self._member_to_processor,
         )
 
     def inverse_transform_ensemble(
@@ -182,18 +183,18 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         table: EnsembleTable,
     ) -> EnsembleTable:
         r"""Invert each output with its fitted member permutation."""
-        variants = tuple(
+        representations = tuple(
             cast(
                 ShuffleColumns,
                 self.processors[processor_index],
-            ).inverse_transform(table[position])
+            ).inverse_transform(table.representation(position))
             for position, processor_index in enumerate(
                 self._member_to_processor
             )
         )
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=tuple(range(table.num_members)),
+            representations=representations,
+            member_representation_ids=tuple(range(table.num_members)),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

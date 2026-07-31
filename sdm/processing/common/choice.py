@@ -7,11 +7,10 @@ from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.ensemble import (
     EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleTable,
     as_ensemble_processor,
 )
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 def _merge_outputs(
@@ -25,20 +24,24 @@ def _merge_outputs(
         for option, selected in positions.items()
     }
     keys: dict[tuple[int, tuple[int, int]], int] = {}
-    variants: list[TableTensor] = []
-    member_to_variant: list[int] = []
+    representations: list[TableTensor] = []
+    member_representation_ids: list[int] = []
     for member, option in enumerate(selections):
         result = outputs[option]
-        location = result.member_to_variant[local_positions[option][member]]
+        location = result._member_locations[local_positions[option][member]]
         key = (option, location)
         if key not in keys:
-            keys[key] = len(variants)
-            group, variant = location
-            variants.append(result.groups[group][variant])
-        member_to_variant.append(keys[key])
+            keys[key] = len(representations)
+            packed_index, representation_index = location
+            representations.append(
+                result._packed_representations[packed_index][
+                    representation_index
+                ]
+            )
+        member_representation_ids.append(keys[key])
     return EnsembleTable.pack(
-        variants=variants,
-        member_to_input_variant=member_to_variant,
+        representations=representations,
+        member_representation_ids=member_representation_ids,
     )
 
 

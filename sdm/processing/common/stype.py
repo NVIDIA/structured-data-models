@@ -9,10 +9,9 @@ from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.ensemble import (
     EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleTable,
     as_ensemble_processor,
 )
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 def _combine_parts(
@@ -21,19 +20,22 @@ def _combine_parts(
     empty_source: EnsembleTable,
 ) -> EnsembleTable:
     if len(parts) == 0:
-        return empty_source.with_groups(
-            tuple(group.select_columns(()) for group in empty_source.groups)
+        return empty_source._replace_packed_representations(
+            tuple(
+                group.select_columns(())
+                for group in empty_source.iter_packed_representations()
+            )
         )
 
-    variants: list[TableTensor] = []
+    representations: list[TableTensor] = []
     keys: dict[tuple[tuple[int, int], ...], int] = {}
-    member_to_variant: list[int] = []
+    member_representation_ids: list[int] = []
     for member in range(parts[0].num_members):
-        key = tuple(part.member_to_variant[member] for part in parts)
+        key = tuple(part._member_locations[member] for part in parts)
         if key not in keys:
-            keys[key] = len(variants)
-            tables = [part[member] for part in parts]
-            variants.append(
+            keys[key] = len(representations)
+            tables = [part.representation(member) for part in parts]
+            representations.append(
                 cast(
                     TableTensor,
                     torch.cat(cast(list[Tensor], tables), dim=-1),
@@ -41,10 +43,10 @@ def _combine_parts(
                 if len(tables) > 1
                 else tables[0]
             )
-        member_to_variant.append(keys[key])
+        member_representation_ids.append(keys[key])
     return EnsembleTable.pack(
-        variants=variants,
-        member_to_input_variant=member_to_variant,
+        representations=representations,
+        member_representation_ids=member_representation_ids,
     )
 
 
@@ -208,8 +210,11 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         table: EnsembleTable,
         stype: str,
     ) -> EnsembleTable:
-        return table.with_groups(
-            tuple(group.select_stypes(stype) for group in table.groups)
+        return table._replace_packed_representations(
+            tuple(
+                group.select_stypes(stype)
+                for group in table.iter_packed_representations()
+            )
         )
 
     def _remainder_input(self, table: EnsembleTable) -> EnsembleTable:
@@ -226,8 +231,10 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
                 return variant.select_columns(())
             return variant.select_stypes(remainder)
 
-        return table.with_groups(
-            tuple(select(group) for group in table.groups)
+        return table._replace_packed_representations(
+            tuple(
+                select(group) for group in table.iter_packed_representations()
+            )
         )
 
     def fit_transform_ensemble(
@@ -248,7 +255,10 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         self._active_routes = tuple(
             stype
             for stype, route_input in route_inputs.items()
-            if any(group.size(-1) > 0 for group in route_input.groups)
+            if any(
+                group.size(-1) > 0
+                for group in route_input.iter_packed_representations()
+            )
         )
 
         parts = [

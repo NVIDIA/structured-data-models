@@ -7,11 +7,10 @@ from typing import Any, ClassVar, Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Stype, TableTensor
+from sdm import EnsembleTable, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.processing import (
     EnsembleRelatedTables,
-    EnsembleTable,
     Recipe,
 )
 from sdm.relational.task import RelatedTablesSchema
@@ -100,7 +99,7 @@ class ICLModel(torch.nn.Module, ABC):
         table: EnsembleTable,
         member: int,
     ) -> object:
-        return table.member_to_variant[member][0]
+        return table._member_locations[member][0]
 
     @classmethod
     def _execution_groups(
@@ -173,8 +172,8 @@ class ICLModel(torch.nn.Module, ABC):
                 else None
             )
             self._validate_context(
-                x=x_context[member],
-                y=y_context[member],
+                x=x_context.representation(member),
+                y=y_context.representation(member),
                 related_tables=context_related,
             )
             if x_query is None:
@@ -185,8 +184,8 @@ class ICLModel(torch.nn.Module, ABC):
                 else None
             )
             self._validate_query(
-                x_context=x_context[member].schema,
-                x_query=x_query[member],
+                x_context=x_context.representation(member).schema,
+                x_query=x_query.representation(member),
                 related_context_tables=(
                     context_related.schema
                     if context_related is not None
@@ -211,12 +210,18 @@ class ICLModel(torch.nn.Module, ABC):
         return tuple(
             self._forward(
                 x_context=(
-                    x_context[member] if x_context is not None else None
+                    x_context.representation(member)
+                    if x_context is not None
+                    else None
                 ),
                 y_context=(
-                    y_context[member] if y_context is not None else None
+                    y_context.representation(member)
+                    if y_context is not None
+                    else None
                 ),
-                x_query=x_query[member] if x_query is not None else None,
+                x_query=x_query.representation(member)
+                if x_query is not None
+                else None,
                 related_context_tables=(
                     related_context_tables.member(member)
                     if related_context_tables is not None
@@ -305,12 +310,13 @@ class ICLModel(torch.nn.Module, ABC):
         )
         caches: list[Cache] = []
         for members in groups:
-            first_target = y_context[members[0]]
+            first_target = y_context.representation(members[0])
             cache = Cache(
                 recipe=recipe,
                 member_ids=members,
                 x_schemas=tuple(
-                    x_context[member].schema for member in members
+                    x_context.representation(member).schema
+                    for member in members
                 ),
                 related_tables_schemas=tuple(
                     (
@@ -637,7 +643,7 @@ class ICLModel(torch.nn.Module, ABC):
             for local, member in enumerate(members):
                 self._validate_query(
                     x_context=x_schemas[local],
-                    x_query=x_ensemble[member],
+                    x_query=x_ensemble.representation(member),
                     related_context_tables=related_schemas[local],
                     related_query_tables=(
                         related_ensemble.member(member)

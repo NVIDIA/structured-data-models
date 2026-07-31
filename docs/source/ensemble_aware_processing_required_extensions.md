@@ -24,3 +24,11 @@ The pre-implementation [design](ensemble_aware_processing_design.md) and [proble
 
 - Version 1 accepts a logical Recipe table with shape [R, C] when a VariableSchemaBatchMixin is present. The adapter may split the ensemble variant dimension because EnsembleTable maps that dimension back to members.
 - A logical input shaped [..., R, C] could produce a different schema at each existing leading position. One TableTensor cannot represent those different schemas, and EnsembleTable has no mapping for non-member positions. Such inputs are rejected until that representation is designed explicitly.
+
+## EnsembleTable Representation API
+
+- The original design exposed physical `groups`, `member_to_variant`, and `from_shared` names. They make storage layout part of the public language and use "variant" for both a logical member result and its physical location.
+- `EnsembleTable(table, num_members=...)` is the single normal constructor. It directly expresses that all members initially share one table without a redundant factory name.
+- Physical storage is private: `_packed_representations` holds schema-compatible representations together and `_member_locations` maps every stable member to `(packed_index, representation_index)`.
+- Public consumers use `representation(member_id)` and `iter_packed_representations()`. Processing internals use `pack(...)` only when distinct branch results must be regrouped.
+- "Packed" is used instead of "stacked" because this structure stores unique compatible representations plus an indirection map; "stacked" remains reserved for a fully materialized tensor in member order.

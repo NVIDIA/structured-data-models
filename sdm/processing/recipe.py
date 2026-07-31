@@ -17,14 +17,13 @@ from sdm.processing.ensemble import (
 )
 from sdm.processing.ensemble_table import (
     EnsembleRelatedTables,
-    EnsembleTable,
     _stack_positional,
 )
 from sdm.processing.output.reduce import ReduceEstimators
 from sdm.processing.output.target import TargetDecode
 from sdm.relational import RelatedTables
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class _TaskResolver(Processor, InvertibleMixin):
@@ -243,7 +242,9 @@ class Recipe(torch.nn.Module):
     ) -> tuple[tuple[object, ...], tuple[torch.Tensor, ...]]:
         local_values = tuple(
             tuple(
-                transformed_target[member].categorical.categories[0].tolist()
+                transformed_target.representation(member)
+                .categorical.categories[0]
+                .tolist()
             )
             for member in range(transformed_target.num_members)
         )
@@ -273,7 +274,7 @@ class Recipe(torch.nn.Module):
                 torch.tensor(
                     [values.index(value) for value in canonical],
                     dtype=torch.long,
-                    device=transformed_target[member].device,
+                    device=transformed_target.representation(member).device,
                 )
             )
         return canonical, tuple(indices)
@@ -412,14 +413,14 @@ class Recipe(torch.nn.Module):
             _plan=plan,
         )
         transformed_features = feature_processor.fit_transform_ensemble(
-            EnsembleTable.from_shared(
+            EnsembleTable(
                 features,
                 num_members=num_members,
             ),
             context=feature_context,
         )
         transformed_target = target_processor.fit_transform_ensemble(
-            EnsembleTable.from_shared(
+            EnsembleTable(
                 target,
                 num_members=num_members,
             ),
@@ -427,7 +428,7 @@ class Recipe(torch.nn.Module):
         )
 
         tasks = {
-            self._task_from_target(transformed_target[member])
+            self._task_from_target(transformed_target.representation(member))
             for member in range(num_members)
         }
         if len(tasks) != 1:
@@ -436,7 +437,7 @@ class Recipe(torch.nn.Module):
             )
         task = next(iter(tasks))
         for task_dispatcher in TaskDispatch._roots(output_processor):
-            task_dispatcher._resolve(transformed_target[0])
+            task_dispatcher._resolve(transformed_target.representation(0))
 
         related_processors = torch.nn.ModuleList()
         related_table_names: list[str] = []
@@ -454,7 +455,7 @@ class Recipe(torch.nn.Module):
                     _plan=plan,
                 )
                 related_outputs[table_name] = processor.fit_transform_ensemble(
-                    EnsembleTable.from_shared(
+                    EnsembleTable(
                         table,
                         num_members=num_members,
                     ),
@@ -527,7 +528,7 @@ class Recipe(torch.nn.Module):
             processor=self.features,
         )
         transformed_features = self._ensemble_features.transform_ensemble(
-            EnsembleTable.from_shared(
+            EnsembleTable(
                 features,
                 num_members=self._num_members,
             )
@@ -549,7 +550,7 @@ class Recipe(torch.nn.Module):
                     EnsembleProcessor,
                     fitted_related[name],
                 ).transform_ensemble(
-                    EnsembleTable.from_shared(
+                    EnsembleTable(
                         table,
                         num_members=self._num_members,
                     )

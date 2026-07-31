@@ -8,10 +8,9 @@ from sdm.processing.base import InvertibleMixin
 from sdm.processing.ensemble import (
     EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleTable,
 )
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 BOUNDS_THRESH = 1e-7
 _MAX_NUM_COLS = 32
@@ -179,23 +178,23 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
     ) -> EnsembleTable:
         r"""Fit sampled grids per member and share deterministic grids."""
         self.processors = torch.nn.ModuleList()
-        variants: list[TableTensor] = []
+        representations: list[TableTensor] = []
         positions: list[int] = []
         member_to_processor: list[int] = []
         keys: dict[tuple[object, ...], int] = {}
         for position, member_id in enumerate(context.member_ids):
-            before = table[position]
+            before = table.representation(position)
             stochastic = (
                 self.subsample is not None and self.subsample < before.size(-2)
             )
             key = (
                 ("member", member_id)
                 if stochastic
-                else ("variant", table.member_to_variant[position])
+                else ("variant", table._member_locations[position])
             )
             processor_index = keys.get(key)
             if processor_index is None:
-                processor_index = len(variants)
+                processor_index = len(representations)
                 keys[key] = processor_index
                 processor = self.__class__(
                     n_quantiles=self._n_quantiles,
@@ -215,28 +214,30 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
                 )
                 self.processors.append(processor)
                 positions.append(position)
-                variants.append(processor.transform(before))
+                representations.append(processor.transform(before))
             member_to_processor.append(processor_index)
 
         self._member_to_processor = tuple(member_to_processor)
         self._processor_positions = tuple(positions)
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=self._member_to_processor,
+            representations=representations,
+            member_representation_ids=self._member_to_processor,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
         r"""Transform members with their fitted quantile grids."""
-        variants = tuple(
-            cast(QuantileTransform, processor).transform(table[position])
+        representations = tuple(
+            cast(QuantileTransform, processor).transform(
+                table.representation(position)
+            )
             for processor, position in zip(
                 self.processors,
                 self._processor_positions,
             )
         )
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=self._member_to_processor,
+            representations=representations,
+            member_representation_ids=self._member_to_processor,
         )
 
     def inverse_transform_ensemble(
@@ -244,18 +245,18 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         table: EnsembleTable,
     ) -> EnsembleTable:
         r"""Invert members with their fitted quantile grids."""
-        variants = tuple(
+        representations = tuple(
             cast(
                 QuantileTransform,
                 self.processors[processor_index],
-            ).inverse_transform(table[position])
+            ).inverse_transform(table.representation(position))
             for position, processor_index in enumerate(
                 self._member_to_processor
             )
         )
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=tuple(range(table.num_members)),
+            representations=representations,
+            member_representation_ids=tuple(range(table.num_members)),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

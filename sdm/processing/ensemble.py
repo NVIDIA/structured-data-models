@@ -10,8 +10,8 @@ import torch
 from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.ensemble_table import EnsembleTable, _stack_positional
-from sdm.tensor import TableTensor
+from sdm.processing.ensemble_table import _stack_positional
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class _EnsemblePlan(Protocol):
@@ -155,7 +155,7 @@ class EnsembleFitContext:
 
 
 class VariableSchemaBatchMixin:
-    r"""Define a batched path whose variants may produce different schemas."""
+    r"""Define a batched path with potentially different output schemas."""
 
     def fit_transform_batch(
         self,
@@ -163,7 +163,7 @@ class VariableSchemaBatchMixin:
         *,
         generator: torch.Generator | None = None,
     ) -> tuple[TableTensor, ...]:
-        r"""Fit and transform variants from ``table`` independently.
+        r"""Fit and transform representations from ``table`` independently.
 
         Args:
             table: Variant batch with shape ``[V, ..., R, C]``.
@@ -218,18 +218,18 @@ class EnsembleProcessor(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         self.fit_transform_ensemble(
-            EnsembleTable.from_shared(table, num_members=1),
+            EnsembleTable(table, num_members=1),
             context=self._direct_context(generator),
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        ensemble = EnsembleTable.from_shared(table, num_members=1)
+        ensemble = EnsembleTable(table, num_members=1)
         if not self.requires_fit:
             return self.fit_transform_ensemble(
                 ensemble,
                 context=self._direct_context(None),
-            )[0]
-        return self.transform_ensemble(ensemble)[0]
+            ).representation(0)
+        return self.transform_ensemble(ensemble).representation(0)
 
     def _fit_transform(
         self,
@@ -243,9 +243,9 @@ class EnsembleProcessor(Processor):
         ):
             return super()._fit_transform(table, generator=generator)
         return self.fit_transform_ensemble(
-            EnsembleTable.from_shared(table, num_members=1),
+            EnsembleTable(table, num_members=1),
             context=self._direct_context(generator),
-        )[0]
+        ).representation(0)
 
     def fit_ensemble(
         self,
@@ -307,8 +307,8 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
         self.template = processor
         self.requires_fit = processor.requires_fit
         self.processors = torch.nn.ModuleList()
-        self._member_to_fitted_variant: tuple[tuple[int, int], ...] = ()
-        self._fitted_group_sizes: tuple[int, ...] = ()
+        self._fitted_member_locations: tuple[tuple[int, int], ...] = ()
+        self._fitted_packed_sizes: tuple[int, ...] = ()
         self._variable_schema = isinstance(
             processor,
             VariableSchemaBatchMixin,
@@ -333,31 +333,31 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
     ) -> EnsembleTable:
         del context
         self.processors = torch.nn.ModuleList()
-        self._member_to_fitted_variant = table.member_to_variant
-        self._fitted_group_sizes = tuple(
-            group.size(0) for group in table.groups
+        self._fitted_member_locations = table._member_locations
+        self._fitted_packed_sizes = tuple(
+            group.size(0) for group in table.iter_packed_representations()
         )
 
         if self._variable_schema:
             return self._fit_transform_variable_schema(table)
 
         groups: list[TableTensor] = []
-        for group in table.groups:
+        for group in table.iter_packed_representations():
             processor = copy.deepcopy(self.template)
             after = processor.fit_transform(group)
             self._validate_row_count(group, after)
             self.processors.append(processor)
             groups.append(after)
-        return table.with_groups(tuple(groups))
+        return table._replace_packed_representations(tuple(groups))
 
     def _fit_transform_variable_schema(
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
-        variants: list[TableTensor] = []
+        representations: list[TableTensor] = []
         offsets: list[int] = []
         offset = 0
-        for group in table.groups:
+        for group in table.iter_packed_representations():
             processor = copy.deepcopy(self.template)
             assert isinstance(processor, VariableSchemaBatchMixin)
             outputs = processor.fit_transform_batch(group)
@@ -371,29 +371,33 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
                 self._validate_row_count(before, after)
             offsets.append(offset)
             offset += len(outputs)
-            variants.extend(outputs)
+            representations.extend(outputs)
             self.processors.append(cast(Processor, processor))
 
         member_to_input = tuple(
             offsets[group] + variant
-            for group, variant in table.member_to_variant
+            for group, variant in table._member_locations
         )
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=member_to_input,
+            representations=representations,
+            member_representation_ids=member_to_input,
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        if len(table.groups) != len(self.processors):
+        if len(tuple(table.iter_packed_representations())) != len(
+            self.processors
+        ):
             raise ValueError(
                 "Expected transform input to preserve fitted ensemble "
                 "group provenance."
             )
         if self._variable_schema:
-            variants: list[TableTensor] = []
+            representations: list[TableTensor] = []
             offsets: list[int] = []
             offset = 0
-            for group, processor in zip(table.groups, self.processors):
+            for group, processor in zip(
+                table.iter_packed_representations(), self.processors
+            ):
                 assert isinstance(processor, VariableSchemaBatchMixin)
                 outputs = processor.transform_batch(group)
                 if len(outputs) != group.size(0):
@@ -406,21 +410,23 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
                     self._validate_row_count(group[index], after)
                 offsets.append(offset)
                 offset += len(outputs)
-                variants.extend(outputs)
+                representations.extend(outputs)
             return EnsembleTable.pack(
-                variants=variants,
-                member_to_input_variant=tuple(
+                representations=representations,
+                member_representation_ids=tuple(
                     offsets[group] + variant
-                    for group, variant in table.member_to_variant
+                    for group, variant in table._member_locations
                 ),
             )
 
         groups: list[TableTensor] = []
-        for group, processor in zip(table.groups, self.processors):
+        for group, processor in zip(
+            table.iter_packed_representations(), self.processors
+        ):
             after = cast(Processor, processor).transform(group)
             self._validate_row_count(group, after)
             groups.append(after)
-        return table.with_groups(tuple(groups))
+        return table._replace_packed_representations(tuple(groups))
 
     def inverse_transform_ensemble(
         self,
@@ -429,37 +435,37 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
         if self._variable_schema:
             raise TypeError("Variable-schema processors are not invertible.")
 
-        if table.num_members != len(self._member_to_fitted_variant):
+        if table.num_members != len(self._fitted_member_locations):
             raise ValueError(
                 "Expected one inverse-transform input per fitted member."
             )
-        if self._fitted_group_sizes == (1,):
+        if self._fitted_packed_sizes == (1,):
             processor = self.processors[0]
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
                     f"{processor.__class__.__name__!r} is not invertible."
                 )
             groups = []
-            for group in table.groups:
+            for group in table.iter_packed_representations():
                 restored = processor.inverse_transform(group)
                 self._validate_row_count(group, restored)
                 groups.append(restored)
-            return table.with_groups(tuple(groups))
+            return table._replace_packed_representations(tuple(groups))
 
-        members_by_variant = [
+        members_by_representation = [
             [[] for _ in range(group_size)]
-            for group_size in self._fitted_group_sizes
+            for group_size in self._fitted_packed_sizes
         ]
         for member, (group, variant) in enumerate(
-            self._member_to_fitted_variant
+            self._fitted_member_locations
         ):
-            members_by_variant[group][variant].append(member)
+            members_by_representation[group][variant].append(member)
 
-        variants: list[TableTensor] = []
-        member_to_variant = [0] * table.num_members
+        representations: list[TableTensor] = []
+        member_representation_ids = [0] * table.num_members
         for processor, group_members in zip(
             self.processors,
-            members_by_variant,
+            members_by_representation,
         ):
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
@@ -473,7 +479,9 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
                 round_tables.append(
                     _stack_positional(
                         tuple(
-                            table[members[min(round_index, len(members) - 1)]]
+                            table.representation(
+                                members[min(round_index, len(members) - 1)]
+                            )
                             for members in group_members
                         )
                     )
@@ -481,14 +489,16 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
             batch = _stack_positional(round_tables)
             restored = processor.inverse_transform(batch)
             self._validate_row_count(batch, restored)
-            for fitted_variant, members in enumerate(group_members):
+            for fitted_representation, members in enumerate(group_members):
                 for round_index, member in enumerate(members):
-                    member_to_variant[member] = len(variants)
-                    variants.append(restored[round_index, fitted_variant])
+                    member_representation_ids[member] = len(representations)
+                    representations.append(
+                        restored[round_index, fitted_representation]
+                    )
 
         return EnsembleTable.pack(
-            variants=variants,
-            member_to_input_variant=member_to_variant,
+            representations=representations,
+            member_representation_ids=member_representation_ids,
         )
 
 

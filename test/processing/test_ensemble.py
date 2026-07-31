@@ -6,7 +6,13 @@ from collections.abc import Sequence
 import pytest
 import torch
 
-from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    RelatedTables,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import (
     Choice,
     Clip,
@@ -16,7 +22,6 @@ from sdm.processing import (
     EnsembleFitContext,
     EnsembleProcessor,
     EnsembleRelatedTables,
-    EnsembleTable,
     Identity,
     ImputeMean,
     PowerTransform,
@@ -71,18 +76,18 @@ class _AddOneEnsemble(EnsembleProcessor):
         context: EnsembleFitContext,
     ) -> EnsembleTable:
         del context
-        return table.with_groups(
+        return table._replace_packed_representations(
             tuple(
                 group.replace_blocks(numerical=group.numerical + 1)
-                for group in table.groups
+                for group in table.iter_packed_representations()
             )
         )
 
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        return table.with_groups(
+        return table._replace_packed_representations(
             tuple(
                 group.replace_blocks(numerical=group.numerical + 2)
-                for group in table.groups
+                for group in table.iter_packed_representations()
             )
         )
 
@@ -128,68 +133,6 @@ def _target(*, classification: bool) -> TableTensor:
     )
 
 
-def test_ensemble_table_preserves_member_order_and_proven_sharing() -> None:
-    first = _numerical([[1.0], [2.0]])
-    second = _numerical([[3.0], [4.0]])
-
-    table = EnsembleTable.pack(
-        variants=(first, second),
-        member_to_input_variant=(0, 1, 0, 1),
-    )
-
-    assert table.num_members == 4
-    torch.testing.assert_close(table[0].numerical, first.numerical)
-    torch.testing.assert_close(table[1].numerical, second.numerical)
-    torch.testing.assert_close(table[2].numerical, first.numerical)
-    torch.testing.assert_close(
-        table.materialize().numerical,
-        torch.stack(
-            (first.numerical, second.numerical) * 2,
-            dim=0,
-        ),
-    )
-
-
-def test_ensemble_table_materializes_only_compatible_member_metadata() -> None:
-    first = _numerical([[1.0], [2.0]])
-    renamed = TableTensor.from_tensor(
-        first.numerical,
-        columns=("renamed",),
-    )
-    table = EnsembleTable.pack(
-        variants=(first, renamed),
-        member_to_input_variant=(0, 1),
-    )
-
-    with pytest.raises(ValueError, match="metadata"):
-        table.materialize()
-
-    categories = CategoricalTensor(
-        code=torch.tensor([[0], [1]], dtype=torch.int64),
-        categories=(torch.tensor([10, 20]),),
-    )
-    reordered = CategoricalTensor(
-        code=torch.tensor([[1], [0]], dtype=torch.int64),
-        categories=(torch.tensor([20, 10]),),
-    )
-    categorical = EnsembleTable.pack(
-        variants=(
-            TableTensor(
-                columns={Stype.categorical: ("kind",)},
-                categorical=categories,
-            ),
-            TableTensor(
-                columns={Stype.categorical: ("kind",)},
-                categorical=reordered,
-            ),
-        ),
-        member_to_input_variant=(0, 1),
-    )
-
-    with pytest.raises(ValueError, match="metadata"):
-        categorical.materialize()
-
-
 def test_ensemble_processor_scalar_fit_transform_runs_once() -> None:
     table = _numerical([[1.0], [2.0]])
     processor = _AddOneEnsemble()
@@ -227,7 +170,7 @@ def test_recipe_round_robin_choice_reuses_two_variants_for_eight_members() -> (
             else torch.zeros_like(features.numerical)
         )
         torch.testing.assert_close(
-            transformed[member].numerical,
+            transformed.representation(member).numerical,
             expected,
         )
 
@@ -280,9 +223,13 @@ def test_shuffle_reuses_equal_member_mappings(
                 for category in table.categorical.categories
             ),
         )
-        for table in (transformed[member] for member in range(8))
+        for table in (
+            transformed.representation(member) for member in range(8)
+        )
     }
-    assert sum(group.size(0) for group in transformed.groups) == len(unique)
+    assert sum(
+        group.size(0) for group in transformed.iter_packed_representations()
+    ) == len(unique)
 
 
 def test_sampled_quantile_is_reproducible_and_member_specific() -> None:
@@ -307,15 +254,15 @@ def test_sampled_quantile_is_reproducible_and_member_specific() -> None:
 
     for member in range(4):
         torch.testing.assert_close(
-            transformed[0][member].numerical,
-            transformed[1][member].numerical,
+            transformed[0].representation(member).numerical,
+            transformed[1].representation(member).numerical,
             rtol=0,
             atol=0,
         )
     assert any(
         not torch.equal(
-            transformed[0][0].numerical,
-            transformed[0][member].numerical,
+            transformed[0].representation(0).numerical,
+            transformed[0].representation(member).numerical,
         )
         for member in range(1, 4)
     )
@@ -349,12 +296,19 @@ def test_schema_changing_processor_splits_only_incompatible_members() -> None:
     )
     query_transformed, _ = recipe.transform(query)
 
-    assert [transformed[i].size(-1) for i in range(4)] == [1, 0, 1, 0]
-    assert [query_transformed[i].size(-1) for i in range(4)] == [1, 0, 1, 0]
-    assert transformed[0].columns[Stype.numerical] == ("x0",)
-    assert transformed[1].columns[Stype.numerical] == ()
+    assert [transformed.representation(i).size(-1) for i in range(4)] == [
+        1,
+        0,
+        1,
+        0,
+    ]
+    assert [
+        query_transformed.representation(i).size(-1) for i in range(4)
+    ] == [1, 0, 1, 0]
+    assert transformed.representation(0).columns[Stype.numerical] == ("x0",)
+    assert transformed.representation(1).columns[Stype.numerical] == ()
     torch.testing.assert_close(
-        query_transformed[0].numerical,
+        query_transformed.representation(0).numerical,
         torch.tensor([[2.4494898]]),
     )
 
@@ -401,13 +355,16 @@ def test_nested_stype_sequential_and_choice_preserve_routes() -> None:
         num_members=2,
     )
 
-    assert transformed[0].columns[Stype.numerical] == ("value", "kind")
+    assert transformed.representation(0).columns[Stype.numerical] == (
+        "value",
+        "kind",
+    )
     torch.testing.assert_close(
-        transformed[0].numerical,
+        transformed.representation(0).numerical,
         torch.tensor([[1.0, 0.0], [2.0, 1.0], [3.0, 0.0]]),
     )
     torch.testing.assert_close(
-        transformed[1].numerical,
+        transformed.representation(1).numerical,
         torch.tensor([[0.0, 0.0], [0.0, 1.0], [0.0, 0.0]]),
     )
 
@@ -502,11 +459,11 @@ def test_related_tables_keep_table_local_fitted_state() -> None:
     assert transformed_related is not None
     for member in range(3):
         torch.testing.assert_close(
-            transformed_related["small"][member].numerical,
+            transformed_related["small"].representation(member).numerical,
             torch.tensor([[-1.2247449], [0.0], [1.2247449]]),
         )
         torch.testing.assert_close(
-            transformed_related["large"][member].numerical,
+            transformed_related["large"].representation(member).numerical,
             torch.tensor([[-1.2247449], [0.0], [1.2247449]]),
         )
 
@@ -720,11 +677,11 @@ def test_custom_processor_contract_works_after_member_split() -> None:
     )
 
     torch.testing.assert_close(
-        transformed[0].numerical,
+        transformed.representation(0).numerical,
         torch.tensor([[-1.0], [0.0], [1.0]]),
     )
     torch.testing.assert_close(
-        transformed[1].numerical,
+        transformed.representation(1).numerical,
         torch.zeros_like(features.numerical),
     )
 
@@ -742,11 +699,11 @@ def test_recipe_rejects_mixed_execution_devices() -> None:
     with pytest.raises(ValueError, match="same device"):
         EnsembleRelatedTables(
             tables={
-                "cpu": EnsembleTable.from_shared(
+                "cpu": EnsembleTable(
                     _numerical([[1.0]]),
                     num_members=2,
                 ),
-                "meta": EnsembleTable.from_shared(
+                "meta": EnsembleTable(
                     TableTensor.from_tensor(torch.ones(1, 1, device="meta")),
                     num_members=2,
                 ),
@@ -790,12 +747,12 @@ def test_failed_refit_keeps_the_previous_complete_recipe_plan() -> None:
     after, _ = recipe.transform(query)
     for member in range(2):
         torch.testing.assert_close(
-            before[member].numerical,
+            before.representation(member).numerical,
             torch.tensor([[3.0]]),
         )
         torch.testing.assert_close(
-            after[member].numerical,
-            before[member].numerical,
+            after.representation(member).numerical,
+            before.representation(member).numerical,
             rtol=0,
             atol=0,
         )

@@ -6,11 +6,10 @@ from sdm.processing.base import Processor
 from sdm.processing.ensemble import (
     EnsembleFitContext,
     EnsembleProcessor,
-    EnsembleTable,
     as_ensemble_processor,
 )
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class TaskDispatch(EnsembleProcessor):

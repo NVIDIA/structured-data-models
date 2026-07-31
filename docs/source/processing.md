@@ -87,7 +87,7 @@ table = recipe.features.transform(table)
 
 ## Ensembling
 
-When a model requests multiple estimators, the Recipe starts from one shared input and keeps equivalent fitted state and intermediate data in an {py:class}`~sdm.processing.EnsembleTable`. A stochastic decision or incompatible output schema splits that representation; compatible distinct variants continue together along a leading ensemble dimension. Model scheduling materializes members in parallel when supported or one at a time for the memory-limited fallback.
+When a model requests multiple estimators, the Recipe starts from one shared input and keeps equivalent fitted state and intermediate data in an {py:class}`~sdm.tensor.EnsembleTable`. A stochastic decision or incompatible output schema splits that representation; compatible distinct variants continue together along a leading ensemble dimension. Model scheduling materializes members in parallel when supported or one at a time for the memory-limited fallback.
 
 ```{figure} images/ensemble_light.svg
 ---
