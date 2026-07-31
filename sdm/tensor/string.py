@@ -46,7 +46,7 @@ class StringTensor(VarLenTensor):
     ) -> Self:
         r"""Create tensor from a string :class:`pyarrow.Array`.
 
-        .. code-block:: python
+        .. testcode::
 
             import pyarrow as pa
             from sdm import StringTensor
@@ -224,11 +224,11 @@ class StringTensor(VarLenTensor):
     ) -> Self:
         r"""Create tensor from a rectangular Python list of strings.
 
-        .. code-block:: python
+        .. testcode::
 
             from sdm import StringTensor
 
-            tensor = VarLenTensor.from_list([
+            tensor = StringTensor.from_list([
                 ["foo", "bar"],
                 ["hello world", ""],
             ])

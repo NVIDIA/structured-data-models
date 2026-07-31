@@ -17,7 +17,6 @@ from sdm.relational.join import join_index
 from sdm.tensor.mixin import DeviceMixin
 
 EXAMPLE_ID = "__example__"
-TemporalStrategy = Literal["uniform", "last"]
 
 
 @dataclass(frozen=True)
@@ -30,7 +29,7 @@ class TemporalSamplingConfig:
     """
 
     time_columns: Mapping[str, str]
-    strategy: TemporalStrategy = "last"
+    strategy: Literal["uniform", "last"] = "last"
 
     def __post_init__(self) -> None:
         if len(self.time_columns) == 0:

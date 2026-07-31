@@ -20,7 +20,7 @@ The `structured-data-models` package groups and unifies such foundation models b
 
 ## The ICL Interface
 
-A In-Context Learning task is described by **context features**, **context targets**, and **query features**, while model-specific details are handled by the model implementation and its pre- and post-processing {py:class}`~sdm.processing.recipe.Recipe`.
+An In-Context Learning task is described by **context features**, **context targets**, and **query features**, while model-specific details are handled by the model implementation and its pre- and post-processing {py:class}`~sdm.processing.recipe.Recipe`.
 As a result, single-table and multi-table models can share the same prediction workflow while consuming different forms of context.
 
 Specifically, an in-context learning task has three core inputs, as defined in the {py:class}`~sdm.models.ICLModel` base class:
@@ -99,9 +99,9 @@ Predictions are returned as a general {py:class}`~sdm.tensor.TableTensor`, where
 - Regression predictions are generally model-dependent.
   For example, {py:class}`~sdm.models.TabICLv2` outputs numerical quantiles named `"q001"` through `"q999"`, from which the (approximate) mean prediction can be derived via `out.numerical.mean(dim=-1)` and the median prediction is available via `out["q500"].numerical`.
 
-Since predictions are returned as {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
+Since predictions are returned as {py:class}`~sdm.tensor.TableTensor`, you can zero-copy them to [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via {py:meth}`~sdm.tensor.TableTensor.to_pandas`, {py:meth}`~sdm.tensor.TableTensor.to_arrow`, and {py:meth}`~sdm.tensor.TableTensor.to_cudf` for further downstream processing.
 
-In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to it (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
+In order to simplify metric calculation (*e.g.*, via [`torchmetrics`](https://lightning.ai/docs/torchmetrics)), we provide helper functions in the [`sdm.evaluation`](api/evaluation) package to convert target columns to class indices and align prediction columns to them (see {py:func}`~sdm.evaluation.to_class_indices` and {py:func}`~sdm.evaluation.to_binary_class`).
 
 ## Relational Context
 
@@ -207,6 +207,6 @@ out = model.predict(x_query, related_query_tables)
 The {py:attr}`~sdm.models.ICLModel.supports_related_tables` attribute denotes whether an {py:class}`~sdm.models.ICLModel` supports relational context.
 For example, {py:class}`~sdm.models.KumoRFM` consumes the `x_context` and `x_query` together with related tables, propagates information through its induced relational subgraph, and then predicts the query rows from the labeled context rows.
 
-To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporal-aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
+To simplify the construction of {py:class}`~sdm.relational.RelatedTables`, we provide heterogeneous, temporally aware subgraph samplers with CPU and CUDA backends, based on [`pyg-lib`](https://github.com/pyg-team/pyg-lib) and [`cugraph`](https://docs.rapids.ai/api/cugraph), respectively.
 Given rows from `x_context` or `x_query`, a sampler returns the reachable subset of related table rows up to a user-specified number of hops and neighbors.
 The full relational sampling and prediction flow is shown in [`examples/kumorfm/rel_bench.py`](https://github.com/NVIDIA/structured-data-models/blob/main/examples/kumorfm/rel_bench.py).
