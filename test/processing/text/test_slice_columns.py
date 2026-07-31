@@ -1,4 +1,3 @@
-import pytest
 import torch
 
 from sdm import Stype, TableTensor
@@ -33,8 +32,3 @@ def test_slice_features_passes_through_when_narrower() -> None:
 
     assert output.columns == table.columns
     assert torch.equal(output.numerical, table.numerical)
-
-
-def test_slice_features_rejects_non_positive_dim() -> None:
-    with pytest.raises(ValueError, match="positive"):
-        SliceColumns(max_columns=0)

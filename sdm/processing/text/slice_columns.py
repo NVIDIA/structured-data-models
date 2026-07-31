@@ -14,7 +14,7 @@ class SliceColumns(Processor):
 
     Args:
         max_columns: Maximum number of numerical columns to keep.
-        mode: Column selection mode. Currently only ``"first"`` is supported.
+        mode: ``"first"`` keeps the leading ``max_columns`` numerical columns.
     """
 
     requires_fit = False
@@ -31,8 +31,6 @@ class SliceColumns(Processor):
             raise ValueError(
                 f"'max_columns' must be positive (got {max_columns})"
             )
-        if mode != "first":
-            raise ValueError(f"Unsupported mode (got {mode!r})")
 
         self.max_columns = max_columns
 
