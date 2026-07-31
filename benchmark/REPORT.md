@@ -2,9 +2,9 @@
 
 ## Outcome
 
-On an NVIDIA L4, the optimized eight-member TabICLv2 Recipe processes 40k context + 10k query rows with 100 features in **129.3 ms median for classification** and **123.0 ms for regression**. The zero-compute model boundary, which adds model-input materialization and output allocation but no neural-network computation, takes **138.8 ms** and **139.1 ms** respectively. The measured processing path is below the earlier 190–200 ms reference, while the optimization target remains the fastest valid implementation rather than a fixed runtime.
+On an NVIDIA L4, the optimized eight-member TabICLv2 Recipe processes 40k context + 10k query rows with 100 features in **129.3 ms median for classification** and **123.0 ms for regression**. The measured processing path is below the earlier 190–200 ms reference, while the optimization target remains the fastest valid implementation rather than a fixed runtime.
 
-These are practical production baselines, not theoretical hardware speed-of-light results. No independent minimum-computation CUDA implementation was added, so the gap between Recipe and zero-core timings is interface overhead, not a proven hardware-limit gap. The real TabICLv2 model cannot execute the 50k workload in parallel on this 22.0 GiB L4.
+These are practical production baselines, not theoretical hardware speed-of-light results. No independent minimum-computation CUDA implementation was added. In a preprocessing-only memory search, all eight members completed at **3.45 million total rows** and first failed at **3.50 million rows** on this 22.0 GiB L4. This boundary excludes the model forward pass and output postprocessing.
 
 ## Environment and method
 
@@ -19,12 +19,10 @@ These are practical production baselines, not theoretical hardware speed-of-ligh
 
 ## TabICLv2 50k processing
 
-| Task           | CPU Recipe median / p95 | L4 Recipe median / p95 | GPU speedup | L4 zero-core parallel median / p95 | L4 Recipe summed kernels | L4 Recipe peak delta / absolute | Recipe throughput |
-| -------------- | ----------------------: | ---------------------: | ----------: | ---------------------------------: | -----------------------: | ------------------------------: | ----------------: |
-| Classification |      2282.3 / 2288.6 ms |       129.3 / 132.3 ms |       17.6× |                   138.8 / 141.0 ms |                 103.9 ms |               292.7 / 313.0 MiB |    386,599 rows/s |
-| Regression     |      2651.7 / 2863.5 ms |       123.0 / 126.7 ms |       21.6× |                   139.1 / 235.6 ms |                 119.3 ms |               914.9 / 973.2 MiB |    406,615 rows/s |
-
-Regression zero-core p95 includes allocator variance that is not present in the independently measured complete-Recipe p95. The synchronized medians are stable; sequential zero-core execution is 2.7 ms slower for classification and 1.2 ms slower for regression.
+| Task           | CPU Recipe median / p95 | L4 Recipe median / p95 | GPU speedup | L4 Recipe summed kernels | L4 Recipe peak delta / absolute | Recipe throughput |
+| -------------- | ----------------------: | ---------------------: | ----------: | -----------------------: | ------------------------------: | ----------------: |
+| Classification |      2282.3 / 2288.6 ms |       129.3 / 132.3 ms |       17.6× |                 103.9 ms |               292.7 / 313.0 MiB |    386,599 rows/s |
+| Regression     |      2651.7 / 2863.5 ms |       123.0 / 126.7 ms |       21.6× |                 119.3 ms |               914.9 / 973.2 MiB |    406,615 rows/s |
 
 ### L4 Recipe stages
 
@@ -72,33 +70,16 @@ The generic multiple-fitted-state inverse path remains for genuinely distinct ta
 | Classification |   3.49 / 4.19 ms |   3.54 / 8.59 ms |
 | Regression     |   3.41 / 3.86 ms |   3.53 / 3.84 ms |
 
-## Real-model scheduling
+## L4 preprocessing memory boundary
 
-The complete random-weight TabICLv2 architecture was measured at 2400 context + 600 query rows because 50k is outside L4 capacity.
+The controlled searches execute only `default_recipe()`: after input transfer, each attempt fits and transforms context features and target for eight members, transforms query features, and keeps all three `EnsembleTable` outputs alive through the peak-memory measurement. Dataset construction, transfers, model execution, and output postprocessing are excluded. The workload uses 100 float32 features, a 4:1 context/query split, four identity and four power-normalized members, exponential growth, and a final 50k-row resolution.
 
-| Task / schedule             |       Median / p95 | Summed kernels | Peak delta / absolute |   Throughput |
-| --------------------------- | -----------------: | -------------: | --------------------: | -----------: |
-| Classification / parallel   | 2456.5 / 2466.3 ms |      4692.8 ms |     12.91 / 13.14 GiB | 1,221 rows/s |
-| Classification / sequential | 2478.1 / 2494.2 ms |      4721.1 ms |       1.62 / 1.85 GiB | 1,211 rows/s |
-| Regression / parallel       | 2517.5 / 2551.9 ms |      4911.9 ms |     12.91 / 13.14 GiB | 1,192 rows/s |
-| Regression / sequential     | 2482.9 / 2499.9 ms |      5252.3 ms |       1.64 / 1.86 GiB | 1,208 rows/s |
+| Task           | Largest success |     Context / query | First OOM | Failing stage   | Success runtime | Success peak delta / absolute | Success peak reserved |
+| -------------- | --------------: | ------------------: | --------: | --------------- | --------------: | ----------------------------: | --------------------: |
+| Classification |  3,450,000 rows | 2,760,000 / 690,000 | 3,500,000 | `fit_transform` |          7.34 s |             19.35 / 20.65 GiB |             21.71 GiB |
+| Regression     |  3,450,000 rows | 2,760,000 / 690,000 | 3,500,000 | `fit_transform` |          7.32 s |             19.35 / 20.65 GiB |             21.71 GiB |
 
-Parallel execution has no consistent material latency advantage and uses about 7.9× more incremental memory. Sequential execution is therefore the practical L4 schedule; `auto` in `forward` and `fit` first attempts parallel execution and retries only the model core sequentially after CUDA OOM while restoring explicit or global RNG state. Cached `predict` reuses the schedule established during `fit`.
-
-## L4 memory boundary
-
-The controlled searches used the real random-weight model, eight members, 100 features, a 4:1 context/query split, and 250-row resolution. Both tasks produced the same bracket.
-
-| Task / schedule             | Rows | Context / query | Result                 |   Runtime |           Peak allocated | Peak reserved |
-| --------------------------- | ---: | --------------: | ---------------------- | --------: | -----------------------: | ------------: |
-| Classification / parallel   | 3750 |      3000 / 750 | Largest tested success | 3343.5 ms |                16.37 GiB |     21.51 GiB |
-| Classification / parallel   | 4000 |      3200 / 800 | First tested OOM       |         — | 15.87 GiB before failure |     21.10 GiB |
-| Classification / sequential | 4000 |      3200 / 800 | Success                | 3226.2 ms |                 2.39 GiB |      4.14 GiB |
-| Regression / parallel       | 3750 |      3000 / 750 | Largest tested success | 3342.3 ms |                16.37 GiB |     21.51 GiB |
-| Regression / parallel       | 4000 |      3200 / 800 | First tested OOM       |         — | 15.87 GiB before failure |     21.10 GiB |
-| Regression / sequential     | 4000 |      3200 / 800 | Success                | 3217.6 ms |                 2.41 GiB |      4.14 GiB |
-
-Every attempt releases outputs and workload data, runs garbage collection, and empties the CUDA cache after success or OOM.
+The result establishes a **3.45–3.50 million-row bracket** for this exact shape, dtype, Recipe, and eight-member configuration, not a universal row limit. The existing `ensemble_mode="sequential"` affects model-core materialization only and therefore does not lower this preprocessing peak. Every attempt releases outputs and workload data, runs garbage collection, and empties the CUDA cache after success or OOM.
 
 ## Canonical RFM processing
 
@@ -116,20 +97,18 @@ The L4 is not faster than CPU for this mixed workload because cuDF is unavailabl
 ## Recommendation and limitations
 
 - Keep the provenance-aware `EnsembleTable`, structural `EnsembleProcessor` nodes, normal-Processor adapter, and variable-schema mixin: each represents a current design invariant and has direct test coverage.
-- Keep `parallel`, `sequential`, and `auto` model schedules. Parallel model stacking is not a useful default on L4, while sequential execution makes the first parallel failure case fit comfortably.
 - The next Processor optimization target is `PowerTransform.fit`; a custom kernel is justified only if standard PyTorch compilation/fusion cannot reduce its measured 33 ms latency.
 - RFM GPU improvement requires eliminating optional CPU string/join fallbacks, not additional ensemble abstractions.
 - Serialization of dynamically fitted ensemble trees and decisions remains an explicit design open question.
-- Cached `predict` does not change schedules after fitting; callers with memory-limited query workloads should fit with `ensemble_mode="sequential"`.
+- The current sequential model schedule does not provide a Recipe-level preprocessing fallback. Workloads beyond the measured preprocessing bracket require fewer rows or members until a chunked or sequential Recipe execution path is implemented.
 - No cross-table fitted-state sharing, content hashing, multi-GPU execution, row-changing Processor support, or speculative schema wrapper was added.
 
 ## Reproduce
 
 ```bash
-uv run python -m benchmark.tabiclv2_ensemble --devices cuda --tasks classification regression --modes parallel sequential --context-rows 40000 --query-rows 10000 --features 100 --categorical-features 10 --vocabulary-size 4096 --num-estimators 8 --repetitions 20 --warmups 5 --include-processors --include-transfers --profile-kernels --output /tmp/tabiclv2_gpu.json
-/usr/bin/time -v -o /tmp/tabiclv2_cpu_time.txt uv run python -m benchmark.tabiclv2_ensemble --devices cpu --tasks classification regression --modes parallel sequential --context-rows 40000 --query-rows 10000 --features 100 --categorical-features 10 --vocabulary-size 4096 --num-estimators 8 --repetitions 20 --warmups 5 --include-processors --output /tmp/tabiclv2_cpu.json
-uv run python -m benchmark.tabiclv2_ensemble --devices cuda --tasks classification regression --modes parallel sequential --context-rows 2400 --query-rows 600 --features 100 --categorical-features 10 --vocabulary-size 4096 --num-estimators 8 --repetitions 20 --warmups 5 --only-model --profile-kernels --output /tmp/tabiclv2_model.json
+uv run python -m benchmark.tabiclv2_ensemble --devices cuda --tasks classification regression --context-rows 40000 --query-rows 10000 --features 100 --categorical-features 10 --vocabulary-size 4096 --num-estimators 8 --repetitions 20 --warmups 5 --include-processors --include-transfers --profile-kernels --output /tmp/tabiclv2_gpu.json
+/usr/bin/time -v -o /tmp/tabiclv2_cpu_time.txt uv run python -m benchmark.tabiclv2_ensemble --devices cpu --tasks classification regression --context-rows 40000 --query-rows 10000 --features 100 --categorical-features 10 --vocabulary-size 4096 --num-estimators 8 --repetitions 20 --warmups 5 --include-processors --output /tmp/tabiclv2_cpu.json
 uv run python -m benchmark.rfm_ensemble --devices cpu cuda --tasks classification regression --schedules ensemble_shared member_isolated --context-rows 5000 --query-rows 1000 --products 1000 --num-estimators 8 --repetitions 20 --warmups 5 --profile-kernels --output /tmp/rfm.json
-uv run python -m benchmark.tabiclv2_memory_limit --task classification --resolution 250 --output /tmp/tabiclv2_l4_classification.json
-uv run python -m benchmark.tabiclv2_memory_limit --task regression --resolution 250 --output /tmp/tabiclv2_l4_regression.json
+uv run python -m benchmark.tabiclv2_preprocessing_memory_limit --task classification --start-rows 100000 --max-rows 5000000 --resolution 50000 --output /tmp/tabiclv2_preprocessing_l4_classification.json
+uv run python -m benchmark.tabiclv2_preprocessing_memory_limit --task regression --start-rows 100000 --max-rows 5000000 --resolution 50000 --output /tmp/tabiclv2_preprocessing_l4_regression.json
 ```

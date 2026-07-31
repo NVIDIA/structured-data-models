@@ -1,4 +1,4 @@
-"""Benchmark ensemble-aware TabICLv2 processing and model scheduling.
+"""Benchmark ensemble-aware TabICLv2 processing.
 
 Dataset construction, correctness checks, and host/device transfers are kept
 outside processing timings. CUDA measurements use warm-up runs, events, and an
@@ -23,9 +23,7 @@ from typing import Any, Literal, cast
 
 import torch
 
-from sdm import CategoricalTensor, RelatedTables, Stype, TableTensor
-from sdm.cache import Cache
-from sdm.models import ICLModel, TabICLv2
+from sdm import CategoricalTensor, Stype, TableTensor
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.processing import (
     AlignCategories,
@@ -34,14 +32,12 @@ from sdm.processing import (
     DropConstantColumns,
     ImputeMean,
     PowerTransform,
-    Recipe,
     Sequential,
     ShuffleColumns,
     Standardize,
 )
 
 Task = Literal["classification", "regression"]
-Mode = Literal["parallel", "sequential"]
 
 
 @dataclass(frozen=True)
@@ -83,7 +79,6 @@ class Measurement:
     operation: str
     task: Task
     device: str
-    mode: str | None
     rows: int
     context_rows: int
     query_rows: int
@@ -101,53 +96,6 @@ class Measurement:
     peak_memory_bytes: int
     absolute_peak_memory_bytes: int
     throughput_rows_per_second: float
-
-
-class _ProcessingBoundaryModel(ICLModel):
-    """Zero-compute core that retains the complete Recipe boundary."""
-
-    supported_feature_stypes = frozenset({Stype.numerical})
-    supported_target_stypes = frozenset({Stype.numerical, Stype.categorical})
-    supports_related_tables = False
-
-    @classmethod
-    def default_recipe(cls) -> Recipe:
-        """Return the production TabICLv2 Recipe."""
-        return default_recipe()
-
-    def _forward(
-        self,
-        x_context: TableTensor | None,
-        y_context: TableTensor | None,
-        x_query: TableTensor | None,
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
-        cache: Cache | None,
-        generator: torch.Generator | None,
-        **kwargs: Any,
-    ) -> TableTensor:
-        del (
-            x_context,
-            related_context_tables,
-            related_query_tables,
-            cache,
-            generator,
-            kwargs,
-        )
-        assert x_query is not None
-        assert y_context is not None
-        if y_context.categorical.size(-1) > 0:
-            categories = y_context.categorical.categories[0]
-            width = categories.numel()
-            columns = tuple(str(value) for value in categories.tolist())
-        else:
-            width = 999
-            columns = tuple(f"q{index:03d}" for index in range(1, 1000))
-        numerical = x_query.numerical.new_zeros((*x_query.size()[:-1], width))
-        return TableTensor(
-            columns={Stype.numerical: columns},
-            numerical=numerical,
-        )
 
 
 def build_workload(
@@ -295,7 +243,6 @@ def measure(
     num_estimators: int,
     repetitions: int,
     warmups: int,
-    mode: str | None = None,
     profile_kernels: bool = False,
 ) -> Measurement:
     """Measure one prepared operation with synchronized CPU/CUDA timing."""
@@ -377,7 +324,6 @@ def measure(
         operation=operation,
         task=workload.task,
         device=str(device),
-        mode=mode,
         rows=workload.rows,
         context_rows=workload.context_rows,
         query_rows=workload.query_rows,
@@ -448,10 +394,9 @@ def benchmark_recipe(
     num_estimators: int,
     repetitions: int,
     warmups: int,
-    modes: Sequence[Mode],
     profile_kernels: bool,
 ) -> list[Measurement]:
-    """Measure Recipe stages and the zero-compute processing boundary."""
+    """Measure the complete Recipe and its individual stages."""
     _assert_correct(workload, num_estimators)
     results: list[Measurement] = []
 
@@ -522,31 +467,6 @@ def benchmark_recipe(
 
     add("recipe_total", total_prepare)
 
-    boundary = _ProcessingBoundaryModel().eval()
-    for mode in modes:
-
-        def boundary_prepare(mode: Mode = mode) -> Callable[[], Any]:
-            return lambda: boundary(
-                workload.x_context,
-                workload.target,
-                workload.x_query,
-                num_estimators=num_estimators,
-                ensemble_mode=mode,
-                generator=torch.Generator().manual_seed(42),
-            )
-
-        results.append(
-            measure(
-                boundary_prepare,
-                operation="zero_core_processing_boundary",
-                workload=workload,
-                num_estimators=num_estimators,
-                repetitions=repetitions,
-                warmups=warmups,
-                mode=mode,
-                profile_kernels=profile_kernels,
-            )
-        )
     return results
 
 
@@ -717,45 +637,6 @@ def benchmark_transfers(
     ]
 
 
-def benchmark_actual_model(
-    workload: Workload,
-    *,
-    num_estimators: int,
-    repetitions: int,
-    warmups: int,
-    modes: Sequence[Mode],
-    profile_kernels: bool,
-) -> list[Measurement]:
-    """Measure the random-weight production architecture end to end."""
-    model = TabICLv2(pretrained=False, device=workload.device).eval()
-    results = []
-    for mode in modes:
-
-        def prepare(mode: Mode = mode) -> Callable[[], Any]:
-            return lambda: model(
-                workload.x_context,
-                workload.target,
-                workload.x_query,
-                num_estimators=num_estimators,
-                ensemble_mode=mode,
-                generator=torch.Generator().manual_seed(42),
-            )
-
-        results.append(
-            measure(
-                prepare,
-                operation="actual_model_end_to_end",
-                workload=workload,
-                num_estimators=num_estimators,
-                repetitions=repetitions,
-                warmups=warmups,
-                mode=mode,
-                profile_kernels=profile_kernels,
-            )
-        )
-    return results
-
-
 def metadata() -> dict[str, object]:
     """Return stable hardware and software metadata for the result file."""
     return {
@@ -790,7 +671,6 @@ def _cpu_model() -> str:
 def run(args: argparse.Namespace) -> dict[str, object]:
     """Execute the requested benchmark matrix."""
     results: list[Measurement] = []
-    modes = cast(tuple[Mode, ...], tuple(args.modes))
     for task in cast(tuple[Task, ...], tuple(args.tasks)):
         cpu_workload = build_workload(
             task=task,
@@ -805,22 +685,16 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             if device.type == "cuda" and not torch.cuda.is_available():
                 raise RuntimeError("CUDA was requested but is unavailable.")
             workload = cpu_workload.to(device)
-            if not args.only_model:
-                results.extend(
-                    benchmark_recipe(
-                        workload,
-                        num_estimators=args.num_estimators,
-                        repetitions=args.repetitions,
-                        warmups=args.warmups,
-                        modes=modes,
-                        profile_kernels=args.profile_kernels,
-                    )
+            results.extend(
+                benchmark_recipe(
+                    workload,
+                    num_estimators=args.num_estimators,
+                    repetitions=args.repetitions,
+                    warmups=args.warmups,
+                    profile_kernels=args.profile_kernels,
                 )
-            if (
-                not args.only_model
-                and args.include_processors
-                and task == "classification"
-            ):
+            )
+            if args.include_processors and task == "classification":
                 results.extend(
                     benchmark_processors(
                         workload,
@@ -830,24 +704,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         profile_kernels=args.profile_kernels,
                     )
                 )
-            if not args.only_model and args.include_transfers:
+            if args.include_transfers:
                 results.extend(
                     benchmark_transfers(
                         workload,
                         num_estimators=args.num_estimators,
                         repetitions=args.repetitions,
                         warmups=args.warmups,
-                        profile_kernels=args.profile_kernels,
-                    )
-                )
-            if args.include_model:
-                results.extend(
-                    benchmark_actual_model(
-                        workload,
-                        num_estimators=args.num_estimators,
-                        repetitions=args.repetitions,
-                        warmups=args.warmups,
-                        modes=modes,
                         profile_kernels=args.profile_kernels,
                     )
                 )
@@ -879,12 +742,6 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=("cpu", "cuda"),
     )
-    parser.add_argument(
-        "--modes",
-        nargs="+",
-        choices=("parallel", "sequential"),
-        default=("parallel", "sequential"),
-    )
     parser.add_argument("--context-rows", type=int, default=40_000)
     parser.add_argument("--query-rows", type=int, default=10_000)
     parser.add_argument("--features", type=int, default=100)
@@ -895,8 +752,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmups", type=int, default=5)
     parser.add_argument("--include-processors", action="store_true")
     parser.add_argument("--include-transfers", action="store_true")
-    parser.add_argument("--include-model", action="store_true")
-    parser.add_argument("--only-model", action="store_true")
     parser.add_argument("--profile-kernels", action="store_true")
     parser.add_argument(
         "--output",
@@ -909,8 +764,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Run the benchmark and persist machine-readable results."""
     args = parse_args()
-    if args.only_model:
-        args.include_model = True
     output = run(args)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2) + "\n")
