@@ -27,11 +27,6 @@ class SliceColumns(Processor):
         mode: Literal["first"] = "first",
     ) -> None:
         super().__init__()
-        if max_columns < 1:
-            raise ValueError(
-                f"'max_columns' must be positive (got {max_columns})"
-            )
-
         self.max_columns = max_columns
 
     def _transform(self, table: TableTensor) -> TableTensor:
