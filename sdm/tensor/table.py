@@ -293,8 +293,6 @@ class TableTensor(Tensor):
                 stypes={"age": "numerical", "city": "categorical"},
             )
 
-        Null values in ``text`` columns are encoded as empty strings.
-
         Args:
             table: The table.
             stypes: The semantic type for each column. Columns that are present
@@ -323,10 +321,7 @@ class TableTensor(Tensor):
                     values = values.astype("int64")
                     tensor = torch.from_numpy(values).unsqueeze(-1)
                 elif stype == Stype.text:
-                    if pa.types.is_null(array.type):
-                        array = array.cast(pa.string())
-                    tensor = StringTensor.from_arrow(array)
-                    tensor = tensor.unsqueeze(-1)
+                    tensor = StringTensor.from_arrow(array).unsqueeze(-1)
                 elif stype == Stype.id:
                     tensor = ColumnarTensor.from_arrow(array)
                 else:
@@ -373,8 +368,6 @@ class TableTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create a tensor from a :class:`pandas.DataFrame`.
-
-        Null values in ``text`` columns are encoded as empty strings.
 
         Args:
             df: The dataframe.
@@ -428,8 +421,6 @@ class TableTensor(Tensor):
     ) -> Self:
         r"""Create a tensor from a :class:`cudf.DataFrame`.
 
-        Null values in ``text`` columns are encoded as empty strings.
-
         Args:
             df: The dataframe.
             stypes: The semantic type for each column. Columns that are present
@@ -449,20 +440,17 @@ class TableTensor(Tensor):
                     ser = ser.astype("float32", copy=False)
                     if ser.null_count > 0:
                         ser = ser.fillna(float("nan"))
-                    tensor = torch.from_dlpack(ser.to_dlpack())
-                    tensor = tensor.unsqueeze(-1).to(device)
+                    tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
+                    tensor = tensor.to(device)
                 elif stype == Stype.categorical:
-                    tensor = CategoricalTensor.from_cudf(
-                        ser,
-                        device=device,
-                    )
+                    tensor = CategoricalTensor.from_cudf(ser, device=device)
                 elif stype == Stype.datetime:
                     ser = ser.astype("datetime64[us]", copy=False)
                     ser = ser.astype("int64", copy=False)
                     if ser.null_count > 0:
                         ser = ser.fillna(torch.iinfo(torch.int64).min)
-                    tensor = torch.from_dlpack(ser.to_dlpack())
-                    tensor = tensor.unsqueeze(-1).to(device)
+                    tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
+                    tensor = tensor.to(device)
                 elif stype == Stype.text:
                     tensor = StringTensor.from_cudf(ser, device=device)
                     tensor = tensor.unsqueeze(-1)
