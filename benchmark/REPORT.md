@@ -83,22 +83,62 @@ The result establishes a **3.45–3.50 million-row bracket** for this exact shap
 
 ## Canonical RFM processing
 
-The canonical relational dataset has 5k context + 1k query task rows and `customers`, `orders`, and `products` tables. It includes primary and foreign IDs, datetimes, numerical and categorical features, missing values, constant features, outliers, and unseen query categories. Exact tables, columns, blocks, codes, and category metadata are compared before timing.
+The canonical relational dataset uses `customers`, `orders`, and `products` tables and includes primary and foreign IDs, datetimes, numerical and categorical features, missing values, constant features, outliers, and unseen query categories. Exact tables, columns, blocks, codes, and category metadata are compared before timing. The cuDF environment uses Python 3.12.3, cuDF 26.6.0, CuPy 14.1.1, pylibcudf 26.6.0, PyTorch 2.13.0+cu130, and CUDA 13.0.
+
+### TabICLv2-aligned 50k task-row workload
+
+This workload uses the same 40k context + 10k query task-row count as the TabICLv2 benchmark, eight estimators, and 1k products. RFM additionally processes 40k/10k customer rows, 80k/20k order rows, and 1k/1k product rows for context/query respectively.
+
+| Task           | CPU with cuDF median / p95 | L4 with cuDF median / p95 | GPU speedup | L4 without cuDF median / p95 | cuDF median effect | L4 cuDF kernels | L4 cuDF peak delta |
+| -------------- | -------------------------: | ------------------------: | ----------: | ---------------------------: | -----------------: | --------------: | -----------------: |
+| Classification |           685.3 / 794.5 ms |          308.5 / 323.2 ms |       2.22× |             271.4 / 352.8 ms |       13.7% slower |        43.67 ms |          46.32 MiB |
+| Regression     |           696.0 / 885.8 ms |          334.9 / 353.5 ms |       2.08× |             302.9 / 308.4 ms |       10.5% slower |        42.14 ms |          46.01 MiB |
+
+The exact `kumo-ml` default cannot execute this shape: `RunMode.FAST` limits context and query to 1k rows each. Even non-FAST context is limited to 10k rows, so the 40k/10k reference comparison is intentionally reported only for SDM preprocessing.
+
+### Six-thousand-row ensemble reuse workload
+
+The original canonical workload uses 5k context + 1k query task rows, eight estimators, and 1k products.
 
 | Task / device        | Ensemble-shared median / p95 | Member-isolated median / p95 | Shared speedup | Shared summed kernels |  Shared peak delta |
 | -------------------- | ---------------------------: | ---------------------------: | -------------: | --------------------: | -----------------: |
-| Classification / CPU |             266.4 / 293.4 ms |           1183.3 / 1275.0 ms |          4.44× |                     — |     sampled 28 KiB |
-| Regression / CPU     |             253.4 / 269.1 ms |           1157.5 / 1232.7 ms |          4.57× |                     — | allocator-retained |
-| Classification / L4  |             265.1 / 273.8 ms |           1366.7 / 1461.6 ms |          5.15× |              37.03 ms |           5.58 MiB |
-| Regression / L4      |             295.9 / 299.7 ms |           1303.3 / 1407.3 ms |          4.40× |              36.11 ms |           5.53 MiB |
+| Classification / CPU |             298.2 / 330.5 ms |           1193.4 / 1290.3 ms |          4.00× |                     — |             28 KiB |
+| Regression / CPU     |             254.6 / 312.8 ms |           1159.7 / 1250.6 ms |          4.55× |                     — | allocator-retained |
+| Classification / L4  |             300.7 / 310.3 ms |           1680.1 / 1818.2 ms |          5.59× |              38.65 ms |           5.58 MiB |
+| Regression / L4      |             334.4 / 340.1 ms |           1580.4 / 1738.2 ms |          4.73× |              37.18 ms |           5.53 MiB |
 
-The L4 is not faster than CPU for this mixed workload because cuDF is unavailable: string sorting and relational joins fall back to CPU and force synchronization. The low kernel-to-wall ratio confirms CPU fallback/orchestration, not GPU compute, is the dominant RFM limit. The benchmark still demonstrates the intended reuse benefit independently of device.
+A matched Python 3.12/PyTorch 2.13 control without cuDF measured 265.3 ms classification and 297.7 ms regression for shared L4 execution. cuDF therefore made the shared medians 13.3% and 12.3% slower; member-isolated medians were 22.6% and 19.8% slower. CPU medians changed by only low single-digit percentages. For the 50k task-row workload, cuDF remained 13.7% and 10.5% slower on L4. cuDF removes the CPU fallback warnings, but the extra columnar conversion, launch, and synchronization overhead outweighs that benefit at both tested sizes. Shared kernel time increased by only 1.61 ms classification and 1.08 ms regression at 6k rows while wall time increased by 35–37 ms, locating most of the slowdown outside GPU kernels. cuDF should remain optional and should not be selected unconditionally for these shapes without a lower-overhead path or a demonstrated crossover.
+
+### Original `kumo-ml` default reference
+
+The reference uses exact commit `e978685d46478758a09e3e472ea2fde9b5c14957`, `kumo-api==0.92.0`, PyTorch 2.12.0+cu130, and the locally cached v2.1 checkpoints. Its public default is `RunMode.FAST`. Classification uses one estimator with all shuffle options disabled. Regression uses one estimator, quantile target normalization, median output, and all shuffle options disabled.
+
+The same canonical raw frames are converted into the sampled `kumo-api.Context` representation expected by the original driver. Dataset creation and checkpoint loading are excluded. `Data.from_context` includes pandas-to-tensor conversion and H2D for the GPU case; public `predict` includes that conversion, model execution, and output materialization.
+
+| Task           | Reference `Data.from_context` CPU median / p95 | Reference `Data.from_context` L4 median / p95 | Reference public `predict` CPU median / p95 | Reference public `predict` L4 median / p95 | Reference L4 summed kernels |
+| -------------- | ---------------------------------------------: | --------------------------------------------: | ------------------------------------------: | -----------------------------------------: | --------------------------: |
+| Classification |                                 23.4 / 25.5 ms |                                24.1 / 25.9 ms |                          7678.5 / 7910.3 ms |                           179.4 / 181.8 ms |                   215.17 ms |
+| Regression     |                                 21.9 / 24.0 ms |                                22.9 / 24.9 ms |                          7894.9 / 7964.8 ms |                           182.8 / 186.7 ms |                   216.48 ms |
+
+At the same 1k context + 1k query shape and one estimator, current SDM measures:
+
+| Task           | SDM Recipe CPU median / p95 | SDM Recipe L4 median / p95 | SDM public forward CPU median / p95 | SDM public forward L4 median / p95 |
+| -------------- | --------------------------: | -------------------------: | ----------------------------------: | ---------------------------------: |
+| Classification |            128.9 / 137.7 ms |           188.6 / 202.9 ms |                  3097.3 / 3179.9 ms |                   305.1 / 314.1 ms |
+| Regression     |            124.9 / 129.4 ms |           207.9 / 216.1 ms |                  2894.4 / 2953.1 ms |                   296.3 / 301.0 ms |
+
+| Task           | Reference public CPU peak delta / absolute | SDM public CPU peak delta / absolute | Reference public L4 peak delta / absolute | SDM public L4 peak delta / absolute |
+| -------------- | -----------------------------------------: | -----------------------------------: | ----------------------------------------: | ----------------------------------: |
+| Classification |                         771.4 / 2090.8 MiB |                   187.5 / 1235.0 MiB |                         618.0 / 868.5 MiB |                   202.1 / 569.9 MiB |
+| Regression     |                         770.7 / 2071.3 MiB |                   117.2 / 1270.7 MiB |                         617.3 / 867.7 MiB |                   202.4 / 570.3 MiB |
+
+Observed default-path ratios are directional, not parity claims: SDM is 2.48× classification and 2.73× regression faster on CPU, while the original is 1.70× and 1.62× faster on L4. The APIs do not expose identical boundaries or outputs: SDM inputs are already device-resident, the original starts from pandas-backed sampled subgraphs, original regression returns the configured median, and current SDM returns 999 decoded quantiles. The preprocessing-only values are especially not equivalent because original feature encoding continues inside the model. A strict performance-parity claim requires aligning graph materialization, output semantics, and timed boundaries first.
 
 ## Recommendation and limitations
 
 - Keep the provenance-aware `EnsembleTable`, structural `EnsembleProcessor` nodes, normal-Processor adapter, and variable-schema mixin: each represents a current design invariant and has direct test coverage.
 - The next Processor optimization target is `PowerTransform.fit`; a custom kernel is justified only if standard PyTorch compilation/fusion cannot reduce its measured 33 ms latency.
-- RFM GPU improvement requires eliminating optional CPU string/join fallbacks, not additional ensemble abstractions.
+- RFM GPU improvement requires reducing string/join conversion and orchestration overhead; merely installing cuDF is 10–23% slower in the tested GPU workloads.
 - Serialization of dynamically fitted ensemble trees and decisions remains an explicit design open question.
 - The current sequential model schedule does not provide a Recipe-level preprocessing fallback. Workloads beyond the measured preprocessing bracket require fewer rows or members until a chunked or sequential Recipe execution path is implemented.
 - No cross-table fitted-state sharing, content hashing, multi-GPU execution, row-changing Processor support, or speculative schema wrapper was added.
@@ -109,6 +149,8 @@ The L4 is not faster than CPU for this mixed workload because cuDF is unavailabl
 uv run python -m benchmark.tabiclv2_ensemble --devices cuda --tasks classification regression --context-rows 40000 --query-rows 10000 --features 100 --categorical-features 10 --vocabulary-size 4096 --num-estimators 8 --repetitions 20 --warmups 5 --include-processors --include-transfers --profile-kernels --output /tmp/tabiclv2_gpu.json
 /usr/bin/time -v -o /tmp/tabiclv2_cpu_time.txt uv run python -m benchmark.tabiclv2_ensemble --devices cpu --tasks classification regression --context-rows 40000 --query-rows 10000 --features 100 --categorical-features 10 --vocabulary-size 4096 --num-estimators 8 --repetitions 20 --warmups 5 --include-processors --output /tmp/tabiclv2_cpu.json
 uv run python -m benchmark.rfm_ensemble --devices cpu cuda --tasks classification regression --schedules ensemble_shared member_isolated --context-rows 5000 --query-rows 1000 --products 1000 --num-estimators 8 --repetitions 20 --warmups 5 --profile-kernels --output /tmp/rfm.json
+uv run python -m benchmark.rfm_ensemble --devices cpu cuda --tasks classification regression --schedules ensemble_shared --context-rows 40000 --query-rows 10000 --products 1000 --num-estimators 8 --repetitions 20 --warmups 5 --profile-kernels --output /tmp/rfm_50k.json
+python -m benchmark.rfm_kumo_reference --devices cpu cuda --tasks classification regression --stages data_from_context predict --context-rows 1000 --query-rows 1000 --products 1000 --repetitions 20 --warmups 5 --profile-kernels --output /tmp/rfm_kumo_reference.json
 uv run python -m benchmark.tabiclv2_preprocessing_memory_limit --task classification --start-rows 100000 --max-rows 5000000 --resolution 50000 --output /tmp/tabiclv2_preprocessing_l4_classification.json
 uv run python -m benchmark.tabiclv2_preprocessing_memory_limit --task regression --start-rows 100000 --max-rows 5000000 --resolution 50000 --output /tmp/tabiclv2_preprocessing_l4_regression.json
 ```
