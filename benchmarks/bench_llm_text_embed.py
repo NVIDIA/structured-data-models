@@ -31,7 +31,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm.processing.text.model_text_embed import ModelTextEmbed
+from sdm.processing import ModelTextEmbed
 
 
 class SentenceTransformerEmbeddingModel(torch.nn.Module):
