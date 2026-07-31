@@ -17,26 +17,23 @@ def to_class_indices(
             Column names define the class order.
         target: Single-column categorical target.
 
-    .. testcode:: to_class_indices
-
-        import torch
-        from sdm import TableTensor
-        from sdm.evaluation import to_class_indices
-
-        pred = TableTensor.from_tensor(
-            torch.tensor([[0.8, 0.2], [0.1, 0.9]]),
-            columns=["0", "1"],
-        )
-        target = TableTensor.from_tensor(torch.tensor([[0], [1]]))
-        class_scores, class_indices = to_class_indices(pred, target)
-        print(class_scores)
-        print(class_indices)
-
-    .. testoutput:: to_class_indices
-
-        tensor([[0.8000, 0.2000],
-                [0.1000, 0.9000]])
-        tensor([0, 1])
+    >>> import torch
+    >>> from sdm import CategoricalTensor, StringTensor, TableTensor
+    >>> from sdm.evaluation import to_class_indices
+    >>> pred = TableTensor.from_tensor(
+    ...     torch.tensor([[0.8, 0.1, 0.1], [0.1, 0.2, 0.7]]),
+    ...     columns=["cat", "dog", "bird"],
+    ... )
+    >>> target = CategoricalTensor(
+    ...     code=torch.tensor([[0], [2]]),
+    ...     categories=(StringTensor.from_list(["cat", "dog", "bird"]),),
+    ... )
+    >>> class_scores, class_indices = to_class_indices(pred, target)
+    >>> print(class_scores)
+    tensor([[0.8000, 0.1000, 0.1000],
+            [0.1000, 0.2000, 0.7000]])
+    >>> print(class_indices)
+    tensor([0, 2])
     """
     if isinstance(target, TableTensor):
         if target.size(-1) != 1:
@@ -98,29 +95,23 @@ def to_binary_class(
         target: Single-column categorical target.
         positive_class: Class value treated as the positive class.
 
-    .. testcode:: to_binary_class
-
-        import torch
-        from sdm import TableTensor
-        from sdm.evaluation import to_binary_class
-
-        pred = TableTensor.from_tensor(
-            torch.tensor([[0.8, 0.2], [0.1, 0.9]]),
-            columns=["0", "1"],
-        )
-        target = TableTensor.from_tensor(torch.tensor([[0], [1]]))
-        positive_scores, binary_target = to_binary_class(
-            pred,
-            target,
-            positive_class=1,
-        )
-        print(positive_scores)
-        print(binary_target)
-
-    .. testoutput:: to_binary_class
-
-        tensor([0.2000, 0.9000])
-        tensor([False,  True])
+    >>> import torch
+    >>> from sdm import TableTensor
+    >>> from sdm.evaluation import to_binary_class
+    >>> pred = TableTensor.from_tensor(
+    ...     torch.tensor([[0.8, 0.2], [0.1, 0.9]]),
+    ...     columns=["0", "1"],
+    ... )
+    >>> target = TableTensor.from_tensor(torch.tensor([[0], [1]]))
+    >>> positive_scores, binary_target = to_binary_class(
+    ...     pred,
+    ...     target,
+    ...     positive_class=1,
+    ... )
+    >>> print(positive_scores)
+    tensor([0.2000, 0.9000])
+    >>> print(binary_target)
+    tensor([False,  True])
     """
     if isinstance(target, TableTensor):
         if target.size(-1) != 1:
