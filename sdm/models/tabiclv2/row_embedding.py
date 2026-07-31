@@ -11,6 +11,16 @@ from sdm.cache import Cache
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
 
 
+def peak():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.cuda.reset_peak_host_memory_stats()
+    torch.cuda.synchronize(device)
+    peak_alloc = torch.cuda.max_memory_allocated(device)
+    peak_reserved = torch.cuda.max_memory_reserved(device)
+    print(f"Allocated: {peak_alloc / 1000**2:.1f}MB")
+    print(f"Reserved: {peak_reserved / 1000**2:.1f}MB")
+
+
 class RowEmbedding(torch.nn.Module):
     def __init__(
         self,
@@ -128,6 +138,9 @@ class RowEmbedding(torch.nn.Module):
             # y_emb has shape [F, ..., R_train, 1, D]:
             x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
+        print("1", x.size())
+        peak()
+
         # Column-wise induced set attention (B * C as the batch axis):
         x = x.transpose(-2, -3)  # [..., C, R, D]
         for i, col_layer in enumerate(self.col_layers):
@@ -148,13 +161,16 @@ class RowEmbedding(torch.nn.Module):
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=batch_size_limit,
+                batch_size_limit=1,  # batch_size_limit,
             )  # [..., C, R, D]
 
             if cache is not None and cache.is_recording:
                 x, cache[key] = result
             else:
                 x = result
+
+            print(f"{1 + i}", x.size())
+            peak()
 
         if num_digits > 1:  # Average over mixed-radix digits.
             x = x.mean(dim=0)  # [F, ..., C, R, D] -> [..., C, R, D]
@@ -175,7 +191,7 @@ class RowEmbedding(torch.nn.Module):
                 query=x[..., :K, :] if i == len(self.row_layers) - 1 else x,
                 key_value=x,  # [..., R, K + C, D]
                 rope=self.rope,
-                batch_size_limit=batch_size_limit,
+                batch_size_limit=60_000,
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]

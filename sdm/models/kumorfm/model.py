@@ -17,6 +17,16 @@ from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.processing import Recipe
 
 
+def peak():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.cuda.reset_peak_host_memory_stats()
+    torch.cuda.synchronize(device)
+    peak_alloc = torch.cuda.max_memory_allocated(device)
+    peak_reserved = torch.cuda.max_memory_reserved(device)
+    print(f"Allocated: {peak_alloc / 1000**2:.1f}MB")
+    print(f"Reserved: {peak_reserved / 1000**2:.1f}MB")
+
+
 class KumoRFM(ICLModel):
     r"""An adapted and simplified version of the relational foundation model
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
@@ -301,6 +311,9 @@ class _KumoRFM(torch.nn.Module):
         num_hops: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
+        print("After Preprocessing")
+        peak()
+
         num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
             y = y_context.categorical.code.squeeze(-1)
@@ -358,6 +371,9 @@ class _KumoRFM(torch.nn.Module):
                 num_hops=num_hops,
             )
 
+        print("After task graph creation")
+        peak()
+
         # TODO Support computing relative time.
         # TODO Inject random heterogeneous GNN.
 
@@ -396,6 +412,9 @@ class _KumoRFM(torch.nn.Module):
                         readout_index=query.readout_index,
                     )
 
+            print(f"Before embed {name}")
+            peak()
+
             xs_context[name], xs_query[name] = self._embed_table(
                 x_context=x_context_i,
                 x_query=x_query_i,
@@ -406,6 +425,9 @@ class _KumoRFM(torch.nn.Module):
                 cache=cache,
                 generator=generator,
             )
+
+            print(f"After embed {name}")
+            peak()
 
         # Inter-Message Passing ###############################################
         gnn_cache = cache or Cache()
@@ -491,6 +513,9 @@ class _KumoRFM(torch.nn.Module):
             assert x_query is not None
             x = x_query
 
+        print("Before row_embedding", x.size(), y.size())
+        peak()
+
         x = self.row_embedding(
             x=x,
             y=y,
@@ -500,6 +525,9 @@ class _KumoRFM(torch.nn.Module):
             cache=_cache,
             generator=generator,
         )
+
+        print("After row_embedding", x.size())
+        peak()
 
         if cache is not None and cache.is_recording:
             cache[cache_key] = cast(Cache, _cache)
