@@ -54,6 +54,35 @@ intersphinx_mapping = {
         None,
     ),
 }
+doctest_global_setup = """
+from unittest.mock import patch
+
+import sdm.models
+
+
+def _skip_pretrained(self):
+    return self
+
+
+_pretrained_patchers = []
+for _model_class in vars(sdm.models).values():
+    if not isinstance(_model_class, type):
+        continue
+    if not hasattr(_model_class, "_load_from_pretrained"):
+        continue
+
+    _patcher = patch.object(
+        _model_class,
+        "_load_from_pretrained",
+        _skip_pretrained,
+    )
+    _patcher.start()
+    _pretrained_patchers.append(_patcher)
+"""
+doctest_global_cleanup = """
+for _patcher in reversed(_pretrained_patchers):
+    _patcher.stop()
+"""
 
 
 def api_names(module_name: str) -> list[str]:
@@ -101,17 +130,11 @@ def _run_cuda_doctests_on_cpu(
     for node in doctree.findall(nodes.literal_block):
         if node.get("testnodetype") != "testcode":
             continue
-        if "cuda-to-cpu" not in node.get("groups", ()):
-            continue
 
         # HTML renders the node text; the doctest builder executes "test".
         code = node["test"] if "test" in node else node.astext()
-        for model_name in ("KumoRFM", "TabICLv2"):
-            code = code.replace(
-                f'{model_name}(device="cuda")',
-                f'{model_name}(pretrained=False, device="cpu")',
-            )
-        node["test"] = code.replace('device="cuda"', 'device="cpu"')
+        code = code.replace('"cuda"', '"cpu"')
+        node["test"] = code.replace("'cuda'", "'cpu'")
 
 
 def setup(app: Sphinx) -> None:
