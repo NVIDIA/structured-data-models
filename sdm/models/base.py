@@ -117,7 +117,7 @@ class ICLModel(torch.nn.Module, ABC):
 
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
-            with torch.amp.autocast(self.device.type, enabled=False):
+            with torch.amp.autocast(x_query.device.type, enabled=False):
                 x_context_i = recipe.features.fit_transform(
                     x_context,
                     generator=generator,
@@ -180,12 +180,12 @@ class ICLModel(torch.nn.Module, ABC):
             if y_context_i.numerical.size(-1) == 1:
                 if not isinstance(recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
-                with torch.amp.autocast(self.device.type, enabled=False):
+                with torch.amp.autocast(x_query.device.type, enabled=False):
                     out = recipe.target.inverse_transform(out)
             outs.append(out)
 
             out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        with torch.amp.autocast(self.device.type, enabled=False):
+        with torch.amp.autocast(x_query.device.type, enabled=False):
             return recipe.output.transform(out)
 
     @_maybe_inference_mode()
@@ -231,7 +231,7 @@ class ICLModel(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            with torch.amp.autocast(self.device.type, enabled=False):
+            with torch.amp.autocast(x.device.type, enabled=False):
                 x_i = recipe.features.fit_transform(x, generator=generator)
                 y_i = recipe.target.fit_transform(y, generator=generator)
 
@@ -332,7 +332,7 @@ class ICLModel(torch.nn.Module, ABC):
         outs: Sequence[TableTensor] = []
         for cache in self._caches:
             recipe = cast(Recipe, cache["recipe"])
-            with torch.amp.autocast(self.device.type, enabled=False):
+            with torch.amp.autocast(x.device.type, enabled=False):
                 x_i = recipe.features.transform(x)
 
                 related_tables_i = None
@@ -373,22 +373,17 @@ class ICLModel(torch.nn.Module, ABC):
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
-                with torch.amp.autocast(self.device.type, enabled=False):
+                with torch.amp.autocast(x.device.type, enabled=False):
                     out = recipe.target.inverse_transform(out)
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        with torch.amp.autocast(self.device.type, enabled=False):
+        with torch.amp.autocast(x.device.type, enabled=False):
             return recipe.output.transform(out)
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
         self._caches = None
-
-    @property
-    def device(self) -> torch.device:
-        r""":meta private:"""  # noqa: D415
-        return next(self.parameters()).device
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
