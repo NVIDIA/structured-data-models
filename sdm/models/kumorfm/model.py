@@ -115,12 +115,10 @@ class KumoRFM(ICLModel):
             related_query_tables=related_query_tables,
             num_hops=1,
         )
-        assert out.size() == (2, 2)
 
         # Fit+Predict forward pass via key/value caching:
         model.fit(x_context, y_context, related_context_tables, num_hops=1)
         out = model.predict(x_query, related_query_tables)
-        assert out.size() == (2, 2)
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.

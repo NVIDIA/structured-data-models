@@ -72,13 +72,13 @@ class TabICLv2(ICLModel):
 
         table = TableTensor.from_columns(
             {
-                "a": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
-                "b": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
-                "target": ["a", "b", "a", "b", "a", "b", "a", "b"],
+                "col0": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+                "col1": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+                "target": ["t", "f", "t", "f", "t", "f", "t", "f"],
             },
             stypes={
-                "a": "numerical",
-                "b": "numerical",
+                "col0": "numerical",
+                "col1": "numerical",
                 "target": "categorical",
             },
             device="cuda",
