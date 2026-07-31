@@ -2,7 +2,7 @@ import pyarrow as pa
 import pytest
 import torch
 
-from sdm.tensor.io import to_cudf
+from sdm.tensor.io import to_arrow, to_cudf
 from sdm.tensor.io.arrow import _combine_arrow_chunks
 from sdm.testing import onlyCUDA
 
@@ -20,6 +20,16 @@ def test_combine_arrow_dictionary_string_chunks() -> None:
     assert pa.types.is_dictionary(out.type)
     assert out.dictionary.type == pa.large_string()
     assert out.to_pylist() == ["b", "a", "a", "c"]
+
+
+def test_to_arrow_bool() -> None:
+    array = to_arrow(
+        torch.tensor([True, False]),
+        torch.tensor([True, False]),
+    )
+
+    assert array.type == pa.bool_()
+    assert array.to_pylist() == [True, None]
 
 
 @onlyCUDA
