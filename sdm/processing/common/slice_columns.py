@@ -33,6 +33,11 @@ class SliceColumns(Processor):
             self.max_columns = {
                 Stype(stype): maximum for stype, maximum in max_columns.items()
             }
+        if any(maximum < 0 for maximum in self.max_columns.values()):
+            raise ValueError(
+                "max_columns values must be non-negative "
+                f"(got {max_columns!r})."
+            )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         columns = tuple(
