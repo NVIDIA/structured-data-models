@@ -33,7 +33,7 @@ class VarLenTensor(Tensor):
     Values are stored in a flat contiguous ``data`` tensor and indexed by an
     ``offset`` tensor.
 
-    .. code-block:: python
+    .. testcode::
 
         import torch
         from sdm import VarLenTensor
@@ -115,56 +115,56 @@ class VarLenTensor(Tensor):
             and data.dtype not in cls.ALLOWED_DTYPES
         ):
             raise ValueError(
-                f"Expected 'data' in '{cls.__name__}' to have dtype "
+                f"Expected 'data' in {cls.__name__!r} to have dtype "
                 f"in '{cls.ALLOWED_DTYPES}' (got '{data.dtype}')"
             )
         if data.dim() != 1:
             raise ValueError(
-                f"Expected 'data' in '{cls.__name__}' to be one-dimensional "
+                f"Expected 'data' in {cls.__name__!r} to be one-dimensional "
                 f"(got {data.dim()}D tensor)"
             )
         if not data.is_contiguous():
             raise ValueError(
-                f"Expected 'data' in '{cls.__name__}' to be contiguous"
+                f"Expected 'data' in {cls.__name__!r} to be contiguous"
             )
         if offset.dtype not in (torch.int32, torch.int64):
             raise ValueError(
-                f"Expected 'offset' in '{cls.__name__}' to have dtype "
+                f"Expected 'offset' in {cls.__name__!r} to have dtype "
                 f"'torch.int32' or 'torch.int64' (got '{offset.dtype}')"
             )
         if offset.dim() != 1:
             raise ValueError(
-                f"Expected 'offset' in '{cls.__name__}' to be one-dimensional "
+                f"Expected 'offset' in {cls.__name__!r} to be one-dimensional "
                 f"(got {offset.dim()}D tensor)"
             )
         if not offset.is_contiguous():
             raise ValueError(
-                f"Expected 'offset' in '{cls.__name__}' to be contiguous"
+                f"Expected 'offset' in {cls.__name__!r} to be contiguous"
             )
         if data.device != offset.device:
             raise ValueError(
-                f"Expected 'data' and 'offset' in '{cls.__name__}' to be on "
+                f"Expected 'data' and 'offset' in {cls.__name__!r} to be on "
                 f"the same device (got '{data.device}' and '{offset.device}')"
             )
         if len(size) != len(stride):
             raise ValueError(
-                f"Expected 'size' and 'stride' in '{cls.__name__}' to have "
+                f"Expected 'size' and 'stride' in {cls.__name__!r} to have "
                 f"the same length (got {len(size)} and {len(stride)})"
             )
         if storage_offset < 0:
             raise ValueError(
-                f"Expected 'storage_offset' in '{cls.__name__}' to be "
+                f"Expected 'storage_offset' in {cls.__name__!r} to be "
                 f"non-negative"
             )
         if storage_offset + _span_len(size, stride) >= offset.numel():
             raise ValueError(
-                f"'offset' in '{cls.__name__}' is out of bounds (got "
+                f"'offset' in {cls.__name__!r} is out of bounds (got "
                 f"{offset.numel()} entries, but expected at least "
                 f"{storage_offset + _span_len(size, stride) + 1} entries)"
             )
         if data.numel() > torch.iinfo(offset.dtype).max:
             raise ValueError(
-                f"Expected 'offset' in '{cls.__name__}' to represent "
+                f"Expected 'offset' in {cls.__name__!r} to represent "
                 f"{data.numel()} elements, but '{offset.dtype}' can only "
                 f"represent {torch.iinfo(offset.dtype).max} elements"
             )
@@ -232,7 +232,7 @@ class VarLenTensor(Tensor):
     ) -> Self:
         r"""Create tensor from a list :class:`pyarrow.Array`.
 
-        .. code-block:: python
+        .. testcode::
 
             import pyarrow as pa
             from sdm import VarLenTensor
@@ -269,7 +269,7 @@ class VarLenTensor(Tensor):
             )
 
         if array.null_count > 0 or array.values.null_count > 0:
-            raise ValueError(f"'{cls.__name__}' cannot represent null values")
+            raise ValueError(f"{cls.__name__!r} cannot represent null values")
 
         dtype = ARROW_TORCH_DTYPES.get(array.values.type)
         if dtype is None:
@@ -320,7 +320,7 @@ class VarLenTensor(Tensor):
     ) -> Self:
         r"""Create tensor from a rectangular Python list.
 
-        .. code-block:: python
+        .. testcode::
 
             from sdm import VarLenTensor
 
@@ -355,14 +355,14 @@ class VarLenTensor(Tensor):
             for item in seq:
                 if not is_sequence(item):
                     raise ValueError(
-                        f"'{cls.__name__}' data must be rectangular"
+                        f"{cls.__name__!r} data must be rectangular"
                     )
                 item_size = flatten(cast(Sequence[Any], item))
                 if child_size is None:
                     child_size = item_size
                 elif item_size != child_size:
                     raise ValueError(
-                        f"'{cls.__name__}' data must be rectangular"
+                        f"{cls.__name__!r} data must be rectangular"
                     )
 
             assert child_size is not None
@@ -390,7 +390,7 @@ class VarLenTensor(Tensor):
         if not self.is_contiguous():
             raise RuntimeError(
                 f"Can't access 'data_offset' for non-contiguous "
-                f"'{self.__class__.__name__}'"
+                f"{self.__class__.__name__!r}"
             )
 
         start = int(self.storage_offset())
@@ -467,7 +467,7 @@ class VarLenTensor(Tensor):
                 return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
-            f"'{func}' is not supported for '{cls.__name__}'"
+            f"'{func}' is not supported for {cls.__name__!r}"
         )
 
     @override
@@ -528,7 +528,7 @@ class VarLenTensor(Tensor):
     def item(self) -> list[Any]:  # type: ignore
         if self.numel() != 1:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' with {self.numel()} "
+                f"{self.__class__.__name__!r} with {self.numel()} "
                 f"elements cannot be converted to a single item"
             )
         return self.view(-1).tolist()[0]
@@ -581,11 +581,11 @@ def _to_copy(
         and dtype not in inp.ALLOWED_DTYPES
     ):
         raise TypeError(
-            f"Can't convert '{inp.__class__.__name__}' to dtype '{dtype}'"
+            f"Can't convert {inp.__class__.__name__!r} to dtype '{dtype}'"
         )
     if layout is not None and layout != torch.strided:
         raise TypeError(
-            f"Can't convert '{inp.__class__.__name__}' to layout '{layout}'"
+            f"Can't convert {inp.__class__.__name__!r} to layout '{layout}'"
         )
     if memory_format not in (torch.preserve_format, torch.contiguous_format):
         raise ValueError(
@@ -924,16 +924,16 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
     if not isinstance(tensors[0], VarLenTensor):
         raise TypeError(
-            f"Expected '{VarLenTensor.__name__}' as element 0, but got "
-            f"'{tensors[0].__class__.__name__}'"
+            f"Expected {VarLenTensor.__name__!r} as element 0, but got "
+            f"{tensors[0].__class__.__name__!r}"
         )
 
     tensor_cls = tensors[0].__class__
     for i, tensor in enumerate(tensors):
         if tensor.__class__ is not tensor_cls:
             raise TypeError(
-                f"Expected '{tensor_cls.__name__}' as element {i}, but got "
-                f"'{tensor.__class__.__name__}'"
+                f"Expected {tensor_cls.__name__!r} as element {i}, but got "
+                f"{tensor.__class__.__name__!r}"
             )
 
     tensors = tuple(

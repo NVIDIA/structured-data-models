@@ -84,6 +84,7 @@ class RowEmbedding(torch.nn.Module):
         x: Tensor,  # [..., R, C]
         y: Tensor,  # [..., R_train]
         *,
+        train_mask: Tensor | None = None,  # [R],
         max_keys: int | None = None,
         num_classes: int | None = None,
         cache: Cache | None = None,
@@ -94,6 +95,7 @@ class RowEmbedding(torch.nn.Module):
         R_train = y.size(-1)
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
+        train_mask: Any = slice(R_train) if train_mask is None else train_mask
 
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
@@ -103,28 +105,28 @@ class RowEmbedding(torch.nn.Module):
         x = self.lin(x)  # [..., R, C, D]
 
         num_digits = 1
+        if (
+            self.y_emb is not None
+            and num_classes is not None
+            and num_classes > self.num_classes
+        ):
+            bases = _mixed_radix_bases(num_classes, self.num_classes)
+            num_digits = len(bases)
+            if y.numel() > 0:
+                x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
+                y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
+            else:
+                x = x.unsqueeze(0).expand(num_digits, *x.size())
+
         if y.numel() > 0:
             if self.y_emb is not None:
-                if num_classes is not None and num_classes > self.num_classes:
-                    # TODO Support KV cache
-                    if cache is not None:
-                        raise NotImplementedError(
-                            f"Key/value caching is not supported with more "
-                            f"than {self.num_classes} classes "
-                            f"(got {num_classes})"
-                        )
-
-                    bases = _mixed_radix_bases(num_classes, self.num_classes)
-                    num_digits = len(bases)
-                    y = _mixed_radix_digits(y, bases)  # [F, ..., R_train]
-                    x = x.unsqueeze(0).repeat(num_digits, *(1,) * x.dim())
                 y_emb = self.y_emb(y).unsqueeze(-2)
             else:
                 assert self.y_lin is not None
                 y_emb = self.y_lin(y.unsqueeze(-1)).unsqueeze(-2)
 
             # y_emb has shape [F, ..., R_train, 1, D]:
-            x[..., :R_train, :, :] += y_emb.to(x.dtype)
+            x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
         # Column-wise induced set attention (B * C as the batch axis):
         x = x.transpose(-2, -3)  # [..., C, R, D]
@@ -133,7 +135,7 @@ class RowEmbedding(torch.nn.Module):
             if cache is not None and cache.is_replaying:
                 key_value = cache[key]
             else:
-                key_value = x[..., :R_train, :]
+                key_value = x[..., train_mask, :]
                 if max_keys is not None and key_value.size(-2) > max_keys:
                     index = torch.randperm(
                         key_value.size(-2),

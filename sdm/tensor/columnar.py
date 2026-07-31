@@ -13,6 +13,7 @@ from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
     import cudf
@@ -71,7 +72,11 @@ class ColumnarTensor(Tensor):
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create a tensor wrapper."""
-        from sdm.tensor import CategoricalTensor, TableTensor
+        # Avoid a circular import through `sdm.tensor`.
+        from sdm.tensor import (  # noqa: PLC0415
+            CategoricalTensor,
+            TableTensor,
+        )
 
         if size is not None and len(size) == 0:
             raise ValueError("Expected 'size' to be non-empty")
@@ -81,12 +86,12 @@ class ColumnarTensor(Tensor):
                 column, CategoricalTensor | ColumnarTensor | TableTensor
             ):
                 raise TypeError(
-                    f"Expected value {i} in '{cls.__name__}' to be a single "
-                    f"column tensor (got '{column.__class__.__name__}')"
+                    f"Expected value {i} in {cls.__name__!r} to be a single "
+                    f"column tensor (got {column.__class__.__name__!r})"
                 )
         columns = tuple(columns)
         size = tuple(size) if size is not None else size
-        device = torch.device(device) if device is not None else None
+        device = _resolve_device(device)
 
         for i, column in enumerate(columns):
             size = tuple(column.size()) if size is None else size
@@ -94,13 +99,13 @@ class ColumnarTensor(Tensor):
 
             if column.size() != size:
                 raise ValueError(
-                    f"Expected value {i} in '{cls.__name__}' to have size "
+                    f"Expected value {i} in {cls.__name__!r} to have size "
                     f"{size} (got {tuple(column.size())})"
                 )
 
             if column.device != device:
                 raise ValueError(
-                    f"Expected value {i} in '{cls.__name__}' to be on "
+                    f"Expected value {i} in {cls.__name__!r} to be on "
                     f"device '{device}' (got '{column.device}')"
                 )
 
@@ -150,7 +155,7 @@ class ColumnarTensor(Tensor):
         else:
             if array.null_count > 0 and pa.types.is_integer(array.type):
                 raise ValueError(
-                    f"'{cls.__name__}' cannot represent null integer values"
+                    f"{cls.__name__!r} cannot represent null integer values"
                 )
             column = arrow_as_tensor(array, device=device)
 
@@ -176,7 +181,7 @@ class ColumnarTensor(Tensor):
         else:
             if ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
                 raise ValueError(
-                    f"'{cls.__name__}' cannot represent null integer values"
+                    f"{cls.__name__!r} cannot represent null integer values"
                 )
             if ser._column.null_count > 0 and ser.dtype.kind == "f":
                 ser = ser.fillna(float("nan"))
@@ -265,7 +270,7 @@ class ColumnarTensor(Tensor):
             return handler(*args, **(kwargs or {}))
 
         raise NotImplementedError(
-            f"'{func}' is not supported for '{cls.__name__}'"
+            f"'{func}' is not supported for {cls.__name__!r}"
         )
 
     @override
@@ -348,9 +353,13 @@ def _to_copy(
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
 
+    # Wrapper dtype is a placeholder, so same dtype means no conversion:
+    if dtype == inp.dtype:
+        dtype = None
+
     if dtype is not None:
         raise TypeError(
-            f"Can't convert '{inp.__class__.__name__}' to dtype '{dtype}'"
+            f"Can't convert {inp.__class__.__name__!r} to dtype '{dtype}'"
         )
 
     return inp.__class__(
@@ -481,7 +490,7 @@ def _view(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
     if len(size) == 0 or size[-1] != inp.size(-1):
         _columns = "column" if inp.size(-1) == 1 else "columns"
         raise RuntimeError(
-            f"Can't reshape '{inp.__class__.__name__}' with "
+            f"Can't reshape {inp.__class__.__name__!r} with "
             f"{inp.size(-1)} {_columns} into shape {size}"
         )
 
@@ -520,7 +529,7 @@ def _squeeze_dims(inp: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
 
     if any(dim == inp.dim() - 1 for dim in dims):
         raise RuntimeError(
-            f"Can't squeeze the column dimension of '{inp.__class__.__name__}'"
+            f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -547,7 +556,7 @@ def _unsqueeze(inp: ColumnarTensor, dim: int) -> ColumnarTensor:
     if dim == inp.dim():
         raise RuntimeError(
             f"Can't unsqueeze after the column dimension of "
-            f"'{inp.__class__.__name__}'"
+            f"{inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -577,7 +586,7 @@ def _expand(
     if size[-1] not in (-1, inp.size(-1)):
         _columns = "column" if inp.size(-1) == 1 else "columns"
         raise RuntimeError(
-            f"Can't expand '{inp.__class__.__name__}' with "
+            f"Can't expand {inp.__class__.__name__!r} with "
             f"{inp.size(-1)} {_columns} to shape {size}"
         )
 
@@ -616,7 +625,7 @@ def _transpose(
     if inp.dim() - 1 in (dim0, dim1):
         raise RuntimeError(
             f"Can't transpose the column dimension of "
-            f"'{inp.__class__.__name__}'"
+            f"{inp.__class__.__name__!r}"
         )
 
     columns = [column.transpose(dim0, dim1) for column in inp._columns]
@@ -637,7 +646,7 @@ def _permute(inp: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
     dims = tuple(_normalize_dim(inp, dim) for dim in dims)
     if dims[-1] != inp.dim() - 1:
         raise RuntimeError(
-            f"Can't permute the column dimension of '{inp.__class__.__name__}'"
+            f"Can't permute the column dimension of {inp.__class__.__name__!r}"
         )
 
     return inp.__class__(
@@ -842,7 +851,7 @@ def _index(
             if num_indexed_dims != 1:
                 raise RuntimeError(
                     f"Can't index the column dimension of "
-                    f"'{inp.__class__.__name__}' with a multi-dimensional "
+                    f"{inp.__class__.__name__!r} with a multi-dimensional "
                     f"index"
                 )
             column_index = index
@@ -854,7 +863,7 @@ def _index(
         if has_other_index or column_index.dim() != 1:
             raise RuntimeError(
                 f"Can't index the column dimension of "
-                f"'{inp.__class__.__name__}' together with other dimensions"
+                f"{inp.__class__.__name__!r} together with other dimensions"
             )
         if column_index.dtype == torch.bool:
             column_index = column_index.nonzero().view(-1)
@@ -884,7 +893,7 @@ def _index(
 def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
     if not all(isinstance(tensor, ColumnarTensor) for tensor in tensors):
         raise TypeError(
-            f"Expected all tensors to be '{ColumnarTensor.__name__}' instances"
+            f"Expected all tensors to be {ColumnarTensor.__name__!r} instances"
         )
 
     tensors = cast(Sequence[ColumnarTensor], tensors)
@@ -915,7 +924,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
     if not all(isinstance(tensor, ColumnarTensor) for tensor in tensors):
         raise TypeError(
-            f"Expected all tensors to be '{ColumnarTensor.__name__}' instances"
+            f"Expected all tensors to be {ColumnarTensor.__name__!r} instances"
         )
 
     tensors = cast(Sequence[ColumnarTensor], tensors)
@@ -930,7 +939,7 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
     if dim >= tensors[0].dim():
         raise RuntimeError(
             f"Can't stack after the column dimension of "
-            f"'{tensors[0].__class__.__name__}'"
+            f"{tensors[0].__class__.__name__!r}"
         )
 
     return tensors[0].__class__(

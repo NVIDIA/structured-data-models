@@ -1,17 +1,17 @@
 import torch
-from sdm import TableTensor, infer_stypes
-from sdm.models import TabICLv2
 from sklearn.datasets import load_breast_cancer
+
+import sdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 df = load_breast_cancer(as_frame=True).frame
 
-table = TableTensor.from_pandas(
+table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=infer_stypes(df, overrides={"target": "categorical"}),
+    stypes=sdm.infer_stypes(df, overrides={"target": "categorical"}),
     device=device,
 )
-model = TabICLv2(device=device)
+model = sdm.models.TabICLv2(device=device)
 
 # Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):

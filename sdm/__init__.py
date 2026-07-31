@@ -15,7 +15,9 @@ from sdm.relational import (
     RelationalData,
     TaskLink,
     RelatedTables,
+    TemporalSamplingConfig,
 )
+from sdm import evaluation, models
 
 try:
     __version__ = version("structured-data-models")
@@ -35,5 +37,8 @@ __all__ = [
     "RelationalData",
     "TaskLink",
     "RelatedTables",
+    "TemporalSamplingConfig",
+    "evaluation",
+    "models",
     "__version__",
 ]

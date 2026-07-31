@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     Choice,
@@ -10,8 +11,8 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
-    SoftmaxTemperature,
-    StandardScale,
+    Softmax,
+    Standardize,
     TaskDispatch,
     ToNumerical,
 )
@@ -22,7 +23,7 @@ def _categorical_target(device: torch.device | None = None) -> TableTensor:
     return TableTensor(
         columns={"categorical": ("target",)},
         categorical=CategoricalTensor(
-            data=torch.tensor(
+            code=torch.tensor(
                 [[0], [1]],
                 dtype=torch.int32,
                 device=device,
@@ -51,7 +52,7 @@ def _recipe(*, target: Processor | None = None) -> Recipe:
         target=target,
         output=[
             TaskDispatch(
-                classification=SoftmaxTemperature(),
+                classification=Softmax(),
                 regression=Identity(),
             )
         ],
@@ -94,7 +95,7 @@ def test_task_resolver_uses_final_target_type_once(
     assert converted.output.transform(output) is output
 
     scaled = Recipe(
-        target=[StandardScale()],
+        target=[Standardize()],
         output=[TaskDispatch(regression=Identity())],
     )
     numerical_target = _numerical_target(device)

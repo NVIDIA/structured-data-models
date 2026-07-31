@@ -7,6 +7,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
@@ -25,7 +26,7 @@ def test_init() -> None:
         },
         numerical=torch.randn(2, 2),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+            code=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
             categories=(torch.arange(2), torch.arange(2)),
         ),
     )
@@ -101,7 +102,7 @@ def test_column_names() -> None:
 def test_equal() -> None:
     numerical = torch.randn(2, 2)
     categorical = CategoricalTensor(
-        data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+        code=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
         categories=(torch.arange(2), torch.arange(2)),
     )
     id = ColumnarTensor(
@@ -149,14 +150,14 @@ def test_equal_categorical_categories() -> None:
     tensor1 = TableTensor(
         columns={"categorical": ["country"]},
         categorical=CategoricalTensor(
-            data=data,
+            code=data,
             categories=(StringTensor.from_list(["a", "b"]),),
         ),
     )
     tensor2 = TableTensor(
         columns={"categorical": ["country"]},
         categorical=CategoricalTensor(
-            data=data.clone(),
+            code=data.clone(),
             categories=(StringTensor.from_list(["x", "y"]),),
         ),
     )
@@ -239,12 +240,38 @@ def test_from_tensor() -> None:
         Stype.text: (),
         Stype.id: (),
     }
-    assert tensor.categorical.as_tensor().equal(
+    assert tensor.categorical.code.equal(
         torch.tensor([[2, 1], [0, 0], [3, 0], [1, 1]])
     )
     assert tensor.categorical.categories[0].equal(torch.tensor([-2, -1, 0, 1]))
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
     assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
+
+
+def test_from_text() -> None:
+    tensor = TableTensor.from_text("hello")
+
+    assert tensor.size() == (1, 1)
+    assert tensor.text.equal(StringTensor.from_list([["hello"]]))
+
+    tensor = TableTensor.from_text(["hello", "there"])
+
+    assert tensor.size() == (2, 1)
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.text: ("0",),
+        Stype.id: (),
+    }
+    assert tensor.text.equal(StringTensor.from_list([["hello"], ["there"]]))
+
+    data = StringTensor.from_list([["left", "right"], ["up", "down"]])
+    tensor = TableTensor.from_text(data, columns=("first", "second"))
+
+    assert tensor.size() == (2, 2)
+    assert tensor.columns[Stype.text] == ("first", "second")
+    assert tensor.text.equal(data)
 
 
 def test_inference_mode() -> None:
@@ -257,7 +284,7 @@ def test_inference_mode() -> None:
             },
             numerical=torch.randn(3, 1),
             categorical=CategoricalTensor(
-                data=torch.arange(3, dtype=torch.int32).unsqueeze(-1),
+                code=torch.arange(3, dtype=torch.int32).unsqueeze(-1),
                 categories=(StringTensor.from_list(["a", "b", "c"]),),
             ),
             id=ColumnarTensor((StringTensor.from_list(["x", "y", "z"]),)),
@@ -303,7 +330,7 @@ def test_replace_blocks() -> None:
         },
         numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
             categories=(StringTensor.from_list(["USA", "Germany"]),),
         ),
         datetime=torch.tensor([[10], [20]], dtype=torch.int64),
@@ -312,7 +339,7 @@ def test_replace_blocks() -> None:
 
     numerical = torch.tensor([[5.0, 6.0], [7.0, 8.0]])
     categorical = CategoricalTensor(
-        data=torch.tensor([[1], [0]], dtype=torch.int32),
+        code=torch.tensor([[1], [0]], dtype=torch.int32),
         categories=(StringTensor.from_list(["France", "Spain"]),),
     )
     datetime = torch.tensor([[30], [40]], dtype=torch.int64)
@@ -360,7 +387,7 @@ def test_select_stypes() -> None:
         },
         numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
             categories=(StringTensor.from_list(["USA", "Germany"]),),
         ),
         datetime=torch.tensor([[10], [20]], dtype=torch.int64),
@@ -415,7 +442,7 @@ def test_drop_stypes() -> None:
         },
         numerical=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0], [1]], dtype=torch.int32),
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
             categories=(StringTensor.from_list(["USA", "Germany"]),),
         ),
         datetime=torch.tensor([[10], [20]], dtype=torch.int64),
@@ -483,7 +510,7 @@ def test_save_load() -> None:
         },
         numerical=torch.randn(3, 2),
         categorical=CategoricalTensor(
-            data=torch.arange(3).view(3, 1),
+            code=torch.arange(3).view(3, 1),
             categories=(StringTensor.from_list(["USA, GER, FRA"]),),
         ),
         datetime=torch.tensor([[1], [2], [3]], dtype=torch.int64),
@@ -517,7 +544,7 @@ def test_to_copy() -> None:
         },
         numerical=torch.randn(2, 2),
         categorical=CategoricalTensor(
-            data=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+            code=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
             categories=(torch.arange(2), torch.arange(2)),
         ),
         datetime=torch.tensor([[1], [2]], dtype=torch.int64),
@@ -533,6 +560,26 @@ def test_to_copy() -> None:
     assert out.datetime.dtype == torch.int64
     assert out.columns == tensor.columns
     assert out._column_to_loc == tensor._column_to_loc
+
+
+@withCUDA
+def test_to_dtype_preserves_empty_block_device(
+    device: torch.device,
+) -> None:
+    tensor = TableTensor.from_tensor(
+        torch.ones(2, 1, dtype=torch.float16, device=device),
+    )
+
+    with torch.inference_mode():
+        out = tensor.to(torch.float32)
+
+    assert isinstance(out, TableTensor)
+    assert out.numerical.dtype == torch.float32
+    assert out.device == device
+    assert out.categorical.device == device
+    assert out.datetime.device == device
+    assert out.text.device == device
+    assert out.id.device == device
 
 
 def test_clone_contiguous() -> None:
@@ -563,7 +610,7 @@ def test_view_ops() -> None:
         },
         numerical=torch.randn(2, 3, 2),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 3, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 3, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -612,7 +659,7 @@ def test_slicing_ops() -> None:
         },
         numerical=torch.randn(2, 3, 4, 2),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -649,7 +696,7 @@ def test_unbind_split() -> None:
         },
         numerical=torch.randn(2, 3, 4, 2),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -701,7 +748,7 @@ def test_index_ops() -> None:
         },
         numerical=torch.randn(2, 3, 4, 2),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -739,7 +786,7 @@ def test_advanced_indexing() -> None:
         },
         numerical=torch.randn(2, 3, 4, 2),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 3, 4, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -821,7 +868,7 @@ def test_cat_stack() -> None:
         },
         numerical=torch.randn(2, 1),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -832,7 +879,7 @@ def test_cat_stack() -> None:
         },
         numerical=torch.randn(3, 1),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (3, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (3, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -843,7 +890,7 @@ def test_cat_stack() -> None:
         },
         numerical=torch.randn(2, 1),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -1004,9 +1051,7 @@ def test_arrow() -> None:
             ]
         )
     )
-    assert tensor.categorical.as_tensor().equal(
-        torch.tensor([[0], [1], [2], [0]])
-    )
+    assert tensor.categorical.code.equal(torch.tensor([[0], [1], [2], [0]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]
     assert tensor.datetime.equal(
         torch.tensor(
@@ -1069,9 +1114,43 @@ def test_from_pandas() -> None:
 
     assert tensor.size() == (2, 4)
     assert tensor.numerical.equal(torch.tensor([[10.0, 1.0], [20.0, 2.5]]))
-    assert tensor.categorical.as_tensor().equal(torch.tensor([[0, 0], [1, 1]]))
+    assert tensor.categorical.code.equal(torch.tensor([[0, 0], [1, 1]]))
     assert tensor.categorical.categories[0].tolist() == ["US", "CA"]
     assert tensor.categorical.categories[1].tolist() == ["a", "b"]
+
+
+@onlyCUDA
+def test_from_pandas_id_cuda() -> None:
+    df = pd.DataFrame(
+        {
+            "user_id": [0, 1, 2],
+            "item_id": ["a", "b", "c"],
+        }
+    )
+
+    tensor = TableTensor.from_pandas(
+        df=df,
+        stypes={"user_id": "id", "item_id": "id"},
+        device="cuda",
+    )
+
+    assert tensor.size() == (3, 2)
+    assert tensor.device.type == "cuda"
+    assert tensor.id.device == tensor.device
+    assert tensor.id[:, 0].equal(torch.tensor([0, 1, 2], device=tensor.device))
+
+
+@onlyCUDA
+def test_to_device_without_index() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ["age"]},
+        numerical=torch.randn(3, 1),
+    )
+
+    out = tensor.to("cuda")
+    assert isinstance(out, TableTensor)
+    assert out.device.type == "cuda"
+    assert out.id.device == out.device
 
 
 def test_text() -> None:
@@ -1135,7 +1214,7 @@ def test_cudf() -> None:
             device=tensor.device,
         )
     )
-    assert tensor.categorical.as_tensor().equal(
+    assert tensor.categorical.code.equal(
         torch.tensor([[0], [1], [2], [0]], device=tensor.device)
     )
     assert tensor.categorical.categories[0].tolist() == ["US", "CA", ""]

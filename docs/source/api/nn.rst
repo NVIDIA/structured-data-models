@@ -6,5 +6,5 @@ sdm.nn
    :nosignatures:
 
 {% for name in api_names("sdm.nn") %}
-   sdm.nn.{{ name }}
+   ~sdm.nn.{{ name }}
 {% endfor %}

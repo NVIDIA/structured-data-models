@@ -40,8 +40,13 @@ class ICLModel(torch.nn.Module, ABC):
     key/value caching, and ensembling.
     """
 
+    #: Semantic types supported for input feature columns in this model.
     supported_feature_stypes: ClassVar[frozenset[Stype]]
+
+    #: Semantic types supported for target columns in this model.
     supported_target_stypes: ClassVar[frozenset[Stype]]
+
+    #: Whether this model supports additional related context.
     supports_related_tables: ClassVar[bool]
 
     def __init__(self) -> None:
@@ -77,15 +82,14 @@ class ICLModel(torch.nn.Module, ABC):
             related_context_tables: Related context for in-context examples.
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
-            num_estimators: The number of estimators for ensembling.
+            num_estimators: The number of estimators ``E`` for ensembling.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
 
         Returns:
-            The processed prediction. Member outputs enter ``recipe.output``
-            stacked as ``[E, ..., R_query, *]``; the output processors
-            determine whether the leading estimator dimension remains.
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R_query, *]``.
         """
         if num_estimators < 1:
             raise ValueError("'num_estimators' needs to be positive")
@@ -179,6 +183,7 @@ class ICLModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        out = cast(TableTensor, out.to(x_query_i.dtype))
         return recipe.output.transform(out)
 
     @_maybe_inference_mode()
@@ -274,13 +279,11 @@ class ICLModel(torch.nn.Module, ABC):
                 generator=generator,
                 **kwargs,
             )
-            cache = cache.cpu().freeze()
+            if num_estimators > 1:
+                cache = cache.cpu()
+            cache = cache.freeze()
             caches.append(cache)
         self._caches = caches
-
-    def clear(self) -> None:
-        r"""Clears cached in-context examples and the fitted recipe."""
-        self._caches = None
 
     @_maybe_inference_mode()
     def predict(
@@ -300,16 +303,15 @@ class ICLModel(torch.nn.Module, ABC):
             related_tables: Related context for query examples.
 
         Returns:
-            The processed prediction. Member outputs enter ``recipe.output``
-            stacked as ``[E, ..., R, *]``; the output processors determine
-            whether the leading estimator dimension remains.
+            The processed prediction after applying ``recipe.output`` to the
+            stacked estimator outputs with shape ``[E, ..., R, *]``.
         """
         if not isinstance(x, TableTensor):
             x = TableTensor.from_tensor(x)
 
         if self._caches is None:
             raise RuntimeError(
-                f"'{self.__class__.__name__}' not yet fitted. Make sure to "
+                f"{self.__class__.__name__!r} not yet fitted. Make sure to "
                 f"call '{self.__class__.__name__}.fit()' before."
             )
 
@@ -371,7 +373,12 @@ class ICLModel(torch.nn.Module, ABC):
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        out = cast(TableTensor, out.to(x_i.dtype))
         return recipe.output.transform(out)
+
+    def clear(self) -> None:
+        r"""Clear cached context state created by :meth:`fit`."""
+        self._caches = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -422,20 +429,20 @@ class ICLModel(torch.nn.Module, ABC):
         invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
         if len(invalid) > 0:
             raise ValueError(
-                f"'{self.__class__.__name__}' received unsupported feature "
+                f"{self.__class__.__name__!r} received unsupported feature "
                 f"stypes: {', '.join(stype.value for stype in invalid)}"
             )
         invalid = y.active_stypes - self.supported_target_stypes
         if len(invalid) > 0:
             raise ValueError(
-                f"'{self.__class__.__name__}' received unsupported target "
+                f"{self.__class__.__name__!r} received unsupported target "
                 f"stypes: {', '.join(stype.value for stype in invalid)}"
             )
 
         if related_tables is not None:
             if not self.supports_related_tables:
                 raise ValueError(
-                    f"'{self.__class__.__name__}' does not support related "
+                    f"{self.__class__.__name__!r} does not support related "
                     f"tables"
                 )
             for table_name, table in related_tables.tables.items():
@@ -443,8 +450,8 @@ class ICLModel(torch.nn.Module, ABC):
                 invalid = invalid - {Stype.id}
                 if len(invalid) > 0:
                     raise ValueError(
-                        f"'{self.__class__.__name__}' received unsupported "
-                        f"feature stypes in related table '{table_name}': "
+                        f"{self.__class__.__name__!r} received unsupported "
+                        f"feature stypes in related table {table_name!r}: "
                         f"{', '.join(stype.value for stype in invalid)}"
                     )
 
