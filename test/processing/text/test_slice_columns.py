@@ -29,6 +29,4 @@ def test_slice_features_passes_through_when_narrower() -> None:
     table = _table()
 
     output = SliceColumns(max_columns=99).transform(table)
-
-    assert output.columns == table.columns
-    assert torch.equal(output.numerical, table.numerical)
+    assert output.equal(table)

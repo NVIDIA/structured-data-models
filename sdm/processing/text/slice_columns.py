@@ -6,7 +6,7 @@ from sdm.tensor import TableTensor
 
 
 class SliceColumns(Processor):
-    """Keep up to ``max_columns`` numerical columns.
+    """Limit the number of numerical columns.
 
     A stateless column reduction, for keeping the leading columns of text
     embeddings. Tables with at most ``max_columns`` numerical columns pass
