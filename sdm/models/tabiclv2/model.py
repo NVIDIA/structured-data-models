@@ -65,27 +65,41 @@ class TabICLv2(ICLModel):
       are mapped to task outputs, such as class logits for classification or
       quantile predictions for regression.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import TableTensor
         from sdm.models import TabICLv2
 
-        table = TableTensor.from_pandas(...)
+        table = TableTensor.from_columns(
+            {
+                "col0": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+                "col1": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+                "target": ["t", "f", "t", "f", "t", None, None, None],
+            },
+            stypes={
+                "col0": "numerical",
+                "col1": "numerical",
+                "target": "categorical",
+            },
+            device="cuda",
+        )
         model = TabICLv2(device="cuda")
 
         # Default in-context learning forward pass:
         out = model(
-            x_context=table[:300].drop_columns("target"),
-            y_context=table[:300, "target"],
-            x_query=table[300:].drop_columns("target"),
+            x_context=table[:5].drop_columns("target"),
+            y_context=table[:5, "target"],
+            x_query=table[5:].drop_columns("target"),
         )
+        assert out.size() == (3, 2)
 
         # Fit+Predict forward pass via key/value caching:
         model.fit(
-            x=table[:300].drop_columns("target"),
-            y=table[:300, "target"],
+            x=table[:5].drop_columns("target"),
+            y=table[:5, "target"],
         )
-        out = model.predict(table[300:].drop_columns("target"))
+        out = model.predict(table[5:].drop_columns("target"))
+        assert out.size() == (3, 2)
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.

@@ -4,6 +4,8 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from pathlib import Path
 
+from docutils import nodes
+from docutils.nodes import Node
 from sphinx.application import Sphinx
 from sphinx.ext.autosummary import generate
 from sphinx.ext.autosummary.generate import AutosummaryEntry
@@ -22,6 +24,7 @@ extensions = [
     "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
     "sphinx_copybutton",
@@ -29,10 +32,13 @@ extensions = [
 templates_path = ["_templates"]
 html_theme = "shibuya"
 html_title = project
+html_logo = "images/nvidia.svg"
 html_theme_options = {
     "accent_color": "green",
     "github_url": "https://github.com/NVIDIA/structured-data-models",
 }
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 autosummary_generate = True
 autosummary_context = {"import_module": importlib.import_module}
 autodoc_member_order = "bysource"
@@ -51,6 +57,35 @@ intersphinx_mapping = {
         None,
     ),
 }
+doctest_global_setup = """
+from unittest.mock import patch
+
+import sdm.models
+
+
+def _skip_pretrained(self):
+    return self
+
+
+_pretrained_patchers = []
+for _model_class in vars(sdm.models).values():
+    if not isinstance(_model_class, type):
+        continue
+    if not hasattr(_model_class, "_load_from_pretrained"):
+        continue
+
+    _patcher = patch.object(
+        _model_class,
+        "_load_from_pretrained",
+        _skip_pretrained,
+    )
+    _patcher.start()
+    _pretrained_patchers.append(_patcher)
+"""
+doctest_global_cleanup = """
+for _patcher in reversed(_pretrained_patchers):
+    _patcher.stop()
+"""
 
 
 def api_names(module_name: str) -> list[str]:
@@ -59,13 +94,15 @@ def api_names(module_name: str) -> list[str]:
 
 
 def _render_jinja(app: Sphinx, docname: str, source: list[str]) -> None:
-    source[0] = app.builder.templates.render_string(
-        source[0],
-        {"api_names": api_names},
+    renderer = generate.AutosummaryRenderer(app)
+    source[0] = renderer.env.from_string(source[0]).render(
+        api_names=api_names,
     )
 
 
 def _patch_autosummary_jinja(app: Sphinx) -> None:
+    renderer = generate.AutosummaryRenderer(app)
+
     def find_autosummary_in_files(
         filenames: list[str],
     ) -> list[AutosummaryEntry]:
@@ -75,9 +112,8 @@ def _patch_autosummary_jinja(app: Sphinx) -> None:
                 encoding=app.config.source_encoding,
                 errors="ignore",
             )
-            source = app.builder.templates.render_string(
-                source,
-                {"api_names": api_names},
+            source = renderer.env.from_string(source).render(
+                api_names=api_names,
             )
             documented.extend(
                 generate.find_autosummary_in_lines(
@@ -90,7 +126,22 @@ def _patch_autosummary_jinja(app: Sphinx) -> None:
     generate.find_autosummary_in_files = find_autosummary_in_files  # type: ignore
 
 
+def _run_on_doctree_read(
+    _app: Sphinx,
+    doctree: Node,
+) -> None:
+    for node in doctree.findall(nodes.literal_block):
+        if node.get("testnodetype") != "testcode":
+            continue
+
+        # HTML renders the node text; the doctest builder executes "test".
+        code = node["test"] if "test" in node else node.astext()
+        code = code.replace('"cuda"', '"cpu"')
+        node["test"] = code.replace("'cuda'", "'cpu'")
+
+
 def setup(app: Sphinx) -> None:
     """Register Jinja rendering for dynamic autosummary lists."""
     app.connect("builder-inited", _patch_autosummary_jinja, priority=400)
     app.connect("source-read", _render_jinja)
+    app.connect("doctree-read", _run_on_doctree_read)
