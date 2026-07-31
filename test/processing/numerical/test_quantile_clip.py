@@ -83,3 +83,36 @@ def test_clip_quantiles_constant_columns_are_exact(
 def test_clip_quantiles_rejects_invalid_quantiles() -> None:
     with pytest.raises(ValueError, match="q_low <= q_high"):
         ClipQuantiles(q_low=0.75, q_high=0.25)
+
+
+@withCUDA
+def test_clip_quantiles_fits_leading_batches_independently(
+    device: torch.device,
+) -> None:
+    context = torch.tensor(
+        [[[0.0], [2.0]], [[10.0], [20.0]]],
+        device=device,
+    )
+    query = torch.tensor(
+        [[[-1.0], [3.0]], [[5.0], [25.0]]],
+        device=device,
+    )
+
+    processor = ClipQuantiles().fit(TableTensor.from_tensor(context))
+    transformed = processor.transform(TableTensor.from_tensor(query)).numerical
+
+    assert torch.equal(
+        processor.lower_bound,
+        torch.tensor([[[0.0]], [[10.0]]], device=device),
+    )
+    assert torch.equal(
+        processor.upper_bound,
+        torch.tensor([[[2.0]], [[20.0]]], device=device),
+    )
+    assert torch.equal(
+        transformed,
+        torch.tensor(
+            [[[0.0], [2.0]], [[10.0], [20.0]]],
+            device=device,
+        ),
+    )

@@ -84,3 +84,33 @@ def test_standardize_single_sample_uses_unit_scale(
         ).numerical,
         inp,
     )
+
+
+@withCUDA
+def test_standardize_fits_leading_batches_independently(
+    device: torch.device,
+) -> None:
+    context = torch.tensor(
+        [[[1.0], [3.0]], [[10.0], [14.0]]],
+        device=device,
+    )
+    query = torch.tensor([[[4.0]], [[16.0]]], device=device)
+
+    processor = Standardize().fit(TableTensor.from_tensor(context))
+    transformed = processor.transform(TableTensor.from_tensor(query)).numerical
+
+    assert torch.equal(
+        processor.mean,
+        torch.tensor([[[2.0]], [[12.0]]], device=device),
+    )
+    assert torch.equal(
+        processor.scale,
+        torch.tensor([[[1.0]], [[2.0]]], device=device),
+    )
+    assert torch.equal(transformed, torch.full_like(query, 2.0))
+    assert torch.equal(
+        processor.inverse_transform(
+            TableTensor.from_tensor(transformed)
+        ).numerical,
+        query,
+    )
