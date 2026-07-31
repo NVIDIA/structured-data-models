@@ -12,19 +12,21 @@ class PCA(Processor):
     The mean and components are fitted on the context table via a singular
     value decomposition of the centered data. The effective dimension is
     capped at the numerical rank of the centered data. Output columns are named
-    ``pca_0, ..., pca_{d-1}``.
+    ``"pca_0"``, ..., ``"pca_{num_components-1}"``.
 
     Args:
-        dim: Number of principal components to keep.
+        num_components: Number of principal components to keep.
     """
 
     supported_stypes = frozenset({Stype.numerical})
 
-    def __init__(self, *, dim: int) -> None:
+    def __init__(self, *, num_components: int) -> None:
         super().__init__()
-        if dim < 1:
-            raise ValueError(f"'dim' must be positive (got {dim}).")
-        self.dim = dim
+        if num_components < 1:
+            raise ValueError(
+                f"'num_components' must be positive (got {num_components})."
+            )
+        self.num_components = num_components
         self.register_buffer("mean", torch.empty(0), persistent=True)
         self.register_buffer("components", torch.empty(0), persistent=True)
 
@@ -57,8 +59,8 @@ class PCA(Processor):
             * torch.finfo(singular_values.dtype).eps
         )
         rank = int((singular_values > tolerance).sum())
-        dim = min(self.dim, rank)
-        self.components = vh[:dim].T  # [F, dim]
+        num_components = min(self.num_components, rank)
+        self.components = vh[:num_components].T  # [F, C]
 
     def _transform(self, table: TableTensor) -> TableTensor:
         if table.numerical.size(-1) != self.mean.size(0):
@@ -69,7 +71,7 @@ class PCA(Processor):
                 f"(got {table.numerical.size(-1)})."
             )
         numerical = _as_float(table.numerical) - self.mean
-        projected = numerical @ self.components  # [N, dim]
+        projected = numerical @ self.components  # [N, C]
         return table.__class__(
             columns={
                 Stype.numerical: tuple(
