@@ -114,6 +114,16 @@ For example, a row in `x_context` or `x_query` might ask for a prediction about 
 Through {py:class}`~sdm.relational.RelatedTables`, that row can be linked to the corresponding user record, that user's past behavior, and any other records connected through the relational schema.
 The model can use this relational neighborhood as context for the prediction task, without requiring manual flattening of related information into one single wide table.
 
+```{figure} images/graph_light.svg
+:figclass: light-only
+:width: 100%
+```
+
+```{figure} images/graph_dark.svg
+:figclass: dark-only
+:width: 100%
+```
+
 Specifically, {py:class}`~sdm.relational.RelatedTables` consist of three components:
 
 - `tables`: mapping from table names to {py:class}`~sdm.tensor.TableTensor` objects containing the tabular data of related tables.
