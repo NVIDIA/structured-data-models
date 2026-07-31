@@ -29,10 +29,10 @@ def to_class_indices(
     ...     categories=(StringTensor.from_list(["cat", "dog", "bird"]),),
     ... )
     >>> class_scores, class_indices = to_class_indices(pred, target)
-    >>> print(class_scores)
+    >>> class_scores
     tensor([[0.8000, 0.1000, 0.1000],
             [0.1000, 0.2000, 0.7000]])
-    >>> print(class_indices)
+    >>> class_indices
     tensor([0, 2])
     """
     if isinstance(target, TableTensor):
@@ -108,9 +108,9 @@ def to_binary_class(
     ...     target,
     ...     positive_class=1,
     ... )
-    >>> print(positive_scores)
+    >>> positive_scores
     tensor([0.2000, 0.9000])
-    >>> print(binary_target)
+    >>> binary_target
     tensor([False,  True])
     """
     if isinstance(target, TableTensor):
