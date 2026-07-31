@@ -10,11 +10,15 @@ from sdm.tensor.table import TableTensor
 
 
 class EnsembleTable:
-    r"""Store shared and distinct representations of one table.
+    """Store table representations for an ensemble.
+
+    Members can share a representation. Representations with matching shape,
+    schema, block types and dtypes, device, and categorical vocabulary objects
+    are stacked along a leading dimension for joint processing.
 
     Args:
-        table: The initial shared table with shape ``[..., R, C]``.
-        num_members: Number of logical ensemble members.
+        table: Table with shape ``[..., R, C]`` shared by all ensemble members.
+        num_members: Number of ensemble members.
     """
 
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
@@ -27,14 +31,18 @@ class EnsembleTable:
         representations: Sequence[TableTensor],
         member_representation_ids: Sequence[int],
     ) -> Self:
-        r"""Create an ensemble table from member representations.
+        """Create an ensemble table from member representations.
+
+        Compatible representations are stacked in input order.
 
         Args:
-            representations: Distinct results in provenance order.
-            member_representation_ids: Representation index for every member.
+            representations: Table representations that members may reference.
+            member_representation_ids: For each member, its index into
+                ``representations``.
+
+        Returns:
+            An ensemble table preserving member order.
         """
-        representations = tuple(representations)
-        member_representation_ids = tuple(member_representation_ids)
         if len(representations) == 0:
             raise ValueError("Expected at least one representation.")
         if len(member_representation_ids) == 0:
@@ -48,9 +56,11 @@ class EnsembleTable:
                 "representation."
             )
 
-        buckets: dict[tuple[object, ...], list[int]] = {}
+        compatible_groups: dict[tuple[object, ...], list[int]] = {}
         for index, representation in enumerate(representations):
-            key = (
+            # Shape, schema, block layout, device, and categorical vocabularies
+            # must match for torch.stack to preserve member semantics.
+            compatibility_key = (
                 tuple(representation.size()),
                 tuple(
                     (stype, columns)
@@ -66,11 +76,11 @@ class EnsembleTable:
                     for category in representation.categorical.categories
                 ),
             )
-            buckets.setdefault(key, []).append(index)
+            compatible_groups.setdefault(compatibility_key, []).append(index)
 
         packed_representations: list[TableTensor] = []
         input_locations: dict[int, tuple[int, int]] = {}
-        for indices in buckets.values():
+        for indices in compatible_groups.values():
             packed_index = len(packed_representations)
             packed_representations.append(
                 cast(TableTensor, representations[indices[0]].unsqueeze(0))
@@ -78,7 +88,7 @@ class EnsembleTable:
                 else cast(
                     TableTensor,
                     torch.stack(
-                        tuple(representations[index] for index in indices),
+                        [representations[index] for index in indices],
                         dim=0,
                     ),
                 )
@@ -99,20 +109,23 @@ class EnsembleTable:
 
     @property
     def num_members(self) -> int:
-        """Return the number of logical ensemble members."""
+        """Return the number of ensemble members."""
         return len(self._member_locations)
 
     def representation(self, member_id: int) -> TableTensor:
-        r"""Return the table representation used by one member.
+        """Return the table representation used by one member.
 
         Args:
-            member_id: Stable member position.
+            member_id: Zero-based ensemble member index.
         """
         packed_index, representation_index = self._member_locations[member_id]
         return self._packed_representations[packed_index][representation_index]
 
     def iter_packed_representations(self) -> Iterator[TableTensor]:
-        """Iterate over schema-compatible packed representations."""
+        """Yield compatible representations.
+
+        Representations are stacked along a leading dimension.
+        """
         return iter(self._packed_representations)
 
     def __repr__(self) -> str:

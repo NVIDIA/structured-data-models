@@ -17,7 +17,7 @@ def test_shared_representation() -> None:
         assert table.representation(member_id).equal(data)
 
 
-def test_from_representations_preserves_member_order() -> None:
+def test_from_representations_stacks_compatible_schemas() -> None:
     first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0]]))
 
@@ -32,6 +32,7 @@ def test_from_representations_preserves_member_order() -> None:
     assert table.representation(0).equal(first)
     assert table.representation(1).equal(second)
     assert table.representation(2).equal(first)
+    assert table.representation(3).equal(second)
 
 
 def test_from_representations_separates_incompatible_schemas() -> None:
