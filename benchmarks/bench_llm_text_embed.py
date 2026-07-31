@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import torch
 from torch import Tensor
@@ -89,7 +90,7 @@ def _resolve_dtype(name: str) -> torch.dtype:
     return dtype
 
 
-def _download_strable(dataset: str) -> tuple[pa.Table, dict[str, Any]]:
+def _download_strable(dataset: str) -> tuple[str, dict[str, Any]]:
     from huggingface_hub import hf_hub_download  # noqa: PLC0415
 
     repo = "inria-soda/STRABLE-benchmark"
@@ -105,10 +106,13 @@ def _download_strable(dataset: str) -> tuple[pa.Table, dict[str, Any]]:
     )
     with open(config_path) as f:
         config = json.load(f)
-    return pq.read_table(data_path), config
+    return data_path, config
 
 
-def _text_columns(table: pa.Table, target_name: str | None) -> list[str]:
+def _arrow_text_columns(
+    table: pa.Table,
+    target_name: str | None,
+) -> list[str]:
     columns: list[str] = []
     for field in table.schema:
         if field.name == target_name:
@@ -118,6 +122,16 @@ def _text_columns(table: pa.Table, target_name: str | None) -> list[str]:
         ):
             columns.append(field.name)
     return columns
+
+
+def _cudf_text_columns(df: Any, target_name: str | None) -> list[str]:
+    from cudf.api.types import is_string_dtype
+
+    return [
+        column
+        for column in df.columns
+        if column != target_name and is_string_dtype(df[column].dtype)
+    ]
 
 
 def _joined_text_array(table: pa.Table, columns: Sequence[str]) -> pa.Array:
@@ -133,18 +147,78 @@ def _joined_text_array(table: pa.Table, columns: Sequence[str]) -> pa.Array:
     return pa.array(values, type=pa.large_string())
 
 
+def _joined_text_series(df: Any, columns: Sequence[str]) -> Any:
+    text = None
+    for column in columns:
+        values = column + ": " + df[column].fillna("")
+        text = values if text is None else text + " | " + values
+    return text
+
+
+def _fill_text_nulls(table: pa.Table, columns: Sequence[str]) -> pa.Table:
+    return pa.table(
+        {
+            column: pc.fill_null(
+                table[column],
+                pa.scalar("", type=table.schema.field(column).type),
+            )
+            for column in columns
+        }
+    )
+
+
 def _load_table(args: argparse.Namespace) -> tuple[TableTensor, list[str]]:
-    table, config = _download_strable(args.dataset)
+    if torch.device(args.table_device).type == "cuda":
+        import cudf
+
+        data_path, config = _download_strable(args.dataset)
+        df = cudf.read_parquet(data_path)
+        if args.max_rows is not None:
+            df = df.head(args.max_rows)
+
+        target_name = config.get("target_name")
+        text_columns = _cudf_text_columns(df, target_name)
+        if not text_columns:
+            raise SystemExit(
+                f"STRABLE table {args.dataset!r} has no text columns"
+            )
+
+        if args.separate_columns:
+            df = df[text_columns].fillna("")
+            stypes = dict.fromkeys(text_columns, Stype.text)
+            return (
+                TableTensor.from_cudf(
+                    df,
+                    stypes=stypes,
+                    device=args.table_device,
+                ),
+                text_columns,
+            )
+
+        df = cudf.DataFrame(
+            {"__text__": _joined_text_series(df, text_columns)}
+        )
+        return (
+            TableTensor.from_cudf(
+                df,
+                stypes={"__text__": Stype.text},
+                device=args.table_device,
+            ),
+            text_columns,
+        )
+
+    data_path, config = _download_strable(args.dataset)
+    table = pq.read_table(data_path)
     if args.max_rows is not None:
         table = table.slice(0, args.max_rows)
 
     target_name = config.get("target_name")
-    text_columns = _text_columns(table, target_name)
+    text_columns = _arrow_text_columns(table, target_name)
     if not text_columns:
         raise SystemExit(f"STRABLE table {args.dataset!r} has no text columns")
 
     if args.separate_columns:
-        arrow_table = table.select(text_columns)
+        arrow_table = _fill_text_nulls(table, text_columns)
         stypes = dict.fromkeys(text_columns, Stype.text)
         return (
             TableTensor.from_arrow(
