@@ -1,11 +1,27 @@
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, cast
 
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import StringTensor, Stype, TableTensor
 from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
 from sdm.testing import onlyCUDA
+
+
+def _text_table(
+    text: Sequence[Any],
+    *,
+    device: torch.device | str | None = None,
+) -> TableTensor:
+    tensor = StringTensor.from_list(text, device=device)
+    if tensor.dim() == 1:
+        tensor = cast(StringTensor, tensor.unsqueeze(-1))
+
+    return TableTensor(
+        columns={Stype.text: [str(i) for i in range(tensor.size(-1))]},
+        text=tensor,
+    )
 
 
 def _numerical_by_column_ngram(
@@ -24,7 +40,7 @@ def _numerical_by_column_ngram(
 
 
 def test_tfidf_encoder_preserves_leading_dimensions() -> None:
-    table = TableTensor.from_text(
+    table = _text_table(
         [
             [["ab"], ["ac"]],
             [["ab"], ["bc"]],
@@ -37,7 +53,7 @@ def test_tfidf_encoder_preserves_leading_dimensions() -> None:
 
 
 def test_tfidf_encoder_rows_are_l2_normalized() -> None:
-    table = TableTensor.from_text(["short", "a much longer text cell"])
+    table = _text_table(["short", "a much longer text cell"])
 
     output = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
 
@@ -49,7 +65,7 @@ def test_tfidf_encoder_rows_are_l2_normalized() -> None:
 
 
 def test_tfidf_encoder_exact_values() -> None:
-    table = TableTensor.from_text(["ab", "ab ac", "ac"])
+    table = _text_table(["ab", "ab ac", "ac"])
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
     output = encoder.fit_transform(table)
 
@@ -68,8 +84,8 @@ def test_tfidf_encoder_exact_values() -> None:
 
 
 def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
-    train = TableTensor.from_text(["aaa bbb", "aaa ccc"])
-    query = TableTensor.from_text(["zzz yyy", "aaa bbb"])
+    train = _text_table(["aaa bbb", "aaa ccc"])
+    query = _text_table(["zzz yyy", "aaa bbb"])
     encoder = TfidfTextEmbed(ngram_range=(3, 3))
     encoder.fit(train)
 
@@ -80,7 +96,7 @@ def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
 
 
 def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
-    table = TableTensor.from_text(["aa aa aa ab ab ac"])
+    table = _text_table(["aa aa aa ab ab ac"])
     full = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
     encoder = TfidfTextEmbed(ngram_range=(2, 3), max_features=3)
     capped = encoder.fit_transform(table)
@@ -91,7 +107,7 @@ def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
 
 
 def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
-    table = TableTensor.from_text([""])
+    table = _text_table([""])
 
     output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
 
@@ -100,7 +116,7 @@ def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
 
 
 def test_tfidf_encoder_short_word_counts_once() -> None:
-    table = TableTensor.from_text(["a"])
+    table = _text_table(["a"])
 
     output = TfidfTextEmbed(ngram_range=(5, 5)).fit_transform(table)
 
@@ -109,7 +125,7 @@ def test_tfidf_encoder_short_word_counts_once() -> None:
 
 
 def test_tfidf_encoder_can_preserve_case() -> None:
-    table = TableTensor.from_text(["CAT", "cat"])
+    table = _text_table(["CAT", "cat"])
 
     lowercased = TfidfTextEmbed(ngram_range=(3, 3)).fit_transform(table)
     case_sensitive = TfidfTextEmbed(
@@ -197,8 +213,8 @@ def test_tfidf_encoder_cuda_matches_cpu(
     pytest.importorskip("cupy")
     pytest.importorskip("pylibcudf")
 
-    cpu_train = TableTensor.from_text(train)
-    cuda_train = TableTensor.from_text(train, device="cuda")
+    cpu_train = _text_table(train)
+    cuda_train = _text_table(train, device="cuda")
     cpu_encoder = TfidfTextEmbed(
         ngram_range=ngram_range,
         max_features=max_features,
@@ -216,10 +232,8 @@ def test_tfidf_encoder_cuda_matches_cpu(
     else:
         cpu_encoder.fit(cpu_train)
         cuda_encoder.fit(cuda_train)
-        expected = cpu_encoder.transform(TableTensor.from_text(query))
-        output = cuda_encoder.transform(
-            TableTensor.from_text(query, device="cuda")
-        )
+        expected = cpu_encoder.transform(_text_table(query))
+        output = cuda_encoder.transform(_text_table(query, device="cuda"))
 
     expected_by_ngram = _numerical_by_column_ngram(cpu_encoder, expected)
     actual_by_ngram = _numerical_by_column_ngram(cuda_encoder, output)
@@ -236,9 +250,7 @@ def test_tfidf_encoder_cuda_matches_cpu(
 
 
 def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
-    table = TableTensor.from_text(
-        [["hello world", "cat"], ["hello there", "dog"]]
-    )
+    table = _text_table([["hello world", "cat"], ["hello there", "dog"]])
     encoder = TfidfTextEmbed(ngram_range=(2, 3))
     expected = encoder.fit_transform(table)
 
@@ -251,8 +263,8 @@ def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
 
 
 def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
-    wide = TableTensor.from_text([["hello world", "cat dog"]])
-    narrow = TableTensor.from_text(["hello world"])
+    wide = _text_table([["hello world", "cat dog"]])
+    narrow = _text_table(["hello world"])
     restored = TfidfTextEmbed(ngram_range=(2, 2))
     restored.fit(wide)
 
@@ -268,7 +280,7 @@ def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
 def test_tfidf_encoder_failed_refit_preserves_previous_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    table = TableTensor.from_text(["hello world", "hello there"])
+    table = _text_table(["hello world", "hello there"])
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
     expected = encoder.fit_transform(table)
 
@@ -286,8 +298,8 @@ def test_tfidf_encoder_failed_refit_preserves_previous_state(
 
 
 def test_tfidf_encoder_refit_replaces_previous_state() -> None:
-    wide = TableTensor.from_text([["hello world", "cat dog"]])
-    narrow = TableTensor.from_text(["hello world"])
+    wide = _text_table([["hello world", "cat dog"]])
+    narrow = _text_table(["hello world"])
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
     encoder.fit(wide)
     expected = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(narrow)
