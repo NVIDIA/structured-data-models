@@ -1,9 +1,7 @@
-from typing import Any
-
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import StringTensor, Stype, TableTensor
 from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
 from sdm.testing import onlyCUDA
 
@@ -24,11 +22,14 @@ def _numerical_by_column_ngram(
 
 
 def test_tfidf_encoder_preserves_leading_dimensions() -> None:
-    table = TableTensor.from_text(
-        [
-            [["ab"], ["ac"]],
-            [["ab"], ["bc"]],
-        ]
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list(
+            [
+                [["ab"], ["ac"]],
+                [["ab"], ["bc"]],
+            ]
+        ),
     )
 
     output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
@@ -37,7 +38,10 @@ def test_tfidf_encoder_preserves_leading_dimensions() -> None:
 
 
 def test_tfidf_encoder_rows_are_l2_normalized() -> None:
-    table = TableTensor.from_text(["short", "a much longer text cell"])
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["short"], ["a much longer text cell"]]),
+    )
 
     output = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
 
@@ -49,7 +53,10 @@ def test_tfidf_encoder_rows_are_l2_normalized() -> None:
 
 
 def test_tfidf_encoder_exact_values() -> None:
-    table = TableTensor.from_text(["ab", "ab ac", "ac"])
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["ab"], ["ab ac"], ["ac"]]),
+    )
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
     output = encoder.fit_transform(table)
 
@@ -68,8 +75,14 @@ def test_tfidf_encoder_exact_values() -> None:
 
 
 def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
-    train = TableTensor.from_text(["aaa bbb", "aaa ccc"])
-    query = TableTensor.from_text(["zzz yyy", "aaa bbb"])
+    train = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["aaa bbb"], ["aaa ccc"]]),
+    )
+    query = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["zzz yyy"], ["aaa bbb"]]),
+    )
     encoder = TfidfTextEmbed(ngram_range=(3, 3))
     encoder.fit(train)
 
@@ -80,7 +93,10 @@ def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
 
 
 def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
-    table = TableTensor.from_text(["aa aa aa ab ab ac"])
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["aa aa aa ab ab ac"]]),
+    )
     full = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
     encoder = TfidfTextEmbed(ngram_range=(2, 3), max_features=3)
     capped = encoder.fit_transform(table)
@@ -91,7 +107,10 @@ def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
 
 
 def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
-    table = TableTensor.from_text([""])
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([[""]]),
+    )
 
     output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
 
@@ -100,7 +119,10 @@ def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
 
 
 def test_tfidf_encoder_short_word_counts_once() -> None:
-    table = TableTensor.from_text(["a"])
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["a"]]),
+    )
 
     output = TfidfTextEmbed(ngram_range=(5, 5)).fit_transform(table)
 
@@ -109,7 +131,10 @@ def test_tfidf_encoder_short_word_counts_once() -> None:
 
 
 def test_tfidf_encoder_can_preserve_case() -> None:
-    table = TableTensor.from_text(["CAT", "cat"])
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["CAT"], ["cat"]]),
+    )
 
     lowercased = TfidfTextEmbed(ngram_range=(3, 3)).fit_transform(table)
     case_sensitive = TfidfTextEmbed(
@@ -128,7 +153,7 @@ def test_tfidf_encoder_can_preserve_case() -> None:
     ("train", "query", "ngram_range", "max_features", "lowercase"),
     [
         pytest.param(
-            ["aa aa aa ab ab ac", "aa ab", "ac"],
+            [["aa aa aa ab ab ac"], ["aa ab"], ["ac"]],
             None,
             (2, 3),
             None,
@@ -136,7 +161,7 @@ def test_tfidf_encoder_can_preserve_case() -> None:
             id="basic",
         ),
         pytest.param(
-            ["aa aa aa ab ab ac", "aa ab", "ac"],
+            [["aa aa aa ab ab ac"], ["aa ab"], ["ac"]],
             None,
             (2, 3),
             3,
@@ -144,7 +169,7 @@ def test_tfidf_encoder_can_preserve_case() -> None:
             id="max-features",
         ),
         pytest.param(
-            [""],
+            [[""]],
             None,
             (2, 2),
             None,
@@ -152,7 +177,7 @@ def test_tfidf_encoder_can_preserve_case() -> None:
             id="empty-string",
         ),
         pytest.param(
-            ["a"],
+            [["a"]],
             None,
             (5, 5),
             None,
@@ -160,15 +185,15 @@ def test_tfidf_encoder_can_preserve_case() -> None:
             id="short-word",
         ),
         pytest.param(
-            ["aaa bbb", "aaa ccc"],
-            ["zzz yyy", "aaa bbb"],
+            [["aaa bbb"], ["aaa ccc"]],
+            [["zzz yyy"], ["aaa bbb"]],
             (3, 3),
             None,
             True,
             id="unseen-ngrams",
         ),
         pytest.param(
-            ["CAT", "cat"],
+            [["CAT"], ["cat"]],
             None,
             (3, 3),
             None,
@@ -187,8 +212,8 @@ def test_tfidf_encoder_can_preserve_case() -> None:
 )
 @onlyCUDA
 def test_tfidf_encoder_cuda_matches_cpu(
-    train: list[Any],
-    query: list[str] | None,
+    train: list[list[str]],
+    query: list[list[str]] | None,
     ngram_range: tuple[int, int],
     max_features: int | None,
     lowercase: bool,
@@ -197,8 +222,15 @@ def test_tfidf_encoder_cuda_matches_cpu(
     pytest.importorskip("cupy")
     pytest.importorskip("pylibcudf")
 
-    cpu_train = TableTensor.from_text(train)
-    cuda_train = TableTensor.from_text(train, device="cuda")
+    num_cols = len(train[0])
+    cpu_train = TableTensor(
+        columns={"text": tuple(str(i) for i in range(num_cols))},
+        text=StringTensor.from_list(train),
+    )
+    cuda_train = TableTensor(
+        columns={"text": tuple(str(i) for i in range(num_cols))},
+        text=StringTensor.from_list(train, device="cuda"),
+    )
     cpu_encoder = TfidfTextEmbed(
         ngram_range=ngram_range,
         max_features=max_features,
@@ -216,9 +248,17 @@ def test_tfidf_encoder_cuda_matches_cpu(
     else:
         cpu_encoder.fit(cpu_train)
         cuda_encoder.fit(cuda_train)
-        expected = cpu_encoder.transform(TableTensor.from_text(query))
+        expected = cpu_encoder.transform(
+            TableTensor(
+                columns={"text": tuple(str(i) for i in range(num_cols))},
+                text=StringTensor.from_list(query),
+            )
+        )
         output = cuda_encoder.transform(
-            TableTensor.from_text(query, device="cuda")
+            TableTensor(
+                columns={"text": tuple(str(i) for i in range(num_cols))},
+                text=StringTensor.from_list(query, device="cuda"),
+            )
         )
 
     expected_by_ngram = _numerical_by_column_ngram(cpu_encoder, expected)
@@ -236,8 +276,11 @@ def test_tfidf_encoder_cuda_matches_cpu(
 
 
 def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
-    table = TableTensor.from_text(
-        [["hello world", "cat"], ["hello there", "dog"]]
+    table = TableTensor(
+        columns={"text": ("0", "1")},
+        text=StringTensor.from_list(
+            [["hello world", "cat"], ["hello there", "dog"]]
+        ),
     )
     encoder = TfidfTextEmbed(ngram_range=(2, 3))
     expected = encoder.fit_transform(table)
@@ -251,8 +294,14 @@ def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
 
 
 def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
-    wide = TableTensor.from_text([["hello world", "cat dog"]])
-    narrow = TableTensor.from_text(["hello world"])
+    wide = TableTensor(
+        columns={"text": ("0", "1")},
+        text=StringTensor.from_list([["hello world", "cat dog"]]),
+    )
+    narrow = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["hello world"]]),
+    )
     restored = TfidfTextEmbed(ngram_range=(2, 2))
     restored.fit(wide)
 
@@ -268,7 +317,10 @@ def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
 def test_tfidf_encoder_failed_refit_preserves_previous_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    table = TableTensor.from_text(["hello world", "hello there"])
+    table = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["hello world"], ["hello there"]]),
+    )
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
     expected = encoder.fit_transform(table)
 
@@ -286,8 +338,14 @@ def test_tfidf_encoder_failed_refit_preserves_previous_state(
 
 
 def test_tfidf_encoder_refit_replaces_previous_state() -> None:
-    wide = TableTensor.from_text([["hello world", "cat dog"]])
-    narrow = TableTensor.from_text(["hello world"])
+    wide = TableTensor(
+        columns={"text": ("0", "1")},
+        text=StringTensor.from_list([["hello world", "cat dog"]]),
+    )
+    narrow = TableTensor(
+        columns={"text": ("0",)},
+        text=StringTensor.from_list([["hello world"]]),
+    )
     encoder = TfidfTextEmbed(ngram_range=(2, 2))
     encoder.fit(wide)
     expected = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(narrow)

@@ -208,17 +208,6 @@ def test_to_cudf_requires_cuda() -> None:
         tensor.to_cudf()
 
 
-@onlyCUDA
-def test_from_cudf_errors() -> None:
-    cudf = pytest.importorskip("cudf")
-
-    with pytest.raises(ValueError, match="cannot represent null"):
-        StringTensor.from_cudf(cudf.Series(["hi", None]))
-
-    with pytest.raises(TypeError, match="string type"):
-        StringTensor.from_cudf(cudf.Series([1, 2], dtype="int32"))
-
-
 def test_allowed_dtype() -> None:
     tensor = StringTensor.from_list("hi")
 
@@ -311,3 +300,18 @@ def test_sort(device: torch.device) -> None:
 
     perm = torch.argsort(tensor)
     assert perm.equal(torch.tensor([4, 2, 1, 0, 3], device=device))
+
+
+def test_null_handling() -> None:
+    tensor = StringTensor.from_arrow(pa.array(["hi", None, "yo"]))
+    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+
+    tensor = StringTensor.from_list(["hi", None, "yo"])
+    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+
+
+@onlyCUDA
+def test_cudf_null_handling() -> None:
+    cudf = pytest.importorskip("cudf")
+    tensor = StringTensor.from_cudf(cudf.Series(["hi", None, "yo"]))
+    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
