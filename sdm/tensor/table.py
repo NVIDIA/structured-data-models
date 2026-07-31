@@ -423,14 +423,25 @@ class TableTensor(Tensor):
         tensor: Tensor,
         columns: Sequence[str] | None = None,
     ) -> Self:
-        r"""Create tensor from a numerical :class:`torch.Tensor`.
+        r"""Create a table from a :class:`torch.Tensor`.
 
         Args:
-            tensor: The numerical tensor.
-            columns: The column names of the tensor.
+            tensor: The input tensor with shape ``[..., C]``, interpreted as:
+
+                * A floating-point :class:`torch.Tensor` becomes numerical
+                  columns.
+                * An integer :class:`torch.Tensor` becomes categorical columns.
+                * A :class:`StringTensor` becomes text columns.
+            columns: The ``C`` column names.
         """
         if columns is None:
             columns = [str(i) for i in range(tensor.size(-1))]
+
+        if isinstance(tensor, StringTensor):
+            return cls(
+                columns={Stype.text: columns},
+                text=tensor,
+            )
 
         if not tensor.is_floating_point():
             return cls(
