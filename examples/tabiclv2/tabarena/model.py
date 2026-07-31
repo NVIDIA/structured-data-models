@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Self
 
 import pandas as pd
@@ -11,15 +12,10 @@ from tabarena.benchmark.exec_models.external import ExternalSystemModel
 
 import sdm
 
-_model: sdm.models.TabICLv2 | None = None
 
-
+@lru_cache(maxsize=1)
 def _create_model(device: torch.device) -> sdm.models.TabICLv2:
-    global _model
-
-    if _model is None:
-        _model = sdm.models.TabICLv2(device=device)
-    return _model
+    return sdm.models.TabICLv2(device=device)
 
 
 class SDMTabICLv2System(ExternalSystemModel):
