@@ -198,13 +198,86 @@ class InvertibleMixin(abc.ABC):
         def _check_is_fitted(self) -> None: ...
 
 
-class VariableSchemaBatchMixin(abc.ABC):
-    r"""Extend a :class:`Processor` with variable-schema batch methods.
+class VariableSchemaProcessor(Processor):
+    r"""Process batches whose representations may have different schemas.
 
-    Batch methods process the first leading dimension independently and
-    return one table per entry because the tables may have different column
-    schemas.
+    Batch methods return one table per representation because the resulting
+    schemas may differ. Single-table and batch fitted state are tracked
+    independently.
     """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._batch_fitted = False
+
+    def _check_is_batch_fitted(self) -> None:
+        if self.requires_fit and not self._batch_fitted:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} is not fitted for batch "
+                "transforms; call 'fit_batch()' before."
+            )
+
+    def _fit_batch(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        pass
+
+    @abc.abstractmethod
+    def _transform_batch(
+        self,
+        table: TableTensor,
+    ) -> tuple[TableTensor, ...]: ...
+
+    def _fit_transform_batch(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> tuple[TableTensor, ...]:
+        if self.requires_fit:
+            self._fit_batch(table, generator=generator)
+        return self._transform_batch(table)
+
+    def fit_batch(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        r"""Fit the processor on a batch of representations.
+
+        Args:
+            table: Table representations with shape ``[B, ..., R, C]``, where
+                ``B`` is the number of representations, ``R`` is the number
+                of rows, and ``C`` is the number of columns.
+            generator: Pseudorandom number generator used for sampling.
+        """
+        self._check_supported_stypes(table)
+        if self.requires_fit:
+            self._fit_batch(table, generator=generator)
+            self._batch_fitted = True
+        return self
+
+    def transform_batch(
+        self,
+        table: TableTensor,
+    ) -> tuple[TableTensor, ...]:
+        r"""Transform a batch into one table per representation.
+
+        Args:
+            table: Table representations with shape ``[B, ..., R, C]``, where
+                ``B`` is the number of representations, ``R`` is the number
+                of rows, and ``C`` is the number of columns.
+
+        Returns:
+            One transformed table per input representation.
+        """
+        self._check_supported_stypes(table)
+        self._check_is_batch_fitted()
+        return self._transform_batch(table)
 
     def fit_transform_batch(
         self,
@@ -223,39 +296,8 @@ class VariableSchemaBatchMixin(abc.ABC):
         Returns:
             One transformed table per input representation.
         """
-        self.fit_batch(table, generator=generator)
-        return self.transform_batch(table)
-
-    @abc.abstractmethod
-    def fit_batch(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> Self:
-        r"""Fit the processor independently on a batch of representations.
-
-        Args:
-            table: Table representations with shape ``[B, ..., R, C]``, where
-                ``B`` is the number of representations, ``R`` is the number
-                of rows, and ``C`` is the number of columns.
-            generator: Pseudorandom number generator used for sampling.
-        """
-        ...
-
-    @abc.abstractmethod
-    def transform_batch(
-        self,
-        table: TableTensor,
-    ) -> tuple[TableTensor, ...]:
-        r"""Transform a batch into one table per representation.
-
-        Args:
-            table: Table representations with shape ``[B, ..., R, C]``, where
-                ``B`` is the number of representations, ``R`` is the number
-                of rows, and ``C`` is the number of columns.
-
-        Returns:
-            One transformed table per input representation.
-        """
-        ...
+        self._check_supported_stypes(table)
+        out = self._fit_transform_batch(table, generator=generator)
+        if self.requires_fit:
+            self._batch_fitted = True
+        return out

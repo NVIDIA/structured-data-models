@@ -10,7 +10,7 @@ Processor API
 
    ~sdm.processing.base.Processor
    ~sdm.processing.base.InvertibleMixin
-   ~sdm.processing.base.VariableSchemaBatchMixin
+   ~sdm.processing.base.VariableSchemaProcessor
    ~sdm.processing.recipe.Recipe
 
 Common Processors
