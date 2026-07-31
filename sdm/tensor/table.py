@@ -75,7 +75,7 @@ class TableTensor(Tensor):
         )
 
         print(table)
-        # TableTensor (
+        # TableTensor(
         #   size=(10, 4),
         #   blocks={
         #     numerical (2): ['age', 'income'],
