@@ -74,6 +74,15 @@ class TableTensor(Tensor):
             ),
         )
 
+        print(table)
+        # TableTensor (
+        #   size=(10, 4),
+        #   blocks={
+        #     numerical (2): ['age', 'income'],
+        #     categorical (2): ['country', 'segment'],
+        #   },
+        # )
+
         # DataFrame-like column selection, but still tensor-native:
         features = table[["age", "country"]]
         assert features.size() == (10, 2)
@@ -92,6 +101,12 @@ class TableTensor(Tensor):
 
         # Column-wise cat extends the schema:
         wide = torch.cat([table[["age"]], table[["country"]]], dim=-1)
+
+    .. testoutput:: drop_stypes, select_columns, drop_columns
+        :hide:
+        :options: +ELLIPSIS
+
+        TableTensor(...)
 
     Args:
         size: The shape of the tensor ``[..., C]``.
