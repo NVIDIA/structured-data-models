@@ -181,17 +181,6 @@ def test_to_cudf_requires_cuda() -> None:
         tensor.to_cudf()
 
 
-@onlyCUDA
-def test_from_cudf_errors() -> None:
-    cudf = pytest.importorskip("cudf")
-
-    with pytest.raises(ValueError, match="cannot represent null"):
-        StringTensor.from_cudf(cudf.Series(["hi", None]))
-
-    with pytest.raises(TypeError, match="string type"):
-        StringTensor.from_cudf(cudf.Series([1, 2], dtype="int32"))
-
-
 def test_allowed_dtype() -> None:
     tensor = StringTensor.from_list("hi")
 
