@@ -62,12 +62,17 @@ class SDMTabICLv2System(ExternalSystemModel):
             stypes={target_name: target_stype},
             device=self._device,
         )
-        self.model.fit(
-            x=table_x,
-            y=table_y,
-            num_estimators=8,
-            generator=generator,
-        )
+        with torch.amp.autocast(
+            self._device.type,
+            torch.bfloat16,
+            enabled=table_x.is_cuda,
+        ):
+            self.model.fit(
+                x=table_x,
+                y=table_y,
+                num_estimators=8,
+                generator=generator,
+            )
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
@@ -76,7 +81,12 @@ class SDMTabICLv2System(ExternalSystemModel):
             stypes=self.stypes,
             device=self._device,
         )
-        out = self.model.predict(table_x)
+        with torch.amp.autocast(
+            self._device.type,
+            torch.bfloat16,
+            enabled=table_x.is_cuda,
+        ):
+            out = self.model.predict(table_x)
         values = out.numerical.float().mean(dim=-1).cpu().numpy()
         return pd.Series(values, index=X.index)
 
@@ -86,7 +96,12 @@ class SDMTabICLv2System(ExternalSystemModel):
             stypes=self.stypes,
             device=self._device,
         )
-        probabilities = self.model.predict(table_x).to_pandas()
+        with torch.amp.autocast(
+            self._device.type,
+            torch.bfloat16,
+            enabled=table_x.is_cuda,
+        ):
+            probabilities = self.model.predict(table_x).to_pandas()
         probabilities.index = X.index
         probabilities = probabilities.rename(
             columns=self._class_labels_by_key,
