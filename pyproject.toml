@@ -63,13 +63,6 @@ dev = [
     { include-group = "test" },
     { include-group = "doc" },
 ]
-example-tabarena = [
-    "autogluon.common @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common",
-    "autogluon.core @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core",
-    "autogluon.features @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features",
-    "autogluon.tabular @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular",
-    "tabarena[plot] @ git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena",
-]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -81,10 +74,6 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
-
-[tool.uv.dependency-groups]
-# TODO Unpin Python version once TabArena supports Python 3.14.
-example-tabarena = { requires-python = ">=3.11,<3.14" }
 
 [tool.pytest.ini_options]
 addopts = [
