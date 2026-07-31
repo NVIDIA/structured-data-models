@@ -385,11 +385,6 @@ class ICLModel(torch.nn.Module, ABC):
         r"""Clear cached context state created by :meth:`fit`."""
         self._caches = None
 
-    @property
-    def device(self) -> torch.device:
-        r""":meta private:"""  # noqa: D415
-        return next(self.parameters()).device
-
     def __repr__(self) -> str:
         device = next(self.parameters()).device
         device_repr = f"device={device}" if device.type != "cpu" else ""

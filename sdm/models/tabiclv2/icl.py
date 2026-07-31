@@ -74,7 +74,7 @@ class ICLBlock(torch.nn.Module):
         *,
         num_classes: int | None = None,
         cache: Cache | None = None,
-        batch_size_limit: int | None,
+        batch_size_limit: int | None = None,
     ) -> Tensor:  # [..., R_test, out_channels or num_classes]
         if num_classes is None or num_classes <= self.num_classes:
             return self._forward(
