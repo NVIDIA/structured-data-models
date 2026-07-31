@@ -7,7 +7,7 @@ from sdm.tensor import TableTensor
 
 
 class SliceColumns(Processor):
-    """Limit the number of columns for each semantic type.
+    """Slice the specified number of the first columns for each semantic type.
 
     Args:
         max_columns: Maximum number of columns to keep. An integer applies to
