@@ -1,7 +1,4 @@
-r"""Evaluate TabICLv2 results on TabArena.
-
-$ uv run --group example-tabarena python examples/tabiclv2/tabarena/evaluate.py
-"""
+r"""Evaluate TabICLv2 results on TabArena."""
 
 from pathlib import Path
 
