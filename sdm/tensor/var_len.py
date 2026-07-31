@@ -33,7 +33,7 @@ class VarLenTensor(Tensor):
     Values are stored in a flat contiguous ``data`` tensor and indexed by an
     ``offset`` tensor.
 
-    .. code-block:: python
+    .. testcode::
 
         import torch
         from sdm import VarLenTensor
@@ -232,7 +232,7 @@ class VarLenTensor(Tensor):
     ) -> Self:
         r"""Create tensor from a list :class:`pyarrow.Array`.
 
-        .. code-block:: python
+        .. testcode::
 
             import pyarrow as pa
             from sdm import VarLenTensor
@@ -320,7 +320,7 @@ class VarLenTensor(Tensor):
     ) -> Self:
         r"""Create tensor from a rectangular Python list.
 
-        .. code-block:: python
+        .. testcode::
 
             from sdm import VarLenTensor
 

@@ -12,8 +12,8 @@ install
 :maxdepth: 1
 
 tensor
-model
-recipe
+icl
+processing
 ```
 
 ```{toctree}
@@ -26,4 +26,5 @@ api/relational
 api/processing
 api/nn
 api/models
+api/evaluation
 ```

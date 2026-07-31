@@ -11,6 +11,7 @@ from sdm.processing.common import (
     ToNumerical,
     ShuffleColumns,
 )
+from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
 from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
@@ -20,6 +21,7 @@ from sdm.processing.numerical import (
     QuantileTransform,
     Standardize,
     DropConstantColumns,
+    SliceColumns,
 )
 from sdm.processing.categorical import (
     AlignCategories,
@@ -41,6 +43,7 @@ __all__ = [
     "Choice",
     "ToNumerical",
     "ShuffleColumns",
+    "TfidfTextEmbed",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
@@ -49,6 +52,7 @@ __all__ = [
     "QuantileTransform",
     "Standardize",
     "DropConstantColumns",
+    "SliceColumns",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
