@@ -10,7 +10,9 @@ class SelectColumns(Processor):
 
     Args:
         max_columns: The maximum number of columns to keep.
-        mode: The column selection mode. ``"first"`` keeps the first columns.
+        mode: The column selection mode.
+            ``"first"`` keeps the first columns according to their order within
+            each semantic block.
     """
 
     supported_stypes = frozenset(Stype)
