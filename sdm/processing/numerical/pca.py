@@ -46,15 +46,14 @@ class PCA(Processor):
 
         numerical = numerical.flatten(end_dim=-2)  # [..., F] -> [N, F]
         self.mean = numerical.mean(dim=0)
-        centered = numerical - self.mean
         # Economy SVD; right-singular vectors are the principal axes.
         _, singular_values, vh = torch.linalg.svd(
-            centered,
+            numerical - self.mean,
             full_matrices=False,
         )
         tolerance = (
             singular_values.max()
-            * max(centered.shape)
+            * max(numerical.shape)
             * torch.finfo(singular_values.dtype).eps
         )
         rank = int((singular_values > tolerance).sum())
