@@ -183,6 +183,34 @@ class NumericalProcessor(Processor):
 
     Floating-point inputs are preserved. Non-floating inputs are promoted to
     the default floating-point dtype before fitting or transforming.
+
+    .. testcode::
+
+        import torch
+
+        from sdm import TableTensor
+        from sdm.processing import NumericalProcessor
+
+
+        class PassThrough(NumericalProcessor):
+            requires_fit = False
+
+            def _transform(self, table: TableTensor) -> TableTensor:
+                return table
+
+
+        table = TableTensor(
+            columns={"numerical": ("value",)},
+            numerical=torch.tensor([[1], [2]], dtype=torch.int64),
+        )
+        print(f"Before: {table.numerical.dtype}")
+        output = PassThrough().transform(table)
+        print(f"After: {output.numerical.dtype}")
+
+    .. testoutput::
+
+        Before: torch.int64
+        After: torch.float32
     """
 
     supported_stypes = frozenset({Stype.numerical})
