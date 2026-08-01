@@ -1,9 +1,4 @@
-r"""Run TabICLv2 on TabArena.
-
-$ uv run --group example-tabarena python examples/tabiclv2/tabarena/main.py
-
-Completed jobs in the output directory are reused.
-"""
+r"""Run TabICLv2 on TabArena."""
 
 from __future__ import annotations
 
@@ -32,5 +27,4 @@ context.build_and_run_jobs(
     experiments,
     expname=result_dir,
     register=False,
-    debug_mode=True,
 )
