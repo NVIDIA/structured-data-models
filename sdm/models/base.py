@@ -9,6 +9,7 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, Stype, TableTensor
+from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Processor, Recipe
 from sdm.relational.task import RelatedTablesSchema
@@ -433,15 +434,21 @@ class ICLModel(torch.nn.Module, ABC):
             )
         invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
         if len(invalid) > 0:
-            raise ValueError(
-                f"{self.__class__.__name__!r} received unsupported feature "
-                f"stypes: {', '.join(stype.value for stype in invalid)}"
+            stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
+            warn_once(
+                key="model-unsupported-feature-stypes",
+                message=(
+                    f"{self.__class__.__name__!r} received unsupported "
+                    f"feature stypes {stypes}. Columns with unsupported "
+                    f"feature stypes will not be consumed by the model."
+                ),
             )
         invalid = y.active_stypes - self.supported_target_stypes
         if len(invalid) > 0:
+            stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
             raise ValueError(
                 f"{self.__class__.__name__!r} received unsupported target "
-                f"stypes: {', '.join(stype.value for stype in invalid)}"
+                f"stypes {stypes}"
             )
 
         if related_tables is not None:
@@ -454,10 +461,16 @@ class ICLModel(torch.nn.Module, ABC):
                 invalid = table.active_stypes - self.supported_feature_stypes
                 invalid = invalid - {Stype.id}
                 if len(invalid) > 0:
-                    raise ValueError(
-                        f"{self.__class__.__name__!r} received unsupported "
-                        f"feature stypes in related table {table_name!r}: "
-                        f"{', '.join(stype.value for stype in invalid)}"
+                    stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
+                    warn_once(
+                        key="model-unsupported-feature-stypes",
+                        message=(
+                            f"{self.__class__.__name__!r} received "
+                            f"unsupported feature stypes {stypes} in related "
+                            f"table {table_name!r}. Columns with unsupported "
+                            f"feature stypes will not be consumed by the "
+                            f"model."
+                        ),
                     )
 
     def _validate_query(
