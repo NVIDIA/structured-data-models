@@ -1,12 +1,10 @@
 import torch
 
-from sdm.processing._utils import _as_float
-from sdm.processing.base import Processor
-from sdm.stype import Stype
+from sdm.processing.base import NumericalProcessor
 from sdm.tensor import TableTensor
 
 
-class ClipQuantiles(Processor):
+class ClipQuantiles(NumericalProcessor):
     """Clamp feature columns to fitted quantile bounds.
 
     Values outside the fitted bounds are discarded, so this processor is not
@@ -18,8 +16,6 @@ class ClipQuantiles(Processor):
         q_high: Upper quantile in ``[0, 1]`` used as the per-column upper
             bound. Must satisfy ``0 <= q_low <= q_high <= 1``.
     """
-
-    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -43,7 +39,7 @@ class ClipQuantiles(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         quantiles = numerical.new_tensor([self.q_low, self.q_high])
         q_low, q_high = torch.quantile(numerical, quantiles, dim=0)
         self.lower_bound = q_low
@@ -51,7 +47,7 @@ class ClipQuantiles(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Clamp ``table`` to the fitted lower and upper bounds."""
-        numerical = _as_float(table.numerical).clamp(
+        numerical = table.numerical.clamp(
             min=self.lower_bound,
             max=self.upper_bound,
         )

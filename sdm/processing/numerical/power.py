@@ -3,10 +3,8 @@ import math
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _as_float
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import InvertibleMixin, NumericalProcessor
 from sdm.processing.numerical._stats import _constant_feature_mask
-from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
@@ -131,15 +129,13 @@ def _yeojohnson_log_likelihood(
     )
 
 
-class PowerTransform(Processor, InvertibleMixin):
+class PowerTransform(NumericalProcessor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed
             features using statistics fitted after the power transform.
     """
-
-    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -232,7 +228,7 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         n_samples, n_features = numerical.shape
 
         var = numerical.var(dim=0, correction=0)
@@ -258,13 +254,13 @@ class PowerTransform(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         transformed = _yeojohnson_transform(numerical, self.lambdas)
         numerical = (transformed - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         unscaled = numerical * self.scale + self.mean
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 

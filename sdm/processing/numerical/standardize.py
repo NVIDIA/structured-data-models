@@ -1,13 +1,11 @@
 import torch
 
-from sdm.processing._utils import _as_float
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import InvertibleMixin, NumericalProcessor
 from sdm.processing.numerical._stats import _constant_feature_mask
-from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class Standardize(Processor, InvertibleMixin):
+class Standardize(NumericalProcessor, InvertibleMixin):
     """Center and scale each feature column.
 
     Constant columns use a unit scale to keep the transform finite and
@@ -20,8 +18,6 @@ class Standardize(Processor, InvertibleMixin):
         epsilon: Value added to each fitted standard deviation. The default
             preserves exact constant-column handling.
     """
-
-    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
@@ -45,7 +41,7 @@ class Standardize(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         data_mean = numerical.mean(dim=0)
 
         if self.with_mean:
@@ -75,9 +71,9 @@ class Standardize(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` using the fitted mean and scale."""
-        numerical = (_as_float(table.numerical) - self.mean) / self.scale
+        numerical = (table.numerical - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = _as_float(table.numerical) * self.scale + self.mean
+        numerical = table.numerical * self.scale + self.mean
         return table.replace_blocks(numerical=numerical)
