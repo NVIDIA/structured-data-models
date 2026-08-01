@@ -1,0 +1,8 @@
+﻿SelectColumns
+=============
+
+.. currentmodule:: sdm.processing.common
+
+.. autoclass:: SelectColumns
+   :members:
+   :show-inheritance:
