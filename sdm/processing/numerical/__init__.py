@@ -8,7 +8,6 @@ from sdm.processing.numerical.power import PowerTransform
 from sdm.processing.numerical.quantile import QuantileTransform
 from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.constant import DropConstantColumns
-from sdm.processing.numerical.slice_columns import SliceColumns
 
 __all__ = [
     "Clip",
@@ -19,5 +18,4 @@ __all__ = [
     "QuantileTransform",
     "Standardize",
     "DropConstantColumns",
-    "SliceColumns",
 ]
