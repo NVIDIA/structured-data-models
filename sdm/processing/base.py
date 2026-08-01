@@ -188,11 +188,11 @@ class NumericalProcessor(Processor):
 
         import torch
 
-        from sdm import TableTensor
+        from sdm import Stype, TableTensor
         from sdm.processing import NumericalProcessor
 
 
-        class PassThrough(NumericalProcessor):
+        class MyNumericalProcessor(NumericalProcessor):
             requires_fit = False
 
             def _transform(self, table: TableTensor) -> TableTensor:
@@ -200,11 +200,16 @@ class NumericalProcessor(Processor):
 
 
         table = TableTensor(
-            columns={"numerical": ("value",)},
-            numerical=torch.tensor([[1], [2]], dtype=torch.int64),
+            columns={Stype.numerical: ("my_column",)},
+            numerical=torch.randint(
+                0,
+                10,
+                size=(2, 1),
+                dtype=torch.int64,
+            ),
         )
         print(f"Before: {table.numerical.dtype}")
-        output = PassThrough().transform(table)
+        output = MyNumericalProcessor().transform(table)
         print(f"After: {output.numerical.dtype}")
 
     .. testoutput::
