@@ -8,50 +8,7 @@ import torch
 from typing_extensions import Self
 
 from sdm.stype import Stype
-from sdm.tensor.categorical import CategoricalTensor
-from sdm.tensor.columnar import ColumnarTensor
-from sdm.tensor.string import StringTensor
 from sdm.tensor.table import TableTensor
-
-
-def _stack_tables(tables: Sequence[TableTensor]) -> TableTensor:
-    """Stack positional table data while retaining the first schema."""
-    tables = tuple(tables)
-    if len(tables) == 0:
-        raise ValueError("Expected at least one table to stack.")
-    reference = tables[0]
-    blocks: dict[Stype, torch.Tensor] = {}
-    for stype, block in reference.items():
-        if stype == Stype.categorical:
-            blocks[stype] = CategoricalTensor(
-                code=torch.stack(
-                    tuple(table.categorical.code for table in tables),
-                    dim=0,
-                ),
-                categories=reference.categorical.categories,
-            )
-        elif block.size(-1) > 0:
-            blocks[stype] = torch.stack(
-                tuple(table.blocks[stype] for table in tables),
-                dim=0,
-            )
-
-    return TableTensor(
-        size=(len(tables), *reference.size()[:-1]),
-        columns={
-            stype.value: columns
-            for stype, columns in reference.columns.items()
-        },
-        device=reference.device,
-        numerical=blocks.get(Stype.numerical),
-        categorical=cast(
-            CategoricalTensor | None,
-            blocks.get(Stype.categorical),
-        ),
-        datetime=blocks.get(Stype.datetime),
-        text=cast(StringTensor | None, blocks.get(Stype.text)),
-        id=cast(ColumnarTensor | None, blocks.get(Stype.id)),
-    )
 
 
 @dataclass(frozen=True, init=False)
@@ -81,7 +38,7 @@ class EnsembleTable:
         )
 
     @classmethod
-    def build_ensemble_from_estimator_tables(
+    def from_table_tensors(
         cls,
         estimator_to_table_map: Mapping[int, TableTensor],
     ) -> Self:
@@ -135,7 +92,7 @@ class EnsembleTable:
         )
         return table
 
-    def materialize(
+    def to_table_tensor(
         self,
         estimator_ids: Sequence[int] | None = None,
     ) -> TableTensor:
@@ -175,8 +132,7 @@ class EnsembleTable:
                 reference_key = compatibility_key
             elif compatibility_key != reference_key:
                 raise ValueError(
-                    "Cannot materialize ensemble members with different "
-                    "metadata."
+                    "Cannot materialize estimators with different metadata."
                 )
             tables.append(table)
 
