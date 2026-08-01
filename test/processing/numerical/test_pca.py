@@ -36,6 +36,21 @@ def test_pca_projects_to_requested_num_components() -> None:
     assert output.columns[Stype.numerical] == ("pca_0", "pca_1")
 
 
+def test_pca_flattens_and_restores_leading_dimensions() -> None:
+    data = _full_rank_data(24, 4).reshape(2, 3, 4, 4)
+
+    output = PCA(num_components=3).fit_transform(_table(data))
+    flat_output = PCA(num_components=3).fit_transform(
+        _table(data.reshape(-1, data.size(-1)))
+    )
+
+    assert output.numerical.size() == (2, 3, 4, 3)
+    torch.testing.assert_close(
+        output.numerical.reshape(-1, 3).abs(),
+        flat_output.numerical.abs(),
+    )
+
+
 def test_pca_recovers_dominant_direction() -> None:
     # Rank-one data along (1, 1): the single component captures it exactly.
     steps = torch.arange(10, dtype=torch.get_default_dtype())
