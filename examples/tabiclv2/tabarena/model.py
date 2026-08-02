@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Self
 
-import numpy as np
 import pandas as pd
 import torch
-from autogluon.core.data.label_cleaner import LabelCleaner
-from autogluon.core.metrics import Scorer
+from autogluon.core.data import LabelCleaner
 from tabarena.benchmark.exec_models.external import ExternalSystemModel
-from tabarena.benchmark.task.metadata import ValidationMetadata
 
-from sdm import Stype, TableTensor, infer_stypes
-from sdm.models import TabICLv2
+import sdm
+
+
+@lru_cache(maxsize=1)
+def _create_model(device: torch.device) -> sdm.models.TabICLv2:
+    return sdm.models.TabICLv2(device=device)
 
 
 class SDMTabICLv2System(ExternalSystemModel):
@@ -26,60 +28,36 @@ class SDMTabICLv2System(ExternalSystemModel):
         *,
         target_name: str,
         problem_type: str,
-        eval_metric: Scorer,
-        validation_metadata: ValidationMetadata,
-        memory_limit: float | None,
-        time_limit: float | None,
         random_state: int | None,
         **_: object,
     ) -> Self:
-        random_state = 42 if random_state is None else random_state
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
-        generator = torch.Generator(device=self._device).manual_seed(
-            random_state
-        )
+        self.model = _create_model(device=self._device)
+        generator = None
+        if random_state is not None:
+            generator = torch.Generator(device=self._device).manual_seed(
+                random_state
+            )
 
-        self.stypes = infer_stypes(X)
+        self.stypes = sdm.infer_stypes(X)
         target_name = target_name or "__target__"
         if problem_type == "regression":
-            target_stype = Stype.numerical
+            target_stype = sdm.Stype.numerical
         else:
-            target_stype = Stype.categorical
-            if y.isna().any():
-                raise ValueError(
-                    "Classification targets must not contain missing values"
-                )
-            class_labels_by_key = {}
-            for label in pd.unique(y):
-                key = str(label)
-                if key in class_labels_by_key:
-                    raise ValueError(
-                        "Classification labels have ambiguous string "
-                        "representations: "
-                        f"{class_labels_by_key[key]!r} and {label!r} "
-                        f"both map to {key!r}"
-                    )
-                class_labels_by_key[key] = label
-
-            label_cleaner = LabelCleaner.construct(
-                problem_type=problem_type,
-                y=y,
-            )
+            target_stype = sdm.Stype.categorical
+            cleaner = LabelCleaner.construct(problem_type=problem_type, y=y)
             self._class_labels_by_key = {
-                str(label): label
-                for label in label_cleaner.ordered_class_labels
+                str(label): label for label in cleaner.ordered_class_labels
             }
 
-        self.model = TabICLv2(device=self._device)
-
-        table_x = TableTensor.from_pandas(
+        table_x = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self._device,
         )
-        table_y = TableTensor.from_pandas(
+        table_y = sdm.TableTensor.from_pandas(
             df=y.rename(target_name).to_frame(),
             stypes={target_name: target_stype},
             device=self._device,
@@ -93,7 +71,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         return self
 
     def _predict(self, X: pd.DataFrame) -> pd.Series:
-        table_x = TableTensor.from_pandas(
+        table_x = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self._device,
@@ -103,21 +81,15 @@ class SDMTabICLv2System(ExternalSystemModel):
         return pd.Series(values, index=X.index)
 
     def _predict_proba(self, X: pd.DataFrame) -> pd.DataFrame:
-        table_x = TableTensor.from_pandas(
+        table_x = sdm.TableTensor.from_pandas(
             df=X,
             stypes=self.stypes,
             device=self._device,
         )
-        prediction = self.model.predict(table_x)
-        values = prediction.numerical.float().cpu().numpy()
-        labels = [
-            self._class_labels_by_key[column]
-            for column in prediction.columns[Stype.numerical]
-        ]
-        probabilities = pd.DataFrame(
-            values,
-            index=X.index,
-            columns=np.asarray(labels, dtype=object),
+        probabilities = self.model.predict(table_x).to_pandas()
+        probabilities.index = X.index
+        probabilities = probabilities.rename(
+            columns=self._class_labels_by_key,
         )
         return probabilities.reindex(
             columns=tuple(self._class_labels_by_key.values()),
