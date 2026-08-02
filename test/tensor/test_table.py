@@ -247,30 +247,16 @@ def test_from_tensor() -> None:
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
     assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
 
-
-def test_from_text() -> None:
-    tensor = TableTensor.from_text("hello")
-
-    assert tensor.size() == (1, 1)
-    assert tensor.text.equal(StringTensor.from_list([["hello"]]))
-
-    tensor = TableTensor.from_text(["hello", "there"])
-
-    assert tensor.size() == (2, 1)
+    data = StringTensor.from_list([["left", "right"], ["up", "down"]])
+    tensor = TableTensor.from_tensor(data)
+    assert tensor.size() == (2, 2)
     assert tensor.columns == {
         Stype.numerical: (),
         Stype.categorical: (),
         Stype.datetime: (),
-        Stype.text: ("0",),
+        Stype.text: ("0", "1"),
         Stype.id: (),
     }
-    assert tensor.text.equal(StringTensor.from_list([["hello"], ["there"]]))
-
-    data = StringTensor.from_list([["left", "right"], ["up", "down"]])
-    tensor = TableTensor.from_text(data, columns=("first", "second"))
-
-    assert tensor.size() == (2, 2)
-    assert tensor.columns[Stype.text] == ("first", "second")
     assert tensor.text.equal(data)
 
 

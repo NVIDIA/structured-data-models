@@ -14,9 +14,10 @@ from sdm.nn import RotaryEmbedding
 from sdm.nn.resolver import normalization_resolver
 
 
-def _validate_batch_size_limit(batch_size_limit: int | None) -> None:
-    if batch_size_limit is not None and batch_size_limit <= 0:
-        raise ValueError("`batch_size_limit` must be positive")
+def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
+    if batch_size_limit is None:
+        return 65_535
+    return min(batch_size_limit, 65_535)
 
 
 def _batch_chunk(
@@ -364,14 +365,13 @@ class SDPA(torch.nn.Module):
                 :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
-            batch_size_limit: Maximum number of broadcast batch elements
-                processed at once during non-compiled evaluation. ``None``
-                disables batch chunking.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
-        _validate_batch_size_limit(batch_size_limit)
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
 
         if query.numel() == 0:
             return query
@@ -396,11 +396,7 @@ class SDPA(torch.nn.Module):
             batch_shapes.append(attn_mask.size()[:-2])
         batch_shape = torch.broadcast_shapes(*batch_shapes)
 
-        if (
-            batch_size_limit is not None
-            and not self.training
-            and not torch.compiler.is_compiling()
-        ):
+        if not self.training and not torch.compiler.is_compiling():
             batch_size = prod(batch_shape)
             if batch_size > batch_size_limit:
                 query_size = query.size()[-3:]
@@ -606,11 +602,8 @@ class Attention(torch.nn.Module):
                 projection.
             return_key_value: Whether to return the computed key and value
                 projections alongside the attention output.
-            batch_size_limit: Maximum flattened batch size processed at once
-                during non-compiled evaluation. ``None`` disables batch
-                chunking. Cache-producing calls are chunked only when the
-                key/value batch shape already matches the broadcast batch
-                shape, preserving the cache shape.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -618,12 +611,8 @@ class Attention(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        _validate_batch_size_limit(batch_size_limit)
-        if (
-            batch_size_limit is not None
-            and not self.training
-            and not torch.compiler.is_compiling()
-        ):
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
+        if not self.training and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
                 forward=self.forward,
                 query=query,
@@ -813,11 +802,8 @@ class TransformerBlock(torch.nn.Module):
                 projection.
             return_key_value: Whether to return the computed key and value
                 projections alongside the block output.
-            batch_size_limit: Maximum flattened batch size processed at once
-                during non-compiled evaluation. ``None`` disables batch
-                chunking. Cache-producing calls are chunked only when the
-                key/value batch shape already matches the broadcast batch
-                shape, preserving the cache shape.
+            batch_size_limit: Maximum number of batch elements processed at
+                once.
 
         Returns:
             Tensor with shape ``[..., Q, C]`` when ``return_key_value`` is
@@ -825,12 +811,8 @@ class TransformerBlock(torch.nn.Module):
             Otherwise, a tuple of the output tensor and a
             :class:`~sdm.cache.KVCacheEntry`.
         """
-        _validate_batch_size_limit(batch_size_limit)
-        if (
-            batch_size_limit is not None
-            and not self.training
-            and not torch.compiler.is_compiling()
-        ):
+        batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
+        if not self.training and not torch.compiler.is_compiling():
             chunked_result = _chunk_attention(
                 forward=self.forward,
                 query=query,
