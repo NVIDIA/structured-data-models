@@ -50,31 +50,37 @@ class EnsembleTable:
         representations: Sequence[TableTensor],
         member_representation_ids: tuple[int, ...],
     ) -> Self: ...
+
+    def iter_packed_representations(self) -> Iterator[TableTensor]: ...
+
+    def repack(self, representations: Sequence[TableTensor]) -> Self: ...
 ```
 
 Each data representation is a `TableTensor` whose leading dimension holds unique batches with compatible shape, schema, stypes, dtypes, and categorical metadata. `_member_locations` maps the stable member position to `(representation_id, batch_id)`; equal references represent proven sharing. `from_representations` packs compatible unique results into the same data representation and creates separate representations for incompatible results. It never merges representations by comparing tensor contents.
 
 `EnsembleRelatedTables` maps table names to `EnsembleTable`; relationships and task links remain shared graph metadata.
 
+Construction initially maps every member to one shared representation. Processors operate on that representation once and only create additional representations when routing, randomness, or incompatible output schemas require a split. Compatible distinct representations remain vectorized along the leading batch dimension. `repack` accepts one result per existing `(representation_id, batch_id)` in `iter_packed_representations` order, preserves the member mapping, and packs compatible results again. This is lazy materialization: tensor operations remain eager, but member data is neither copied nor separately processed before its execution path diverges.
+
 ## Processor Contracts
 
 ```python
-class EnsembleProcessor(Processor):
+class EnsembleTableProcessor(Processor):
     def fit_ensemble(self, table: EnsembleTable, *, context: EnsembleFitContext) -> Self: ...
     def transform_ensemble(self, table: EnsembleTable) -> EnsembleTable: ...
     def fit_transform_ensemble(self, table: EnsembleTable, *, context: EnsembleFitContext) -> EnsembleTable: ...
-
-class VariableSchemaProcessor(Processor):
-    def fit_batch(self, batch: TableTensor, *, generator: torch.Generator | None = None) -> Self: ...
-    def transform_batch(self, batch: TableTensor) -> tuple[TableTensor, ...]: ...
 ```
 
-`EnsembleProcessor` retains the inherited `TableTensor → TableTensor` API; the bridge to its ensemble methods is an implementation detail outside this initial specification. Invertible implementations also expose `inverse_transform_ensemble`. A normal `Processor` operates independently on every leading batch position within a data representation and retains fitted state such as `[B,1,C]`; member-routing, composite, or stochastic operations implement `EnsembleProcessor` directly. `VariableSchemaProcessor` is a `Processor` subclass that exposes an explicit batch path when fitted output schemas may differ by `batch_id`, while preserving the single-table `TableTensor` return type on the normal Processor API.
+`EnsembleTableProcessor` retains the inherited `TableTensor → TableTensor` API; the base class bridges that API through an `EnsembleTable` with one member. Invertible implementations also expose `inverse_transform_ensemble`.
+
+A normal `Processor` consumes and returns one `TableTensor`. It operates independently on every leading batch position within a packed representation and may retain fitted state such as `[B,1,C]`. It may change the schema only when every leading position produces the same output schema, so the result remains one `TableTensor`.
+
+An operation implements `EnsembleTableProcessor` when it must inspect or change the `EnsembleTable` structure. This includes member routing, composites, member-specific randomness, and data-dependent schema splits. There is no separate `VariableSchemaProcessor`, mixin, or capability flag. For example, `DropConstantColumns` computes masks vectorized as `[B,C]`, stores the fitted columns per packed position, creates one output per position, and calls `repack`; query transformation reuses those columns rather than recomputing them. `AlignCategories` follows the same contract when fitted output schemas differ.
 
 ## Processor Adapter
 
 ```python
-class _EnsembleProcessorAdapter(EnsembleProcessor):
+class _EnsembleTableProcessorAdapter(EnsembleTableProcessor):
     def fit_transform_ensemble(
         self,
         table: EnsembleTable,
@@ -84,31 +90,29 @@ class _EnsembleProcessorAdapter(EnsembleProcessor):
         self.processors = ModuleList(
             copy.deepcopy(self.template) for _ in table._packed_representations
         )
-        if isinstance(self.template, VariableSchemaProcessor):
-            ...
-
-        else...
+        ...
 
 
-def as_ensemble_processor(
+def as_ensemble_table_processor(
     processor: Processor,
-) -> EnsembleProcessor:
-    if isinstance(processor, EnsembleProcessor):
+) -> EnsembleTableProcessor:
+    if isinstance(processor, EnsembleTableProcessor):
         return processor
-    return _EnsembleProcessorAdapter(processor)
+    return _EnsembleTableProcessorAdapter(processor)
 ```
 
-`_EnsembleProcessorAdapter` adapts a normal Processor to the ensemble contract and owns one fitted instance per packed data representation. For a `VariableSchemaProcessor`, its private variable-schema path requires one output per `batch_id` and passes those outputs with the composed member mapping to `from_representations` / `pack`; `DropConstantColumns` uses this path so mask calculation remains vectorized. Query transform and inverse transform select the same path and apply the same instances to packed representations in the same order. All composite children are normalized through `as_ensemble_processor`, so downstream components use one interface.
+`_EnsembleTableProcessorAdapter` adapts a normal Processor to the ensemble contract and owns one fitted instance per packed data representation. It applies the Processor to the complete leading batch and replaces the packed representation without changing its member mapping. Query transform and inverse transform apply the same fitted instances to packed representations in the same order. The adapter never handles schema splits; operations that may produce a different schema per leading position implement `EnsembleTableProcessor` directly. All composite children are normalized through `as_ensemble_table_processor`, so downstream components use one interface. The adapter is private execution machinery, not a Processor category users select.
 
 ## Representation-Producing and Composite Processors
 
 - Member-specific randomness is defined by stable `(member_id, table_scope, processor_path)` streams and remains independent of physical packing of data representations and model randomness. Decisions are sampled during fit, stored by the Processor, and reused by transform and inverse transform.
 - `Choice` stores one option per member, computes each unique selected branch once, and calls `EnsembleTable.pack` / `from_representations` on the branch results in original member order. Round-robin selects `member_id % num_options`; random selection uses the member stream.
 - `ShuffleColumns` and `ShuffleCategories` store member-specific mappings, compute unique results, and call `pack`.
+- `DropConstantColumns` and `AlignCategories` compute data-dependent state vectorized per packed representation and call `repack` when leading positions produce incompatible schemas.
 - `Sequential`, `StypeDispatch`, and `TaskDispatch` pass `EnsembleTable` recursively through normalized children.
 - Only `ReduceEstimators` may aggregate the member dimension.
 
-The producer owns the semantic member-to-result mapping. `pack` / `from_representations` owns physical packing into data representations and `batch_id` assignment. The representation-preserving adapter does not repack; representation-producing Processors and the variable-schema adapter do.
+The producer owns the semantic member-to-result mapping. `pack` / `from_representations` owns physical packing into data representations and `batch_id` assignment. The representation-preserving adapter does not repack; `EnsembleTableProcessor` implementations that produce new routes or schemas do.
 
 ## Lazy Member Fitting Extension (Extension - not needed in v0)
 
@@ -122,10 +126,10 @@ class EnsembleTable:
 
 `_member_locations` describes the physical location of each member's current processed data representation. Its length always equals the total ensemble size. `(-1, -1)` marks a member that is inactive in the current branch. Compatible results remain in one packed data representation with a leading batch dimension; separate representations are required only for incompatible schemas or metadata.
 
-An ensemble-aware Processor may fit all active members or a requested subset. For each requested member, it resolves the input location and fits that data-dependent representation only if no fitted state exists. Every active member pointing to the same `(representation_id, batch_id)` shares that fitted state and is marked fitted at the same time. Sharing follows execution provenance; tensor values are never compared.
+An `EnsembleTableProcessor` may fit all active members or a requested subset. For each requested member, it resolves the input location and fits that data-dependent representation only if no fitted state exists. Every active member pointing to the same `(representation_id, batch_id)` shares that fitted state and is marked fitted at the same time. Sharing follows execution provenance; tensor values are never compared.
 
 ```python
-class EnsembleProcessor(Processor):
+class EnsembleTableProcessor(Processor):
     member_to_fitted_state: Tensor  # [E], -1 if not fitted
 
     def fit_transform_ensemble(
@@ -144,14 +148,14 @@ class EnsembleProcessor(Processor):
 
 ## Tasks
 
-| Task                          | Scope                                                                                                                                                                 | Owner                                                                           |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Recipe and output integration | Update `Recipe.fit_transform`/`transform`, atomic state, related tables, and `transform_output` including target inverse and class alignment.                         | TBD                                                                             |
-| Ensemble container            | Implement `EnsembleTable`, packing into data representations, member lookup via `(representation_id, batch_id)`, and related-table container.                         | Ramona Bendias DE                                                               |
-| Custom ensemble nodes         | Add `EnsembleProcessor` behavior for `Choice`, `Sequential`, `StypeDispatch`, `TaskDispatch`, `ShuffleColumns`, `ShuffleCategories`, and sampled `QuantileTransform`. | Jana Gagacheva (`Choice`/`Sequential`/`StypeDispatch`); remaining ownership TBD |
-| Processor adapter             | Implement `_EnsembleProcessorAdapter` and `VariableSchemaProcessor` with one fitted instance per packed representation and transform/inverse reuse.                   | TBD                                                                             |
-| Vectorized leaf Processors    | Update normal Processors to accept independent leading batch dimensions `[B,...,R,C]` within a data representation.                                                   | Ramona Bendias DE                                                               |
-| Validation                    | Cover member RNG, representation packing by schema, context/query state reuse, target inverse, raw member parity, and CUDA performance.                               | TBD                                                                             |
+| Task                          | Scope                                                                                                                                                 | Owner                                                                           |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Recipe and output integration | Update `Recipe.fit_transform`/`transform`, atomic state, related tables, and `transform_output` including target inverse and class alignment.         | TBD                                                                             |
+| Ensemble container            | Implement `EnsembleTable`, packing into data representations, member lookup via `(representation_id, batch_id)`, and related-table container.         | Ramona Bendias DE                                                               |
+| Collection-aware processors   | Add `EnsembleTableProcessor` behavior for routing, composites, stochastic operations, and data-dependent schema splits such as `DropConstantColumns`. | Jana Gagacheva (`Choice`/`Sequential`/`StypeDispatch`); remaining ownership TBD |
+| Processor adapter             | Implement `_EnsembleTableProcessorAdapter` with one fitted instance per packed representation and transform/inverse reuse.                            | TBD                                                                             |
+| Vectorized leaf Processors    | Update normal Processors to accept independent leading batch dimensions `[B,...,R,C]` within a data representation.                                   | Ramona Bendias DE                                                               |
+| Validation                    | Cover member RNG, representation packing by schema, context/query state reuse, target inverse, raw member parity, and CUDA performance.               | TBD                                                                             |
 
 ## Open Questions
 
