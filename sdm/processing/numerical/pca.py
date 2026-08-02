@@ -32,7 +32,6 @@ class PCA(Processor):
         self.num_components = num_components
         self.register_buffer("mean", torch.empty(0), persistent=True)
         self.register_buffer("components", torch.empty(0), persistent=True)
-        self._output_columns: tuple[str, ...] = ()
 
     def _fit(
         self,
