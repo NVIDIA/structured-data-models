@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from sdm import TableTensor
-from sdm.processing import QuantileTransform
+from sdm import EnsembleTable, TableTensor
+from sdm.processing import EnsembleProcessor, QuantileTransform
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -204,3 +204,52 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
     )
 
     assert torch.equal(first.quantiles, second.quantiles)
+
+
+def test_quantile_transform_is_an_ensemble_processor() -> None:
+    assert issubclass(QuantileTransform, EnsembleProcessor)
+
+
+def test_quantile_transform_deterministic_fit_remains_shared() -> None:
+    table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
+    output = QuantileTransform(
+        n_quantiles=8,
+        subsample=None,
+    ).fit_transform_ensemble(EnsembleTable(table, num_members=8))
+
+    assert (
+        sum(packed.size(0) for packed in output.iter_packed_representations())
+        == 1
+    )
+    for member_id in range(output.num_members):
+        assert output.representation(member_id).equal(output.representation(0))
+
+
+def test_quantile_transform_subsample_matches_independent_processors() -> None:
+    context = TableTensor.from_tensor(torch.arange(256.0).view(128, 2))
+    query = TableTensor.from_tensor(torch.arange(32.0).view(16, 2) + 0.5)
+    processor = QuantileTransform(n_quantiles=8, subsample=32)
+
+    context_output = processor.fit_transform_ensemble(
+        EnsembleTable(context, num_members=8),
+        generator=torch.Generator().manual_seed(7),
+    )
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=8)
+    )
+    restored = processor.inverse_transform_ensemble(context_output)
+
+    generator = torch.Generator().manual_seed(7)
+    references = [
+        QuantileTransform(n_quantiles=8, subsample=32) for _ in range(8)
+    ]
+    for member_id, reference in enumerate(references):
+        expected_context = reference.fit_transform(
+            context,
+            generator=generator,
+        )
+        expected_query = reference.transform(query)
+        expected_restored = reference.inverse_transform(expected_context)
+        assert context_output.representation(member_id).equal(expected_context)
+        assert query_output.representation(member_id).equal(expected_query)
+        assert restored.representation(member_id).equal(expected_restored)
