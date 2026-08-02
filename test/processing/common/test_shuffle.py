@@ -5,11 +5,12 @@ import torch
 
 from sdm import (
     CategoricalTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
-from sdm.processing import ShuffleColumns
+from sdm.processing import EnsembleProcessor, ShuffleColumns
 
 
 def _table() -> TableTensor:
@@ -71,3 +72,53 @@ def test_shuffle_columns_is_reproducible_with_generator(
 
     assert torch.equal(first.permutation, second.permutation)
     assert torch.equal(first_output.numerical, second_output.numerical)
+
+
+def test_shuffle_columns_is_an_ensemble_processor() -> None:
+    assert issubclass(ShuffleColumns, EnsembleProcessor)
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_columns_ensemble_matches_independent_processors(
+    method: Literal["shift", "random"],
+) -> None:
+    context = _table()
+    query = context.replace_blocks(numerical=context.numerical + 10)
+    ensemble = ShuffleColumns(method=method)
+    ensemble_generator = torch.Generator().manual_seed(7)
+
+    context_output = ensemble.fit_transform_ensemble(
+        EnsembleTable(context, num_members=8),
+        generator=ensemble_generator,
+    )
+    query_output = ensemble.transform_ensemble(
+        EnsembleTable(query, num_members=8)
+    )
+    restored = ensemble.inverse_transform_ensemble(context_output)
+
+    reference_generator = torch.Generator().manual_seed(7)
+    references = [ShuffleColumns(method=method) for _ in range(8)]
+    for member_id, processor in enumerate(references):
+        expected_context = processor.fit_transform(
+            context,
+            generator=reference_generator,
+        )
+        expected_query = processor.transform(query)
+        assert context_output.representation(member_id).equal(expected_context)
+        assert query_output.representation(member_id).equal(expected_query)
+        assert restored.representation(member_id).equal(context)
+
+
+def test_shuffle_columns_reuses_equal_member_permutations() -> None:
+    output = ShuffleColumns(method="shift").fit_transform_ensemble(
+        EnsembleTable(_table(), num_members=8),
+        generator=torch.Generator().manual_seed(9),
+    )
+
+    unique_columns = {
+        output.representation(member_id).columns[Stype.numerical]
+        for member_id in range(output.num_members)
+    }
+    assert sum(
+        packed.size(0) for packed in output.iter_packed_representations()
+    ) == len(unique_columns)
