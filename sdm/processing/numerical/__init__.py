@@ -9,7 +9,6 @@ from sdm.processing.numerical.quantile import QuantileTransform
 from sdm.processing.numerical.standardize import Standardize
 from sdm.processing.numerical.constant import DropConstantColumns
 from sdm.processing.numerical.pca import PCA
-from sdm.processing.numerical.slice_columns import SliceColumns
 
 __all__ = [
     "Clip",
