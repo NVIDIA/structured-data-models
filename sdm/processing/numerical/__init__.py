@@ -20,5 +20,4 @@ __all__ = [
     "Standardize",
     "DropConstantColumns",
     "PCA",
-    "SliceColumns",
 ]
