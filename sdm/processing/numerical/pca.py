@@ -56,7 +56,7 @@ class PCA(Processor):
         )
         rank = int((singular_values > tolerance).sum())
         num_components = min(self.num_components, rank)
-        self.components = vh[:num_components].T  # [F, C]
+        self.components = vh[:num_components].T
         self._columns: dict[str, Sequence[str]] = {
             Stype.numerical: tuple(f"pca_{i}" for i in range(num_components))
         }
