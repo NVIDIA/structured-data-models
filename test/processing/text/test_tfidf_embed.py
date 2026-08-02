@@ -1,7 +1,8 @@
 import pytest
 import torch
 
-from sdm import StringTensor, Stype, TableTensor
+from sdm import EnsembleTable, StringTensor, Stype, TableTensor
+from sdm.processing import EnsembleProcessor
 from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
 from sdm.testing import onlyCUDA
 
@@ -320,3 +321,50 @@ def test_tfidf_encoder_refit_replaces_previous_state() -> None:
 
     assert output.columns == expected.columns
     assert torch.equal(output.numerical, expected.numerical)
+
+
+def test_tfidf_text_embed_is_an_ensemble_processor() -> None:
+    assert issubclass(TfidfTextEmbed, EnsembleProcessor)
+
+
+def test_tfidf_text_embed_keeps_vocabulary_per_representation() -> None:
+    short = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
+    long = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    processor = TfidfTextEmbed(ngram_range=(2, 2))
+    context = EnsembleTable.from_representations(
+        (short, long),
+        member_representation_ids=(0, 1, 0, 1),
+    )
+
+    output = processor.fit_transform_ensemble(context)
+
+    assert output.representation(0).numerical.shape == (1, 2)
+    assert output.representation(1).numerical.shape == (1, 4)
+    assert torch.equal(
+        output.representation(0).numerical,
+        output.representation(2).numerical,
+    )
+    assert torch.equal(
+        output.representation(1).numerical,
+        output.representation(3).numerical,
+    )
+
+    query = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=4)
+    )
+    assert query_output.representation(0).numerical.shape == (1, 2)
+    assert query_output.representation(1).numerical.shape == (1, 4)
+
+
+def test_tfidf_text_embed_keeps_shared_output_packed() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+
+    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform_ensemble(
+        EnsembleTable(table, num_members=8)
+    )
+
+    assert (
+        sum(packed.size(0) for packed in output.iter_packed_representations())
+        == 1
+    )
