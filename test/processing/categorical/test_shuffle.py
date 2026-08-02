@@ -3,8 +3,14 @@ from typing import Literal
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
-from sdm.processing import ShuffleCategories
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
+from sdm.processing import EnsembleProcessor, ShuffleCategories
 from sdm.testing import withCUDA
 
 
@@ -140,3 +146,61 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert output.categorical.categories[0].numel() == 4
     assert output.categorical.code[-1].item() == -1
     assert output.categorical.tolist() == target.categorical.tolist()
+
+
+def test_shuffle_categories_is_an_ensemble_processor() -> None:
+    assert issubclass(ShuffleCategories, EnsembleProcessor)
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_categories_ensemble_matches_independent_processors(
+    method: Literal["shift", "random"],
+) -> None:
+    context = _table(
+        [[0, 0], [1, 1], [2, -1], [1, 0]],
+        (("a", "b", "c"), ("x", "y")),
+    )
+    query = _table(
+        [[2, 1], [0, -1]],
+        (("a", "b", "c"), ("x", "y")),
+    )
+    processor = ShuffleCategories(method=method)
+
+    context_output = processor.fit_transform_ensemble(
+        EnsembleTable(context, num_members=8),
+        generator=torch.Generator().manual_seed(7),
+    )
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=8)
+    )
+
+    generator = torch.Generator().manual_seed(7)
+    references = [ShuffleCategories(method=method) for _ in range(8)]
+    for member_id, reference in enumerate(references):
+        expected_context = reference.fit_transform(
+            context,
+            generator=generator,
+        )
+        expected_query = reference.transform(query)
+        assert context_output.representation(member_id).equal(expected_context)
+        assert query_output.representation(member_id).equal(expected_query)
+
+
+def test_shuffle_categories_reuses_equal_member_permutations() -> None:
+    table = _table([[0], [1]], (("a", "b"),))
+    output = ShuffleCategories(method="shift").fit_transform_ensemble(
+        EnsembleTable(table, num_members=8),
+        generator=torch.Generator().manual_seed(9),
+    )
+
+    unique_codes = {
+        tuple(
+            output.representation(member_id)
+            .categorical.code.flatten()
+            .tolist()
+        )
+        for member_id in range(output.num_members)
+    }
+    assert sum(
+        packed.size(0) for packed in output.iter_packed_representations()
+    ) == len(unique_codes)

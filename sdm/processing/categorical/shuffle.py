@@ -1,14 +1,14 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import CategoricalTensor, Stype
-from sdm.processing.base import Processor
-from sdm.tensor import TableTensor
+from sdm.processing.ensemble import EnsembleProcessor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
-class ShuffleCategories(Processor):
+class ShuffleCategories(EnsembleProcessor):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
@@ -43,6 +43,8 @@ class ShuffleCategories(Processor):
             "offsets",
             torch.zeros(1, dtype=torch.long),
         )
+        self.processors = torch.nn.ModuleList()
+        self._member_processor_ids: tuple[int, ...] = ()
 
     def _fit(
         self,
@@ -85,6 +87,80 @@ class ShuffleCategories(Processor):
             offsets,
             dtype=torch.long,
             device=device,
+        )
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        self._fit(table, generator=generator)
+        return self._transform(table)
+
+    def _fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self.processors = torch.nn.ModuleList()
+        representations = []
+        member_processor_ids = []
+        fitted: dict[tuple[tuple[int, int], tuple[int, ...]], int] = {}
+
+        for member_id in range(table.num_members):
+            processor = self.__class__(method=self.method)
+            transformed = processor.fit_transform(
+                table.representation(member_id),
+                generator=generator,
+            )
+            key = (
+                table._member_locations[member_id],
+                tuple(processor.permutations.tolist()),
+            )
+            processor_id = fitted.get(key)
+            if processor_id is None:
+                processor_id = len(representations)
+                fitted[key] = processor_id
+                self.processors.append(processor)
+                representations.append(transformed)
+            member_processor_ids.append(processor_id)
+
+        self._member_processor_ids = tuple(member_processor_ids)
+        return EnsembleTable.from_representations(
+            representations,
+            self._member_processor_ids,
+        )
+
+    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        if len(self._member_processor_ids) != table.num_members:
+            raise RuntimeError(
+                "ShuffleCategories must be fitted with the same number of "
+                "ensemble members before transform."
+            )
+
+        representations = []
+        member_representation_ids = []
+        transformed: dict[tuple[tuple[int, int], int], int] = {}
+        for member_id, processor_id in enumerate(self._member_processor_ids):
+            key = (table._member_locations[member_id], processor_id)
+            representation_id = transformed.get(key)
+            if representation_id is None:
+                processor = cast(
+                    ShuffleCategories,
+                    self.processors[processor_id],
+                )
+                representation_id = len(representations)
+                transformed[key] = representation_id
+                representations.append(
+                    processor.transform(table.representation(member_id))
+                )
+            member_representation_ids.append(representation_id)
+
+        return EnsembleTable.from_representations(
+            representations,
+            member_representation_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
