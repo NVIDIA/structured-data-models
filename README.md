@@ -1,3 +1,11 @@
+<p align="center">
+  <picture>
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/NVIDIA/structured-data-models/main/docs/source/images/logo_light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NVIDIA/structured-data-models/main/docs/source/images/logo_dark.svg">
+      <img src="https://raw.githubusercontent.com/NVIDIA/structured-data-models/main/docs/source/images/logo_dark.svg" width="420">
+  </picture>
+</p>
+
 # Structured Data Models
 
 Python package for structured data models.
