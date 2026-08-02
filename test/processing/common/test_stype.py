@@ -1,14 +1,40 @@
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import (
+    EnsembleProcessor,
     Identity,
     ImputeMean,
+    InvertibleMixin,
+    Processor,
     ShuffleCategories,
     Standardize,
     StypeDispatch,
 )
+
+
+class Center(Processor, InvertibleMixin):
+    supported_stypes = frozenset({Stype.numerical})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("mean", torch.empty(0))
+
+    def _fit(self, table: TableTensor, **_: object) -> None:
+        self.mean = table.numerical.mean(dim=-2, keepdim=True)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical - self.mean)
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical + self.mean)
 
 
 def _mixed_table() -> TableTensor:
@@ -201,3 +227,61 @@ def test_stype_dispatch_uses_route_fitted_state() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
+
+
+def test_stype_dispatch_is_an_ensemble_processor() -> None:
+    assert issubclass(StypeDispatch, EnsembleProcessor)
+
+
+def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
+    first = _mixed_table()
+    second = _mixed_table().replace_blocks(
+        numerical=torch.tensor([[2.0, 3.0], [4.0, 5.0]])
+    )
+    table = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(1, 0, 1),
+    )
+    processor = StypeDispatch(
+        numerical=lambda value: value.replace_blocks(
+            numerical=value.numerical.square()
+        )
+    )
+
+    output = processor.transform_ensemble(table)
+
+    for member_id, source in enumerate((second, first, second)):
+        result = output.representation(member_id)
+        assert torch.equal(result.numerical, source.numerical.square())
+        assert torch.equal(result.categorical.code, source.categorical.code)
+
+
+def test_stype_dispatch_ensemble_keeps_fitted_state_per_representation() -> (
+    None
+):
+    first = TableTensor.from_tensor(
+        torch.tensor([[1.0], [3.0]]),
+        columns=("first",),
+    )
+    second = TableTensor.from_tensor(
+        torch.tensor([[10.0], [14.0]]),
+        columns=("second",),
+    )
+    table = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(0, 1, 0),
+    )
+    processor = StypeDispatch(numerical=Center())
+
+    transformed = processor.fit_transform_ensemble(table)
+    restored = processor.inverse_transform_ensemble(transformed)
+
+    for member_id in range(table.num_members):
+        result = transformed.representation(member_id)
+        assert torch.allclose(
+            result.numerical.mean(dim=-2),
+            torch.zeros(1),
+        )
+        assert restored.representation(member_id).equal(
+            table.representation(member_id)
+        )
