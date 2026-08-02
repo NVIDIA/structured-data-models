@@ -5,10 +5,19 @@ from typing import Any, cast
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    EnsembleTable,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import (
+    EnsembleProcessor,
     ImputeMean,
+    InvertibleMixin,
     PowerTransform,
+    Processor,
     QuantileTransform,
     Sequential,
     ShuffleColumns,
@@ -43,6 +52,23 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
 
 def _add_one(table: TableTensor) -> TableTensor:
     return table.replace_blocks(numerical=table.numerical + 1)
+
+
+class Center(Processor, InvertibleMixin):
+    supported_stypes = frozenset({Stype.numerical})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("mean", torch.empty(0))
+
+    def _fit(self, table: TableTensor, **_: object) -> None:
+        self.mean = table.numerical.mean(dim=-2, keepdim=True)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical - self.mean)
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical + self.mean)
 
 
 def test_empty_pipeline_returns_input_table() -> None:
@@ -196,3 +222,54 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
     restored = pipeline.inverse_transform(transformed)
 
     assert torch.allclose(restored.numerical, table.numerical, atol=1e-4)
+
+
+def test_sequential_is_an_ensemble_processor() -> None:
+    assert issubclass(Sequential, EnsembleProcessor)
+
+
+def test_sequential_ensemble_matches_member_execution() -> None:
+    first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+    second = _table(torch.tensor([[2.0, 3.0], [4.0, 5.0]]))
+    table = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(1, 0, 1),
+    )
+    processor = Sequential(
+        Sequential(
+            lambda value: value.replace_blocks(
+                numerical=value.numerical.square()
+            )
+        ),
+        _add_one,
+    )
+
+    output = processor.fit_transform_ensemble(table)
+
+    for member_id, source in enumerate((second, first, second)):
+        expected = _add_one(
+            source.replace_blocks(numerical=source.numerical.square())
+        )
+        assert output.representation(member_id).equal(expected)
+
+
+def test_sequential_ensemble_keeps_fitted_state_per_representation() -> None:
+    first = TableTensor.from_tensor(
+        torch.tensor([[1.0], [3.0]]), columns=("first",)
+    )
+    second = TableTensor.from_tensor(
+        torch.tensor([[10.0], [14.0]]), columns=("second",)
+    )
+    table = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(0, 1),
+    )
+    processor = Sequential(Center())
+
+    transformed = processor.fit_transform_ensemble(table)
+    restored = processor.inverse_transform_ensemble(transformed)
+
+    for member_id in range(table.num_members):
+        assert restored.representation(member_id).equal(
+            table.representation(member_id)
+        )

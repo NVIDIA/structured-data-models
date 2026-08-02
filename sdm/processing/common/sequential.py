@@ -4,11 +4,15 @@ from typing import cast
 import torch
 from typing_extensions import Self
 
-from sdm import Stype, TableTensor
-from sdm.processing import InvertibleMixin, Processor
+from sdm import EnsembleTable, Stype, TableTensor
+from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.ensemble import (
+    EnsembleProcessor,
+    EnsembleProcessorAdapter,
+)
 
 
-class Sequential(Processor, InvertibleMixin):
+class Sequential(EnsembleProcessor, InvertibleMixin):
     r"""Apply processors and callables in sequence.
 
     Args:
@@ -78,6 +82,46 @@ class Sequential(Processor, InvertibleMixin):
             out = child.fit_transform(out, generator=generator)
         return out
 
+    def _fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        out = table
+        for child in self._ensemble_children():
+            out = child.fit_transform_ensemble(out, generator=generator)
+        return out
+
+    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        out = table
+        for child in self._ensemble_children():
+            out = child.transform_ensemble(out)
+        return out
+
+    def inverse_transform_ensemble(
+        self,
+        table: EnsembleTable,
+    ) -> EnsembleTable:
+        """Apply fitted child inverses in reverse order.
+
+        Args:
+            table: Ensemble table in the transformed representation.
+
+        Returns:
+            Ensemble table restored to its representation before transform.
+        """
+        out = table
+        for child in reversed(tuple(self._ensemble_children())):
+            fn = getattr(child, "inverse_transform_ensemble", None)
+            if not callable(fn):
+                raise AttributeError(
+                    f"{child.__class__.__name__!r} object has no attribute "
+                    "'inverse_transform_ensemble'"
+                )
+            out = fn(out)
+        return out
+
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         out = table
         for child in reversed(list(self)):
@@ -89,6 +133,13 @@ class Sequential(Processor, InvertibleMixin):
                 )
             out = fn(out)
         return out
+
+    def _ensemble_children(self) -> Iterator[EnsembleProcessor]:
+        for name, child in tuple(self._modules.items()):
+            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
+            if processor is not child:
+                self._modules[name] = processor
+            yield processor
 
     def __iter__(self) -> Iterator[Processor]:
         return cast(Iterator[Processor], self.children())
