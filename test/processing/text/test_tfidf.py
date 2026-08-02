@@ -2,7 +2,8 @@ import pytest
 import torch
 
 from sdm import StringTensor, Stype, TableTensor
-from sdm.processing import TFIDF
+from sdm.processing import TFIDF, EnsembleProcessor
+from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
 
 
@@ -320,3 +321,47 @@ def test_refit_replaces_previous_state() -> None:
 
     assert output.columns == expected.columns
     assert torch.equal(output.numerical, expected.numerical)
+
+
+def test_tfidf_text_embed_is_an_ensemble_processor() -> None:
+    assert issubclass(TFIDF, EnsembleProcessor)
+
+
+def test_tfidf_text_embed_keeps_vocabulary_per_representation() -> None:
+    short = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
+    long = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    processor = TFIDF(ngram_range=(2, 2))
+    context = EnsembleTable.from_tables(
+        (short, long),
+        member_table_ids=(0, 1, 0, 1),
+    )
+
+    output = processor.fit_transform_ensemble(context)
+
+    assert output.table(0).numerical.shape == (1, 2)
+    assert output.table(1).numerical.shape == (1, 4)
+    assert torch.equal(
+        output.table(0).numerical,
+        output.table(2).numerical,
+    )
+    assert torch.equal(
+        output.table(1).numerical,
+        output.table(3).numerical,
+    )
+
+    query = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=4)
+    )
+    assert query_output.table(0).numerical.shape == (1, 2)
+    assert query_output.table(1).numerical.shape == (1, 4)
+
+
+def test_tfidf_text_embed_keeps_shared_output_packed() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+
+    output = TFIDF(ngram_range=(2, 2)).fit_transform_ensemble(
+        EnsembleTable(table, num_members=8)
+    )
+
+    assert sum(group.size(0) for group in output) == 1
