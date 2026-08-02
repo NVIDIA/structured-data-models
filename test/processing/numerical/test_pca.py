@@ -40,14 +40,7 @@ def test_pca_caps_num_components_at_feature_count() -> None:
 
 
 def test_pca_caps_num_components_at_centered_rank() -> None:
-    table = TableTensor.from_tensor(
-        torch.tensor(
-            [
-                [1.0, 1.0],
-                [2.0, 2.0],
-            ],
-        )
-    )
+    table = TableTensor.from_tensor(torch.tensor([[1.0, 1.0], [2.0, 2.0]]))
     output = PCA(num_components=2).fit_transform(table)
     assert output.numerical.size() == (2, 1)
     assert output.columns[Stype.numerical] == ("pca_0",)
