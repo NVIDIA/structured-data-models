@@ -23,7 +23,6 @@ from sdm.processing.numerical import (
     Standardize,
     DropConstantColumns,
     PCA,
-    SliceColumns,
 )
 from sdm.processing.categorical import (
     AlignCategories,
