@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
@@ -6,17 +6,18 @@ from torch import Tensor
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
-from sdm.processing import Processor
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.relational.join import join_index
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
 
-class AlignCategories(Processor):
+class AlignCategories(EnsembleProcessor):
     """Align categorical columns to vocabularies observed during fitting.
 
     Fitting keeps the observed category values for each column. Transforming
@@ -39,6 +40,8 @@ class AlignCategories(Processor):
         super().__init__()
         self.sort_by = sort_by
         self._categories: tuple[Tensor, ...] = ()
+        self.processors = torch.nn.ModuleList()
+        self._member_processor_ids: tuple[int, ...] = ()
 
     def _fit_category(
         self,
@@ -134,6 +137,68 @@ class AlignCategories(Processor):
 
         return table.replace_blocks(
             categorical=CategoricalTensor(out, categories=self._categories),
+        )
+
+    def _fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self.processors = torch.nn.ModuleList()
+        representations = []
+        member_processor_ids = []
+        fitted: dict[tuple[int, int], int] = {}
+
+        for member_id in range(table.num_members):
+            location = table._member_locations[member_id]
+            processor_id = fitted.get(location)
+            if processor_id is None:
+                processor = self.__class__(sort_by=self.sort_by)
+                transformed = processor.fit_transform(
+                    table.representation(member_id),
+                    generator=generator,
+                )
+                processor_id = len(representations)
+                fitted[location] = processor_id
+                self.processors.append(processor)
+                representations.append(transformed)
+            member_processor_ids.append(processor_id)
+
+        self._member_processor_ids = tuple(member_processor_ids)
+        return EnsembleTable.from_representations(
+            representations,
+            self._member_processor_ids,
+        )
+
+    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        if len(self._member_processor_ids) != table.num_members:
+            raise RuntimeError(
+                "AlignCategories must be fitted with the same number of "
+                "ensemble members before transform."
+            )
+
+        representations = []
+        member_representation_ids = []
+        transformed: dict[tuple[tuple[int, int], int], int] = {}
+        for member_id, processor_id in enumerate(self._member_processor_ids):
+            key = (table._member_locations[member_id], processor_id)
+            representation_id = transformed.get(key)
+            if representation_id is None:
+                processor = cast(
+                    AlignCategories,
+                    self.processors[processor_id],
+                )
+                representation_id = len(representations)
+                transformed[key] = representation_id
+                representations.append(
+                    processor.transform(table.representation(member_id))
+                )
+            member_representation_ids.append(representation_id)
+
+        return EnsembleTable.from_representations(
+            representations,
+            member_representation_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

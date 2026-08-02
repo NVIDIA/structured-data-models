@@ -4,8 +4,8 @@ import pandas as pd
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, TableTensor
-from sdm.processing import AlignCategories
+from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
+from sdm.processing import AlignCategories, EnsembleProcessor
 from sdm.testing import withCUDA
 
 
@@ -361,3 +361,80 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
     with pytest.raises(NotImplementedError):
         processor.transform(query)
+
+
+def test_align_categories_is_an_ensemble_processor() -> None:
+    assert issubclass(AlignCategories, EnsembleProcessor)
+
+
+def test_align_categories_keeps_fitted_vocabularies_per_representation() -> (
+    None
+):
+    first = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    second = _table(
+        [[1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    processor = AlignCategories()
+    context = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(0, 1, 0, 1),
+    )
+
+    transformed = processor.fit_transform_ensemble(context)
+
+    assert transformed.representation(0).categorical.categories[
+        0
+    ].tolist() == [
+        "red",
+        "blue",
+    ]
+    assert transformed.representation(1).categorical.categories[
+        0
+    ].tolist() == [
+        "blue",
+        "green",
+    ]
+
+    query = _table(
+        [[0], [1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    query_output = processor.transform_ensemble(
+        EnsembleTable.from_representations(
+            (query, query),
+            member_representation_ids=(0, 1, 0, 1),
+        )
+    )
+    assert query_output.representation(0).categorical.code.tolist() == [
+        [0],
+        [1],
+        [-1],
+    ]
+    assert query_output.representation(1).categorical.code.tolist() == [
+        [-1],
+        [0],
+        [1],
+    ]
+
+
+def test_align_categories_keeps_shared_output_packed() -> None:
+    table = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue"),),
+    )
+    output = AlignCategories().fit_transform_ensemble(
+        EnsembleTable(table, num_members=8)
+    )
+
+    assert (
+        sum(packed.size(0) for packed in output.iter_packed_representations())
+        == 1
+    )
