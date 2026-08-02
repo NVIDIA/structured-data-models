@@ -3,8 +3,9 @@ from textwrap import dedent
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
 from sdm.processing import (
+    EnsembleProcessor,
     Identity,
     Softmax,
     Standardize,
@@ -89,3 +90,26 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
         dispatch._resolve(_categorical_target())
     with pytest.raises(ValueError, match=r"exactly one.*got 2"):
         dispatch._resolve(_numerical_table(("y0", "y1")))
+
+
+def test_task_dispatch_is_an_ensemble_processor() -> None:
+    assert issubclass(TaskDispatch, EnsembleProcessor)
+
+
+def test_task_dispatch_routes_packed_ensemble_output() -> None:
+    first = _numerical_table(("a", "b"))
+    second = first.replace_blocks(numerical=first.numerical.flip(-1))
+    table = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(1, 0, 1),
+    )
+    dispatch = TaskDispatch(classification=Softmax())
+    dispatch._resolve(_categorical_target())
+
+    output = dispatch.transform_ensemble(table)
+
+    for member_id, source in enumerate((second, first, second)):
+        torch.testing.assert_close(
+            output.representation(member_id).numerical,
+            source.numerical.softmax(dim=-1),
+        )
