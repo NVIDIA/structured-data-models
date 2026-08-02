@@ -64,7 +64,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
         with torch.amp.autocast(
             self._device.type,
-            torch.bfloat16,
+            torch.float16,
             enabled=table_x.is_cuda,
         ):
             self.model.fit(
@@ -83,7 +83,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
         with torch.amp.autocast(
             self._device.type,
-            torch.bfloat16,
+            torch.float16,
             enabled=table_x.is_cuda,
         ):
             out = self.model.predict(table_x)
@@ -98,7 +98,7 @@ class SDMTabICLv2System(ExternalSystemModel):
         )
         with torch.amp.autocast(
             self._device.type,
-            torch.bfloat16,
+            torch.float16,
             enabled=table_x.is_cuda,
         ):
             probabilities = self.model.predict(table_x).to_pandas()
