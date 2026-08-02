@@ -2,7 +2,6 @@ from collections.abc import Sequence
 
 import torch
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -39,7 +38,7 @@ class PCA(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         if numerical.numel() == 0:
             raise ValueError("`table` must be non-empty.")
 
@@ -70,7 +69,7 @@ class PCA(Processor):
                 f"{table.numerical.size(-1)})."
             )
 
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         output_shape = (*numerical.shape[:-1], self.components.size(-1))
         numerical = numerical.flatten(end_dim=-2)
         projected = (numerical - self.mean) @ self.components  # [N, C]
