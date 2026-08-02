@@ -56,7 +56,6 @@ __all__ = [
     "Standardize",
     "DropConstantColumns",
     "PCA",
-    "SliceColumns",
     "AlignCategories",
     "ShuffleCategories",
     "ImputeMode",
