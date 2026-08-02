@@ -1,11 +1,3 @@
-<p align="center">
-  <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/source/_static/logo_dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset="docs/source/_static/logo_light.svg">
-      <img src="docs/source/_static/logo_light.svg" width="420">
-  </picture>
-</p>
-
 # Structured Data Models
 
 Python package for structured data models.
