@@ -2,7 +2,12 @@ import pytest
 import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import EnsembleProcessor, Processor
+from sdm.processing import (
+    EnsembleProcessor,
+    EnsembleProcessorAdapter,
+    InvertibleMixin,
+    Processor,
+)
 
 
 class IdentityEnsembleProcessor(EnsembleProcessor):
@@ -36,6 +41,23 @@ class ExpandingEnsembleProcessor(IdentityEnsembleProcessor):
         table: EnsembleTable,
     ) -> EnsembleTable:
         return EnsembleTable(table.representation(0), num_members=2)
+
+
+class Center(Processor, InvertibleMixin):
+    supported_stypes = frozenset({Stype.numerical})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("mean", torch.empty(0))
+
+    def _fit(self, table: TableTensor, **_: object) -> None:
+        self.mean = table.numerical.mean(dim=-2, keepdim=True)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical - self.mean)
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=table.numerical + self.mean)
 
 
 def test_ensemble_processor_is_a_processor() -> None:
@@ -109,3 +131,47 @@ def test_only_ensemble_api_accepts_multiple_output_members() -> None:
     assert processor.transform_ensemble(ensemble).num_members == 2
     with pytest.raises(RuntimeError, match="exactly one member"):
         processor.transform(table)
+
+
+def test_adapter_preserves_packed_member_mapping() -> None:
+    first = TableTensor.from_tensor(
+        torch.tensor([[1.0], [3.0]]), columns=("first",)
+    )
+    second = TableTensor.from_tensor(
+        torch.tensor([[2.0], [6.0]]), columns=("second",)
+    )
+    table = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(1, 0, 1),
+    )
+    processor = EnsembleProcessorAdapter(Center())
+
+    output = processor.fit_transform_ensemble(table)
+
+    assert output.num_members == 3
+    assert output.representation(0).numerical.tolist() == [[-2.0], [2.0]]
+    assert output.representation(1).numerical.tolist() == [[-1.0], [1.0]]
+    assert output.representation(2).equal(output.representation(0))
+    restored = processor.inverse_transform_ensemble(output)
+    for member_id in range(table.num_members):
+        assert restored.representation(member_id).equal(
+            table.representation(member_id)
+        )
+
+
+def test_adapter_returns_ensemble_processors_unchanged() -> None:
+    processor = IdentityEnsembleProcessor()
+    assert EnsembleProcessorAdapter.adapt(processor) is processor
+
+
+def test_adapter_rejects_row_changing_processor() -> None:
+    table = EnsembleTable(
+        TableTensor.from_tensor(torch.ones(2, 1)),
+        num_members=2,
+    )
+    processor = EnsembleProcessorAdapter(
+        Processor.as_processor(lambda value: value[..., :1, :])
+    )
+
+    with pytest.raises(ValueError, match="row dimension"):
+        processor.fit_transform_ensemble(table)

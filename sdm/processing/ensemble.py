@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import abc
+import copy
+from typing import cast
 
 import torch
 
-from sdm.processing.base import Processor
+from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
 from sdm.tensor import EnsembleTable, TableTensor
 
 
@@ -108,3 +111,103 @@ class EnsembleProcessor(Processor):
                 "exactly one member."
             )
         return table.representation(0)
+
+
+class EnsembleProcessorAdapter(EnsembleProcessor):
+    """Apply an ordinary processor to packed ensemble representations.
+
+    The adapter owns one fitted processor copy per packed representation and
+    preserves the member-to-representation mapping. It only supports
+    processors whose output remains packed with the same leading size.
+
+    Args:
+        processor: Ordinary processor to adapt.
+    """
+
+    supported_stypes = frozenset(Stype)
+
+    def __init__(self, processor: Processor) -> None:
+        super().__init__()
+        self.template = processor
+        self.requires_fit = processor.requires_fit
+        self.processors = torch.nn.ModuleList()
+
+    @classmethod
+    def adapt(cls, processor: Processor) -> EnsembleProcessor:
+        """Return an ensemble processor for ``processor``.
+
+        Args:
+            processor: Processor to normalize.
+        """
+        if isinstance(processor, EnsembleProcessor):
+            return processor
+        return cls(processor)
+
+    def _fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self.processors = torch.nn.ModuleList()
+        outputs = []
+        for packed in table.iter_packed_representations():
+            processor = copy.deepcopy(self.template)
+            output = processor.fit_transform(packed, generator=generator)
+            self._check_output(packed, output)
+            self.processors.append(processor)
+            outputs.append(output)
+        return table._replace_packed_representations(outputs)
+
+    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        processors = self.processors
+        if not self.requires_fit and len(processors) == 0:
+            processors = torch.nn.ModuleList(
+                copy.deepcopy(self.template)
+                for _ in table.iter_packed_representations()
+            )
+
+        outputs = []
+        for packed, processor in zip(
+            table.iter_packed_representations(),
+            processors,
+            strict=True,
+        ):
+            output = cast(Processor, processor).transform(packed)
+            self._check_output(packed, output)
+            outputs.append(output)
+        return table._replace_packed_representations(outputs)
+
+    def inverse_transform_ensemble(
+        self,
+        table: EnsembleTable,
+    ) -> EnsembleTable:
+        """Apply the fitted inverse to packed representations.
+
+        Args:
+            table: Ensemble table in the transformed representation.
+
+        Returns:
+            Ensemble table restored to its representation before transform.
+        """
+        outputs = []
+        for packed, processor in zip(
+            table.iter_packed_representations(),
+            self.processors,
+            strict=True,
+        ):
+            if not isinstance(processor, InvertibleMixin):
+                raise TypeError(
+                    f"{processor.__class__.__name__!r} is not invertible."
+                )
+            output = processor.inverse_transform(packed)
+            self._check_output(packed, output)
+            outputs.append(output)
+        return table._replace_packed_representations(outputs)
+
+    @staticmethod
+    def _check_output(before: TableTensor, after: TableTensor) -> None:
+        if before.size(-2) != after.size(-2):
+            raise ValueError(
+                "An adapted Processor must preserve the row dimension."
+            )

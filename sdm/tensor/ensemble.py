@@ -21,6 +21,9 @@ class EnsembleTable:
         num_members: Number of ensemble members.
     """
 
+    _packed_representations: tuple[TableTensor, ...]
+    _member_locations: tuple[tuple[int, int], ...]
+
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
         if num_members <= 0:
             raise ValueError("Expected 'num_members' to be positive.")
@@ -129,6 +132,27 @@ class EnsembleTable:
         Representations are stacked along a leading dimension.
         """
         return iter(self._packed_representations)
+
+    def _replace_packed_representations(
+        self,
+        representations: Sequence[TableTensor],
+    ) -> Self:
+        if len(representations) != len(self._packed_representations):
+            raise ValueError("Expected one replacement per representation.")
+        if any(
+            before.size(0) != after.size(0)
+            for before, after in zip(
+                self._packed_representations,
+                representations,
+                strict=True,
+            )
+        ):
+            raise ValueError("Expected replacements to preserve packed sizes.")
+
+        table = self.__class__.__new__(self.__class__)
+        table._packed_representations = tuple(representations)
+        table._member_locations = self._member_locations
+        return table
 
     def __repr__(self) -> str:
         return (
