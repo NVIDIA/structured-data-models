@@ -3,8 +3,8 @@ import math
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
-from sdm.processing import PCA
+from sdm import EnsembleTable, Stype, TableTensor
+from sdm.processing import PCA, EnsembleProcessor
 
 
 @pytest.mark.parametrize("shape", [(20, 5), (2, 3, 4, 4)])
@@ -47,3 +47,53 @@ def test_pca_caps_num_components_at_centered_rank() -> None:
     output = PCA(num_components=2).fit_transform(table)
     assert output.numerical.size() == (2, 1)
     assert output.columns[Stype.numerical] == ("pca_0",)
+
+
+def test_pca_is_an_ensemble_processor() -> None:
+    assert issubclass(PCA, EnsembleProcessor)
+
+
+def test_pca_keeps_fitted_projection_per_representation() -> None:
+    rank_one = TableTensor.from_tensor(
+        torch.tensor([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    )
+    rank_two = TableTensor.from_tensor(
+        torch.tensor([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]])
+    )
+    processor = PCA(num_components=2)
+    context = EnsembleTable.from_representations(
+        (rank_one, rank_two),
+        member_representation_ids=(0, 1, 0, 1),
+    )
+
+    output = processor.fit_transform_ensemble(context)
+
+    assert output.representation(0).numerical.shape == (3, 1)
+    assert output.representation(1).numerical.shape == (3, 2)
+    torch.testing.assert_close(
+        output.representation(0).numerical,
+        output.representation(2).numerical,
+    )
+    torch.testing.assert_close(
+        output.representation(1).numerical,
+        output.representation(3).numerical,
+    )
+
+    query_output = processor.transform_ensemble(
+        EnsembleTable(rank_two, num_members=4)
+    )
+    assert query_output.representation(0).numerical.shape == (3, 1)
+    assert query_output.representation(1).numerical.shape == (3, 2)
+
+
+def test_pca_keeps_shared_output_packed() -> None:
+    table = TableTensor.from_tensor(torch.eye(3))
+
+    output = PCA(num_components=2).fit_transform_ensemble(
+        EnsembleTable(table, num_members=8)
+    )
+
+    assert (
+        sum(packed.size(0) for packed in output.iter_packed_representations())
+        == 1
+    )

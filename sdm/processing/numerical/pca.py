@@ -1,13 +1,14 @@
 from collections.abc import Sequence
+from typing import cast
 
 import torch
 
-from sdm.processing.base import Processor
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
-class PCA(Processor):
+class PCA(EnsembleProcessor):
     """Project numerical columns onto their principal components.
 
     The mean and components are fitted on the context table via a singular
@@ -31,6 +32,8 @@ class PCA(Processor):
         self.num_components = num_components
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("components", torch.empty(0))
+        self.processors = torch.nn.ModuleList()
+        self._member_processor_ids: tuple[int, ...] = ()
 
     def _fit(
         self,
@@ -60,6 +63,75 @@ class PCA(Processor):
         self._columns: dict[str, Sequence[str]] = {
             Stype.numerical: tuple(f"pca_{i}" for i in range(num_components))
         }
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        self._fit(table, generator=generator)
+        return self._transform(table)
+
+    def _fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        processors = torch.nn.ModuleList()
+        representations: list[TableTensor] = []
+        member_processor_ids: list[int] = []
+        fitted: dict[tuple[int, int], int] = {}
+
+        for member_id in range(table.num_members):
+            location = table._member_locations[member_id]
+            processor_id = fitted.get(location)
+            if processor_id is None:
+                processor = self.__class__(num_components=self.num_components)
+                transformed = processor.fit_transform(
+                    table.representation(member_id),
+                    generator=generator,
+                )
+                processor_id = len(processors)
+                fitted[location] = processor_id
+                processors.append(processor)
+                representations.append(transformed)
+            member_processor_ids.append(processor_id)
+
+        self.processors = processors
+        self._member_processor_ids = tuple(member_processor_ids)
+        return EnsembleTable.from_representations(
+            representations,
+            member_processor_ids,
+        )
+
+    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        if len(self._member_processor_ids) != table.num_members:
+            raise RuntimeError(
+                "PCA must be fitted with the same number of ensemble members "
+                "before transform."
+            )
+
+        representations: list[TableTensor] = []
+        member_representation_ids: list[int] = []
+        transformed: dict[tuple[tuple[int, int], int], int] = {}
+        for member_id, processor_id in enumerate(self._member_processor_ids):
+            key = (table._member_locations[member_id], processor_id)
+            representation_id = transformed.get(key)
+            if representation_id is None:
+                processor = cast(PCA, self.processors[processor_id])
+                representation_id = len(representations)
+                transformed[key] = representation_id
+                representations.append(
+                    processor.transform(table.representation(member_id))
+                )
+            member_representation_ids.append(representation_id)
+
+        return EnsembleTable.from_representations(
+            representations,
+            member_representation_ids,
+        )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         if table.numerical.size(-1) != self.mean.size(0):
