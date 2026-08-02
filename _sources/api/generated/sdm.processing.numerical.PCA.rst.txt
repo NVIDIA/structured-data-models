@@ -1,0 +1,8 @@
+﻿PCA
+===
+
+.. currentmodule:: sdm.processing.numerical
+
+.. autoclass:: PCA
+   :members:
+   :show-inheritance:
