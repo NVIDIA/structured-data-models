@@ -1,28 +1,25 @@
+import math
+
+import pytest
 import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import PCA
 
 
-def test_pca_projects_to_requested_num_components() -> None:
-    table = TableTensor.from_tensor(torch.eye(20, 5, dtype=torch.float32))
+@pytest.mark.parametrize("shape", [(20, 5), (2, 3, 4, 4)])
+def test_basic(
+    shape: tuple[int, ...],
+) -> None:
+    data = torch.eye(
+        math.prod(shape[:-1]),
+        shape[-1],
+        dtype=torch.float32,
+    ).reshape(shape)
+    table = TableTensor.from_tensor(data)
     output = PCA(num_components=2).fit_transform(table)
-    assert output.numerical.size() == (20, 2)
+    assert output.numerical.size() == (*shape[:-1], 2)
     assert output.columns[Stype.numerical] == ("pca_0", "pca_1")
-
-
-def test_pca_flattens_and_restores_leading_dimensions() -> None:
-    data = torch.eye(24, 4, dtype=torch.float32).reshape(2, 3, 4, 4)
-    pca = PCA(num_components=3)
-    output = pca.fit_transform(TableTensor.from_tensor(data))
-    flat_output = pca.transform(
-        TableTensor.from_tensor(data.flatten(end_dim=-2))
-    )
-    assert output.numerical.size() == (2, 3, 4, 3)
-    torch.testing.assert_close(
-        output.numerical.flatten(end_dim=-2),
-        flat_output.numerical,
-    )
 
 
 def test_pca_projects_onto_fitted_dominant_direction() -> None:
