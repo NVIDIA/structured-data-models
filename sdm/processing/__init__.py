@@ -1,6 +1,6 @@
 """Processors for structured data tables."""
 
-from sdm.processing.base import Processor, NumericalProcessor, InvertibleMixin
+from sdm.processing.base import Processor, InvertibleMixin
 from sdm.processing.common import (
     Identity,
     Callable,
@@ -34,7 +34,6 @@ from sdm.processing.recipe import Recipe
 
 __all__ = [
     "Processor",
-    "NumericalProcessor",
     "InvertibleMixin",
     "Identity",
     "Callable",

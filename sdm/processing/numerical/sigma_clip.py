@@ -1,7 +1,8 @@
 import torch
 from torch import Tensor
 
-from sdm.processing.base import NumericalProcessor
+from sdm.processing.base import Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
@@ -10,7 +11,7 @@ def _std(inp: Tensor, *, dim: int) -> Tensor:
     return inp.std(dim=dim, correction=correction)
 
 
-class ClipSigma(NumericalProcessor):
+class ClipSigma(Processor):
     """Two-stage z-score outlier clipping with soft logarithmic bounds.
 
     The first pass masks values outside the initial z-score bounds, then the
@@ -21,6 +22,8 @@ class ClipSigma(NumericalProcessor):
         threshold: Positive z-score multiplier setting how many standard
             deviations from the mean mark the soft clipping bounds.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

@@ -9,7 +9,6 @@ Processor API
    :nosignatures:
 
    ~sdm.processing.base.Processor
-   ~sdm.processing.base.NumericalProcessor
    ~sdm.processing.base.InvertibleMixin
    ~sdm.processing.recipe.Recipe
 

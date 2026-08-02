@@ -3,8 +3,9 @@ import math
 import torch
 from torch import Tensor
 
-from sdm.processing.base import InvertibleMixin, NumericalProcessor
+from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 # Keep GPU execution batched; adaptive per-column stopping would resynchronize.
@@ -129,13 +130,15 @@ def _yeojohnson_log_likelihood(
     )
 
 
-class PowerTransform(NumericalProcessor, InvertibleMixin):
+class PowerTransform(Processor, InvertibleMixin):
     """Apply a feature-wise Yeo-Johnson power transform.
 
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed
             features using statistics fitted after the power transform.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

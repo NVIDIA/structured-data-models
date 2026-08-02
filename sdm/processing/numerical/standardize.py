@@ -1,11 +1,12 @@
 import torch
 
-from sdm.processing.base import InvertibleMixin, NumericalProcessor
+from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class Standardize(NumericalProcessor, InvertibleMixin):
+class Standardize(Processor, InvertibleMixin):
     """Center and scale each feature column.
 
     Constant columns use a unit scale to keep the transform finite and
@@ -18,6 +19,8 @@ class Standardize(NumericalProcessor, InvertibleMixin):
         epsilon: Value added to each fitted standard deviation. The default
             preserves exact constant-column handling.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

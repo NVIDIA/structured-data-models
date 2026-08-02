@@ -1,11 +1,11 @@
 from typing import Literal
 
-from sdm.processing.base import NumericalProcessor
+from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class ReduceEstimators(NumericalProcessor):
+class ReduceEstimators(Processor):
     """Reduce the leading ensemble dimension of model outputs.
 
     Input must be a numerical output table with shape ``[E, ..., R, O]``.
@@ -22,6 +22,7 @@ class ReduceEstimators(NumericalProcessor):
             ``"mean"`` is supported.
     """
 
+    supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def __init__(

@@ -2,11 +2,12 @@ import math
 
 import torch
 
-from sdm.processing.base import NumericalProcessor
+from sdm.processing.base import Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class Softmax(NumericalProcessor):
+class Softmax(Processor):
     """Apply softmax to logits after temperature scaling.
 
     Softmax acts on the final class dimension and preserves all leading
@@ -17,6 +18,7 @@ class Softmax(NumericalProcessor):
             higher values produce a softer distribution.
     """
 
+    supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def __init__(

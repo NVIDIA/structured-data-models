@@ -1,8 +1,9 @@
-from sdm.processing.base import NumericalProcessor
+from sdm.processing.base import Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class Clip(NumericalProcessor):
+class Clip(Processor):
     """Clamp numerical values to a fixed interval.
 
     Values below ``min_value`` are set to ``min_value``, and values above
@@ -15,6 +16,7 @@ class Clip(NumericalProcessor):
         max_value: Inclusive upper bound for every numerical value.
     """
 
+    supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
     def __init__(

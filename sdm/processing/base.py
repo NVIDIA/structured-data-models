@@ -32,9 +32,6 @@ class Processor(torch.nn.Module, abc.ABC):
         super().__init__()
         self._fitted = False
 
-    def _cast_table(self, table: TableTensor) -> TableTensor:
-        return table
-
     def _check_supported_stypes(self, table: TableTensor) -> None:
         supported_stypes = self.supported_stypes
         for stype, columns in table.columns.items():
@@ -111,7 +108,6 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         self._check_supported_stypes(table)
         if self.requires_fit:
-            table = self._cast_table(table)
             self._fit(table, generator=generator)
             self._fitted = True
         return self
@@ -127,7 +123,6 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         self._check_supported_stypes(table)
         self._check_is_fitted()
-        table = self._cast_table(table)
         return self._transform(table)
 
     def forward(self, table: TableTensor) -> TableTensor:
@@ -150,7 +145,6 @@ class Processor(torch.nn.Module, abc.ABC):
             The transformed table.
         """
         self._check_supported_stypes(table)
-        table = self._cast_table(table)
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
             self._fitted = True
@@ -178,55 +172,6 @@ class Processor(torch.nn.Module, abc.ABC):
         return f"{' ' * indent}{self.__class__.__name__}()"
 
 
-class NumericalProcessor(Processor):
-    r"""Base processor that promotes numerical values to floating point.
-
-    Floating-point inputs are preserved. Non-floating inputs are promoted to
-    the default floating-point dtype before fitting or transforming.
-
-    .. testcode::
-
-        import torch
-
-        from sdm import Stype, TableTensor
-        from sdm.processing import NumericalProcessor
-
-
-        class MyNumericalProcessor(NumericalProcessor):
-            requires_fit = False
-
-            def _transform(self, table: TableTensor) -> TableTensor:
-                return table
-
-
-        table = TableTensor(
-            columns={Stype.numerical: ("my_column",)},
-            numerical=torch.randint(
-                0,
-                10,
-                size=(2, 1),
-                dtype=torch.int64,
-            ),
-        )
-        print(f"Before: {table.numerical.dtype}")
-        output = MyNumericalProcessor().transform(table)
-        print(f"After: {output.numerical.dtype}")
-
-    .. testoutput::
-
-        Before: torch.int64
-        After: torch.float32
-    """
-
-    supported_stypes = frozenset({Stype.numerical})
-
-    def _cast_table(self, table: TableTensor) -> TableTensor:
-        if table.numerical.is_floating_point():
-            return table
-        numerical = table.numerical.to(dtype=torch.get_default_dtype())
-        return table.replace_blocks(numerical=numerical)
-
-
 class InvertibleMixin(abc.ABC):
     r"""Extend a :class:`Processor` by an inverse transformation."""
 
@@ -244,11 +189,8 @@ class InvertibleMixin(abc.ABC):
             :meth:`~Processor.transform`.
         """
         self._check_is_fitted()
-        table = self._cast_table(table)
         return self._inverse_transform(table)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
         def _check_is_fitted(self) -> None: ...
-
-        def _cast_table(self, table: TableTensor) -> TableTensor: ...

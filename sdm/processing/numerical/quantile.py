@@ -3,7 +3,8 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm.processing.base import InvertibleMixin, NumericalProcessor
+from sdm.processing.base import InvertibleMixin, Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 BOUNDS_THRESH = 1e-7
@@ -73,7 +74,7 @@ def _batched_interp(
     return torch.where(values >= upper_boundary, upper, result)
 
 
-class QuantileTransform(NumericalProcessor, InvertibleMixin):
+class QuantileTransform(Processor, InvertibleMixin):
     """Map feature columns through their empirical quantiles.
 
     QuantileTransform grids are capped by the number of fitted rows and, when
@@ -88,6 +89,8 @@ class QuantileTransform(NumericalProcessor, InvertibleMixin):
         subsample: Maximum number of rows to use for quantile computation.
         output_distribution: Distribution to map the empirical quantiles to.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

@@ -2,17 +2,20 @@ import math
 
 import torch
 
-from sdm.processing.base import NumericalProcessor
+from sdm.processing.base import Processor
+from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-class ImputeMean(NumericalProcessor):
+class ImputeMean(Processor):
     """Replace NaN feature values with fitted per-column means.
 
     Args:
         fill_value: Finite value used for columns whose fitted mean is
             undefined (e.g. all-NaN columns).
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,

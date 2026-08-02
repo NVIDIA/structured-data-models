@@ -3,13 +3,13 @@ from typing import Literal
 import torch
 
 from sdm import Stype
-from sdm.processing.base import NumericalProcessor
+from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
 DropConstantColumnsMethod = Literal["unique", "variance"]
 
 
-class DropConstantColumns(NumericalProcessor):
+class DropConstantColumns(Processor):
     """Remove non-informative numerical columns learned during fit.
 
     With ``method="unique"``, columns are retained when they have more than
@@ -18,9 +18,6 @@ class DropConstantColumns(NumericalProcessor):
 
     With ``method="variance"``, columns are retained when their sample
     standard deviation is greater than ``tolerance``.
-
-    Non-floating input is promoted to the default floating-point dtype before
-    fitting or transforming with either method.
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
@@ -36,6 +33,8 @@ class DropConstantColumns(NumericalProcessor):
         tolerance: With ``method="variance"``, columns with sample standard
             deviation at most this value are removed.
     """
+
+    supported_stypes = frozenset({Stype.numerical})
 
     def __init__(
         self,
