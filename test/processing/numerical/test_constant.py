@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from sdm import Stype, TableTensor
-from sdm.processing import DropConstantColumns
+from sdm import EnsembleTable, Stype, TableTensor
+from sdm.processing import DropConstantColumns, EnsembleProcessor
 from sdm.testing import withCUDA
 
 
@@ -100,3 +100,58 @@ def test_drop_constant_columns_rejects_invalid_arguments() -> None:
         DropConstantColumns(threshold=0)
     with pytest.raises(ValueError, match="tolerance must be non-negative"):
         DropConstantColumns(method="variance", tolerance=-1.0)
+
+
+def test_drop_constant_columns_is_an_ensemble_processor() -> None:
+    assert issubclass(DropConstantColumns, EnsembleProcessor)
+
+
+def test_drop_constant_columns_splits_different_fitted_schemas() -> None:
+    first = TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0], [1.0, 3.0]]),
+        columns=("a", "b"),
+    )
+    second = TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0], [3.0, 2.0]]),
+        columns=("a", "b"),
+    )
+    context = EnsembleTable.from_representations(
+        (first, second),
+        member_representation_ids=(0, 1, 0, 1),
+    )
+    processor = DropConstantColumns()
+
+    transformed = processor.fit_transform_ensemble(context)
+
+    assert transformed.representation(0).columns[Stype.numerical] == ("b",)
+    assert transformed.representation(1).columns[Stype.numerical] == ("a",)
+    assert transformed.representation(2).equal(transformed.representation(0))
+    assert transformed.representation(3).equal(transformed.representation(1))
+
+    query = TableTensor.from_tensor(
+        torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+        columns=("a", "b"),
+    )
+    query_output = processor.transform_ensemble(
+        EnsembleTable.from_representations(
+            (query, query),
+            member_representation_ids=(0, 1, 0, 1),
+        )
+    )
+    assert query_output.representation(0).columns[Stype.numerical] == ("b",)
+    assert query_output.representation(1).columns[Stype.numerical] == ("a",)
+
+
+def test_drop_constant_columns_keeps_shared_output_packed() -> None:
+    table = TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0], [1.0, 3.0]]),
+        columns=("a", "b"),
+    )
+    output = DropConstantColumns().fit_transform_ensemble(
+        EnsembleTable(table, num_members=8)
+    )
+
+    assert (
+        sum(packed.size(0) for packed in output.iter_packed_representations())
+        == 1
+    )
