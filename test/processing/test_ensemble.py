@@ -162,6 +162,7 @@ def test_adapter_preserves_packed_member_mapping() -> None:
 def test_adapter_returns_ensemble_processors_unchanged() -> None:
     processor = IdentityEnsembleProcessor()
     assert EnsembleProcessorAdapter.adapt(processor) is processor
+    assert repr(EnsembleProcessorAdapter(Center())) == "Center()"
 
 
 def test_adapter_rejects_row_changing_processor() -> None:

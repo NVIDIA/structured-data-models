@@ -211,3 +211,6 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
             raise ValueError(
                 "An adapted Processor must preserve the row dimension."
             )
+
+    def __repr__(self, *, indent: int = 0) -> str:
+        return self.template.__repr__(indent=indent)
