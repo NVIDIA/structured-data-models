@@ -2,7 +2,11 @@ import pytest
 import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import EnsembleProcessor, Processor
+from sdm.processing import (
+    EnsembleInvertibleMixin,
+    EnsembleProcessor,
+    Processor,
+)
 
 
 class IdentityEnsembleProcessor(EnsembleProcessor):
@@ -36,6 +40,20 @@ class ExpandingEnsembleProcessor(IdentityEnsembleProcessor):
         table: EnsembleTable,
     ) -> EnsembleTable:
         return EnsembleTable(table.representation(0), num_members=2)
+
+
+class InvertibleIdentityEnsembleProcessor(
+    IdentityEnsembleProcessor,
+    EnsembleInvertibleMixin,
+):
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return table
+
+    def _inverse_transform_ensemble(
+        self,
+        table: EnsembleTable,
+    ) -> EnsembleTable:
+        return EnsembleTable(table.representation(0), num_members=1)
 
 
 def test_ensemble_processor_is_a_processor() -> None:
@@ -79,6 +97,21 @@ def test_ensemble_processor_requires_fit_before_transform() -> None:
 
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform_ensemble(table)
+
+
+def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
+    data = TableTensor.from_tensor(torch.ones(2, 1))
+    table = EnsembleTable(data, num_members=2)
+    processor = InvertibleIdentityEnsembleProcessor()
+
+    with pytest.raises(RuntimeError, match="not fitted"):
+        processor.inverse_transform_ensemble(table)
+
+    processor.fit_transform_ensemble(table)
+    output = processor.inverse_transform_ensemble(table)
+
+    assert output.num_members == 1
+    assert output.representation(0).equal(data)
 
 
 def test_ensemble_processor_rejects_unsupported_stype() -> None:
