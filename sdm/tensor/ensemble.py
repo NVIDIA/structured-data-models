@@ -10,14 +10,38 @@ from sdm.tensor.table import TableTensor
 
 
 class EnsembleTable:
-    """Store table representations for an ensemble.
+    r"""Table data for multiple members of a model ensemble.
 
-    Members can share a representation. Representations with matching shape,
-    schema, block types and dtypes, device, and categorical vocabulary objects
-    are stacked along a leading dimension for joint processing.
+    A model ensemble combines multiple estimators, called members.
+    :class:`EnsembleTable` maps each member to the
+    :class:`~sdm.tensor.TableTensor` it uses. Members may share the same table
+    or use differently processed representations. Shared data is stored once.
+    Compatible representations are stacked for joint processing, while
+    incompatible representations remain separate.
+
+    .. testcode::
+
+        import torch
+        from sdm import EnsembleTable, TableTensor
+
+        original = TableTensor.from_tensor(
+            torch.tensor([[1.0], [2.0]])
+        )
+        normalized = TableTensor.from_tensor(
+            torch.tensor([[-1.0], [1.0]])
+        )
+
+        ensemble = EnsembleTable.from_representations(
+            representations=(original, normalized),
+            member_representation_ids=(0, 1, 0, 1),
+        )
+
+        assert ensemble.num_members == 4
+        assert ensemble.representation(0).equal(original)
+        assert ensemble.representation(1).equal(normalized)
 
     Args:
-        table: Table with shape ``[..., R, C]`` shared by all ensemble members.
+        table: A :class:`TableTensor` shared by all ensemble members.
         num_members: Number of ensemble members.
     """
 
@@ -33,9 +57,15 @@ class EnsembleTable:
         representations: Sequence[TableTensor],
         member_representation_ids: Sequence[int],
     ) -> Self:
-        """Create an ensemble table from member representations.
+        r"""Create an ensemble table from member-specific representations.
 
-        Compatible representations are stacked in input order.
+        ``member_representation_ids[i]`` selects the representation used by
+        member ``i``. Reusing an ID means that members share the same
+        representation. Compatible representations are stacked without
+        changing member order.
+
+        Categorical representations are stacked only when they reference the
+        same category vocabulary objects.
 
         Args:
             representations: Table representations that members may reference.
