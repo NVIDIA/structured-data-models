@@ -193,7 +193,7 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
                 and self.subsample < representation.size(-2)
             )
             key = (
-                table._member_locations[member_id],
+                table.member_location(member_id),
                 member_id if stochastic else None,
             )
             processor_id = fitted.get(key)
@@ -215,8 +215,8 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
 
         self._member_processor_ids = tuple(member_processor_ids)
         return EnsembleTable.from_representations(
-            representations,
-            self._member_processor_ids,
+            representations=representations,
+            member_representation_ids=self._member_processor_ids,
         )
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -236,16 +236,17 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         inverse: bool,
     ) -> EnsembleTable:
         if len(self._member_processor_ids) != table.num_members:
+            operation = "inverse transform" if inverse else "transform"
             raise RuntimeError(
                 "QuantileTransform must be fitted with the same number of "
-                "ensemble members before transform."
+                f"ensemble members before {operation}."
             )
 
         representations = []
         member_representation_ids = []
         transformed: dict[tuple[tuple[int, int], int], int] = {}
         for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (table._member_locations[member_id], processor_id)
+            key = (table.member_location(member_id), processor_id)
             representation_id = transformed.get(key)
             if representation_id is None:
                 processor = cast(
@@ -263,12 +264,17 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
             member_representation_ids.append(representation_id)
 
         return EnsembleTable.from_representations(
-            representations,
-            member_representation_ids,
+            representations=representations,
+            member_representation_ids=member_representation_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` into the configured output distribution."""
+        if len(self.processors) > 0:
+            raise RuntimeError(
+                "'QuantileTransform' was fitted for an ensemble; use "
+                "'transform_ensemble' instead of 'transform'."
+            )
         numerical = _as_float(table.numerical)
         transformed = torch.empty_like(numerical)
         for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
@@ -321,6 +327,12 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         return table.replace_blocks(numerical=transformed)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        if len(self.processors) > 0:
+            raise RuntimeError(
+                "'QuantileTransform' was fitted for an ensemble; use "
+                "'inverse_transform_ensemble' instead of "
+                "'inverse_transform'."
+            )
         numerical = _as_float(table.numerical)
         inverse = torch.empty_like(numerical)
         for start in range(0, numerical.shape[1], _MAX_NUM_COLS):

@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm import EnsembleTable, TableTensor
-from sdm.processing import EnsembleProcessor, QuantileTransform
+from sdm.processing import QuantileTransform
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -206,10 +206,6 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
     assert torch.equal(first.quantiles, second.quantiles)
 
 
-def test_quantile_transform_is_an_ensemble_processor() -> None:
-    assert issubclass(QuantileTransform, EnsembleProcessor)
-
-
 def test_quantile_transform_deterministic_fit_remains_shared() -> None:
     table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
     output = QuantileTransform(
@@ -253,3 +249,10 @@ def test_quantile_transform_subsample_matches_independent_processors() -> None:
         assert context_output.representation(member_id).equal(expected_context)
         assert query_output.representation(member_id).equal(expected_query)
         assert restored.representation(member_id).equal(expected_restored)
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=7))
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(query)
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.inverse_transform(context_output.representation(0))
