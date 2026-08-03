@@ -1,8 +1,8 @@
 """CUDA inference memory heuristics.
 
 Reserve 20% (at least 512 MiB) of live headroom. Attention chunks use at
-most 5% of the process limit, and callers choose the largest work chunk that
-fits the resulting budget.
+most 5% of the current process's PyTorch CUDA allocator limit, and callers
+choose the largest work chunk that fits the resulting budget.
 """
 
 from math import prod
@@ -18,40 +18,35 @@ _ATTENTION_WORK_FACTOR = 12
 
 
 def cuda_memory_budget(device: torch.device) -> tuple[int, int]:
-    """Return safe allocation headroom and the CUDA process limit.
+    """Return safe headroom and the current process's allocator limit.
 
-    Headroom combines unused PyTorch-reserved memory with memory still
-    available to the process, then reserves space for fragmentation and
-    unmodeled CUDA work.
+    Headroom is CUDA-free memory plus unused PyTorch cache, capped by the
+    allocator limit. A margin is retained for fragmentation and unmodeled
+    CUDA work.
     """
     if device.index is None:
         device = torch.device(device.type, torch.cuda.current_device())
-    free_bytes, total_bytes = torch.cuda.mem_get_info(device)
-    allocated_bytes = torch.cuda.memory_allocated(device)
-    reserved_bytes = torch.cuda.memory_reserved(device)
-    process_limit = int(
-        total_bytes * torch.cuda.get_per_process_memory_fraction(device)
+    free, total = torch.cuda.mem_get_info(device)
+    allocated = torch.cuda.memory_allocated(device)
+    reserved = torch.cuda.memory_reserved(device)
+    allocator_limit = int(
+        total * torch.cuda.get_per_process_memory_fraction(device)
     )
-    reusable_bytes = max(reserved_bytes - allocated_bytes, 0)
-    unreserved_bytes = min(
-        free_bytes,
-        max(process_limit - reserved_bytes, 0),
+    headroom = max(
+        min(free + reserved - allocated, allocator_limit - allocated),
+        0,
     )
-    headroom = min(
-        unreserved_bytes + reusable_bytes,
-        max(process_limit - allocated_bytes, 0),
-    )
-    reserve = max(
+    margin = max(
         _CUDA_MEMORY_RESERVE_BYTES,
         int(headroom * _CUDA_MEMORY_RESERVE_FRACTION),
     )
-    return max(headroom - reserve, 0), process_limit
+    return max(headroom - margin, 0), allocator_limit
 
 
 def cuda_attention_work_byte_limit(device: torch.device) -> int:
-    """Limit one attention chunk to safe headroom and 5% of process memory."""
-    available_bytes, process_limit = cuda_memory_budget(device)
-    return min(available_bytes, process_limit // 20)
+    """Return the safe memory limit for one attention chunk."""
+    headroom, allocator_limit = cuda_memory_budget(device)
+    return min(headroom, allocator_limit // 20)
 
 
 def attention_batch_size_limit(

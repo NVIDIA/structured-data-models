@@ -54,10 +54,10 @@ def test_cuda_memory_budget(
         lambda _device: reserved_mib * mib,
     )
 
-    available, process_limit = cuda_memory_budget(torch.device("cuda"))
+    headroom, allocator_limit = cuda_memory_budget(torch.device("cuda"))
 
-    assert available == pytest.approx(expected_mib * mib, abs=1)
-    assert process_limit == int(total_mib * mib * fraction)
+    assert headroom == pytest.approx(expected_mib * mib, abs=1)
+    assert allocator_limit == int(total_mib * mib * fraction)
 
 
 def test_attention_batch_size_limit() -> None:
