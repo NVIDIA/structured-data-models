@@ -1,22 +1,17 @@
-<div align="center">
-
+<p align="center">
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/source/images/logo_light.svg">
   <source media="(prefers-color-scheme: dark)" srcset="docs/source/images/logo_dark.svg">
   <img src="docs/source/images/logo_light.svg" width="125">
 </picture>
+</p>
 
-<h1 style="margin-top: 0">Structured Data Models
-
+<h1 align="center">Structured Data Models
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-brightgreen.svg?style=flat&color=76B900)](https://www.python.org/downloads)
 [![License: Apache 2.0](https://img.shields.io/badge/license-apache%202.0-brightgreen.svg?style=flat&color=76B900)](https://opensource.org/licenses/Apache-2.0)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat&color=76B900)](CONTRIBUTING.md)
 [![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat&color=76B900)](https://musical-invention-2y4yjlw.pages.github.io)
-
 </h1>
-</div>
-
-# Structured Data Models
 
 Python package for structured data models.
 
