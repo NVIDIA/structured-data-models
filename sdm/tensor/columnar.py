@@ -410,6 +410,28 @@ class ColumnarTensor(Tensor):
         return out
 
 
+@ColumnarTensor.implements(aten.isnan.default)
+def _isnan(inp: ColumnarTensor) -> Tensor:
+    if inp.numel() == 0:
+        return torch.empty(inp.size(), dtype=torch.bool, device=inp.device)
+
+    masks = []
+    for column, valid in zip(inp._columns, inp._validity):
+        mask: Tensor | None = None
+        if column.is_floating_point():
+            mask = column.isnan()
+        if valid is not None:
+            mask = ~valid if mask is None else mask | ~valid
+        if mask is None:
+            mask = torch.zeros(
+                column.size(),
+                dtype=torch.bool,
+                device=column.device,
+            )
+        masks.append(mask)
+    return torch.stack(masks, dim=-1)
+
+
 @ColumnarTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: ColumnarTensor) -> ColumnarTensor:
