@@ -1,19 +1,13 @@
-from collections.abc import Sequence
+from typing import cast
 
 import torch
 
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm import Stype, TableTensor
+from sdm.processing import Processor
 
 
 class PCA(Processor):
-    """Project numerical columns onto their principal components.
-
-    The mean and components are fitted on the context table via a singular
-    value decomposition of the centered data. The effective dimension is
-    capped at the numerical rank of the centered data. Output columns are named
-    ``"pca_0"``, ..., ``"pca_{num_components-1}"``.
+    r"""Project numerical columns onto their principal components.
 
     Args:
         num_components: Number of principal components to keep.
@@ -23,11 +17,6 @@ class PCA(Processor):
 
     def __init__(self, *, num_components: int) -> None:
         super().__init__()
-        if num_components < 1:
-            raise ValueError(
-                f"'num_components' must be positive (got {num_components})."
-            )
-
         self.num_components = num_components
         self.register_buffer("mean", torch.empty(0))
         self.register_buffer("components", torch.empty(0))
@@ -38,43 +27,32 @@ class PCA(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
-        if numerical.numel() == 0:
-            raise ValueError("`table` must be non-empty.")
 
-        numerical = numerical.flatten(end_dim=-2)  # [..., F] -> [N, F]
-        self.mean = numerical.mean(dim=0)
-        # Economy SVD; right-singular vectors are the principal axes.
-        _, singular_values, vh = torch.linalg.svd(
-            numerical - self.mean,
-            full_matrices=False,
-        )
-        tolerance = (
-            singular_values.max()
-            * max(numerical.shape)
-            * torch.finfo(singular_values.dtype).eps
-        )
-        rank = int((singular_values > tolerance).sum())
-        num_components = min(self.num_components, rank)
-        self.components = vh[:num_components].T
-        self._columns: dict[str, Sequence[str]] = {
-            Stype.numerical: tuple(f"pca_{i}" for i in range(num_components))
-        }
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        if table.numerical.size(-1) != self.mean.size(0):
+        if table.numerical.size(-1) == 0:
             raise ValueError(
-                f"Expected 'table' to have {self.mean.size(0)} numerical "
-                f"columns, matching the table used to fit 'PCA' (got "
-                f"{table.numerical.size(-1)})."
+                f"{self.__class__.__name__!r} requires 'table' to have "
+                f"numerical features"
             )
 
-        numerical = table.numerical
-        output_shape = (*numerical.shape[:-1], self.components.size(-1))
-        numerical = numerical.flatten(end_dim=-2)
-        projected = (numerical - self.mean) @ self.components  # [N, C]
-        projected = projected.reshape(output_shape)  # [N, C] -> [..., C]
-        return TableTensor(
-            columns=self._columns,
-            numerical=projected,
+        self.mean = table.numerical.mean(dim=-2, keepdim=True)
+        _, _, vh = torch.linalg.svd(
+            table.numerical - self.mean,
+            full_matrices=False,
+        )
+        num_components = min(
+            self.num_components,
+            table.numerical.size(-2),
+            table.numerical.size(-1),
+        )
+        self.components = vh[..., :num_components, :].transpose(-2, -1)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        x = (table.numerical - self.mean) @ self.components
+        out = TableTensor(
+            columns={Stype.numerical: [f"pca_{i}" for i in range(x.size(-1))]},
+            numerical=x,
+        )
+        return cast(
+            TableTensor,
+            torch.cat([table.drop_stypes(Stype.numerical), out], dim=-1),
         )
