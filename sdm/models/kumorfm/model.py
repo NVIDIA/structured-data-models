@@ -411,7 +411,9 @@ class _KumoRFM(torch.nn.Module):
                     datetime=query.related_tables.tables[name].datetime,
                     seed_datetime=x_query.datetime,
                     task_row=query_task_row_i,
-                    standardizer=cache[f"table_{name}.standardizer"]
+                    standardizer=cast(
+                        Standardize, cache[f"table_{name}.standardizer"]
+                    )
                     if cache is not None and cache.is_replaying
                     else standardizer,
                 )
