@@ -845,7 +845,7 @@ def _select(inp: ColumnarTensor, dim: int, index: int) -> Tensor:
         if inp._validity[index] is not None:
             raise RuntimeError(
                 f"Can't select a nullable column from "
-                f"{inp.__class__.__name__!r} without losing its validity mask"
+                f"{inp.__class__.__name__!r}"
             )
         return aten.alias.default(inp._columns[index])
 
@@ -919,7 +919,7 @@ def _unbind(inp: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
         if any(valid is not None for valid in inp._validity):
             raise RuntimeError(
                 f"Can't unbind nullable columns from "
-                f"{inp.__class__.__name__!r} without losing validity masks"
+                f"{inp.__class__.__name__!r}"
             )
         return tuple(aten.alias.default(column) for column in inp._columns)
 

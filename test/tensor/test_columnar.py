@@ -59,29 +59,18 @@ def test_from_arrow() -> None:
 
     tensor = ColumnarTensor.from_arrow(pa.array([1, None, 3]))
     assert tensor.tolist() == [[1], [None], [3]]
-    assert tensor.validity[0] is not None
-    assert tensor.validity[0].equal(torch.tensor([True, False, True]))
+    assert tensor._validity[0] is not None
+    assert tensor._validity[0].equal(torch.tensor([True, False, True]))
 
     tensor = ColumnarTensor.from_arrow(pa.array(["a", None, ""]))
     assert tensor.tolist() == [["a"], [None], [""]]
+    assert tensor._validity[0] is not None
+    assert tensor._validity[0].equal(torch.tensor([True, False, True]))
 
-    tensor = ColumnarTensor.from_arrow(
-        pa.array([1.5, None, 3.5], type=pa.float32())
-    )
-    assert tensor.validity == (None,)
-    assert tensor[:, 0].allclose(
-        torch.tensor([1.5, float("nan"), 3.5]),
-        equal_nan=True,
-    )
-
-
-def test_from_arrow_chunked_string() -> None:
-    tensor = ColumnarTensor.from_arrow(
-        pa.chunked_array([pa.array(["a", "b"]), pa.array(["c"])]),
-    )
-
-    assert tensor.to_arrow().column(0).type == pa.large_string()
-    assert tensor.to_arrow().to_pydict() == {"0": ["a", "b", "c"]}
+    tensor = ColumnarTensor.from_arrow(pa.array([1.5, None, 3.5]))
+    assert tensor.tolist() == [[1.5], [None], [3.5]]
+    assert tensor._validity[0] is not None
+    assert tensor._validity[0].equal(torch.tensor([True, False, True]))
 
 
 def test_from_arrow_chunked_string() -> None:
@@ -138,13 +127,13 @@ def test_from_cudf() -> None:
 
 
 def test_to_arrow() -> None:
-    column1 = torch.arange(6).view(2, 3)
-    column2 = StringTensor.from_list([["a", "b", "c"], ["d", "e", "f"]])
-    tensor = ColumnarTensor((column1, column2))
-
-    table = tensor.to_arrow()
-    assert table.column_names == ["0", "1"]
-    assert table.to_pydict() == {
+    tensor = ColumnarTensor(
+        (
+            torch.arange(6).view(2, 3),
+            StringTensor.from_list([["a", "b", "c"], ["d", "e", "f"]]),
+        )
+    )
+    assert tensor.to_arrow().to_pydict() == {
         "0": [0, 1, 2, 3, 4, 5],
         "1": ["a", "b", "c", "d", "e", "f"],
     }
