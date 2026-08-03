@@ -53,9 +53,7 @@ def _combine_ensemble_parts(
     locations: dict[tuple[tuple[int, int], ...], int] = {}
     member_representation_ids = []
     for member_id in range(source.num_members):
-        location = tuple(
-            part.member_location(member_id) for part in parts
-        )
+        location = tuple(part.member_location(member_id) for part in parts)
         if location not in locations:
             locations[location] = len(representations)
             representations.append(

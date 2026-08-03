@@ -309,7 +309,9 @@ def test_stype_dispatch_stateless_ensemble_inverse() -> None:
         )
 
 
-def test_stype_dispatch_ensemble_inverse_rejects_non_invertible_route() -> None:
+def test_stype_dispatch_ensemble_inverse_rejects_non_invertible_route() -> (
+    None
+):
     table = EnsembleTable(_mixed_table(), num_members=2)
     processor = StypeDispatch(numerical=ImputeMean())
     transformed = processor.fit_transform_ensemble(table)
