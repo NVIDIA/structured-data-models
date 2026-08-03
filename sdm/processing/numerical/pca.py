@@ -85,7 +85,7 @@ class PCA(EnsembleProcessor):
         fitted: dict[tuple[int, int], int] = {}
 
         for member_id in range(table.num_members):
-            location = table._member_locations[member_id]
+            location = table.member_location(member_id)
             processor_id = fitted.get(location)
             if processor_id is None:
                 processor = self.__class__(num_components=self.num_components)
@@ -102,8 +102,8 @@ class PCA(EnsembleProcessor):
         self.processors = processors
         self._member_processor_ids = tuple(member_processor_ids)
         return EnsembleTable.from_representations(
-            representations,
-            member_processor_ids,
+            representations=representations,
+            member_representation_ids=member_processor_ids,
         )
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -117,7 +117,7 @@ class PCA(EnsembleProcessor):
         member_representation_ids: list[int] = []
         transformed: dict[tuple[tuple[int, int], int], int] = {}
         for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (table._member_locations[member_id], processor_id)
+            key = (table.member_location(member_id), processor_id)
             representation_id = transformed.get(key)
             if representation_id is None:
                 processor = cast(PCA, self.processors[processor_id])
@@ -129,11 +129,16 @@ class PCA(EnsembleProcessor):
             member_representation_ids.append(representation_id)
 
         return EnsembleTable.from_representations(
-            representations,
-            member_representation_ids,
+            representations=representations,
+            member_representation_ids=member_representation_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if len(self.processors) > 0:
+            raise RuntimeError(
+                "'PCA' was fitted for an ensemble; use "
+                "'transform_ensemble' instead of 'transform'."
+            )
         if table.numerical.size(-1) != self.mean.size(0):
             raise ValueError(
                 f"Expected 'table' to have {self.mean.size(0)} numerical "

@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import PCA, EnsembleProcessor
+from sdm.processing import PCA
 
 
 @pytest.mark.parametrize("shape", [(20, 5), (2, 3, 4, 4)])
@@ -49,10 +49,6 @@ def test_pca_caps_num_components_at_centered_rank() -> None:
     assert output.columns[Stype.numerical] == ("pca_0",)
 
 
-def test_pca_is_an_ensemble_processor() -> None:
-    assert issubclass(PCA, EnsembleProcessor)
-
-
 def test_pca_keeps_fitted_projection_per_representation() -> None:
     rank_one = TableTensor.from_tensor(
         torch.tensor([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
@@ -84,6 +80,11 @@ def test_pca_keeps_fitted_projection_per_representation() -> None:
     )
     assert query_output.representation(0).numerical.shape == (3, 1)
     assert query_output.representation(1).numerical.shape == (3, 2)
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(rank_two, num_members=3))
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(rank_two)
 
 
 def test_pca_keeps_shared_output_packed() -> None:
