@@ -109,11 +109,11 @@ def to_binary_class(
     >>> import sdm
     >>> from sdm.evaluation import to_binary_class
     >>> pred = sdm.TableTensor.from_tensor(
-    ...     torch.tensor([[0.8, 0.2], [0.1, 0.9]]),
+    ...     torch.tensor([[0.8, 0.2], [0.1, 0.9], [0.4, 0.6]]),
     ...     columns=["false", "true"],
     ... )
     >>> target = sdm.CategoricalTensor(
-    ...     code=torch.tensor([[0], [1]]),
+    ...     code=torch.tensor([[0], [1], [1]]),
     ...     categories=(sdm.StringTensor.from_list(["false", "true"]),),
     ... )
     >>> positive_scores, binary_target = to_binary_class(
@@ -122,11 +122,11 @@ def to_binary_class(
     ...     positive_class="true",
     ... )
     >>> positive_scores
-    tensor([0.2000, 0.9000])
+    tensor([0.2000, 0.9000, 0.6000])
     >>> binary_target
-    tensor([False,  True])
+    tensor([False,  True,  True])
     >>> pred = sdm.TableTensor.from_tensor(
-    ...     torch.tensor([[0.2, 0.8], [0.9, 0.1]]),
+    ...     torch.tensor([[0.2, 0.8], [0.9, 0.1], [0.6, 0.4]]),
     ...     columns=["true", "false"],
     ... )
     >>> positive_scores, binary_target = to_binary_class(
@@ -135,9 +135,9 @@ def to_binary_class(
     ...     positive_class="true",
     ... )
     >>> positive_scores
-    tensor([0.2000, 0.9000])
+    tensor([0.2000, 0.9000, 0.6000])
     >>> binary_target
-    tensor([False,  True])
+    tensor([False,  True,  True])
     """
     if isinstance(target, TableTensor):
         if target.size(-1) != 1:
