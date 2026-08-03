@@ -26,6 +26,7 @@ class DropConstantColumns(EnsembleProcessor):
     Fitting expects data with shape ``[N, C]``, where ``N`` is the number of
     rows and ``C`` is the number of numerical columns. The learned selection
     can transform later tables with shape ``[..., C]``.
+    Ensemble query members must preserve the member order used during fitting.
 
     Args:
         method: Filtering rule. ``"unique"`` uses distinct-value counts;
@@ -120,7 +121,7 @@ class DropConstantColumns(EnsembleProcessor):
         fitted: dict[tuple[int, int], int] = {}
 
         for member_id in range(table.num_members):
-            location = table._member_locations[member_id]
+            location = table.member_location(member_id)
             processor_id = fitted.get(location)
             if processor_id is None:
                 processor = self.__class__(
@@ -144,8 +145,8 @@ class DropConstantColumns(EnsembleProcessor):
 
         self._member_processor_ids = tuple(member_processor_ids)
         return EnsembleTable.from_representations(
-            representations,
-            self._member_processor_ids,
+            representations=representations,
+            member_representation_ids=self._member_processor_ids,
         )
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -159,7 +160,7 @@ class DropConstantColumns(EnsembleProcessor):
         member_representation_ids = []
         transformed: dict[tuple[tuple[int, int], int], int] = {}
         for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (table._member_locations[member_id], processor_id)
+            key = (table.member_location(member_id), processor_id)
             representation_id = transformed.get(key)
             if representation_id is None:
                 processor = cast(
@@ -174,12 +175,17 @@ class DropConstantColumns(EnsembleProcessor):
             member_representation_ids.append(representation_id)
 
         return EnsembleTable.from_representations(
-            representations,
-            member_representation_ids,
+            representations=representations,
+            member_representation_ids=member_representation_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Drop columns rejected by the fitted filtering rule."""
+        if len(self.processors) > 0:
+            raise RuntimeError(
+                "'DropConstantColumns' was fitted for an ensemble; use "
+                "'transform_ensemble' instead of 'transform'."
+            )
         columns = table.columns[Stype.numerical]
         if self._columns_to_keep == columns:
             return table

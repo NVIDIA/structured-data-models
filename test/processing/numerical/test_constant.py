@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing import DropConstantColumns, EnsembleProcessor
+from sdm.processing import DropConstantColumns
 from sdm.testing import withCUDA
 
 
@@ -102,17 +102,16 @@ def test_drop_constant_columns_rejects_invalid_arguments() -> None:
         DropConstantColumns(method="variance", tolerance=-1.0)
 
 
-def test_drop_constant_columns_is_an_ensemble_processor() -> None:
-    assert issubclass(DropConstantColumns, EnsembleProcessor)
-
-
-def test_drop_constant_columns_splits_different_fitted_schemas() -> None:
+@withCUDA
+def test_drop_constant_columns_splits_different_fitted_schemas(
+    device: torch.device,
+) -> None:
     first = TableTensor.from_tensor(
-        torch.tensor([[1.0, 2.0], [1.0, 3.0]]),
+        torch.tensor([[1.0, 2.0], [1.0, 3.0]], device=device),
         columns=("a", "b"),
     )
     second = TableTensor.from_tensor(
-        torch.tensor([[1.0, 2.0], [3.0, 2.0]]),
+        torch.tensor([[1.0, 2.0], [3.0, 2.0]], device=device),
         columns=("a", "b"),
     )
     context = EnsembleTable.from_representations(
@@ -129,7 +128,7 @@ def test_drop_constant_columns_splits_different_fitted_schemas() -> None:
     assert transformed.representation(3).equal(transformed.representation(1))
 
     query = TableTensor.from_tensor(
-        torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+        torch.tensor([[4.0, 5.0], [6.0, 7.0]], device=device),
         columns=("a", "b"),
     )
     query_output = processor.transform_ensemble(
@@ -140,11 +139,20 @@ def test_drop_constant_columns_splits_different_fitted_schemas() -> None:
     )
     assert query_output.representation(0).columns[Stype.numerical] == ("b",)
     assert query_output.representation(1).columns[Stype.numerical] == ("a",)
+    assert query_output.representation(0).device == device
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=3))
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(query)
 
 
-def test_drop_constant_columns_keeps_shared_output_packed() -> None:
+@withCUDA
+def test_drop_constant_columns_keeps_shared_output_packed(
+    device: torch.device,
+) -> None:
     table = TableTensor.from_tensor(
-        torch.tensor([[1.0, 2.0], [1.0, 3.0]]),
+        torch.tensor([[1.0, 2.0], [1.0, 3.0]], device=device),
         columns=("a", "b"),
     )
     output = DropConstantColumns().fit_transform_ensemble(
