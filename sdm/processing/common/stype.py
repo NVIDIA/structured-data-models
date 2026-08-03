@@ -282,12 +282,13 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
             )
 
         active_routes = self._active_routes
-        if self.requires_fit and active_routes is None:
-            raise RuntimeError(
-                "'StypeDispatch' was fitted for a single table; use "
-                "'transform' instead of 'transform_ensemble'."
-            )
-        if not self.requires_fit:
+        if self.requires_fit:
+            if active_routes is None:
+                raise RuntimeError(
+                    "'StypeDispatch' was fitted for a single table; use "
+                    "'transform' instead of 'transform_ensemble'."
+                )
+        else:
             active_routes = tuple(
                 stype
                 for stype in self.processors
