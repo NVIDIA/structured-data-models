@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
-from sdm.processing import AlignCategories, EnsembleProcessor
+from sdm.processing import AlignCategories
 from sdm.testing import withCUDA
 
 
@@ -363,10 +363,6 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
         processor.transform(query)
 
 
-def test_align_categories_is_an_ensemble_processor() -> None:
-    assert issubclass(AlignCategories, EnsembleProcessor)
-
-
 def test_align_categories_keeps_fitted_vocabularies_per_representation() -> (
     None
 ):
@@ -422,6 +418,11 @@ def test_align_categories_keeps_fitted_vocabularies_per_representation() -> (
         [0],
         [1],
     ]
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=3))
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(query)
 
 
 def test_align_categories_keeps_shared_output_packed() -> None:
