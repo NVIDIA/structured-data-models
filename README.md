@@ -1,9 +1,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: light)" srcset="https://musical-invention-2y4yjlw.pages.github.io/_images/logo_light.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="https://musical-invention-2y4yjlw.pages.github.io/_images/logo_dark.svg">
-  <img src="https://musical-invention-2y4yjlw.pages.github.io/_images/logo_light.svg" width="125">
+  <source media="(prefers-color-scheme: light)" srcset="docs/source/images/logo_light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/source/images/logo_dark.svg">
+  <img src="docs/source/images/logo_light.svg" width="125">
 </picture>
 
 <h1>Structured Data Models
