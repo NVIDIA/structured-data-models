@@ -137,6 +137,8 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        self.processors = torch.nn.ModuleList()
+        self._member_processor_ids = ()
         numerical = _as_float(table.numerical)
         n_samples = numerical.shape[0]
         quantile_limit = n_samples
@@ -227,6 +229,9 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
         table: EnsembleTable,
     ) -> EnsembleTable:
         """Restore each member with its fitted quantiles."""
+        for packed in table.iter_packed_representations():
+            self._check_supported_stypes(packed)
+        self._check_is_fitted()
         return self._apply_ensemble(table, inverse=True)
 
     def _apply_ensemble(
@@ -237,8 +242,13 @@ class QuantileTransform(EnsembleProcessor, InvertibleMixin):
     ) -> EnsembleTable:
         if len(self._member_processor_ids) != table.num_members:
             operation = "inverse transform" if inverse else "transform"
+            if not self._member_processor_ids:
+                raise RuntimeError(
+                    "'QuantileTransform' was fitted for a single table; fit "
+                    f"it on an ensemble before {operation}."
+                )
             raise RuntimeError(
-                "QuantileTransform must be fitted with the same number of "
+                "'QuantileTransform' must be fitted with the same number of "
                 f"ensemble members before {operation}."
             )
 
