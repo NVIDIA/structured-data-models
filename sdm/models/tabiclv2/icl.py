@@ -11,7 +11,7 @@ from sdm.cache import Cache, KVCacheEntry
 from sdm.nn import TransformerBlock
 from sdm.nn.memory import (
     attention_batch_size_limit,
-    cuda_attention_work_byte_limit,
+    cuda_attention_memory_limit,
 )
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
@@ -123,16 +123,14 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
-        attention_work_byte_limit = None
+        attention_memory_limit = None
         if (
             x.device.type == "cuda"
             and not self.training
             and not torch.is_grad_enabled()
             and not torch.compiler.is_compiling()
         ):
-            attention_work_byte_limit = cuda_attention_work_byte_limit(
-                x.device
-            )
+            attention_memory_limit = cuda_attention_memory_limit(x.device)
 
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
@@ -150,7 +148,7 @@ class ICLBlock(torch.nn.Module):
                     batch_size_limit,
                     query,
                     key_value,
-                    attention_work_byte_limit,
+                    attention_memory_limit,
                 ),
             )
 

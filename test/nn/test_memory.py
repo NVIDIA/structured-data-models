@@ -3,7 +3,7 @@ import torch
 
 from sdm.nn.memory import (
     attention_batch_size_limit,
-    cuda_memory_budget,
+    cuda_memory_limits,
 )
 
 
@@ -22,7 +22,7 @@ from sdm.nn.memory import (
         (600, 20_480, 1.0, 0, 0, 88),
     ],
 )
-def test_cuda_memory_budget(
+def test_cuda_memory_limits(
     monkeypatch: pytest.MonkeyPatch,
     free_mib: int,
     total_mib: int,
@@ -54,7 +54,7 @@ def test_cuda_memory_budget(
         lambda _device: reserved_mib * mib,
     )
 
-    headroom, allocator_limit = cuda_memory_budget(torch.device("cuda"))
+    headroom, allocator_limit = cuda_memory_limits(torch.device("cuda"))
 
     assert headroom == pytest.approx(expected_mib * mib, abs=1)
     assert allocator_limit == int(total_mib * mib * fraction)

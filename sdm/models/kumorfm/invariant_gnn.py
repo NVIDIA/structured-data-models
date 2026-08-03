@@ -9,7 +9,7 @@ from torch.nn import LayerNorm, Linear
 
 from sdm.cache import Cache
 from sdm.models.kumorfm.graph import HomogeneousGraph
-from sdm.nn.memory import cuda_memory_budget
+from sdm.nn.memory import cuda_memory_limits
 
 # Empirical upper bounds for transient aggregation work.
 _AGGREGATION_EDGE_WORK_FACTOR = 4
@@ -35,7 +35,7 @@ def _automatic_aggregation_work_byte_limit(
     if x.device.type != "cuda":
         return None
 
-    available_bytes, _ = cuda_memory_budget(x.device)
+    headroom, _ = cuda_memory_limits(x.device)
     value_bytes = x.size(-1) * max(x.element_size(), 4)
     node_bytes = _aggregation_required_bytes(
         num_nodes=graph.num_nodes,
@@ -48,10 +48,10 @@ def _automatic_aggregation_work_byte_limit(
             num_edges=graph.num_edges,
             value_bytes=value_bytes,
         )
-        <= available_bytes
+        <= headroom
     ):
         return None
-    return max(available_bytes - node_bytes, 0)
+    return max(headroom - node_bytes, 0)
 
 
 def _aggregation_slices(

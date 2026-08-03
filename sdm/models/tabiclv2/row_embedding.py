@@ -11,7 +11,7 @@ from sdm.cache import Cache, KVCacheEntry
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
 from sdm.nn.memory import (
     attention_batch_size_limit,
-    cuda_attention_work_byte_limit,
+    cuda_attention_memory_limit,
 )
 
 
@@ -106,9 +106,9 @@ class RowEmbedding(torch.nn.Module):
             and not torch.is_grad_enabled()
             and not torch.compiler.is_compiling()
         )
-        attention_target_bytes: int | None = None
+        attention_memory_limit: int | None = None
         if plan_attention:
-            attention_target_bytes = cuda_attention_work_byte_limit(x.device)
+            attention_memory_limit = cuda_attention_memory_limit(x.device)
 
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
@@ -166,7 +166,7 @@ class RowEmbedding(torch.nn.Module):
                     batch_size_limit,
                     x,
                     key_value,
-                    attention_target_bytes,
+                    attention_memory_limit,
                 ),
             )  # [..., C, R, D]
 
@@ -199,7 +199,7 @@ class RowEmbedding(torch.nn.Module):
                     batch_size_limit,
                     query,
                     x,
-                    attention_target_bytes,
+                    attention_memory_limit,
                 ),
             )  # [..., R, K + C, D] or [..., R, K, D]
 

@@ -35,14 +35,14 @@ def test_row_embedding_automatic_batch_size_limit(
     with torch.inference_mode():
         monkeypatch.setattr(
             row_embedding_module,
-            "cuda_attention_work_byte_limit",
+            "cuda_attention_memory_limit",
             lambda _device: 1 << 60,
         )
         expected = model(torch.cat([context, query], dim=-2), y)[:, 4:]
 
         monkeypatch.setattr(
             row_embedding_module,
-            "cuda_attention_work_byte_limit",
+            "cuda_attention_memory_limit",
             lambda _device: 12 * 6 * 8 * 4,
         )
         actual = model(torch.cat([context, query], dim=-2), y, **chunk_kwargs)[

@@ -17,7 +17,7 @@ _CUDA_MEMORY_RESERVE_FRACTION = 0.2
 _ATTENTION_WORK_FACTOR = 12
 
 
-def cuda_memory_budget(device: torch.device) -> tuple[int, int]:
+def cuda_memory_limits(device: torch.device) -> tuple[int, int]:
     """Return safe headroom and the current process's allocator limit.
 
     Headroom is CUDA-free memory plus unused PyTorch cache, capped by the
@@ -43,9 +43,9 @@ def cuda_memory_budget(device: torch.device) -> tuple[int, int]:
     return max(headroom - margin, 0), allocator_limit
 
 
-def cuda_attention_work_byte_limit(device: torch.device) -> int:
+def cuda_attention_memory_limit(device: torch.device) -> int:
     """Return the safe memory limit for one attention chunk."""
-    headroom, allocator_limit = cuda_memory_budget(device)
+    headroom, allocator_limit = cuda_memory_limits(device)
     return min(headroom, allocator_limit // 20)
 
 
