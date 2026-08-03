@@ -132,6 +132,7 @@ class ICLBlock(torch.nn.Module):
         ):
             attention_memory_limit = cuda_attention_memory_limit(x.device)
 
+        icl_batch_size_limit = batch_size_limit
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
             query = x[..., R_train:, :] if i == len(self.layers) - 1 else x
@@ -140,16 +141,18 @@ class ICLBlock(torch.nn.Module):
                 if cache is not None and cache.is_replaying
                 else x[..., :R_train, :]
             )
-            result = layer(
-                query=query,
-                key_value=key_value,  # [..., R_train, D]
-                return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=attention_batch_size_limit(
+            if i == 0:
+                icl_batch_size_limit = attention_batch_size_limit(
                     batch_size_limit,
                     query,
                     key_value,
                     attention_memory_limit,
-                ),
+                )
+            result = layer(
+                query=query,
+                key_value=key_value,  # [..., R_train, D]
+                return_key_value=cache is not None and cache.is_recording,
+                batch_size_limit=icl_batch_size_limit,
             )
 
             if cache is not None and cache.is_recording:

@@ -3,7 +3,8 @@ import torch
 
 from sdm.nn.memory import (
     attention_batch_size_limit,
-    cuda_memory_limits,
+    cuda_attention_memory_limit,
+    cuda_memory_availability,
 )
 
 
@@ -14,22 +15,24 @@ from sdm.nn.memory import (
         "fraction",
         "allocated_mib",
         "reserved_mib",
-        "expected_mib",
+        "expected_available_mib",
+        "expected_attention_mib",
     ),
     [
-        (10_240, 20_480, 1.0, 1_024, 2_048, 9_011.2),
-        (10_240, 20_480, 0.25, 512, 1_024, 3_686.4),
-        (600, 20_480, 1.0, 0, 0, 88),
+        (10_240, 20_480, 1.0, 1_024, 2_048, 9_011.2, 1_024),
+        (10_240, 20_480, 0.25, 512, 1_024, 3_686.4, 256),
+        (600, 20_480, 1.0, 0, 0, 88, 88),
     ],
 )
-def test_cuda_memory_limits(
+def test_cuda_memory_availability(
     monkeypatch: pytest.MonkeyPatch,
     free_mib: int,
     total_mib: int,
     fraction: float,
     allocated_mib: int,
     reserved_mib: int,
-    expected_mib: float,
+    expected_available_mib: float,
+    expected_attention_mib: float,
 ) -> None:
     mib = 1024**2
     monkeypatch.setattr(
@@ -54,10 +57,17 @@ def test_cuda_memory_limits(
         lambda _device: reserved_mib * mib,
     )
 
-    headroom, allocator_limit = cuda_memory_limits(torch.device("cuda"))
+    available_memory, capacity = cuda_memory_availability(torch.device("cuda"))
 
-    assert headroom == pytest.approx(expected_mib * mib, abs=1)
-    assert allocator_limit == int(total_mib * mib * fraction)
+    assert available_memory == pytest.approx(
+        expected_available_mib * mib,
+        abs=1,
+    )
+    assert capacity == int(total_mib * mib * fraction)
+    assert cuda_attention_memory_limit(torch.device("cuda")) == pytest.approx(
+        expected_attention_mib * mib,
+        abs=1,
+    )
 
 
 def test_attention_batch_size_limit() -> None:
