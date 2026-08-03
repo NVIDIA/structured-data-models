@@ -455,8 +455,6 @@ def _to_copy(
             )
             for column in inp._columns
         ],
-        size=inp.size()[:-1],
-        device=device,
         validity=[
             None
             if valid is None
@@ -471,6 +469,8 @@ def _to_copy(
             )
             for valid in inp._validity
         ],
+        size=inp.size()[:-1],
+        device=device,
     )
 
 
@@ -496,14 +496,14 @@ def _contiguous(
             column.contiguous(memory_format=memory_format)
             for column in inp._columns
         ],
-        size=inp.size()[:-1],
-        device=inp.device,
         validity=[
             None
             if valid is None
             else valid.contiguous(memory_format=memory_format)
             for valid in inp._validity
         ],
+        size=inp.size()[:-1],
+        device=inp.device,
     )
 
 
@@ -518,12 +518,12 @@ def _is_pinned(inp: ColumnarTensor) -> bool:
 def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
     return inp.__class__(
         columns=[column.pin_memory() for column in inp._columns],
-        size=inp.size()[:-1],
-        device=inp.device,
         validity=[
             None if valid is None else valid.pin_memory()
             for valid in inp._validity
         ],
+        size=inp.size()[:-1],
+        device=inp.device,
     )
 
 
@@ -539,10 +539,15 @@ def _equal(inp: ColumnarTensor, other: Tensor) -> bool:
             return False
 
     for valid1, valid2 in zip(inp._validity, other._validity):
-        if valid1 is None or valid2 is None:
-            if valid1 is not valid2:
-                return False
-        elif not valid1.equal(valid2):
+        if valid1 is None and valid2 is not None and not valid2.all():
+            return False
+        if valid2 is None and valid1 is not None and not valid1.all():
+            return False
+        if (
+            valid1 is not None
+            and valid2 is not None
+            and not valid1.equal(valid2)
+        ):
             return False
 
     return True
@@ -569,10 +574,15 @@ def _allclose(
             return False
 
     for valid1, valid2 in zip(inp._validity, other._validity):
-        if valid1 is None or valid2 is None:
-            if valid1 is not valid2:
-                return False
-        elif not valid1.equal(valid2):
+        if valid1 is None and valid2 is not None and not valid2.all():
+            return False
+        if valid2 is None and valid1 is not None and not valid1.all():
+            return False
+        if (
+            valid1 is not None
+            and valid2 is not None
+            and not valid1.equal(valid2)
+        ):
             return False
 
     return True
@@ -616,12 +626,12 @@ def _view(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
 
     return inp.__class__(
         columns=[column.view(size[:-1]) for column in inp._columns],
-        size=size[:-1],
-        device=inp.device,
         validity=[
             None if valid is None else valid.view(size[:-1])
             for valid in inp._validity
         ],
+        size=size[:-1],
+        device=inp.device,
     )
 
 
@@ -658,16 +668,16 @@ def _squeeze_dims(inp: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
 
     return inp.__class__(
         columns=[column.squeeze(dims) for column in inp._columns],
+        validity=[
+            None if valid is None else valid.squeeze(dims)
+            for valid in inp._validity
+        ],
         size=tuple(
             dim_size
             for i, dim_size in enumerate(inp.size()[:-1])
             if i not in dims or dim_size != 1
         ),
         device=inp.device,
-        validity=[
-            None if valid is None else valid.squeeze(dims)
-            for valid in inp._validity
-        ],
     )
 
 
@@ -689,12 +699,12 @@ def _unsqueeze(inp: ColumnarTensor, dim: int) -> ColumnarTensor:
 
     return inp.__class__(
         columns=[column.unsqueeze(dim) for column in inp._columns],
-        size=(*inp.size()[:dim], 1, *inp.size()[dim:-1]),
-        device=inp.device,
         validity=[
             None if valid is None else valid.unsqueeze(dim)
             for valid in inp._validity
         ],
+        size=(*inp.size()[:dim], 1, *inp.size()[dim:-1]),
+        device=inp.device,
     )
 
 
@@ -733,10 +743,6 @@ def _expand(
             )
             for column in inp._columns
         ],
-        size=tuple(
-            old if new == -1 else new for old, new in zip(old_size, size)
-        )[:-1],
-        device=inp.device,
         validity=[
             None
             if valid is None
@@ -747,6 +753,10 @@ def _expand(
             )
             for valid in inp._validity
         ],
+        size=tuple(
+            old if new == -1 else new for old, new in zip(old_size, size)
+        )[:-1],
+        device=inp.device,
     )
 
 
@@ -770,19 +780,17 @@ def _transpose(
             f"{inp.__class__.__name__!r}"
         )
 
-    columns = [column.transpose(dim0, dim1) for column in inp._columns]
-
     size = list(inp.size())
     size[dim0], size[dim1] = size[dim1], size[dim0]
 
     return inp.__class__(
-        columns=columns,
-        size=size[:-1],
-        device=inp.device,
+        columns=[column.transpose(dim0, dim1) for column in inp._columns],
         validity=[
             None if valid is None else valid.transpose(dim0, dim1)
             for valid in inp._validity
         ],
+        size=size[:-1],
+        device=inp.device,
     )
 
 
@@ -797,12 +805,12 @@ def _permute(inp: ColumnarTensor, dims: Sequence[int]) -> ColumnarTensor:
 
     return inp.__class__(
         columns=[column.permute(dims[:-1]) for column in inp._columns],
-        size=tuple(inp.size(dim) for dim in dims[:-1]),
-        device=inp.device,
         validity=[
             None if valid is None else valid.permute(dims[:-1])
             for valid in inp._validity
         ],
+        size=tuple(inp.size(dim) for dim in dims[:-1]),
+        device=inp.device,
     )
 
 
@@ -821,12 +829,12 @@ def _select(inp: ColumnarTensor, dim: int, index: int) -> Tensor:
 
     return inp.__class__(
         columns=[column.select(dim, index) for column in inp._columns],
-        size=(*inp.size()[:dim], *inp.size()[dim + 1 : -1]),
-        device=inp.device,
         validity=[
             None if valid is None else valid.select(dim, index)
             for valid in inp._validity
         ],
+        size=(*inp.size()[:dim], *inp.size()[dim + 1 : -1]),
+        device=inp.device,
     )
 
 
@@ -854,18 +862,18 @@ def _slice(
             aten.slice.Tensor(column, dim, start, end, step)
             for column in inp._columns
         ],
-        size=(
-            *inp.size()[:dim],
-            len(range(inp.size(dim))[slice(start, end, step)]),
-            *inp.size()[dim + 1 : -1],
-        ),
-        device=inp.device,
         validity=[
             None
             if valid is None
             else aten.slice.Tensor(valid, dim, start, end, step)
             for valid in inp._validity
         ],
+        size=(
+            *inp.size()[:dim],
+            len(range(inp.size(dim))[slice(start, end, step)]),
+            *inp.size()[dim + 1 : -1],
+        ),
+        device=inp.device,
     )
 
 
@@ -894,9 +902,6 @@ def _unbind(inp: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
         return tuple(aten.alias.default(column) for column in inp._columns)
 
     columns_list = [column.unbind(dim) for column in inp._columns]
-    validity_list = [
-        None if valid is None else valid.unbind(dim) for valid in inp._validity
-    ]
     if len(columns_list) == 0:
         size = (*inp.size()[:dim], *inp.size()[dim + 1 : -1])
         return tuple(
@@ -908,6 +913,9 @@ def _unbind(inp: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
             for _ in range(inp.size(dim))
         )
 
+    validity_list = [
+        None if valid is None else valid.unbind(dim) for valid in inp._validity
+    ]
     return tuple(
         inp.__class__(
             columns=columns,
@@ -960,19 +968,15 @@ def _split_with_sizes(
         for split_size in split_sizes:
             out = inp.__class__(
                 columns=inp._columns[start : start + split_size],
+                validity=inp._validity[start : start + split_size],
                 size=inp.size()[:-1],
                 device=inp.device,
-                validity=inp._validity[start : start + split_size],
             )
             start += split_size
             outs.append(out)
         return tuple(outs)
 
     columns_list = [col.split(split_sizes, dim=dim) for col in inp._columns]
-    validity_list = [
-        None if valid is None else valid.split(split_sizes, dim=dim)
-        for valid in inp._validity
-    ]
     if len(columns_list) == 0:
         return tuple(
             inp.__class__(
@@ -987,14 +991,18 @@ def _split_with_sizes(
             for split_size in split_sizes
         )
 
+    validity_list = [
+        None if valid is None else valid.split(split_sizes, dim=dim)
+        for valid in inp._validity
+    ]
     return tuple(
         inp.__class__(
             columns=columns,
-            device=inp.device,
             validity=[
                 None if validity is None else validity[i]
                 for validity in validity_list
             ],
+            device=inp.device,
         )
         for i, columns in enumerate(zip(*columns_list))
     )
@@ -1011,23 +1019,23 @@ def _index_select(
         column_indices = index.tolist()
         return inp.__class__(
             columns=[inp._columns[i] for i in column_indices],
+            validity=[inp._validity[i] for i in column_indices],
             size=inp.size()[:-1],
             device=inp.device,
-            validity=[inp._validity[i] for i in column_indices],
         )
 
     return inp.__class__(
         columns=[column.index_select(dim, index) for column in inp._columns],
+        validity=[
+            None if valid is None else valid.index_select(dim, index)
+            for valid in inp._validity
+        ],
         size=(
             *inp.size()[:dim],
             index.numel(),
             *inp.size()[dim + 1 : -1],
         ),
         device=inp.device,
-        validity=[
-            None if valid is None else valid.index_select(dim, index)
-            for valid in inp._validity
-        ],
     )
 
 
@@ -1086,11 +1094,11 @@ def _index(
         columns=[
             aten.index.Tensor(column, indices) for column in inp._columns
         ],
-        device=inp.device,
         validity=[
             None if valid is None else aten.index.Tensor(valid, indices)
             for valid in inp._validity
         ],
+        device=inp.device,
     )
 
 
@@ -1107,14 +1115,18 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
     if dim == tensors[0].dim() - 1:
         return tensors[0].__class__(
             columns=tuple(chain.from_iterable(t._columns for t in tensors)),
+            validity=tuple(chain.from_iterable(t._validity for t in tensors)),
             size=tensors[0].size()[:-1],
             device=tensors[0].device,
-            validity=tuple(chain.from_iterable(t._validity for t in tensors)),
         )
 
     return tensors[0].__class__(
         columns=[
             torch.cat([tensor._columns[i] for tensor in tensors], dim=dim)
+            for i in range(tensors[0].size(-1))
+        ],
+        validity=[
+            _combine_validity(tensors, column=i, dim=dim, stack=False)
             for i in range(tensors[0].size(-1))
         ],
         size=(
@@ -1123,10 +1135,6 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             *tensors[0].size()[dim + 1 : -1],
         ),
         device=tensors[0].device,
-        validity=[
-            _combine_validity(tensors, column=i, dim=dim, stack=False)
-            for i in range(tensors[0].size(-1))
-        ],
     )
 
 
@@ -1157,28 +1165,20 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             torch.stack([tensor._columns[i] for tensor in tensors], dim=dim)
             for i in range(tensors[0].size(-1))
         ],
+        validity=[
+            _combine_validity(tensors, column=i, dim=dim, stack=True)
+            for i in range(tensors[0].size(-1))
+        ],
         size=(
             *tensors[0].size()[:dim],
             len(tensors),
             *tensors[0].size()[dim:-1],
         ),
         device=tensors[0].device,
-        validity=[
-            _combine_validity(tensors, column=i, dim=dim, stack=True)
-            for i in range(tensors[0].size(-1))
-        ],
     )
 
 
 # Helpers #####################################################################
-
-
-def _apply_validity(values: Any, validity: Any) -> Any:
-    if isinstance(validity, bool):
-        return values if validity else None
-    return [
-        _apply_validity(value, valid) for value, valid in zip(values, validity)
-    ]
 
 
 def _combine_validity(
@@ -1201,6 +1201,7 @@ def _combine_validity(
                 device=tensor.device,
             )
         masks.append(valid)
+
     if stack:
         return torch.stack(masks, dim=dim)
     return torch.cat(masks, dim=dim)
