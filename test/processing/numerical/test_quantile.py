@@ -206,8 +206,13 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
     assert torch.equal(first.quantiles, second.quantiles)
 
 
-def test_quantile_transform_deterministic_fit_remains_shared() -> None:
-    table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
+@withCUDA
+def test_quantile_transform_deterministic_fit_remains_shared(
+    device: torch.device,
+) -> None:
+    table = TableTensor.from_tensor(
+        torch.arange(64.0, device=device).view(32, 2)
+    )
     output = QuantileTransform(
         n_quantiles=8,
         subsample=None,
@@ -221,21 +226,28 @@ def test_quantile_transform_deterministic_fit_remains_shared() -> None:
         assert output.representation(member_id).equal(output.representation(0))
 
 
-def test_quantile_transform_subsample_matches_independent_processors() -> None:
-    context = TableTensor.from_tensor(torch.arange(256.0).view(128, 2))
-    query = TableTensor.from_tensor(torch.arange(32.0).view(16, 2) + 0.5)
+@withCUDA
+def test_quantile_transform_subsample_matches_independent_processors(
+    device: torch.device,
+) -> None:
+    context = TableTensor.from_tensor(
+        torch.arange(256.0, device=device).view(128, 2)
+    )
+    query = TableTensor.from_tensor(
+        torch.arange(32.0, device=device).view(16, 2) + 0.5
+    )
     processor = QuantileTransform(n_quantiles=8, subsample=32)
 
     context_output = processor.fit_transform_ensemble(
         EnsembleTable(context, num_members=8),
-        generator=torch.Generator().manual_seed(7),
+        generator=torch.Generator(device=device).manual_seed(7),
     )
     query_output = processor.transform_ensemble(
         EnsembleTable(query, num_members=8)
     )
     restored = processor.inverse_transform_ensemble(context_output)
 
-    generator = torch.Generator().manual_seed(7)
+    generator = torch.Generator(device=device).manual_seed(7)
     references = [
         QuantileTransform(n_quantiles=8, subsample=32) for _ in range(8)
     ]
@@ -256,3 +268,41 @@ def test_quantile_transform_subsample_matches_independent_processors() -> None:
         processor.transform(query)
     with pytest.raises(RuntimeError, match="fitted for an ensemble"):
         processor.inverse_transform(context_output.representation(0))
+
+
+def test_quantile_transform_refit_clears_ensemble_state() -> None:
+    table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
+    processor = QuantileTransform(n_quantiles=8, subsample=None)
+
+    processor.fit_transform_ensemble(EnsembleTable(table, num_members=4))
+    transformed = processor.fit_transform(table)
+    expected = QuantileTransform(
+        n_quantiles=8,
+        subsample=None,
+    ).fit_transform(table)
+
+    assert transformed.equal(expected)
+
+
+def test_quantile_transform_ensemble_inverse_requires_fit() -> None:
+    table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
+
+    with pytest.raises(RuntimeError, match="not fitted"):
+        QuantileTransform(
+            n_quantiles=8,
+            subsample=None,
+        ).inverse_transform_ensemble(EnsembleTable(table, num_members=4))
+
+
+def test_quantile_transform_ensemble_requires_ensemble_fit() -> None:
+    table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
+    processor = QuantileTransform(
+        n_quantiles=8,
+        subsample=None,
+    ).fit(table)
+    ensemble = EnsembleTable(table, num_members=4)
+
+    with pytest.raises(RuntimeError, match="fitted for a single table"):
+        processor.transform_ensemble(ensemble)
+    with pytest.raises(RuntimeError, match="fitted for a single table"):
+        processor.inverse_transform_ensemble(ensemble)
