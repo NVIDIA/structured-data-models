@@ -89,17 +89,23 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         out = table
-        for child in self._ensemble_children():
-            out = child.fit_transform_ensemble(out, generator=generator)
+        for name, child in tuple(self._modules.items()):
+            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
+            if processor is not child:
+                self._modules[name] = processor
+            out = processor.fit_transform_ensemble(out, generator=generator)
         return out
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
         out = table
-        for child in self._ensemble_children():
-            out = child.transform_ensemble(out)
+        for name, child in tuple(self._modules.items()):
+            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
+            if processor is not child:
+                self._modules[name] = processor
+            out = processor.transform_ensemble(out)
         return out
 
-    def inverse_transform_ensemble(
+    def _inverse_transform_ensemble(
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
@@ -113,12 +119,15 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
         """
         self._check_is_fitted()
         out = table
-        for child in reversed(tuple(self._ensemble_children())):
-            fn = getattr(child, "inverse_transform_ensemble", None)
+        for name, child in reversed(tuple(self._modules.items())):
+            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
+            if processor is not child:
+                self._modules[name] = processor
+            fn = getattr(processor, "inverse_transform_ensemble", None)
             if not callable(fn):
                 raise AttributeError(
-                    f"{child.__class__.__name__!r} object has no attribute "
-                    "'inverse_transform_ensemble'"
+                    f"{processor.__class__.__name__!r} object has no "
+                    "attribute 'inverse_transform_ensemble'"
                 )
             out = fn(out)
         return out
@@ -134,13 +143,6 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
                 )
             out = fn(out)
         return out
-
-    def _ensemble_children(self) -> Iterator[EnsembleProcessor]:
-        for name, child in tuple(self._modules.items()):
-            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
-            if processor is not child:
-                self._modules[name] = processor
-            yield processor
 
     def __iter__(self) -> Iterator[Processor]:
         return cast(Iterator[Processor], self.children())
