@@ -247,6 +247,18 @@ def test_from_tensor() -> None:
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
     assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
 
+    data = StringTensor.from_list([["left", "right"], ["up", "down"]])
+    tensor = TableTensor.from_tensor(data)
+    assert tensor.size() == (2, 2)
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.text: ("0", "1"),
+        Stype.id: (),
+    }
+    assert tensor.text.equal(data)
+
 
 def test_inference_mode() -> None:
     def make_table() -> TableTensor:
