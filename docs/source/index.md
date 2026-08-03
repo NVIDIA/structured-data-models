@@ -1,3 +1,17 @@
+```{figure} images/logo_light.svg
+:name: sdm-logo-light
+:figclass: light-only
+:width: 125
+:align: center
+```
+
+```{figure} images/logo_dark.svg
+:name: sdm-logo-dark
+:figclass: dark-only
+:width: 125
+:align: center
+```
+
 # Structured Data Models
 
 ```{toctree}
