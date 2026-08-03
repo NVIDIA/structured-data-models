@@ -383,6 +383,11 @@ class TFIDF(EnsembleProcessor):
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if len(self.processors) > 0:
+            raise RuntimeError(
+                "'TfidfTextEmbed' was fitted for an ensemble; use "
+                "'transform_ensemble' instead of 'transform'."
+            )
         device = table.text.device
         dtype = (
             self.get_buffer("idf_0").dtype
