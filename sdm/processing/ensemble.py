@@ -222,3 +222,25 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.template.__repr__(indent=indent)
+class EnsembleInvertibleMixin(InvertibleMixin):
+    r"""Extend a :class:`EnsembleProcessor` by an inverse transformation."""
+
+    @abc.abstractmethod
+    def _inverse_transform_ensemble(
+        self, table: EnsembleTable
+    ) -> EnsembleTable: ...
+
+    def inverse_transform_ensemble(
+        self, table: EnsembleTable
+    ) -> EnsembleTable:
+        r"""Apply the inverse transformation to ``ensemble table``.
+
+        Args:
+            table: The ensemble table in transformed representation.
+
+        Returns:
+            The table restored to the representation before
+            :meth:`~EnsembleProcessor.transform_ensemble`.
+        """
+        self._check_is_fitted()
+        return self._inverse_transform_ensemble(table)
