@@ -1,0 +1,9 @@
+.sy-head-brand {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sy-head-brand img + strong {
+  display: inline;
+}
