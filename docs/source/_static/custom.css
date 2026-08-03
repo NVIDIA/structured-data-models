@@ -7,3 +7,12 @@
 .sy-head-brand img + strong {
   display: inline;
 }
+
+#sdm-logo-light, #sdm-logo-dark {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+#structured-data-models h1 {
+  text-align: center;
+}
