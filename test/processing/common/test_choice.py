@@ -7,7 +7,6 @@ import torch
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
     Choice,
-    EnsembleProcessor,
     Identity,
     ImputeMean,
     InvertibleMixin,
@@ -149,10 +148,6 @@ def test_choice_copies_draw_independently_at_fit() -> None:
     assert picks == {"Identity", "QuantileTransform"}
 
 
-def test_choice_is_an_ensemble_processor() -> None:
-    assert issubclass(Choice, EnsembleProcessor)
-
-
 def test_choice_round_robin_routes_eight_members_and_reuses_selection() -> (
     None
 ):
@@ -235,3 +230,21 @@ def test_choice_random_ensemble_is_reproducible() -> None:
         assert first.representation(member_id).equal(
             second.representation(member_id)
         )
+
+
+def test_choice_ensemble_requires_matching_member_count() -> None:
+    processor = Choice(Add(0), Add(1), selection="round_robin")
+    processor.fit_transform_ensemble(EnsembleTable(_table(), num_members=8))
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(_table(), num_members=7))
+
+
+def test_choice_ensemble_inverse_rejects_non_invertible_option() -> None:
+    processor = Choice(ImputeMean(), selection="round_robin")
+    transformed = processor.fit_transform_ensemble(
+        EnsembleTable(_table(), num_members=2)
+    )
+
+    with pytest.raises(TypeError, match="not invertible"):
+        processor.inverse_transform_ensemble(transformed)
