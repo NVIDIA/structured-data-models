@@ -88,6 +88,35 @@ def _chunk_key_value(
     return None
 
 
+def chunked_forward(fn):
+    def wrapper(
+        self,
+        query: Tensor,
+        key_value: Tensor | KVCacheEntry | None,
+        seqused_key_value: Tensor | None,
+        attn_mask: Tensor | None,
+        *args: Any,
+        batch_size_limt: int,
+        **kwargs: Any,
+    ) -> Tensor | tuple[Tensor, KVCacheEntry]:
+
+        batch_shapes = [query.size()[:-2]]
+        if isinstance(key_value, Tensor):
+            batch_shapes.append(key_value.size()[:-2])
+        elif isinstance(key_value, KVCacheEntry)
+            batch_shapes.append([key_value.key.size()[:-3]])
+        if seqused_key_value is not None:
+            batch_shapes.append(seqused_key_value.size())
+        if attn_mask is not None:
+            batch_shapes.append(attn_mask.size()[:-2])
+        batch_shape = torch.broadcast_shapes(*batch_shapes)
+
+        if query.size(-2) == 0:
+            return query.new_empty(*batch_shape, 0, query.size(-1))
+
+    return wrapper
+
+
 def _chunk_attention(
     forward: Callable[..., object],
     query: Tensor,
