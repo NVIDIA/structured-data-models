@@ -11,17 +11,16 @@ if TYPE_CHECKING:
 
 def to_cudf(
     tensor: Tensor,
-    valid_mask: Tensor | None = None,
+    valid: Tensor | None = None,
 ) -> cudf.Series:
     r"""Convert a CUDA tensor to a flat :class:`cudf.Series`.
 
     Args:
         tensor: The CUDA tensor.
-        valid_mask: Boolean mask indicating valid, non-null tensor elements.
+        valid: The validity bitmap.
     """
     import cudf
 
-    # Avoid a circular import through `sdm.tensor`.
     from sdm.tensor import StringTensor  # noqa: PLC0415
 
     if not tensor.is_cuda:
@@ -36,17 +35,17 @@ def to_cudf(
         with torch.cuda.device(tensor.device):
             ser = cudf.Series(tensor, copy=False)
 
-    if valid_mask is None:
+    if valid is None:
         return ser
 
-    if valid_mask.device != tensor.device:
+    if valid.device != tensor.device:
         raise ValueError(
-            f"Expected 'valid_mask' to be on device '{tensor.device}' "
-            f"(got '{valid_mask.device}')"
+            f"Expected 'valid' to be on device '{tensor.device}' "
+            f"(got '{valid.device}')"
         )
 
     with torch.cuda.device(tensor.device):
-        mask = to_cudf(valid_mask.contiguous().view(-1))._column.as_mask()
+        mask = to_cudf(valid.contiguous().view(-1))._column.as_mask()
         if not isinstance(mask, tuple):
             mask = (mask,)
 
