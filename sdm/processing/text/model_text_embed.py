@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import torch
 from torch import Tensor
@@ -36,6 +36,16 @@ class ModelTextEmbed(Processor):
         super().__init__()
         self._embedding_model: torch.nn.Module = embedding_model
         self._embedding_dim: int = embedding_dim
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> ModelTextEmbed:
+        copied = type(self)(
+            embedding_model=self._embedding_model,
+            embedding_dim=self._embedding_dim,
+        )
+        memo[id(self)] = copied
+        copied._fitted = self._fitted
+        copied.training = self.training
+        return copied
 
     def _transform(self, table: TableTensor) -> TableTensor:
         device = table.device
