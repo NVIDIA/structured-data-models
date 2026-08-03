@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import TableTensor
 from sdm.relational.data import RelationalData
 from sdm.relational.join import join_index
 from sdm.relational.sampler import (
@@ -364,10 +364,10 @@ class CuGraphRelationalSampler(RelationalSampler):
 
     @staticmethod
     def _id_column(table: TableTensor, column: str) -> Tensor | None:
-        column_index = table.columns[Stype.id].index(column)
-        if table.id.validity[column_index] is not None:
+        table = table[column]
+        if table.id._validity[0] is not None:
             return None
-        return table.id.select(-1, column_index)
+        return table.id[..., 0]
 
     def _sample_non_temporal(
         self,
