@@ -84,6 +84,15 @@ def test_from_arrow_chunked_string() -> None:
     assert tensor.to_arrow().to_pydict() == {"0": ["a", "b", "c"]}
 
 
+def test_from_arrow_chunked_string() -> None:
+    tensor = ColumnarTensor.from_arrow(
+        pa.chunked_array([pa.array(["a", "b"]), pa.array(["c"])]),
+    )
+
+    assert tensor.to_arrow().column(0).type == pa.large_string()
+    assert tensor.to_arrow().to_pydict() == {"0": ["a", "b", "c"]}
+
+
 @onlyCUDA
 def test_from_arrow_cuda() -> None:
     tensor = ColumnarTensor.from_arrow(pa.array([1, 2, 3]), device="cuda")
