@@ -1,5 +1,11 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="https://musical-invention-2y4yjlw.pages.github.io/_images/logo_light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://musical-invention-2y4yjlw.pages.github.io/_images/logo_dark.svg">
+  <img src="https://musical-invention-2y4yjlw.pages.github.io/_images/logo_light.svg" width="125">
+</picture>
+
 <h1>Structured Data Models
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-brightgreen.svg?style=flat&color=76B900)](https://www.python.org/downloads)
