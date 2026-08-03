@@ -323,6 +323,7 @@ def test_refit_replaces_previous_state() -> None:
     assert torch.equal(output.numerical, expected.numerical)
 
 
+<<<<<<< HEAD:test/processing/text/test_tfidf.py
 def test_tfidf_text_embed_is_an_ensemble_processor() -> None:
     assert issubclass(TFIDF, EnsembleProcessor)
 
@@ -355,6 +356,11 @@ def test_tfidf_text_embed_keeps_vocabulary_per_representation() -> None:
     )
     assert query_output.table(0).numerical.shape == (1, 2)
     assert query_output.table(1).numerical.shape == (1, 4)
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=3))
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(query)
 
 
 def test_tfidf_text_embed_keeps_shared_output_packed() -> None:
