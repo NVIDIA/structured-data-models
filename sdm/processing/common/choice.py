@@ -21,7 +21,7 @@ def _merge_ensemble_outputs(
     member_representation_ids = []
     for member_id, option in enumerate(selections):
         output = outputs[option]
-        location = output._member_locations[member_id]
+        location = output.member_location(member_id)
         key = (option, location)
         if key not in locations:
             locations[key] = len(representations)
@@ -29,8 +29,8 @@ def _merge_ensemble_outputs(
         member_representation_ids.append(locations[key])
 
     return EnsembleTable.from_representations(
-        representations,
-        member_representation_ids,
+        representations=representations,
+        member_representation_ids=member_representation_ids,
     )
 
 
@@ -88,12 +88,13 @@ class Choice(EnsembleProcessor, InvertibleMixin):
         if self.selection == "round_robin":
             self._index = 0
         else:
+            device = table.device if generator is None else generator.device
             self._index = int(
                 torch.randint(
                     len(self.options),
                     (1,),
                     generator=generator,
-                    device=table.device,
+                    device=device,
                 ).item()
             )
         self.selected.fit(table, generator=generator)
@@ -150,6 +151,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
                 ).tolist()
             )
 
+        # Each option sees stable member positions, including nested choices.
         outputs = {
             option: cast(
                 EnsembleProcessor,
@@ -182,6 +184,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
         table: EnsembleTable,
     ) -> EnsembleTable:
         """Invert members through their selected options."""
+        self._check_is_fitted()
         outputs = {}
         for option in sorted(set(self._selections)):
             processor = cast(EnsembleProcessor, self.options[option])
