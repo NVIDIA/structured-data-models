@@ -15,7 +15,7 @@
 
 </h1>
 
-Python package for structured data models.
+**`structured-data-models`** is a PyTorch- and GPU-native collection of foundation models, tensor subclasses, and data processors for structured data.
 
 ## Installation
 
@@ -28,6 +28,8 @@ pip install structured-data-models
 
 > [!NOTE]
 > For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency to keep dataframe-style operations on GPU and avoid unnecessary data movement.
+
+## A
 
 ## Quick Tour
 
