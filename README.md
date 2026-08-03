@@ -15,7 +15,11 @@
 
 </h1>
 
-**A PyTorch- and GPU-native collection of foundation models, tensor subclasses, and data processors for structured data.**
+**A PyTorch- and GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
+
+- **Models**: Implementations of structured data foundation models such as `TabICLv2` and `KumoRFM`, built on a unified interface with room for future model families.
+- **Tensor-native**: PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
+- **Data processing**: Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
 ## Installation
 
