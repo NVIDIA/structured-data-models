@@ -106,6 +106,7 @@ def to_binary_class(
         positive_class: Class value treated as the positive class.
 
     >>> import torch
+    >>> import sdm
     >>> from sdm.evaluation import to_binary_class
     >>> pred = sdm.TableTensor.from_tensor(
     ...     torch.tensor([[0.8, 0.2], [0.1, 0.9]]),
