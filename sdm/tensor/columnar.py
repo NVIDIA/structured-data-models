@@ -47,7 +47,6 @@ class ColumnarTensor(Tensor):
         validity: Per-column validity bitmap.
         size: The shape of the tensor ``[...]``.
         device: The device.
-            value. ``None`` denotes an entirely valid column.
     """
 
     HANDLED_FUNCTIONS: ClassVar[
@@ -941,11 +940,11 @@ def _unbind(inp: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
     return tuple(
         inp.__class__(
             columns=columns,
-            device=inp.device,
             validity=[
                 None if validity is None else validity[i]
                 for validity in validity_list
             ],
+            device=inp.device,
         )
         for i, columns in enumerate(zip(*columns_list))
     )
@@ -1038,10 +1037,10 @@ def _index_select(
 ) -> ColumnarTensor:
     dim = _normalize_dim(inp, dim)
     if dim == inp.dim() - 1:
-        column_indices = index.tolist()
+        indices = index.tolist()
         return inp.__class__(
-            columns=[inp._columns[i] for i in column_indices],
-            validity=[inp._validity[i] for i in column_indices],
+            columns=[inp._columns[i] for i in indices],
+            validity=[inp._validity[i] for i in indices],
             size=inp.size()[:-1],
             device=inp.device,
         )
@@ -1099,9 +1098,9 @@ def _index(
         column_indices = column_index.tolist()
         return inp.__class__(
             columns=[inp._columns[i] for i in column_indices],
+            validity=[inp._validity[i] for i in column_indices],
             size=inp.size()[:-1],
             device=inp.device,
-            validity=[inp._validity[i] for i in column_indices],
         )
 
     if len(inp._columns) == 0:
