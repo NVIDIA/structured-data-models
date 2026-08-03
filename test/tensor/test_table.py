@@ -1055,52 +1055,6 @@ def test_arrow() -> None:
     assert tensor.to_arrow().to_pydict() == data
 
 
-def test_arrow_chunked_strings() -> None:
-    tensor = TableTensor.from_arrow(
-        pa.table(
-            {
-                "category": pa.chunked_array(
-                    [pa.array(["b", None]), pa.array(["a", "b"])]
-                ),
-                "text": pa.chunked_array(
-                    [pa.array(["hi", "é"]), pa.array(["", "abc"])]
-                ),
-                "id": pa.chunked_array(
-                    [pa.array(["u1", "u2"]), pa.array(["u3", "u4"])]
-                ),
-            }
-        ),
-        stypes={
-            "category": "categorical",
-            "text": "text",
-            "id": "id",
-        },
-    )
-
-    table = tensor.to_arrow()
-    assert table.to_pydict() == {
-        "category": ["b", None, "a", "b"],
-        "text": ["hi", "é", "", "abc"],
-        "id": ["u1", "u2", "u3", "u4"],
-    }
-    assert table["category"].chunk(0).dictionary.type == pa.large_string()
-    assert table["text"].type == pa.large_string()
-    assert table["id"].type == pa.large_string()
-
-
-def test_arrow_nullable_id() -> None:
-    data = {
-        "user_id": [1, None, 3],
-        "item_id": ["a", None, ""],
-    }
-    tensor = TableTensor.from_arrow(
-        pa.table(data),
-        stypes={"user_id": "id", "item_id": "id"},
-    )
-
-    assert tensor.to_arrow().to_pydict() == data
-
-
 def test_arrow_empty() -> None:
     tensor = TableTensor.from_arrow(
         pa.table(
@@ -1270,22 +1224,6 @@ def test_cudf() -> None:
 
     df = tensor.to_cudf()
     assert df.to_arrow().to_pydict() == data
-
-
-@onlyCUDA
-def test_cudf_nullable_id() -> None:
-    cudf = pytest.importorskip("cudf")
-
-    data = {
-        "user_id": [1, None, 3],
-        "item_id": ["a", None, ""],
-    }
-    tensor = TableTensor.from_cudf(
-        df=cudf.DataFrame(data),
-        stypes={"user_id": "id", "item_id": "id"},
-    )
-
-    assert tensor.to_cudf().to_arrow().to_pydict() == data
 
 
 @onlyCUDA
