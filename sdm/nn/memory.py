@@ -18,7 +18,12 @@ _ATTENTION_WORK_FACTOR = 12
 
 
 def cuda_memory_budget(device: torch.device) -> tuple[int, int]:
-    """Return usable CUDA headroom and the process memory limit."""
+    """Return safe allocation headroom and the CUDA process limit.
+
+    Headroom combines unused PyTorch-reserved memory with memory still
+    available to the process, then reserves space for fragmentation and
+    unmodeled CUDA work.
+    """
     if device.index is None:
         device = torch.device(device.type, torch.cuda.current_device())
     free_bytes, total_bytes = torch.cuda.mem_get_info(device)
@@ -44,7 +49,7 @@ def cuda_memory_budget(device: torch.device) -> tuple[int, int]:
 
 
 def cuda_attention_work_byte_limit(device: torch.device) -> int:
-    """Return the target CUDA bytes for one attention chunk."""
+    """Limit one attention chunk to safe headroom and 5% of process memory."""
     available_bytes, process_limit = cuda_memory_budget(device)
     return min(available_bytes, process_limit // 20)
 
@@ -55,7 +60,7 @@ def attention_batch_size_limit(
     key_value: Tensor | KVCacheEntry,
     work_byte_limit: int | None,
 ) -> int | None:
-    """Bound an attention batch using its sequence and channel dimensions."""
+    """Return the smallest explicit or memory-derived attention batch limit."""
     if work_byte_limit is None:
         return requested_limit
 
