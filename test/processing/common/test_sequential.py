@@ -13,7 +13,6 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing import (
-    EnsembleProcessor,
     ImputeMean,
     InvertibleMixin,
     PowerTransform,
@@ -224,10 +223,6 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
     assert torch.allclose(restored.numerical, table.numerical, atol=1e-4)
 
 
-def test_sequential_is_an_ensemble_processor() -> None:
-    assert issubclass(Sequential, EnsembleProcessor)
-
-
 def test_sequential_ensemble_matches_member_execution() -> None:
     first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
     second = _table(torch.tensor([[2.0, 3.0], [4.0, 5.0]]))
@@ -273,3 +268,19 @@ def test_sequential_ensemble_keeps_fitted_state_per_representation() -> None:
         assert restored.representation(member_id).equal(
             table.representation(member_id)
         )
+
+
+def test_sequential_ensemble_inverse_requires_fit() -> None:
+    table = EnsembleTable(_table(), num_members=2)
+
+    with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
+        Sequential(Center()).inverse_transform_ensemble(table)
+
+
+def test_sequential_ensemble_inverse_rejects_non_invertible_step() -> None:
+    table = EnsembleTable(_table(), num_members=2)
+    processor = Sequential(ImputeMean())
+    transformed = processor.fit_transform_ensemble(table)
+
+    with pytest.raises(TypeError, match="'ImputeMean' is not invertible"):
+        processor.inverse_transform_ensemble(transformed)

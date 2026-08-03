@@ -111,6 +111,7 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
         Returns:
             Ensemble table restored to its representation before transform.
         """
+        self._check_is_fitted()
         out = table
         for child in reversed(tuple(self._ensemble_children())):
             fn = getattr(child, "inverse_transform_ensemble", None)
