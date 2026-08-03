@@ -5,14 +5,15 @@ import torch
 from typing_extensions import Self
 
 from sdm import EnsembleTable, Stype, TableTensor
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import Processor
 from sdm.processing.ensemble import (
+    EnsembleInvertibleMixin,
     EnsembleProcessor,
     EnsembleProcessorAdapter,
 )
 
 
-class Sequential(EnsembleProcessor, InvertibleMixin):
+class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     r"""Apply processors and callables in sequence.
 
     Args:
@@ -117,7 +118,6 @@ class Sequential(EnsembleProcessor, InvertibleMixin):
         Returns:
             Ensemble table restored to its representation before transform.
         """
-        self._check_is_fitted()
         out = table
         for name, child in reversed(tuple(self._modules.items())):
             processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
