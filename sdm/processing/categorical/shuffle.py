@@ -13,6 +13,7 @@ class ShuffleCategories(EnsembleProcessor):
 
     One permutation per categorical column is drawn when the processor is
     fitted; pass ``generator`` to ``fit()`` to make the draws reproducible.
+    Ensemble fitting draws one permutation per categorical column and member.
     Codes and their corresponding category vectors are permuted together so
     decoded values remain unchanged. Negative codes represent missing values
     and are preserved unchanged. Only categorical columns are supported; use
@@ -116,7 +117,7 @@ class ShuffleCategories(EnsembleProcessor):
                 generator=generator,
             )
             key = (
-                table._member_locations[member_id],
+                table.member_location(member_id),
                 tuple(processor.permutations.tolist()),
             )
             processor_id = fitted.get(key)
@@ -129,8 +130,8 @@ class ShuffleCategories(EnsembleProcessor):
 
         self._member_processor_ids = tuple(member_processor_ids)
         return EnsembleTable.from_representations(
-            representations,
-            self._member_processor_ids,
+            representations=representations,
+            member_representation_ids=self._member_processor_ids,
         )
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -144,7 +145,7 @@ class ShuffleCategories(EnsembleProcessor):
         member_representation_ids = []
         transformed: dict[tuple[tuple[int, int], int], int] = {}
         for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (table._member_locations[member_id], processor_id)
+            key = (table.member_location(member_id), processor_id)
             representation_id = transformed.get(key)
             if representation_id is None:
                 processor = cast(
@@ -159,11 +160,16 @@ class ShuffleCategories(EnsembleProcessor):
             member_representation_ids.append(representation_id)
 
         return EnsembleTable.from_representations(
-            representations,
-            member_representation_ids,
+            representations=representations,
+            member_representation_ids=member_representation_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
+        if len(self.processors) > 0:
+            raise RuntimeError(
+                "'ShuffleCategories' was fitted for an ensemble; use "
+                "'transform_ensemble' instead of 'transform'."
+            )
         offsets = self.offsets.tolist()
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
