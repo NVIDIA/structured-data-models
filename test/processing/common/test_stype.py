@@ -9,7 +9,6 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing import (
-    EnsembleProcessor,
     Identity,
     ImputeMean,
     InvertibleMixin,
@@ -229,10 +228,6 @@ def test_stype_dispatch_uses_route_fitted_state() -> None:
     )
 
 
-def test_stype_dispatch_is_an_ensemble_processor() -> None:
-    assert issubclass(StypeDispatch, EnsembleProcessor)
-
-
 def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
     first = _mixed_table()
     second = _mixed_table().replace_blocks(
@@ -274,6 +269,7 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_representation() -> (
     processor = StypeDispatch(numerical=Center())
 
     transformed = processor.fit_transform_ensemble(table)
+    query = processor.transform_ensemble(table)
     restored = processor.inverse_transform_ensemble(transformed)
 
     for member_id in range(table.num_members):
@@ -282,6 +278,41 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_representation() -> (
             result.numerical.mean(dim=-2),
             torch.zeros(1),
         )
+        assert query.representation(member_id).equal(result)
+        assert restored.representation(member_id).columns == (
+            table.representation(member_id).columns
+        )
         assert restored.representation(member_id).equal(
             table.representation(member_id)
         )
+
+
+def test_stype_dispatch_ensemble_inverse_rejects_drop() -> None:
+    table = EnsembleTable(_mixed_table(), num_members=2)
+    processor = StypeDispatch(numerical=Identity(), remainder="drop")
+    transformed = processor.fit_transform_ensemble(table)
+
+    with pytest.raises(ValueError, match="not invertible"):
+        processor.inverse_transform_ensemble(transformed)
+
+
+def test_stype_dispatch_stateless_ensemble_inverse() -> None:
+    table = EnsembleTable(_mixed_table(), num_members=2)
+    processor = StypeDispatch(numerical=Identity())
+
+    transformed = processor.transform_ensemble(table)
+    restored = processor.inverse_transform_ensemble(transformed)
+
+    for member_id in range(table.num_members):
+        assert restored.representation(member_id).equal(
+            table.representation(member_id)
+        )
+
+
+def test_stype_dispatch_ensemble_inverse_rejects_non_invertible_route() -> None:
+    table = EnsembleTable(_mixed_table(), num_members=2)
+    processor = StypeDispatch(numerical=ImputeMean())
+    transformed = processor.fit_transform_ensemble(table)
+
+    with pytest.raises(TypeError, match="not invertible"):
+        processor.inverse_transform_ensemble(transformed)

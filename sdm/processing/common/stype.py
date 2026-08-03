@@ -25,11 +25,37 @@ def _combine_ensemble_parts(
             ]
         )
 
+    if all(
+        all(
+            part.member_location(member_id)
+            == source.member_location(member_id)
+            for member_id in range(source.num_members)
+        )
+        for part in parts
+    ):
+        return source._replace_packed_representations(
+            [
+                cast(
+                    TableTensor,
+                    torch.cat(cast(list[Tensor], packed_parts), dim=-1),
+                )
+                for packed_parts in zip(
+                    *(
+                        tuple(part.iter_packed_representations())
+                        for part in parts
+                    ),
+                    strict=True,
+                )
+            ]
+        )
+
     representations: list[TableTensor] = []
     locations: dict[tuple[tuple[int, int], ...], int] = {}
     member_representation_ids = []
     for member_id in range(source.num_members):
-        location = tuple(part._member_locations[member_id] for part in parts)
+        location = tuple(
+            part.member_location(member_id) for part in parts
+        )
         if location not in locations:
             locations[location] = len(representations)
             representations.append(
@@ -47,8 +73,8 @@ def _combine_ensemble_parts(
         member_representation_ids.append(locations[location])
 
     return EnsembleTable.from_representations(
-        representations,
-        member_representation_ids,
+        representations=representations,
+        member_representation_ids=member_representation_ids,
     )
 
 
@@ -218,6 +244,14 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
                 cast(Processor, processor)
             )
 
+        self._active_routes = tuple(
+            stype
+            for stype in self.processors
+            if any(
+                len(packed.columns[Stype(stype)]) > 0
+                for packed in table.iter_packed_representations()
+            )
+        )
         route_inputs = {
             stype: table._replace_packed_representations(
                 [
@@ -225,16 +259,8 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
                     for packed in table.iter_packed_representations()
                 ]
             )
-            for stype in self.processors
+            for stype in self._active_routes
         }
-        self._active_routes = tuple(
-            stype
-            for stype, route_input in route_inputs.items()
-            if any(
-                packed.size(-1) > 0
-                for packed in route_input.iter_packed_representations()
-            )
-        )
         parts = [
             cast(
                 EnsembleProcessor,
@@ -245,10 +271,10 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
             )
             for stype in self._active_routes
         ]
-        if self.remainder != "drop":
-            remainder = self._remainder_ensemble(table)
-            if self.remainder == "passthrough":
-                parts.append(remainder)
+        if self.remainder == "passthrough":
+            parts.append(self._remainder_ensemble(table))
+        elif self.remainder == "error":
+            self._remainder_ensemble(table)
         return _combine_ensemble_parts(parts, table)
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -259,7 +285,15 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
 
         active_routes = self._active_routes
         if not self.requires_fit:
-            active_routes = tuple(self.processors)
+            active_routes = tuple(
+                stype
+                for stype in self.processors
+                if any(
+                    len(packed.columns[Stype(stype)]) > 0
+                    for packed in table.iter_packed_representations()
+                )
+            )
+            self._active_routes = active_routes
         parts = [
             cast(
                 EnsembleProcessor,
@@ -274,10 +308,10 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
             )
             for stype in active_routes
         ]
-        if self.remainder != "drop":
-            remainder = self._remainder_ensemble(table)
-            if self.remainder == "passthrough":
-                parts.append(remainder)
+        if self.remainder == "passthrough":
+            parts.append(self._remainder_ensemble(table))
+        elif self.remainder == "error":
+            self._remainder_ensemble(table)
         return _combine_ensemble_parts(parts, table)
 
     def inverse_transform_ensemble(
@@ -285,6 +319,7 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         table: EnsembleTable,
     ) -> EnsembleTable:
         """Invert every active semantic-type route."""
+        self._check_is_fitted()
         if self.remainder == "drop":
             raise ValueError(
                 "'StypeDispatch' with remainder='drop' is not invertible"
@@ -340,12 +375,13 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
             route_input = table.select_stypes(stype)
             if route_input.size(-1) == 0:
                 continue
-            if not isinstance(processor, InvertibleMixin):
+            inverse = getattr(processor, "inverse_transform", None)
+            if not callable(inverse):
                 raise TypeError(
                     f"Route {stype!r} uses non-invertible processor "
                     f"{processor.__class__.__name__!r}"
                 )
-            outputs.append(processor.inverse_transform(route_input))
+            outputs.append(inverse(route_input))
 
         remainder_stypes = [
             stype
