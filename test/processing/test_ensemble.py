@@ -3,7 +3,7 @@ import torch
 
 from sdm import EnsembleTable, Stype, TableTensor
 from sdm.processing import (
-    EnsembleInvertibleMixin   
+    EnsembleInvertibleMixin,
     EnsembleProcessor,
     EnsembleProcessorAdapter,
     InvertibleMixin,
@@ -70,6 +70,8 @@ class Negate(Processor, InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return self._transform(table)
+
+
 class InvertibleIdentityEnsembleProcessor(
     IdentityEnsembleProcessor,
     EnsembleInvertibleMixin,

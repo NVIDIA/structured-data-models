@@ -113,7 +113,31 @@ class EnsembleProcessor(Processor):
         return table.representation(0)
 
 
-class EnsembleProcessorAdapter(EnsembleProcessor):
+class EnsembleInvertibleMixin(InvertibleMixin):
+    r"""Extend a :class:`EnsembleProcessor` by an inverse transformation."""
+
+    @abc.abstractmethod
+    def _inverse_transform_ensemble(
+        self, table: EnsembleTable
+    ) -> EnsembleTable: ...
+
+    def inverse_transform_ensemble(
+        self, table: EnsembleTable
+    ) -> EnsembleTable:
+        r"""Apply the inverse transformation to ``ensemble table``.
+
+        Args:
+            table: The ensemble table in transformed representation.
+
+        Returns:
+            The table restored to the representation before
+            :meth:`~EnsembleProcessor.transform_ensemble`.
+        """
+        self._check_is_fitted()
+        return self._inverse_transform_ensemble(table)
+
+
+class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     """Apply an ordinary processor to packed ensemble representations.
 
     The adapter owns one fitted processor copy per packed representation and
@@ -178,7 +202,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
             outputs.append(output)
         return table._replace_packed_representations(outputs)
 
-    def inverse_transform_ensemble(
+    def _inverse_transform_ensemble(
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
@@ -190,7 +214,6 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
         Returns:
             Ensemble table restored to its representation before transform.
         """
-        self._check_is_fitted()
         outputs = []
         for packed, processor in zip(
             table.iter_packed_representations(),
@@ -206,9 +229,9 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
             outputs.append(output)
         return table._replace_packed_representations(outputs)
 
-    def inverse_transform(self, table: TableTensor) -> TableTensor:
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
         """Apply the fitted inverse to a single table."""
-        output = self.inverse_transform_ensemble(
+        output = self._inverse_transform_ensemble(
             EnsembleTable(table, num_members=1)
         )
         return self._single_member(output)
@@ -222,25 +245,3 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.template.__repr__(indent=indent)
-class EnsembleInvertibleMixin(InvertibleMixin):
-    r"""Extend a :class:`EnsembleProcessor` by an inverse transformation."""
-
-    @abc.abstractmethod
-    def _inverse_transform_ensemble(
-        self, table: EnsembleTable
-    ) -> EnsembleTable: ...
-
-    def inverse_transform_ensemble(
-        self, table: EnsembleTable
-    ) -> EnsembleTable:
-        r"""Apply the inverse transformation to ``ensemble table``.
-
-        Args:
-            table: The ensemble table in transformed representation.
-
-        Returns:
-            The table restored to the representation before
-            :meth:`~EnsembleProcessor.transform_ensemble`.
-        """
-        self._check_is_fitted()
-        return self._inverse_transform_ensemble(table)
