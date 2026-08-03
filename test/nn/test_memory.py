@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from sdm.nn._memory import (
+from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_memory_budget,
 )

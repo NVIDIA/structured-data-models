@@ -9,7 +9,7 @@ from torch.nn import LayerNorm, Linear
 
 from sdm.cache import Cache
 from sdm.models.kumorfm.graph import HomogeneousGraph
-from sdm.nn._memory import cuda_memory_budget
+from sdm.nn.memory import cuda_memory_budget
 
 # Empirical upper bounds for transient aggregation work.
 _AGGREGATION_EDGE_WORK_FACTOR = 4

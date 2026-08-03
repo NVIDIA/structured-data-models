@@ -9,7 +9,7 @@ from torch.nn import Embedding, LayerNorm, Linear, ModuleList, Parameter
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.nn import InducedTransformerBlock, RotaryEmbedding, TransformerBlock
-from sdm.nn._memory import (
+from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_work_byte_limit,
 )

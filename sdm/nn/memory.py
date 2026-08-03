@@ -1,3 +1,10 @@
+"""CUDA inference memory heuristics.
+
+Reserve 20% (at least 512 MiB) of live headroom. Attention chunks use at
+most 5% of the process limit, and callers choose the largest work chunk that
+fits the resulting budget.
+"""
+
 from math import prod
 
 import torch

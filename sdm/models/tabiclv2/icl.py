@@ -9,7 +9,7 @@ from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
 from sdm.cache import Cache, KVCacheEntry
 from sdm.nn import TransformerBlock
-from sdm.nn._memory import (
+from sdm.nn.memory import (
     attention_batch_size_limit,
     cuda_attention_work_byte_limit,
 )
