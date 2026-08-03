@@ -199,10 +199,6 @@ data-aria-dark="Switch to auto color mode">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.numerical.</span></span><span class="sig-name descname"><span class="pre">PCA</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.numerical.PCA" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
 <p>Project numerical columns onto their principal components.</p>
-<p>The mean and components are fitted on the context table via a singular
-value decomposition of the centered data. The effective dimension is
-capped at the numerical rank of the centered data. Output columns are named
-<code class="docutils literal notranslate"><span class="pre">&quot;pca_0&quot;</span></code>, …, <code class="docutils literal notranslate"><span class="pre">&quot;pca_{num_components-1}&quot;</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>num_components</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of principal components to keep.</p>
@@ -236,7 +232,7 @@ capped at the numerical rank of the centered data. Output columns are named
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=3e323635"></script>
+      <script src="../../_static/documentation_options.js?v=a1176764"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
