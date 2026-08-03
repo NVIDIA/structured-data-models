@@ -10,7 +10,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import EnsembleProcessor, ShuffleColumns
+from sdm.processing import ShuffleColumns
 
 
 def _table() -> TableTensor:
@@ -74,10 +74,6 @@ def test_shuffle_columns_is_reproducible_with_generator(
     assert torch.equal(first_output.numerical, second_output.numerical)
 
 
-def test_shuffle_columns_is_an_ensemble_processor() -> None:
-    assert issubclass(ShuffleColumns, EnsembleProcessor)
-
-
 @pytest.mark.parametrize("method", ["shift", "random"])
 def test_shuffle_columns_ensemble_matches_independent_processors(
     method: Literal["shift", "random"],
@@ -110,7 +106,8 @@ def test_shuffle_columns_ensemble_matches_independent_processors(
 
 
 def test_shuffle_columns_reuses_equal_member_permutations() -> None:
-    output = ShuffleColumns(method="shift").fit_transform_ensemble(
+    processor = ShuffleColumns(method="shift")
+    output = processor.fit_transform_ensemble(
         EnsembleTable(_table(), num_members=8),
         generator=torch.Generator().manual_seed(9),
     )
@@ -122,3 +119,10 @@ def test_shuffle_columns_reuses_equal_member_permutations() -> None:
     assert sum(
         packed.size(0) for packed in output.iter_packed_representations()
     ) == len(unique_columns)
+
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(_table())
+    with pytest.raises(RuntimeError, match="inverse transform"):
+        processor.inverse_transform_ensemble(
+            EnsembleTable(_table(), num_members=7)
+        )

@@ -92,7 +92,7 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
                 generator=generator,
             )
             key = (
-                table._member_locations[member_id],
+                table.member_location(member_id),
                 tuple(processor.permutation.tolist()),
             )
             processor_id = fitted.get(key)
@@ -105,8 +105,8 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
 
         self._member_processor_ids = tuple(member_processor_ids)
         return EnsembleTable.from_representations(
-            representations,
-            self._member_processor_ids,
+            representations=representations,
+            member_representation_ids=self._member_processor_ids,
         )
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
@@ -126,16 +126,17 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         inverse: bool,
     ) -> EnsembleTable:
         if len(self._member_processor_ids) != table.num_members:
+            operation = "inverse transform" if inverse else "transform"
             raise RuntimeError(
                 "ShuffleColumns must be fitted with the same number of "
-                "ensemble members before transform."
+                f"ensemble members before {operation}."
             )
 
         representations = []
         member_representation_ids = []
         transformed: dict[tuple[tuple[int, int], int], int] = {}
         for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (table._member_locations[member_id], processor_id)
+            key = (table.member_location(member_id), processor_id)
             representation_id = transformed.get(key)
             if representation_id is None:
                 processor = cast(
@@ -153,8 +154,8 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
             member_representation_ids.append(representation_id)
 
         return EnsembleTable.from_representations(
-            representations,
-            member_representation_ids,
+            representations=representations,
+            member_representation_ids=member_representation_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -169,6 +170,11 @@ class ShuffleColumns(EnsembleProcessor, InvertibleMixin):
         table: TableTensor,
         permutation: Tensor,
     ) -> TableTensor:
+        if len(self.processors) > 0:
+            raise RuntimeError(
+                "'ShuffleColumns' was fitted for an ensemble; use the "
+                "ensemble transform methods."
+            )
         indices = permutation.tolist()
         return table.__class__(
             columns={
