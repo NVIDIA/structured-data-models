@@ -14,6 +14,8 @@
 
 # Structured Data Models
 
+A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.
+
 ```{toctree}
 :caption: Getting Started
 :maxdepth: 1
