@@ -70,7 +70,7 @@ def test_attention_batch_size_limit() -> None:
             None,
             query,
             key_value,
-            work_byte_limit=bytes_per_batch,
+            attention_memory_limit=bytes_per_batch,
         )
         == 1
     )
@@ -79,7 +79,7 @@ def test_attention_batch_size_limit() -> None:
             None,
             query,
             key_value,
-            work_byte_limit=2 * bytes_per_batch,
+            attention_memory_limit=2 * bytes_per_batch,
         )
         is None
     )
@@ -88,7 +88,7 @@ def test_attention_batch_size_limit() -> None:
             1,
             query,
             key_value,
-            work_byte_limit=2 * bytes_per_batch,
+            attention_memory_limit=2 * bytes_per_batch,
         )
         == 1
     )

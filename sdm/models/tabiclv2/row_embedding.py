@@ -144,6 +144,7 @@ class RowEmbedding(torch.nn.Module):
         # Column-wise induced set attention (B * C as the batch axis).
         # Materialize once to avoid repeated copies in the column layers.
         x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
+        col_batch_size_limit = batch_size_limit
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
             if cache is not None and cache.is_replaying:
@@ -158,16 +159,18 @@ class RowEmbedding(torch.nn.Module):
                     )[:max_keys]
                     key_value = key_value[..., index, :]
 
-            result = col_layer(
-                query=x,  # [..., C, R, D]
-                key_value=key_value,  # [..., C, R_train, D]
-                return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=attention_batch_size_limit(
+            if i == 0:
+                col_batch_size_limit = attention_batch_size_limit(
                     batch_size_limit,
                     x,
                     key_value,
                     attention_memory_limit,
-                ),
+                )
+            result = col_layer(
+                query=x,  # [..., C, R, D]
+                key_value=key_value,  # [..., C, R_train, D]
+                return_key_value=cache is not None and cache.is_recording,
+                batch_size_limit=col_batch_size_limit,
             )  # [..., C, R, D]
 
             if cache is not None and cache.is_recording:
@@ -189,18 +192,19 @@ class RowEmbedding(torch.nn.Module):
         )  # [..., R, K + C, D]
 
         # Row-wise attention (B * R as the batch axis).
+        row_batch_size_limit = attention_batch_size_limit(
+            batch_size_limit,
+            x,
+            x,
+            attention_memory_limit,
+        )
         for i, row_layer in enumerate(self.row_layers):
             query = x[..., :K, :] if i == len(self.row_layers) - 1 else x
             x = row_layer(
                 query=query,
                 key_value=x,  # [..., R, K + C, D]
                 rope=self.rope,
-                batch_size_limit=attention_batch_size_limit(
-                    batch_size_limit,
-                    query,
-                    x,
-                    attention_memory_limit,
-                ),
+                batch_size_limit=row_batch_size_limit,
             )  # [..., R, K + C, D] or [..., R, K, D]
 
         return self.norm(x).view(*B, R, K * D)  # [..., R, K * D]

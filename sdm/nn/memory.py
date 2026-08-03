@@ -53,33 +53,36 @@ def attention_batch_size_limit(
     requested_limit: int | None,
     query: Tensor,
     key_value: Tensor | KVCacheEntry,
-    work_byte_limit: int | None,
+    attention_memory_limit: int | None,
 ) -> int | None:
     """Return the smallest explicit or memory-derived attention batch limit."""
-    if work_byte_limit is None:
+    if attention_memory_limit is None:
         return requested_limit
 
-    batch_shapes = [query.size()[:-2]]
+    input_batch_shapes = [query.size()[:-2]]
     sequence_length = query.size(-2)
     if isinstance(key_value, Tensor):
-        batch_shapes.append(key_value.size()[:-2])
+        input_batch_shapes.append(key_value.size()[:-2])
         sequence_length = max(sequence_length, key_value.size(-2))
     else:
-        batch_shapes.extend(
+        input_batch_shapes.extend(
             [key_value.key.size()[:-3], key_value.value.size()[:-3]]
         )
         sequence_length = max(sequence_length, key_value.key.size(-3))
 
-    batch_size = prod(torch.broadcast_shapes(*batch_shapes))
-    bytes_per_batch = (
+    total_batch_size = prod(torch.broadcast_shapes(*input_batch_shapes))
+    estimated_bytes_per_batch = (
         _ATTENTION_WORK_FACTOR
         * sequence_length
         * query.size(-1)
         * max(query.element_size(), 4)
     )
-    automatic_limit = max(1, work_byte_limit // max(bytes_per_batch, 1))
-    if batch_size <= automatic_limit:
+    automatic_batch_size_limit = max(
+        1,
+        attention_memory_limit // max(estimated_bytes_per_batch, 1),
+    )
+    if total_batch_size <= automatic_batch_size_limit:
         return requested_limit
     if requested_limit is None:
-        return automatic_limit
-    return min(requested_limit, automatic_limit)
+        return automatic_batch_size_limit
+    return min(requested_limit, automatic_batch_size_limit)
