@@ -309,6 +309,14 @@ def test_stype_dispatch_stateless_ensemble_inverse() -> None:
         )
 
 
+def test_stype_dispatch_rejects_ensemble_transform_after_single_fit() -> None:
+    table = _mixed_table()
+    processor = StypeDispatch(numerical=Center()).fit(table)
+
+    with pytest.raises(RuntimeError, match="fitted for a single table"):
+        processor.transform_ensemble(EnsembleTable(table, num_members=2))
+
+
 def test_stype_dispatch_ensemble_inverse_rejects_non_invertible_route() -> (
     None
 ):

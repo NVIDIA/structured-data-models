@@ -140,7 +140,7 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         self.requires_fit = any(
             processor.requires_fit for processor in self.processors.values()
         )
-        self._active_routes: tuple[str, ...] = ()
+        self._active_routes: tuple[str, ...] | None = None
 
     def _check_remainder(self, remainder_stypes: list[Stype]) -> None:
         if self.remainder != "error" or len(remainder_stypes) == 0:
@@ -282,6 +282,11 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
             )
 
         active_routes = self._active_routes
+        if self.requires_fit and active_routes is None:
+            raise RuntimeError(
+                "'StypeDispatch' was fitted for a single table; use "
+                "'transform' instead of 'transform_ensemble'."
+            )
         if not self.requires_fit:
             active_routes = tuple(
                 stype
@@ -321,6 +326,13 @@ class StypeDispatch(EnsembleProcessor, InvertibleMixin):
         if self.remainder == "drop":
             raise ValueError(
                 "'StypeDispatch' with remainder='drop' is not invertible"
+            )
+
+        if self._active_routes is None:
+            raise RuntimeError(
+                "'StypeDispatch' has no ensemble routing state; call "
+                "'fit_transform_ensemble' or 'transform_ensemble' before "
+                "'inverse_transform_ensemble'."
             )
 
         parts = []
