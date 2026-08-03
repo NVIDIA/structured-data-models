@@ -160,12 +160,12 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
         return table._replace_packed_representations(outputs)
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        processors = self.processors
-        if not self.requires_fit and len(processors) == 0:
-            processors = torch.nn.ModuleList(
+        if not self.requires_fit and len(self.processors) == 0:
+            self.processors = torch.nn.ModuleList(
                 copy.deepcopy(self.template)
                 for _ in table.iter_packed_representations()
             )
+        processors = self.processors
 
         outputs = []
         for packed, processor in zip(
@@ -190,6 +190,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
         Returns:
             Ensemble table restored to its representation before transform.
         """
+        self._check_is_fitted()
         outputs = []
         for packed, processor in zip(
             table.iter_packed_representations(),
@@ -204,6 +205,13 @@ class EnsembleProcessorAdapter(EnsembleProcessor):
             self._check_output(packed, output)
             outputs.append(output)
         return table._replace_packed_representations(outputs)
+
+    def inverse_transform(self, table: TableTensor) -> TableTensor:
+        """Apply the fitted inverse to a single table."""
+        output = self.inverse_transform_ensemble(
+            EnsembleTable(table, num_members=1)
+        )
+        return self._single_member(output)
 
     @staticmethod
     def _check_output(before: TableTensor, after: TableTensor) -> None:

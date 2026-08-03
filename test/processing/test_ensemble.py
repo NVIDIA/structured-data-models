@@ -60,6 +60,17 @@ class Center(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=table.numerical + self.mean)
 
 
+class Negate(Processor, InvertibleMixin):
+    supported_stypes = frozenset({Stype.numerical})
+    requires_fit = False
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=-table.numerical)
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return self._transform(table)
+
+
 def test_ensemble_processor_is_a_processor() -> None:
     assert issubclass(EnsembleProcessor, Processor)
 
@@ -149,6 +160,8 @@ def test_adapter_preserves_packed_member_mapping() -> None:
     output = processor.fit_transform_ensemble(table)
 
     assert output.num_members == 3
+    assert table.member_location(0) == table.member_location(2)
+    assert table.member_location(0) != table.member_location(1)
     assert output.representation(0).numerical.tolist() == [[-2.0], [2.0]]
     assert output.representation(1).numerical.tolist() == [[-1.0], [1.0]]
     assert output.representation(2).equal(output.representation(0))
@@ -157,6 +170,15 @@ def test_adapter_preserves_packed_member_mapping() -> None:
         assert restored.representation(member_id).equal(
             table.representation(member_id)
         )
+
+
+def test_stateless_adapter_reuses_processor_for_inverse_transform() -> None:
+    table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
+    processor = EnsembleProcessorAdapter(Negate())
+
+    transformed = processor.transform(table)
+
+    assert processor.inverse_transform(transformed).equal(table)
 
 
 def test_adapter_returns_ensemble_processors_unchanged() -> None:

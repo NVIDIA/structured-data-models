@@ -126,6 +126,10 @@ class EnsembleTable:
         packed_index, representation_index = self._member_locations[member_id]
         return self._packed_representations[packed_index][representation_index]
 
+    def member_location(self, member_id: int) -> tuple[int, int]:
+        """Return the packed representation location for one member."""
+        return self._member_locations[member_id]
+
     def iter_packed_representations(self) -> Iterator[TableTensor]:
         """Yield compatible representations.
 
