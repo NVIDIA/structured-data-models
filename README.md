@@ -15,7 +15,7 @@
 
 </h1>
 
-**`structured-data-models`** is a PyTorch- and GPU-native collection of foundation models, tensor subclasses, and data processors for structured data.
+**A PyTorch- and GPU-native collection of foundation models, tensor subclasses, and data processors for structured data.**
 
 ## Installation
 
