@@ -10,7 +10,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import EnsembleProcessor, ShuffleCategories
+from sdm.processing import ShuffleCategories
 from sdm.testing import withCUDA
 
 
@@ -148,10 +148,6 @@ def test_shuffle_categories_preserves_missing() -> None:
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
-def test_shuffle_categories_is_an_ensemble_processor() -> None:
-    assert issubclass(ShuffleCategories, EnsembleProcessor)
-
-
 @pytest.mark.parametrize("method", ["shift", "random"])
 def test_shuffle_categories_ensemble_matches_independent_processors(
     method: Literal["shift", "random"],
@@ -188,7 +184,8 @@ def test_shuffle_categories_ensemble_matches_independent_processors(
 
 def test_shuffle_categories_reuses_equal_member_permutations() -> None:
     table = _table([[0], [1]], (("a", "b"),))
-    output = ShuffleCategories(method="shift").fit_transform_ensemble(
+    processor = ShuffleCategories(method="shift")
+    output = processor.fit_transform_ensemble(
         EnsembleTable(table, num_members=8),
         generator=torch.Generator().manual_seed(9),
     )
@@ -204,3 +201,6 @@ def test_shuffle_categories_reuses_equal_member_permutations() -> None:
     assert sum(
         packed.size(0) for packed in output.iter_packed_representations()
     ) == len(unique_codes)
+
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(table)
