@@ -2,7 +2,6 @@ import pytest
 import torch
 
 from sdm import EnsembleTable, StringTensor, Stype, TableTensor
-from sdm.processing import EnsembleProcessor
 from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
 from sdm.testing import onlyCUDA
 
@@ -323,10 +322,6 @@ def test_tfidf_encoder_refit_replaces_previous_state() -> None:
     assert torch.equal(output.numerical, expected.numerical)
 
 
-def test_tfidf_text_embed_is_an_ensemble_processor() -> None:
-    assert issubclass(TfidfTextEmbed, EnsembleProcessor)
-
-
 def test_tfidf_text_embed_keeps_vocabulary_per_representation() -> None:
     short = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
     long = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
@@ -355,6 +350,11 @@ def test_tfidf_text_embed_keeps_vocabulary_per_representation() -> None:
     )
     assert query_output.representation(0).numerical.shape == (1, 2)
     assert query_output.representation(1).numerical.shape == (1, 4)
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=3))
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(query)
 
 
 def test_tfidf_text_embed_keeps_shared_output_packed() -> None:
