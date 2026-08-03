@@ -17,7 +17,7 @@
 
 **A PyTorch- and GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
 
-- **Models**: Implementations of structured data foundation models such as `TabICLv2` and `KumoRFM`, built on a unified interface with room for future model families.
+- **Models**: Reference implementations of structured data foundation models such as `TabICLv2` and `KumoRFM`, built on a unified interface with room for future model families.
 - **Tensor-native**: PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
 - **Data processing**: Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
 
@@ -33,7 +33,15 @@ pip install structured-data-models
 > [!NOTE]
 > For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency to keep dataframe-style operations on GPU and avoid unnecessary data movement.
 
-## A
+## Model Families
+
+### Tabular Foundation Models
+
+- **[TabICLv2](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139)
+
+### Relational Foundation Models
+
+- **[KumoRFM](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRFM)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596)
 
 ## Quick Tour
 
