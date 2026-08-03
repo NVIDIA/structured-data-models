@@ -403,9 +403,9 @@ def test_nullable_ops() -> None:
     out = tensor[[2, 1]]
     assert out.tolist() == [[3], [None]]
 
-    with pytest.raises(RuntimeError, match="without losing its validity mask"):
+    with pytest.raises(RuntimeError, match="nullable column"):
         tensor.select(-1, 0)
-    with pytest.raises(RuntimeError, match="without losing validity masks"):
+    with pytest.raises(RuntimeError, match="nullable column"):
         tensor.unbind(-1)
 
     out = torch.cat([tensor, tensor], dim=0)
