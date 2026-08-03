@@ -7,8 +7,12 @@ import torch
 from torch import Tensor
 from torch.nn import GELU, Embedding, LayerNorm, Linear, ModuleList, Sequential
 
-from sdm.cache import Cache
+from sdm.cache import Cache, KVCacheEntry
 from sdm.nn import TransformerBlock
+from sdm.nn._memory import (
+    attention_batch_size_limit,
+    cuda_attention_work_byte_limit,
+)
 
 _Node: TypeAlias = dict[str, Tensor | list["_Node"]]
 
@@ -119,15 +123,35 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
+        attention_work_byte_limit = None
+        if (
+            x.device.type == "cuda"
+            and not self.training
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+        ):
+            attention_work_byte_limit = cuda_attention_work_byte_limit(
+                x.device
+            )
+
         for i, layer in enumerate(self.layers):
             key = f"{cache_prefix}.layer{i}"
-            result = layer(
-                query=x[..., R_train:, :] if i == len(self.layers) - 1 else x,
-                key_value=cache[key]
+            query = x[..., R_train:, :] if i == len(self.layers) - 1 else x
+            key_value = (
+                cast(KVCacheEntry, cache[key])
                 if cache is not None and cache.is_replaying
-                else x[..., :R_train, :],  # [..., R_train, D]
+                else x[..., :R_train, :]
+            )
+            result = layer(
+                query=query,
+                key_value=key_value,  # [..., R_train, D]
                 return_key_value=cache is not None and cache.is_recording,
-                batch_size_limit=batch_size_limit,
+                batch_size_limit=attention_batch_size_limit(
+                    batch_size_limit,
+                    query,
+                    key_value,
+                    attention_work_byte_limit,
+                ),
             )
 
             if cache is not None and cache.is_recording:

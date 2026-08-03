@@ -12,6 +12,7 @@ from sdm import (
 )
 from sdm.cache import Cache
 from sdm.models import KumoRFM
+from sdm.models.kumorfm import invariant_gnn as invariant_gnn_module
 from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
@@ -202,6 +203,74 @@ def test_invariant_gnn(
     assert out.size() == (4, 8)
     assert out.device == device
     assert not out.isnan().any()
+
+
+@withCUDA
+def test_invariant_gnn_destination_chunks(
+    relational_data: RelationalData,
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    related_tables = RelatedTables(
+        tables={
+            "users": relational_data.tables["users"],
+            "orders": relational_data.tables["orders"],
+        },
+        relationships=relational_data.relationships[:1],
+        task_links=[],
+    )
+    graph = HomogeneousGraph.from_tables(
+        tables=related_tables.tables,
+        relationships=related_tables.relationships,
+    )
+    model = InvariantGNN(channels=8, device=device).eval()
+    x = torch.randn(10, 8, device=device)
+    readout_index = torch.arange(4, device=device)
+
+    with torch.inference_mode():
+        expected = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        monkeypatch.setattr(
+            invariant_gnn_module,
+            "_automatic_aggregation_work_byte_limit",
+            lambda _x, _graph: 1024,
+        )
+        actual = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        cache = Cache()
+        recorded = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            cache=cache,
+            generator=torch.Generator(device=device).manual_seed(0),
+        )
+        replayed = model(
+            x=x,
+            graph=graph,
+            readout_table="users",
+            readout_index=readout_index,
+            num_hops=2,
+            cache=cache.freeze(),
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(recorded, expected)
+    torch.testing.assert_close(replayed, expected)
 
 
 @withCUDA

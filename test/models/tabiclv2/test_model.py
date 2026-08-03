@@ -1,12 +1,64 @@
 import pytest
 import torch
 
+from sdm.cache import Cache
 from sdm.models import TabICLv2
+from sdm.models.tabiclv2 import row_embedding as row_embedding_module
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
 from sdm.nn import Attention
 from sdm.processing import Recipe
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
+
+
+@withCUDA
+def test_row_embedding_automatic_batch_size_limit(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = RowEmbedding(
+        num_classes=2,
+        channels=8,
+        num_layers=1,
+        num_heads=2,
+        group_size=2,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+        device=device,
+    ).eval()
+    context = torch.randn(2, 4, 4, device=device)
+    query = torch.randn(2, 2, 4, device=device)
+    y = torch.randint(2, (2, 4), device=device)
+    chunk_kwargs = {} if device.type == "cuda" else {"batch_size_limit": 1}
+
+    with torch.inference_mode():
+        monkeypatch.setattr(
+            row_embedding_module,
+            "cuda_attention_work_byte_limit",
+            lambda _device: 1 << 60,
+        )
+        expected = model(torch.cat([context, query], dim=-2), y)[:, 4:]
+
+        monkeypatch.setattr(
+            row_embedding_module,
+            "cuda_attention_work_byte_limit",
+            lambda _device: 12 * 6 * 8 * 4,
+        )
+        actual = model(torch.cat([context, query], dim=-2), y, **chunk_kwargs)[
+            :, 4:
+        ]
+        cache = Cache()
+        model(context, y, cache=cache, **chunk_kwargs)
+        replayed = model(
+            query,
+            y[:, :0],
+            cache=cache.freeze(),
+            **chunk_kwargs,
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(replayed, expected)
 
 
 @withCUDA
