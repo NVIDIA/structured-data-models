@@ -18,15 +18,15 @@ def to_class_indices(
         target: Single-column categorical target.
 
     >>> import torch
-    >>> from sdm import CategoricalTensor, StringTensor, TableTensor
+    >>> import sdm
     >>> from sdm.evaluation import to_class_indices
-    >>> pred = TableTensor.from_tensor(
+    >>> pred = sdm.TableTensor.from_tensor(
     ...     torch.tensor([[0.8, 0.1, 0.1], [0.1, 0.2, 0.7]]),
     ...     columns=["cat", "dog", "bird"],
     ... )
-    >>> target = CategoricalTensor(
+    >>> target = sdm.CategoricalTensor(
     ...     code=torch.tensor([[0], [2]]),
-    ...     categories=(StringTensor.from_list(["cat", "dog", "bird"]),),
+    ...     categories=(sdm.StringTensor.from_list(["cat", "dog", "bird"]),),
     ... )
     >>> class_scores, class_indices = to_class_indices(pred, target)
     >>> class_scores
@@ -34,7 +34,7 @@ def to_class_indices(
             [0.1000, 0.2000, 0.7000]])
     >>> class_indices
     tensor([0, 2])
-    >>> pred = TableTensor.from_tensor(
+    >>> pred = sdm.TableTensor.from_tensor(
     ...     torch.tensor([[0.1, 0.8, 0.1], [0.7, 0.1, 0.2]]),
     ...     columns=["bird", "cat", "dog"],
     ... )
@@ -106,15 +106,14 @@ def to_binary_class(
         positive_class: Class value treated as the positive class.
 
     >>> import torch
-    >>> from sdm import CategoricalTensor, StringTensor, TableTensor
     >>> from sdm.evaluation import to_binary_class
-    >>> pred = TableTensor.from_tensor(
+    >>> pred = sdm.TableTensor.from_tensor(
     ...     torch.tensor([[0.8, 0.2], [0.1, 0.9]]),
     ...     columns=["false", "true"],
     ... )
-    >>> target = CategoricalTensor(
+    >>> target = sdm.CategoricalTensor(
     ...     code=torch.tensor([[0], [1]]),
-    ...     categories=(StringTensor.from_list(["false", "true"]),),
+    ...     categories=(sdm.StringTensor.from_list(["false", "true"]),),
     ... )
     >>> positive_scores, binary_target = to_binary_class(
     ...     pred,
@@ -125,7 +124,7 @@ def to_binary_class(
     tensor([0.2000, 0.9000])
     >>> binary_target
     tensor([False,  True])
-    >>> pred = TableTensor.from_tensor(
+    >>> pred = sdm.TableTensor.from_tensor(
     ...     torch.tensor([[0.2, 0.8], [0.9, 0.1]]),
     ...     columns=["true", "false"],
     ... )
