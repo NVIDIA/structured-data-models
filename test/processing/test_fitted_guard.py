@@ -10,7 +10,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import ClipQuantiles, Processor, Standardize
+from sdm.processing import PCA, ClipQuantiles, Processor, Standardize
 from sdm.processing.base import InvertibleMixin
 
 ProcessorFactory = Callable[[], Processor]
@@ -102,3 +102,30 @@ def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
 def test_processor_rejects_id_stype() -> None:
     with pytest.raises(ValueError, match="id"):
         Standardize().fit(_id_table())
+
+    with pytest.raises(ValueError, match="id"):
+        Standardize().inverse_transform(_id_table())
+
+
+def test_single_stype_processor_passes_empty_block_through() -> None:
+    table = TableTensor.from_tensor(torch.empty(3, 0))
+    processor = PCA(num_components=2)
+
+    transformed = processor.transform(table)
+    fit_transformed = processor.fit_transform(table)
+
+    assert transformed.size() == table.size()
+    assert transformed.schema == table.schema
+    assert fit_transformed.size() == table.size()
+    assert fit_transformed.schema == table.schema
+
+
+def test_fitting_empty_block_does_not_fit_nonempty_inputs() -> None:
+    empty = TableTensor.from_tensor(torch.empty(3, 0))
+    nonempty = TableTensor.from_tensor(torch.ones(3, 1))
+    processor = Standardize().fit(nonempty).fit(empty)
+
+    assert processor.transform(empty).size() == empty.size()
+    assert processor.inverse_transform(empty).size() == empty.size()
+    with pytest.raises(RuntimeError, match="not fitted"):
+        processor.transform(nonempty)

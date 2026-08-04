@@ -25,9 +25,14 @@ class Processor(torch.nn.Module, abc.ABC):
     the transformation via :meth:`transform`. Implementations preserve the row
     dimension and, unless an explicit batch contract says otherwise, process
     every leading table position independently.
+
+    Processors that support exactly one semantic type pass tables with an
+    empty block of that type through unchanged. Fitting such an input skips
+    processor-specific work and leaves the processor unfitted.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
+    _pass_empty_blocks: ClassVar[bool] = True
     requires_fit: bool = True
 
     def __init__(self) -> None:
@@ -74,6 +79,12 @@ class Processor(torch.nn.Module, abc.ABC):
                 "call 'fit()' before."
             )
 
+    def _is_empty_block(self, table: TableTensor) -> bool:
+        if not self._pass_empty_blocks or len(self.supported_stypes) != 1:
+            return False
+        stype = next(iter(self.supported_stypes))
+        return len(table.columns[stype]) == 0
+
     def _fit(
         self,
         table: TableTensor,
@@ -109,6 +120,10 @@ class Processor(torch.nn.Module, abc.ABC):
             generator: Pseudorandom number generator used for sampling.
         """
         self._check_supported_stypes(table)
+        if self._is_empty_block(table):
+            if self.requires_fit:
+                self._fitted = False
+            return self
         if self.requires_fit:
             self._fit(table, generator=generator)
             self._fitted = True
@@ -124,6 +139,8 @@ class Processor(torch.nn.Module, abc.ABC):
             The transformed table.
         """
         self._check_supported_stypes(table)
+        if self._is_empty_block(table):
+            return table
         self._check_is_fitted()
         return self._transform(table)
 
@@ -147,6 +164,10 @@ class Processor(torch.nn.Module, abc.ABC):
             The transformed table.
         """
         self._check_supported_stypes(table)
+        if self._is_empty_block(table):
+            if self.requires_fit:
+                self._fitted = False
+            return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
             self._fitted = True
@@ -190,9 +211,16 @@ class InvertibleMixin(abc.ABC):
             The table restored to the representation before
             :meth:`~Processor.transform`.
         """
+        self._check_supported_stypes(table)
+        if self._is_empty_block(table):
+            return table
         self._check_is_fitted()
         return self._inverse_transform(table)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
+        def _check_supported_stypes(self, table: TableTensor) -> None: ...
+
         def _check_is_fitted(self) -> None: ...
+
+        def _is_empty_block(self, table: TableTensor) -> bool: ...

@@ -40,6 +40,15 @@ def test_reduce_estimators_rejects_empty_ensemble_dimension() -> None:
         ReduceEstimators().transform(table)
 
 
+def test_reduce_estimators_reduces_empty_output_block() -> None:
+    table = TableTensor.from_tensor(torch.empty(2, 3, 4, 0))
+
+    output = ReduceEstimators().transform(table)
+
+    assert output.size() == (3, 4, 0)
+    assert output.schema == table.schema
+
+
 def test_reduce_estimators_rejects_unknown_method() -> None:
     with pytest.raises(ValueError, match="method must be 'mean'"):
         ReduceEstimators(method="median")  # type: ignore
