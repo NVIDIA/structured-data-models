@@ -67,20 +67,20 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         return cast(Processor, option.processors[0])
 
     @staticmethod
-    def _merge_ensemble_outputs(
-        selections: Sequence[int],
-        outputs: Mapping[int, EnsembleTable],
+    def _combine_ensemble_tables(
+        member_selections: Sequence[int],
+        ensemble_tables_by_selection: Mapping[int, EnsembleTable],
     ) -> EnsembleTable:
         tables: list[TableTensor] = []
         locations: dict[tuple[int, tuple[int, int]], int] = {}
         member_table_ids = []
-        for member_id, option in enumerate(selections):
-            output = outputs[option]
-            location = output._member_location(member_id)
-            key = (option, location)
+        for member_id, selection in enumerate(member_selections):
+            ensemble_table = ensemble_tables_by_selection[selection]
+            location = ensemble_table._member_location(member_id)
+            key = (selection, location)
             if key not in locations:
                 locations[key] = len(tables)
-                tables.append(output.table(member_id))
+                tables.append(ensemble_table.table(member_id))
             member_table_ids.append(locations[key])
 
         return EnsembleTable.from_tables(
@@ -88,7 +88,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             member_table_ids=member_table_ids,
         )
 
-    def _select_ensemble_options(
+    def _assign_processors_to_members(
         self,
         ensemble_table: EnsembleTable,
         *,
@@ -125,7 +125,10 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._select_ensemble_options(ensemble_table, generator=generator)
+        self._assign_processors_to_members(
+            ensemble_table,
+            generator=generator,
+        )
         for option in sorted(set(self._selections)):
             processor = cast(EnsembleProcessor, self.options[option])
             processor.fit_ensemble(ensemble_table, generator=generator)
@@ -136,7 +139,10 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        self._select_ensemble_options(ensemble_table, generator=generator)
+        self._assign_processors_to_members(
+            ensemble_table,
+            generator=generator,
+        )
 
         # Each option sees stable member positions, including nested choices.
         outputs = {
@@ -149,7 +155,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             )
             for option in sorted(set(self._selections))
         }
-        return self._merge_ensemble_outputs(self._selections, outputs)
+        return self._combine_ensemble_tables(self._selections, outputs)
 
     def _transform_ensemble(
         self,
@@ -167,12 +173,17 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
             ).transform_ensemble(ensemble_table)
             for option in sorted(set(self._selections))
         }
-        return self._merge_ensemble_outputs(self._selections, outputs)
+        return self._combine_ensemble_tables(self._selections, outputs)
 
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if len(self._selections) != ensemble_table.num_members:
+            raise RuntimeError(
+                "Choice must be fitted with the same number of ensemble "
+                "members before transform."
+            )
         outputs = {}
         for option in sorted(set(self._selections)):
             processor = cast(EnsembleProcessor, self.options[option])
@@ -183,7 +194,7 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                     "attribute 'inverse_transform_ensemble'"
                 )
             outputs[option] = inverse(ensemble_table)
-        return self._merge_ensemble_outputs(self._selections, outputs)
+        return self._combine_ensemble_tables(self._selections, outputs)
 
     def __repr__(self, *, indent: int = 0) -> str:
         inner = ",\n".join(
