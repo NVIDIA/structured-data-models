@@ -13,11 +13,12 @@ class EnsembleTable:
     """Store and group input tables for an ensemble.
 
     Each ensemble member is associated with one table. Shared tables are stored
-    only once. Distinct tables with compatible schemas are stacked so
-    processors can process them together; incompatible tables remain separate.
+    only once. Compatible tables are stacked along a leading dimension and
+    form a group, so processors can process them together. Incompatible tables
+    remain in separate groups.
 
     Use :meth:`table` to access a member's table. Iterate over the
-    :class:`EnsembleTable` to process its compatible groups.
+    :class:`EnsembleTable` to process its groups.
 
     .. testcode::
 
