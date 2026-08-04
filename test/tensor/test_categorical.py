@@ -312,6 +312,11 @@ def test_from_cudf_numeric_values() -> None:
             [30, 10, 20],
             [[2], [-1], [1], [2]],
         ),
+        (
+            [None, None],
+            ["a", "b"],
+            [[-1], [-1]],
+        ),
     ],
 )
 def test_from_cudf_categorical_values(
