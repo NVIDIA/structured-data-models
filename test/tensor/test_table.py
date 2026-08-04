@@ -11,6 +11,7 @@ import torch
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    NaT,
     StringTensor,
     Stype,
     TableTensor,
@@ -1043,7 +1044,7 @@ def test_arrow() -> None:
         torch.tensor(
             [
                 [1704067200000000],
-                [-9223372036854775808],
+                [NaT],
                 [1704153600000000],
                 [1704240000000000],
             ]
@@ -1208,7 +1209,7 @@ def test_cudf() -> None:
         torch.tensor(
             [
                 [1704067200000000],
-                [-9223372036854775808],
+                [NaT],
                 [1704153600000000],
                 [1704240000000000],
             ],

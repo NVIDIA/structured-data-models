@@ -5,6 +5,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype
+from sdm._constants import NaT
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
@@ -43,7 +44,7 @@ class AddCalendarFields(Processor):
             return table
 
         datetime = table.datetime
-        na_mask = datetime == torch.iinfo(datetime.dtype).min
+        na_mask = datetime == NaT
 
         outs: list[Tensor] = []
         for field in self.fields:
