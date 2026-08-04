@@ -89,7 +89,10 @@ class ImputeMode(Processor):
     def _replace_missing(self, table: TableTensor) -> TableTensor:
         code = table.categorical.where(
             table.categorical >= 0,
-            self._fill_values.to(dtype=table.categorical.dtype),
+            self._fill_values.to(
+                dtype=table.categorical.dtype,
+                device=table.categorical.device,
+            )
         )
         categorical = CategoricalTensor(
             code=code,
