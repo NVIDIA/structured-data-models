@@ -348,7 +348,7 @@ class CategoricalTensor(Tensor):
     ) -> Any:
         if func is torch.isfinite or func is Tensor.isfinite:
             assert isinstance(args[0], CategoricalTensor)
-            return args[0]._code >= 0
+            return _isfinite(args[0])
 
         with torch._C.DisableTorchFunction():
             return func(*args, **(kwargs or {}))
@@ -421,6 +421,11 @@ class CategoricalTensor(Tensor):
 @CategoricalTensor.implements(aten.isnan.default)
 def _isnan(inp: CategoricalTensor) -> Tensor:
     return inp._code < 0
+
+
+@CategoricalTensor.implements(aten.isfinite.default)
+def _isfinite(inp: CategoricalTensor) -> Tensor:
+    return inp._code >= 0
 
 
 @CategoricalTensor.implements(aten.alias.default)

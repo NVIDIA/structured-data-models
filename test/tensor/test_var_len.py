@@ -390,6 +390,18 @@ def test_equal_allclose() -> None:
     assert torch.allclose(tensor, other[:, ::2])
 
 
+def test_isnan_isfinite() -> None:
+    tensor = VarLenTensor.from_list([[1, 2], None, [3]])
+
+    out = torch.isnan(tensor)
+    assert out.dtype == torch.bool
+    assert out.equal(torch.tensor([False, True, False]))
+
+    out = tensor.isfinite()
+    assert out.dtype == torch.bool
+    assert out.equal(torch.tensor([True, False, True]))
+
+
 def test_masked_select() -> None:
     tensor = VarLenTensor(
         data=torch.arange(9),
