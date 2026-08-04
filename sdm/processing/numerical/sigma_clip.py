@@ -23,8 +23,8 @@ class ClipSigma(Processor):
     logarithmic soft clipping instead of hard truncation.
 
     Args:
-        threshold: Z-score multiplier setting how many standard deviations
-            from the mean mark the soft clipping bounds.
+        threshold: Positive z-score multiplier setting how many standard
+            deviations from the mean mark the soft clipping bounds.
     """
 
     supported_stypes = frozenset({Stype.numerical})

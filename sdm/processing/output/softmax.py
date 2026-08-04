@@ -12,8 +12,8 @@ class Softmax(Processor):
     dimensions, so it supports both stacked and reduced estimator outputs.
 
     Args:
-        temperature: Divisor applied to logits before softmax; higher values
-            produce a softer distribution.
+        temperature: Positive divisor applied to logits before softmax;
+            higher values produce a softer distribution.
     """
 
     supported_stypes = frozenset({Stype.numerical})

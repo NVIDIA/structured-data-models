@@ -9,8 +9,8 @@ class ImputeMean(Processor):
     """Replace NaN feature values with fitted per-column means.
 
     Args:
-        fill_value: Value used for columns whose fitted mean is undefined
-            (e.g. all-NaN columns).
+        fill_value: Finite value used for columns whose fitted mean is
+            undefined (e.g. all-NaN columns).
     """
 
     supported_stypes = frozenset({Stype.numerical})

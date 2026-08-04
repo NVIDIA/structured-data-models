@@ -29,7 +29,7 @@ class DropConstantColumns(Processor):
         method: Filtering rule. ``"unique"`` uses distinct-value counts;
             ``"variance"`` uses sample standard deviation.
         threshold: With ``method="unique"``, columns with at most this many
-            unique values are removed.
+            unique values are removed. Must be positive.
         tolerance: With ``method="variance"``, columns with sample standard
             deviation at most this value are removed.
     """
