@@ -33,6 +33,8 @@ class ShuffleCategories(EnsembleProcessor):
         method: Literal["shift", "random"] = "shift",
     ) -> None:
         super().__init__()
+        if method not in {"shift", "random"}:
+            raise ValueError("method must be 'shift' or 'random'")
         self.method = method
         self.register_buffer(
             "permutations",
@@ -68,14 +70,12 @@ class ShuffleCategories(EnsembleProcessor):
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
-            elif self.method == "random":
+            else:
                 permutation = torch.randperm(
                     n_classes,
                     generator=generator,
                     device=device,
                 )
-            else:
-                raise ValueError("method must be 'shift' or 'random'")
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 
@@ -99,69 +99,78 @@ class ShuffleCategories(EnsembleProcessor):
         self._fit(table, generator=generator)
         return self._transform(table)
 
-    def _fit_transform_ensemble(
+    def _fit_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
+    ) -> None:
         self.processors = torch.nn.ModuleList()
-        representations = []
         member_processor_ids = []
         fitted: dict[tuple[tuple[int, int], tuple[int, ...]], int] = {}
 
-        for member_id in range(table.num_members):
+        for member_id in range(ensemble_table.num_members):
             processor = self.__class__(method=self.method)
-            transformed = processor.fit_transform(
-                table.representation(member_id),
+            processor.fit(
+                ensemble_table.table(member_id),
                 generator=generator,
             )
             key = (
-                table.member_location(member_id),
+                ensemble_table._locations[member_id],
                 tuple(processor.permutations.tolist()),
             )
             processor_id = fitted.get(key)
             if processor_id is None:
-                processor_id = len(representations)
+                processor_id = len(self.processors)
                 fitted[key] = processor_id
                 self.processors.append(processor)
-                representations.append(transformed)
             member_processor_ids.append(processor_id)
 
         self._member_processor_ids = tuple(member_processor_ids)
-        return EnsembleTable.from_representations(
-            representations=representations,
-            member_representation_ids=self._member_processor_ids,
-        )
 
-    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        if len(self._member_processor_ids) != table.num_members:
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self._fit_ensemble(ensemble_table, generator=generator)
+        return self._transform_ensemble(ensemble_table)
+
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        if len(self._member_processor_ids) != ensemble_table.num_members:
             raise RuntimeError(
                 "ShuffleCategories must be fitted with the same number of "
                 "ensemble members before transform."
             )
 
-        representations = []
-        member_representation_ids = []
+        tables = []
+        member_table_ids = []
         transformed: dict[tuple[tuple[int, int], int], int] = {}
         for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (table.member_location(member_id), processor_id)
-            representation_id = transformed.get(key)
-            if representation_id is None:
+            key = (
+                ensemble_table._locations[member_id],
+                processor_id,
+            )
+            table_id = transformed.get(key)
+            if table_id is None:
                 processor = cast(
                     ShuffleCategories,
                     self.processors[processor_id],
                 )
-                representation_id = len(representations)
-                transformed[key] = representation_id
-                representations.append(
-                    processor.transform(table.representation(member_id))
+                table_id = len(tables)
+                transformed[key] = table_id
+                tables.append(
+                    processor.transform(ensemble_table.table(member_id))
                 )
-            member_representation_ids.append(representation_id)
+            member_table_ids.append(table_id)
 
-        return EnsembleTable.from_representations(
-            representations=representations,
-            member_representation_ids=member_representation_ids,
+        return EnsembleTable.from_tables(
+            tables=tables,
+            member_table_ids=member_table_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:

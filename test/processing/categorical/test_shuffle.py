@@ -205,3 +205,31 @@ def test_shuffle_categories_reuses_equal_member_permutations() -> None:
 
     with pytest.raises(RuntimeError, match="fitted for an ensemble"):
         processor.transform(table)
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_categories_fit_ensemble_matches_fit_transform(
+    method: Literal["shift", "random"],
+) -> None:
+    table = EnsembleTable(
+        _table(
+            [[0, 0], [1, 1], [2, -1], [1, 0]],
+            (("a", "b", "c"), ("x", "y")),
+        ),
+        num_members=8,
+    )
+    fitted = ShuffleCategories(method=method)
+    combined = ShuffleCategories(method=method)
+
+    fitted.fit_ensemble(
+        table,
+        generator=torch.Generator().manual_seed(7),
+    )
+    transformed = fitted.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(
+        table,
+        generator=torch.Generator().manual_seed(7),
+    )
+
+    for member_id in range(table.num_members):
+        assert transformed.table(member_id).equal(expected.table(member_id))
