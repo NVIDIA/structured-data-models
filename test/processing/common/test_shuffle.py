@@ -126,3 +126,25 @@ def test_shuffle_columns_reuses_equal_member_permutations() -> None:
         processor.inverse_transform_ensemble(
             EnsembleTable(_table(), num_members=7)
         )
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_columns_fit_ensemble_matches_fit_transform(
+    method: Literal["shift", "random"],
+) -> None:
+    table = EnsembleTable(_table(), num_members=8)
+    fitted = ShuffleColumns(method=method)
+    combined = ShuffleColumns(method=method)
+
+    fitted.fit_ensemble(
+        table,
+        generator=torch.Generator().manual_seed(7),
+    )
+    transformed = fitted.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(
+        table,
+        generator=torch.Generator().manual_seed(7),
+    )
+
+    for member_id in range(table.num_members):
+        assert transformed.table(member_id).equal(expected.table(member_id))
