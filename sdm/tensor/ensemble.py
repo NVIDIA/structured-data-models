@@ -19,39 +19,39 @@ class EnsembleTable:
     For processing, distinct compatible tables are stacked along a new leading
     dimension. Tables form separate groups when their shape, column schema,
     block layout, device, or categorical vocabularies differ. Model code can
-    access one member's table with :meth:`member_table`, while processor code
-    can iterate over the stacked groups with :meth:`member_groups`.
+    access one member's table with :meth:`table`, while processor code can
+    iterate over the stacked groups or access them with :meth:`groups`.
 
     .. testcode::
 
         import torch
-        from sdm import EnsembleTable, TableTensor
+        from sdm.tensor import EnsembleTable, TableTensor
 
-        original = TableTensor.from_tensor(
+        estimator_table1 = TableTensor.from_tensor(
             torch.tensor([[1.0], [2.0]]),
             columns=("value",),
         )
-        normalized = TableTensor.from_tensor(
+        estimator_table2 = TableTensor.from_tensor(
             torch.tensor([[-1.0], [1.0]]),
             columns=("value",),
         )
-        selected = TableTensor.from_tensor(
+        estimator_table3 = TableTensor.from_tensor(
             torch.tensor([[10.0], [20.0]]),
             columns=("selected_value",),
         )
 
-        ensemble = EnsembleTable.from_member_tables(
-            tables=(original, normalized, selected),
+        ensemble = EnsembleTable.from_tables(
+            tables=(estimator_table1, estimator_table2, estimator_table3),
             member_table_ids=(0, 1, 2, 0),
         )
 
         # Model code accesses tables in member order.
         assert ensemble.num_members == 4
-        assert ensemble.member_table(0).equal(original)
-        assert ensemble.member_table(3).equal(original)
+        assert ensemble.table(0).equal(estimator_table1)
+        assert ensemble.table(3).equal(estimator_table1)
 
         # Processor code receives two groups of compatible tables.
-        groups = tuple(ensemble.member_groups())
+        groups = tuple(ensemble.groups())
         assert len(groups) == 2
         assert groups[0].size() == (2, 2, 1)
         assert groups[1].size() == (1, 2, 1)
@@ -65,11 +65,11 @@ class EnsembleTable:
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
         if num_members <= 0:
             raise ValueError("Expected 'num_members' to be positive.")
-        self._member_groups = (cast(TableTensor, table.unsqueeze(0)),)
+        self._groups = (cast(TableTensor, table.unsqueeze(0)),)
         self._member_locations = ((0, 0),) * num_members
 
     @classmethod
-    def from_member_tables(
+    def from_tables(
         cls,
         tables: Sequence[TableTensor],
         member_table_ids: Sequence[int],
@@ -106,13 +106,12 @@ class EnsembleTable:
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
-                tuple(table.size()),
                 tuple(
                     (stype, columns)
                     for stype, columns in table.columns.items()
                 ),
                 tuple(
-                    (stype, type(block), block.dtype)
+                    (stype, type(block), block.size(), block.dtype)
                     for stype, block in table.items()
                 ),
                 table.device,
@@ -122,11 +121,11 @@ class EnsembleTable:
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
 
-        member_groups: list[TableTensor] = []
+        groups: list[TableTensor] = []
         input_locations: dict[int, tuple[int, int]] = {}
         for indices in compatible_groups.values():
-            group_index = len(member_groups)
-            member_groups.append(
+            group_index = len(groups)
+            groups.append(
                 cast(TableTensor, tables[indices[0]].unsqueeze(0))
                 if len(indices) == 1
                 else cast(
@@ -145,7 +144,7 @@ class EnsembleTable:
             )
 
         ensemble = cls.__new__(cls)
-        ensemble._member_groups = tuple(member_groups)
+        ensemble._groups = tuple(groups)
         ensemble._member_locations = tuple(
             input_locations[index] for index in member_table_ids
         )
@@ -156,16 +155,16 @@ class EnsembleTable:
         """Return the number of ensemble members."""
         return len(self._member_locations)
 
-    def member_table(self, member_id: int) -> TableTensor:
+    def table(self, member_id: int) -> TableTensor:
         """Return the table associated with one member for model execution.
 
         Args:
             member_id: Zero-based member index.
         """
         group_index, position = self._member_locations[member_id]
-        return self._member_groups[group_index][position]
+        return self._groups[group_index][position]
 
-    def member_groups(self) -> Iterator[TableTensor]:
+    def groups(self) -> Iterator[TableTensor]:
         """Yield the stored groups of compatible tables for processing.
 
         Each group is a :class:`~sdm.tensor.TableTensor` with a leading
@@ -173,11 +172,13 @@ class EnsembleTable:
         in the group, not the number of members referencing them. Tables in a
         group can be processed jointly.
         """
-        return iter(self._member_groups)
+        return iter(self._groups)
+
+    def __iter__(self) -> Iterator[TableTensor]:
+        return self.groups()
 
     def __repr__(self) -> str:
-        num_member_tables = sum(g.size(0) for g in self._member_groups)
         return (
             f"{self.__class__.__name__}(num_members={self.num_members}, "
-            f"num_member_tables={num_member_tables})"
+            f"num_groups={len(self._groups)})"
         )

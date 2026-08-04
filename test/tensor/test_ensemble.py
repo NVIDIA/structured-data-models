@@ -1,6 +1,6 @@
 import torch
 
-from sdm import EnsembleTable, TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 def test_shared_member_table() -> None:
@@ -8,32 +8,34 @@ def test_shared_member_table() -> None:
     table = EnsembleTable(data, num_members=3)
 
     assert table.num_members == 3
-    assert repr(table) == "EnsembleTable(num_members=3, num_member_tables=1)"
-    assert len(tuple(table.member_groups())) == 1
-    assert next(table.member_groups()).size() == (1, 2, 1)
+    assert repr(table) == "EnsembleTable(num_members=3, num_groups=1)"
+    groups = tuple(table.groups())
+    assert len(groups) == 1
+    assert groups[0].size() == (1, 2, 1)
+    assert next(iter(table)) is groups[0]
     for member_id in range(3):
-        assert table.member_table(member_id).equal(data)
+        assert table.table(member_id).equal(data)
 
 
-def test_from_member_tables_stacks_compatible_schemas() -> None:
+def test_from_tables_stacks_compatible_schemas() -> None:
     first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0]]))
 
-    table = EnsembleTable.from_member_tables(
+    table = EnsembleTable.from_tables(
         tables=(first, second),
         member_table_ids=(0, 1, 0, 1),
     )
 
-    groups = tuple(table.member_groups())
+    groups = tuple(table.groups())
     assert len(groups) == 1
     assert groups[0].size() == (2, 2, 1)
-    assert table.member_table(0).equal(first)
-    assert table.member_table(1).equal(second)
-    assert table.member_table(2).equal(first)
-    assert table.member_table(3).equal(second)
+    assert table.table(0).equal(first)
+    assert table.table(1).equal(second)
+    assert table.table(2).equal(first)
+    assert table.table(3).equal(second)
 
 
-def test_from_member_tables_separates_incompatible_schemas() -> None:
+def test_from_tables_separates_incompatible_schemas() -> None:
     first = TableTensor.from_tensor(
         torch.tensor([[1.0], [2.0]]), columns=("first",)
     )
@@ -41,11 +43,25 @@ def test_from_member_tables_separates_incompatible_schemas() -> None:
         torch.tensor([[3.0], [4.0]]), columns=("second",)
     )
 
-    table = EnsembleTable.from_member_tables(
+    table = EnsembleTable.from_tables(
         tables=(first, second),
         member_table_ids=(0, 1),
     )
 
-    assert len(tuple(table.member_groups())) == 2
-    assert table.member_table(0).columns == first.columns
-    assert table.member_table(1).columns == second.columns
+    assert len(tuple(table.groups())) == 2
+    assert table.table(0).columns == first.columns
+    assert table.table(1).columns == second.columns
+
+
+def test_from_tables_separates_incompatible_block_sizes() -> None:
+    first = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
+    second = TableTensor.from_tensor(torch.tensor([[3.0], [4.0], [5.0]]))
+
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
+    )
+
+    assert len(tuple(table.groups())) == 2
+    assert table.table(0).size() == (2, 1)
+    assert table.table(1).size() == (3, 1)

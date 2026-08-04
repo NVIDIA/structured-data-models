@@ -9,7 +9,6 @@ from sdm.tensor import (
     CategoricalTensor,
     ColumnarTensor,
     TableTensor,
-    EnsembleTable,
 )
 from sdm.relational import (
     Relationship,
@@ -34,7 +33,6 @@ __all__ = [
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
-    "EnsembleTable",
     "Relationship",
     "RelationalData",
     "TaskLink",
