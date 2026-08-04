@@ -27,7 +27,7 @@ class Processor(torch.nn.Module, abc.ABC):
     every leading table position independently.
 
     :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
-    supported tables without columns.
+    supported stypes with empty blocks.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
