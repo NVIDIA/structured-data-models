@@ -323,7 +323,6 @@ def test_refit_replaces_previous_state() -> None:
     assert torch.equal(output.numerical, expected.numerical)
 
 
-<<<<<<< HEAD:test/processing/text/test_tfidf.py
 def test_tfidf_text_embed_is_an_ensemble_processor() -> None:
     assert issubclass(TFIDF, EnsembleProcessor)
 
@@ -371,3 +370,21 @@ def test_tfidf_text_embed_keeps_shared_output_packed() -> None:
     )
 
     assert sum(group.size(0) for group in output) == 1
+
+
+def test_tfidf_text_embed_fit_then_transform_matches_fit_transform() -> None:
+    first = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    second = TableTensor.from_tensor(StringTensor.from_list([["world"]]))
+    ensemble_table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+    fitted = TFIDF(ngram_range=(2, 2))
+    combined = TFIDF(ngram_range=(2, 2))
+
+    fitted.fit_ensemble(ensemble_table)
+    actual = fitted.transform_ensemble(ensemble_table)
+    expected = combined.fit_transform_ensemble(ensemble_table)
+
+    for member_id in range(ensemble_table.num_members):
+        assert actual.table(member_id).equal(expected.table(member_id))

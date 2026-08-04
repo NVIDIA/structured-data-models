@@ -313,14 +313,13 @@ class TFIDF(EnsembleProcessor):
         self._fit(table, generator=generator)
         return self._transform(table)
 
-    def _fit_transform_ensemble(
+    def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
+    ) -> None:
         processors = torch.nn.ModuleList()
-        representations: list[TableTensor] = []
         member_processor_ids: list[int] = []
         fitted: dict[tuple[int, int], int] = {}
 
@@ -333,25 +332,30 @@ class TFIDF(EnsembleProcessor):
                     max_features=self.max_features,
                     lowercase=self.lowercase,
                 )
-                transformed = processor.fit_transform(
+                processor.fit(
                     ensemble_table.table(member_id),
                     generator=generator,
                 )
                 processor_id = len(processors)
                 fitted[location] = processor_id
                 processors.append(processor)
-                representations.append(transformed)
             member_processor_ids.append(processor_id)
 
         self.processors = processors
         self._member_processor_ids = tuple(member_processor_ids)
-        return EnsembleTable.from_tables(
-            representations,
-            member_processor_ids,
-        )
+
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self._fit_ensemble(ensemble_table, generator=generator)
+        return self._transform_ensemble(ensemble_table)
 
     def _transform_ensemble(
-        self, ensemble_table: EnsembleTable
+        self,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         if len(self._member_processor_ids) != ensemble_table.num_members:
             raise RuntimeError(
