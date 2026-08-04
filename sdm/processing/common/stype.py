@@ -248,9 +248,39 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             torch.cat(cast(list[Tensor], outputs), dim=-1),
         )
 
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        for stype, processor in tuple(self.processors.items()):
+            self.processors[stype] = EnsembleProcessorAdapter.adapt(
+                cast(Processor, processor)
+            )
+
+        self._active_routes = tuple(
+            stype
+            for stype in self.processors
+            if any(
+                len(group.columns[Stype(stype)]) > 0
+                for group in ensemble_table
+            )
+        )
+        if self.remainder == "error":
+            self._remainder_ensemble(ensemble_table)
+        for stype in self._active_routes:
+            processor = cast(EnsembleProcessor, self.processors[stype])
+            processor.fit_ensemble(
+                ensemble_table._replace_groups(
+                    [group.select_stypes(stype) for group in ensemble_table]
+                ),
+                generator=generator,
+            )
+
     def _fit_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
@@ -262,16 +292,19 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         self._active_routes = tuple(
             stype
             for stype in self.processors
-            if any(len(group.columns[Stype(stype)]) > 0 for group in table)
+            if any(
+                len(group.columns[Stype(stype)]) > 0
+                for group in ensemble_table
+            )
         )
         route_inputs = {
-            stype: table._replace_groups(
-                [group.select_stypes(stype) for group in table]
+            stype: ensemble_table._replace_groups(
+                [group.select_stypes(stype) for group in ensemble_table]
             )
             for stype in self._active_routes
         }
         if self.remainder == "error":
-            self._remainder_ensemble(table)
+            self._remainder_ensemble(ensemble_table)
         ensemble_tables = [
             cast(
                 EnsembleProcessor,
@@ -283,10 +316,16 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             for stype in self._active_routes
         ]
         if self.remainder == "passthrough":
-            ensemble_tables.append(self._remainder_ensemble(table))
-        return self._concatenate_ensemble_tables(ensemble_tables, table)
+            ensemble_tables.append(self._remainder_ensemble(ensemble_table))
+        return self._concatenate_ensemble_tables(
+            ensemble_tables,
+            ensemble_table,
+        )
 
-    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
         for stype, processor in tuple(self.processors.items()):
             self.processors[stype] = EnsembleProcessorAdapter.adapt(
                 cast(Processor, processor)
@@ -297,7 +336,10 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             active_routes = tuple(
                 stype
                 for stype in self.processors
-                if any(len(group.columns[Stype(stype)]) > 0 for group in table)
+                if any(
+                    len(group.columns[Stype(stype)]) > 0
+                    for group in ensemble_table
+                )
             )
             self._active_routes = active_routes
         ensemble_tables = [
@@ -305,21 +347,24 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
                 EnsembleProcessor,
                 self.processors[stype],
             ).transform_ensemble(
-                table._replace_groups(
-                    [group.select_stypes(stype) for group in table]
+                ensemble_table._replace_groups(
+                    [group.select_stypes(stype) for group in ensemble_table]
                 )
             )
             for stype in active_routes
         ]
         if self.remainder == "passthrough":
-            ensemble_tables.append(self._remainder_ensemble(table))
+            ensemble_tables.append(self._remainder_ensemble(ensemble_table))
         elif self.remainder == "error":
-            self._remainder_ensemble(table)
-        return self._concatenate_ensemble_tables(ensemble_tables, table)
+            self._remainder_ensemble(ensemble_table)
+        return self._concatenate_ensemble_tables(
+            ensemble_tables,
+            ensemble_table,
+        )
 
     def _inverse_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         """Invert every active semantic-type route."""
         if self.remainder == "drop":
@@ -343,18 +388,24 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
                     f"Route {stype!r} uses non-invertible processor "
                     f"{processor.__class__.__name__!r}"
                 )
-            route_input = table._replace_groups(
-                [group.select_stypes(stype) for group in table]
+            route_input = ensemble_table._replace_groups(
+                [group.select_stypes(stype) for group in ensemble_table]
             )
             ensemble_tables.append(inverse(route_input))
 
-        ensemble_tables.append(self._remainder_ensemble(table))
-        return self._concatenate_ensemble_tables(ensemble_tables, table)
+        ensemble_tables.append(self._remainder_ensemble(ensemble_table))
+        return self._concatenate_ensemble_tables(
+            ensemble_tables,
+            ensemble_table,
+        )
 
-    def _remainder_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+    def _remainder_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
         configured = frozenset(self.processors)
         outputs = []
-        for group in table:
+        for group in ensemble_table:
             remainder = [
                 stype
                 for stype, columns in group.columns.items()
@@ -365,7 +416,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
                 outputs.append(group.select_columns(()))
             else:
                 outputs.append(group.select_stypes(remainder))
-        return table._replace_groups(outputs)
+        return ensemble_table._replace_groups(outputs)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         if self.remainder == "drop":

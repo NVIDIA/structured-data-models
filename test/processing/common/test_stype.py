@@ -43,16 +43,19 @@ class ExpandMembers(EnsembleProcessor):
 
     def _fit_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        return self._transform_ensemble(table)
+        return self._transform_ensemble(ensemble_table)
 
-    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
         return EnsembleTable(
-            table.table(0),
-            num_members=table.num_members + 1,
+            ensemble_table.table(0),
+            num_members=ensemble_table.num_members + 1,
         )
 
 
@@ -303,6 +306,19 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_group() -> None:
         assert restored.table(member_id).equal(table.table(member_id))
 
 
+def test_stype_dispatch_fit_ensemble_fits_routes() -> None:
+    table = EnsembleTable(_mixed_table(), num_members=2)
+    fitted = StypeDispatch(numerical=Center())
+    combined = StypeDispatch(numerical=Center())
+
+    fitted.fit_ensemble(table)
+    transformed = fitted.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(table)
+
+    for member_id in range(table.num_members):
+        assert transformed.table(member_id).equal(expected.table(member_id))
+
+
 def test_stype_dispatch_ensemble_inverse_rejects_drop() -> None:
     table = EnsembleTable(_mixed_table(), num_members=2)
     processor = StypeDispatch(numerical=Identity(), remainder="drop")
@@ -321,14 +337,6 @@ def test_stype_dispatch_stateless_ensemble_inverse() -> None:
 
     for member_id in range(table.num_members):
         assert restored.table(member_id).equal(table.table(member_id))
-
-
-def test_stype_dispatch_rejects_ensemble_transform_after_single_fit() -> None:
-    table = _mixed_table()
-    processor = StypeDispatch(numerical=Center()).fit(table)
-
-    with pytest.raises(RuntimeError, match="fitted for a single table"):
-        processor.transform_ensemble(EnsembleTable(table, num_members=2))
 
 
 def test_stype_dispatch_rejects_route_member_count_change() -> None:
