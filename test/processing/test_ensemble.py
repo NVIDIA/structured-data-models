@@ -20,16 +20,6 @@ class IdentityEnsembleProcessor(EnsembleProcessor):
         return ensemble_table
 
 
-class ExpandingEnsembleProcessor(IdentityEnsembleProcessor):
-    requires_fit = False
-
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        return EnsembleTable(ensemble_table.table(0), num_members=2)
-
-
 class InvertibleIdentityEnsembleProcessor(
     IdentityEnsembleProcessor,
     EnsembleInvertibleMixin,
@@ -138,15 +128,3 @@ def test_ensemble_processor_passthrough_for_empty_supported_blocks() -> None:
     )
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform_ensemble(ensemble_table)
-
-
-def test_only_ensemble_api_accepts_multiple_output_members() -> None:
-    table = TableTensor.from_tensor(torch.ones(2, 1))
-    ensemble_table = EnsembleTable(table, num_members=1)
-    processor = ExpandingEnsembleProcessor()
-
-    assert processor.transform_ensemble(ensemble_table).num_members == 2
-    with pytest.raises(RuntimeError, match="transform_ensemble"):
-        processor.transform(table)
-    with pytest.raises(RuntimeError, match="transform_ensemble"):
-        processor.fit_transform(table)

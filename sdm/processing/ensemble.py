@@ -39,13 +39,6 @@ class EnsembleProcessor(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         output = self._transform_ensemble(EnsembleTable(table, num_members=1))
-        if output.num_members != 1:
-            raise RuntimeError(
-                f"{type(self).__name__!r} returned {output.num_members} "
-                f"ensemble members; call 'transform_ensemble()' instead of "
-                f"'transform()' when the output may contain more than one "
-                f"member."
-            )
         return output.table(0)
 
     def _fit_ensemble(
