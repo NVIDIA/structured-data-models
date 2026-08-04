@@ -26,7 +26,7 @@ class Processor(torch.nn.Module, abc.ABC):
     and batch dimensions. Batch dimensions are processed independently.
 
     :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
-    supported tables without columns.
+    supported stypes with empty blocks.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
