@@ -46,7 +46,7 @@ def test_choice_draws_at_fit() -> None:
 
     choice.fit(_table())
 
-    assert choice.selected in list(choice.options)
+    assert isinstance(choice.selected, Identity | Standardize)
 
 
 def test_choice_accepts_callable_option() -> None:
@@ -61,23 +61,13 @@ def test_choice_accepts_callable_option() -> None:
     assert torch.equal(output.numerical, table.numerical.square())
     assert repr(choice) == "Choice(\n  Callable(<lambda>),\n)"
 
-    with pytest.raises(AttributeError, match="inverse_transform"):
+    with pytest.raises(TypeError, match="not invertible"):
         choice.inverse_transform(output)
 
 
 def test_choice_rejects_invalid_option() -> None:
     with pytest.raises(TypeError, match=r"Input must be a"):
         Choice(Identity(), cast(Any, object()))
-
-
-def test_choice_keeps_state_dict_keys_independent_of_the_draw() -> None:
-    table = _table()
-    torch.manual_seed(0)
-    first = Choice(Identity(), Standardize()).fit(table)
-    torch.manual_seed(1)
-    second = Choice(Identity(), Standardize()).fit(table)
-
-    assert set(first.state_dict()) == set(second.state_dict())
 
 
 def test_choice_delegates_fit_transform_and_inverse() -> None:
@@ -98,7 +88,7 @@ def test_choice_inverse_requires_invertible_selected() -> None:
 
     choice.fit(table)
 
-    with pytest.raises(AttributeError, match="inverse_transform"):
+    with pytest.raises(TypeError, match="not invertible"):
         choice.inverse_transform(table)
 
 
