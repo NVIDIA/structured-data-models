@@ -59,11 +59,13 @@ def test_offset_dtype() -> None:
             VarLenTensor(
                 data=torch.tensor([0, 1, 2]),
                 offset=torch.tensor([0, 1, 3], dtype=torch.int32),
+                valid=None,
                 size=(1, 2),
             ),
             VarLenTensor(
                 data=torch.tensor([3, 4]),
                 offset=torch.tensor([0, 1, 2], dtype=torch.int32),
+                valid=None,
                 size=(1, 2),
             ),
         ]
@@ -76,11 +78,13 @@ def test_offset_dtype() -> None:
             VarLenTensor(
                 data=torch.tensor([0, 1, 2]),
                 offset=torch.tensor([0, 1, 3], dtype=torch.int32),
+                valid=None,
                 size=(1, 2),
             ),
             VarLenTensor(
                 data=torch.tensor([3, 4]),
                 offset=torch.tensor([0, 1, 2], dtype=torch.int64),
+                valid=None,
                 size=(1, 2),
             ),
         ]
@@ -168,6 +172,7 @@ def test_to_copy() -> None:
     tensor = VarLenTensor(
         data=data,
         offset=offset,
+        valid=None,
         size=(4, 4),
     )
     out = tensor.clone()
@@ -179,9 +184,28 @@ def test_to_copy() -> None:
     assert out._data.data_ptr() != tensor._data.data_ptr()
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
+    assert tensor.to(copy=False) is tensor
+    assert tensor.to(torch.int64, copy=False) is tensor
+
+    valid = torch.tensor([True, False, True, True])
+    tensor = VarLenTensor(
+        data=torch.arange(4),
+        offset=torch.arange(5),
+        valid=valid,
+        size=(4,),
+    )
+    out = tensor.clone()
+    assert isinstance(out, VarLenTensor)
+    assert out._data.data_ptr() != tensor._data.data_ptr()
+    assert out._offset.data_ptr() != tensor._offset.data_ptr()
+    assert out._valid is not None
+    assert tensor._valid is not None
+    assert out._valid.data_ptr() != tensor._valid.data_ptr()
+
     tensor = VarLenTensor(
         data=data,
         offset=offset,
+        valid=None,
         size=(4, 2),
         stride=(1, 4),
         storage_offset=2,
@@ -189,6 +213,7 @@ def test_to_copy() -> None:
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
     assert out.stride() == tensor.stride()
+    assert out.storage_offset() == 0
     assert out._data.equal(torch.arange(2, 10))
     assert out._offset.equal(torch.arange(9))
     assert out._data.data_ptr() != tensor._data.data_ptr()
@@ -205,6 +230,7 @@ def test_to_copy() -> None:
     tensor = VarLenTensor(
         data=data,
         offset=offset,
+        valid=None,
         size=(4, 2),
         stride=(4, 1),
         storage_offset=2,
@@ -220,6 +246,7 @@ def test_to_copy() -> None:
     tensor = VarLenTensor(
         data=data,
         offset=offset,
+        valid=None,
         size=(4, 4),
         stride=(0, 1),
     )
@@ -234,6 +261,7 @@ def test_to_copy() -> None:
     tensor = VarLenTensor(
         data=data,
         offset=offset,
+        valid=None,
         size=(2,),
         storage_offset=2,
     )
@@ -253,6 +281,36 @@ def test_to_copy() -> None:
     assert out._offset.data_ptr() != tensor._offset.data_ptr()
 
 
+def test_to_inference_mode() -> None:
+    with torch.inference_mode():
+        tensor = VarLenTensor(
+            data=torch.arange(4, dtype=torch.float32),
+            offset=torch.arange(5),
+            valid=torch.tensor([True, False, True, True]),
+            size=(4,),
+        )
+
+        out = tensor.to(torch.float64)
+        assert isinstance(out, VarLenTensor)
+        assert out.dtype == torch.float64
+        assert out._offset.data_ptr() != tensor._offset.data_ptr()
+        assert out._valid is not None
+        assert tensor._valid is not None
+        assert out._valid.data_ptr() == tensor._valid.data_ptr()
+
+        other = torch.empty((), dtype=torch.float64)
+        out = tensor.to(other)
+        assert isinstance(out, VarLenTensor)
+        assert out.dtype == other.dtype
+
+        out = tensor.to(copy=True)
+        assert isinstance(out, VarLenTensor)
+        assert out._offset.data_ptr() != tensor._offset.data_ptr()
+        assert out._valid is not None
+        assert tensor._valid is not None
+        assert out._valid.data_ptr() != tensor._valid.data_ptr()
+
+
 @onlyCUDA
 def test_to_device_cuda() -> None:
     data = torch.arange(16)
@@ -261,6 +319,7 @@ def test_to_device_cuda() -> None:
     tensor = VarLenTensor(
         data=data,
         offset=offset,
+        valid=None,
         size=(4, 4),
     )
     out = tensor.to("cuda")
@@ -286,6 +345,7 @@ def test_data_offset() -> None:
     tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
+        valid=None,
         size=(2,),
         storage_offset=2,
     )
@@ -296,6 +356,7 @@ def test_data_offset() -> None:
     tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
+        valid=None,
         size=(2, 4),
     )
     with pytest.raises(RuntimeError, match="non-contiguous"):
@@ -306,11 +367,13 @@ def test_equal_allclose() -> None:
     tensor = VarLenTensor(
         data=torch.tensor([0, 2, 3, 5]),
         offset=torch.arange(5),
+        valid=None,
         size=(2, 2),
     )
     other = VarLenTensor(
         data=torch.arange(6),
         offset=torch.arange(7),
+        valid=None,
         size=(2, 3),
     )
 
@@ -329,6 +392,7 @@ def test_masked_select() -> None:
     tensor = VarLenTensor(
         data=torch.arange(9),
         offset=torch.tensor([0, 1, 3, 4, 6, 7, 9]),
+        valid=None,
         size=(2, 3),
     )
     mask = torch.tensor([[True, False, True], [False, True, True]])
@@ -357,6 +421,7 @@ def test_indexing() -> None:
     tensor = VarLenTensor(
         data=torch.arange(9),
         offset=torch.tensor([0, 1, 3, 4, 6, 7, 9]),
+        valid=None,
         size=(2, 3),
     )
 
@@ -401,11 +466,13 @@ def test_cat() -> None:
         VarLenTensor(
             data=torch.arange(4),
             offset=torch.arange(5),
+            valid=None,
             size=(2, 2),
         ),
         VarLenTensor(
             data=torch.tensor([4, 5, 6]),
             offset=torch.tensor([0, 1, 3]),
+            valid=None,
             size=(1, 2),
         ),
     ]
@@ -422,11 +489,13 @@ def test_cat() -> None:
         VarLenTensor(
             data=torch.arange(4),
             offset=torch.arange(5),
+            valid=None,
             size=(2, 2),
         ),
         VarLenTensor(
             data=torch.tensor([4, 5, 6]),
             offset=torch.tensor([0, 1, 3]),
+            valid=None,
             size=(2, 1),
         ),
     ]
@@ -444,11 +513,13 @@ def test_stack() -> None:
         VarLenTensor(
             data=torch.arange(3),
             offset=torch.tensor([0, 1, 3]),
+            valid=None,
             size=(2,),
         ),
         VarLenTensor(
             data=torch.arange(3, 5),
             offset=torch.tensor([0, 1, 2]),
+            valid=None,
             size=(2,),
         ),
     ]
@@ -474,6 +545,7 @@ def test_pin_memory() -> None:
     tensor = VarLenTensor(
         data=torch.arange(4),
         offset=torch.arange(5),
+        valid=None,
         size=(4,),
     )
 
@@ -485,6 +557,7 @@ def test_pin_memory_cuda() -> None:
     tensor = VarLenTensor(
         data=torch.arange(4),
         offset=torch.arange(5),
+        valid=None,
         size=(4,),
     )
 
@@ -495,6 +568,7 @@ def test_share_memory() -> None:
     tensor = VarLenTensor(
         data=torch.arange(4),
         offset=torch.arange(5),
+        valid=None,
         size=(4,),
     )
 
@@ -510,6 +584,7 @@ def test_view() -> None:
     tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
+        valid=None,
         size=(2, 4),
     )
 
@@ -530,6 +605,7 @@ def test_view() -> None:
     tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
+        valid=None,
         size=(2, 2),
         stride=(1, 4),
     )
@@ -541,6 +617,7 @@ def test_squeeze() -> None:
     tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
+        valid=None,
         size=(1, 2, 1, 4),
         storage_offset=0,
     )
@@ -576,6 +653,7 @@ def test_unsqueeze() -> None:
     tensor = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
+        valid=None,
         size=(2, 2),
         stride=(1, 4),
         storage_offset=1,
@@ -603,6 +681,7 @@ def test_unsqueeze() -> None:
     scalar = VarLenTensor(
         data=torch.arange(8),
         offset=torch.arange(9),
+        valid=None,
         size=(),
     )
     out = scalar.unsqueeze(0)
@@ -618,6 +697,7 @@ def test_transpose_permute() -> None:
     tensor = VarLenTensor(
         data=torch.arange(12),
         offset=torch.arange(13),
+        valid=None,
         size=(2, 3),
         stride=(1, 4),
         storage_offset=2,
@@ -642,6 +722,7 @@ def test_transpose_permute() -> None:
     tensor = VarLenTensor(
         data=torch.arange(24),
         offset=torch.arange(25),
+        valid=None,
         size=(2, 3, 4),
         stride=(12, 4, 1),
     )
@@ -670,6 +751,7 @@ def test_select_slice_narrow_expand() -> None:
     tensor = VarLenTensor(
         data=torch.arange(24),
         offset=torch.arange(25),
+        valid=None,
         size=(2, 3, 4),
     )
 
@@ -700,6 +782,7 @@ def test_select_slice_narrow_expand() -> None:
     tensor = VarLenTensor(
         data=torch.arange(4),
         offset=torch.arange(5),
+        valid=None,
         size=(1, 4),
     )
     out = tensor.expand(3, 4)
@@ -723,6 +806,7 @@ def test_unbind() -> None:
     tensor = VarLenTensor(
         data=torch.arange(25),
         offset=torch.arange(26),
+        valid=None,
         size=(2, 3, 4),
         storage_offset=1,
     )
@@ -748,6 +832,7 @@ def test_split() -> None:
     tensor = VarLenTensor(
         data=torch.arange(25),
         offset=torch.arange(26),
+        valid=None,
         size=(2, 3, 4),
         storage_offset=1,
     )
@@ -776,6 +861,7 @@ def test_unsafe_view() -> None:
     tensor = VarLenTensor(
         data=torch.arange(12),
         offset=torch.arange(13),
+        valid=None,
         size=(3, 2),
         stride=(4, 1),
     )

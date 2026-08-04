@@ -220,6 +220,7 @@ class TableTensor(Tensor):
             text = StringTensor(
                 data=torch.empty(0, dtype=torch.uint8, device=device),
                 offset=torch.zeros(1, dtype=torch.int32, device=device),
+                valid=None,
                 size=(*size, 0),
             )
         if id is None:
