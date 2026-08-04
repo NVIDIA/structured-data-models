@@ -74,9 +74,10 @@ class Standardize(Processor, InvertibleMixin):
                         )
                     ] = 1.0
             else:
-                scale = torch.zeros_like(data_mean)
                 if self.epsilon == 0:
-                    scale.fill_(1.0)
+                    scale = torch.ones_like(data_mean)
+                else:
+                    scale = torch.zeros_like(data_mean)
             self.scale = scale + self.epsilon
         else:
             self.scale = torch.ones_like(data_mean)

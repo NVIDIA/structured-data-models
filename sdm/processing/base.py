@@ -23,8 +23,7 @@ class Processor(torch.nn.Module, abc.ABC):
     preprocessing.
     A :class:`Processor` learns any required state via :meth:`fit`, and applies
     the transformation via :meth:`transform`. Implementations preserve the row
-    dimension and, unless an explicit batch contract says otherwise, process
-    every leading table position independently.
+    and batch dimensions. Batch dimensions are processed independently.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
