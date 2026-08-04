@@ -89,10 +89,6 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 
 # Naming Policy
 
-## Parameters and Variables
-
-- Use one name per type across signatures, locals, tests, and docs, e.g., `table` for `TableTensor` and `ensemble_table` for `EnsembleTable`. Pick names that stay unambiguous when several of these types appear in the same scope.
-
 ## Processors
 
 1. Name the main operation first, e.g., `ShuffleColumns` over `ColumnShuffle`.
