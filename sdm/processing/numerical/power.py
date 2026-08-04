@@ -234,56 +234,54 @@ class PowerTransform(Processor, InvertibleMixin):
     ) -> None:
         numerical = _as_float(table.numerical)
         n_samples = numerical.size(-2)
-        n_features = numerical.size(-1)
-        state_shape = (*numerical.shape[:-2], n_features)
 
-        var = numerical.var(dim=-2, correction=0)  # [*batch, n_features]
-        mean = numerical.mean(dim=-2)  # [*batch, n_features]
-        self.max = numerical.max(dim=-2).values  # [*batch, n_features]
+        var = numerical.var(dim=-2, correction=0)
+        mean = numerical.mean(dim=-2)
+        self.max = numerical.max(dim=-2).values
         constant_features = _constant_feature_mask(var, mean, n_samples)
         self.lambdas = self._optimize_lambdas(numerical, constant_features)
 
         lambda_eps = torch.finfo(numerical.dtype).eps
-        self.upper_bound = -(1 / self.lambdas)  # [*batch, n_features]
+        self.upper_bound = -(1 / self.lambdas)
         self.upper_bound[self.lambdas > -lambda_eps] = torch.inf
 
         if self.standardize:
             transformed = _yeojohnson_transform(numerical, self.lambdas)
-            self.mean = transformed.mean(dim=-2)  # [*batch, n_features]
-            var = transformed.var(dim=-2, correction=0)  # [*batch, n_features]
+            self.mean = transformed.mean(dim=-2)
+            var = transformed.var(dim=-2, correction=0)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
-            self.scale = scale  # [*batch, n_features]
+            self.scale = scale
         else:
-            self.mean = numerical.new_zeros(state_shape)
-            self.scale = numerical.new_ones(state_shape)
+            self.mean = torch.zeros_like(self.lambdas)
+            self.scale = torch.ones_like(self.lambdas)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
         numerical = _as_float(table.numerical)
         transformed = _yeojohnson_transform(numerical, self.lambdas)
-        mean = self.mean.unsqueeze(-2)  # [*batch, 1, n_features]
-        scale = self.scale.unsqueeze(-2)  # [*batch, 1, n_features]
+        mean = self.mean.unsqueeze(-2)
+        scale = self.scale.unsqueeze(-2)
         numerical = (transformed - mean) / scale
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         numerical = _as_float(table.numerical)
-        scale = self.scale.unsqueeze(-2)  # [*batch, 1, n_features]
-        mean = self.mean.unsqueeze(-2)  # [*batch, 1, n_features]
+        scale = self.scale.unsqueeze(-2)
+        mean = self.mean.unsqueeze(-2)
         unscaled = numerical * scale + mean
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 
         out_of_bounds = inverse.isinf()
         eps = torch.finfo(numerical.dtype).eps
-        upper_bound = self.upper_bound.unsqueeze(-2)  # [*batch, 1, n_features]
+        upper_bound = self.upper_bound.unsqueeze(-2)
         bounded_unscaled = torch.minimum(unscaled, upper_bound - eps)
         bounded_inverse = _yeojohnson_inverse_transform(
             bounded_unscaled, self.lambdas
         )
         inverse = torch.where(out_of_bounds, bounded_inverse, inverse)
         invalid = inverse.isinf()
-        maximum = self.max.unsqueeze(-2)  # [*batch, 1, n_features]
+        maximum = self.max.unsqueeze(-2)
         inverse = torch.where(
             invalid,
             torch.fmin(inverse, maximum),
