@@ -293,13 +293,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             )
 
         active_routes = self._active_routes
-        if self.requires_fit:
-            if active_routes is None:
-                raise RuntimeError(
-                    "'StypeDispatch' was fitted for a single table; use "
-                    "'transform' instead of 'transform_ensemble'."
-                )
-        else:
+        if not self.requires_fit or active_routes is None:
             active_routes = tuple(
                 stype
                 for stype in self.processors
@@ -344,7 +338,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         for stype in self._active_routes:
             processor = cast(EnsembleProcessor, self.processors[stype])
             inverse = getattr(processor, "inverse_transform_ensemble", None)
-            if inverse is None:
+            if not callable(inverse):
                 raise TypeError(
                     f"Route {stype!r} uses non-invertible processor "
                     f"{processor.__class__.__name__!r}"
