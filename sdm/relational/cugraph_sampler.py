@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
+from sdm import NaT, Stype, TableTensor
 from sdm.relational.data import RelationalData
 from sdm.relational.join import join_index
 from sdm.relational.sampler import (
@@ -177,7 +177,6 @@ class CuGraphRelationalSampler(RelationalSampler):
         dsts: list[Tensor] = []
         edge_types: list[Tensor] = []
         edge_times: list[Tensor] = []
-        minimum_time = torch.iinfo(torch.int64).min
 
         times = {
             table_name: self.data.tables[table_name][
@@ -211,7 +210,7 @@ class CuGraphRelationalSampler(RelationalSampler):
                 if table_name in times:
                     edge_times.append(times[table_name][index])
                 else:
-                    edge_times.append(torch.full_like(index, minimum_time))
+                    edge_times.append(torch.full_like(index, NaT))
 
         if self._num_edge_types == 0:
             self._resource_handle = None
