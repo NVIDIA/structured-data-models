@@ -23,7 +23,6 @@ class ReduceEstimators(Processor):
     """
 
     supported_stypes = frozenset({Stype.numerical})
-    _pass_empty_blocks = False
     requires_fit = False
 
     def __init__(
