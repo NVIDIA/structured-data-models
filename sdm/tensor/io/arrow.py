@@ -68,19 +68,16 @@ def arrow_as_tensor(
         return torch.as_tensor(values, dtype=dtype, device=device)
 
 
-def to_arrow(tensor: Tensor) -> pa.Array:
+def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
     r"""Convert a tensor to a flat :class:`pyarrow.Array`.
 
     Args:
         tensor: The tensor.
+        valid_mask: Boolean mask indicating valid, non-null tensor elements.
     """
-    # Avoid a circular import through `sdm.tensor`.
-    from sdm.tensor import VarLenTensor  # noqa: PLC0415
-
-    if isinstance(tensor, VarLenTensor):
-        return tensor.to_arrow()
-
     tensor = tensor.detach().contiguous().view(-1).cpu()
+    if valid_mask is not None:
+        valid_mask = valid_mask.contiguous().view(-1).cpu()
 
     arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
     if arrow_type is None:
@@ -89,5 +86,11 @@ def to_arrow(tensor: Tensor) -> pa.Array:
     return pa.Array.from_buffers(
         type=arrow_type,
         length=tensor.numel(),
-        buffers=[None, pa.py_buffer(tensor.numpy())],
+        buffers=[
+            pa.array(valid_mask.numpy(), type=pa.bool_()).buffers()[1]
+            if valid_mask is not None
+            else None,
+            pa.py_buffer(tensor.numpy()),
+        ],
+        null_count=-1 if valid_mask is not None else 0,
     )
