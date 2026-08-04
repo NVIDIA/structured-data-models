@@ -23,8 +23,8 @@ class ClipSigma(Processor):
     logarithmic soft clipping instead of hard truncation.
 
     Args:
-        threshold: Positive z-score multiplier setting how many standard
-            deviations from the mean mark the soft clipping bounds.
+        threshold: Z-score multiplier setting how many standard deviations
+            from the mean mark the soft clipping bounds.
     """
 
     supported_stypes = frozenset({Stype.numerical})
@@ -35,8 +35,6 @@ class ClipSigma(Processor):
         threshold: float = 4.0,
     ) -> None:
         super().__init__()
-        if threshold <= 0:
-            raise ValueError("threshold must be positive.")
         self.threshold = threshold
         self.register_buffer("_mean", torch.empty(0))
         self.register_buffer("_std", torch.empty(0))

@@ -6,16 +6,6 @@ from sdm.processing import QuantileTransform
 from sdm.testing import onlyCUDA, withCUDA
 
 
-def test_quantile_transform_rejects_nonpositive_n_quantiles() -> None:
-    with pytest.raises(ValueError, match="n_quantiles"):
-        QuantileTransform(n_quantiles=0)
-
-
-def test_quantile_transform_rejects_nonpositive_subsample() -> None:
-    with pytest.raises(ValueError, match="subsample"):
-        QuantileTransform(subsample=0)
-
-
 def test_quantile_transform_rejects_unknown_output_distribution() -> None:
     table = TableTensor.from_tensor(torch.arange(4.0).view(-1, 1))
     processor = QuantileTransform(

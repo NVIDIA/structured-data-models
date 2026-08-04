@@ -1,4 +1,3 @@
-import pytest
 import torch
 
 from sdm import TableTensor
@@ -72,11 +71,6 @@ def test_clip_sigma_matches_tabicl_reference_values() -> None:
             dtype=dtype,
         ),
     )
-
-
-def test_clip_sigma_rejects_nonpositive_threshold() -> None:
-    with pytest.raises(ValueError, match="threshold must be positive"):
-        ClipSigma(threshold=0.0)
 
 
 @withCUDA
