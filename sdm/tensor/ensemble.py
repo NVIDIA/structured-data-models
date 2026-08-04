@@ -10,15 +10,17 @@ from sdm.tensor.table import TableTensor
 
 
 class EnsembleTable:
-    r"""Table data for multiple members of a model ensemble.
+    r"""Container for the tabular inputs of a model ensemble.
 
-    Each ensemble member receives a :class:`~sdm.tensor.TableTensor` as input.
-    Members may share the same table or hold member-specific tables produced by
-    per-member preprocessing. Shared tables are stored once.
+    A :class:`~sdm.tensor.TableTensor` stores one tensorized table. An
+    :class:`EnsembleTable` associates each member position with one such table.
+    Multiple members may reference the same table, which is stored only once.
 
-    Compatible member tables are batched into groups along a leading dimension
-    for joint processing. Two tables are compatible when they have the same
-    shape, column schema, block layout, device, and categorical vocabularies.
+    For processing, distinct compatible tables are stacked along a new leading
+    dimension. Tables form separate groups when their shape, column schema,
+    block layout, device, or categorical vocabularies differ. Model code can
+    access one member's table with :meth:`member_table`, while processor code
+    can iterate over the stacked groups with :meth:`member_groups`.
 
     .. testcode::
 
@@ -26,20 +28,33 @@ class EnsembleTable:
         from sdm import EnsembleTable, TableTensor
 
         original = TableTensor.from_tensor(
-            torch.tensor([[1.0], [2.0]])
+            torch.tensor([[1.0], [2.0]]),
+            columns=("value",),
         )
         normalized = TableTensor.from_tensor(
-            torch.tensor([[-1.0], [1.0]])
+            torch.tensor([[-1.0], [1.0]]),
+            columns=("value",),
+        )
+        selected = TableTensor.from_tensor(
+            torch.tensor([[10.0], [20.0]]),
+            columns=("selected_value",),
         )
 
         ensemble = EnsembleTable.from_member_tables(
-            tables=(original, normalized),
-            member_table_ids=(0, 1, 0, 1),
+            tables=(original, normalized, selected),
+            member_table_ids=(0, 1, 2, 0),
         )
 
+        # Model code accesses tables in member order.
         assert ensemble.num_members == 4
         assert ensemble.member_table(0).equal(original)
-        assert ensemble.member_table(1).equal(normalized)
+        assert ensemble.member_table(3).equal(original)
+
+        # Processor code receives two groups of compatible tables.
+        groups = tuple(ensemble.member_groups())
+        assert len(groups) == 2
+        assert groups[0].size() == (2, 2, 1)
+        assert groups[1].size() == (1, 2, 1)
 
     Args:
         table: A :class:`~sdm.tensor.TableTensor` shared by all ensemble
@@ -61,17 +76,17 @@ class EnsembleTable:
     ) -> Self:
         r"""Create an ensemble table from member-specific tables.
 
-        ``member_table_ids[i]`` selects the table used by member ``i``.
-        Reusing an ID means that members share the same table. Compatible
-        tables are automatically batched into groups for joint processing.
+        Each entry in ``tables`` is stored once. ``member_table_ids[i]``
+        selects the table associated with member position ``i``. Reusing an
+        index makes multiple members reference the same stored table.
 
-        Categorical tables are grouped only when they reference the same
-        category vocabulary objects.
+        Compatible tables are stacked into groups for joint processing;
+        incompatible tables remain in separate groups. Categorical tables are
+        compatible only when they reference the same category vocabularies.
 
         Args:
-            tables: Distinct tables that members may reference.
-            member_table_ids: For each member, the index of its table in
-                ``tables``.
+            tables: Tables available to the ensemble members.
+            member_table_ids: Index into ``tables`` for each member position.
 
         Returns:
             An ensemble table preserving member order.
@@ -142,7 +157,7 @@ class EnsembleTable:
         return len(self._member_locations)
 
     def member_table(self, member_id: int) -> TableTensor:
-        """Return the table for one ensemble member.
+        """Return the table associated with one member for model execution.
 
         Args:
             member_id: Zero-based member index.
@@ -151,11 +166,12 @@ class EnsembleTable:
         return self._member_groups[group_index][position]
 
     def member_groups(self) -> Iterator[TableTensor]:
-        """Yield groups of compatible member tables.
+        """Yield the stored groups of compatible tables for processing.
 
         Each group is a :class:`~sdm.tensor.TableTensor` with a leading
-        dimension of size ``G``, where ``G`` is the number of members in the
-        group. Use this to process all members in a group jointly as a batch.
+        dimension of size ``G``, where ``G`` is the number of distinct tables
+        in the group, not the number of members referencing them. Tables in a
+        group can be processed jointly.
         """
         return iter(self._member_groups)
 
