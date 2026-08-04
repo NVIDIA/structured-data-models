@@ -72,9 +72,21 @@ class ImputeMode(Processor):
         )
         self._categories = table.categorical.categories
 
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        self._fit(table, generator=generator)
+        return self._replace_missing(table)
+
     def _transform(self, table: TableTensor) -> TableTensor:
         self._check_categories(table)
         _check_categorical_codes(table)
+        return self._replace_missing(table)
+
+    def _replace_missing(self, table: TableTensor) -> TableTensor:
         code = table.categorical.where(
             table.categorical >= 0,
             self._fill_values.to(dtype=table.categorical.dtype),
