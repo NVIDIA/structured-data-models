@@ -84,9 +84,7 @@ class EnsembleTable:
             table_id < 0 or table_id >= len(tables)
             for table_id in member_table_ids
         ):
-            raise ValueError(
-                "'member_table_ids' references an unknown table."
-            )
+            raise ValueError("'member_table_ids' references an unknown table.")
 
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
         for index, table in enumerate(tables):
@@ -104,8 +102,7 @@ class EnsembleTable:
                 ),
                 table.device,
                 tuple(
-                    id(category)
-                    for category in table.categorical.categories
+                    id(category) for category in table.categorical.categories
                 ),
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
