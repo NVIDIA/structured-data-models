@@ -2,10 +2,11 @@ import pytest
 import torch
 
 from sdm import Recipe
+from sdm.cache import Cache, KVCacheEntry
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.nn import Attention
+from sdm.nn import Attention, InducedTransformerBlock
 from sdm.testing import onlyCUDA, onlyFullTest, withCUDA
 
 
@@ -135,6 +136,195 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
         out,
         row_embedding(x, y_swapped, num_classes=25),
     )
+
+
+@onlyCUDA
+@pytest.mark.parametrize(
+    ("dtype", "stabilize", "expected_query_dtype", "expected_autocast"),
+    [
+        (torch.float16, True, torch.float32, False),
+        (torch.float16, False, torch.float16, True),
+        (torch.bfloat16, True, torch.bfloat16, True),
+    ],
+)
+def test_row_embedding_float16_recording(
+    dtype: torch.dtype,
+    stabilize: bool,
+    expected_query_dtype: torch.dtype,
+    expected_autocast: bool,
+) -> None:
+    device = torch.device("cuda")
+    if dtype == torch.bfloat16 and not torch.cuda.is_bf16_supported():
+        pytest.skip("BF16 is not supported")
+    row_embedding = RowEmbedding(
+        num_classes=3,
+        channels=8,
+        num_layers=2,
+        num_heads=2,
+        group_size=3,
+        num_inducing_points=4,
+        num_readout_tokens=2,
+        norm_bias=True,
+        device=device,
+        stabilize_float16_recording=stabilize,
+    ).eval()
+    col_layers: list[InducedTransformerBlock] = []
+    for col_layer in row_embedding.col_layers:
+        assert isinstance(col_layer, InducedTransformerBlock)
+        col_layers.append(col_layer)
+    x_context = torch.randn(5, 6, device=device)
+    y_context = torch.randint(3, size=(5,), device=device)
+    cache = Cache()
+    recording_dtypes: list[tuple[bool, torch.dtype]] = []
+
+    def capture_recording_dtype(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        query = kwargs["query"]
+        assert isinstance(query, torch.Tensor)
+        recording_dtypes.append(
+            (
+                torch.is_autocast_enabled(query.device.type),
+                query.dtype,
+            )
+        )
+
+    handles = [
+        col_layer.output_block.register_forward_pre_hook(
+            capture_recording_dtype,
+            with_kwargs=True,
+        )
+        for col_layer in col_layers
+    ]
+    with torch.amp.autocast(device.type, dtype=dtype):
+        context_out = row_embedding(
+            x=x_context,
+            y=y_context,
+            cache=cache,
+        )
+    for handle in handles:
+        handle.remove()
+
+    entries = [
+        value for value in cache.values() if isinstance(value, KVCacheEntry)
+    ]
+    assert recording_dtypes == [
+        (expected_autocast, expected_query_dtype)
+    ] * len(col_layers)
+    assert context_out.dtype == torch.float32
+    assert entries
+    assert all(entry.key.dtype == dtype for entry in entries)
+    assert all(entry.value.dtype == dtype for entry in entries)
+
+    if dtype != torch.float16 or not stabilize:
+        return
+
+    replay_dtypes: list[tuple[bool, torch.dtype, torch.dtype]] = []
+
+    def capture_replay_dtype(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        query = kwargs["query"]
+        key_value = kwargs["key_value"]
+        assert isinstance(query, torch.Tensor)
+        assert isinstance(key_value, KVCacheEntry)
+        replay_dtypes.append(
+            (
+                torch.is_autocast_enabled(query.device.type),
+                query.dtype,
+                key_value.key.dtype,
+            )
+        )
+
+    cache.freeze()
+    handles = [
+        col_layer.output_block.register_forward_pre_hook(
+            capture_replay_dtype,
+            with_kwargs=True,
+        )
+        for col_layer in col_layers
+    ]
+    with torch.amp.autocast(device.type, dtype=dtype):
+        query_out = row_embedding(
+            x=torch.randn(3, 6, device=device),
+            y=y_context.new_empty(0),
+            cache=cache,
+        )
+    for handle in handles:
+        handle.remove()
+
+    assert replay_dtypes == [(True, torch.float16, torch.float16)] * len(
+        col_layers
+    )
+    assert query_out.isfinite().all()
+
+
+@onlyCUDA
+def test_tabiclv2_float16_recording() -> None:
+    device = torch.device("cuda")
+    model = _TabICLv2(
+        num_classes=3,
+        num_quantiles=0,
+        channels=8,
+        num_embedding_layers=2,
+        num_embedding_heads=2,
+        num_inducing_points=4,
+        group_size=3,
+        num_readout_tokens=2,
+        num_icl_layers=2,
+        num_icl_heads=2,
+        norm_bias=True,
+        device=device,
+    ).eval()
+    col_layers: list[InducedTransformerBlock] = []
+    for col_layer in model.row_embedding.col_layers:
+        assert isinstance(col_layer, InducedTransformerBlock)
+        col_layers.append(col_layer)
+    recording_dtypes: list[tuple[bool, torch.dtype]] = []
+
+    def capture_recording_dtype(
+        _module: torch.nn.Module,
+        _args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        query = kwargs["query"]
+        assert isinstance(query, torch.Tensor)
+        recording_dtypes.append(
+            (
+                torch.is_autocast_enabled(query.device.type),
+                query.dtype,
+            )
+        )
+
+    cache = Cache()
+    handles = [
+        col_layer.output_block.register_forward_pre_hook(
+            capture_recording_dtype,
+            with_kwargs=True,
+        )
+        for col_layer in col_layers
+    ]
+    with torch.amp.autocast(device.type, dtype=torch.float16):
+        model(
+            x=torch.randn(5, 6, device=device),
+            y=torch.randint(3, size=(5,), device=device),
+            num_classes=3,
+            cache=cache,
+        )
+    for handle in handles:
+        handle.remove()
+
+    entries = [
+        value for value in cache.values() if isinstance(value, KVCacheEntry)
+    ]
+    assert recording_dtypes == [(False, torch.float32)] * len(col_layers)
+    assert entries
+    assert all(entry.key.dtype == torch.float16 for entry in entries)
+    assert all(entry.value.dtype == torch.float16 for entry in entries)
 
 
 def test_tabiclv2_hierarchical_log_probs(
