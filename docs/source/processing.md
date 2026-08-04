@@ -8,7 +8,6 @@ The basic unit of a recipe is a {py:class}`~sdm.processing.base.Processor`.
 A list of all available processors grouped by their domain and semantic type is outlined in the [API reference](api/processing).
 
 - A {py:class}`~sdm.processing.base.Processor` transforms a {py:class}`~sdm.tensor.TableTensor` and returns a new {py:class}`~sdm.tensor.TableTensor`.
-- An {py:class}`~sdm.processing.ensemble.EnsembleProcessor` transforms an {py:class}`~sdm.tensor.EnsembleTable` and returns a new {py:class}`~sdm.tensor.EnsembleTable`. Use it when a transformation has to tell ensemble members apart: when each member needs its own state (*e.g.*, a different column permutation per member), when members end up with tables that no longer share the same columns or shape (*e.g.*, dropping a different set of columns per member), or when the number of members changes (*e.g.*, reducing the outputs of all members into one). Applied to a plain {py:class}`~sdm.tensor.TableTensor`, it operates on an ensemble with a single member.
 - A **stateful** {py:class}`~sdm.processing.base.Processor` learns state when you call {py:meth}`~sdm.processing.base.Processor.fit` (*e.g.*, {py:class}`~sdm.processing.numerical.Standardize` learns each column's mean and standard deviation); a **stateless** one does not (*e.g.*, {py:class}`~sdm.processing.output.Softmax`).
 
 A {py:class}`~sdm.processing.base.Processor` is fully composable:
