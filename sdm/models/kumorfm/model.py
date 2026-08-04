@@ -5,7 +5,7 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Relationship, Stype, TableTensor
+from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -565,9 +565,8 @@ class _KumoRFM(torch.nn.Module):
 
         seed_datetime = seed_datetime[task_row]
 
-        na_value = torch.iinfo(datetime.dtype).min
-        na_mask = (task_row < 0).unsqueeze(-1) | (seed_datetime == na_value)
-        na_mask = na_mask.unsqueeze(-2) | (datetime == na_value).unsqueeze(-1)
+        na_mask = (task_row < 0).unsqueeze(-1) | (seed_datetime == NaT)
+        na_mask = na_mask.unsqueeze(-2) | (datetime == NaT).unsqueeze(-1)
         na_mask = na_mask.flatten(-2)
 
         rel_time = seed_datetime.unsqueeze(-2) - datetime.unsqueeze(-1)
