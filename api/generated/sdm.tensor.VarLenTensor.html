@@ -164,6 +164,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.VarLenTensor.from_list"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.from_list()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.VarLenTensor.data_offset"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.data_offset</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.VarLenTensor.valid"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.valid</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.VarLenTensor.is_nullable"><code class="docutils literal notranslate"><span class="pre">VarLenTensor.is_nullable</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -340,6 +341,12 @@ non-null tensor elements, or <code class="docutils literal notranslate"><span cl
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.tensor.VarLenTensor.is_nullable">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_nullable</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></em><a class="headerlink" href="#sdm.tensor.VarLenTensor.is_nullable" title="Link to this definition">#</a></dt>
+<dd><p>Whether this tensor has a validity mask.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -368,7 +375,7 @@ non-null tensor elements, or <code class="docutils literal notranslate"><span cl
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=c2bb8348"></script>
+      <script src="../../_static/documentation_options.js?v=4084189b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
