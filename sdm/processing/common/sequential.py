@@ -84,13 +84,33 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             out = child.fit_transform(out, generator=generator)
         return out
 
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        out = ensemble_table
+        children = tuple(self._modules.items())
+        for index, (name, child) in enumerate(children):
+            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
+            if processor is not child:
+                self._modules[name] = processor
+            if index < len(children) - 1:
+                out = processor.fit_transform_ensemble(
+                    out,
+                    generator=generator,
+                )
+            else:
+                processor.fit_ensemble(out, generator=generator)
+
     def _fit_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        out = table
+        out = ensemble_table
         for name, child in tuple(self._modules.items()):
             processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
             if processor is not child:
@@ -98,8 +118,11 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             out = processor.fit_transform_ensemble(out, generator=generator)
         return out
 
-    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        out = table
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        out = ensemble_table
         for name, child in tuple(self._modules.items()):
             processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
             if processor is not child:
@@ -109,17 +132,17 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
 
     def _inverse_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         """Apply fitted child inverses in reverse order.
 
         Args:
-            table: Ensemble table in the transformed representation.
+            ensemble_table: Ensemble table in the transformed representation.
 
         Returns:
             Ensemble table restored to its representation before transform.
         """
-        out = table
+        out = ensemble_table
         for name, child in reversed(tuple(self._modules.items())):
             processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
             if processor is not child:
