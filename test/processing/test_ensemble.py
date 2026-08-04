@@ -24,9 +24,6 @@ class InvertibleIdentityEnsembleProcessor(
     IdentityEnsembleProcessor,
     EnsembleInvertibleMixin,
 ):
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return table
-
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -84,6 +81,7 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
 
     assert output.num_members == 1
     assert output.table(0).equal(table)
+    assert processor.inverse_transform(table).equal(table)
 
 
 def test_ensemble_processor_rejects_unsupported_stype() -> None:

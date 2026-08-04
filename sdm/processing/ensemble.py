@@ -145,6 +145,12 @@ class EnsembleProcessor(Processor):
 class EnsembleInvertibleMixin(InvertibleMixin):
     r"""Extend a :class:`EnsembleProcessor` by an inverse transformation."""
 
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        output = self._inverse_transform_ensemble(
+            EnsembleTable(table, num_members=1)
+        )
+        return output.table(0)
+
     @abc.abstractmethod
     def _inverse_transform_ensemble(
         self, ensemble_table: EnsembleTable
