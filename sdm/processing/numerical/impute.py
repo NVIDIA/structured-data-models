@@ -2,7 +2,6 @@ import math
 
 import torch
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -35,12 +34,16 @@ class ImputeMean(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
-        mean = torch.nanmean(numerical, dim=0)
+        numerical = table.numerical
+        mean = torch.nanmean(
+            numerical,
+            dim=-2,
+            keepdim=True,
+        )
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Replace NaNs with the fitted per-column means."""
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         numerical = torch.where(numerical.isnan(), self._mean, numerical)
         return table.replace_blocks(numerical=numerical)

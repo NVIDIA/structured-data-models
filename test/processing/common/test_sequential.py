@@ -7,7 +7,6 @@ import torch
 
 from sdm import (
     CategoricalTensor,
-    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
@@ -23,6 +22,7 @@ from sdm.processing import (
     Softmax,
     Standardize,
 )
+from sdm.tensor import EnsembleTable
 
 
 def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:
@@ -226,9 +226,9 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
 def test_sequential_ensemble_matches_member_execution() -> None:
     first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
     second = _table(torch.tensor([[2.0, 3.0], [4.0, 5.0]]))
-    table = EnsembleTable.from_representations(
-        (first, second),
-        member_representation_ids=(1, 0, 1),
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
     )
     processor = Sequential(
         Sequential(
@@ -245,19 +245,19 @@ def test_sequential_ensemble_matches_member_execution() -> None:
         expected = _add_one(
             source.replace_blocks(numerical=source.numerical.square())
         )
-        assert output.representation(member_id).equal(expected)
+        assert output.table(member_id).equal(expected)
 
 
-def test_sequential_ensemble_keeps_fitted_state_per_representation() -> None:
+def test_sequential_ensemble_keeps_fitted_state_per_group() -> None:
     first = TableTensor.from_tensor(
         torch.tensor([[1.0], [3.0]]), columns=("first",)
     )
     second = TableTensor.from_tensor(
         torch.tensor([[10.0], [14.0]]), columns=("second",)
     )
-    table = EnsembleTable.from_representations(
-        (first, second),
-        member_representation_ids=(0, 1),
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
     )
     processor = Sequential(Center())
 
@@ -265,9 +265,7 @@ def test_sequential_ensemble_keeps_fitted_state_per_representation() -> None:
     restored = processor.inverse_transform_ensemble(transformed)
 
     for member_id in range(table.num_members):
-        assert restored.representation(member_id).equal(
-            table.representation(member_id)
-        )
+        assert restored.table(member_id).equal(table.table(member_id))
 
 
 def test_sequential_ensemble_inverse_requires_fit() -> None:

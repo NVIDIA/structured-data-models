@@ -3,7 +3,6 @@ import torch
 
 from sdm import (
     CategoricalTensor,
-    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
@@ -17,6 +16,7 @@ from sdm.processing import (
     Standardize,
     StypeDispatch,
 )
+from sdm.tensor import EnsembleTable
 
 
 class Center(Processor, InvertibleMixin):
@@ -233,9 +233,9 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
     second = _mixed_table().replace_blocks(
         numerical=torch.tensor([[2.0, 3.0], [4.0, 5.0]])
     )
-    table = EnsembleTable.from_representations(
-        (first, second),
-        member_representation_ids=(1, 0, 1),
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
     )
     processor = StypeDispatch(
         numerical=lambda value: value.replace_blocks(
@@ -246,14 +246,12 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
     output = processor.transform_ensemble(table)
 
     for member_id, source in enumerate((second, first, second)):
-        result = output.representation(member_id)
+        result = output.table(member_id)
         assert torch.equal(result.numerical, source.numerical.square())
         assert torch.equal(result.categorical.code, source.categorical.code)
 
 
-def test_stype_dispatch_ensemble_keeps_fitted_state_per_representation() -> (
-    None
-):
+def test_stype_dispatch_ensemble_keeps_fitted_state_per_group() -> None:
     first = TableTensor.from_tensor(
         torch.tensor([[1.0], [3.0]]),
         columns=("first",),
@@ -262,9 +260,9 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_representation() -> (
         torch.tensor([[10.0], [14.0]]),
         columns=("second",),
     )
-    table = EnsembleTable.from_representations(
-        (first, second),
-        member_representation_ids=(0, 1, 0),
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0),
     )
     processor = StypeDispatch(numerical=Center())
 
@@ -273,18 +271,16 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_representation() -> (
     restored = processor.inverse_transform_ensemble(transformed)
 
     for member_id in range(table.num_members):
-        result = transformed.representation(member_id)
+        result = transformed.table(member_id)
         assert torch.allclose(
             result.numerical.mean(dim=-2),
             torch.zeros(1),
         )
-        assert query.representation(member_id).equal(result)
-        assert restored.representation(member_id).columns == (
-            table.representation(member_id).columns
+        assert query.table(member_id).equal(result)
+        assert restored.table(member_id).columns == (
+            table.table(member_id).columns
         )
-        assert restored.representation(member_id).equal(
-            table.representation(member_id)
-        )
+        assert restored.table(member_id).equal(table.table(member_id))
 
 
 def test_stype_dispatch_ensemble_inverse_rejects_drop() -> None:
@@ -304,9 +300,7 @@ def test_stype_dispatch_stateless_ensemble_inverse() -> None:
     restored = processor.inverse_transform_ensemble(transformed)
 
     for member_id in range(table.num_members):
-        assert restored.representation(member_id).equal(
-            table.representation(member_id)
-        )
+        assert restored.table(member_id).equal(table.table(member_id))
 
 
 def test_stype_dispatch_rejects_ensemble_transform_after_single_fit() -> None:

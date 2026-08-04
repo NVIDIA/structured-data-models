@@ -13,7 +13,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self, override
 
-from sdm import Stype, StypeLike
+from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.mixin import _resolve_device
@@ -220,6 +220,7 @@ class TableTensor(Tensor):
             text = StringTensor(
                 data=torch.empty(0, dtype=torch.uint8, device=device),
                 offset=torch.zeros(1, dtype=torch.int32, device=device),
+                valid=None,
                 size=(*size, 0),
             )
         if id is None:
@@ -491,7 +492,7 @@ class TableTensor(Tensor):
                     ser = ser.astype("datetime64[us]", copy=False)
                     ser = ser.astype("int64", copy=False)
                     if ser.null_count > 0:
-                        ser = ser.fillna(torch.iinfo(torch.int64).min)
+                        ser = ser.fillna(NaT)
                     tensor = torch.from_dlpack(ser.to_dlpack()).unsqueeze(-1)
                     tensor = tensor.to(device)
                 elif stype == Stype.text:
@@ -532,7 +533,7 @@ class TableTensor(Tensor):
                         for name, data, mask in zip(
                             self._columns[stype],
                             tensor,
-                            tensor != torch.iinfo(tensor.dtype).min,
+                            tensor != NaT,
                         )
                     }
                 )

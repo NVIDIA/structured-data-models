@@ -77,7 +77,7 @@ def test_power_transform_without_standardization_is_near_identity(
 
     assert torch.allclose(
         processor.lambdas,
-        torch.ones(1, dtype=inp.dtype, device=device),
+        torch.ones((1, 1), dtype=inp.dtype, device=device),
         atol=1e-5,
     )
     assert torch.allclose(transformed, inp, atol=1e-5)
@@ -104,7 +104,7 @@ def test_power_transform_learns_skewed_lambda(
         TableTensor.from_tensor(inp)
     )
     expected = torch.tensor(
-        [-0.057856304067531325],
+        [[-0.057856304067531325]],
         dtype=inp.dtype,
         device=device,
     )
@@ -125,7 +125,7 @@ def test_power_transform_constant_columns_use_identity_lambda(
     processor = PowerTransform().fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
-    assert torch.equal(processor.lambdas, torch.ones(2, device=device))
+    assert torch.equal(processor.lambdas, torch.ones((1, 2), device=device))
     assert torch.equal(transformed, torch.zeros_like(inp))
     assert transformed.device == device
     assert torch.equal(
@@ -164,3 +164,38 @@ def test_power_transform_inverse_overflow_with_positive_lambda_clamps_to_max(
     assert torch.isfinite(inverse).all()
     assert torch.equal(inverse, processor.max.reshape_as(inverse))
     assert inverse.device == device
+
+
+@withCUDA
+def test_power_transform_fits_leading_batches_independently(
+    device: torch.device,
+) -> None:
+    context = torch.tensor(
+        [
+            [[-2.0], [-1.0], [0.0], [1.0], [4.0]],
+            [[0.0], [1.0], [2.0], [8.0], [32.0]],
+        ],
+        dtype=torch.float64,
+        device=device,
+    )
+    query = torch.tensor([[[-0.5], [2.0]], [[1.5], [16.0]]], device=device)
+
+    processor = PowerTransform().fit(TableTensor.from_tensor(context))
+    actual = processor.transform(TableTensor.from_tensor(query)).numerical
+    expected = []
+    for batch in range(context.size(0)):
+        independent = PowerTransform().fit(
+            TableTensor.from_tensor(context[batch])
+        )
+        expected.append(
+            independent.transform(
+                TableTensor.from_tensor(query[batch])
+            ).numerical
+        )
+
+    torch.testing.assert_close(
+        actual,
+        torch.stack(expected),
+        rtol=2e-5,
+        atol=2e-5,
+    )
