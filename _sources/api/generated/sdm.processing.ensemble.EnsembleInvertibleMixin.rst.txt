@@ -1,0 +1,8 @@
+﻿EnsembleInvertibleMixin
+=======================
+
+.. currentmodule:: sdm.processing.ensemble
+
+.. autoclass:: EnsembleInvertibleMixin
+   :members:
+   :show-inheritance:

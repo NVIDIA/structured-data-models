@@ -99,6 +99,8 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.processing</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.Processor.html">Processor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html">Recipe</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.common.Callable.html">Callable</a></li>
@@ -206,6 +208,12 @@ data-aria-dark="Switch to auto color mode">
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p></td>
 <td><p>Extend a <code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code> by an inverse transformation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p></td>
+<td><p>Base processor for ensemble-aware table transformations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.ensemble.EnsembleInvertibleMixin.html#sdm.processing.ensemble.EnsembleInvertibleMixin" title="sdm.processing.ensemble.EnsembleInvertibleMixin"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleInvertibleMixin</span></code></a></p></td>
+<td><p>Extend a <code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code> by an inverse transformation.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.recipe.Recipe.html#sdm.processing.recipe.Recipe" title="sdm.processing.recipe.Recipe"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Recipe</span></code></a></p></td>
 <td><p>Processing contract around an external model boundary.</p></td>
@@ -357,7 +365,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=1f1b469f"></script>
+      <script src="../_static/documentation_options.js?v=ea8e88ac"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>

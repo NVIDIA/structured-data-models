@@ -1,0 +1,8 @@
+﻿EnsembleProcessor
+=================
+
+.. currentmodule:: sdm.processing.ensemble
+
+.. autoclass:: EnsembleProcessor
+   :members:
+   :show-inheritance:
