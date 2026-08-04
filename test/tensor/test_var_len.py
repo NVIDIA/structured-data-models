@@ -141,28 +141,30 @@ def test_arrow() -> None:
     assert array.values.to_pylist() == [2, 3]
     assert array.to_pylist() == [[2], [3]]
 
-    tensor = VarLenTensor.from_list([[1, 2], [], [3]])
-    array = cast(VarLenTensor, tensor[1:]).to_arrow()
-    assert array.offset == 1
-    assert array.to_pylist() == [[], [3]]
-    assert (
-        array.buffers()[1].address
-        == tensor._offset.numpy().__array_interface__["data"][0]
+    tensor = VarLenTensor.from_arrow(
+        pa.array([[1, 2], None, [3]], type=pa.list_(pa.int64())),
     )
-    assert (
-        array.values.buffers()[1].address
-        == tensor._data.numpy().__array_interface__["data"][0]
-    )
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().to_pylist() == [[1, 2], None, [3]]
+    assert tensor.tolist() == [[1, 2], None, [3]]
 
 
 def test_list() -> None:
-    tensor = VarLenTensor.from_list([[1, 2], [], [3]])
-    assert tensor.size() == (3,)
+    data = [
+        [[1, 2], [3, 4, 5]],
+        [[], [6]],
+        [[7, 8], None],
+    ]
+    tensor = VarLenTensor.from_list(data)
+    assert tensor.size() == (3, 2)
     assert tensor.dtype == torch.int64
-    assert tensor._data.equal(torch.tensor([1, 2, 3]))
-    assert tensor._offset.equal(torch.tensor([0, 2, 2, 3], dtype=torch.int32))
-    assert tensor.tolist() == [[1, 2], [], [3]]
-    assert tensor[0].item() == [1, 2]
+    assert tensor._data.equal(torch.tensor([1, 2, 3, 4, 5, 6, 7, 8]))
+    assert tensor._offset.equal(torch.tensor([0, 2, 5, 5, 6, 8, 8]))
+    assert tensor.tolist() == data
+    assert tensor[0, 0].item() == [1, 2]
+    assert tensor[1, 0].item() == []
+    assert tensor[2, 1].item() is None
 
 
 def test_to_copy() -> None:
