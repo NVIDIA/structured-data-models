@@ -1,7 +1,6 @@
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -46,7 +45,7 @@ class ClipSigma(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         min_std = numerical.new_tensor(1e-6)
 
         mean = numerical.mean(dim=0)
@@ -82,7 +81,7 @@ class ClipSigma(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Clip ``table`` using the fitted soft lower and upper bounds."""
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         log_abs = numerical.abs().log1p()
         clipped = torch.maximum(-log_abs + self.lower_bound, numerical)
         numerical = torch.minimum(log_abs + self.upper_bound, clipped)

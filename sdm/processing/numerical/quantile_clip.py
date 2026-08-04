@@ -1,6 +1,5 @@
 import torch
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -43,7 +42,7 @@ class ClipQuantiles(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         quantiles = numerical.new_tensor([self.q_low, self.q_high])
         q_low, q_high = torch.quantile(numerical, quantiles, dim=0)
         self.lower_bound = q_low
@@ -51,7 +50,7 @@ class ClipQuantiles(Processor):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Clamp ``table`` to the fitted lower and upper bounds."""
-        numerical = _as_float(table.numerical).clamp(
+        numerical = table.numerical.clamp(
             min=self.lower_bound,
             max=self.upper_bound,
         )
