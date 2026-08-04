@@ -10,6 +10,8 @@ from sdm.processing import (
 from sdm.tensor import EnsembleTable
 
 
+# TODO: Replace these stubs with real EnsembleProcessor subclasses once they
+# land, and exercise the EnsembleProcessor contract through those instead.
 class IdentityEnsembleProcessor(EnsembleProcessor):
     supported_stypes = frozenset({Stype.numerical})
 
