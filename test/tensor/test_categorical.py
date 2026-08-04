@@ -29,8 +29,8 @@ def test_to_copy_string_categories() -> None:
         assert out_category.tolist() == category.tolist()
 
 
-def test_rejects_null_string_categories() -> None:
-    with pytest.raises(ValueError, match="null string values"):
+def test_reject_nullable() -> None:
+    with pytest.raises(ValueError, match="null values"):
         CategoricalTensor(
             code=torch.tensor([[0], [-1]]),
             categories=(StringTensor.from_list(["a", None]),),
