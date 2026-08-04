@@ -50,8 +50,8 @@ class EnsembleTable:
         assert ensemble.table(0).equal(estimator_table1)
         assert ensemble.table(3).equal(estimator_table1)
 
-        # Processor code receives two groups of compatible tables.
-        groups = tuple(ensemble.groups())
+        # Processor code iterates over two groups of compatible tables.
+        groups = tuple(ensemble)
         assert len(groups) == 2
         assert groups[0].size() == (2, 2, 1)
         assert groups[1].size() == (1, 2, 1)
@@ -156,7 +156,7 @@ class EnsembleTable:
         return len(self._member_locations)
 
     def table(self, member_id: int) -> TableTensor:
-        """Return the table associated with one member for model execution.
+        """Return the table associated with one member.
 
         Args:
             member_id: Zero-based member index.
@@ -169,10 +169,33 @@ class EnsembleTable:
 
         Each group is a :class:`~sdm.tensor.TableTensor` with a leading
         dimension of size ``G``, where ``G`` is the number of distinct tables
-        in the group, not the number of members referencing them. Tables in a
-        group can be processed jointly.
+        in the group.
         """
         return iter(self._groups)
+
+    def repack(self, tables: Sequence[TableTensor]) -> Self:
+        """Pack processed tables while preserving their member associations.
+
+        ``tables`` must contain one result for each stored table, in iteration
+        order and then leading-dimension order within each group.
+        """
+        num_tables = sum(group.size(0) for group in self._groups)
+        if len(tables) != num_tables:
+            raise ValueError(
+                f"Expected {num_tables} processed tables, got {len(tables)}."
+            )
+
+        group_offsets: list[int] = []
+        offset = 0
+        for group in self._groups:
+            group_offsets.append(offset)
+            offset += group.size(0)
+
+        member_table_ids = tuple(
+            group_offsets[group_index] + position
+            for group_index, position in self._member_locations
+        )
+        return self.from_tables(tables, member_table_ids)
 
     def __iter__(self) -> Iterator[TableTensor]:
         return self.groups()
