@@ -8,6 +8,7 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing import (
+    EnsembleProcessor,
     Identity,
     ImputeMean,
     InvertibleMixin,
@@ -34,6 +35,25 @@ class Center(Processor, InvertibleMixin):
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         return table.replace_blocks(numerical=table.numerical + self.mean)
+
+
+class ExpandMembers(EnsembleProcessor):
+    supported_stypes = frozenset({Stype.numerical})
+    requires_fit = False
+
+    def _fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        return self._transform_ensemble(table)
+
+    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
+        return EnsembleTable(
+            table.table(0),
+            num_members=table.num_members + 1,
+        )
 
 
 def _mixed_table() -> TableTensor:
@@ -309,6 +329,14 @@ def test_stype_dispatch_rejects_ensemble_transform_after_single_fit() -> None:
 
     with pytest.raises(RuntimeError, match="fitted for a single table"):
         processor.transform_ensemble(EnsembleTable(table, num_members=2))
+
+
+def test_stype_dispatch_rejects_route_member_count_change() -> None:
+    table = EnsembleTable(_mixed_table(), num_members=2)
+    processor = StypeDispatch(numerical=ExpandMembers())
+
+    with pytest.raises(ValueError, match="preserve ensemble member count"):
+        processor.transform_ensemble(table)
 
 
 def test_stype_dispatch_ensemble_inverse_rejects_non_invertible_route() -> (

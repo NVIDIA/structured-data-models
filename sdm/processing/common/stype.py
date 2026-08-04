@@ -90,6 +90,14 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
                 [group.select_columns(()) for group in input_table]
             )
 
+        if any(
+            table.num_members != input_table.num_members
+            for table in ensemble_tables
+        ):
+            raise ValueError(
+                "StypeDispatch routes must preserve ensemble member count"
+            )
+
         same_storage_layout = True
         for ensemble_table in ensemble_tables:
             for member_id in range(input_table.num_members):
@@ -262,6 +270,8 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             )
             for stype in self._active_routes
         }
+        if self.remainder == "error":
+            self._remainder_ensemble(table)
         ensemble_tables = [
             cast(
                 EnsembleProcessor,
@@ -274,8 +284,6 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         ]
         if self.remainder == "passthrough":
             ensemble_tables.append(self._remainder_ensemble(table))
-        elif self.remainder == "error":
-            self._remainder_ensemble(table)
         return self._concatenate_ensemble_tables(ensemble_tables, table)
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
