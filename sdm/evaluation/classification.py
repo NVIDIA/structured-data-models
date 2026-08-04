@@ -69,10 +69,11 @@ def to_class_indices(
     columns = pred.columns[Stype.numerical]
     pred: Tensor = pred.numerical
 
+    if target.isnan().any():
+        raise ValueError("Expected target to not contain missing values")
+
     category = target.categories[0]
     code = target.code.squeeze(-1)
-    if target.isnan().squeeze(-1).any():
-        raise ValueError("Expected target to not contain missing values")
 
     if isinstance(category, StringTensor):
         classes = StringTensor.from_list(
