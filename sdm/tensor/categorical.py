@@ -392,13 +392,12 @@ class CategoricalTensor(Tensor):
                 for value, isna in zip(values, na_mask)
             ]
 
-        def decode_column(
-            code: Tensor,
-            category: Tensor,
-            na_mask: Tensor,
-        ) -> Any:
-            out = category[code.clamp(min=0)]
-            return apply_na_mask(out.tolist(), na_mask.tolist())
+        def decode_column(tensor: CategoricalTensor) -> Sequence[Any]:
+            out = tensor.categories[0][tensor.code.clamp(min=0).squeeze(-1)]
+            return apply_na_mask(
+                out.tolist(),
+                tensor.isnan().squeeze(-1).tolist(),
+            )
 
         def columns_to_rows(
             columns: Sequence[Any],
@@ -415,10 +414,9 @@ class CategoricalTensor(Tensor):
                 for i in range(size[0])
             ]
 
-        na_mask = self.isnan()
         columns = [
-            decode_column(self._code[..., i], category, na_mask[..., i])
-            for i, category in enumerate(self._categories)
+            decode_column(cast(CategoricalTensor, column))
+            for column in self.split(1, dim=-1)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
 
