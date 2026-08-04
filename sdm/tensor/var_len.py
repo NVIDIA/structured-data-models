@@ -12,6 +12,7 @@ from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import Self, override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
+from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 aten = torch.ops.aten
 
@@ -284,10 +285,7 @@ class VarLenTensor(Tensor):
             device: The device.
         """
         if isinstance(array, pa.ChunkedArray):
-            if array.num_chunks == 1:
-                array = array.chunk(0)
-            else:
-                array = array.combine_chunks()
+            array = _combine_arrow_chunks(array)
 
         if size is None:
             size = (len(array),)
@@ -313,7 +311,6 @@ class VarLenTensor(Tensor):
         dtype = ARROW_TORCH_DTYPES.get(array.values.type)
         if dtype is None:
             raise TypeError(f"Unsupported value type '{array.values.type}'")
-        offset_dtype = torch.int32 if is_list else torch.int64
 
         buffer = array.values.buffers()[1]
         if buffer is not None and buffer.size > 0:
@@ -323,27 +320,24 @@ class VarLenTensor(Tensor):
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
+        offset = torch.frombuffer(
+            array.buffers()[1],
+            dtype=torch.int32 if is_list else torch.int64,
+        )
         valid: Tensor | None = None
+        storage_offset = array.offset
         if array.null_count > 0:
-            offset = arrow_as_tensor(
-                array.offsets,
-                dtype=offset_dtype,
-                device=device,
-            )
+            offset = offset[array.offset : array.offset + len(array) + 1]
             valid = arrow_as_tensor(
                 array.is_valid(),
                 dtype=torch.bool,
                 device=device,
             )
             storage_offset = 0
-        else:
-            offset = torch.frombuffer(array.buffers()[1], dtype=offset_dtype)
-            offset = offset.to(device)
-            storage_offset = array.offset
 
         return cls(
             data=data,
-            offset=offset,
+            offset=offset.to(device),
             valid=valid,
             size=size,
             storage_offset=storage_offset,

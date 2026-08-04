@@ -31,6 +31,13 @@ def test_from_list() -> None:
     assert tensor._data.equal(torch.tensor([104, 105]))
     assert tensor._offset.equal(torch.tensor([0, 2]))
 
+    tensor = StringTensor.from_list(None)
+    assert repr(tensor) == "StringTensor(..., size=(), null_count=1)"
+    assert tensor.size() == ()
+    assert tensor.valid is not None
+    assert not bool(tensor.valid)
+    assert tensor.item() is None
+
 
 def test_arrow() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", "é", ""]))
@@ -278,7 +285,6 @@ def test_to_list_in_inference_mode(
 def test_item() -> None:
     assert StringTensor.from_list("é").item() == "é"
     assert StringTensor.from_list(["hi", "é"])[1].item() == "é"
-    assert str(StringTensor.from_list([""])) == ""
 
     with pytest.raises(RuntimeError, match="cannot be converted"):
         StringTensor.from_list(["hi", "é"]).item()
@@ -314,14 +320,43 @@ def test_sort(device: torch.device) -> None:
 
 def test_null_handling() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", None, "yo"]))
-    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().to_pylist() == ["hi", None, "yo"]
+    assert tensor.tolist() == ["hi", None, "yo"]
 
     tensor = StringTensor.from_list(["hi", None, "yo"])
-    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().to_pylist() == ["hi", None, "yo"]
+    assert tensor.tolist() == ["hi", None, "yo"]
+
+    tensor = StringTensor.from_list([["hi", None], ["", "yo"]])
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([[True, False], [True, True]]))
+    assert tensor.tolist() == [["hi", None], ["", "yo"]]
+
+    assert (tensor == "").equal(torch.tensor([[False, False], [True, False]]))
+    assert (tensor != "").equal(torch.tensor([[True, False], [False, True]]))
+
+    other = StringTensor.from_list([["hi", "x"], ["", None]])
+    assert (tensor == other).equal(
+        torch.tensor([[True, False], [True, False]])
+    )
+    assert (tensor != other).equal(
+        torch.tensor([[False, False], [False, False]])
+    )
 
 
 @onlyCUDA
 def test_cudf_null_handling() -> None:
     cudf = pytest.importorskip("cudf")
     tensor = StringTensor.from_cudf(cudf.Series(["hi", None, "yo"]))
-    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+    assert tensor.to_arrow().to_pylist() == ["hi", None, "yo"]
+
+    assert (tensor == "hi").equal(
+        torch.tensor([True, False, False], device="cuda")
+    )
+    assert (tensor != "hi").equal(
+        torch.tensor([False, False, True], device="cuda")
+    )
