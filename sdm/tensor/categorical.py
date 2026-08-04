@@ -106,6 +106,13 @@ class CategoricalTensor(Tensor):
                     f"Expected category {i} in {cls.__name__!r} to be "
                     f"one-dimensional (got {category.dim()}D)"
                 )
+            if isinstance(category, StringTensor) and bool(
+                category.isnan().any()
+            ):
+                raise ValueError(
+                    f"Expected category {i} in {cls.__name__!r} to not "
+                    "contain null string values"
+                )
 
         out = Tensor._make_wrapper_subclass(
             cls,

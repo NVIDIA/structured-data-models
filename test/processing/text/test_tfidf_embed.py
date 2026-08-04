@@ -109,6 +109,16 @@ def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
     assert output.columns[Stype.numerical] == ()
 
 
+def test_tfidf_encoder_null_text_yields_zero_features() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([[None], ["ab"]]))
+
+    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+
+    assert output.numerical.size(0) == 2
+    assert output.numerical[0].eq(0).all()
+    assert output.numerical[1].ne(0).any()
+
+
 def test_tfidf_encoder_short_word_counts_once() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
 
@@ -193,12 +203,20 @@ def test_tfidf_encoder_can_preserve_case() -> None:
             True,
             id="multi-column",
         ),
+        pytest.param(
+            [[None], ["ab"]],
+            None,
+            (2, 2),
+            None,
+            True,
+            id="null-text",
+        ),
     ],
 )
 @onlyCUDA
 def test_tfidf_encoder_cuda_matches_cpu(
-    train: list[list[str]],
-    query: list[list[str]] | None,
+    train: list[list[str | None]],
+    query: list[list[str | None]] | None,
     ngram_range: tuple[int, int],
     max_features: int | None,
     lowercase: bool,
