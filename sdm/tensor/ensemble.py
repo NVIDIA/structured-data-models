@@ -160,10 +160,10 @@ class EnsembleTable:
         return iter(self._groups)
 
     def _replace_groups(self, groups: Sequence[TableTensor]) -> Self:
-        table = self.__class__.__new__(self.__class__)
-        table._groups = tuple(groups)
-        table._member_locations = self._member_locations
-        return table
+        output = self.__class__.__new__(self.__class__)
+        output._groups = tuple(groups)
+        output._member_locations = self._member_locations
+        return output
 
     def __repr__(self) -> str:
         return (

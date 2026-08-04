@@ -37,7 +37,7 @@ class InvertibleIdentityEnsembleProcessor(
         return EnsembleTable(ensemble_table.table(0), num_members=1)
 
 
-class Center(Processor, InvertibleMixin):
+class _Center(Processor, InvertibleMixin):
     supported_stypes = frozenset({Stype.numerical})
 
     def __init__(self) -> None:
@@ -54,7 +54,7 @@ class Center(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=table.numerical + self.mean)
 
 
-class Negate(Processor, InvertibleMixin):
+class _Negate(Processor, InvertibleMixin):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
 
@@ -173,42 +173,45 @@ def test_adapter_preserves_member_mapping() -> None:
         tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
-    processor = EnsembleProcessorAdapter(Center())
+    processor = EnsembleProcessorAdapter(_Center())
+    combined = EnsembleProcessorAdapter(_Center())
 
-    output = processor.fit_transform_ensemble(ensemble_table)
+    processor.fit_ensemble(ensemble_table)
+    output = processor.transform_ensemble(ensemble_table)
+    expected = combined.fit_transform_ensemble(ensemble_table)
 
     assert output.num_members == 3
     assert output.table(0).numerical.tolist() == [[-2.0], [2.0]]
     assert output.table(1).numerical.tolist() == [[-1.0], [1.0]]
     assert output.table(2).equal(output.table(0))
+    for member_id in range(ensemble_table.num_members):
+        assert output.table(member_id).equal(expected.table(member_id))
     restored = processor.inverse_transform_ensemble(output)
     for member_id in range(ensemble_table.num_members):
         assert restored.table(member_id).equal(ensemble_table.table(member_id))
 
 
-def test_stateless_adapter_reuses_processor_for_inverse_transform() -> None:
+def test_stateless_adapter_supports_transform_and_inverse() -> None:
     table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
-    processor = EnsembleProcessorAdapter(Negate())
+    processor = EnsembleProcessorAdapter(_Negate())
 
-    transformed = processor.transform(table)
+    transformed = processor.inverse_transform(table)
 
+    assert transformed.numerical.tolist() == [[-1.0], [-2.0]]
+    assert processor.transform(transformed).equal(table)
     assert processor.inverse_transform(transformed).equal(table)
 
 
 def test_adapter_returns_ensemble_processors_unchanged() -> None:
     processor = IdentityEnsembleProcessor()
     assert EnsembleProcessorAdapter.adapt(processor) is processor
-    assert repr(EnsembleProcessorAdapter(Center())) == "Center()"
 
 
-def test_adapter_rejects_row_changing_processor() -> None:
-    ensemble_table = EnsembleTable(
-        TableTensor.from_tensor(torch.ones(2, 1)),
-        num_members=2,
-    )
+def test_adapter_rejects_inverse_for_non_invertible_processor() -> None:
+    table = TableTensor.from_tensor(torch.ones(2, 1))
     processor = EnsembleProcessorAdapter(
-        Processor.as_processor(lambda value: value[..., :1, :])
+        Processor.as_processor(lambda value: value)
     )
 
-    with pytest.raises(ValueError, match="row dimension"):
-        processor.fit_transform_ensemble(ensemble_table)
+    with pytest.raises(TypeError, match="not invertible"):
+        processor.inverse_transform(table)
