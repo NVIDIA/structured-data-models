@@ -5,7 +5,7 @@ from sdm.tensor.string import StringTensor
 from sdm.tensor.categorical import CategoricalTensor
 from sdm.tensor.columnar import ColumnarTensor
 from sdm.tensor.table import TableTensor
-from sdm.tensor.ensemble import EnsembleTable
+from sdm.tensor.ensemble import EnsembleTensor
 
 __all__ = [
     "VarLenTensor",
@@ -13,5 +13,5 @@ __all__ = [
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
-    "EnsembleTable",
+    "EnsembleTensor",
 ]
