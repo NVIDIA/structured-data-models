@@ -268,6 +268,22 @@ def test_sequential_ensemble_keeps_fitted_state_per_group() -> None:
         assert restored.table(member_id).equal(table.table(member_id))
 
 
+def test_sequential_fit_ensemble_fits_each_step_on_previous_output() -> None:
+    table = EnsembleTable(
+        TableTensor.from_tensor(torch.tensor([[1.0], [3.0]])),
+        num_members=2,
+    )
+    fitted = Sequential(Center(), _add_one)
+    combined = Sequential(Center(), _add_one)
+
+    fitted.fit_ensemble(table)
+    transformed = fitted.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(table)
+
+    for member_id in range(table.num_members):
+        assert transformed.table(member_id).equal(expected.table(member_id))
+
+
 def test_sequential_ensemble_inverse_requires_fit() -> None:
     table = EnsembleTable(_table(), num_members=2)
 
