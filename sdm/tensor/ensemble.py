@@ -9,7 +9,7 @@ from typing_extensions import Self
 from sdm.tensor.table import TableTensor
 
 
-class EnsembleTensor:
+class EnsembleTable:
     """Store and group input tables for an ensemble.
 
     Each ensemble member is associated with one table. Shared tables are stored
@@ -18,12 +18,12 @@ class EnsembleTensor:
     remain in separate groups.
 
     Use :meth:`table` to access a member's table. Iterate over the
-    :class:`EnsembleTensor` to process its groups.
+    :class:`EnsembleTable` to process its groups.
 
     .. testcode::
 
         import torch
-        from sdm.tensor import EnsembleTensor, TableTensor
+        from sdm.tensor import EnsembleTable, TableTensor
 
         estimator_table1 = TableTensor.from_tensor(
             tensor=torch.tensor([[1.0], [2.0]]),
@@ -38,7 +38,7 @@ class EnsembleTensor:
             columns=("selected_value",),
         )
 
-        ensemble = EnsembleTensor.from_tables(
+        ensemble = EnsembleTable.from_tables(
             tables=(estimator_table1, estimator_table2, estimator_table3),
             member_table_ids=(0, 1, 2, 0),
         )
