@@ -66,7 +66,7 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 # Python/PyTorch Coding Style
 
 - Keep Python code typed at function and method boundaries.
-- Keep parameter validation minimal: only reject values that could otherwise be silently accepted, and raise for unsupported `Literal` values when dispatching on them rather than in constructors.
+- Keep argument validation minimal: only reject values that could otherwise be silently accepted, and raise for unsupported `Literal` values when dispatching on them rather than in constructors.
 - Use keyword arguments in multi-line calls.
 - Avoid `else` after `return`, `raise`, `break`, or `continue`.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
