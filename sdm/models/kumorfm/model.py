@@ -5,8 +5,7 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Relationship, Stype, TableTensor
-from sdm._constants import NaT
+from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint

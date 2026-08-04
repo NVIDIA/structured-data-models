@@ -5,8 +5,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sdm import Stype, TableTensor
-from sdm._constants import NaT
+from sdm import NaT, Stype, TableTensor
 from sdm.relational.data import RelationalData
 from sdm.relational.join import join_index
 from sdm.relational.sampler import (

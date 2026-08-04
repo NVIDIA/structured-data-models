@@ -13,8 +13,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self, override
 
-from sdm import Stype, StypeLike
-from sdm._constants import NaT
+from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.mixin import _resolve_device

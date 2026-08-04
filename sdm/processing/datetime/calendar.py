@@ -4,8 +4,7 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import Stype
-from sdm._constants import NaT
+from sdm import NaT, Stype
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
