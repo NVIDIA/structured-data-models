@@ -25,6 +25,7 @@ def test_clip_quantiles_bounds_and_transform(device: torch.device) -> None:
         inp,
         torch.tensor([0.25, 0.75], device=device),
         dim=0,
+        keepdim=True,
     )
     expected = inp.clamp(min=expected_bounds[0], max=expected_bounds[1])
 
@@ -48,11 +49,11 @@ def test_clip_quantiles_default_uses_min_max_bounds(
 
     assert torch.equal(
         processor.lower_bound,
-        torch.tensor([0.0, 5.0], device=device),
+        torch.tensor([[0.0, 5.0]], device=device),
     )
     assert torch.equal(
         processor.upper_bound,
-        torch.tensor([4.0, 9.0], device=device),
+        torch.tensor([[4.0, 9.0]], device=device),
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
@@ -70,10 +71,10 @@ def test_clip_quantiles_constant_columns_are_exact(
     )
 
     assert torch.equal(
-        processor.lower_bound, torch.full((2,), 3.0, device=device)
+        processor.lower_bound, torch.full((1, 2), 3.0, device=device)
     )
     assert torch.equal(
-        processor.upper_bound, torch.full((2,), 3.0, device=device)
+        processor.upper_bound, torch.full((1, 2), 3.0, device=device)
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)

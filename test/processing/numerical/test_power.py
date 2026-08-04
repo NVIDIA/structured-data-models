@@ -77,7 +77,7 @@ def test_power_transform_without_standardization_is_near_identity(
 
     assert torch.allclose(
         processor.lambdas,
-        torch.ones(1, dtype=inp.dtype, device=device),
+        torch.ones((1, 1), dtype=inp.dtype, device=device),
         atol=1e-5,
     )
     assert torch.allclose(transformed, inp, atol=1e-5)
@@ -104,7 +104,7 @@ def test_power_transform_learns_skewed_lambda(
         TableTensor.from_tensor(inp)
     )
     expected = torch.tensor(
-        [-0.057856304067531325],
+        [[-0.057856304067531325]],
         dtype=inp.dtype,
         device=device,
     )
@@ -125,7 +125,7 @@ def test_power_transform_constant_columns_use_identity_lambda(
     processor = PowerTransform().fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
-    assert torch.equal(processor.lambdas, torch.ones(2, device=device))
+    assert torch.equal(processor.lambdas, torch.ones((1, 2), device=device))
     assert torch.equal(transformed, torch.zeros_like(inp))
     assert transformed.device == device
     assert torch.equal(

@@ -10,10 +10,9 @@ def _std(
     inp: Tensor,
     *,
     dim: int,
-    keepdim: bool = False,
 ) -> Tensor:
     correction = 1 if inp.size(dim) > 1 else 0
-    return inp.std(dim=dim, correction=correction, keepdim=keepdim)
+    return inp.std(dim=dim, correction=correction, keepdim=True)
 
 
 class ClipSigma(Processor):
@@ -51,15 +50,13 @@ class ClipSigma(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        keepdim = numerical.dim() > 2
         min_std = numerical.new_tensor(1e-6)
 
-        mean = numerical.mean(dim=-2, keepdim=keepdim)
+        mean = numerical.mean(dim=-2, keepdim=True)
         std = torch.maximum(
             _std(
                 numerical,
                 dim=-2,
-                keepdim=keepdim,
             ),
             min_std,
         )
@@ -68,13 +65,13 @@ class ClipSigma(Processor):
         outlier_mask = (numerical < lower_bound) | (numerical > upper_bound)
 
         keep = ~outlier_mask
-        count = keep.sum(dim=-2, keepdim=keepdim)
+        count = keep.sum(dim=-2, keepdim=True)
         safe_count = count.clamp_min(1)
         clean_sum = torch.where(
             keep,
             numerical,
             0.0,
-        ).sum(dim=-2, keepdim=keepdim)
+        ).sum(dim=-2, keepdim=True)
         mean_clean = clean_sum / safe_count
         centered = torch.where(
             keep,
@@ -84,7 +81,7 @@ class ClipSigma(Processor):
         correction = (count > 1).to(count.dtype)
         denominator = (count - correction).clamp_min(1)
         std_clean = (
-            centered.square().sum(dim=-2, keepdim=keepdim) / denominator
+            centered.square().sum(dim=-2, keepdim=True) / denominator
         ).sqrt()
 
         has_clean = count > 0

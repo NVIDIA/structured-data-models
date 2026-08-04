@@ -48,7 +48,7 @@ class ClipQuantiles(Processor):
             numerical,
             quantiles,
             dim=-2,
-            keepdim=numerical.dim() > 2,
+            keepdim=True,
         )
         self.lower_bound = q_low
         self.upper_bound = q_high

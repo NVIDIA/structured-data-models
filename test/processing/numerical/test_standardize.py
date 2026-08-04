@@ -23,15 +23,17 @@ def test_standardize_fit_transform_and_inverse_round_trip(
 
     processor = Standardize().fit(inp)
     expected_mean = torch.tensor(
-        [3.0, 2.0, 7.0],
+        [[3.0, 2.0, 7.0]],
         dtype=torch.float64,
         device=device,
     )
     expected_scale = torch.tensor(
         [
-            torch.sqrt(torch.tensor(8.0 / 3.0)),
-            1.0,
-            torch.sqrt(torch.tensor(8.0 / 3.0)),
+            [
+                torch.sqrt(torch.tensor(8.0 / 3.0)),
+                1.0,
+                torch.sqrt(torch.tensor(8.0 / 3.0)),
+            ]
         ],
         dtype=torch.float64,
         device=device,
@@ -59,8 +61,8 @@ def test_standardize_without_mean_or_std(device: torch.device) -> None:
         TableTensor.from_tensor(inp)
     )
 
-    assert torch.equal(processor.mean, torch.zeros(2, device=device))
-    assert torch.equal(processor.scale, torch.ones(2, device=device))
+    assert torch.equal(processor.mean, torch.zeros((1, 2), device=device))
+    assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
     assert transformed.device == device
@@ -75,7 +77,7 @@ def test_standardize_single_sample_uses_unit_scale(
     processor = Standardize().fit(TableTensor.from_tensor(inp))
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
-    assert torch.equal(processor.scale, torch.ones(2, device=device))
+    assert torch.equal(processor.scale, torch.ones((1, 2), device=device))
     assert torch.equal(transformed, torch.zeros_like(inp))
     assert transformed.device == device
     assert torch.equal(

@@ -63,15 +63,13 @@ class ImputeMode(Processor):
                 codes.clamp_min(0).to(torch.long),
                 observed.to(torch.long),
             )
-            fill_values.append(counts.argmax(dim=-1))
+            fill_values.append(counts.argmax(dim=-1, keepdim=True))
 
         self._fill_values = (
             torch.stack(fill_values, dim=-1)
             if len(fill_values) > 0
             else torch.empty(0, dtype=torch.long, device=data.device)
         )
-        if data.dim() > 2:
-            self._fill_values = self._fill_values.unsqueeze(-2)
         self._categories = table.categorical.categories
 
     def _transform(self, table: TableTensor) -> TableTensor:

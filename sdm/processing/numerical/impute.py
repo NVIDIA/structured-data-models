@@ -38,7 +38,7 @@ class ImputeMean(Processor):
         mean = torch.nanmean(
             numerical,
             dim=-2,
-            keepdim=numerical.dim() > 2,
+            keepdim=True,
         )
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
