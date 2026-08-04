@@ -15,9 +15,9 @@ class IdentityEnsembleProcessor(EnsembleProcessor):
 
     def _transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        return table
+        return ensemble_table
 
 
 class ExpandingEnsembleProcessor(IdentityEnsembleProcessor):
@@ -25,9 +25,9 @@ class ExpandingEnsembleProcessor(IdentityEnsembleProcessor):
 
     def _transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        return EnsembleTable(table.table(0), num_members=2)
+        return EnsembleTable(ensemble_table.table(0), num_members=2)
 
 
 class InvertibleIdentityEnsembleProcessor(
@@ -39,9 +39,9 @@ class InvertibleIdentityEnsembleProcessor(
 
     def _inverse_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        return EnsembleTable(table.table(0), num_members=1)
+        return EnsembleTable(ensemble_table.table(0), num_members=1)
 
 
 def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
@@ -53,55 +53,55 @@ def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
         torch.tensor([[3.0], [4.0]]),
         columns=("second",),
     )
-    table = EnsembleTable.from_tables(
+    ensemble_table = EnsembleTable.from_tables(
         tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
     processor = IdentityEnsembleProcessor()
 
-    output = processor.fit_transform_ensemble(table)
+    output = processor.fit_transform_ensemble(ensemble_table)
 
-    assert output is table
+    assert output is ensemble_table
     assert output.num_members == 3
     assert output.table(0).columns == second.columns
     assert output.table(1).columns == first.columns
     assert output.table(2).columns == second.columns
-    assert processor.transform_ensemble(table) is table
+    assert processor.transform_ensemble(ensemble_table) is ensemble_table
 
 
 def test_ensemble_processor_requires_fit_before_transform() -> None:
-    data = TableTensor.from_tensor(torch.ones(2, 1))
-    table = EnsembleTable(data, num_members=2)
+    table = TableTensor.from_tensor(torch.ones(2, 1))
+    ensemble_table = EnsembleTable(table, num_members=2)
     processor = IdentityEnsembleProcessor()
 
     with pytest.raises(RuntimeError, match="not fitted"):
-        processor.transform_ensemble(table)
+        processor.transform_ensemble(ensemble_table)
 
-    assert processor.fit_ensemble(table) is processor
-    assert processor.transform_ensemble(table) is table
+    assert processor.fit_ensemble(ensemble_table) is processor
+    assert processor.transform_ensemble(ensemble_table) is ensemble_table
 
 
 def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
-    data = TableTensor.from_tensor(torch.ones(2, 1))
-    table = EnsembleTable(data, num_members=2)
+    table = TableTensor.from_tensor(torch.ones(2, 1))
+    ensemble_table = EnsembleTable(table, num_members=2)
     processor = InvertibleIdentityEnsembleProcessor()
 
     with pytest.raises(RuntimeError, match="not fitted"):
-        processor.inverse_transform_ensemble(table)
+        processor.inverse_transform_ensemble(ensemble_table)
 
-    processor.fit_transform_ensemble(table)
-    output = processor.inverse_transform_ensemble(table)
+    processor.fit_transform_ensemble(ensemble_table)
+    output = processor.inverse_transform_ensemble(ensemble_table)
 
     assert output.num_members == 1
-    assert output.table(0).equal(data)
+    assert output.table(0).equal(table)
 
 
 def test_ensemble_processor_rejects_unsupported_stype() -> None:
-    data = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
-    table = EnsembleTable(data, num_members=2)
+    table = TableTensor.from_tensor(torch.ones(2, 1, dtype=torch.int64))
+    ensemble_table = EnsembleTable(table, num_members=2)
 
     with pytest.raises(ValueError, match="categorical"):
-        IdentityEnsembleProcessor().fit_transform_ensemble(table)
+        IdentityEnsembleProcessor().fit_transform_ensemble(ensemble_table)
 
 
 def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:
@@ -117,29 +117,35 @@ def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:
 
 
 def test_ensemble_processor_passthrough_for_empty_supported_blocks() -> None:
-    empty = EnsembleTable(
+    empty_ensemble_table = EnsembleTable(
         TableTensor.from_tensor(torch.empty(2, 0)),
         num_members=2,
     )
-    data = EnsembleTable(
+    ensemble_table = EnsembleTable(
         TableTensor.from_tensor(torch.ones(2, 1)),
         num_members=2,
     )
     processor = IdentityEnsembleProcessor()
 
-    assert processor.fit_ensemble(empty) is processor
-    assert processor.fit_transform_ensemble(empty) is empty
-    assert processor.transform_ensemble(empty) is empty
+    assert processor.fit_ensemble(empty_ensemble_table) is processor
+    assert (
+        processor.fit_transform_ensemble(empty_ensemble_table)
+        is empty_ensemble_table
+    )
+    assert (
+        processor.transform_ensemble(empty_ensemble_table)
+        is empty_ensemble_table
+    )
     with pytest.raises(RuntimeError, match="not fitted"):
-        processor.transform_ensemble(data)
+        processor.transform_ensemble(ensemble_table)
 
 
 def test_only_ensemble_api_accepts_multiple_output_members() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
-    ensemble = EnsembleTable(table, num_members=1)
+    ensemble_table = EnsembleTable(table, num_members=1)
     processor = ExpandingEnsembleProcessor()
 
-    assert processor.transform_ensemble(ensemble).num_members == 2
+    assert processor.transform_ensemble(ensemble_table).num_members == 2
     with pytest.raises(RuntimeError, match="transform_ensemble"):
         processor.transform(table)
     with pytest.raises(RuntimeError, match="transform_ensemble"):

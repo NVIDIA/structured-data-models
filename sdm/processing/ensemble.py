@@ -50,7 +50,7 @@ class EnsembleProcessor(Processor):
 
     def _fit_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
@@ -59,86 +59,89 @@ class EnsembleProcessor(Processor):
     @abc.abstractmethod
     def _transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable: ...
 
     def _fit_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         if self.requires_fit:
-            self._fit_ensemble(table, generator=generator)
-        return self._transform_ensemble(table)
+            self._fit_ensemble(ensemble_table, generator=generator)
+        return self._transform_ensemble(ensemble_table)
 
     def fit_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> Self:
         """Fit the processor on an ensemble table.
 
         Args:
-            table: Ensemble table used to compute the processor state.
+            ensemble_table: Ensemble table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        for group in table:
+        for group in ensemble_table:
             self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes for group in table
+            group.active_stypes & self.supported_stypes
+            for group in ensemble_table
         ):
             return self
         if self.requires_fit:
-            self._fit_ensemble(table, generator=generator)
+            self._fit_ensemble(ensemble_table, generator=generator)
             self._fitted = True
         return self
 
     def transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         """Transform an ensemble table with fitted state.
 
         Args:
-            table: Ensemble table to transform.
+            ensemble_table: Ensemble table to transform.
 
         Returns:
             The transformed ensemble table.
         """
-        for group in table:
+        for group in ensemble_table:
             self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes for group in table
+            group.active_stypes & self.supported_stypes
+            for group in ensemble_table
         ):
-            return table
+            return ensemble_table
         self._check_is_fitted()
-        return self._transform_ensemble(table)
+        return self._transform_ensemble(ensemble_table)
 
     def fit_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         """Fit the processor and transform an ensemble table.
 
         Args:
-            table: Ensemble table to fit on and transform.
+            ensemble_table: Ensemble table to fit on and transform.
             generator: Pseudorandom number generator used for sampling.
 
         Returns:
             The transformed ensemble table.
         """
-        for group in table:
+        for group in ensemble_table:
             self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes for group in table
+            group.active_stypes & self.supported_stypes
+            for group in ensemble_table
         ):
-            return table
+            return ensemble_table
         output = self._fit_transform_ensemble(
-            table,
+            ensemble_table,
             generator=generator,
         )
         if self.requires_fit:
@@ -151,20 +154,20 @@ class EnsembleInvertibleMixin(InvertibleMixin):
 
     @abc.abstractmethod
     def _inverse_transform_ensemble(
-        self, table: EnsembleTable
+        self, ensemble_table: EnsembleTable
     ) -> EnsembleTable: ...
 
     def inverse_transform_ensemble(
-        self, table: EnsembleTable
+        self, ensemble_table: EnsembleTable
     ) -> EnsembleTable:
-        r"""Apply the inverse transformation to ``ensemble table``.
+        r"""Apply the inverse transformation to ``ensemble_table``.
 
         Args:
-            table: The ensemble table in transformed representation.
+            ensemble_table: The ensemble table in transformed representation.
 
         Returns:
             The table restored to the representation before
             :meth:`~EnsembleProcessor.transform_ensemble`.
         """
         self._check_is_fitted()
-        return self._inverse_transform_ensemble(table)
+        return self._inverse_transform_ensemble(ensemble_table)
