@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from sdm import TableTensor
@@ -39,3 +40,11 @@ def test_softmax_is_numerically_stable(
 
     assert torch.isfinite(output).all()
     assert torch.allclose(output.sum(dim=-1), torch.ones(2, device=device))
+
+
+@pytest.mark.parametrize("temperature", [0.0, -1.0])
+def test_softmax_rejects_nonpositive_temperature(
+    temperature: float,
+) -> None:
+    with pytest.raises(ValueError, match="positive"):
+        Softmax(temperature=temperature)

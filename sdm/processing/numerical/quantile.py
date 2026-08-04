@@ -100,6 +100,10 @@ class QuantileTransform(Processor, InvertibleMixin):
         output_distribution: Literal["uniform", "normal"] = "uniform",
     ) -> None:
         super().__init__()
+        if n_quantiles <= 0:
+            raise ValueError("n_quantiles must be positive.")
+        if subsample is not None and subsample <= 0:
+            raise ValueError("subsample must be positive or None.")
         self._n_quantiles = n_quantiles
         self.subsample = subsample
         self.output_distribution = output_distribution

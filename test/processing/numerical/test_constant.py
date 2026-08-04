@@ -89,8 +89,12 @@ def test_variance_filter(device: torch.device) -> None:
     assert output.device == device
 
 
-def test_drop_constant_columns_rejects_ignored_arguments() -> None:
+def test_drop_constant_columns_rejects_invalid_arguments() -> None:
     with pytest.raises(ValueError, match="tolerance must be None"):
         DropConstantColumns(tolerance=1e-6)
     with pytest.raises(ValueError, match="threshold must be None"):
         DropConstantColumns(method="variance", threshold=1)
+    with pytest.raises(ValueError, match="threshold must be positive"):
+        DropConstantColumns(threshold=0)
+    with pytest.raises(ValueError, match="tolerance must be non-negative"):
+        DropConstantColumns(method="variance", tolerance=-1.0)

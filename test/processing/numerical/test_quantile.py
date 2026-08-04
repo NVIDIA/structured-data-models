@@ -6,6 +6,16 @@ from sdm.processing import QuantileTransform
 from sdm.testing import onlyCUDA, withCUDA
 
 
+def test_quantile_transform_rejects_nonpositive_n_quantiles() -> None:
+    with pytest.raises(ValueError, match="n_quantiles"):
+        QuantileTransform(n_quantiles=0)
+
+
+def test_quantile_transform_rejects_nonpositive_subsample() -> None:
+    with pytest.raises(ValueError, match="subsample"):
+        QuantileTransform(subsample=0)
+
+
 @withCUDA
 def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
     device: torch.device,

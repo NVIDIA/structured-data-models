@@ -52,6 +52,12 @@ class DropConstantColumns(Processor):
                 "threshold must be None when method is 'variance'"
             )
 
+        if threshold is not None and threshold <= 0:
+            raise ValueError("threshold must be positive")
+
+        if tolerance is not None and tolerance < 0:
+            raise ValueError("tolerance must be non-negative")
+
         self.method = method
         self.threshold = 1 if threshold is None else threshold
         self.tolerance = 1e-6 if tolerance is None else tolerance

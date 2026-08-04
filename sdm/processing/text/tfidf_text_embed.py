@@ -43,8 +43,10 @@ class TfidfTextEmbed(Processor):
     ) -> None:
         super().__init__()
         min_n, max_n = ngram_range
-        if max_n < min_n:
-            raise ValueError("ngram_range must satisfy min_n <= max_n.")
+        if min_n < 1 or max_n < min_n:
+            raise ValueError("ngram_range must satisfy 1 <= min_n <= max_n.")
+        if max_features is not None and max_features <= 0:
+            raise ValueError("max_features must be positive or None.")
         self.ngram_range = ngram_range
         self.max_features = max_features
         self.lowercase = lowercase

@@ -35,6 +35,8 @@ class ClipSigma(Processor):
         threshold: float = 4.0,
     ) -> None:
         super().__init__()
+        if threshold <= 0:
+            raise ValueError("threshold must be positive.")
         self.threshold = threshold
         self.register_buffer("_mean", torch.empty(0))
         self.register_buffer("_std", torch.empty(0))

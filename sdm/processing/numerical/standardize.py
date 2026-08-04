@@ -30,6 +30,8 @@ class Standardize(Processor, InvertibleMixin):
         epsilon: float = 0.0,
     ) -> None:
         super().__init__()
+        if epsilon < 0:
+            raise ValueError("epsilon must be non-negative.")
         self.with_mean = with_mean
         self.with_std = with_std
         self.epsilon = epsilon

@@ -25,6 +25,8 @@ class Softmax(Processor):
         temperature: float = 1.0,
     ) -> None:
         super().__init__()
+        if temperature <= 0:
+            raise ValueError("temperature must be positive.")
         self.temperature = temperature
 
     def _transform(self, table: TableTensor) -> TableTensor:
