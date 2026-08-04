@@ -90,13 +90,14 @@ class ShuffleCategories(Processor):
     def _transform(self, table: TableTensor) -> TableTensor:
         offsets = self.offsets.tolist()
         code = table.categorical.code.clone()
+        valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
             permutation = self.permutations[
                 offsets[index] : offsets[index + 1]
             ]
             codes = code[..., index]
-            valid = codes >= 0
+            valid = valid_mask[..., index]
             if valid.any():
                 valid_codes = codes[valid].to(torch.long)
                 max_code = int(valid_codes.max().item())

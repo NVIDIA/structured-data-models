@@ -202,7 +202,12 @@ class ColumnarTensor(Tensor):
             )
 
         return pa.Table.from_arrays(
-            arrays=[to_arrow(column) for column in self.unbind(-1)],
+            arrays=[
+                column.to_arrow()
+                if isinstance(column, StringTensor)
+                else to_arrow(column)
+                for column in self.unbind(-1)
+            ],
             names=names,
         )
 
@@ -224,7 +229,9 @@ class ColumnarTensor(Tensor):
 
         return cudf.DataFrame(
             {
-                name: to_cudf(column)
+                name: column.to_cudf()
+                if isinstance(column, StringTensor)
+                else to_cudf(column)
                 for name, column in zip(names, self.unbind(-1))
             },
         )
