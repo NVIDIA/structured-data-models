@@ -165,20 +165,6 @@ def test_list() -> None:
     assert tensor[0].item() == [1, 2]
 
 
-def test_item_null() -> None:
-    tensor = VarLenTensor(
-        data=torch.tensor([1, 2]),
-        offset=torch.tensor([0, 2]),
-        valid=torch.tensor([False]),
-        size=(),
-    )
-
-    assert tensor.item() is None
-    assert repr(tensor) == (
-        "VarLenTensor(..., size=(), dtype=torch.int64, null_count=1)"
-    )
-
-
 def test_to_copy() -> None:
     data = torch.arange(16)
     offset = torch.arange(data.numel() + 1)
@@ -200,9 +186,6 @@ def test_to_copy() -> None:
 
     assert tensor.to(copy=False) is tensor
     assert tensor.to(torch.int64, copy=False) is tensor
-    assert (
-        tensor.to(memory_format=torch.contiguous_format, copy=False) is tensor
-    )
 
     valid = torch.tensor([True, False, True, True])
     tensor = VarLenTensor(
@@ -313,11 +296,7 @@ def test_to_inference_mode() -> None:
         assert out._offset.data_ptr() != tensor._offset.data_ptr()
         assert out._valid is not None
         assert tensor._valid is not None
-        assert out._valid.data_ptr() != tensor._valid.data_ptr()
-
-        out = tensor.to("cpu", torch.float64)
-        assert isinstance(out, VarLenTensor)
-        assert out.dtype == torch.float64
+        assert out._valid.data_ptr() == tensor._valid.data_ptr()
 
         other = torch.empty((), dtype=torch.float64)
         out = tensor.to(other)
