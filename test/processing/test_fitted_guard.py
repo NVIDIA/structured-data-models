@@ -55,6 +55,13 @@ class StatelessProcessor(Processor):
         return table.replace_blocks(numerical=table.numerical + 1)
 
 
+class MultiStypeProcessor(Processor):
+    supported_stypes = frozenset({Stype.numerical, Stype.categorical})
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table
+
+
 def test_stateless_processor_runs_without_fit() -> None:
     processor = StatelessProcessor()
     inp = torch.ones(2, 2)
@@ -118,6 +125,19 @@ def test_single_stype_processor_passes_empty_block_through() -> None:
     assert transformed.schema == table.schema
     assert fit_transformed.size() == table.size()
     assert fit_transformed.schema == table.schema
+
+
+def test_multi_stype_processor_requires_one_nonempty_supported_block() -> None:
+    empty = TableTensor.from_tensor(torch.empty(3, 0))
+    nonempty = TableTensor.from_tensor(torch.ones(3, 1))
+    processor = MultiStypeProcessor()
+
+    transformed = processor.transform(empty)
+
+    assert transformed.size() == empty.size()
+    assert transformed.schema == empty.schema
+    with pytest.raises(RuntimeError, match="not fitted"):
+        processor.transform(nonempty)
 
 
 def test_fitting_empty_block_does_not_fit_nonempty_inputs() -> None:

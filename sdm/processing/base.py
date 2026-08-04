@@ -26,13 +26,12 @@ class Processor(torch.nn.Module, abc.ABC):
     dimension and, unless an explicit batch contract says otherwise, process
     every leading table position independently.
 
-    Processors that support exactly one semantic type pass tables with an
-    empty block of that type through unchanged. Fitting such an input skips
+    Processors pass tables through unchanged when all blocks for their
+    supported semantic types are empty. Fitting such an input skips
     processor-specific work and leaves the processor unfitted.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
-    _pass_empty_blocks: ClassVar[bool] = True
     requires_fit: bool = True
 
     def __init__(self) -> None:
@@ -80,10 +79,9 @@ class Processor(torch.nn.Module, abc.ABC):
             )
 
     def _is_empty_block(self, table: TableTensor) -> bool:
-        if not self._pass_empty_blocks or len(self.supported_stypes) != 1:
-            return False
-        stype = next(iter(self.supported_stypes))
-        return len(table.columns[stype]) == 0
+        return all(
+            len(table.columns[stype]) == 0 for stype in self.supported_stypes
+        )
 
     def _fit(
         self,
