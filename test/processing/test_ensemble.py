@@ -2,30 +2,16 @@ import pytest
 import torch
 
 from sdm import Stype, TableTensor
-from sdm.processing import (
-    EnsembleInvertibleMixin,
-    EnsembleProcessor,
-    Processor,
-)
+from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.tensor import EnsembleTable
 
 
 # TODO: Replace these stubs with real EnsembleProcessor subclasses once they
 # land, and exercise the EnsembleProcessor contract through those instead.
+# Generator forwarding is only observable through a stochastic transformation
+# and is therefore left to those processors as well.
 class IdentityEnsembleProcessor(EnsembleProcessor):
     supported_stypes = frozenset({Stype.numerical})
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.generator: torch.Generator | None = None
-
-    def _fit_ensemble(
-        self,
-        table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        self.generator = generator
 
     def _transform_ensemble(
         self,
@@ -58,10 +44,6 @@ class InvertibleIdentityEnsembleProcessor(
         return EnsembleTable(table.table(0), num_members=1)
 
 
-def test_ensemble_processor_is_a_processor() -> None:
-    assert issubclass(EnsembleProcessor, Processor)
-
-
 def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
     first = TableTensor.from_tensor(
         torch.tensor([[1.0], [2.0]]),
@@ -75,15 +57,10 @@ def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
         tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
-    generator = torch.Generator()
     processor = IdentityEnsembleProcessor()
 
-    output = processor.fit_transform_ensemble(
-        table,
-        generator=generator,
-    )
+    output = processor.fit_transform_ensemble(table)
 
-    assert processor.generator is generator
     assert output is table
     assert output.num_members == 3
     assert output.table(0).columns == second.columns
@@ -140,16 +117,21 @@ def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:
 
 
 def test_ensemble_processor_passthrough_for_empty_supported_blocks() -> None:
-    table = EnsembleTable(
+    empty = EnsembleTable(
         TableTensor.from_tensor(torch.empty(2, 0)),
+        num_members=2,
+    )
+    data = EnsembleTable(
+        TableTensor.from_tensor(torch.ones(2, 1)),
         num_members=2,
     )
     processor = IdentityEnsembleProcessor()
 
-    assert processor.fit_ensemble(table) is processor
-    assert processor.fit_transform_ensemble(table) is table
-    assert processor.transform_ensemble(table) is table
-    assert not processor._fitted
+    assert processor.fit_ensemble(empty) is processor
+    assert processor.fit_transform_ensemble(empty) is empty
+    assert processor.transform_ensemble(empty) is empty
+    with pytest.raises(RuntimeError, match="not fitted"):
+        processor.transform_ensemble(data)
 
 
 def test_only_ensemble_api_accepts_multiple_output_members() -> None:
