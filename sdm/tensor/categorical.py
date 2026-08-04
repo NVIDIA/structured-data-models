@@ -194,23 +194,18 @@ class CategoricalTensor(Tensor):
                 f"(got {len(names)})"
             )
 
-        code_t = self._code.movedim(-1, 0).contiguous()
-        na_mask_t = self.isnan().movedim(-1, 0).contiguous()
-
         arrays = []
-        for code, category, na_mask in zip(
-            code_t.cpu().unbind(0),
+        for code, category, mask in zip(
+            self.code.movedim(-1, 0).contiguous().cpu().unbind(0),
             self.categories,
-            na_mask_t.cpu().unbind(0),
+            self.isfinite().movedim(-1, 0).contiguous().cpu().unbind(0),
         ):
-            indices = pa.array(
-                code.view(-1).numpy(),
-                mask=na_mask.view(-1).numpy(),
-            )
             arrays.append(
                 pa.DictionaryArray.from_arrays(
-                    indices=indices,
-                    dictionary=to_arrow(category),
+                    indices=to_arrow(code, mask),
+                    dictionary=category.to_arrow()
+                    if isinstance(category, StringTensor)
+                    else to_arrow(category),
                 )
             )
 
@@ -264,19 +259,18 @@ class CategoricalTensor(Tensor):
                 f"(got {len(names)})"
             )
 
-        code_t = self._code.movedim(-1, 0).contiguous()
-        valid_mask_t = self.isfinite().movedim(-1, 0).contiguous()
-
         columns = {}
         for name, code, category, mask in zip(
             names,
-            code_t.unbind(0),
+            self.code.movedim(-1, 0).contiguous().unbind(0),
             self.categories,
-            valid_mask_t.unbind(0),
+            self.isfinite().movedim(-1, 0).contiguous().unbind(0),
         ):
             columns[name] = cudf.CategoricalIndex.from_codes(
                 codes=to_cudf(code, mask)._column,
-                categories=to_cudf(category),
+                categories=category.to_cudf()
+                if isinstance(category, StringTensor)
+                else to_cudf(category),
                 ordered=False,
             )
 
