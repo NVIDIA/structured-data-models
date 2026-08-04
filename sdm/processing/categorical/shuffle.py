@@ -32,8 +32,6 @@ class ShuffleCategories(Processor):
         method: Literal["shift", "random"] = "shift",
     ) -> None:
         super().__init__()
-        if method not in {"shift", "random"}:
-            raise ValueError("method must be 'shift' or 'random'")
         self.method = method
         self.register_buffer(
             "permutations",
@@ -67,12 +65,14 @@ class ShuffleCategories(Processor):
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
-            else:
+            elif self.method == "random":
                 permutation = torch.randperm(
                     n_classes,
                     generator=generator,
                     device=device,
                 )
+            else:
+                raise ValueError("method must be 'shift' or 'random'")
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 

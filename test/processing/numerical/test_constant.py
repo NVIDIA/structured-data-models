@@ -90,8 +90,9 @@ def test_variance_filter(device: torch.device) -> None:
 
 
 def test_drop_constant_columns_rejects_invalid_arguments() -> None:
+    table = TableTensor.from_tensor(torch.ones(2, 1))
     with pytest.raises(ValueError, match="method must be"):
-        DropConstantColumns(method="invalid")  # type: ignore
+        DropConstantColumns(method="invalid").fit(table)  # type: ignore
     with pytest.raises(ValueError, match="tolerance must be None"):
         DropConstantColumns(tolerance=1e-6)
     with pytest.raises(ValueError, match="threshold must be None"):

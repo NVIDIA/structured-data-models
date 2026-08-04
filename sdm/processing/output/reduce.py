@@ -31,9 +31,6 @@ class ReduceEstimators(Processor):
         method: Literal["mean"] = "mean",
     ) -> None:
         super().__init__()
-        # TODO: Support `method="median"` when required by a model recipe.
-        if method != "mean":
-            raise ValueError("method must be 'mean'")
         self.method = method
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -45,7 +42,10 @@ class ReduceEstimators(Processor):
         if table.size(0) == 0:
             raise ValueError("Expected at least one ensemble member.")
 
-        numerical = table.numerical.mean(dim=0)
+        if self.method == "mean":
+            numerical = table.numerical.mean(dim=0)
+        else:
+            raise ValueError("method must be 'mean'")
         return table.__class__(
             columns={Stype.numerical.value: table.columns[Stype.numerical]},
             numerical=numerical,
