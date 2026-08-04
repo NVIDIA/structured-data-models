@@ -595,9 +595,6 @@ class VarLenTensor(Tensor):
                 f"{self.__class__.__name__!r} with {self.numel()} "
                 f"elements cannot be converted to a single item"
             )
-        valid = self.valid
-        if valid is not None and not bool(valid.view(-1)[0]):
-            return None
         return self.view(-1).tolist()[0]
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
