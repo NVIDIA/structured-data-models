@@ -95,6 +95,7 @@ class StringTensor(VarLenTensor):
                 buffer=buffers[1],
                 dtype=torch.int32 if is_string else torch.int64,
             ).to(device),
+            valid=None,
             size=size,
             storage_offset=array.offset,
         )
@@ -169,6 +170,7 @@ class StringTensor(VarLenTensor):
             return cls(
                 data=data,
                 offset=torch.zeros(1, dtype=torch.int32, device=data.device),
+                valid=None,
                 size=size,
             )
 
@@ -183,6 +185,7 @@ class StringTensor(VarLenTensor):
             offset=torch.from_dlpack(
                 cp.asarray(offsets.data()).view(offset_dtype)
             ).to(device),
+            valid=None,
             size=size,
             storage_offset=column.offset(),
         )
