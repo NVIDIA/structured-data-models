@@ -206,9 +206,14 @@ def test_invariant_gnn(
 
 
 @withCUDA
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float16, torch.float32, torch.float64],
+)
 def test_invariant_gnn_destination_chunks(
     relational_data: RelationalData,
     device: torch.device,
+    dtype: torch.dtype,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     related_tables = RelatedTables(
@@ -223,8 +228,8 @@ def test_invariant_gnn_destination_chunks(
         tables=related_tables.tables,
         relationships=related_tables.relationships,
     )
-    model = InvariantGNN(channels=8, device=device).eval()
-    x = torch.randn(10, 8, device=device)
+    model = InvariantGNN(channels=8, device=device, dtype=dtype).eval()
+    x = torch.randn(10, 8, device=device, dtype=dtype)
     readout_index = torch.arange(4, device=device)
 
     with torch.inference_mode():

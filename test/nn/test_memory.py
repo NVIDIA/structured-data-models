@@ -70,10 +70,21 @@ def test_cuda_memory_availability(
     )
 
 
-def test_attention_batch_size_limit() -> None:
-    query = torch.empty(2, 10, 16)
-    key_value = torch.empty(2, 20, 16)
-    bytes_per_batch = 12 * 20 * 16 * 4
+@pytest.mark.parametrize(
+    ("dtype", "estimated_element_size"),
+    [
+        (torch.float16, 4),
+        (torch.float32, 4),
+        (torch.float64, 8),
+    ],
+)
+def test_attention_batch_size_limit(
+    dtype: torch.dtype,
+    estimated_element_size: int,
+) -> None:
+    query = torch.empty(2, 10, 16, dtype=dtype)
+    key_value = torch.empty(2, 20, 16, dtype=dtype)
+    bytes_per_batch = 12 * 20 * 16 * estimated_element_size
 
     assert (
         attention_batch_size_limit(
