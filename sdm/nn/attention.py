@@ -8,10 +8,14 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
+from torch.nn.attention.varlen import varlen_attn
 
 from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 from sdm.nn.resolver import normalization_resolver
+
+_FLASH_ATTENTION_AVAILABLE = torch.backends.cuda.is_flash_attention_available()
+_VARLEN_ATTENTION_DEVICE_SUPPORT: dict[torch.device, bool] = {}
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
@@ -190,6 +194,69 @@ def _chunk_attention(
     )
 
 
+@torch.compiler.assume_constant_result
+def _supports_varlen_attention(device: torch.device) -> bool:
+    supported = _VARLEN_ATTENTION_DEVICE_SUPPORT.get(device)
+    if supported is not None:
+        return supported
+
+    major, _ = torch.cuda.get_device_capability(device)
+    supported = major >= 8
+    _VARLEN_ATTENTION_DEVICE_SUPPORT[device] = supported
+    return supported
+
+
+def _can_use_varlen_attention(
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+) -> bool:
+    return (
+        _FLASH_ATTENTION_AVAILABLE
+        and query.is_cuda
+        and query.dtype in (torch.float16, torch.bfloat16)
+        and not torch.is_grad_enabled()
+        and query.size(-1) <= 256
+        and query.stride(-1) == key.stride(-1) == value.stride(-1) == 1
+        and _supports_varlen_attention(query.device)
+    )
+
+
+def _varlen_attention(
+    query: Tensor,  # [B, Q, Hq, C]
+    key: Tensor,  # [B, KV, Hkv, C]
+    value: Tensor,  # [B, KV, Hkv, C]
+    seqused_key_value: Tensor,  # [B]
+    scale: float | None,
+    enable_gqa: bool,
+) -> Tensor:  # [B, Q, Hq, C]
+    batch_size, query_len = query.size()[:2]
+    key_value_len = key.size(1)
+
+    batch_index = torch.arange(
+        batch_size + 1,
+        dtype=torch.int32,
+        device=query.device,
+    )
+    cu_seq_query = batch_index * query_len
+    cu_seq_key_value = batch_index * key_value_len
+
+    out = varlen_attn(
+        query=query.flatten(0, 1),  # [B * Q, Hq, C]
+        key=key.flatten(0, 1),  # [B * KV, Hkv, C]
+        value=value.flatten(0, 1),  # [B * KV, Hkv, C]
+        cu_seq_q=cu_seq_query,
+        cu_seq_k=cu_seq_key_value,
+        max_q=query_len,
+        max_k=key_value_len,
+        scale=scale,
+        enable_gqa=enable_gqa,
+        seqused_k=seqused_key_value,
+    )
+    assert isinstance(out, Tensor)
+    return out.view_as(query)
+
+
 class QASSMax(torch.nn.Module):
     r"""Query-Aware Scalable SoftMax (QASSMax).
 
@@ -290,7 +357,8 @@ class SDPA(torch.nn.Module):
     This module wraps :func:`torch.nn.functional.scaled_dot_product_attention`
     and extends it by arbitrary batch dimensions, optional inference-time
     batch chunking, :class:`QASSMax`-based temperature-scaling, and padding
-    support for key/value pairs.
+    support for key/value pairs. Supported half-precision CUDA inference uses
+    :func:`torch.nn.attention.varlen.varlen_attn` to skip padded keys.
 
     Args:
         channels: The number of channels per attention head.
@@ -362,7 +430,9 @@ class SDPA(torch.nn.Module):
                 number of key/value heads (``num_key_value_heads``).
             value: The value tensor with shape ``[..., KV, Hkv, C]``.
             seqused_key_value: Valid key/value lengths with shape ``[...]`` and
-                :external+torch:ref:`torch.int32 <dtype-doc>` dtype.
+                :external+torch:ref:`torch.int32 <dtype-doc>` dtype. Supported
+                CUDA inference paths skip unused keys with variable-length
+                Flash Attention.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
                 Entries set to ``True`` participate in attention.
             batch_size_limit: Maximum number of batch elements processed at
@@ -451,7 +521,21 @@ class SDPA(torch.nn.Module):
 
         if seqused_key_value is not None:
             seqused_key_value = seqused_key_value.expand(batch_shape)
-            seqused_key_value = seqused_key_value.reshape(-1).unsqueeze(-1)
+            seqused_key_value = seqused_key_value.reshape(-1)
+            if _can_use_varlen_attention(query, key, value):
+                out = _varlen_attention(
+                    query=query,
+                    key=key,
+                    value=value,
+                    seqused_key_value=seqused_key_value,
+                    scale=self.scale,
+                    enable_gqa=(
+                        self.num_query_heads != self.num_key_value_heads
+                    ),
+                )
+                return out.view(batch_shape + out.size()[-3:])
+
+            seqused_key_value = seqused_key_value.unsqueeze(-1)
             key_index = torch.arange(key.size(-3), device=key.device)
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)

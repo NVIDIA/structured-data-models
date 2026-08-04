@@ -13,7 +13,7 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 # Skip all tests in this test file if it is not a full test run (FULL_TEST=1).
 pytestmark = pytest.mark.skipif(
@@ -126,6 +126,61 @@ def test_sdpa_compile(
         seqused_key_value=seqused,
         attn_mask=attn_mask,
     )
+    torch.testing.assert_close(out, expected)
+
+
+@onlyCUDA
+def test_sdpa_varlen_compile() -> None:
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    channels = 16
+    num_query_heads = 4
+    num_key_value_heads = 2
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+        qassmax=True,
+        device=device,
+        dtype=dtype,
+    ).eval()
+    query = torch.randn(
+        3,
+        8,
+        num_query_heads,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    key = torch.randn(
+        3,
+        64,
+        num_key_value_heads,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    value = torch.randn_like(key)
+    seqused_key_value = torch.tensor(
+        [64, 32, 1],
+        dtype=torch.int32,
+        device=device,
+    )
+
+    with torch.inference_mode():
+        expected = module(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=seqused_key_value,
+        )
+        out = fullgraph(module)(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=seqused_key_value,
+        )
+
     torch.testing.assert_close(out, expected)
 
 

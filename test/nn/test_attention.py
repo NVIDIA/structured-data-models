@@ -14,7 +14,7 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.testing import onlyCUDA, withCUDA
 
 
 def reference_sdpa(
@@ -221,6 +221,202 @@ def test_sdpa(
         key=key.expand(-1, num_test, -1, -1, -1),
         value=value.expand(-1, num_test, -1, -1, -1),
     )
+    torch.testing.assert_close(out, expected)
+
+
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+@pytest.mark.parametrize(
+    "num_key_value_heads",
+    [
+        pytest.param(4, id="mha"),
+        pytest.param(1, id="mqa"),
+        pytest.param(2, id="gqa"),
+    ],
+)
+@pytest.mark.parametrize("qassmax", [False, True])
+def test_sdpa_varlen(
+    dtype: torch.dtype,
+    num_key_value_heads: int,
+    qassmax: bool,
+) -> None:
+    device = torch.device("cuda")
+    channels = 16
+    num_query_heads = 4
+    query_len = 7
+    key_value_len = 9
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_query_heads,
+        num_key_value_heads=num_key_value_heads,
+        qassmax=qassmax,
+        device=device,
+        dtype=dtype,
+    )
+    query = torch.randn(
+        2,
+        1,
+        query_len,
+        num_query_heads,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    key = torch.randn(
+        1,
+        3,
+        key_value_len,
+        num_key_value_heads,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    value = torch.randn(
+        2,
+        3,
+        key_value_len,
+        num_key_value_heads,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    seqused_key_value = torch.tensor(
+        [[0, 1, 9], [8, 2, 4]],
+        dtype=torch.int32,
+        device=device,
+    )
+    key_index = torch.arange(key_value_len, device=device)
+    attn_mask = key_index < seqused_key_value.unsqueeze(-1)
+    attn_mask = attn_mask.unsqueeze(-2).expand(-1, -1, query_len, -1)
+
+    with torch.inference_mode():
+        out = module(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=seqused_key_value,
+        )
+        expected = module(
+            query=query,
+            key=key,
+            value=value,
+            attn_mask=attn_mask,
+        )
+
+    assert not out.isnan().any()
+    torch.testing.assert_close(out, expected, atol=2e-2, rtol=2e-2)
+
+
+@onlyCUDA
+def test_sdpa_varlen_batch_size_limit() -> None:
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    batch_size = 5
+    query_len = 8
+    key_value_len = 64
+    channels = 16
+    num_heads = 4
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_heads,
+        device=device,
+        dtype=dtype,
+    ).eval()
+    query = torch.randn(
+        batch_size,
+        query_len,
+        num_heads,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    key = torch.randn(
+        batch_size,
+        key_value_len,
+        num_heads,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    value = torch.randn_like(key)
+    seqused_key_value = torch.tensor(
+        [64, 48, 32, 16, 0],
+        dtype=torch.int32,
+        device=device,
+    )
+
+    with torch.inference_mode():
+        expected = module(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=seqused_key_value,
+        )
+        out = module(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=seqused_key_value,
+            batch_size_limit=2,
+        )
+
+    torch.testing.assert_close(out, expected, atol=2e-2, rtol=2e-2)
+
+
+@onlyCUDA
+def test_sdpa_varlen_unsupported_head_dim() -> None:
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    batch_size = 2
+    query_len = 3
+    key_value_len = 4
+    channels = 264
+    module = SDPA(
+        channels=channels,
+        num_query_heads=1,
+        device=device,
+        dtype=dtype,
+    )
+    query = torch.randn(
+        batch_size,
+        query_len,
+        1,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    key = torch.randn(
+        batch_size,
+        key_value_len,
+        1,
+        channels,
+        device=device,
+        dtype=dtype,
+    )
+    value = torch.randn_like(key)
+    seqused_key_value = torch.tensor(
+        [4, 2],
+        dtype=torch.int32,
+        device=device,
+    )
+    key_index = torch.arange(key_value_len, device=device)
+    attn_mask = key_index < seqused_key_value.unsqueeze(-1)
+    attn_mask = attn_mask.unsqueeze(-2).expand(-1, query_len, -1)
+
+    with torch.inference_mode():
+        out = module(
+            query=query,
+            key=key,
+            value=value,
+            seqused_key_value=seqused_key_value,
+        )
+        expected = module(
+            query=query,
+            key=key,
+            value=value,
+            attn_mask=attn_mask,
+        )
+
     torch.testing.assert_close(out, expected)
 
 
@@ -877,9 +1073,10 @@ def test_transformer_block(
     # mask), so its MLP GEMMs may round differently in float32.
     if qassmax:
         torch.testing.assert_close(out1, out2, atol=5e-4, rtol=5e-3)
+        torch.testing.assert_close(chunked_out, out1, atol=5e-4, rtol=5e-3)
     else:
         torch.testing.assert_close(out1, out2)
-    torch.testing.assert_close(chunked_out, out1)
+        torch.testing.assert_close(chunked_out, out1)
 
     # Test no padding leakage
     new_key_value = key_value.clone()
