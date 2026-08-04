@@ -45,6 +45,11 @@ class Standardize(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
+        if numerical.size(-1) == 0:
+            self.mean = numerical.sum(dim=-2, keepdim=True)
+            self.scale = torch.ones_like(self.mean)
+            return
+
         data_mean = numerical.mean(dim=-2, keepdim=True)
 
         if self.with_mean:
@@ -69,9 +74,10 @@ class Standardize(Processor, InvertibleMixin):
                         )
                     ] = 1.0
             else:
-                scale = torch.zeros_like(data_mean)
                 if self.epsilon == 0:
-                    scale.fill_(1.0)
+                    scale = torch.ones_like(data_mean)
+                else:
+                    scale = torch.zeros_like(data_mean)
             self.scale = scale + self.epsilon
         else:
             self.scale = torch.ones_like(data_mean)

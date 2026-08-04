@@ -28,6 +28,7 @@ class StringTensor(VarLenTensor):
     Args:
         data: Flat contiguous ``uint8`` tensor containing all string values.
         offset: One-dimensional offsets into ``data``.
+        valid: One-dimensional mask indicating valid, non-null string values.
         size: The shape of the tensor.
         stride: The stride of the tensor.
         storage_offset: The offset into the logical ``offset`` storage.
@@ -46,8 +47,6 @@ class StringTensor(VarLenTensor):
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create tensor from a string :class:`pyarrow.Array`.
-
-        Null values will be encoded as empty strings.
 
         .. testcode::
 
@@ -82,22 +81,30 @@ class StringTensor(VarLenTensor):
                 f"'string' or 'large_string' type (got '{array.type}')"
             )
 
-        if array.null_count > 0:
-            array = array.fill_null("")
-
         buffers = array.buffers()
+        offset = torch.frombuffer(
+            buffers[1],
+            dtype=torch.int32 if is_string else torch.int64,
+        )
+        valid: Tensor | None = None
+        storage_offset = array.offset
+        if array.null_count > 0:
+            offset = offset[array.offset : array.offset + len(array) + 1]
+            valid = arrow_as_tensor(
+                array.is_valid(),
+                dtype=torch.bool,
+                device=device,
+            )
+            storage_offset = 0
 
         return cls(
             data=torch.frombuffer(buffers[2], dtype=torch.uint8).to(device)
             if buffers[2] is not None and buffers[2].size > 0
             else torch.empty(0, dtype=torch.uint8, device=device),
-            offset=torch.frombuffer(
-                buffer=buffers[1],
-                dtype=torch.int32 if is_string else torch.int64,
-            ).to(device),
-            valid=None,
+            offset=offset.to(device),
+            valid=valid,
             size=size,
-            storage_offset=array.offset,
+            storage_offset=storage_offset,
         )
 
     @override
@@ -111,10 +118,13 @@ class StringTensor(VarLenTensor):
             else pa.large_string(),
             length=tensor.numel(),
             buffers=[
-                None,
+                pa.array(tensor._valid.numpy(), type=pa.bool_()).buffers()[1]
+                if tensor._valid is not None
+                else None,
                 pa.py_buffer(tensor._offset.numpy()),
                 pa.py_buffer(tensor._data.numpy()),
             ],
+            null_count=-1,
             offset=int(tensor.storage_offset()),
         )
 
@@ -127,8 +137,6 @@ class StringTensor(VarLenTensor):
         device: torch.device | str | None = None,
     ) -> Self:
         r"""Create tensor from a string :class:`cudf.Series`.
-
-        Null values will be encoded as empty strings.
 
         Args:
             ser: The string :class:`cudf.Series` or :class:`cudf.Index`.
@@ -152,9 +160,6 @@ class StringTensor(VarLenTensor):
                 f"Expected 'values' in '{cls.__name__}.from_cudf' to have "
                 f"string type (got '{ser.dtype}')"
             )
-
-        if ser.hasnans:
-            ser = ser.fillna("")
 
         # `Series.to_pylibcudf` returns a zero-copy Arrow-style view: base
         # character/offset buffers plus a row offset into the offsets.
@@ -180,14 +185,23 @@ class StringTensor(VarLenTensor):
             if offsets.type().id() == plc.types.TypeId.INT32
             else cp.int64
         )
+        offset = torch.from_dlpack(
+            cp.asarray(offsets.data()).view(offset_dtype)
+        )
+
+        valid: Tensor | None = None
+        storage_offset = column.offset()
+        if ser.hasnans:
+            offset = offset[column.offset() : column.offset() + len(ser) + 1]
+            valid = torch.from_dlpack(ser.notnull().to_cupy()).to(device)
+            storage_offset = 0
+
         return cls(
             data=data,
-            offset=torch.from_dlpack(
-                cp.asarray(offsets.data()).view(offset_dtype)
-            ).to(device),
-            valid=None,
+            offset=offset.to(device),
+            valid=valid,
             size=size,
-            storage_offset=column.offset(),
+            storage_offset=storage_offset,
         )
 
     def to_cudf(self) -> cudf.Series:
@@ -203,18 +217,25 @@ class StringTensor(VarLenTensor):
             import cudf
             import pylibcudf as plc
 
-            # StringTensor stores variable-width strings in separate UTF-8
-            # data and offset buffers. Use pylibcudf to expose them without a
-            # host copy.
-            offset_column = plc.Column.from_array(obj=tensor._offset)
+            mask = None
+            null_count = 0
+            start = int(tensor.storage_offset())
+            if tensor._valid is not None:
+                mask = cudf.Series(tensor._valid, copy=False)._column.as_mask()
+                if isinstance(mask, tuple):
+                    mask = mask[0]
+                null_count = plc.null_mask.null_count(
+                    mask, start, start + tensor.numel()
+                )
+
             plc_column = plc.Column(
                 data_type=plc.DataType(plc.TypeId.STRING),
                 size=tensor.numel(),
                 data=plc.gpumemoryview(tensor._data),
-                mask=None,
-                null_count=0,
-                offset=int(tensor.storage_offset()),
-                children=[offset_column],
+                mask=mask,
+                null_count=null_count,
+                offset=start,
+                children=[plc.Column.from_array(obj=tensor._offset)],
             )
             return cudf.Series.from_pylibcudf(plc_column)
 
@@ -222,7 +243,7 @@ class StringTensor(VarLenTensor):
     @override
     def from_list(
         cls,
-        values: str | Sequence[Any],
+        values: str | None | Sequence[Any],
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
@@ -237,6 +258,7 @@ class StringTensor(VarLenTensor):
             tensor = StringTensor.from_list([
                 ["foo", "bar"],
                 ["hello world", ""],
+                [None, "xzy"],
             ])
 
         Args:
@@ -257,21 +279,25 @@ class StringTensor(VarLenTensor):
                 f"(got '{offset_dtype}')"
             )
 
-        def flatten(seq: Any) -> tuple[int, ...]:
-            if isinstance(seq, str):
-                array.append(seq)
+        data: list[str | None] = []
+
+        def flatten(value: Any) -> tuple[int, ...]:
+            if value is None or isinstance(value, str):
+                data.append(value)
                 return ()
-            if not isinstance(seq, Sequence):
-                raise TypeError(f"{cls.__name__!r} data must contain strings")
-            if len(seq) == 0:
+
+            if not isinstance(value, Sequence):
+                raise ValueError(f"{cls.__name__!r} data must be rectangular")
+
+            if len(value) == 0:
                 return (0,)
 
-            if not isinstance(seq[0], Sequence) or isinstance(seq[0], str):
-                array.extend(seq)
-                return (len(seq),)
+            if not isinstance(value[0], Sequence) or isinstance(value[0], str):
+                data.extend(value)
+                return (len(value),)
 
             child_size: tuple[int, ...] | None = None
-            for item in seq:
+            for item in value:
                 item_size = flatten(item)
                 if child_size is None:
                     child_size = item_size
@@ -281,28 +307,23 @@ class StringTensor(VarLenTensor):
                     )
 
             assert child_size is not None
-            return (len(seq), *child_size)
+            return (len(value), *child_size)
 
-        if isinstance(values, str):
-            array: list[str] = [values]
-            size: tuple[int, ...] = ()
-        else:
-            array = []
-            size = flatten(values)
+        size = flatten(values)
 
         pa_type = pa.large_string()
         if offset_dtype == torch.int32:
             pa_type = pa.string()
 
         return cls.from_arrow(
-            array=pa.array(array, type=pa_type),
+            array=pa.array(data, type=pa_type),
             device=device,
             size=size,
         )
 
     @override
-    def item(self) -> str:  # type: ignore
-        return cast(str, super().item())
+    def item(self) -> str | None:  # type: ignore
+        return cast(str | None, super().item())
 
     def __eq__(self, other: object) -> Tensor:  # type: ignore
         if isinstance(other, str):
@@ -314,13 +335,12 @@ class StringTensor(VarLenTensor):
             return _ne(self, other)
         return cast(Tensor, super().__ne__(other))
 
-    def __str__(self) -> str:
-        return self.item() if self.numel() == 1 else self.__repr__()
-
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         # TODO Support tensor content printing.
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
+        if self.valid is not None:
+            out += f", null_count={int((~self.valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"
@@ -373,6 +393,8 @@ def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
                 other.to_arrow() if isinstance(other, StringTensor) else other,
             ],
         )
+        if out.null_count > 0:
+            out = out.fill_null(False)
         mask = arrow_as_tensor(out, dtype=torch.bool, device=inp.device)
     else:
         assert backend == "cudf"
@@ -381,6 +403,8 @@ def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
                 out = inp.to_cudf() == other.to_cudf()
             else:
                 out = inp.to_cudf() == other
+            if out.hasnans:
+                out = out.fillna(False)
             mask = torch.from_dlpack(out.to_cupy()).view(size)
 
     return mask.view(size)
@@ -389,7 +413,64 @@ def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
 @StringTensor.implements(aten.ne.Tensor)
 @StringTensor.implements(aten.ne.str)
 def _ne(inp: StringTensor, other: Tensor | str) -> Tensor:
-    return ~_eq(inp, other)
+    if isinstance(other, Tensor) and inp.device != other.device:
+        raise RuntimeError(
+            f"Expected both tensors to be on the same device "
+            f"(got '{inp.device}' and '{other.device}')"
+        )
+
+    if not isinstance(other, StringTensor | str):
+        return torch.ones(
+            torch.broadcast_shapes(inp.size(), other.size()),
+            dtype=torch.bool,
+            device=inp.device,
+        )
+
+    if isinstance(other, Tensor):
+        size = torch.broadcast_shapes(inp.size(), other.size())
+        inp = cast(StringTensor, inp.expand(size))
+        other = cast(StringTensor, other.expand(size))
+    else:
+        size = inp.size()
+
+    backend: Literal["arrow", "cudf"] = "arrow"
+    if inp.is_cuda:
+        if importlib.util.find_spec("cudf") is not None:
+            backend = "cudf"
+        else:
+            warn_once(
+                key="missing-cudf-eq",
+                message=(
+                    "Falling back to a CPU-based string comparison because "
+                    "cuDF is not installed. Install cuDF to enable faster "
+                    "CUDA-based string comparisons without device "
+                    "synchronization."
+                ),
+            )
+
+    if backend == "arrow":
+        out = pc.call_function(
+            "not_equal",
+            [
+                inp.to_arrow(),
+                other.to_arrow() if isinstance(other, StringTensor) else other,
+            ],
+        )
+        if out.null_count > 0:
+            out = out.fill_null(False)
+        mask = arrow_as_tensor(out, dtype=torch.bool, device=inp.device)
+    else:
+        assert backend == "cudf"
+        with torch.cuda.device(inp.device):
+            if isinstance(other, StringTensor):
+                out = inp.to_cudf() != other.to_cudf()
+            else:
+                out = inp.to_cudf() != other
+            if out.hasnans:
+                out = out.fillna(False)
+            mask = torch.from_dlpack(out.to_cupy()).view(size)
+
+    return mask.view(size)
 
 
 @StringTensor.implements(aten.sort.default)

@@ -12,6 +12,7 @@ from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import Self, override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
+from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 aten = torch.ops.aten
 
@@ -62,9 +63,6 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
-
-    # Route tensor operations through `__torch_dispatch__` only.
-    __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
 
     # Constructors ############################################################
 
@@ -284,10 +282,7 @@ class VarLenTensor(Tensor):
             device: The device.
         """
         if isinstance(array, pa.ChunkedArray):
-            if array.num_chunks == 1:
-                array = array.chunk(0)
-            else:
-                array = array.combine_chunks()
+            array = _combine_arrow_chunks(array)
 
         if size is None:
             size = (len(array),)
@@ -313,7 +308,6 @@ class VarLenTensor(Tensor):
         dtype = ARROW_TORCH_DTYPES.get(array.values.type)
         if dtype is None:
             raise TypeError(f"Unsupported value type '{array.values.type}'")
-        offset_dtype = torch.int32 if is_list else torch.int64
 
         buffer = array.values.buffers()[1]
         if buffer is not None and buffer.size > 0:
@@ -323,27 +317,24 @@ class VarLenTensor(Tensor):
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
+        offset = torch.frombuffer(
+            array.buffers()[1],
+            dtype=torch.int32 if is_list else torch.int64,
+        )
         valid: Tensor | None = None
+        storage_offset = array.offset
         if array.null_count > 0:
-            offset = arrow_as_tensor(
-                array.offsets,
-                dtype=offset_dtype,
-                device=device,
-            )
+            offset = offset[array.offset : array.offset + len(array) + 1]
             valid = arrow_as_tensor(
                 array.is_valid(),
                 dtype=torch.bool,
                 device=device,
             )
             storage_offset = 0
-        else:
-            offset = torch.frombuffer(array.buffers()[1], dtype=offset_dtype)
-            offset = offset.to(device)
-            storage_offset = array.offset
 
         return cls(
             data=data,
-            offset=offset,
+            offset=offset.to(device),
             valid=valid,
             size=size,
             storage_offset=storage_offset,
@@ -510,6 +501,11 @@ class VarLenTensor(Tensor):
             storage_offset=int(self.storage_offset()),
         )
 
+    @property
+    def is_nullable(self) -> bool:
+        r"""Whether this tensor has a validity mask."""
+        return self._valid is not None
+
     # Decorators ##############################################################
 
     @classmethod
@@ -567,6 +563,21 @@ class VarLenTensor(Tensor):
             int(self.storage_offset()),
         )
         return (self.__class__, args)
+
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Callable[..., Any],
+        types: tuple[type[Any], ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        if func is torch.isfinite or func is Tensor.isfinite:
+            assert isinstance(args[0], VarLenTensor)
+            return _isfinite(args[0])
+
+        with torch._C.DisableTorchFunction():
+            return func(*args, **(kwargs or {}))
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -908,6 +919,30 @@ def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
     )
+
+
+@VarLenTensor.implements(aten.isnan.default)
+def _isnan(inp: VarLenTensor) -> Tensor:
+    valid = inp.valid
+    if valid is None:
+        return torch.zeros(
+            inp.size(),
+            dtype=torch.bool,
+            device=inp.device,
+        )
+    return ~valid
+
+
+@VarLenTensor.implements(aten.isfinite.default)
+def _isfinite(inp: VarLenTensor) -> Tensor:
+    valid = inp.valid
+    if valid is None:
+        return torch.ones(
+            inp.size(),
+            dtype=torch.bool,
+            device=inp.device,
+        )
+    return valid
 
 
 @VarLenTensor.implements(aten.equal.default)
