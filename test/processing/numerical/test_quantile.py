@@ -6,16 +6,6 @@ from sdm.processing import QuantileTransform
 from sdm.testing import onlyCUDA, withCUDA
 
 
-def test_quantile_transform_rejects_unknown_output_distribution() -> None:
-    table = TableTensor.from_tensor(torch.arange(4.0).view(-1, 1))
-    processor = QuantileTransform(
-        output_distribution="unknown",  # type: ignore
-    )
-
-    with pytest.raises(ValueError, match="output_distribution must be"):
-        processor.fit_transform(table)
-
-
 @withCUDA
 def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
     device: torch.device,

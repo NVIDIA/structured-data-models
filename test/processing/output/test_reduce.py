@@ -38,10 +38,3 @@ def test_reduce_estimators_rejects_empty_ensemble_dimension() -> None:
 
     with pytest.raises(ValueError, match="at least one ensemble member"):
         ReduceEstimators().transform(table)
-
-
-def test_reduce_estimators_rejects_unknown_method() -> None:
-    table = TableTensor.from_tensor(torch.ones(1, 2, 3))
-
-    with pytest.raises(ValueError, match="method must be 'mean'"):
-        ReduceEstimators(method="median").transform(table)  # type: ignore

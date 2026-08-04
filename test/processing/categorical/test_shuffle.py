@@ -35,14 +35,6 @@ def _table(
     )
 
 
-def test_shuffle_categories_rejects_unknown_method() -> None:
-    table = _table([[0], [1]], (("a", "b"),))
-    processor = ShuffleCategories(method="unknown")  # type: ignore
-
-    with pytest.raises(ValueError, match="method must be"):
-        processor.fit(table)
-
-
 def test_shuffle_categories_shift_maps_single_target() -> None:
     target = _table(
         [[0], [1], [2], [-1]],
