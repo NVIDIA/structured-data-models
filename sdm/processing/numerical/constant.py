@@ -29,7 +29,7 @@ class DropConstantColumns(Processor):
         method: Filtering rule. ``"unique"`` uses distinct-value counts;
             ``"variance"`` uses sample standard deviation.
         threshold: With ``method="unique"``, columns with at most this many
-            unique values are removed. Must be positive.
+            unique values are removed.
         tolerance: With ``method="variance"``, columns with sample standard
             deviation at most this value are removed.
     """
@@ -51,12 +51,6 @@ class DropConstantColumns(Processor):
             raise ValueError(
                 "threshold must be None when method is 'variance'"
             )
-
-        if threshold is not None and threshold <= 0:
-            raise ValueError("threshold must be positive")
-
-        if tolerance is not None and tolerance < 0:
-            raise ValueError("tolerance must be non-negative")
 
         self.method = method
         self.threshold = 1 if threshold is None else threshold
