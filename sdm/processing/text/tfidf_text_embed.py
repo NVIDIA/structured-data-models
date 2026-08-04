@@ -115,6 +115,9 @@ class TfidfTextEmbed(Processor):
         ngrams: list[str] = []
         offsets: list[int] = [0]
         for document in tensor.to_arrow().to_pylist():
+            if document is None:
+                offsets.append(len(ngrams))
+                continue
             if lowercase:
                 document = document.lower()
             document = whitespace.sub(" ", document)
@@ -150,6 +153,8 @@ class TfidfTextEmbed(Processor):
         min_n, max_n = ngram_range
         n_docs = tensor.numel()
         s = tensor.to_cudf()  # n_docs documents
+        if tensor.is_nullable:
+            s = s.fillna("")
         if lowercase:
             s = s.str.lower()
         # Collapse every whitespace run to a single space and trim, so each

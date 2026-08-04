@@ -317,6 +317,17 @@ def test_sort(device: torch.device) -> None:
     perm = torch.argsort(tensor)
     assert perm.equal(torch.tensor([4, 2, 1, 0, 3], device=device))
 
+    tensor = StringTensor.from_list(["b", None, "a", ""], device=device)
+    out, perm = tensor.sort()
+    assert out.device == device
+    assert out.tolist() == ["", "a", "b", None]
+    assert perm.equal(torch.tensor([3, 2, 0, 1], device=device))
+
+    out, perm = torch.sort(tensor, dim=-1, descending=True)
+    assert out.device == device
+    assert out.tolist() == ["b", "a", "", None]
+    assert perm.equal(torch.tensor([0, 2, 3, 1], device=device))
+
 
 def test_null_handling() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", None, "yo"]))
