@@ -212,6 +212,8 @@ preprocessing.
 A <a class="reference internal" href="#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a> learns any required state via <a class="reference internal" href="#sdm.processing.base.Processor.fit" title="sdm.processing.base.Processor.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>, and applies
 the transformation via <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>. Implementations preserve the row
 and batch dimensions. Batch dimensions are processed independently.</p>
+<p><a class="reference internal" href="#sdm.processing.base.Processor.fit" title="sdm.processing.base.Processor.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit()</span></code></a>, <a class="reference internal" href="#sdm.processing.base.Processor.transform" title="sdm.processing.base.Processor.transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">transform()</span></code></a>, and <a class="reference internal" href="#sdm.processing.base.Processor.fit_transform" title="sdm.processing.base.Processor.fit_transform"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fit_transform()</span></code></a> are no-ops for
+supported stypes with empty blocks.</p>
 <dl class="field-list simple">
 </dl>
 <dl class="py method">
@@ -327,7 +329,7 @@ and a sequence of processor-like objects is normalized to
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=d2159e79"></script>
+      <script src="../../_static/documentation_options.js?v=c75dc9f4"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
