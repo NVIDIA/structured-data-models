@@ -3,8 +3,9 @@ from typing import Literal, cast
 
 import torch
 
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import Processor
 from sdm.processing.ensemble import (
+    EnsembleInvertibleMixin,
     EnsembleProcessor,
     EnsembleProcessorAdapter,
 )
@@ -34,7 +35,7 @@ def _merge_ensemble_outputs(
     )
 
 
-class Choice(EnsembleProcessor, InvertibleMixin):
+class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
     """Delegate each table or ensemble member to one selected option.
 
     The option is drawn when the processor is fitted; pass ``generator``
@@ -120,12 +121,12 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             )
         return fn(table)
 
-    def _fit_transform_ensemble(
+    def _select_ensemble_options(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
+    ) -> None:
         for index, option in enumerate(tuple(self.options)):
             self.options[index] = EnsembleProcessorAdapter.adapt(
                 cast(Processor, option)
@@ -134,22 +135,41 @@ class Choice(EnsembleProcessor, InvertibleMixin):
         if self.selection == "round_robin":
             self._selections = tuple(
                 member_id % len(self.options)
-                for member_id in range(table.num_members)
+                for member_id in range(ensemble_table.num_members)
             )
         else:
             device = (
-                next(table.iter_packed_representations()).device
+                next(iter(ensemble_table)).device
                 if generator is None
                 else generator.device
             )
             self._selections = tuple(
                 torch.randint(
                     len(self.options),
-                    (table.num_members,),
+                    (ensemble_table.num_members,),
                     generator=generator,
                     device=device,
                 ).tolist()
             )
+
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self._select_ensemble_options(ensemble_table, generator=generator)
+        for option in sorted(set(self._selections)):
+            processor = cast(EnsembleProcessor, self.options[option])
+            processor.fit_ensemble(ensemble_table, generator=generator)
+
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self._select_ensemble_options(ensemble_table, generator=generator)
 
         # Each option sees stable member positions, including nested choices.
         outputs = {
@@ -157,15 +177,18 @@ class Choice(EnsembleProcessor, InvertibleMixin):
                 EnsembleProcessor,
                 self.options[option],
             ).fit_transform_ensemble(
-                table,
+                ensemble_table,
                 generator=generator,
             )
             for option in sorted(set(self._selections))
         }
         return _merge_ensemble_outputs(self._selections, outputs)
 
-    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        if len(self._selections) != table.num_members:
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        if len(self._selections) != ensemble_table.num_members:
             raise RuntimeError(
                 "Choice must be fitted with the same number of ensemble "
                 "members before transform."
@@ -174,17 +197,15 @@ class Choice(EnsembleProcessor, InvertibleMixin):
             option: cast(
                 EnsembleProcessor,
                 self.options[option],
-            ).transform_ensemble(table)
+            ).transform_ensemble(ensemble_table)
             for option in sorted(set(self._selections))
         }
         return _merge_ensemble_outputs(self._selections, outputs)
 
-    def inverse_transform_ensemble(
+    def _inverse_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        """Invert members through their selected options."""
-        self._check_is_fitted()
         outputs = {}
         for option in sorted(set(self._selections)):
             processor = cast(EnsembleProcessor, self.options[option])
@@ -194,7 +215,7 @@ class Choice(EnsembleProcessor, InvertibleMixin):
                     f"{processor.__class__.__name__!r} object has no "
                     "attribute 'inverse_transform_ensemble'"
                 )
-            outputs[option] = inverse(table)
+            outputs[option] = inverse(ensemble_table)
         return _merge_ensemble_outputs(self._selections, outputs)
 
     def get_extra_state(self) -> int | None:

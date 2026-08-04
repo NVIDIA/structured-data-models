@@ -176,6 +176,22 @@ def test_choice_round_robin_routes_eight_members_and_reuses_selection() -> (
         assert restored.representation(member_id).equal(context)
 
 
+def test_choice_fit_ensemble_fits_selected_options() -> None:
+    table = EnsembleTable(_table(), num_members=4)
+    fitted = Choice(Standardize(), Identity(), selection="round_robin")
+    combined = Choice(Standardize(), Identity(), selection="round_robin")
+
+    fitted.fit_ensemble(table)
+    transformed = fitted.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(table)
+
+    for member_id in range(table.num_members):
+        torch.testing.assert_close(
+            transformed.table(member_id).numerical,
+            expected.table(member_id).numerical,
+        )
+
+
 def test_nested_choice_uses_stable_member_positions() -> None:
     processor = Choice(
         Choice(
