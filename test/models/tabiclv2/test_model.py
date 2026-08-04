@@ -166,7 +166,7 @@ def test_row_embedding_float16_recording(
         num_readout_tokens=2,
         norm_bias=True,
         device=device,
-        stabilize_float16_recording=stabilize,
+        stabilize_float16_context=stabilize,
     ).eval()
     col_layers: list[InducedTransformerBlock] = []
     for col_layer in row_embedding.col_layers:
@@ -264,7 +264,8 @@ def test_row_embedding_float16_recording(
 
 
 @onlyCUDA
-def test_tabiclv2_float16_recording() -> None:
+@pytest.mark.parametrize("recording", [False, True])
+def test_tabiclv2_float16_context(recording: bool) -> None:
     device = torch.device("cuda")
     model = _TabICLv2(
         num_classes=3,
@@ -284,33 +285,33 @@ def test_tabiclv2_float16_recording() -> None:
     for col_layer in model.row_embedding.col_layers:
         assert isinstance(col_layer, InducedTransformerBlock)
         col_layers.append(col_layer)
-    recording_dtypes: list[tuple[bool, torch.dtype]] = []
+    context_dtypes: list[tuple[bool, torch.dtype]] = []
 
-    def capture_recording_dtype(
+    def capture_context_dtype(
         _module: torch.nn.Module,
         _args: tuple[object, ...],
         kwargs: dict[str, object],
     ) -> None:
         query = kwargs["query"]
         assert isinstance(query, torch.Tensor)
-        recording_dtypes.append(
+        context_dtypes.append(
             (
                 torch.is_autocast_enabled(query.device.type),
                 query.dtype,
             )
         )
 
-    cache = Cache()
+    cache = Cache() if recording else None
     handles = [
         col_layer.output_block.register_forward_pre_hook(
-            capture_recording_dtype,
+            capture_context_dtype,
             with_kwargs=True,
         )
         for col_layer in col_layers
     ]
     with torch.amp.autocast(device.type, dtype=torch.float16):
         model(
-            x=torch.randn(5, 6, device=device),
+            x=torch.randn(5 if recording else 8, 6, device=device),
             y=torch.randint(3, size=(5,), device=device),
             num_classes=3,
             cache=cache,
@@ -318,10 +319,13 @@ def test_tabiclv2_float16_recording() -> None:
     for handle in handles:
         handle.remove()
 
+    assert context_dtypes == [(False, torch.float32)] * len(col_layers)
+    if cache is None:
+        return
+
     entries = [
         value for value in cache.values() if isinstance(value, KVCacheEntry)
     ]
-    assert recording_dtypes == [(False, torch.float32)] * len(col_layers)
     assert entries
     assert all(entry.key.dtype == torch.float16 for entry in entries)
     assert all(entry.value.dtype == torch.float16 for entry in entries)

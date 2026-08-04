@@ -26,13 +26,13 @@ class RowEmbedding(torch.nn.Module):
         norm_bias: bool,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        stabilize_float16_recording: bool = False,
+        stabilize_float16_context: bool = False,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
-        self._stabilize_float16_recording = stabilize_float16_recording
+        self._stabilize_float16_context = stabilize_float16_context
 
         self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
@@ -108,8 +108,8 @@ class RowEmbedding(torch.nn.Module):
         train_mask: Any = slice(R_train) if train_mask is None else train_mask
         recording = cache is not None and cache.is_recording
         stabilize_float16 = (
-            recording
-            and self._stabilize_float16_recording
+            y.numel() > 0
+            and self._stabilize_float16_context
             and x.is_cuda
             and self.lin.weight.dtype == torch.float32
             and torch.is_autocast_enabled(x.device.type)
