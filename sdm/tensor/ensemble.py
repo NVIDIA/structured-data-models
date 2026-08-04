@@ -10,31 +10,30 @@ from sdm.tensor.table import TableTensor
 
 
 class EnsembleTable:
-    r"""Store and group input tables for an ensemble.
+    """Store and group input tables for an ensemble.
 
-    Each ensemble member is associated with one table. When members share a table,
-    it is stored only once. Distinct tables with compatible schemas are stacked so
-    processors can process them together. Incompatible tables remain in separate
-    groups.
-    
-    Use :meth:`table` to access a member's table. Iterate over the 
+    Each ensemble member is associated with one table. Shared tables are stored
+    only once. Distinct tables with compatible schemas are stacked so
+    processors can process them together; incompatible tables remain separate.
+
+    Use :meth:`table` to access a member's table. Iterate over the
     :class:`EnsembleTable` to process its compatible groups.
-    
+
     .. testcode::
 
         import torch
         from sdm.tensor import EnsembleTable, TableTensor
 
         estimator_table1 = TableTensor.from_tensor(
-            torch.tensor([[1.0], [2.0]]),
+            tensor=torch.tensor([[1.0], [2.0]]),
             columns=("value",),
         )
         estimator_table2 = TableTensor.from_tensor(
-            torch.tensor([[-1.0], [1.0]]),
+            tensor=torch.tensor([[-1.0], [1.0]]),
             columns=("value",),
         )
         estimator_table3 = TableTensor.from_tensor(
-            torch.tensor([[10.0], [20.0]]),
+            tensor=torch.tensor([[10.0], [20.0]]),
             columns=("selected_value",),
         )
 
@@ -43,7 +42,7 @@ class EnsembleTable:
             member_table_ids=(0, 1, 2, 0),
         )
 
-        # Accesse tables in member order.
+        # Access tables in member order.
         assert ensemble.num_members == 4
         assert ensemble.table(0).equal(estimator_table1)
         assert ensemble.table(3).equal(estimator_table1)
@@ -70,22 +69,24 @@ class EnsembleTable:
         tables: Sequence[TableTensor],
         member_table_ids: Sequence[int],
     ) -> Self:
-        r"""Create an ensemble table from tables and their member assignments.
+        """Create an ensemble table from tables and their member assignments.
 
-          ``member_table_ids`` contains the table index for each member. For example,
-          ``(0, 1, 0)`` assigns the first table to members 0 and 2 and the second table
-          to member 1. Shared tables are stored only once.
+        ``member_table_ids`` contains one table index per member. For
+        example, ``(0, 1, 0)`` assigns the first table to members 0 and 2 and
+        the second table to member 1.
 
         Args:
             tables: Tables available to the ensemble members.
-            member_table_ids: Index into ``tables`` for each member position.
+            member_table_ids: Index into ``tables`` for each ensemble member.
 
         Returns:
             An ensemble table preserving member order.
         """
-
+        referenced_table_ids = set(member_table_ids)
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
         for index, table in enumerate(tables):
+            if index not in referenced_table_ids:
+                continue
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
@@ -94,7 +95,13 @@ class EnsembleTable:
                     for stype, columns in table.columns.items()
                 ),
                 tuple(
-                    (stype, type(block), block.size(), block.dtype)
+                    (
+                        stype,
+                        type(block),
+                        block.size(),
+                        block.layout,
+                        block.dtype,
+                    )
                     for stype, block in table.items()
                 ),
                 table.device,
@@ -114,7 +121,7 @@ class EnsembleTable:
                 else cast(
                     TableTensor,
                     torch.stack(
-                        [tables[index] for index in indices],
+                        tensors=[tables[index] for index in indices],
                         dim=0,
                     ),
                 )
