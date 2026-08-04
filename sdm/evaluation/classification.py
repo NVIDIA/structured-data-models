@@ -59,6 +59,9 @@ def to_class_indices(
             f"(got {target.size(-1)} columns)"
         )
 
+    if target.isnan().any():
+        raise ValueError("Expected target to not contain missing values")
+
     if pred.size()[:-1] != target.size()[:-1]:
         raise ValueError(
             f"Expected prediction and target row dimensions to match "
@@ -71,8 +74,6 @@ def to_class_indices(
 
     category = target.categories[0]
     code = target.code.squeeze(-1)
-    if (code < 0).any():
-        raise ValueError("Expected target to not contain missing values")
 
     if isinstance(category, StringTensor):
         classes = StringTensor.from_list(
