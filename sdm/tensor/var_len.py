@@ -64,9 +64,6 @@ class VarLenTensor(Tensor):
     _offset: Tensor
     _valid: Tensor | None
 
-    # Route tensor operations through `__torch_dispatch__` only.
-    __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
-
     # Constructors ############################################################
 
     def __init__(
@@ -504,6 +501,11 @@ class VarLenTensor(Tensor):
             storage_offset=int(self.storage_offset()),
         )
 
+    @property
+    def is_nullable(self) -> bool:
+        r"""Whether this tensor has a validity mask."""
+        return self._valid is not None
+
     # Decorators ##############################################################
 
     @classmethod
@@ -561,6 +563,21 @@ class VarLenTensor(Tensor):
             int(self.storage_offset()),
         )
         return (self.__class__, args)
+
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Callable[..., Any],
+        types: tuple[type[Any], ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        if func is torch.isfinite or func is Tensor.isfinite:
+            assert isinstance(args[0], VarLenTensor)
+            return _isfinite(args[0])
+
+        with torch._C.DisableTorchFunction():
+            return func(*args, **(kwargs or {}))
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -902,6 +919,30 @@ def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
     )
+
+
+@VarLenTensor.implements(aten.isnan.default)
+def _isnan(inp: VarLenTensor) -> Tensor:
+    valid = inp.valid
+    if valid is None:
+        return torch.zeros(
+            inp.size(),
+            dtype=torch.bool,
+            device=inp.device,
+        )
+    return ~valid
+
+
+@VarLenTensor.implements(aten.isfinite.default)
+def _isfinite(inp: VarLenTensor) -> Tensor:
+    valid = inp.valid
+    if valid is None:
+        return torch.ones(
+            inp.size(),
+            dtype=torch.bool,
+            device=inp.device,
+        )
+    return valid
 
 
 @VarLenTensor.implements(aten.equal.default)
