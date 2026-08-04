@@ -66,6 +66,7 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 # Python/PyTorch Coding Style
 
 - Keep Python code typed at function and method boundaries.
+- Keep parameter validation minimal: only reject values that could otherwise be silently accepted, and raise for unsupported `Literal` values when dispatching on them rather than in constructors.
 - Use keyword arguments in multi-line calls.
 - Avoid `else` after `return`, `raise`, `break`, or `continue`.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
@@ -76,12 +77,6 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Docs, errors, and reprs should describe public operations, inputs, outputs, and values rather than incidental implementation details.
 - Keep code direct and use the narrowest practical scope. Introduce abstractions only when they encapsulate behavior or invariants, define a public interface, or serve established reuse.
 - In `__init__.py`, order imports and `__all__` in dependency order: base classes/mixins first, then concrete; never alphabetically.
-
-# Validation
-
-- Do not add runtime validation merely to repeat type annotations. In particular, do not validate `Literal` membership in constructors; use an exhaustive assertion at the dispatch point when needed for narrowing.
-- Validate semantic constraints only when invalid input would otherwise be silently accepted, ignore an argument, corrupt state, or fail later with an unrelated error. Prefer clear downstream PyTorch errors over speculative positivity, range, or finiteness checks.
-- Validate each invariant once at the public boundary that owns it. Reuse invariants established earlier in the same operation, and do not repeat tensor, category, or schema scans in `fit_transform` or other hot paths. Revalidate new external inputs passed to later calls.
 
 # CUDA / GPU Performance
 
