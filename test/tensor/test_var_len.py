@@ -154,6 +154,23 @@ def test_arrow() -> None:
         == tensor._data.numpy().__array_interface__["data"][0]
     )
 
+    tensor = VarLenTensor.from_arrow(
+        pa.array([[1, 2], None, [3]], type=pa.list_(pa.int64())),
+    )
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().to_pylist() == [[1, 2], None, [3]]
+    assert tensor.tolist() == [[1, 2], None, [3]]
+
+    tensor = VarLenTensor.from_arrow(
+        pa.array([[1, 2], None, [3]], type=pa.large_list(pa.int64()))[1:],
+    )
+    assert tensor.storage_offset() == 0
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([False, True]))
+    assert tensor.to_arrow().type == pa.large_list(pa.int64())
+    assert tensor.to_arrow().to_pylist() == [None, [3]]
+
 
 def test_list() -> None:
     tensor = VarLenTensor.from_list([[1, 2], [], [3]])

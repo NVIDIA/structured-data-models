@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
 from typing_extensions import Self, override
 
-from sdm.tensor.io import ARROW_TORCH_DTYPES, to_arrow
+from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
 
 aten = torch.ops.aten
 
@@ -274,7 +274,7 @@ class VarLenTensor(Tensor):
             import pyarrow as pa
             from sdm import VarLenTensor
 
-            array = pa.array([[1, 2], [3, 4, 5], [], [6]])
+            array = pa.array([[1, 2], [3, 4, 5], [], None, [6]])
             tensor = VarLenTensor.from_arrow(array)
 
         Args:
@@ -305,8 +305,10 @@ class VarLenTensor(Tensor):
                 f"'list' or 'large_list' type (got '{array.type}')"
             )
 
-        if array.null_count > 0 or array.values.null_count > 0:
-            raise ValueError(f"{cls.__name__!r} cannot represent null values")
+        if array.values.null_count > 0:
+            raise ValueError(
+                f"{cls.__name__!r} cannot represent inner null values"
+            )
 
         dtype = ARROW_TORCH_DTYPES.get(array.values.type)
         if dtype is None:
@@ -321,15 +323,30 @@ class VarLenTensor(Tensor):
         else:
             data = torch.empty(0, dtype=dtype, device=device)
 
-        offset = torch.frombuffer(array.buffers()[1], dtype=offset_dtype)
-        offset = offset.to(device)
+        valid: Tensor | None = None
+        if array.null_count > 0:
+            offset = arrow_as_tensor(
+                array.offsets,
+                dtype=offset_dtype,
+                device=device,
+            )
+            valid = arrow_as_tensor(
+                array.is_valid(),
+                dtype=torch.bool,
+                device=device,
+            )
+            storage_offset = 0
+        else:
+            offset = torch.frombuffer(array.buffers()[1], dtype=offset_dtype)
+            offset = offset.to(device)
+            storage_offset = array.offset
 
         return cls(
             data=data,
             offset=offset,
-            valid=None,
+            valid=valid,
             size=size,
-            storage_offset=array.offset,
+            storage_offset=storage_offset,
         )
 
     def to_arrow(self) -> pa.Array:
@@ -342,7 +359,13 @@ class VarLenTensor(Tensor):
             if tensor._offset.dtype == torch.int32
             else pa.large_list(array.type),
             length=tensor.numel(),
-            buffers=[None, pa.py_buffer(tensor._offset.numpy())],
+            buffers=[
+                pa.array(tensor._valid.numpy(), type=pa.bool_()).buffers()[1]
+                if tensor._valid is not None
+                else None,
+                pa.py_buffer(tensor._offset.numpy()),
+            ],
+            null_count=-1,
             children=[array],
             offset=int(tensor.storage_offset()),
         )
@@ -373,29 +396,58 @@ class VarLenTensor(Tensor):
             device: The device.
             offset_dtype: The dtype of the ``offset`` tensor.
         """
+        data: list[Any] = []
+        offset: list[int] = [0]
+        valid: list[bool] = []
 
         def is_sequence(value: Any) -> bool:
             return isinstance(value, Sequence) and not isinstance(
                 value, str | bytes | bytearray
             )
 
-        def flatten(seq: Sequence[Any]) -> tuple[int, ...]:
-            if len(seq) == 0:
-                offset.append(len(data))
-                return ()
+        def is_leaf(value: Any) -> bool:
+            if value is None:
+                return True
+            if not is_sequence(value):
+                return False
+            return len(value) == 0 or not is_sequence(value[0])
 
-            if not is_sequence(seq[0]):
-                data.extend(seq)
+        def flatten_leaf(value: Any) -> None:
+            if value is None:
                 offset.append(len(data))
-                return ()
+                valid.append(False)
+                return
 
-            child_size: tuple[int, ...] | None = None
-            for item in seq:
-                if not is_sequence(item):
+            for item in value:
+                if item is None:
+                    raise ValueError(
+                        f"{cls.__name__!r} cannot represent inner null values"
+                    )
+                if is_sequence(item):
                     raise ValueError(
                         f"{cls.__name__!r} data must be rectangular"
                     )
-                item_size = flatten(cast(Sequence[Any], item))
+
+            data.extend(value)
+            valid.append(True)
+            offset.append(len(data))
+
+        def flatten(value: Any) -> tuple[int, ...]:
+            if is_leaf(value):
+                flatten_leaf(value)
+                return ()
+
+            if not is_sequence(value):
+                raise ValueError(f"{cls.__name__!r} data must be rectangular")
+
+            child_size: tuple[int, ...] | None = None
+            for item in value:
+                if is_leaf(item):
+                    item_size = ()
+                    flatten_leaf(item)
+                else:
+                    item_size = flatten(item)
+
                 if child_size is None:
                     child_size = item_size
                 elif item_size != child_size:
@@ -404,16 +456,16 @@ class VarLenTensor(Tensor):
                     )
 
             assert child_size is not None
-            return (len(seq), *child_size)
+            return (len(value), *child_size)
 
-        data: list[Any] = []
-        offset = [0]
         size = (0,) if len(values) == 0 else flatten(values)
 
         return cls(
             data=torch.tensor(data, dtype=dtype, device=device),
             offset=torch.tensor(offset, dtype=offset_dtype, device=device),
-            valid=None,
+            valid=torch.tensor(valid, dtype=torch.bool, device=device)
+            if False in valid
+            else None,
             size=size,
         )
 
