@@ -118,7 +118,7 @@ def test_stype_dispatch_accepts_callable_route() -> None:
         table.categorical.code,
     )
 
-    with pytest.raises(TypeError, match="non-invertible"):
+    with pytest.raises(TypeError, match=r"'Callable' is not invertible"):
         dispatch.inverse_transform(output)
 
 
@@ -151,7 +151,7 @@ def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
 
     output = dispatch.fit_transform(table)
 
-    with pytest.raises(TypeError, match=r"numerical.*ImputeMean"):
+    with pytest.raises(TypeError, match=r"'ImputeMean' is not invertible"):
         dispatch.inverse_transform(output)
 
 

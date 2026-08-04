@@ -171,83 +171,6 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             "remainder='passthrough' or remainder='drop'."
         )
 
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        remainder_stypes = [
-            stype
-            for stype, columns in table.columns.items()
-            if stype.value not in self.processors and len(columns) > 0
-        ]
-        self._check_remainder(remainder_stypes)
-        for stype, processor in self.processors.items():
-            processor = cast(Processor, processor)
-            route_input = table.select_stypes(stype)
-            if route_input.size(-1) == 0:
-                continue
-            processor.fit(route_input, generator=generator)
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        remainder_stypes = [
-            stype
-            for stype, columns in table.columns.items()
-            if stype.value not in self.processors and len(columns) > 0
-        ]
-        self._check_remainder(remainder_stypes)
-
-        outputs: list[TableTensor] = []
-        for stype, processor in self.processors.items():
-            processor = cast(Processor, processor)
-            route_input = table.select_stypes(stype)
-            if route_input.size(-1) == 0:
-                continue
-            out = processor.fit_transform(route_input, generator=generator)
-            outputs.append(out)
-        if self.remainder == "passthrough":
-            outputs.extend(
-                table.select_stypes(stype) for stype in remainder_stypes
-            )
-        if len(outputs) == 0:
-            return table.select_columns(())
-        return cast(
-            TableTensor,
-            torch.cat(cast(list[Tensor], outputs), dim=-1),
-        )
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        remainder_stypes = [
-            stype
-            for stype, columns in table.columns.items()
-            if stype.value not in self.processors and len(columns) > 0
-        ]
-        self._check_remainder(remainder_stypes)
-
-        outputs: list[TableTensor] = []
-        for stype, processor in self.processors.items():
-            processor = cast(Processor, processor)
-            route_input = table.select_stypes(stype)
-            if route_input.size(-1) == 0:
-                continue
-            outputs.append(processor.transform(route_input))
-        if self.remainder == "passthrough":
-            outputs.extend(
-                table.select_stypes(stype) for stype in remainder_stypes
-            )
-        if len(outputs) == 0:
-            return table.select_columns(())
-        return cast(
-            TableTensor,
-            torch.cat(cast(list[Tensor], outputs), dim=-1),
-        )
-
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -417,45 +340,6 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             else:
                 outputs.append(group.select_stypes(remainder))
         return ensemble_table._replace_groups(outputs)
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        if self.remainder == "drop":
-            raise ValueError(
-                "'StypeDispatch' with remainder='drop' is not invertible"
-            )
-
-        outputs: list[TableTensor] = []
-        # TODO: Track transformed route ownership before supporting routes that
-        # change stype or share an output stype.
-        for stype, processor in self.processors.items():
-            processor = cast(Processor, processor)
-            route_input = table.select_stypes(stype)
-            if route_input.size(-1) == 0:
-                continue
-            inverse = getattr(processor, "inverse_transform", None)
-            if not callable(inverse):
-                raise TypeError(
-                    f"Route {stype!r} uses non-invertible processor "
-                    f"{processor.__class__.__name__!r}"
-                )
-            outputs.append(inverse(route_input))
-
-        remainder_stypes = [
-            stype
-            for stype, columns in table.columns.items()
-            if stype.value not in self.processors and len(columns) > 0
-        ]
-        self._check_remainder(remainder_stypes)
-        outputs.extend(
-            table.select_stypes(stype) for stype in remainder_stypes
-        )
-        if len(outputs) == 0:
-            return table.select_columns(())
-
-        return cast(
-            TableTensor,
-            torch.cat(cast(list[Tensor], outputs), dim=-1),
-        )
 
     def __repr__(self, *, indent: int = 0) -> str:
         if len(self.processors) == 0:
