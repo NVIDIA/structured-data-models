@@ -12,12 +12,13 @@ from sdm.tensor.table import TableTensor
 class EnsembleTable:
     r"""Table data for multiple members of a model ensemble.
 
-    A model ensemble combines multiple estimators, called members.
-    :class:`EnsembleTable` maps each member to the
-    :class:`~sdm.tensor.TableTensor` it uses. Members may share the same table
-    or use differently processed representations. Shared data is stored once.
-    Compatible representations are stacked for joint processing, while
-    incompatible representations remain separate.
+    Each ensemble member receives a :class:`~sdm.tensor.TableTensor` as input.
+    Members may share the same table or hold member-specific tables produced by
+    per-member preprocessing. Shared tables are stored once.
+
+    Compatible member tables are batched into groups along a leading dimension
+    for joint processing. Two tables are compatible when they have the same
+    shape, column schema, block layout, device, and categorical vocabularies.
 
     .. testcode::
 
@@ -31,138 +32,139 @@ class EnsembleTable:
             torch.tensor([[-1.0], [1.0]])
         )
 
-        ensemble = EnsembleTable.from_representations(
-            representations=(original, normalized),
-            member_representation_ids=(0, 1, 0, 1),
+        ensemble = EnsembleTable.from_member_tables(
+            tables=(original, normalized),
+            member_table_ids=(0, 1, 0, 1),
         )
 
         assert ensemble.num_members == 4
-        assert ensemble.representation(0).equal(original)
-        assert ensemble.representation(1).equal(normalized)
+        assert ensemble.member_table(0).equal(original)
+        assert ensemble.member_table(1).equal(normalized)
 
     Args:
-        table: A :class:`TableTensor` shared by all ensemble members.
+        table: A :class:`~sdm.tensor.TableTensor` shared by all ensemble
+            members.
         num_members: Number of ensemble members.
     """
 
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
         if num_members <= 0:
             raise ValueError("Expected 'num_members' to be positive.")
-        self._packed_representations = (cast(TableTensor, table.unsqueeze(0)),)
+        self._member_groups = (cast(TableTensor, table.unsqueeze(0)),)
         self._member_locations = ((0, 0),) * num_members
 
     @classmethod
-    def from_representations(
+    def from_member_tables(
         cls,
-        representations: Sequence[TableTensor],
-        member_representation_ids: Sequence[int],
+        tables: Sequence[TableTensor],
+        member_table_ids: Sequence[int],
     ) -> Self:
-        r"""Create an ensemble table from member-specific representations.
+        r"""Create an ensemble table from member-specific tables.
 
-        ``member_representation_ids[i]`` selects the representation used by
-        member ``i``. Reusing an ID means that members share the same
-        representation. Compatible representations are stacked without
-        changing member order.
+        ``member_table_ids[i]`` selects the table used by member ``i``.
+        Reusing an ID means that members share the same table. Compatible
+        tables are automatically batched into groups for joint processing.
 
-        Categorical representations are stacked only when they reference the
-        same category vocabulary objects.
+        Categorical tables are grouped only when they reference the same
+        category vocabulary objects.
 
         Args:
-            representations: Table representations that members may reference.
-            member_representation_ids: For each member, its index into
-                ``representations``.
+            tables: Distinct tables that members may reference.
+            member_table_ids: For each member, the index of its table in
+                ``tables``.
 
         Returns:
             An ensemble table preserving member order.
         """
-        if len(representations) == 0:
-            raise ValueError("Expected at least one representation.")
-        if len(member_representation_ids) == 0:
+        if len(tables) == 0:
+            raise ValueError("Expected at least one table.")
+        if len(member_table_ids) == 0:
             raise ValueError("Expected at least one ensemble member.")
         if any(
-            representation_id < 0 or representation_id >= len(representations)
-            for representation_id in member_representation_ids
+            table_id < 0 or table_id >= len(tables)
+            for table_id in member_table_ids
         ):
             raise ValueError(
-                "'member_representation_ids' references an unknown "
-                "representation."
+                "'member_table_ids' references an unknown table."
             )
 
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
-        for index, representation in enumerate(representations):
+        for index, table in enumerate(tables):
             # Shape, schema, block layout, device, and categorical vocabularies
             # must match for torch.stack to preserve member semantics.
             compatibility_key = (
-                tuple(representation.size()),
+                tuple(table.size()),
                 tuple(
                     (stype, columns)
-                    for stype, columns in representation.columns.items()
+                    for stype, columns in table.columns.items()
                 ),
                 tuple(
                     (stype, type(block), block.dtype)
-                    for stype, block in representation.items()
+                    for stype, block in table.items()
                 ),
-                representation.device,
+                table.device,
                 tuple(
                     id(category)
-                    for category in representation.categorical.categories
+                    for category in table.categorical.categories
                 ),
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
 
-        packed_representations: list[TableTensor] = []
+        member_groups: list[TableTensor] = []
         input_locations: dict[int, tuple[int, int]] = {}
         for indices in compatible_groups.values():
-            packed_index = len(packed_representations)
-            packed_representations.append(
-                cast(TableTensor, representations[indices[0]].unsqueeze(0))
+            group_index = len(member_groups)
+            member_groups.append(
+                cast(TableTensor, tables[indices[0]].unsqueeze(0))
                 if len(indices) == 1
                 else cast(
                     TableTensor,
                     torch.stack(
-                        [representations[index] for index in indices],
+                        [tables[index] for index in indices],
                         dim=0,
                     ),
                 )
             )
             input_locations.update(
                 {
-                    input_index: (packed_index, representation_index)
-                    for representation_index, input_index in enumerate(indices)
+                    input_index: (group_index, position)
+                    for position, input_index in enumerate(indices)
                 }
             )
 
-        table = cls.__new__(cls)
-        table._packed_representations = tuple(packed_representations)
-        table._member_locations = tuple(
-            input_locations[index] for index in member_representation_ids
+        ensemble = cls.__new__(cls)
+        ensemble._member_groups = tuple(member_groups)
+        ensemble._member_locations = tuple(
+            input_locations[index] for index in member_table_ids
         )
-        return table
+        return ensemble
 
     @property
     def num_members(self) -> int:
         """Return the number of ensemble members."""
         return len(self._member_locations)
 
-    def representation(self, member_id: int) -> TableTensor:
-        """Return the table representation used by one member.
+    def member_table(self, member_id: int) -> TableTensor:
+        """Return the table for one ensemble member.
 
         Args:
-            member_id: Zero-based ensemble member index.
+            member_id: Zero-based member index.
         """
-        packed_index, representation_index = self._member_locations[member_id]
-        return self._packed_representations[packed_index][representation_index]
+        group_index, position = self._member_locations[member_id]
+        return self._member_groups[group_index][position]
 
-    def iter_packed_representations(self) -> Iterator[TableTensor]:
-        """Yield compatible representations.
+    def member_groups(self) -> Iterator[TableTensor]:
+        """Yield groups of compatible member tables.
 
-        Representations are stacked along a leading dimension.
+        Each group is a :class:`~sdm.tensor.TableTensor` with a leading
+        dimension of size ``G``, where ``G`` is the number of members in the
+        group. Use this to process all members in a group jointly as a batch.
         """
-        return iter(self._packed_representations)
+        return iter(self._member_groups)
 
     def __repr__(self) -> str:
+        num_member_tables = sum(g.size(0) for g in self._member_groups)
         return (
             f"{self.__class__.__name__}(num_members={self.num_members}, "
-            f"num_representations="
-            f"{sum(table.size(0) for table in self._packed_representations)})"
+            f"num_member_tables={num_member_tables})"
         )
