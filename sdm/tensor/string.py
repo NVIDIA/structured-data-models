@@ -222,6 +222,8 @@ class StringTensor(VarLenTensor):
             start = int(tensor.storage_offset())
             if tensor._valid is not None:
                 mask = cudf.Series(tensor._valid, copy=False)._column.as_mask()
+                if isinstance(mask, tuple):
+                    mask = mask[0]
                 null_count = plc.null_mask.null_count(
                     mask, start, start + tensor.numel()
                 )
