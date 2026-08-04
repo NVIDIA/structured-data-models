@@ -43,9 +43,10 @@ class ImputeMode(Processor):
         _check_categorical_codes(table)
         fill_values: list[torch.Tensor] = []
         columns = table.columns[Stype.categorical]
+        observed_mask = data.isfinite()
         for index, category in enumerate(table.categorical.categories):
             codes = data[..., index]  # [*batch, n_samples]
-            observed = codes >= 0
+            observed = observed_mask[..., index]
             if not bool(observed.any(dim=-1).all()):
                 raise ValueError(
                     "Cannot fit 'ImputeMode' because categorical "
@@ -88,7 +89,7 @@ class ImputeMode(Processor):
 
     def _replace_missing(self, table: TableTensor) -> TableTensor:
         code = table.categorical.where(
-            table.categorical >= 0,
+            table.categorical.isfinite(),
             self._fill_values.to(
                 dtype=table.categorical.dtype,
                 device=table.categorical.device,

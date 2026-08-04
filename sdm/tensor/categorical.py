@@ -195,12 +195,13 @@ class CategoricalTensor(Tensor):
             )
 
         code_t = self._code.movedim(-1, 0).contiguous()
+        na_mask_t = self.isnan().movedim(-1, 0).contiguous()
 
         arrays = []
         for code, category, na_mask in zip(
             code_t.cpu().unbind(0),
             self.categories,
-            (code_t < 0).cpu().unbind(0),
+            na_mask_t.cpu().unbind(0),
         ):
             indices = pa.array(
                 code.view(-1).numpy(),
@@ -264,13 +265,14 @@ class CategoricalTensor(Tensor):
             )
 
         code_t = self._code.movedim(-1, 0).contiguous()
+        valid_mask_t = self.isfinite().movedim(-1, 0).contiguous()
 
         columns = {}
         for name, code, category, mask in zip(
             names,
             code_t.unbind(0),
             self.categories,
-            (code_t >= 0).unbind(0),
+            valid_mask_t.unbind(0),
         ):
             columns[name] = cudf.CategoricalIndex.from_codes(
                 codes=to_cudf(code, mask)._column,
@@ -396,8 +398,11 @@ class CategoricalTensor(Tensor):
                 for value, isna in zip(values, na_mask)
             ]
 
-        def decode_column(code: Tensor, category: Tensor) -> Any:
-            na_mask = code < 0
+        def decode_column(
+            code: Tensor,
+            category: Tensor,
+            na_mask: Tensor,
+        ) -> Any:
             out = category[code.clamp(min=0)]
             return apply_na_mask(out.tolist(), na_mask.tolist())
 
@@ -416,8 +421,9 @@ class CategoricalTensor(Tensor):
                 for i in range(size[0])
             ]
 
+        na_mask = self.isnan()
         columns = [
-            decode_column(self._code[..., i], category)
+            decode_column(self._code[..., i], category, na_mask[..., i])
             for i, category in enumerate(self._categories)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))

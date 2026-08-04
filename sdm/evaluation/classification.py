@@ -71,7 +71,7 @@ def to_class_indices(
 
     category = target.categories[0]
     code = target.code.squeeze(-1)
-    if (code < 0).any():
+    if target.isnan().squeeze(-1).any():
         raise ValueError("Expected target to not contain missing values")
 
     if isinstance(category, StringTensor):
