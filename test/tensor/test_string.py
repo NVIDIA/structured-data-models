@@ -364,3 +364,10 @@ def test_cudf_null_handling() -> None:
     cudf = pytest.importorskip("cudf")
     tensor = StringTensor.from_cudf(cudf.Series(["hi", None, "yo"]))
     assert tensor.to_arrow().to_pylist() == ["hi", None, "yo"]
+
+    assert (tensor == "hi").equal(
+        torch.tensor([True, False, False], device="cuda")
+    )
+    assert (tensor != "hi").equal(
+        torch.tensor([False, False, True], device="cuda")
+    )
