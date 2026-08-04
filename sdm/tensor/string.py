@@ -217,30 +217,25 @@ class StringTensor(VarLenTensor):
             import cudf
             import pylibcudf as plc
 
-            # StringTensor stores variable-width strings in separate UTF-8
-            # data and offset buffers. Use pylibcudf to expose them without a
-            # host copy.
-            offset_column = plc.Column.from_array(obj=tensor._offset)
+            mask = None
+            null_count = 0
+            start = int(tensor.storage_offset())
+            if tensor._valid is not None:
+                mask = cudf.Series(tensor._valid, copy=False)._column.as_mask()
+                null_count = plc.null_mask.null_count(
+                    mask, start, start + tensor.numel()
+                )
+
             plc_column = plc.Column(
                 data_type=plc.DataType(plc.TypeId.STRING),
                 size=tensor.numel(),
                 data=plc.gpumemoryview(tensor._data),
-                mask=None,
-                null_count=0,
-                offset=int(tensor.storage_offset()),
-                children=[offset_column],
+                mask=mask,
+                null_count=null_count,
+                offset=start,
+                children=[plc.Column.from_array(obj=tensor._offset)],
             )
-            out = cudf.Series.from_pylibcudf(plc_column)
-
-            valid = tensor.valid
-            if valid is None:
-                return out
-
-            valid = valid.contiguous().view(-1)
-            mask = cudf.Series(valid, copy=False)._column.as_mask()
-            if not isinstance(mask, tuple):
-                mask = (mask,)
-            return cudf.Series._from_column(out._column.set_mask(*mask))
+            return cudf.Series.from_pylibcudf(plc_column)
 
     @classmethod
     @override
