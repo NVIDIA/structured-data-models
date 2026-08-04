@@ -26,9 +26,8 @@ class Processor(torch.nn.Module, abc.ABC):
     dimension and, unless an explicit batch contract says otherwise, process
     every leading table position independently.
 
-    Processors pass tables through unchanged when all blocks for their
-    supported semantic types are empty. Fitting such an input skips
-    processor-specific work and leaves the processor unfitted.
+    :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
+    supported tables without columns.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
@@ -119,8 +118,6 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         self._check_supported_stypes(table)
         if self._is_empty_block(table):
-            if self.requires_fit:
-                self._fitted = False
             return self
         if self.requires_fit:
             self._fit(table, generator=generator)
@@ -163,8 +160,6 @@ class Processor(torch.nn.Module, abc.ABC):
         """
         self._check_supported_stypes(table)
         if self._is_empty_block(table):
-            if self.requires_fit:
-                self._fitted = False
             return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
@@ -209,16 +204,9 @@ class InvertibleMixin(abc.ABC):
             The table restored to the representation before
             :meth:`~Processor.transform`.
         """
-        self._check_supported_stypes(table)
-        if self._is_empty_block(table):
-            return table
         self._check_is_fitted()
         return self._inverse_transform(table)
 
     if TYPE_CHECKING:
         # Provided at runtime by `Processor` via the MRO.
-        def _check_supported_stypes(self, table: TableTensor) -> None: ...
-
         def _check_is_fitted(self) -> None: ...
-
-        def _is_empty_block(self, table: TableTensor) -> bool: ...

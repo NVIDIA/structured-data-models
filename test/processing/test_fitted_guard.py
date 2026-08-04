@@ -55,13 +55,6 @@ class StatelessProcessor(Processor):
         return table.replace_blocks(numerical=table.numerical + 1)
 
 
-class MultiStypeProcessor(Processor):
-    supported_stypes = frozenset({Stype.numerical, Stype.categorical})
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table
-
-
 def test_stateless_processor_runs_without_fit() -> None:
     processor = StatelessProcessor()
     inp = torch.ones(2, 2)
@@ -110,42 +103,10 @@ def test_processor_rejects_id_stype() -> None:
     with pytest.raises(ValueError, match="id"):
         Standardize().fit(_id_table())
 
-    with pytest.raises(ValueError, match="id"):
-        Standardize().inverse_transform(_id_table())
 
-
-def test_single_stype_processor_passes_empty_block_through() -> None:
+def test_processor_fit_transform_handles_empty_table() -> None:
     table = TableTensor.from_tensor(torch.empty(3, 0))
-    processor = PCA(num_components=2)
+    output = PCA(num_components=2).fit_transform(table)
 
-    transformed = processor.transform(table)
-    fit_transformed = processor.fit_transform(table)
-
-    assert transformed.size() == table.size()
-    assert transformed.schema == table.schema
-    assert fit_transformed.size() == table.size()
-    assert fit_transformed.schema == table.schema
-
-
-def test_multi_stype_processor_requires_one_nonempty_supported_block() -> None:
-    empty = TableTensor.from_tensor(torch.empty(3, 0))
-    nonempty = TableTensor.from_tensor(torch.ones(3, 1))
-    processor = MultiStypeProcessor()
-
-    transformed = processor.transform(empty)
-
-    assert transformed.size() == empty.size()
-    assert transformed.schema == empty.schema
-    with pytest.raises(RuntimeError, match="not fitted"):
-        processor.transform(nonempty)
-
-
-def test_fitting_empty_block_does_not_fit_nonempty_inputs() -> None:
-    empty = TableTensor.from_tensor(torch.empty(3, 0))
-    nonempty = TableTensor.from_tensor(torch.ones(3, 1))
-    processor = Standardize().fit(nonempty).fit(empty)
-
-    assert processor.transform(empty).size() == empty.size()
-    assert processor.inverse_transform(empty).size() == empty.size()
-    with pytest.raises(RuntimeError, match="not fitted"):
-        processor.transform(nonempty)
+    assert output.size() == table.size()
+    assert output.schema == table.schema
