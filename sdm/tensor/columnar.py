@@ -66,6 +66,7 @@ class ColumnarTensor(Tensor):
     ) -> None:
         pass
 
+    @torch.compiler.disable
     def __new__(
         cls,
         columns: Sequence[Tensor],

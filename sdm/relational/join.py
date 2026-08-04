@@ -17,6 +17,7 @@ LEFT_ROW_ID = f"__{PREFIX}_left_row_id__"
 RIGHT_ROW_ID = f"__{PREFIX}_right_row_id__"
 
 
+@torch.compiler.disable
 def join_index(
     left_table: TableTensor,
     right_table: TableTensor,

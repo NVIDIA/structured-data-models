@@ -77,6 +77,7 @@ class VarLenTensor(Tensor):
     ) -> None:
         pass
 
+    @torch.compiler.disable
     def __new__(
         cls,
         data: Tensor,

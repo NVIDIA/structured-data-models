@@ -149,6 +149,7 @@ class TableTensor(Tensor):
     ) -> None:
         pass
 
+    @torch.compiler.disable
     def __new__(
         cls,
         size: Sequence[int] | None = None,
@@ -709,7 +710,7 @@ class TableTensor(Tensor):
 
         return self.__class__(
             columns={stype: self._columns[stype] for stype in stypes},
-            **{stype: getattr(self, stype) for stype in stypes},
+            **{stype.value: getattr(self, stype.value) for stype in stypes},
         )
 
     def drop_stypes(
@@ -737,7 +738,7 @@ class TableTensor(Tensor):
             size=self.size()[:-1],
             columns={stype: self._columns[stype] for stype in keep},
             device=self.device,
-            **{stype: getattr(self, stype) for stype in keep},
+            **{stype.value: getattr(self, stype.value) for stype in keep},
         )
 
     def select_columns(self, columns: str | Iterable[str]) -> Self:

@@ -72,6 +72,36 @@ def test_recipe_role_fit_accepts_table() -> None:
     )
 
 
+def test_tabiclv2_feature_recipe_compile() -> None:
+    recipe = TabICLv2.default_recipe()
+    features = TableTensor(
+        columns={
+            "numerical": ("a", "b"),
+            "categorical": ("kind",),
+        },
+        numerical=torch.tensor(
+            [
+                [1.0, 2.0],
+                [3.0, 5.0],
+                [7.0, 11.0],
+                [13.0, 17.0],
+            ]
+        ),
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+    recipe.features.fit(features)
+    expected = recipe.features.transform(features)
+
+    transform = torch.compile(recipe.features.transform, backend="eager")
+    actual = transform(features)
+
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+    assert actual.columns == expected.columns
+
+
 @withCUDA
 def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     recipe = TabICLv2.default_recipe()
