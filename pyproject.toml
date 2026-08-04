@@ -63,13 +63,6 @@ dev = [
     { include-group = "test" },
     { include-group = "doc" },
 ]
-example-tabarena = [
-    "autogluon.common @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common",
-    "autogluon.core @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core",
-    "autogluon.features @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features",
-    "autogluon.tabular @ git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular",
-    "tabarena[plot] @ git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena",
-]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -81,10 +74,6 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
-
-[tool.uv.dependency-groups]
-# TODO Unpin Python version once TabArena supports Python 3.14.
-example-tabarena = { requires-python = ">=3.11,<3.14" }
 
 [tool.pytest.ini_options]
 addopts = [
@@ -144,16 +133,20 @@ select = [
     "D",    # pydocstyle
     "E",    # pycodestyle errors
     "F",    # pyflakes
+    "G",    # flake8-logging-format
     "I",    # import sorting
+    "LOG",  # flake8-logging
     "NPY",  # numpy-specific rules
     "PIE",  # flake8-pie
     "PLC0415",  # pylint: imports should be at module scope
+    "PLE",  # pylint errors
     "PT",   # pytest style
     "RET",  # return statement style
     "RUF",  # ruff-specific rules
     "SIM",  # simplification
     "T10",  # flake8-debugger
     "T20",  # flake8-print
+    "TID252",  # flake8-tidy-imports: require absolute imports
     "TID253",  # flake8-tidy-imports: keep optional imports lazy
     "UP",   # pyupgrade
     "W",    # pycodestyle warnings
@@ -178,6 +171,7 @@ convention = "google"
 ignorelist = ["id"]
 
 [tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
 banned-module-level-imports = [
     "cudf",
     "cupy",

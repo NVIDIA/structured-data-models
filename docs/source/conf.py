@@ -43,6 +43,8 @@ autosummary_generate = True
 autosummary_context = {"import_module": importlib.import_module}
 autodoc_member_order = "bysource"
 autodoc_typehints = "both"
+copybutton_prompt_text = r">>> |\.\.\. "
+copybutton_prompt_is_regexp = True
 suppress_warnings = ["config.cache"]
 intersphinx_mapping = {
     "cudf": ("https://docs.rapids.ai/api/cudf/stable", None),
