@@ -92,7 +92,7 @@ class ImputeMode(Processor):
             self._fill_values.to(
                 dtype=table.categorical.dtype,
                 device=table.categorical.device,
-            )
+            ),
         )
         categorical = CategoricalTensor(
             code=code,
