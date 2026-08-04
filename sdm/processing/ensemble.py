@@ -3,20 +3,27 @@ from __future__ import annotations
 import abc
 
 import torch
+from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.tensor import EnsembleTable, TableTensor
 
 
 class EnsembleProcessor(Processor):
-    """Base processor for transformations defined over complete ensembles.
+    r"""Base processor for ensemble-aware table transformations.
 
-    Implementations receive a complete :class:`~sdm.tensor.EnsembleTable` and
-    may change how many members it has and which table each member is
-    associated with.
-    The inherited :class:`~sdm.processing.base.Processor` API accepts a single
-    :class:`~sdm.tensor.TableTensor` as an ensemble with one member and
-    therefore requires one output member.
+    An :class:`EnsembleProcessor` defines a reusable transformation on
+    :class:`~sdm.tensor.EnsembleTable` for feature, target and output
+    pre/post-processing across ensemble members.
+    An :class:`EnsembleProcessor` learns any required state via
+    :meth:`fit_ensemble` and applies the transformation via
+    :meth:`transform_ensemble`. :meth:`fit_ensemble`,
+    :meth:`transform_ensemble`, and :meth:`fit_transform_ensemble`
+    are no-ops for supported stypes with empty blocks.
+
+    As a :class:`~sdm.processing.base.Processor`, it also accepts a
+    :class:`~sdm.tensor.TableTensor` and processes it as an ensemble
+    with one member.
     """
 
     def _fit(
@@ -25,40 +32,89 @@ class EnsembleProcessor(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._fit_transform_ensemble(
+        self._fit_ensemble(
             EnsembleTable(table, num_members=1),
             generator=generator,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
         output = self._transform_ensemble(EnsembleTable(table, num_members=1))
-        return self._single_member(output)
+        if output.num_members != 1:
+            raise RuntimeError(
+                f"{type(self).__name__!r} returned {output.num_members} "
+                f"ensemble members; call 'transform_ensemble()' instead of "
+                f"'transform()' when the output may contain more than one "
+                f"member."
+            )
+        return output.table(0)
 
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        output = self._fit_transform_ensemble(
-            EnsembleTable(table, num_members=1),
-            generator=generator,
-        )
-        return self._single_member(output)
-
-    @abc.abstractmethod
-    def _fit_transform_ensemble(
+    def _fit_ensemble(
         self,
         table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable: ...
+    ) -> None:
+        pass
 
     @abc.abstractmethod
     def _transform_ensemble(
         self,
         table: EnsembleTable,
     ) -> EnsembleTable: ...
+
+    def _fit_transform_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        if self.requires_fit:
+            self._fit_ensemble(table, generator=generator)
+        return self._transform_ensemble(table)
+
+    def fit_ensemble(
+        self,
+        table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        """Fit the processor on an ensemble table.
+
+        Args:
+            table: Ensemble table used to compute the processor state.
+            generator: Pseudorandom number generator used for sampling.
+        """
+        for group in table:
+            self._check_supported_stypes(group)
+        if not any(
+            group.active_stypes & self.supported_stypes for group in table
+        ):
+            return self
+        if self.requires_fit:
+            self._fit_ensemble(table, generator=generator)
+            self._fitted = True
+        return self
+
+    def transform_ensemble(
+        self,
+        table: EnsembleTable,
+    ) -> EnsembleTable:
+        """Transform an ensemble table with fitted state.
+
+        Args:
+            table: Ensemble table to transform.
+
+        Returns:
+            The transformed ensemble table.
+        """
+        for group in table:
+            self._check_supported_stypes(group)
+        if not any(
+            group.active_stypes & self.supported_stypes for group in table
+        ):
+            return table
+        self._check_is_fitted()
+        return self._transform_ensemble(table)
 
     def fit_transform_ensemble(
         self,
@@ -77,6 +133,10 @@ class EnsembleProcessor(Processor):
         """
         for group in table:
             self._check_supported_stypes(group)
+        if not any(
+            group.active_stypes & self.supported_stypes for group in table
+        ):
+            return table
         output = self._fit_transform_ensemble(
             table,
             generator=generator,
@@ -84,32 +144,6 @@ class EnsembleProcessor(Processor):
         if self.requires_fit:
             self._fitted = True
         return output
-
-    def transform_ensemble(
-        self,
-        table: EnsembleTable,
-    ) -> EnsembleTable:
-        """Transform an ensemble table with fitted state.
-
-        Args:
-            table: Ensemble table to transform.
-
-        Returns:
-            The transformed ensemble table.
-        """
-        for group in table:
-            self._check_supported_stypes(group)
-        self._check_is_fitted()
-        return self._transform_ensemble(table)
-
-    @staticmethod
-    def _single_member(ensemble: EnsembleTable) -> TableTensor:
-        if ensemble.num_members != 1:
-            raise RuntimeError(
-                "An EnsembleProcessor used with a TableTensor must return "
-                "exactly one member."
-            )
-        return ensemble.table(0)
 
 
 class EnsembleInvertibleMixin(InvertibleMixin):

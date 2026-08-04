@@ -17,14 +17,13 @@ class IdentityEnsembleProcessor(EnsembleProcessor):
         super().__init__()
         self.generator: torch.Generator | None = None
 
-    def _fit_transform_ensemble(
+    def _fit_ensemble(
         self,
         table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
+    ) -> None:
         self.generator = generator
-        return table
 
     def _transform_ensemble(
         self,
@@ -99,6 +98,9 @@ def test_ensemble_processor_requires_fit_before_transform() -> None:
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform_ensemble(table)
 
+    assert processor.fit_ensemble(table) is processor
+    assert processor.transform_ensemble(table) is table
+
 
 def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     data = TableTensor.from_tensor(torch.ones(2, 1))
@@ -135,11 +137,26 @@ def test_ensemble_processor_supports_table_tensor_lifecycle() -> None:
     assert processor(table).equal(table)
 
 
+def test_ensemble_processor_passthrough_for_empty_supported_blocks() -> None:
+    table = EnsembleTable(
+        TableTensor.from_tensor(torch.empty(2, 0)),
+        num_members=2,
+    )
+    processor = IdentityEnsembleProcessor()
+
+    assert processor.fit_ensemble(table) is processor
+    assert processor.fit_transform_ensemble(table) is table
+    assert processor.transform_ensemble(table) is table
+    assert not processor._fitted
+
+
 def test_only_ensemble_api_accepts_multiple_output_members() -> None:
     table = TableTensor.from_tensor(torch.ones(2, 1))
     ensemble = EnsembleTable(table, num_members=1)
     processor = ExpandingEnsembleProcessor()
 
     assert processor.transform_ensemble(ensemble).num_members == 2
-    with pytest.raises(RuntimeError, match="exactly one member"):
+    with pytest.raises(RuntimeError, match="transform_ensemble"):
         processor.transform(table)
+    with pytest.raises(RuntimeError, match="transform_ensemble"):
+        processor.fit_transform(table)
