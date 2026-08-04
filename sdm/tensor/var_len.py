@@ -501,6 +501,11 @@ class VarLenTensor(Tensor):
             storage_offset=int(self.storage_offset()),
         )
 
+    @property
+    def is_nullable(self) -> bool:
+        r"""Whether this tensor has a validity mask."""
+        return self._valid is not None
+
     # Decorators ##############################################################
 
     @classmethod

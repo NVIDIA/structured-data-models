@@ -392,6 +392,7 @@ def test_equal_allclose() -> None:
 
 def test_isnan_isfinite() -> None:
     tensor = VarLenTensor.from_list([[1, 2], None, [3]])
+    assert tensor.is_nullable
 
     out = torch.isnan(tensor)
     assert out.dtype == torch.bool
