@@ -553,12 +553,17 @@ class TableTensor(Tensor):
                 dfs.append(df)
             else:
                 tensor = tensor.detach().movedim(-1, 0).contiguous()
-                df = cudf.DataFrame(
-                    {
-                        name: to_cudf(column)
-                        for name, column in zip(self._columns[stype], tensor)
-                    }
-                )
+                valid = ~tensor.isnan() if tensor.is_floating_point() else None
+                col_dict: dict[str, cudf.Series] = {}
+                for idx, (name, column) in enumerate(
+                    zip(self._columns[stype], tensor)
+                ):
+                    col_dict[name] = to_cudf(
+                        column,
+                        None if valid is None else valid[idx],
+                    )
+
+                df = cudf.DataFrame(col_dict)
                 dfs.append(df)
 
         if len(dfs) == 1:
