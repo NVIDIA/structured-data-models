@@ -156,9 +156,10 @@ def test_sampler(relational_data: RelationalData) -> None:
               },
             ),
             orders: TableTensor(
-              size=(6, 4),
+              size=(6, 5),
               blocks={
                 numerical (1): [amount],
+                datetime (1): [timestamp],
                 id (3): [user_id, item_id, __example__],
               },
             ),

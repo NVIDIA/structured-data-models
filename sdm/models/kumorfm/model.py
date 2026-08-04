@@ -5,7 +5,7 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
-from sdm import RelatedTables, Relationship, Stype, TableTensor
+from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -14,7 +14,7 @@ from sdm.models.kumorfm.recipe import default_recipe
 from sdm.models.kumorfm.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import Recipe
+from sdm.processing import Recipe, Standardize
 
 
 class KumoRFM(ICLModel):
@@ -358,7 +358,6 @@ class _KumoRFM(torch.nn.Module):
                 num_hops=num_hops,
             )
 
-        # TODO Support computing relative time.
         # TODO Inject random heterogeneous GNN.
 
         # Reason within each Table ############################################
@@ -373,34 +372,60 @@ class _KumoRFM(torch.nn.Module):
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
         for name in table_names:
-            x_context_i = task_row_i = None
+            standardizer = Standardize()  # Relative time standardization.
+            x_context_i = context_task_row_i = None
             if context is not None:
+                assert x_context is not None
                 x_context_i = context.related_tables.tables[name].numerical
-                task_row_i = context.task_row_by_table[name]
+                context_task_row_i = context.task_row_by_table[name]
                 if name == readout_table:  # Inject task features:
-                    assert x_context is not None
                     x_context_i = self._inject_task(
                         x=x_context_i,
                         task=x_context.numerical,
                         readout_index=context.readout_index,
                     )
+                if cache is not None and cache.is_recording:
+                    cache[f"table_{name}.standardizer"] = standardizer
+                rel_time_i = self._get_rel_time(  # Inject relative time:
+                    datetime=context.related_tables.tables[name].datetime,
+                    seed_datetime=x_context.datetime,
+                    task_row=context_task_row_i,
+                    standardizer=standardizer,
+                )
+                if rel_time_i is not None:
+                    rel_time_i = rel_time_i.to(x_context_i.dtype)
+                    x_context_i = torch.cat([x_context_i, rel_time_i], dim=-1)
 
             x_query_i = None
             if query is not None and name in query.related_tables.tables:
+                assert x_query is not None
                 x_query_i = query.related_tables.tables[name].numerical
+                query_task_row_i = query.task_row_by_table[name]
                 if name == readout_table:  # Inject task features:
-                    assert x_query is not None
                     x_query_i = self._inject_task(
                         x=x_query_i,
                         task=x_query.numerical,
                         readout_index=query.readout_index,
                     )
+                rel_time_i = self._get_rel_time(  # Inject relative time:
+                    datetime=query.related_tables.tables[name].datetime,
+                    seed_datetime=x_query.datetime,
+                    task_row=query_task_row_i,
+                    standardizer=cast(
+                        Standardize, cache[f"table_{name}.standardizer"]
+                    )
+                    if cache is not None and cache.is_replaying
+                    else standardizer,
+                )
+                if rel_time_i is not None:
+                    rel_time_i = rel_time_i.to(x_query_i.dtype)
+                    x_query_i = torch.cat([x_query_i, rel_time_i], dim=-1)
 
             xs_context[name], xs_query[name] = self._embed_table(
                 x_context=x_context_i,
                 x_query=x_query_i,
                 y=y,
-                task_row=task_row_i,
+                task_row=context_task_row_i,
                 num_classes=num_classes,
                 cache_key=f"table_{name}",
                 cache=cache,
@@ -526,6 +551,45 @@ class _KumoRFM(torch.nn.Module):
         )
         x[..., readout_index, -task.size(-1) :] = task
         return x
+
+    def _get_rel_time(
+        self,
+        datetime: Tensor,
+        seed_datetime: Tensor,
+        task_row: Tensor,
+        standardizer: Standardize,
+    ) -> Tensor | None:
+
+        if datetime.size(-1) == 0 or seed_datetime.size(-1) == 0:
+            return None
+
+        seed_datetime = seed_datetime[task_row]
+
+        na_mask = (task_row < 0).unsqueeze(-1) | (seed_datetime == NaT)
+        na_mask = na_mask.unsqueeze(-2) | (datetime == NaT).unsqueeze(-1)
+        na_mask = na_mask.flatten(-2)
+
+        rel_time = seed_datetime.unsqueeze(-2) - datetime.unsqueeze(-1)
+        rel_time = rel_time.flatten(-2) / (24 * 60 * 60 * 1_000_000)
+        rel_time = rel_time.sign() * rel_time.abs().log1p()
+
+        if not standardizer._fitted:
+            rel_time[na_mask] = float("NaN")
+            rel_time = torch.where(
+                na_mask,
+                rel_time.nanmean(dim=-2, keepdim=True).nan_to_num(0.0),
+                rel_time,
+            )
+            rel_time = standardizer.fit_transform(
+                TableTensor.from_tensor(rel_time)
+            ).numerical
+        else:
+            rel_time = standardizer.transform(
+                TableTensor.from_tensor(rel_time)
+            ).numerical
+            rel_time[na_mask] = 0.0
+
+        return rel_time
 
 
 def _remap_v2_1_checkpoint(

@@ -15,9 +15,11 @@ class EnsembleProcessor(Processor):
     """Base processor for transformations defined over complete ensembles.
 
     Implementations receive a complete :class:`~sdm.tensor.EnsembleTable` and
-    may change its member count or member-to-representation mapping.
-    The inherited :class:`~sdm.tensor.TableTensor` lifecycle treats its input
-    as an ensemble with one member and therefore requires one output member.
+    may change how many members it has and which table each member is
+    associated with.
+    The inherited :class:`~sdm.processing.base.Processor` API accepts a single
+    :class:`~sdm.tensor.TableTensor` as an ensemble with one member and
+    therefore requires one output member.
     """
 
     def _fit(
@@ -76,8 +78,8 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for packed in table.iter_packed_representations():
-            self._check_supported_stypes(packed)
+        for group in table:
+            self._check_supported_stypes(group)
         output = self._fit_transform_ensemble(
             table,
             generator=generator,
@@ -98,19 +100,19 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for packed in table.iter_packed_representations():
-            self._check_supported_stypes(packed)
+        for group in table:
+            self._check_supported_stypes(group)
         self._check_is_fitted()
         return self._transform_ensemble(table)
 
     @staticmethod
-    def _single_member(table: EnsembleTable) -> TableTensor:
-        if table.num_members != 1:
+    def _single_member(ensemble: EnsembleTable) -> TableTensor:
+        if ensemble.num_members != 1:
             raise RuntimeError(
                 "An EnsembleProcessor used with a TableTensor must return "
                 "exactly one member."
             )
-        return table.representation(0)
+        return ensemble.table(0)
 
 
 class EnsembleInvertibleMixin(InvertibleMixin):
@@ -138,11 +140,11 @@ class EnsembleInvertibleMixin(InvertibleMixin):
 
 
 class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
-    """Apply an ordinary processor to packed ensemble representations.
+    """Apply an ordinary processor to compatible table groups.
 
-    The adapter owns one fitted processor copy per packed representation and
-    preserves the member-to-representation mapping. It only supports
-    processors whose output remains packed with the same leading size.
+    The adapter owns one fitted processor copy per group and preserves the
+    member-to-table mapping. It only supports processors whose output remains
+    grouped with the same leading size.
 
     Args:
         processor: Ordinary processor to adapt.
@@ -175,38 +177,37 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         self.processors = torch.nn.ModuleList()
         outputs = []
-        for packed in table.iter_packed_representations():
+        for group in table:
             processor = copy.deepcopy(self.template)
-            output = processor.fit_transform(packed, generator=generator)
-            self._check_output(packed, output)
+            output = processor.fit_transform(group, generator=generator)
+            self._check_output(group, output)
             self.processors.append(processor)
             outputs.append(output)
-        return table._replace_packed_representations(outputs)
+        return table._replace_groups(outputs)
 
     def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
         if not self.requires_fit and len(self.processors) == 0:
             self.processors = torch.nn.ModuleList(
-                copy.deepcopy(self.template)
-                for _ in table.iter_packed_representations()
+                copy.deepcopy(self.template) for _ in table
             )
         processors = self.processors
 
         outputs = []
-        for packed, processor in zip(
-            table.iter_packed_representations(),
+        for group, processor in zip(
+            table,
             processors,
             strict=True,
         ):
-            output = cast(Processor, processor).transform(packed)
-            self._check_output(packed, output)
+            output = cast(Processor, processor).transform(group)
+            self._check_output(group, output)
             outputs.append(output)
-        return table._replace_packed_representations(outputs)
+        return table._replace_groups(outputs)
 
     def _inverse_transform_ensemble(
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
-        """Apply the fitted inverse to packed representations.
+        """Apply the fitted inverse to compatible groups.
 
         Args:
             table: Ensemble table in the transformed representation.
@@ -215,8 +216,8 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
             Ensemble table restored to its representation before transform.
         """
         outputs = []
-        for packed, processor in zip(
-            table.iter_packed_representations(),
+        for group, processor in zip(
+            table,
             self.processors,
             strict=True,
         ):
@@ -224,10 +225,10 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
                 raise TypeError(
                     f"{processor.__class__.__name__!r} is not invertible."
                 )
-            output = processor.inverse_transform(packed)
-            self._check_output(packed, output)
+            output = processor.inverse_transform(group)
+            self._check_output(group, output)
             outputs.append(output)
-        return table._replace_packed_representations(outputs)
+        return table._replace_groups(outputs)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         """Apply the fitted inverse to a single table."""
