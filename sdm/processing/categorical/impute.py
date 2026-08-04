@@ -52,7 +52,7 @@ class ImputeMode(Processor):
                     f"column {columns[index]!r} has no observed values."
                 )
 
-            # Accumulate category counts per batch without one-hot data.
+            # Accumulate category counts per batch.
             counts = torch.zeros(
                 (*codes.shape[:-1], category.numel()),
                 dtype=torch.long,
