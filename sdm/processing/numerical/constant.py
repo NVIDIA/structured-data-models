@@ -3,7 +3,6 @@ from typing import Literal
 import torch
 
 from sdm import Stype
-from sdm.processing._utils import _as_float
 from sdm.processing.base import Processor
 from sdm.tensor import TableTensor
 
@@ -18,8 +17,7 @@ class DropConstantColumns(Processor):
     equal to ``threshold``, all columns are preserved.
 
     With ``method="variance"``, columns are retained when their sample
-    standard deviation is greater than ``tolerance``. Non-floating input is
-    promoted to the default floating-point dtype for this calculation.
+    standard deviation is greater than ``tolerance``.
 
     Only numerical columns are supported. Convert other feature stypes before
     this step, for example with :class:`~sdm.processing.ToNumerical`.
@@ -77,7 +75,7 @@ class DropConstantColumns(Processor):
         data = table.numerical
 
         if self.method == "variance":
-            keep = _as_float(data).std(dim=0) > self.tolerance
+            keep = data.std(dim=0) > self.tolerance
         # Preserve the schema when too few rows can exceed the threshold.
         elif data.size(0) <= self.threshold:
             keep = data.new_ones((data.size(-1),), dtype=torch.bool)
