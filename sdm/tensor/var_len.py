@@ -41,12 +41,14 @@ class VarLenTensor(Tensor):
         tensor = VarLenTensor(
             data=torch.tensor([1, 2, 3, 4, 5, 6]),
             offset=torch.tensor([0, 2, 5, 5, 6]),
+            valid=None,
             size=(2, 2),
         )
 
     Args:
         data: Flat contiguous tensor containing all element values.
         offset: One-dimensional offsets into ``data``.
+        valid: One-dimensional mask indicating valid, non-null element values.
         size: The shape of the tensor.
         stride: The stride of the tensor.
         storage_offset: The offset into the logical ``offset`` storage.
@@ -59,6 +61,7 @@ class VarLenTensor(Tensor):
 
     _data: Tensor
     _offset: Tensor
+    _valid: Tensor | None
 
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
@@ -69,6 +72,7 @@ class VarLenTensor(Tensor):
         self,
         data: Tensor,
         offset: Tensor,
+        valid: Tensor | None,
         size: Sequence[int],
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
@@ -79,6 +83,7 @@ class VarLenTensor(Tensor):
         cls,
         data: Tensor,
         offset: Tensor,
+        valid: Tensor | None,
         size: Sequence[int],
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
@@ -146,6 +151,27 @@ class VarLenTensor(Tensor):
                 f"Expected 'data' and 'offset' in {cls.__name__!r} to be on "
                 f"the same device (got '{data.device}' and '{offset.device}')"
             )
+        if valid is not None:
+            if valid.dtype != torch.bool:
+                raise ValueError(
+                    f"Expected 'valid' in {cls.__name__!r} to have dtype "
+                    f"'torch.bool' (got '{valid.dtype}')"
+                )
+            if valid.dim() != 1:
+                raise ValueError(
+                    f"Expected 'valid' in {cls.__name__!r} to be "
+                    f"one-dimensional (got {valid.dim()}D tensor)"
+                )
+            if not valid.is_contiguous():
+                raise ValueError(
+                    f"Expected 'valid' in {cls.__name__!r} to be contiguous"
+                )
+            if data.device != valid.device:
+                raise ValueError(
+                    f"Expected 'data' and 'valid' in {cls.__name__!r} to be "
+                    f"on the same device (got '{data.device}' and "
+                    f"'{valid.device}')"
+                )
         if len(size) != len(stride):
             raise ValueError(
                 f"Expected 'size' and 'stride' in {cls.__name__!r} to have "
@@ -161,6 +187,15 @@ class VarLenTensor(Tensor):
                 f"'offset' in {cls.__name__!r} is out of bounds (got "
                 f"{offset.numel()} entries, but expected at least "
                 f"{storage_offset + _span_len(size, stride) + 1} entries)"
+            )
+        if (
+            valid is not None
+            and storage_offset + _span_len(size, stride) > valid.numel()
+        ):
+            raise ValueError(
+                f"'valid' in {cls.__name__!r} is out of bounds (got "
+                f"{valid.numel()} entries, but expected at least "
+                f"{storage_offset + _span_len(size, stride)} entries)"
             )
         if data.numel() > torch.iinfo(offset.dtype).max:
             raise ValueError(
@@ -184,6 +219,7 @@ class VarLenTensor(Tensor):
 
         out._data = data
         out._offset = offset
+        out._valid = valid
 
         return out
 
@@ -217,6 +253,7 @@ class VarLenTensor(Tensor):
         return cls(
             data=data,
             offset=offset,
+            valid=None,
             size=tensor.size(),
             stride=tensor.stride(),
             storage_offset=int(tensor.storage_offset()),
@@ -290,6 +327,7 @@ class VarLenTensor(Tensor):
         return cls(
             data=data,
             offset=offset,
+            valid=None,
             size=size,
             storage_offset=array.offset,
         )
@@ -375,6 +413,7 @@ class VarLenTensor(Tensor):
         return cls(
             data=torch.tensor(data, dtype=dtype, device=device),
             offset=torch.tensor(offset, dtype=offset_dtype, device=device),
+            valid=None,
             size=size,
         )
 
@@ -399,6 +438,24 @@ class VarLenTensor(Tensor):
         if offset.is_cpu and int(offset[0]) == 0:
             return data, offset
         return data, offset - offset[0]
+
+    @property
+    def valid(self) -> Tensor | None:
+        r"""Return the logical validity mask.
+
+        Returns:
+            Boolean mask with shape ``self.size()`` indicating valid,
+            non-null tensor elements, or ``None`` when all elements are valid.
+        """
+        if self._valid is None:
+            return None
+
+        return torch.as_strided(
+            self._valid,
+            size=self.size(),
+            stride=self.stride(),
+            storage_offset=int(self.storage_offset()),
+        )
 
     # Decorators ##############################################################
 
@@ -425,6 +482,8 @@ class VarLenTensor(Tensor):
 
     def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
         attrs = ["_data", "_offset"]
+        if self._valid is not None:
+            attrs.append("_valid")
         ctx = (self.__class__, self.storage_offset())
         return attrs, ctx
 
@@ -439,6 +498,7 @@ class VarLenTensor(Tensor):
         return cls(
             data=inner_tensors["_data"],
             offset=inner_tensors["_offset"],
+            valid=inner_tensors.get("_valid"),
             size=outer_size,
             stride=outer_stride,
             storage_offset=storage_offset,
@@ -448,6 +508,7 @@ class VarLenTensor(Tensor):
         args = (
             self._data,
             self._offset,
+            self._valid,
             tuple(self.size()),
             tuple(self.stride()),
             int(self.storage_offset()),
@@ -472,12 +533,15 @@ class VarLenTensor(Tensor):
 
     @override
     def is_shared(self) -> bool:
-        return self._data.is_shared() and self._offset.is_shared()
+        is_shared = self._data.is_shared() and self._offset.is_shared()
+        return is_shared and (self._valid is None or self._valid.is_shared())
 
     @override
     def share_memory_(self) -> Self:
         self._data.share_memory_()
         self._offset.share_memory_()
+        if self._valid is not None:
+            self._valid.share_memory_()
         return self
 
     @property
@@ -525,7 +589,7 @@ class VarLenTensor(Tensor):
         return reshape(values, tuple(self.size()))
 
     @override
-    def item(self) -> list[Any]:  # type: ignore
+    def item(self) -> list[Any] | None:  # type: ignore
         if self.numel() != 1:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} with {self.numel()} "
@@ -538,6 +602,8 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}(..."
         out += f", size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
+        if self.valid is not None:
+            out += f", null_count={int((~self.valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
@@ -554,36 +620,42 @@ def _alias(inp: VarLenTensor) -> VarLenTensor:
     return inp.__class__(
         data=aten.alias.default(inp._data),
         offset=aten.alias.default(inp._offset),
+        valid=aten.alias.default(inp._valid)
+        if inp._valid is not None
+        else None,
         size=inp.size(),
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
     )
 
 
-@VarLenTensor.implements(aten._to_copy.default)
-def _to_copy(
+@VarLenTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
     inp: VarLenTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,  # Ignored by PyTorch.
+    pin_memory: bool | None = None,  # Ignored by PyTorch.
     non_blocking: bool = False,
+    copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> VarLenTensor:
-
+    if dtype is None:
+        dtype = inp.dtype
+    if layout is None:
+        layout = inp.layout
+    if device is None:
+        device = inp.device
+    device = torch.device(device)
     if memory_format is None:
         memory_format = torch.preserve_format
 
-    if (
-        dtype is not None
-        and inp.ALLOWED_DTYPES is not None
-        and dtype not in inp.ALLOWED_DTYPES
-    ):
+    if inp.ALLOWED_DTYPES is not None and dtype not in inp.ALLOWED_DTYPES:
         raise TypeError(
             f"Can't convert {inp.__class__.__name__!r} to dtype '{dtype}'"
         )
-    if layout is not None and layout != torch.strided:
+    if layout != torch.strided:
         raise TypeError(
             f"Can't convert {inp.__class__.__name__!r} to layout '{layout}'"
         )
@@ -592,6 +664,21 @@ def _to_copy(
             f"Unsupported memory format '{memory_format}' for "
             f"'{inp.__class__.__name__}.clone'"
         )
+
+    if (
+        not copy
+        and dtype == inp.dtype
+        and device == inp.device
+        and layout == inp.layout
+        and (
+            memory_format == torch.preserve_format
+            or (
+                memory_format == torch.contiguous_format
+                and inp.is_contiguous()
+            )
+        )
+    ):
+        return inp
 
     # Copying has two cases:
     # 1. Slice when the output layout can reuse the input storage order.
@@ -602,10 +689,7 @@ def _to_copy(
             memory_format == torch.preserve_format
             and torch._debug_has_internal_overlap(_layout_view(inp)) == 0
         )
-        or (
-            memory_format == torch.contiguous_format
-            and inp.stride() == _contiguous_stride(inp.size())
-        )
+        or (memory_format == torch.contiguous_format and inp.is_contiguous())
     )
     if not use_slice:
         return _materialize(
@@ -623,42 +707,103 @@ def _to_copy(
         device=device,
         dtype=dtype,
         non_blocking=non_blocking,
-        copy=True,
+        copy=copy,
     )
-    offset = (offset - offset[0]).to(device, non_blocking=non_blocking)
+    offset = (offset - offset[0]).to(device=device, non_blocking=non_blocking)
+    valid: Tensor | None = None
+    if inp._valid is not None:
+        valid = inp._valid[storage_offset : storage_offset + span_len].to(
+            device=device,
+            non_blocking=non_blocking,
+            copy=copy,
+        )
 
     return inp.__class__(
         data=data,
         offset=offset,
+        valid=valid,
         size=inp.size(),
         stride=inp.stride()
         if memory_format == torch.preserve_format
-        else _contiguous_stride(inp.size()),
+        else None,
         storage_offset=0,
     )
 
 
-@VarLenTensor.implements(aten.to.dtype_layout)
-def _to_dtype_layout(
+@VarLenTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: VarLenTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> VarLenTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@VarLenTensor.implements(aten.to.device)
+def _to_device(
+    inp: VarLenTensor,
+    device: torch.device,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> VarLenTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@VarLenTensor.implements(aten.to.other)
+def _to_other(
+    inp: VarLenTensor,
+    other: Tensor,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> VarLenTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=other.dtype,
+        layout=other.layout,
+        device=other.device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@VarLenTensor.implements(aten._to_copy.default)
+def _to_copy(
     inp: VarLenTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool | None = None,
+    pin_memory: bool = False,  # Ignored by PyTorch.
     non_blocking: bool = False,
-    copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> VarLenTensor:
-    # TODO Return `inp` when `copy` is false and no conversion is requested
-    # to preserve the zero-copy behavior of `Tensor.to`.
-    return _to_copy(
+    return _to_dtype_layout(
         inp,
         dtype=dtype,
         layout=layout,
         device=device,
-        pin_memory=bool(pin_memory),
+        pin_memory=pin_memory,
         non_blocking=non_blocking,
+        copy=True,
         memory_format=memory_format,
     )
 
@@ -669,19 +814,7 @@ def _clone(
     *,
     memory_format: torch.memory_format | None = None,
 ) -> VarLenTensor:
-    return _to_copy(inp, memory_format=memory_format)
-
-
-@VarLenTensor.implements(aten.detach.default)
-@preserve_view_inference_mode
-def _detach(inp: VarLenTensor) -> VarLenTensor:
-    return inp.__class__(
-        data=inp._data.detach(),
-        offset=inp._offset,
-        size=inp.size(),
-        stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
-    )
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
 @VarLenTensor.implements(aten.contiguous.default)
@@ -690,12 +823,26 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> VarLenTensor:
-    return _to_copy(inp, memory_format=memory_format)
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
+
+
+@VarLenTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
+def _detach(inp: VarLenTensor) -> VarLenTensor:
+    return inp.__class__(
+        data=inp._data.detach(),
+        offset=inp._offset,
+        valid=inp._valid,
+        size=inp.size(),
+        stride=inp.stride(),
+        storage_offset=int(inp.storage_offset()),
+    )
 
 
 @VarLenTensor.implements(aten.is_pinned.default)
 def _is_pinned(inp: VarLenTensor) -> bool:
-    return inp._data.is_pinned() and inp._offset.is_pinned()
+    is_pinned = inp._data.is_pinned() and inp._offset.is_pinned()
+    return is_pinned and (inp._valid is None or inp._valid.is_pinned())
 
 
 @VarLenTensor.implements(aten._pin_memory.default)
@@ -703,6 +850,7 @@ def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
     return inp.__class__(
         data=inp._data.pin_memory(),
         offset=inp._offset.pin_memory(),
+        valid=inp._valid.pin_memory() if inp._valid is not None else None,
         size=inp.size(),
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
@@ -716,10 +864,31 @@ def _equal(inp: VarLenTensor, other: Tensor) -> bool:
     if inp.size() != other.size():
         return False
 
-    data1, offset1 = cast(VarLenTensor, inp.contiguous()).data_offset
-    data2, offset2 = cast(VarLenTensor, other.contiguous()).data_offset
+    valid1, valid2 = inp.valid, other.valid
+    if valid1 is not None and valid2 is not None:
+        if not valid1.equal(valid2):
+            return False
+    elif (valid1 is not None and not valid1.all()) or (
+        valid2 is not None and not valid2.all()
+    ):
+        return False
 
-    return offset1.equal(offset2) and data1.equal(data2)
+    inp = cast(
+        VarLenTensor,
+        inp.contiguous() if valid1 is None else inp[valid1],
+    )
+    other = cast(
+        VarLenTensor,
+        other.contiguous() if valid2 is None else other[valid2],
+    )
+
+    data1, offset1 = inp.data_offset
+    data2, offset2 = other.data_offset
+
+    if not offset1.equal(offset2):
+        return False
+
+    return data1.equal(data2)
 
 
 @VarLenTensor.implements(aten.allclose.default)
@@ -735,8 +904,26 @@ def _allclose(
     if inp.size() != other.size():
         return False
 
-    data1, offset1 = cast(VarLenTensor, inp.contiguous()).data_offset
-    data2, offset2 = cast(VarLenTensor, other.contiguous()).data_offset
+    valid1, valid2 = inp.valid, other.valid
+    if valid1 is not None and valid2 is not None:
+        if not valid1.equal(valid2):
+            return False
+    elif (valid1 is not None and not valid1.all()) or (
+        valid2 is not None and not valid2.all()
+    ):
+        return False
+
+    inp = cast(
+        VarLenTensor,
+        inp.contiguous() if valid1 is None else inp[valid1],
+    )
+    other = cast(
+        VarLenTensor,
+        other.contiguous() if valid2 is None else other[valid2],
+    )
+
+    data1, offset1 = inp.data_offset
+    data2, offset2 = other.data_offset
 
     if not offset1.equal(offset2):
         return False
@@ -940,6 +1127,19 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
         cast(VarLenTensor, tensor.contiguous()) for tensor in tensors
     )
     data_list, offsets = zip(*(tensor.data_offset for tensor in tensors))
+    valid: Tensor | None = None
+    if any(tensor._valid is not None for tensor in tensors):
+        valid_views = tuple(
+            tensor.valid
+            if tensor.valid is not None
+            else torch.ones(
+                tensor.size(),
+                dtype=torch.bool,
+                device=tensor.device,
+            )
+            for tensor in tensors
+        )
+        valid = torch.cat(valid_views, dim=dim).contiguous().view(-1)
 
     offset_dtype: torch.dtype = torch.int32
     if (
@@ -967,7 +1167,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
     if math.prod(tensors[0].size()[:dim]) == 1:  # Contiguous path:
         offset[-1] = storage_offset
-        return tensor_cls(data=data, offset=offset, size=size)
+        return tensor_cls(data=data, offset=offset, valid=valid, size=size)
 
     end = torch.cat(end_views, dim=dim)
     start = torch.as_strided(start, size=(start.numel(),), stride=(1,))
@@ -975,7 +1175,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
     offset, index = _compact(start, end)
 
-    return tensor_cls(data=data[index], offset=offset, size=size)
+    return tensor_cls(data=data[index], offset=offset, valid=valid, size=size)
 
 
 @VarLenTensor.implements(aten.stack.default)
@@ -1018,6 +1218,7 @@ def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
     return inp.__class__(
         data=inp._data,
         offset=inp._offset,
+        valid=inp._valid,
         size=view.size(),
         stride=view.stride(),
         storage_offset=int(view.storage_offset()),
@@ -1090,6 +1291,15 @@ def _materialize(
         stride=(1,),
         storage_offset=end.storage_offset(),
     )
+    valid: Tensor | None = None
+    if inp._valid is not None:
+        valid = torch.as_strided(
+            inp._valid,
+            size=inp.size(),
+            stride=inp.stride(),
+            storage_offset=int(inp.storage_offset()),
+        )
+        valid = function(valid).contiguous().view(-1)
 
     offset, index = _compact(start, end)
 
@@ -1100,6 +1310,9 @@ def _materialize(
             non_blocking=non_blocking,
         ),
         offset=offset.to(device, non_blocking=non_blocking),
+        valid=valid.to(device=device, non_blocking=non_blocking)
+        if valid is not None
+        else None,
         size=size,
         stride=stride,
         storage_offset=0,

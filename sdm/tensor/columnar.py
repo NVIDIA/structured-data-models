@@ -13,6 +13,7 @@ from typing_extensions import Self, override
 
 from sdm.tensor import StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor.io.arrow import _combine_arrow_chunks
 from sdm.tensor.mixin import _resolve_device
 
 if TYPE_CHECKING:
@@ -143,10 +144,7 @@ class ColumnarTensor(Tensor):
         device = torch.device("cpu" if device is None else device)
 
         if isinstance(array, pa.ChunkedArray):
-            if array.num_chunks == 1:
-                array = array.chunk(0)
-            else:
-                array = array.combine_chunks()
+            array = _combine_arrow_chunks(array)
 
         is_string = pa.types.is_string(array.type)
         is_large_string = pa.types.is_large_string(array.type)

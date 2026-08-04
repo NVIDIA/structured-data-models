@@ -70,6 +70,7 @@ class TfidfTextEmbed(Processor):
             StringTensor(
                 data=data,
                 offset=offset,
+                valid=None,
                 size=(offset.numel() - 1,),
             ).to_arrow()
             for data, offset in state["vocabularies"]
