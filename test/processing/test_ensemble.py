@@ -1,12 +1,13 @@
 import pytest
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableTensor
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
     Processor,
 )
+from sdm.tensor import EnsembleTable
 
 
 class IdentityEnsembleProcessor(EnsembleProcessor):
@@ -39,7 +40,7 @@ class ExpandingEnsembleProcessor(IdentityEnsembleProcessor):
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
-        return EnsembleTable(table.representation(0), num_members=2)
+        return EnsembleTable(table.table(0), num_members=2)
 
 
 class InvertibleIdentityEnsembleProcessor(
@@ -53,7 +54,7 @@ class InvertibleIdentityEnsembleProcessor(
         self,
         table: EnsembleTable,
     ) -> EnsembleTable:
-        return EnsembleTable(table.representation(0), num_members=1)
+        return EnsembleTable(table.table(0), num_members=1)
 
 
 def test_ensemble_processor_is_a_processor() -> None:
@@ -69,9 +70,9 @@ def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
         torch.tensor([[3.0], [4.0]]),
         columns=("second",),
     )
-    table = EnsembleTable.from_representations(
-        representations=(first, second),
-        member_representation_ids=(1, 0, 1),
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
     )
     generator = torch.Generator()
     processor = IdentityEnsembleProcessor()
@@ -84,9 +85,9 @@ def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
     assert processor.generator is generator
     assert output is table
     assert output.num_members == 3
-    assert output.representation(0).columns == second.columns
-    assert output.representation(1).columns == first.columns
-    assert output.representation(2).columns == second.columns
+    assert output.table(0).columns == second.columns
+    assert output.table(1).columns == first.columns
+    assert output.table(2).columns == second.columns
     assert processor.transform_ensemble(table) is table
 
 
@@ -111,7 +112,7 @@ def test_ensemble_invertible_mixin_requires_fit_and_delegates() -> None:
     output = processor.inverse_transform_ensemble(table)
 
     assert output.num_members == 1
-    assert output.representation(0).equal(data)
+    assert output.table(0).equal(data)
 
 
 def test_ensemble_processor_rejects_unsupported_stype() -> None:

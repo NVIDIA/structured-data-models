@@ -12,9 +12,11 @@ class EnsembleProcessor(Processor):
     """Base processor for transformations defined over complete ensembles.
 
     Implementations receive a complete :class:`~sdm.tensor.EnsembleTable` and
-    may change its member count or member-to-representation mapping.
-    The inherited :class:`~sdm.tensor.TableTensor` lifecycle treats its input
-    as an ensemble with one member and therefore requires one output member.
+    may change how many members it has and which table each member is
+    associated with.
+    The inherited :class:`~sdm.processing.base.Processor` API accepts a single
+    :class:`~sdm.tensor.TableTensor` as an ensemble with one member and
+    therefore requires one output member.
     """
 
     def _fit(
@@ -73,8 +75,8 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for packed in table.iter_packed_representations():
-            self._check_supported_stypes(packed)
+        for group in table:
+            self._check_supported_stypes(group)
         output = self._fit_transform_ensemble(
             table,
             generator=generator,
@@ -95,19 +97,19 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for packed in table.iter_packed_representations():
-            self._check_supported_stypes(packed)
+        for group in table:
+            self._check_supported_stypes(group)
         self._check_is_fitted()
         return self._transform_ensemble(table)
 
     @staticmethod
-    def _single_member(table: EnsembleTable) -> TableTensor:
-        if table.num_members != 1:
+    def _single_member(ensemble: EnsembleTable) -> TableTensor:
+        if ensemble.num_members != 1:
             raise RuntimeError(
                 "An EnsembleProcessor used with a TableTensor must return "
                 "exactly one member."
             )
-        return table.representation(0)
+        return ensemble.table(0)
 
 
 class EnsembleInvertibleMixin(InvertibleMixin):
