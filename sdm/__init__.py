@@ -2,6 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from sdm._constants import NaT
 from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
     VarLenTensor,
@@ -9,7 +10,6 @@ from sdm.tensor import (
     CategoricalTensor,
     ColumnarTensor,
     TableTensor,
-    EnsembleTable,
 )
 from sdm.relational import (
     Relationship,
@@ -26,6 +26,7 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 __all__ = [
+    "NaT",
     "Stype",
     "StypeLike",
     "infer_stypes",
@@ -34,7 +35,6 @@ __all__ = [
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
-    "EnsembleTable",
     "Relationship",
     "RelationalData",
     "TaskLink",
