@@ -3,7 +3,6 @@ import math
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
 from sdm.stype import Stype
@@ -232,7 +231,7 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         n_samples = numerical.size(-2)
 
         var = numerical.var(dim=-2, correction=0)
@@ -258,7 +257,7 @@ class PowerTransform(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         transformed = _yeojohnson_transform(numerical, self.lambdas)
         mean = self.mean.unsqueeze(-2)
         scale = self.scale.unsqueeze(-2)
@@ -266,7 +265,7 @@ class PowerTransform(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         scale = self.scale.unsqueeze(-2)
         mean = self.mean.unsqueeze(-2)
         unscaled = numerical * scale + mean

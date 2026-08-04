@@ -1,6 +1,5 @@
 import torch
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
 from sdm.stype import Stype
@@ -45,7 +44,7 @@ class Standardize(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         keepdim = numerical.dim() > 2
         if numerical.size(-1) == 0:
             if numerical.dim() > 2:
@@ -88,9 +87,9 @@ class Standardize(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` using the fitted mean and scale."""
-        numerical = (_as_float(table.numerical) - self.mean) / self.scale
+        numerical = (table.numerical - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = _as_float(table.numerical) * self.scale + self.mean
+        numerical = table.numerical * self.scale + self.mean
         return table.replace_blocks(numerical=numerical)
