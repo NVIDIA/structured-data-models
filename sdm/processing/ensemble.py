@@ -44,6 +44,18 @@ class EnsembleProcessor(Processor):
         output = self._transform_ensemble(EnsembleTable(table, num_members=1))
         return output.table(0)
 
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        output = self._fit_transform_ensemble(
+            EnsembleTable(table, num_members=1),
+            generator=generator,
+        )
+        return output.table(0)
+
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
