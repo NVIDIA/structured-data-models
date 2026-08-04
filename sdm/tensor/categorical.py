@@ -11,8 +11,13 @@ from torch import Tensor
 from torch.utils import _pytree as pytree
 from typing_extensions import Self, override
 
-from sdm.tensor import StringTensor
-from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
+from sdm.tensor import StringTensor, VarLenTensor
+from sdm.tensor.io import (
+    arrow_as_tensor,
+    to_arrow,
+    to_cudf,
+)
+from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 if TYPE_CHECKING:
     import cudf
@@ -101,6 +106,11 @@ class CategoricalTensor(Tensor):
                     f"Expected category {i} in {cls.__name__!r} to be "
                     f"one-dimensional (got {category.dim()}D)"
                 )
+            if isinstance(category, VarLenTensor) and category.is_nullable:
+                raise ValueError(
+                    f"Expected category {i} in {cls.__name__!r} to not "
+                    "contain null values"
+                )
 
         out = Tensor._make_wrapper_subclass(
             cls,
@@ -147,10 +157,7 @@ class CategoricalTensor(Tensor):
         device = torch.device("cpu" if device is None else device)
 
         if isinstance(array, pa.ChunkedArray):
-            if array.num_chunks == 1:
-                array = array.chunk(0)
-            else:
-                array = array.combine_chunks()
+            array = _combine_arrow_chunks(array)
 
         encoded = array.dictionary_encode()
         code = arrow_as_tensor(
@@ -346,7 +353,7 @@ class CategoricalTensor(Tensor):
     ) -> Any:
         if func is torch.isfinite or func is Tensor.isfinite:
             assert isinstance(args[0], CategoricalTensor)
-            return args[0]._code >= 0
+            return _isfinite(args[0])
 
         with torch._C.DisableTorchFunction():
             return func(*args, **(kwargs or {}))
@@ -419,6 +426,11 @@ class CategoricalTensor(Tensor):
 @CategoricalTensor.implements(aten.isnan.default)
 def _isnan(inp: CategoricalTensor) -> Tensor:
     return inp._code < 0
+
+
+@CategoricalTensor.implements(aten.isfinite.default)
+def _isfinite(inp: CategoricalTensor) -> Tensor:
+    return inp._code >= 0
 
 
 @CategoricalTensor.implements(aten.alias.default)

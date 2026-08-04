@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import torch
 
-from sdm import Stype, TableTensor
+from sdm import NaT, Stype, TableTensor
 from sdm.processing import AddCalendarFields
 
 
@@ -12,7 +12,6 @@ def _timestamp(value: datetime) -> int:
 
 
 def test_add_calendar_fields_channels_and_missing_values() -> None:
-    missing = torch.iinfo(torch.int64).min
     utc = timezone.utc
     table = TableTensor(
         columns={Stype.datetime: ("event_time",)},
@@ -21,7 +20,7 @@ def test_add_calendar_fields_channels_and_missing_values() -> None:
                 [_timestamp(datetime(2024, 2, 29, 23, 59, tzinfo=utc))],
                 [_timestamp(datetime(2023, 3, 1, tzinfo=utc))],
                 [_timestamp(datetime(1969, 12, 31, 23, 1, tzinfo=utc))],
-                [missing],
+                [NaT],
             ]
         ),
     )
