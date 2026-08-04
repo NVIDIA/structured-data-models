@@ -59,6 +59,36 @@ def test_align_categories_remaps_independent_vocabularies(
     assert output.categorical.device == device
 
 
+@withCUDA
+def test_align_categories_keeps_string_vocabularies_column_local(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [[0, 0], [1, 1]],
+        categories=(("shared", "left"), ("right", "shared")),
+        device=device,
+    )
+    query = _table(
+        [[0, 0], [1, 1], [2, 2], [-1, -1]],
+        categories=(
+            ("shared", "right", "left"),
+            ("shared", "left", "right"),
+        ),
+        device=device,
+    )
+
+    output = AlignCategories().fit(context).transform(query)
+
+    assert torch.equal(
+        output.categorical.code,
+        torch.tensor(
+            [[0, 1], [-1, -1], [1, 0], [-1, -1]],
+            dtype=torch.int32,
+            device=device,
+        ),
+    )
+
+
 def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     table = TableTensor.from_pandas(
         pd.DataFrame({"kind": ["red", "blue", "green", "blue"]}),
