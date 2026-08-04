@@ -22,7 +22,8 @@ class Processor(torch.nn.Module, abc.ABC):
     :class:`~sdm.tensor.TableTensor` for feature, target and output
     preprocessing.
     A :class:`Processor` learns any required state via :meth:`fit`, and applies
-    the transformation via :meth:`transform`.
+    the transformation via :meth:`transform`. Implementations preserve the row
+    and batch dimensions. Batch dimensions are processed independently.
     """
 
     supported_stypes: ClassVar[SupportedStypes]

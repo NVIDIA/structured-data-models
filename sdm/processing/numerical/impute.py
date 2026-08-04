@@ -35,7 +35,11 @@ class ImputeMean(Processor):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        mean = torch.nanmean(numerical, dim=0)
+        mean = torch.nanmean(
+            numerical,
+            dim=-2,
+            keepdim=True,
+        )
         self._mean = torch.where(mean.isnan(), self.fill_value, mean)
 
     def _transform(self, table: TableTensor) -> TableTensor:

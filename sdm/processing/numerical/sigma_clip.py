@@ -6,9 +6,13 @@ from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
 
-def _std(inp: Tensor, *, dim: int) -> Tensor:
+def _std(
+    inp: Tensor,
+    *,
+    dim: int,
+) -> Tensor:
     correction = 1 if inp.size(dim) > 1 else 0
-    return inp.std(dim=dim, correction=correction)
+    return inp.std(dim=dim, correction=correction, keepdim=True)
 
 
 class ClipSigma(Processor):
@@ -48,29 +52,37 @@ class ClipSigma(Processor):
         numerical = table.numerical
         min_std = numerical.new_tensor(1e-6)
 
-        mean = numerical.mean(dim=0)
-        std = torch.maximum(_std(numerical, dim=0), min_std)
+        mean = numerical.mean(dim=-2, keepdim=True)
+        std = torch.maximum(
+            _std(
+                numerical,
+                dim=-2,
+            ),
+            min_std,
+        )
         lower_bound = mean - self.threshold * std
         upper_bound = mean + self.threshold * std
         outlier_mask = (numerical < lower_bound) | (numerical > upper_bound)
 
         keep = ~outlier_mask
-        count = keep.sum(dim=0)
+        count = keep.sum(dim=-2, keepdim=True)
         safe_count = count.clamp_min(1)
         clean_sum = torch.where(
             keep,
             numerical,
-            torch.zeros_like(numerical),
-        ).sum(dim=0)
+            0.0,
+        ).sum(dim=-2, keepdim=True)
         mean_clean = clean_sum / safe_count
         centered = torch.where(
             keep,
             numerical - mean_clean,
-            torch.zeros_like(numerical),
+            0.0,
         )
         correction = (count > 1).to(count.dtype)
         denominator = (count - correction).clamp_min(1)
-        std_clean = (centered.square().sum(dim=0) / denominator).sqrt()
+        std_clean = (
+            centered.square().sum(dim=-2, keepdim=True) / denominator
+        ).sqrt()
 
         has_clean = count > 0
         self._mean = torch.where(has_clean, mean_clean, mean)

@@ -45,32 +45,42 @@ class Standardize(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         numerical = table.numerical
-        data_mean = numerical.mean(dim=0)
+        if numerical.size(-1) == 0:
+            self.mean = numerical.sum(dim=-2, keepdim=True)
+            self.scale = torch.ones_like(self.mean)
+            return
+
+        data_mean = numerical.mean(dim=-2, keepdim=True)
 
         if self.with_mean:
             self.mean = data_mean
         else:
-            self.mean = numerical.new_zeros(numerical.shape[1])
+            self.mean = torch.zeros_like(data_mean)
 
         if self.with_std:
-            if numerical.size(0) > 1:
-                var = numerical.var(dim=0, correction=0)
+            if numerical.size(-2) > 1:
+                var = numerical.var(
+                    dim=-2,
+                    correction=0,
+                    keepdim=True,
+                )
                 scale = var.sqrt()
                 if self.epsilon == 0:
                     scale[
                         _constant_feature_mask(
                             var,
                             data_mean,
-                            numerical.shape[0],
+                            numerical.size(-2),
                         )
                     ] = 1.0
             else:
-                scale = numerical.new_zeros(numerical.shape[1])
                 if self.epsilon == 0:
-                    scale.fill_(1.0)
+                    scale = torch.ones_like(data_mean)
+                else:
+                    scale = torch.zeros_like(data_mean)
             self.scale = scale + self.epsilon
         else:
-            self.scale = numerical.new_ones(numerical.shape[1])
+            self.scale = torch.ones_like(data_mean)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` using the fitted mean and scale."""
