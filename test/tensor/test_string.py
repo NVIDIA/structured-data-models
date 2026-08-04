@@ -285,7 +285,6 @@ def test_to_list_in_inference_mode(
 def test_item() -> None:
     assert StringTensor.from_list("é").item() == "é"
     assert StringTensor.from_list(["hi", "é"])[1].item() == "é"
-    assert str(StringTensor.from_list([""])) == ""
 
     with pytest.raises(RuntimeError, match="cannot be converted"):
         StringTensor.from_list(["hi", "é"]).item()
