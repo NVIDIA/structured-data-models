@@ -24,22 +24,26 @@ current_flash_attention_impl = cast(
     getattr(torch_attention, "current_flash_attention_impl", None),
 )
 
-_fa3_activation_attempted = False
+_flash_attention_activation_attempted = False
+_flash_attention_impls: dict[int, tuple[Literal["FA3", "FA4"], str]] = {
+    9: ("FA3", "Hopper"),
+    10: ("FA4", "Blackwell"),
+}
 
 
 @torch.compiler.assume_constant_result
-def _maybe_activate_fa3(device: torch.device) -> None:
-    global _fa3_activation_attempted
+def _maybe_activate_flash_attention(device: torch.device) -> None:
+    global _flash_attention_activation_attempted
 
     if (
-        _fa3_activation_attempted
+        _flash_attention_activation_attempted
         or activate_flash_attention_impl is None
         or current_flash_attention_impl is None
         or device.type != "cuda"
     ):
         return
 
-    _fa3_activation_attempted = True
+    _flash_attention_activation_attempted = True
     if current_flash_attention_impl() is not None:
         return
 
@@ -47,16 +51,21 @@ def _maybe_activate_fa3(device: torch.device) -> None:
         torch.cuda.get_device_capability(index)[0]
         for index in range(torch.cuda.device_count())
     }
-    if device_majors != {9}:
+    if len(device_majors) != 1:
         return
 
+    implementation = _flash_attention_impls.get(device_majors.pop())
+    if implementation is None:
+        return
+    name, architecture = implementation
+
     try:
-        activate_flash_attention_impl("FA3")
+        activate_flash_attention_impl(name)
     except (ImportError, OSError, RuntimeError, ValueError) as error:
         warn_once(
-            "fa3-activation-failed",
-            f"FA3 could not be enabled on Hopper ({error}); falling back "
-            "to PyTorch's default attention implementation.",
+            f"{name.lower()}-activation-failed",
+            f"{name} could not be enabled on {architecture} ({error}); "
+            "falling back to PyTorch's default attention implementation.",
             stacklevel=3,
         )
 
@@ -418,7 +427,7 @@ class SDPA(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
-        _maybe_activate_fa3(query.device)
+        _maybe_activate_flash_attention(query.device)
 
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
 
