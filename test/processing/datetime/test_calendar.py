@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import torch
 
@@ -7,12 +7,12 @@ from sdm.processing import AddCalendarFields
 
 
 def _timestamp(value: datetime) -> int:
-    assert value.tzinfo is timezone.utc
+    assert value.tzinfo is UTC
     return int(value.timestamp() * 1_000_000)
 
 
 def test_add_calendar_fields_channels_and_missing_values() -> None:
-    utc = timezone.utc
+    utc = UTC
     table = TableTensor(
         columns={Stype.datetime: ("event_time",)},
         datetime=torch.tensor(

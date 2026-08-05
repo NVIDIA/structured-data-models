@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
-class Stype(str, Enum):
+class Stype(str, Enum):  # noqa: UP042
     r"""The semantic type of a table column.
 
     A semantic type denotes the semantic meaning of a column, and denotes how

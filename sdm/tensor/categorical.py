@@ -3,13 +3,13 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor import StringTensor, VarLenTensor
 from sdm.tensor.io import (
