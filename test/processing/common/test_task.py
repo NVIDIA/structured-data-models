@@ -34,23 +34,21 @@ def _numerical_table(
 
 
 def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
-    dispatch = TaskDispatch(
-        classification=Softmax(),
-        regression=[Identity()],
-    )
+    dispatch = TaskDispatch(classification=Softmax())
     output = _numerical_table(("a", "b"))
     description = dedent("""\
         TaskDispatch(
           classification: Softmax(),
-          regression: Sequential(
-            Identity(),
-          ),
         )""")
     assert repr(dispatch) == description
 
     dispatch._resolve(_numerical_table())
     assert dispatch.transform(output).equal(output)
     assert repr(dispatch) == description
+
+    restored = TaskDispatch(classification=Softmax())
+    restored.load_state_dict(dispatch.state_dict())
+    assert restored.transform(output) is output
 
     dispatch._resolve(_categorical_target())
     transformed = dispatch.transform(output)
@@ -61,10 +59,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     )
     assert repr(dispatch) == description
 
-    restored = TaskDispatch(
-        classification=Softmax(),
-        regression=[Identity()],
-    )
+    restored = TaskDispatch(classification=Softmax())
     restored.load_state_dict(dispatch.state_dict())
 
     torch.testing.assert_close(
@@ -85,7 +80,7 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
 
     with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
         dispatch.transform(output)
-    with pytest.raises(ValueError, match="no 'classification' route"):
-        dispatch._resolve(_categorical_target())
+    dispatch._resolve(_categorical_target())
+    assert dispatch.transform(output) is output
     with pytest.raises(ValueError, match=r"exactly one.*got 2"):
         dispatch._resolve(_numerical_table(("y0", "y1")))
