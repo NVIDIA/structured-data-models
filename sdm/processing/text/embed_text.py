@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import torch
+from torch import Tensor
 
 from sdm.processing.base import Processor
 from sdm.stype import Stype
@@ -26,13 +27,8 @@ class _ModuleReference(torch.nn.Module):
 class EmbedText(Processor):
     r"""Embed text columns with a user-provided embedding model.
 
-    Each text column is embedded cell-by-cell through ``embedding_model``.
-    The model must return one embedding per text value as a
-    :class:`torch.Tensor` with shape ``[n, embedding_dim]``. Embedding
-    Embeddings are concatenated in column order into the numerical output.
-
     Args:
-        embedding_model: Pre-loaded model called on each flattened text column.
+        embedding_model: Pre-loaded model called on the flattened text values.
             It must return a :class:`torch.Tensor` with shape
             ``[n, embedding_dim]``.
         embedding_dim: Width of each returned embedding.
@@ -69,34 +65,31 @@ class EmbedText(Processor):
                 device=device,
             )
         else:
-            numerical = torch.empty(
-                (*batch_shape, len(out_col_names)),
-                dtype=dtype,
-                device=device,
+            # FIXME: The embedding_model currently must take in a
+            # dataframe and not a Tensor.
+            num_cols = len(col_names)
+            all_cols: list[Tensor] = [
+                table.text[..., i].reshape(-1) for i in range(num_cols)
+            ]
+            flat_strings = cast(StringTensor, torch.cat(all_cols))
+            strings = (
+                flat_strings.to_cudf()
+                if flat_strings.is_cuda
+                else flat_strings.to_arrow()
             )
-            # FIXME: There're currently multiple issues:
-            # 1. Even though the same model gets applied to all columns, we run
-            #    it once per column.
-            # 2. The embedding_model currently must take in a dataframe and not
-            #    a Tensor.
-            for col_idx in range(len(col_names)):
-                col_tensor = cast(
-                    StringTensor,
-                    table.text[..., col_idx].reshape(-1),
-                )
-                strings = (
-                    col_tensor.to_cudf()
-                    if col_tensor.is_cuda
-                    else col_tensor.to_arrow()
-                )
-                block = self._embedding_model(strings)
-                embeddings = block.to(device=device, dtype=dtype).reshape(
+            all_embeddings = self._embedding_model(strings).to(
+                device=device,
+                dtype=dtype,
+            )  # (num_cols * batch_numel, embedding_dim)
+            numerical = (
+                all_embeddings.reshape(
+                    num_cols,
                     *batch_shape,
                     self._embedding_dim,
                 )
-                start_idx = col_idx * self._embedding_dim
-                end_idx = start_idx + self._embedding_dim
-                numerical[..., start_idx:end_idx] = embeddings
+                .movedim(0, -2)
+                .reshape(*batch_shape, len(out_col_names))
+            )
 
         return TableTensor(
             columns={Stype.numerical: tuple(out_col_names)},
