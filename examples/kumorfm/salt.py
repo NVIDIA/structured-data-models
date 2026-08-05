@@ -7,7 +7,7 @@ import torch
 from relbench.base import Dataset
 from relbench.datasets import get_dataset
 from relbench.tasks import get_task
-from torchmetrics.classification import MulticlassAccuracy
+from torchmetrics.aggregation import MeanMetric
 from tqdm import tqdm
 
 from sdm import (
@@ -48,9 +48,7 @@ def run_task(task_name: str) -> None:
     """Evaluate one SALT task."""
     torch.manual_seed(args.seed)
     task = get_task(SALT_DATASET, task_name, download=True)
-    db = get_dataset(SALT_DATASET, download=True).get_db(
-        upto_test_timestamp=False
-    )
+    db = task.dataset.get_db(upto_test_timestamp=False)
     data = RelationalData(
         tables={
             name: TableTensor.from_pandas(
@@ -145,10 +143,8 @@ def run_task(task_name: str) -> None:
     y_context = context[task.target_col]
 
     model = KumoRFM(device=device)
-    metric = MulticlassAccuracy(
-        num_classes=cast(int, task.num_classes),
-        average="micro",
-    ).to(device)
+    mrr = MeanMetric().to(device)
+    accuracy = MeanMetric().to(device)
     batch_size = SALT_PRESETS[task_name][1]
     for query in tqdm(
         task_tables[-1].split(batch_size),
@@ -174,10 +170,16 @@ def run_task(task_name: str) -> None:
             ],
             device=device,
         )
-        pred = class_indices[out.numerical.argmax(dim=-1)]
-        metric.update(pred.view(-1), y_query.categorical.code.view(-1))
+        ranked_classes = class_indices[
+            out.numerical.argsort(dim=-1, descending=True)
+        ]
+        matches = ranked_classes == y_query.categorical.code
+        rank = matches.to(torch.float32).argmax(dim=-1) + 1
+        mrr.update(rank.reciprocal() * matches.any(dim=-1))
+        accuracy.update(matches[:, 0])
 
-    print(f"{SALT_DATASET}/{task_name} accuracy: {metric.compute():.4f}")
+    print(f"{SALT_DATASET}/{task_name} MRR: {mrr.compute():.4f}")
+    print(f"{SALT_DATASET}/{task_name} accuracy: {accuracy.compute():.4f}")
     model.clear()
 
 
