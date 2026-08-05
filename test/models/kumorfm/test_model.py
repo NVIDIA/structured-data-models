@@ -404,7 +404,9 @@ def _sample_related_tables(
     return relational_data.sampler()(
         task_table=TableTensor(
             columns={Stype.id: ("user_id",)},
-            id=ColumnarTensor((torch.tensor(user_ids),)),
+            id=ColumnarTensor(
+                (torch.tensor(user_ids, device=relational_data.device),)
+            ),
         ),
         task_link={
             "task_column": "user_id",
@@ -446,8 +448,10 @@ def test_sampled_task_graph_with_explicit_hops_uses_mask_fallback(
     assert not graph.all_task_rows_assigned
 
 
+@withCUDA
 def test_sampled_fast_path_matches_public_mask_fallback(
     relational_data: RelationalData,
+    device: torch.device,
 ) -> None:
     context, context_related = _sample_related_tables(
         relational_data,
@@ -460,12 +464,16 @@ def test_sampled_fast_path_matches_public_mask_fallback(
     target = TableTensor(
         columns={Stype.categorical: ("target",)},
         categorical=CategoricalTensor(
-            code=torch.tensor([[0], [1], [0], [1]], dtype=torch.int32),
-            categories=(torch.tensor([False, True]),),
+            code=torch.tensor(
+                [[0], [1], [0], [1]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(torch.tensor([False, True], device=device),),
         ),
     )
     fallback_related = context_related.replace_tables(context_related.tables)
-    model = KumoRFM(pretrained=False)
+    model = KumoRFM(pretrained=False, device=device)
 
     torch.manual_seed(1)
     direct = model(
