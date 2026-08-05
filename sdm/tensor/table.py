@@ -977,26 +977,38 @@ def _alias(inp: TableTensor) -> TableTensor:
     )
 
 
-@TableTensor.implements(aten._to_copy.default)
-def _to_copy(
+@TableTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
     inp: TableTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,
+    pin_memory: bool | None = None,  # Ignored by PyTorch.
     non_blocking: bool = False,
+    copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    # Device-only `.to` auto-fills the wrapper dtype; treat as no cast:
-    if dtype == inp.dtype:
-        dtype = None
 
-    device = inp.device if device is None else device
+    if (
+        not copy
+        and (dtype is None or dtype == inp.dtype)
+        and (device is None or torch.device(device) == inp.device)
+        and (layout is None or layout == inp.layout)
+        and (
+            memory_format is None
+            or memory_format == torch.preserve_format
+            or (
+                memory_format == torch.contiguous_format
+                and inp.is_contiguous()
+            )
+        )
+    ):
+        return inp
+
     blocks = {
-        stype: aten._to_copy.default(
+        stype: aten.to.dtype_layout(
             tensor,
-            device=device,
             dtype=dtype
             if (
                 stype not in (Stype.categorical,)
@@ -1005,8 +1017,10 @@ def _to_copy(
             and stype not in (Stype.datetime, Stype.text, Stype.id)
             else None,
             layout=layout,
+            device=device,
             pin_memory=pin_memory,
             non_blocking=non_blocking,
+            copy=copy,
             memory_format=memory_format,
         )
         for stype, tensor in inp.items()
@@ -1014,29 +1028,6 @@ def _to_copy(
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
-    )
-
-
-@TableTensor.implements(aten.to.dtype_layout)
-def _to_dtype_layout(
-    inp: TableTensor,
-    *,
-    dtype: torch.dtype | None = None,
-    layout: torch.layout | None = None,
-    device: torch.device | str | None = None,
-    pin_memory: bool | None = None,
-    non_blocking: bool = False,
-    copy: bool = False,
-    memory_format: torch.memory_format | None = None,
-) -> TableTensor:
-    return _to_copy(
-        inp,
-        dtype=dtype,
-        layout=layout,
-        device=device,
-        pin_memory=bool(pin_memory),
-        non_blocking=non_blocking,
-        memory_format=memory_format,
     )
 
 
@@ -1048,12 +1039,11 @@ def _to_dtype(
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    if not copy and inp.dtype == dtype:
-        return inp
-    return _to_copy(
+    return _to_dtype_layout(
         inp,
         dtype=dtype,
         non_blocking=non_blocking,
+        copy=copy,
         memory_format=memory_format,
     )
 
@@ -1061,17 +1051,60 @@ def _to_dtype(
 @TableTensor.implements(aten.to.device)
 def _to_device(
     inp: TableTensor,
-    device: torch.device | str,
+    device: torch.device,
     dtype: torch.dtype,
     non_blocking: bool = False,
     copy: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    return _to_copy(
+    return _to_dtype_layout(
         inp,
         dtype=dtype,
         device=device,
         non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@TableTensor.implements(aten.to.other)
+def _to_other(
+    inp: TableTensor,
+    other: Tensor,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=other.dtype,
+        layout=other.layout,
+        device=other.device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@TableTensor.implements(aten._to_copy.default)
+def _to_copy(
+    inp: TableTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool = False,  # Ignored by PyTorch.
+    non_blocking: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> TableTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        non_blocking=non_blocking,
+        copy=True,
         memory_format=memory_format,
     )
 
@@ -1082,7 +1115,7 @@ def _clone(
     *,
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
-    return _to_copy(inp, memory_format=memory_format)
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
 @TableTensor.implements(aten.contiguous.default)
