@@ -54,6 +54,24 @@ def test_shuffle_columns_shift_rotates_numerical_block() -> None:
 
 
 @pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_columns_scalar_fit_transform_and_inverse(
+    method: Literal["shift", "random"],
+) -> None:
+    table = _table()
+    processor = ShuffleColumns(method=method)
+
+    processor.fit(table)
+    transformed = processor.transform(table)
+    restored = processor.inverse_transform(transformed)
+
+    assert torch.equal(
+        transformed.numerical,
+        table.numerical.index_select(-1, processor.permutation),
+    )
+    assert restored.equal(table)
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
 def test_shuffle_columns_is_reproducible_with_generator(
     method: Literal["shift", "random"],
 ) -> None:
@@ -120,7 +138,7 @@ def test_shuffle_columns_reuses_equal_member_permutations() -> None:
         packed.size(0) for packed in output.iter_packed_representations()
     ) == len(unique_columns)
 
-    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+    with pytest.raises(RuntimeError, match="same number"):
         processor.transform(_table())
     with pytest.raises(RuntimeError, match="inverse transform"):
         processor.inverse_transform_ensemble(
