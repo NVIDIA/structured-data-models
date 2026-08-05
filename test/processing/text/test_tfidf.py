@@ -393,8 +393,8 @@ def test_tfidf_text_embed_fit_then_transform_matches_fit_transform() -> None:
 def test_tfidf_text_embed_refit_clears_ensemble_state() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
     ensemble_table = EnsembleTable(table, num_members=4)
-    processor = TfidfTextEmbed(ngram_range=(2, 2))
-    expected = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+    processor = TFIDF(ngram_range=(2, 2))
+    expected = TFIDF(ngram_range=(2, 2)).fit_transform(table)
 
     processor.fit_transform_ensemble(ensemble_table)
     output = processor.fit_transform(table)
@@ -408,7 +408,8 @@ def test_tfidf_text_embed_failed_refit_preserves_ensemble_state(
 ) -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
     ensemble_table = EnsembleTable(table, num_members=4)
-    processor = TfidfTextEmbed(ngram_range=(2, 2)).fit_ensemble(ensemble_table)
+    processor = TFIDF(ngram_range=(2, 2))
+    processor.fit_ensemble(ensemble_table)
     expected = processor.transform_ensemble(ensemble_table)
 
     def fail_bincount(*_: object, **__: object) -> None:
