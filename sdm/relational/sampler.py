@@ -1,10 +1,9 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, NamedTuple, cast
+from typing import Literal, NamedTuple, Self, cast
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import ColumnarTensor, Stype, TableTensor
 from sdm.relational import (

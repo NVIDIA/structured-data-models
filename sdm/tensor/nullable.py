@@ -3,12 +3,12 @@ from __future__ import annotations
 import functools
 import math
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor.io import (
     ARROW_TORCH_DTYPES,
@@ -244,7 +244,7 @@ class NullableIntTensor(Tensor):
     @classmethod
     def from_list(
         cls,
-        values: int | None | Sequence[Any],
+        values: int | Sequence[Any] | None,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,

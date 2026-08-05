@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, Self, TypeAlias
 
 import torch
-from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 
