@@ -64,11 +64,11 @@ class EnsembleTable:
 
     _groups: tuple[TableTensor, ...]
     # Group index and position within that group, per ensemble member.
-    _member_locations: tuple[tuple[int, int], ...]
+    _locations: tuple[tuple[int, int], ...]
 
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
         self._groups = (cast(TableTensor, table.unsqueeze(0)),)
-        self._member_locations = ((0, 0),) * num_members
+        self._locations = ((0, 0),) * num_members
 
     @classmethod
     def from_tables(
@@ -150,7 +150,7 @@ class EnsembleTable:
     @property
     def num_members(self) -> int:
         """Return the number of ensemble members."""
-        return len(self._member_locations)
+        return len(self._locations)
 
     @property
     def num_groups(self) -> int:
@@ -163,7 +163,7 @@ class EnsembleTable:
         Args:
             member_id: Zero-based member index.
         """
-        group_index, position = self._member_locations[member_id]
+        group_index, position = self._locations[member_id]
         return self._groups[group_index][position]
 
     def __iter__(self) -> Iterator[TableTensor]:
