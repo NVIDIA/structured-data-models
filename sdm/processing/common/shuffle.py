@@ -23,11 +23,8 @@ class _ColumnPermutation(torch.nn.Module):
 class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     """Permute numerical feature columns and their names.
 
-    A permutation is drawn for each logical ensemble member during fitting
-    and reused by transformation and inverse transformation. The number and
-    order of rows and ensemble members remain unchanged. Pass ``generator``
-    to ``fit()`` to make the permutations reproducible. Convert non-numerical
-    feature stypes before this step, for example with
+    Pass ``generator`` to ``fit()`` to make the permutation reproducible.
+    Convert non-numerical feature stypes before this step, for example with
     :class:`~sdm.processing.ToNumerical`.
 
     Args:
