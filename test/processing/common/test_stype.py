@@ -43,10 +43,7 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-    assert torch.equal(
-        output.categorical.code,
-        table.categorical.code,
-    )
+    assert output.categorical is table.categorical
 
     restored = dispatch.inverse_transform(output)
 
