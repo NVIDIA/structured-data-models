@@ -388,3 +388,36 @@ def test_tfidf_text_embed_fit_then_transform_matches_fit_transform() -> None:
 
     for member_id in range(ensemble_table.num_members):
         assert actual.table(member_id).equal(expected.table(member_id))
+
+
+def test_tfidf_text_embed_refit_clears_ensemble_state() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = TfidfTextEmbed(ngram_range=(2, 2))
+    expected = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+
+    processor.fit_transform_ensemble(ensemble_table)
+    output = processor.fit_transform(table)
+
+    assert output.equal(expected)
+    assert processor.transform(table).equal(expected)
+
+
+def test_tfidf_text_embed_failed_refit_preserves_ensemble_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = TfidfTextEmbed(ngram_range=(2, 2)).fit_ensemble(ensemble_table)
+    expected = processor.transform_ensemble(ensemble_table)
+
+    def fail_bincount(*_: object, **__: object) -> None:
+        raise RuntimeError("refit failed")
+
+    monkeypatch.setattr(torch, "bincount", fail_bincount)
+    with pytest.raises(RuntimeError, match="refit failed"):
+        processor.fit(table)
+
+    output = processor.transform_ensemble(ensemble_table)
+    for member_id in range(ensemble_table.num_members):
+        assert output.table(member_id).equal(expected.table(member_id))

@@ -303,15 +303,8 @@ class TFIDF(EnsembleProcessor):
         self._vocabularies = vocabularies
         for column, idf in enumerate(idfs):
             self.register_buffer(f"idf_{column}", idf)
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        self._fit(table, generator=generator)
-        return self._transform(table)
+        self.processors = torch.nn.ModuleList()
+        self._member_processor_ids = ()
 
     def _fit_ensemble(
         self,
@@ -343,15 +336,6 @@ class TFIDF(EnsembleProcessor):
 
         self.processors = processors
         self._member_processor_ids = tuple(member_processor_ids)
-
-    def _fit_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-        self._fit_ensemble(ensemble_table, generator=generator)
-        return self._transform_ensemble(ensemble_table)
 
     def _transform_ensemble(
         self,
