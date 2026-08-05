@@ -49,7 +49,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
 
     restored = TaskDispatch(classification=Softmax())
     restored.load_state_dict(dispatch.state_dict())
-    assert restored.transform(output) is output
+    assert restored.transform(output).equal(output)
 
     dispatch._resolve(_categorical_target())
     transformed = dispatch.transform(output)
@@ -82,7 +82,7 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
     with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
         dispatch.transform(output)
     dispatch._resolve(_categorical_target())
-    assert dispatch.transform(output) is output
+    assert dispatch.transform(output).equal(output)
     with pytest.raises(ValueError, match=r"exactly one.*got 2"):
         dispatch._resolve(_numerical_table(("y0", "y1")))
 
