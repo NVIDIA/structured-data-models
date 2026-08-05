@@ -1,19 +1,30 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import Stype
-from sdm.processing.base import InvertibleMixin, Processor
-from sdm.tensor import TableTensor
+from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
-class ShuffleColumns(Processor, InvertibleMixin):
-    """Permute the numerical feature columns.
+class _ColumnPermutation(torch.nn.Module):
+    """Store one fitted column permutation."""
 
-    The permutation is drawn when the processor is fitted; pass
-    ``generator`` to ``fit()`` to make it reproducible. Convert
-    non-numerical feature stypes before this step, for example with
+    indices: Tensor
+    order: tuple[int, ...]
+
+    def __init__(self, indices: Tensor, order: tuple[int, ...]) -> None:
+        super().__init__()
+        self.register_buffer("indices", indices, persistent=False)
+        self.order = order
+
+
+class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
+    """Permute numerical feature columns and their names.
+
+    Pass ``generator`` to ``fit()`` to make the permutation reproducible.
+    Convert non-numerical feature stypes before this step, for example with
     :class:`~sdm.processing.ToNumerical`.
 
     Args:
@@ -30,55 +41,116 @@ class ShuffleColumns(Processor, InvertibleMixin):
     ) -> None:
         super().__init__()
         self.method = method
-        self.register_buffer(
-            "permutation",
-            torch.empty(0, dtype=torch.long),
-        )
+        self._permutations = torch.nn.ModuleList()
 
-    def _fit(
+    @property
+    def permutation(self) -> Tensor:
+        """Return the fitted permutation for a single table."""
+        if len(self._permutations) != 1:
+            raise RuntimeError(
+                "'ShuffleColumns' has no single fitted permutation."
+            )
+        state = cast(_ColumnPermutation, self._permutations[0])
+        return state.indices
+
+    def _draw_permutation(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
-    ) -> None:
+    ) -> Tensor:
         n_features = table.numerical.size(-1)
         device = table.numerical.device
         if n_features <= 1:
-            self.permutation = torch.arange(n_features, device=device)
-        elif self.method == "shift":
+            return torch.arange(n_features, device=device)
+        if self.method == "shift":
             offset = torch.randint(
                 n_features,
                 (1,),
                 generator=generator,
                 device=device,
             )
-            self.permutation = (
+            return (
                 torch.arange(n_features, device=device) + offset
             ) % n_features
-        else:
-            self.permutation = torch.randperm(
+        if self.method == "random":
+            return torch.randperm(
                 n_features,
                 generator=generator,
                 device=device,
             )
+        raise AssertionError(f"Unexpected method {self.method!r}")
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        """Reorder the numerical block with the fitted permutation."""
-        return self._permute(table, self.permutation)
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return self._permute(table, self.permutation.argsort())
-
-    def _permute(
+    def _fit_ensemble(
         self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        permutations = []
+        for member_id in range(ensemble_table.num_members):
+            indices = self._draw_permutation(
+                ensemble_table.table(member_id),
+                generator=generator,
+            )
+            permutations.append(
+                _ColumnPermutation(indices, tuple(indices.tolist()))
+            )
+        self._permutations = torch.nn.ModuleList(permutations)
+
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return self._apply_ensemble(ensemble_table, inverse=False)
+
+    def _inverse_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return self._apply_ensemble(ensemble_table, inverse=True)
+
+    def _apply_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        inverse: bool,
+    ) -> EnsembleTable:
+        if len(self._permutations) != ensemble_table.num_members:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} was fitted with "
+                f"{len(self._permutations)} ensemble members, but got "
+                f"{ensemble_table.num_members}."
+            )
+
+        tables: list[TableTensor] = []
+        for member_id, module in enumerate(self._permutations):
+            state = cast(_ColumnPermutation, module)
+            permutation = state.indices.argsort() if inverse else state.indices
+            order = tuple(permutation.tolist()) if inverse else state.order
+            tables.append(
+                self._permute(
+                    ensemble_table.table(member_id),
+                    permutation,
+                    order,
+                )
+            )
+
+        return EnsembleTable.from_tables(
+            tables=tables,
+            member_table_ids=range(len(tables)),
+        )
+
+    @staticmethod
+    def _permute(
         table: TableTensor,
         permutation: Tensor,
+        order: tuple[int, ...],
     ) -> TableTensor:
-        indices = permutation.tolist()
         return table.__class__(
             columns={
                 Stype.numerical.value: tuple(
-                    table.columns[Stype.numerical][index] for index in indices
+                    table.columns[Stype.numerical][index] for index in order
                 )
             },
             numerical=table.numerical.index_select(-1, permutation),

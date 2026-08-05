@@ -5,7 +5,11 @@ from typing import Any, cast
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    StringTensor,
+    TableTensor,
+)
 from sdm.processing import (
     ImputeMean,
     PowerTransform,
@@ -15,6 +19,7 @@ from sdm.processing import (
     Softmax,
     Standardize,
 )
+from sdm.tensor import EnsembleTable
 
 
 def _mixed_table(numerical: torch.Tensor | None = None) -> TableTensor:
@@ -48,9 +53,9 @@ def _add_one(table: TableTensor) -> TableTensor:
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
-    assert Sequential().transform(table) is table
-    assert Sequential().fit_transform(table) is table
-    assert Sequential().inverse_transform(table) is table
+    assert Sequential().transform(table).equal(table)
+    assert Sequential().fit_transform(table).equal(table)
+    assert Sequential().inverse_transform(table).equal(table)
 
 
 def test_pipeline_transforms_numerical() -> None:
@@ -175,10 +180,7 @@ def test_inverse_transform_rejects_non_invertible_step() -> None:
     processor = Sequential(ImputeMean())
     transformed = processor.fit_transform(_table())
 
-    with pytest.raises(
-        AttributeError,
-        match=r"ImputeMean.*inverse_transform",
-    ):
+    with pytest.raises(TypeError, match="'ImputeMean' is not invertible"):
         processor.inverse_transform(transformed)
 
 
@@ -196,3 +198,46 @@ def test_inverse_transform_runs_steps_in_reverse_order() -> None:
     restored = pipeline.inverse_transform(transformed)
 
     assert torch.allclose(restored.numerical, table.numerical, atol=1e-4)
+
+
+def test_sequential_ensemble_matches_member_execution() -> None:
+    first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+    second = _table(torch.tensor([[2.0, 3.0], [4.0, 5.0]]))
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
+    )
+    processor = Sequential(
+        Sequential(
+            lambda value: value.replace_blocks(
+                numerical=value.numerical.square()
+            )
+        ),
+        _add_one,
+    )
+
+    output = processor.fit_transform_ensemble(table)
+
+    for member_id, source in enumerate((second, first, second)):
+        expected = _add_one(
+            source.replace_blocks(numerical=source.numerical.square())
+        )
+        assert output.table(member_id).equal(expected)
+
+
+def test_empty_ensemble_pipeline_passes_through_members() -> None:
+    first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+    second = _table(torch.tensor([[5.0, 6.0], [7.0, 8.0]]))
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
+    )
+    processor = Sequential()
+
+    for output in (
+        processor.transform_ensemble(table),
+        processor.fit_transform_ensemble(table),
+        processor.inverse_transform_ensemble(table),
+    ):
+        for member_id in range(table.num_members):
+            assert output.table(member_id).equal(table.table(member_id))

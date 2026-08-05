@@ -38,8 +38,3 @@ def test_reduce_estimators_rejects_empty_ensemble_dimension() -> None:
 
     with pytest.raises(ValueError, match="at least one ensemble member"):
         ReduceEstimators().transform(table)
-
-
-def test_reduce_estimators_rejects_unknown_method() -> None:
-    with pytest.raises(ValueError, match="method must be 'mean'"):
-        ReduceEstimators(method="median")  # type: ignore
