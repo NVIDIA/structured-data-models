@@ -12,9 +12,9 @@ The last dimension refers to the named column dimension `C`, while preceding dim
 This makes a table look like a tensor of shape `[..., C]` without flattening all columns into one dense array of a single data type.
 In particular, it is
 
-- **dataframe-like at the boundary:** contruct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
-- **PyTorch-native in the middle:** use familar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
-- **lossless:** column names, semantic types, categorical vocabularies, string values, and missing-values are fully preserved.
+- **dataframe-like at the boundary:** construct from [`pandas`](https://pandas.pydata.org/docs), [`arrow`](https://arrow.apache.org/docs), or [`cudf`](https://docs.rapids.ai/api/cudf) via zero-copy buffer views, and convert back when needed.
+- **PyTorch-native in the middle:** use familiar operations such as {py:meth}`~torch.Tensor.to`, {py:meth}`~torch.Tensor.view`, {py:meth}`~torch.Tensor.unsqueeze`, indexing, slicing, {py:func}`torch.cat`, and {py:func}`torch.stack`, with fast device movement and efficient transfer to accelerators.
+- **lossless:** column names, semantic types, categorical vocabularies, string values, and missing values are fully preserved.
 
 ## The Tensor Stack
 
@@ -23,9 +23,10 @@ Each subclass supports multi-dimensional shapes and strides, and preserves stand
 
 - {py:class}`~sdm.tensor.VarLenTensor`: A tensor whose logical elements have variable-length payloads, *e.g.* for multi-categorical data.
 - {py:class}`~sdm.tensor.StringTensor`: A specialized {py:class}`~sdm.tensor.VarLenTensor` for representing UTF-8 strings.
+- {py:class}`~sdm.tensor.NullableIntTensor`: A tensor for nullable integer values.
 - {py:class}`~sdm.tensor.CategoricalTensor`: A tensor for representing categorical values via integer codes together with their mapping to original values.
   Category mappings can be ordinary {py:class}`torch.Tensor` instances or subclasses of it, *e.g.*, {py:class}`~sdm.tensor.StringTensor`.
-- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless, table representation whose columns are grouped by semantic type.
+- {py:class}`~sdm.tensor.TableTensor`: Combines the tensor types above into a lossless table representation whose columns are grouped by semantic type.
   It is the main user-facing interface for model inputs and outputs.
 
 ## Working with {py:class}`~sdm.tensor.TableTensor`
@@ -36,7 +37,7 @@ A {py:class}`~sdm.tensor.TableTensor` currently supports the following semantic 
 - {py:attr}`~sdm.Stype.categorical`: discrete values stored as a {py:class}`~sdm.tensor.CategoricalTensor`.
 - {py:attr}`~sdm.Stype.datetime`: timestamps stored as an integer {py:class}`torch.Tensor` containing Unix timestamps in microseconds.
 - {py:attr}`~sdm.Stype.text`: free-form strings stored as {py:class}`~sdm.tensor.StringTensor`.
-- {py:attr}`~sdm.Stype.id`: identifier columns (*e.g.*, primary keys or foreign keys) stored as a {py:class}`~sdm.tensor.ColumnarTensor`.
+- {py:attr}`~sdm.Stype.id`: identifier columns (*e.g.*, primary keys or foreign keys) represented as a {py:class}`~sdm.tensor.ColumnarTensor` with heterogeneous columns backed by {py:class}`torch.Tensor`, {py:class}`~sdm.tensor.StringTensor` or {py:class}`~sdm.tensor.NullableIntTensor`.
 
 ```{figure} images/table_light.svg
 :figclass: light-only
@@ -121,11 +122,8 @@ print(table[["age", "country"]].size())
 print(table[:2].size())
 # torch.Size([2, 5])
 
-print(table[:2].size())
-# torch.Size([2, 5])
-
-print(table.unsqueeze(0).size())
-# torch.Size([1, 3, 5])
+print(table.unsqueeze(0).expand(2, -1, -1).size())
+# torch.Size([2, 3, 5])
 
 print(torch.cat([table, table], dim=0).size())
 # torch.Size([6, 5])

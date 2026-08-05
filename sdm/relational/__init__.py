@@ -5,7 +5,6 @@ from sdm.relational.task import TaskLink, RelatedTables
 from sdm.relational.sampler import (
     RelationalSampler,
     TemporalSamplingConfig,
-    TemporalStrategy,
 )
 from sdm.relational.cugraph_sampler import CuGraphRelationalSampler
 
@@ -16,6 +15,5 @@ __all__ = [
     "RelatedTables",
     "RelationalSampler",
     "TemporalSamplingConfig",
-    "TemporalStrategy",
     "CuGraphRelationalSampler",
 ]

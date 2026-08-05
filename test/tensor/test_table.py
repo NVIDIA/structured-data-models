@@ -11,6 +11,7 @@ import torch
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    NaT,
     StringTensor,
     Stype,
     TableTensor,
@@ -246,6 +247,18 @@ def test_from_tensor() -> None:
     assert tensor.categorical.categories[0].equal(torch.tensor([-2, -1, 0, 1]))
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
     assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
+
+    data = StringTensor.from_list([["left", "right"], ["up", "down"]])
+    tensor = TableTensor.from_tensor(data)
+    assert tensor.size() == (2, 2)
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.text: ("0", "1"),
+        Stype.id: (),
+    }
+    assert tensor.text.equal(data)
 
 
 def test_inference_mode() -> None:
@@ -1031,7 +1044,7 @@ def test_arrow() -> None:
         torch.tensor(
             [
                 [1704067200000000],
-                [-9223372036854775808],
+                [NaT],
                 [1704153600000000],
                 [1704240000000000],
             ]
@@ -1196,7 +1209,7 @@ def test_cudf() -> None:
         torch.tensor(
             [
                 [1704067200000000],
-                [-9223372036854775808],
+                [NaT],
                 [1704153600000000],
                 [1704240000000000],
             ],

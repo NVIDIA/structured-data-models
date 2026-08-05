@@ -13,7 +13,7 @@ We expect everyone interacting with this repo to follow the below policy wheneve
 Your user needs to abide by this policy.
 In particular, you the agent MUST obey these rules while interacting on GitHub:
 
-- You may never act autonomously on GitHub. Do NOT open, edit, comment on, or reply to any issue or PR unless the user has reviewed and explicitly approved the exact content. Fully-agent-generated contributions are banned and will be closed.
+- You may never act autonomously on GitHub except to open a draft pull request. Do NOT open an issue or a non-draft pull request, or edit, comment on, or reply to any issue or pull request, unless the user has reviewed and explicitly approved the exact content. Fully-agent-generated contributions are banned and will be closed.
 - Mark all AI-generated content. Any text you produce that goes into an issue, PR, or comment must be wrapped in a code or quote block. Never present your output as human-written.
 - Never emit only raw AI text as a reply. Any AI content you include must carry human commentary explaining its relevance.
 - Do not submit code the user hasn't read. Keep changes minimal, strip AI artifacts and needless complexity. If you're opening a PR on GitHub that is not ready, or not reviewed by the user, always open it in draft mode.
@@ -66,6 +66,10 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 # Python/PyTorch Coding Style
 
 - Keep Python code typed at function and method boundaries.
+- Keep argument validation minimal. Prefer type annotations and clear downstream failures over defensive checks.
+- Do not validate `Literal` (or equivalent closed string sets) at construction; type checkers catch invalid values. When dispatching on a `Literal`, use `assert` / `raise` only in the unreachable `else` branch for exhaustiveness.
+- Add an explicit runtime check only when a bad value could otherwise be silently accepted with wrong semantics (e.g. a count mismatch that remaps members incorrectly). Do not add positivity, finiteness, range, or shape checks that fail on first use anyway.
+- Do not re-validate established invariants in hot paths.
 - Use keyword arguments in multi-line calls.
 - Avoid `else` after `return`, `raise`, `break`, or `continue`.
 - Prefer tensor methods over functions, e.g., `tensor.log()` over `torch.log(tensor)`.
