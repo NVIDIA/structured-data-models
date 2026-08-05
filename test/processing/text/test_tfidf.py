@@ -21,7 +21,7 @@ def _numerical_by_column_ngram(
     return values
 
 
-def test_tfidf_encoder_preserves_leading_dimensions() -> None:
+def test_preserves_leading_dimensions() -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list(
             [
@@ -36,7 +36,7 @@ def test_tfidf_encoder_preserves_leading_dimensions() -> None:
     assert output.numerical.shape[:-1] == (2, 2)
 
 
-def test_tfidf_encoder_rows_are_l2_normalized() -> None:
+def test_rows_are_l2_normalized() -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list([["short"], ["a much longer text cell"]])
     )
@@ -50,7 +50,7 @@ def test_tfidf_encoder_rows_are_l2_normalized() -> None:
     )
 
 
-def test_tfidf_encoder_exact_values() -> None:
+def test_exact_values() -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list([["ab"], ["ab ac"], ["ac"]])
     )
@@ -71,7 +71,7 @@ def test_tfidf_encoder_exact_values() -> None:
         assert torch.allclose(actual[key], expected_values, atol=1e-6)
 
 
-def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
+def test_ignores_unseen_ngrams() -> None:
     train = TableTensor.from_tensor(
         StringTensor.from_list([["aaa bbb"], ["aaa ccc"]])
     )
@@ -87,7 +87,7 @@ def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
     assert output.numerical[1].ne(0).any()
 
 
-def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
+def test_max_features_keeps_most_frequent_ngrams() -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list([["aa aa aa ab ab ac"]])
     )
@@ -100,7 +100,7 @@ def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
     assert set(encoder._vocabularies[0].to_pylist()) == {" a", "aa", "a "}
 
 
-def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
+def test_empty_string_yields_zero_width_output() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([[""]]))
 
     output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
@@ -109,7 +109,7 @@ def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
     assert output.columns[Stype.numerical] == ()
 
 
-def test_tfidf_encoder_short_word_counts_once() -> None:
+def test_short_word_counts_once() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
 
     output = TFIDF(ngram_range=(5, 5)).fit_transform(table)
@@ -118,7 +118,7 @@ def test_tfidf_encoder_short_word_counts_once() -> None:
     assert torch.equal(output.numerical, torch.ones(1, 1))
 
 
-def test_tfidf_encoder_can_preserve_case() -> None:
+def test_can_preserve_case() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([["CAT"], ["cat"]]))
 
     lowercased = TFIDF(ngram_range=(3, 3)).fit_transform(table)
@@ -196,7 +196,7 @@ def test_tfidf_encoder_can_preserve_case() -> None:
     ],
 )
 @onlyCUDA
-def test_tfidf_encoder_cuda_matches_cpu(
+def test_cuda_matches_cpu(
     train: list[list[str]],
     query: list[list[str]] | None,
     ngram_range: tuple[int, int],
@@ -251,7 +251,7 @@ def test_tfidf_encoder_cuda_matches_cpu(
         )
 
 
-def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
+def test_state_dict_round_trip(tmp_path) -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list(
             [["hello world", "cat"], ["hello there", "dog"]]
@@ -268,7 +268,7 @@ def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
     assert torch.equal(restored.transform(table).numerical, expected.numerical)
 
 
-def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
+def test_load_state_dict_clears_stale_idf_buffers() -> None:
     wide = TableTensor.from_tensor(
         StringTensor.from_list([["hello world", "cat dog"]])
     )
@@ -285,7 +285,7 @@ def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
     assert torch.equal(output.numerical, expected.numerical)
 
 
-def test_tfidf_encoder_failed_refit_preserves_previous_state(
+def test_failed_refit_preserves_previous_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     table = TableTensor.from_tensor(
@@ -307,7 +307,7 @@ def test_tfidf_encoder_failed_refit_preserves_previous_state(
     assert torch.equal(output.numerical, expected.numerical)
 
 
-def test_tfidf_encoder_refit_replaces_previous_state() -> None:
+def test_refit_replaces_previous_state() -> None:
     wide = TableTensor.from_tensor(
         StringTensor.from_list([["hello world", "cat dog"]])
     )
