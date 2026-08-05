@@ -93,6 +93,7 @@ def test_llm_text_embed_empty_rows_use_embedding_dim_without_model_call() -> (
         text=StringTensor(
             data=torch.empty(0, dtype=torch.uint8),
             offset=torch.zeros(1, dtype=torch.int32),
+            valid=None,
             size=(0, 1),
         ),
     )
