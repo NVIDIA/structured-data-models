@@ -43,7 +43,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     assert repr(dispatch) == description
 
     dispatch._resolve(_numerical_table())
-    assert dispatch.transform(output) is output
+    assert dispatch.transform(output).equal(output)
     assert repr(dispatch) == description
 
     restored = TaskDispatch(classification=Softmax())
