@@ -226,12 +226,19 @@ class CategoricalTensor(Tensor):
             dtype: The dtype.
             device: The device.
         """
+        import cudf
         from cudf.api.types import is_string_dtype
 
-        codes, categories = ser.factorize(
-            sort=False,
-            use_na_sentinel=True,
-        )
+        if isinstance(ser.dtype, cudf.CategoricalDtype):
+            codes = ser.cat.codes.astype("int32", copy=False).to_cupy(
+                na_value=-1
+            )
+            categories = ser.cat.categories
+        else:
+            codes, categories = ser.factorize(
+                sort=False,
+                use_na_sentinel=True,
+            )
         code = torch.from_dlpack(codes).unsqueeze(-1).to(device, dtype)
 
         if len(categories) == 0:
@@ -437,6 +444,119 @@ def _alias(inp: CategoricalTensor) -> CategoricalTensor:
     return inp.__class__(aten.alias.default(inp._code), inp._categories)
 
 
+@CategoricalTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
+    inp: CategoricalTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool | None = None,  # Ignored by PyTorch.
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+
+    if (
+        not copy
+        and (dtype is None or dtype == inp.dtype)
+        and (device is None or torch.device(device) == inp.device)
+        and (layout is None or layout == inp.layout)
+        and (
+            memory_format is None
+            or memory_format == torch.preserve_format
+            or (
+                memory_format == torch.contiguous_format
+                and inp.is_contiguous()
+            )
+        )
+    ):
+        return inp
+
+    code = aten.to.dtype_layout(
+        inp._code,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+    if code.dtype not in inp.ALLOWED_DTYPES or code.layout != torch.strided:
+        return code
+
+    categories = tuple(
+        aten.to.dtype_layout(
+            category,
+            dtype=None,
+            layout=None,
+            device=device,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            copy=copy,
+            memory_format=None,
+        )
+        for category in inp._categories
+    )
+    return inp.__class__(code, categories)
+
+
+@CategoricalTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: CategoricalTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@CategoricalTensor.implements(aten.to.device)
+def _to_device(
+    inp: CategoricalTensor,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@CategoricalTensor.implements(aten.to.other)
+def _to_other(
+    inp: CategoricalTensor,
+    other: Tensor,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> Tensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=other.dtype,
+        layout=other.layout,
+        device=other.device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
 @CategoricalTensor.implements(aten._to_copy.default)
 def _to_copy(
     inp: CategoricalTensor,
@@ -444,36 +564,20 @@ def _to_copy(
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,
+    pin_memory: bool = False,  # Ignored by PyTorch.
     non_blocking: bool = False,
     memory_format: torch.memory_format | None = None,
 ) -> Tensor:
-
-    code = aten._to_copy.default(
-        inp._code,
-        device=device,
+    return _to_dtype_layout(
+        inp,
         dtype=dtype,
         layout=layout,
+        device=device,
         pin_memory=pin_memory,
         non_blocking=non_blocking,
+        copy=True,
         memory_format=memory_format,
     )
-    if code.dtype not in inp.ALLOWED_DTYPES or code.layout != torch.strided:
-        return code
-
-    categories = tuple(
-        aten._to_copy.default(
-            category,
-            device=device,
-            dtype=None,
-            layout=None,
-            pin_memory=pin_memory,
-            non_blocking=non_blocking,
-            memory_format=None,
-        )
-        for category in inp._categories
-    )
-    return inp.__class__(code, categories)
 
 
 @CategoricalTensor.implements(aten.clone.default)
@@ -482,9 +586,7 @@ def _clone(
     *,
     memory_format: torch.memory_format | None = None,
 ) -> CategoricalTensor:
-    out = _to_copy(inp, memory_format=memory_format)
-    assert isinstance(out, CategoricalTensor)
-    return out
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
 @CategoricalTensor.implements(aten.contiguous.default)

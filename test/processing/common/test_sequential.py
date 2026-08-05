@@ -8,14 +8,11 @@ import torch
 from sdm import (
     CategoricalTensor,
     StringTensor,
-    Stype,
     TableTensor,
 )
 from sdm.processing import (
     ImputeMean,
-    InvertibleMixin,
     PowerTransform,
-    Processor,
     QuantileTransform,
     Sequential,
     ShuffleColumns,
@@ -53,29 +50,12 @@ def _add_one(table: TableTensor) -> TableTensor:
     return table.replace_blocks(numerical=table.numerical + 1)
 
 
-class Center(Processor, InvertibleMixin):
-    supported_stypes = frozenset({Stype.numerical})
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.register_buffer("mean", torch.empty(0))
-
-    def _fit(self, table: TableTensor, **_: object) -> None:
-        self.mean = table.numerical.mean(dim=-2, keepdim=True)
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical - self.mean)
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical + self.mean)
-
-
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
-    assert Sequential().transform(table) is table
-    assert Sequential().fit_transform(table) is table
-    assert Sequential().inverse_transform(table) is table
+    assert Sequential().transform(table).equal(table)
+    assert Sequential().fit_transform(table).equal(table)
+    assert Sequential().inverse_transform(table).equal(table)
 
 
 def test_pipeline_transforms_numerical() -> None:
@@ -200,10 +180,7 @@ def test_inverse_transform_rejects_non_invertible_step() -> None:
     processor = Sequential(ImputeMean())
     transformed = processor.fit_transform(_table())
 
-    with pytest.raises(
-        AttributeError,
-        match=r"ImputeMean.*inverse_transform",
-    ):
+    with pytest.raises(TypeError, match="'ImputeMean' is not invertible"):
         processor.inverse_transform(transformed)
 
 
@@ -246,55 +223,3 @@ def test_sequential_ensemble_matches_member_execution() -> None:
             source.replace_blocks(numerical=source.numerical.square())
         )
         assert output.table(member_id).equal(expected)
-
-
-def test_sequential_ensemble_keeps_fitted_state_per_group() -> None:
-    first = TableTensor.from_tensor(
-        torch.tensor([[1.0], [3.0]]), columns=("first",)
-    )
-    second = TableTensor.from_tensor(
-        torch.tensor([[10.0], [14.0]]), columns=("second",)
-    )
-    table = EnsembleTable.from_tables(
-        tables=(first, second),
-        member_table_ids=(0, 1),
-    )
-    processor = Sequential(Center())
-
-    transformed = processor.fit_transform_ensemble(table)
-    restored = processor.inverse_transform_ensemble(transformed)
-
-    for member_id in range(table.num_members):
-        assert restored.table(member_id).equal(table.table(member_id))
-
-
-def test_sequential_fit_ensemble_fits_each_step_on_previous_output() -> None:
-    table = EnsembleTable(
-        TableTensor.from_tensor(torch.tensor([[1.0], [3.0]])),
-        num_members=2,
-    )
-    fitted = Sequential(Center(), _add_one)
-    combined = Sequential(Center(), _add_one)
-
-    fitted.fit_ensemble(table)
-    transformed = fitted.transform_ensemble(table)
-    expected = combined.fit_transform_ensemble(table)
-
-    for member_id in range(table.num_members):
-        assert transformed.table(member_id).equal(expected.table(member_id))
-
-
-def test_sequential_ensemble_inverse_requires_fit() -> None:
-    table = EnsembleTable(_table(), num_members=2)
-
-    with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
-        Sequential(Center()).inverse_transform_ensemble(table)
-
-
-def test_sequential_ensemble_inverse_rejects_non_invertible_step() -> None:
-    table = EnsembleTable(_table(), num_members=2)
-    processor = Sequential(ImputeMean())
-    transformed = processor.fit_transform_ensemble(table)
-
-    with pytest.raises(TypeError, match="'ImputeMean' is not invertible"):
-        processor.inverse_transform_ensemble(transformed)

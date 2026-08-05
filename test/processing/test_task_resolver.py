@@ -83,7 +83,7 @@ def test_task_resolver_uses_final_target_type_once(
     )
 
     recipe.target.fit(_numerical_target(device))
-    assert recipe.output.transform(output) is output
+    assert recipe.output.transform(output).equal(output)
 
     converted = Recipe(
         target=[ToNumerical()],
@@ -92,7 +92,7 @@ def test_task_resolver_uses_final_target_type_once(
     transformed_target = converted.target.fit_transform(categorical_target)
 
     assert transformed_target.numerical.size(-1) == 1
-    assert converted.output.transform(output) is output
+    assert converted.output.transform(output).equal(output)
 
     scaled = Recipe(
         target=[Standardize()],
@@ -115,7 +115,7 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     assert "_TaskResolver" not in repr(recipe)
 
     recipe.target.fit(_numerical_target())
-    assert recipe.output.transform(output) is output
+    assert recipe.output.transform(output).equal(output)
 
     with pytest.raises(ValueError, match="no 'classification' route"):
         recipe.target.fit(_categorical_target())
@@ -152,4 +152,4 @@ def test_task_resolver_copies_recipes_independently() -> None:
         classification.output.transform(output).numerical.sum(dim=-1),
         torch.ones(2),
     )
-    assert regression.output.transform(output) is output
+    assert regression.output.transform(output).equal(output)

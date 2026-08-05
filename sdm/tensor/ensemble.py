@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterator, Sequence
 from typing import cast
 
@@ -18,7 +19,8 @@ class EnsembleTable:
     remain in separate groups.
 
     Use :meth:`table` to access a member's table. Iterate over the
-    :class:`EnsembleTable` to process its groups.
+    :class:`EnsembleTable` to process its groups, and :meth:`replace_groups`
+    to build an ensemble table from the processed groups.
 
     .. testcode::
 
@@ -60,9 +62,13 @@ class EnsembleTable:
         num_members: Number of ensemble members.
     """
 
+    _groups: tuple[TableTensor, ...]
+    # Group index and position within that group, per ensemble member.
+    _locations: tuple[tuple[int, int], ...]
+
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
         self._groups = (cast(TableTensor, table.unsqueeze(0)),)
-        self._member_locations = ((0, 0),) * num_members
+        self._locations = ((0, 0),) * num_members
 
     @classmethod
     def from_tables(
@@ -136,7 +142,7 @@ class EnsembleTable:
 
         ensemble = cls.__new__(cls)
         ensemble._groups = tuple(groups)
-        ensemble._member_locations = tuple(
+        ensemble._locations = tuple(
             input_locations[index] for index in member_table_ids
         )
         return ensemble
@@ -144,7 +150,12 @@ class EnsembleTable:
     @property
     def num_members(self) -> int:
         """Return the number of ensemble members."""
-        return len(self._member_locations)
+        return len(self._locations)
+
+    @property
+    def num_groups(self) -> int:
+        """Return the number of groups of compatible tables."""
+        return len(self._groups)
 
     def table(self, member_id: int) -> TableTensor:
         """Return the table associated with one ensemble member.
@@ -152,7 +163,7 @@ class EnsembleTable:
         Args:
             member_id: Zero-based member index.
         """
-        group_index, position = self._member_locations[member_id]
+        group_index, position = self._locations[member_id]
         return self._groups[group_index][position]
 
     def _member_location(self, member_id: int) -> tuple[int, int]:
@@ -162,14 +173,27 @@ class EnsembleTable:
         """Iterate over groups of compatible tables."""
         return iter(self._groups)
 
-    def _replace_groups(self, groups: Sequence[TableTensor]) -> Self:
-        table = self.__class__.__new__(self.__class__)
-        table._groups = tuple(groups)
-        table._member_locations = self._member_locations
-        return table
+    def replace_groups(self, groups: Sequence[TableTensor]) -> Self:
+        """Return an ensemble table with its groups replaced.
+
+        Args:
+            groups: One replacement group per current group.
+
+        Returns:
+            An ensemble table over ``groups`` with the current member
+            assignment.
+        """
+        if len(groups) != self.num_groups:
+            raise ValueError(
+                f"Expected one replacement per group of compatible tables "
+                f"({self.num_groups}), got {len(groups)}."
+            )
+        ensemble = copy.copy(self)
+        ensemble._groups = tuple(groups)
+        return ensemble
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(num_members={self.num_members}, "
-            f"num_groups={len(self._groups)})"
+            f"num_groups={self.num_groups})"
         )

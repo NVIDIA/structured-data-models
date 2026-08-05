@@ -11,11 +11,11 @@ from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleProcessorAdapter,
 )
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm.tensor import EnsembleTable
 
 
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
-    r"""Apply processors and callables in sequence.
+    r"""Apply processors and callables to a table in sequence.
 
     Args:
         args: Sequence of :class:`Processor` instances or callables.
@@ -54,36 +54,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.append(processor)
         return self
 
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        out = table
-        for i, child in enumerate(self):
-            if i < len(self) - 1:
-                out = child.fit_transform(out, generator=generator)
-            else:
-                child.fit(out, generator=generator)
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.transform(out)
-        return out
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.fit_transform(out, generator=generator)
-        return out
-
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -91,18 +61,15 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         out = ensemble_table
-        children = tuple(self._modules.items())
-        for index, (name, child) in enumerate(children):
-            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
-            if processor is not child:
-                self._modules[name] = processor
-            if index < len(children) - 1:
-                out = processor.fit_transform_ensemble(
-                    out,
-                    generator=generator,
-                )
+        n = len(self._modules)
+        for index, (name, child) in enumerate(self._modules.items()):
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            if index < n - 1:
+                out = child.fit_transform_ensemble(out, generator=generator)
             else:
-                processor.fit_ensemble(out, generator=generator)
+                child.fit_ensemble(out, generator=generator)
 
     def _fit_transform_ensemble(
         self,
@@ -111,11 +78,11 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in tuple(self._modules.items()):
-            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
-            if processor is not child:
-                self._modules[name] = processor
-            out = processor.fit_transform_ensemble(out, generator=generator)
+        for name, child in self._modules.items():
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            out = child.fit_transform_ensemble(out, generator=generator)
         return out
 
     def _transform_ensemble(
@@ -123,47 +90,27 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in tuple(self._modules.items()):
-            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
-            if processor is not child:
-                self._modules[name] = processor
-            out = processor.transform_ensemble(out)
+        for name, child in self._modules.items():
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            out = child.transform_ensemble(out)
         return out
 
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        """Apply fitted child inverses in reverse order.
-
-        Args:
-            ensemble_table: Ensemble table in the transformed representation.
-
-        Returns:
-            Ensemble table restored to its representation before transform.
-        """
         out = ensemble_table
-        for name, child in reversed(tuple(self._modules.items())):
-            processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
-            if processor is not child:
-                self._modules[name] = processor
-            fn = getattr(processor, "inverse_transform_ensemble", None)
+        for name, child in reversed(self._modules.items()):
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            fn = getattr(child, "inverse_transform_ensemble", None)
             if not callable(fn):
                 raise AttributeError(
-                    f"{processor.__class__.__name__!r} object has no "
+                    f"{child.__class__.__name__!r} object has no "
                     "attribute 'inverse_transform_ensemble'"
-                )
-            out = fn(out)
-        return out
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in reversed(list(self)):
-            fn = getattr(child, "inverse_transform", None)
-            if not callable(fn):
-                raise AttributeError(
-                    f"{child.__class__.__name__!r} object has no attribute "
-                    f"'inverse_transform'"
                 )
             out = fn(out)
         return out
