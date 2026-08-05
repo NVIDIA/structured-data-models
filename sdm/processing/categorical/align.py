@@ -305,7 +305,7 @@ class AlignCategories(EnsembleProcessor):
     @staticmethod
     def _string_category_lookups(
         input_categories: tuple[StringTensor, ...],
-        fitted_categories: tuple[StringTensor, ...],
+        fitted_categories: tuple[Tensor, ...],
         codes: Tensor,
     ) -> tuple[Tensor, ...]:
         if not input_categories:
@@ -406,9 +406,7 @@ class AlignCategories(EnsembleProcessor):
         lookups_by_column: list[dict[int, Tensor]] = [
             {} for _ in table.categorical.categories
         ]
-        string_requests: list[
-            tuple[int, int, StringTensor, StringTensor]
-        ] = []
+        string_requests: list[tuple[int, int, StringTensor, Tensor]] = []
         for column_index, input_categories in enumerate(
             table.categorical.categories
         ):

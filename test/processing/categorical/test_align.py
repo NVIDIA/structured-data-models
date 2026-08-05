@@ -84,6 +84,7 @@ def test_align_categories_keeps_string_vocabularies_column_local(
 
     output = AlignCategories().fit(context).transform(query)
 
+    assert output.categorical.code.dtype == dtype
     assert torch.equal(
         output.categorical.code,
         torch.tensor(
