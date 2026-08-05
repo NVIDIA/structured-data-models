@@ -3,6 +3,7 @@ import io
 import pyarrow as pa
 import pytest
 import torch
+
 from sdm import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.testing import onlyCUDA
 
@@ -26,7 +27,7 @@ def test_init() -> None:
         ColumnarTensor(
             (
                 CategoricalTensor(
-                    data=torch.randint(0, 2, (2, 1)),
+                    code=torch.randint(0, 2, (2, 1)),
                     categories=(torch.arange(2),),
                 ),
             )
@@ -58,6 +59,22 @@ def test_from_arrow() -> None:
 
     with pytest.raises(ValueError, match="cannot represent null integer"):
         ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+
+
+def test_from_arrow_chunked_string() -> None:
+    tensor = ColumnarTensor.from_arrow(
+        pa.chunked_array([pa.array(["a", "b"]), pa.array(["c"])]),
+    )
+
+    assert tensor.to_arrow().column(0).type == pa.large_string()
+    assert tensor.to_arrow().to_pydict() == {"0": ["a", "b", "c"]}
+
+
+@onlyCUDA
+def test_from_arrow_cuda() -> None:
+    tensor = ColumnarTensor.from_arrow(pa.array([1, 2, 3]), device="cuda")
+    assert tensor.is_cuda
+    assert tensor[:, 0].equal(torch.tensor([1, 2, 3], device=tensor.device))
 
 
 @onlyCUDA
@@ -190,6 +207,20 @@ def test_to_cuda_in_inference_mode() -> None:
     assert isinstance(out, ColumnarTensor)
     assert out.is_cuda
     assert all(column.is_cuda for column in out._columns)
+
+
+@onlyCUDA
+def test_to_cuda() -> None:
+    tensor = ColumnarTensor(
+        (
+            torch.arange(3),
+            StringTensor.from_list(["a", "bb", "c"]),
+        )
+    )
+
+    out = tensor.to("cuda")
+    assert isinstance(out, ColumnarTensor)
+    assert out.device.type == "cuda"
     assert out.tolist() == tensor.tolist()
 
 

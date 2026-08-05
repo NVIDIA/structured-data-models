@@ -3,45 +3,134 @@ from collections.abc import Sequence
 from typing import Any, ClassVar, cast
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Relationship, Stype, TableTensor, TaskLink
+from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
-from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.recipe import default_recipe
+from sdm.models.kumorfm.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import Recipe
+from sdm.processing import Recipe, Standardize
 
 
 class KumoRFM(ICLModel):
-    r"""The adapted relational foundation model from the `"KumoRFM-2: Scaling
-    Foundation Models for Relational Learning"
+    r"""An adapted and simplified version of the relational foundation model
+    from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
-    .. image:: https://arxiv.org/html/2604.12596v1/x3.png
-        :align: center
+    .. figure:: /images/rfm_light.svg
+        :figclass: light-only
         :width: 100%
+
+    .. figure:: /images/rfm_dark.svg
+        :figclass: dark-only
+        :width: 100%
+
+    :class:`KumoRFM` extends the in-context learning structure of tabular
+    foundation models from single tables to relational, multi-table inputs.
+    It processes task rows together with one or more related tables, avoiding
+    manual flattening of relational data into a single table.
+
+    This implementation follows the high-level KumoRFM-2 architecture.
+    It consists of three stages:
+
+    * **Intra-table row embeddings:** Each related table is embedded
+      independently with a :class:`TabICLv2`-style row embedding stack.
+      Target information is injected by distributing context targets over the
+      relational graph.
+    * **Inter-table message passing:** A schema-agnostic GNN exchanges the row
+      embeddings along pre-defined relationships for ``num_hops`` rounds,
+      before it reads out the rows linked to the task table.
+    * **In-context learning over samples:** The readout embeddings for context
+      and query task rows are processed by a :class:`TabICLv2`-style
+      dataset-level ICL block.
+      Context rows carry target information, while query rows attend to the
+      labeled context to produce class logits or regression quantiles.
+
+    .. testcode::
+
+        from sdm import RelatedTables, TableTensor
+        from sdm.models import KumoRFM
+
+        task_table = TableTensor.from_columns(
+            {"user_id": [0, 1, 2, 3], "churn": [True, False, True, False]},
+            stypes={"user_id": "id", "churn": "categorical"},
+            device="cuda",
+        )
+
+        related_tables = RelatedTables(
+            tables={
+                "users": TableTensor.from_columns(
+                    {"user_id": [0, 1, 2, 3], "age": [42, 23, 31, 26]},
+                    stypes={"user_id": "id", "age": "numerical"},
+                    device="cuda",
+                ),
+                "orders": TableTensor.from_columns(
+                    {
+                        "user_id": [0, 0, 1, 3, 3, 3],
+                        "amount": [9.99, 4.99, 12.99, 7.99, 3.99, 5.99],
+                    },
+                    stypes={"user_id": "id", "amount": "numerical"},
+                    device="cuda",
+                ),
+            },
+            relationships=[{
+                "left_table": "orders",
+                "left_columns": "user_id",
+                "right_table": "users",
+                "right_columns": "user_id",
+            }],
+            task_links=[{
+                "task_columns": "user_id",
+                "table": "users",
+                "table_columns": "user_id",
+            }],
+        )
+
+        x_context = task_table[:2].drop_columns("churn")
+        y_context = task_table[:2, "churn"]
+        x_query = task_table[2:].drop_columns("churn")
+
+        related_context_tables = related_tables.replace_tables({
+            "users": related_tables.tables["users"][:2],
+            "orders": related_tables.tables["orders"][:3],
+        })
+        related_query_tables = related_tables.replace_tables({
+            "users": related_tables.tables["users"][2:],
+            "orders": related_tables.tables["orders"][3:],
+        })
+
+        model = KumoRFM(device="cuda")
+
+        # Default in-context learning forward pass:
+        out = model(
+            x_context=x_context,
+            y_context=y_context,
+            x_query=x_query,
+            related_context_tables=related_context_tables,
+            related_query_tables=related_query_tables,
+            num_hops=1,
+        )
+
+        # Fit+Predict forward pass via key/value caching:
+        model.fit(x_context, y_context, related_context_tables, num_hops=1)
+        out = model.predict(x_query, related_query_tables)
 
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
     """
 
-    #:
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.datetime}
     )
-    #:
     supported_target_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.categorical}
     )
-    #:
     supports_related_tables: ClassVar[bool] = True
 
     _checkpoint_filenames: ClassVar[dict[str, str]] = {
@@ -79,7 +168,7 @@ class KumoRFM(ICLModel):
 
         for variant, filename in self._checkpoint_filenames.items():
             path = download_checkpoint(
-                repo_id="nvidia/kumorfm-2",
+                repo_id="nvidia/kumorfm",
                 filename=filename,
                 revision="v2.1.0",
             )
@@ -171,7 +260,6 @@ class _KumoRFM(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_classes = num_classes
         self.max_train_size = max_train_size
 
         self.row_embedding = RowEmbedding(
@@ -191,24 +279,13 @@ class _KumoRFM(torch.nn.Module):
         )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
+            out_channels=num_classes or num_quantiles,
             channels=num_readout_tokens * channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
             norm_bias=norm_bias,
+            temperature=0.9,
             **factory_kwargs,
-        )
-        self.head = Sequential(
-            Linear(
-                in_features=num_readout_tokens * channels,
-                out_features=2 * num_readout_tokens * channels,
-                **factory_kwargs,
-            ),
-            GELU(),
-            Linear(
-                in_features=2 * num_readout_tokens * channels,
-                out_features=num_classes or num_quantiles,
-                **factory_kwargs,
-            ),
         )
 
     def forward(
@@ -224,26 +301,9 @@ class _KumoRFM(torch.nn.Module):
         num_hops: int | None = None,
     ) -> Tensor:  # [..., R_query, *]
 
-        if related_context_tables is None and related_query_tables is None:
-            raise ValueError(
-                f"'{self.__class__.__name__}' requires related tables"
-            )
-
-        for tables in (related_context_tables, related_query_tables):
-            if tables is not None and len(tables.task_links) != 1:
-                raise NotImplementedError(
-                    f"'{self.__class__.__name__}' expects exactly one task "
-                    f"link to an entity table (got {len(tables.task_links)})"
-                )
-
-        if num_hops is None:  # Infer `num_hops`:
-            num_hops = 2  # TODO Support automatic `num_hops` detection.
-            if cache is not None and cache.is_recording:
-                cast(dict[str, Any], cache["kwargs"])["num_hops"] = num_hops
-
         num_classes: int | None = None  # Extract `y` as tensor:
         if y_context is not None and y_context.categorical.size(-1) > 0:
-            y = y_context.categorical.as_tensor().squeeze(-1)
+            y = y_context.categorical.code.squeeze(-1)
             num_classes = len(y_context.categorical.categories[0])
         elif y_context is not None and y_context.numerical.size(-1) > 0:
             y = y_context.numerical.squeeze(-1)
@@ -257,141 +317,153 @@ class _KumoRFM(torch.nn.Module):
                 device=next(self.parameters()).device,
             )
 
-        # TODO Support computing relative time.
-        # TODO Inject random heterogeneous GNN.
-
-        graph: HomogeneousGraph | None = None
-        task_index: Tensor | None = None
-        y_graph: Tensor | None = None
-        if related_context_tables is not None:
-            assert x_context is not None
-            graph = HomogeneousGraph.from_tables(
-                tables=related_context_tables.tables,
-                relationships=related_context_tables.relationships,
-            )
-            task_index = related_context_tables.task_indices(x_context)[0]
-            y_graph = _propagate_y(
-                y=y,
-                graph=graph,
-                task_links=related_context_tables.task_links,
-                task_indices=[task_index],
-                num_hops=num_hops,
-                num_classes=num_classes,
-            )
-
-        # Reason within each Table ############################################
-        xs_context: dict[str, Tensor] = {}
-        xs_query: dict[str, Tensor] = {}
-        for name in cast(
-            RelatedTables,
-            related_context_tables or related_query_tables,
-        ).tables:
-            table_cache: Cache | None = None
-            if cache is not None and cache.is_recording:
-                table_cache = Cache()
-            elif cache is not None:
-                table_cache = cast(Cache, cache[f"table_{name}"])
-
-            y_i = y  # Distribute `target` over related tables:
-            if related_context_tables is not None:
-                # TODO Split entity table into task+nearby entities.
-                assert graph is not None
-                assert y_graph is not None
-                x_i = related_context_tables.tables[name].numerical
-                start = graph.start_node_offsets[name]
-                end = graph.end_node_offsets[name]
-                y_i = y_graph[start:end]
-                if (
-                    related_query_tables is not None
-                    and name in related_query_tables.tables
-                ):
-                    x_i = torch.cat(
-                        [x_i, related_query_tables.tables[name].numerical],
-                        dim=-2,
-                    )
-            else:
-                assert related_query_tables is not None
-                x_i = related_query_tables.tables[name].numerical
-
-            x_i = self.row_embedding(
-                x=x_i,
-                y=y_i,
-                max_keys=self.max_train_size,
-                num_classes=num_classes,
-                cache=table_cache,
-                generator=generator,
-            )
-
-            if related_context_tables is not None:
-                num_rows = related_context_tables.tables[name].size(-2)
-                xs_context[name] = x_i[..., :num_rows, :]
-            if (
-                related_query_tables is not None
-                and name in related_query_tables.tables
-            ):
-                num_rows = related_query_tables.tables[name].size(-2)
-                xs_query[name] = x_i[..., -num_rows:, :]
-
-            if cache is not None and cache.is_recording:
-                cache[f"table_{name}"] = cast(Cache, table_cache)
-
-        # Inter-Message Passing Exchange ######################################
-        edge_type_emb: Tensor | None = None
-        if related_context_tables is not None:
-            assert graph is not None
-            x_context: Tensor = torch.cat(
-                [xs_context[name] for name in related_context_tables.tables],
-                dim=-2,
-            )
-            del xs_context
-            if cache is not None and cache.is_recording:
-                cache["relationships"] = related_context_tables.relationships
-            edge_type_emb = self.gnn.get_edge_type_emb(
-                num_edge_types=graph.num_edge_types,
-                dtype=x_context.dtype,
-                generator=generator,
-            )
-            if cache is not None and cache.is_recording:
-                cache["edge_type_emb"] = edge_type_emb
-            x_context = self.gnn(
+        context: TaskGraph | None = None
+        if x_context is not None:
+            if related_context_tables is None:
+                raise ValueError(
+                    f"{self.__class__.__name__!r} requires related tables"
+                )
+            context = TaskGraph.from_input(
                 x=x_context,
-                graph=graph,
-                edge_type_emb=edge_type_emb,
-                readout_table=related_context_tables.task_links[0].table,
+                related_tables=related_context_tables,
                 num_hops=num_hops,
             )
-            assert task_index is not None
-            x_context = x_context[task_index[1][task_index[0].argsort()]]
+            if cache is not None and cache.is_recording:
+                cache["relationships"] = context.related_tables.relationships
+                cache["num_hops"] = context.num_hops
 
-        if related_query_tables is not None:
-            assert x_query is not None
-            task_index = related_query_tables.task_indices(x_query)[0]
-            x_query: Tensor = torch.cat(
-                [xs_query[name] for name in related_query_tables.tables],
-                dim=-2,
-            )
-            del xs_query
-            if related_context_tables is not None:
-                relationships = related_context_tables.relationships
+        query: TaskGraph | None = None
+        if x_query is not None:
+            if related_query_tables is None:
+                raise ValueError(
+                    f"{self.__class__.__name__!r} requires related tables"
+                )
+            if context is not None:
+                relationships = context.related_tables.relationships
+                num_hops = context.num_hops
             else:
                 assert cache is not None
                 assert cache.is_replaying
-                relationships = cache["relationships"]
-            graph = HomogeneousGraph.from_tables(
-                tables=related_query_tables.tables,
-                relationships=cast(Sequence[Relationship], relationships),
-            )
-            if edge_type_emb is None:
-                assert cache is not None
-                edge_type_emb = cast(Tensor, cache["edge_type_emb"])
-            x_query = self.gnn(
+                relationships = cast(
+                    Sequence[Relationship], cache["relationships"]
+                )
+                num_hops = cast(int, cache["num_hops"])
+            query = TaskGraph.from_input(
                 x=x_query,
-                graph=graph,
-                edge_type_emb=edge_type_emb,
-                readout_table=related_query_tables.task_links[0].table,
+                related_tables=RelatedTables(
+                    tables=related_query_tables.tables,
+                    relationships=relationships,
+                    task_links=related_query_tables.task_links,
+                ),
                 num_hops=num_hops,
             )
-            x_query = x_query[task_index[1][task_index[0].argsort()]]
+
+        # TODO Inject random heterogeneous GNN.
+
+        # Reason within each Table ############################################
+        if context is not None:
+            table_names = list(context.related_tables.tables)
+            readout_table = context.readout_table
+        else:
+            assert query is not None
+            table_names = list(query.related_tables.tables)
+            readout_table = query.readout_table
+
+        xs_context: dict[str, Tensor] = {}
+        xs_query: dict[str, Tensor] = {}
+        for name in table_names:
+            standardizer = Standardize()  # Relative time standardization.
+            x_context_i = context_task_row_i = None
+            if context is not None:
+                assert x_context is not None
+                x_context_i = context.related_tables.tables[name].numerical
+                context_task_row_i = context.task_row_by_table[name]
+                if name == readout_table:  # Inject task features:
+                    x_context_i = self._inject_task(
+                        x=x_context_i,
+                        task=x_context.numerical,
+                        readout_index=context.readout_index,
+                    )
+                if cache is not None and cache.is_recording:
+                    cache[f"table_{name}.standardizer"] = standardizer
+                rel_time_i = self._get_rel_time(  # Inject relative time:
+                    datetime=context.related_tables.tables[name].datetime,
+                    seed_datetime=x_context.datetime,
+                    task_row=context_task_row_i,
+                    standardizer=standardizer,
+                )
+                if rel_time_i is not None:
+                    rel_time_i = rel_time_i.to(x_context_i.dtype)
+                    x_context_i = torch.cat([x_context_i, rel_time_i], dim=-1)
+
+            x_query_i = None
+            if query is not None and name in query.related_tables.tables:
+                assert x_query is not None
+                x_query_i = query.related_tables.tables[name].numerical
+                query_task_row_i = query.task_row_by_table[name]
+                if name == readout_table:  # Inject task features:
+                    x_query_i = self._inject_task(
+                        x=x_query_i,
+                        task=x_query.numerical,
+                        readout_index=query.readout_index,
+                    )
+                rel_time_i = self._get_rel_time(  # Inject relative time:
+                    datetime=query.related_tables.tables[name].datetime,
+                    seed_datetime=x_query.datetime,
+                    task_row=query_task_row_i,
+                    standardizer=cast(
+                        Standardize, cache[f"table_{name}.standardizer"]
+                    )
+                    if cache is not None and cache.is_replaying
+                    else standardizer,
+                )
+                if rel_time_i is not None:
+                    rel_time_i = rel_time_i.to(x_query_i.dtype)
+                    x_query_i = torch.cat([x_query_i, rel_time_i], dim=-1)
+
+            xs_context[name], xs_query[name] = self._embed_table(
+                x_context=x_context_i,
+                x_query=x_query_i,
+                y=y,
+                task_row=context_task_row_i,
+                num_classes=num_classes,
+                cache_key=f"table_{name}",
+                cache=cache,
+                generator=generator,
+            )
+
+        # Inter-Message Passing ###############################################
+        gnn_cache = cache or Cache()
+        if context is not None:
+            x_context: Tensor = torch.cat(
+                [xs_context[name] for name in context.related_tables.tables],
+                dim=-2,
+            )
+            del xs_context
+            x_context = self.gnn(
+                x=x_context,
+                graph=context.graph,
+                readout_table=context.readout_table,
+                readout_index=context.readout_index,
+                num_hops=context.num_hops,
+                cache=gnn_cache,
+                generator=generator,
+            )
+
+        if query is not None:
+            x_query: Tensor = torch.cat(
+                [xs_query[name] for name in query.related_tables.tables],
+                dim=-2,
+            )
+            del xs_query
+            x_query = self.gnn(
+                x=x_query,
+                graph=query.graph,
+                readout_table=query.readout_table,
+                readout_index=query.readout_index,
+                num_hops=query.num_hops,
+                cache=gnn_cache.freeze() if cache is None else cache,
+            )
 
         # Reason across Tables ################################################
         if x_query is None and x_context is not None:
@@ -404,8 +476,120 @@ class _KumoRFM(torch.nn.Module):
             x = torch.cat([x_context, x_query], dim=-2)
             del x_context
             del x_query
-        x = self.icl_block(x, y, cache=cache)
-        return self.head(x)
+        return self.icl_block(
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+        )
+
+    def _embed_table(
+        self,
+        x_context: Tensor | None,
+        x_query: Tensor | None,
+        y: Tensor,
+        task_row: Tensor | None,
+        num_classes: int | None,
+        cache_key: str,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+    ) -> tuple[Tensor, Tensor]:
+        # Embed context and query rows jointly per table. Targets are injected
+        # by distributing them to related tables via task-row assignment:
+        _cache: Cache | None = None
+        if cache is not None and cache.is_recording:
+            _cache = Cache()
+        elif cache is not None:
+            _cache = cast(Cache, cache[cache_key])
+
+        train_mask: Tensor | None = None
+        if x_context is not None:
+            assert task_row is not None
+            x = x_context
+            train_mask = task_row >= 0
+            y = y[task_row[train_mask]]
+            if x_query is not None:
+                x = torch.cat([x, x_query], dim=-2)
+                test_mask = train_mask.new_zeros(x_query.size(-2))
+                train_mask = torch.cat([train_mask, test_mask])
+        else:
+            assert x_query is not None
+            x = x_query
+
+        x = self.row_embedding(
+            x=x,
+            y=y,
+            train_mask=train_mask,
+            max_keys=self.max_train_size,
+            num_classes=num_classes,
+            cache=_cache,
+            generator=generator,
+        )
+
+        if cache is not None and cache.is_recording:
+            cache[cache_key] = cast(Cache, _cache)
+
+        sections = [
+            x_context.size(-2) if x_context is not None else 0,
+            x_query.size(-2) if x_query is not None else 0,
+        ]
+        return x.split(sections, dim=-2)
+
+    def _inject_task(
+        self,
+        x: Tensor,
+        task: Tensor,
+        readout_index: Tensor,
+    ) -> Tensor:
+
+        if task.size(-1) == 0:
+            return x
+
+        x = torch.cat(
+            [x, x.new_zeros(*x.size()[:-1], task.size(-1))],
+            dim=-1,
+        )
+        x[..., readout_index, -task.size(-1) :] = task
+        return x
+
+    def _get_rel_time(
+        self,
+        datetime: Tensor,
+        seed_datetime: Tensor,
+        task_row: Tensor,
+        standardizer: Standardize,
+    ) -> Tensor | None:
+
+        if datetime.size(-1) == 0 or seed_datetime.size(-1) == 0:
+            return None
+
+        seed_datetime = seed_datetime[task_row]
+
+        na_mask = (task_row < 0).unsqueeze(-1) | (seed_datetime == NaT)
+        na_mask = na_mask.unsqueeze(-2) | (datetime == NaT).unsqueeze(-1)
+        na_mask = na_mask.flatten(-2)
+
+        rel_time = seed_datetime.unsqueeze(-2) - datetime.unsqueeze(-1)
+        rel_time = rel_time.flatten(-2) / (24 * 60 * 60 * 1_000_000)
+        rel_time = rel_time.sign() * rel_time.abs().log1p()
+
+        if not standardizer._fitted:
+            rel_time[na_mask] = float("NaN")
+            rel_time = torch.where(
+                na_mask,
+                rel_time.nanmean(dim=-2, keepdim=True).nan_to_num(0.0),
+                rel_time,
+            )
+            rel_time = standardizer.fit_transform(
+                TableTensor.from_tensor(rel_time)
+            ).numerical
+        else:
+            rel_time = standardizer.transform(
+                TableTensor.from_tensor(rel_time)
+            ).numerical
+            rel_time[na_mask] = 0.0
+
+        return rel_time
 
 
 def _remap_v2_1_checkpoint(
@@ -440,7 +624,7 @@ def _remap_v2_1_checkpoint(
         variant_replacements = (
             ("row_embedding.y_cls_lin.", "row_embedding.y_emb."),
             ("icl_block.y_cls_lin.", "icl_block.y_emb."),
-            ("icl_block.cls_head.", "head.2."),
+            ("icl_block.cls_head.", "icl_block.head.2."),
         )
     else:
         ignored_prefixes = (
@@ -451,7 +635,7 @@ def _remap_v2_1_checkpoint(
         variant_replacements = (
             ("row_embedding.y_reg_lin.", "row_embedding.y_lin."),
             ("icl_block.y_reg_lin.", "icl_block.y_lin."),
-            ("icl_block.reg_head.", "head.2."),
+            ("icl_block.reg_head.", "icl_block.head.2."),
         )
 
     prefix_replacements = (
@@ -459,7 +643,7 @@ def _remap_v2_1_checkpoint(
         ("gnn.post_lin.", "gnn.out_lin."),
         ("gnn.post_norm.", "gnn.out_norm."),
         ("icl_block.mlp.0.", "icl_block.norm."),
-        ("icl_block.mlp.1.", "head.0."),
+        ("icl_block.mlp.1.", "icl_block.head.0."),
     )
     remapped: dict[str, Tensor] = {}
 
@@ -507,46 +691,3 @@ def _remap_v2_1_checkpoint(
         remapped[key] = value
 
     return remapped
-
-
-def _propagate_y(
-    y: Tensor,  # [R_train]
-    graph: HomogeneousGraph,
-    task_links: Sequence[TaskLink],
-    task_indices: Sequence[Tensor],
-    num_hops: int,
-    num_classes: int | None,
-) -> Tensor:  # [R]
-
-    if y.is_floating_point():
-        source = torch.stack([y, torch.ones_like(y)], dim=-1)
-    else:
-        source = F.one_hot(y, num_classes=num_classes or -1).float()
-
-    state = source.new_zeros((graph.colptr.numel() - 1, source.size(-1)))
-    for task_link, task_index in zip(task_links, task_indices):
-        row, col = task_index
-        col = col + graph.start_node_offsets[task_link.table]
-        state.index_add_(dim=0, index=col, source=source[row])
-
-    for _ in range(num_hops):
-        state += torch.segment_reduce(
-            state[graph.row],
-            offsets=graph.colptr,
-            reduce="sum",
-            unsafe=True,
-            initial=0,
-        )
-
-    if y.is_floating_point():
-        if (state[:, 1] == 0).any():
-            raise ValueError(
-                "'num_hops' did not propagate targets to every related row"
-            )
-        return state[:, 0] / state[:, 1]
-
-    if (state.sum(dim=-1) == 0).any():
-        raise ValueError(
-            "'num_hops' did not propagate targets to every related row"
-        )
-    return state.argmax(dim=-1)

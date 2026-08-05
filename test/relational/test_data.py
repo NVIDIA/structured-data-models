@@ -1,6 +1,7 @@
 from textwrap import dedent
 
 import torch
+
 from sdm import RelationalData
 from sdm.testing import withCUDA
 
@@ -18,9 +19,10 @@ def test_repr(relational_data: RelationalData) -> None:
               },
             ),
             orders: TableTensor(
-              size=(6, 3),
+              size=(6, 4),
               blocks={
                 numerical (1): [amount],
+                datetime (1): [timestamp],
                 id (2): [user_id, item_id],
               },
             ),

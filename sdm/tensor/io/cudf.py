@@ -9,10 +9,7 @@ if TYPE_CHECKING:
     import cudf
 
 
-def to_cudf(
-    tensor: Tensor,
-    valid_mask: Tensor | None = None,
-) -> cudf.Series:
+def to_cudf(tensor: Tensor, valid_mask: Tensor | None = None) -> cudf.Series:
     r"""Convert a CUDA tensor to a flat :class:`cudf.Series`.
 
     Args:
@@ -21,19 +18,14 @@ def to_cudf(
     """
     import cudf
 
-    from sdm.tensor import StringTensor
-
     if not tensor.is_cuda:
         raise ValueError(
             f"Expected tensor to be on a CUDA device (got '{tensor.device}')"
         )
 
-    if isinstance(tensor, StringTensor):
-        ser = tensor.to_cudf()
-    else:
-        tensor = tensor.detach().contiguous().view(-1)
-        with torch.cuda.device(tensor.device):
-            ser = cudf.Series(tensor, copy=False)
+    tensor = tensor.detach().contiguous().view(-1)
+    with torch.cuda.device(tensor.device):
+        ser = cudf.Series(tensor, copy=False, nan_as_null=valid_mask is None)
 
     if valid_mask is None:
         return ser

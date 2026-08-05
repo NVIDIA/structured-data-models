@@ -3,6 +3,7 @@ from typing import Any, ClassVar, cast
 
 import pytest
 import torch
+
 from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
@@ -10,7 +11,7 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
-    StandardScale,
+    Standardize,
     StypeDispatch,
 )
 
@@ -138,7 +139,7 @@ def _related_tables(*, query: bool) -> RelatedTables:
 
 def _recipe() -> Recipe:
     return Recipe(
-        features=StypeDispatch(numerical=StandardScale()),
+        features=StypeDispatch(numerical=Standardize()),
     )
 
 

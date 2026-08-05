@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm.nn import InducedTransformerBlock
 from sdm.testing import withCUDA
 
