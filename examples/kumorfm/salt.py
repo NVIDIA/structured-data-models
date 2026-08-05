@@ -38,6 +38,7 @@ parser.add_argument("--task", choices=SALT_PRESETS)
 parser.add_argument("--context_size", type=int, default=1_000)
 parser.add_argument("--num_neighbors", type=int)
 parser.add_argument("--num_estimators", type=int, default=1)
+parser.add_argument("--batch_size", type=int)
 parser.add_argument("--max_test_rows", type=int)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
@@ -146,7 +147,7 @@ def run_task(task_name: str) -> None:
     model = KumoRFM(device=device)
     mrr = MeanMetric().to(device)
     accuracy = MeanMetric().to(device)
-    batch_size = SALT_PRESETS[task_name][1]
+    batch_size = args.batch_size or SALT_PRESETS[task_name][1]
     test_table = task_tables[-1][: args.max_test_rows]
     for query in tqdm(
         test_table.split(batch_size),
