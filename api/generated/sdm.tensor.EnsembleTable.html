@@ -101,6 +101,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.base.InvertibleMixin.html">InvertibleMixin</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html">EnsembleProcessor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html">EnsembleInvertibleMixin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessorAdapter.html">EnsembleProcessorAdapter</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.recipe.Recipe.html">Recipe</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Identity.html">Identity</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.Callable.html">Callable</a></li>
@@ -163,7 +164,9 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable"><code class="docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a><ul>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.from_tables"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.from_tables()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.num_members"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.num_members</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.EnsembleTable.num_groups"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.num_groups</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.table"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.table()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.EnsembleTable.replace_groups"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.replace_groups()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -212,7 +215,8 @@ only once. Compatible tables are stacked along a leading dimension and
 form a group, so processors can process them together. Incompatible tables
 remain in separate groups.</p>
 <p>Use <a class="reference internal" href="#sdm.tensor.EnsembleTable.table" title="sdm.tensor.EnsembleTable.table"><code class="xref py py-meth docutils literal notranslate"><span class="pre">table()</span></code></a> to access a member’s table. Iterate over the
-<a class="reference internal" href="#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> to process its groups.</p>
+<a class="reference internal" href="#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> to process its groups, and <a class="reference internal" href="#sdm.tensor.EnsembleTable.replace_groups" title="sdm.tensor.EnsembleTable.replace_groups"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replace_groups()</span></code></a>
+to build an ensemble table from the processed groups.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 </span><span data-line="2"><span class="kn">from</span><span class="w"> </span><span class="nn">sdm.tensor</span><span class="w"> </span><span class="kn">import</span> <span class="n">EnsembleTable</span><span class="p">,</span> <span class="n">TableTensor</span>
 </span><span data-line="3">
@@ -284,6 +288,12 @@ the second table to member 1.</p>
 <dd><p>Return the number of ensemble members.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.num_groups">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">num_groups</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></em><a class="headerlink" href="#sdm.tensor.EnsembleTable.num_groups" title="Link to this definition">#</a></dt>
+<dd><p>Return the number of groups of compatible tables.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.table">
 <span class="sig-name descname"><span class="pre">table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">member_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.table" title="Link to this definition">#</a></dt>
@@ -294,6 +304,24 @@ the second table to member 1.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.replace_groups">
+<span class="sig-name descname"><span class="pre">replace_groups</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.replace_groups" title="Link to this definition">#</a></dt>
+<dd><p>Return an ensemble table with its groups replaced.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>groups</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a><em>]</em>) – One replacement group per current group.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An ensemble table over <code class="docutils literal notranslate"><span class="pre">groups</span></code> with the current member
+assignment.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Self</em></p>
 </dd>
 </dl>
 </dd></dl>
@@ -326,7 +354,7 @@ the second table to member 1.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=320c96e0"></script>
+      <script src="../../_static/documentation_options.js?v=2eea0845"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
