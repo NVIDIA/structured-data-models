@@ -72,6 +72,11 @@ class EmbedText(Processor):
                 device=device,
             )
         else:
+            # FIXME: There're currently multiple potential issues:
+            # 1. Even though the model gets applied to all columns, we run it
+            #    once per column.
+            # 2. The embedding_model currently must take in a dataframe and not
+            #    a Tensor.
             embeddings: list[Tensor] = []
             for col_idx in range(len(text_columns)):
                 column_text = cast(
