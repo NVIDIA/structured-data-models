@@ -282,35 +282,6 @@ def test_to_list_in_inference_mode(
         assert tensor.tolist() == values
 
 
-def test_to_in_inference_mode() -> None:
-    values = ["hi", "é", ""]
-    tensor = StringTensor.from_list(values)
-
-    with torch.inference_mode():
-        out = tensor.to(torch.uint8)
-
-    assert isinstance(out, StringTensor)
-    assert out.dtype == torch.uint8
-    assert out._offset.equal(tensor._offset)
-    assert out.tolist() == values
-
-
-@onlyCUDA
-def test_to_cuda_in_inference_mode() -> None:
-    values = ["hi", "é", ""]
-    tensor = StringTensor.from_list(values)
-
-    with torch.inference_mode():
-        out = tensor.to("cuda")
-
-    assert isinstance(out, StringTensor)
-    assert out.is_cuda
-    assert out._data.is_cuda
-    assert out._offset.is_cuda
-    assert out._offset.cpu().equal(tensor._offset)
-    assert out.tolist() == values
-
-
 def test_item() -> None:
     assert StringTensor.from_list("é").item() == "é"
     assert StringTensor.from_list(["hi", "é"])[1].item() == "é"

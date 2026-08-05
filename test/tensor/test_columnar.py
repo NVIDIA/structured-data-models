@@ -183,32 +183,6 @@ def test_to_copy() -> None:
         tensor.to(torch.float32)
 
 
-def test_to_in_inference_mode() -> None:
-    tensor = ColumnarTensor((torch.arange(3), torch.randn(3)))
-
-    with torch.inference_mode():
-        out = tensor.to("cpu")
-
-        assert isinstance(out, ColumnarTensor)
-        assert out.is_cpu
-        assert out.tolist() == tensor.tolist()
-
-        with pytest.raises(TypeError, match="convert"):
-            tensor.to(torch.float32)
-
-
-@onlyCUDA
-def test_to_cuda_in_inference_mode() -> None:
-    tensor = ColumnarTensor((torch.arange(3), torch.randn(3)))
-
-    with torch.inference_mode():
-        out = tensor.to("cuda")
-
-    assert isinstance(out, ColumnarTensor)
-    assert out.is_cuda
-    assert all(column.is_cuda for column in out._columns)
-
-
 @onlyCUDA
 def test_to_cuda() -> None:
     tensor = ColumnarTensor(

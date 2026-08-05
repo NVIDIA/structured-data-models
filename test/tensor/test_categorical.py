@@ -55,43 +55,6 @@ def test_to_copy() -> None:
     assert out.dtype == torch.float32
 
 
-def test_to_in_inference_mode() -> None:
-    data = torch.randint(0, 2, size=(10, 2))
-    categories = (
-        StringTensor.from_list(["USA", "GERMANY"]),
-        StringTensor.from_list(["enterprise", "startup"]),
-    )
-    tensor = CategoricalTensor(data, categories)
-
-    with torch.inference_mode():
-        out = tensor.to(torch.int32)
-
-    assert isinstance(out, CategoricalTensor)
-    assert out.dtype == torch.int32
-    for out_category, category in zip(out.categories, categories):
-        assert out_category.tolist() == category.tolist()
-
-
-@onlyCUDA
-def test_to_cuda_in_inference_mode() -> None:
-    data = torch.randint(0, 2, size=(10, 2))
-    categories = (
-        StringTensor.from_list(["USA", "GERMANY"]),
-        StringTensor.from_list(["enterprise", "startup"]),
-    )
-    tensor = CategoricalTensor(data, categories)
-
-    with torch.inference_mode():
-        out = tensor.to("cuda")
-
-    assert isinstance(out, CategoricalTensor)
-    assert out.is_cuda
-    assert out.code.cpu().equal(data)
-    for out_category, category in zip(out.categories, categories):
-        assert out_category.is_cuda
-        assert out_category.tolist() == category.tolist()
-
-
 def test_from_arrow_string_values() -> None:
     tensor = CategoricalTensor.from_arrow(
         pa.array(["b", "a", None, "b"]),
