@@ -1036,17 +1036,6 @@ def _unsafe_view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     return _from_layout_view(inp, view)
 
 
-@VarLenTensor.implements(aten.reshape.default)
-@preserve_view_inference_mode
-def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
-    try:
-        view = _layout_view(inp).view(tuple(size))
-    except RuntimeError:
-        inp = cast(VarLenTensor, inp.contiguous())
-        view = _layout_view(inp).view(tuple(size))
-    return _from_layout_view(inp, view)
-
-
 @VarLenTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: VarLenTensor) -> VarLenTensor:
