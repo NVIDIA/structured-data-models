@@ -1,11 +1,3 @@
-r"""Run TabICLv2 on text and numerical features from STRABLE.
-
-Predicts the human-rated reading difficulty (``BT Easiness``) of a prose
-passage from the CLEAR corpus. The passage is encoded as character n-gram
-TF-IDF features, which carry most of the signal here since difficulty lives in
-the text itself. CUDA execution of the text encoder requires cuDF.
-"""
-
 import pyarrow.parquet as pq
 import torch
 from huggingface_hub import hf_hub_download

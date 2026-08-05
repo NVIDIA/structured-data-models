@@ -1039,10 +1039,6 @@ def _unsafe_view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
 @VarLenTensor.implements(aten.reshape.default)
 @preserve_view_inference_mode
 def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
-    # Reshape returns a view when the layout permits one, and otherwise
-    # compacts the values so the requested shape becomes viewable. Outside
-    # inference mode PyTorch decomposes reshape into these steps for us; under
-    # inference mode it dispatches here directly.
     try:
         view = _layout_view(inp).view(tuple(size))
     except RuntimeError:

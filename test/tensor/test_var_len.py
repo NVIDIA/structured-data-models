@@ -899,9 +899,6 @@ def test_unsafe_view() -> None:
 
 
 def test_reshape_under_inference_mode() -> None:
-    # Under inference mode reshape no longer decomposes into view/_unsafe_view,
-    # so it must be handled directly. A viewable reshape shares storage; a
-    # non-viewable one compacts the values first.
     tensor = VarLenTensor(
         data=torch.arange(12),
         offset=torch.arange(13),
