@@ -11,7 +11,7 @@ from torch import Tensor
 
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import Recipe, StypeDispatch
-from sdm.processing.text.model_text_embed import ModelTextEmbed
+from sdm.processing.text.model_embed import ModelEmbed
 from sdm.testing import onlyCUDA
 
 if TYPE_CHECKING:
@@ -53,8 +53,8 @@ def _text_table() -> TableTensor:
     )
 
 
-def test_llm_text_embed_embeds_each_text_column() -> None:
-    output = ModelTextEmbed(
+def test_model_embed_embeds_each_text_column() -> None:
+    output = ModelEmbed(
         _FakeEmbeddingModel(),
         embedding_dim=2,
     ).transform(_text_table())
@@ -77,17 +77,15 @@ def test_llm_text_embed_embeds_each_text_column() -> None:
     )
 
 
-def test_llm_text_embed_rejects_wrong_model_shape() -> None:
+def test_model_embed_rejects_wrong_model_shape() -> None:
     with pytest.raises(ValueError, match="Expected 'embedding_model'"):
-        ModelTextEmbed(
+        ModelEmbed(
             _WrongShapeEmbeddingModel(),
             embedding_dim=2,
         ).transform(_text_table())
 
 
-def test_llm_text_embed_empty_rows_use_embedding_dim_without_model_call() -> (
-    None
-):
+def test_model_embed_empty_rows_use_embedding_dim_without_model_call() -> None:
     table = TableTensor(
         columns={"text": ("title",)},
         text=StringTensor(
@@ -98,7 +96,7 @@ def test_llm_text_embed_empty_rows_use_embedding_dim_without_model_call() -> (
         ),
     )
 
-    output = ModelTextEmbed(
+    output = ModelEmbed(
         _FakeEmbeddingModel(),
         embedding_dim=2,
     ).transform(table)
@@ -108,7 +106,7 @@ def test_llm_text_embed_empty_rows_use_embedding_dim_without_model_call() -> (
 
 
 @onlyCUDA
-def test_llm_text_embed_uses_cudf_for_cuda_text() -> None:
+def test_model_embed_uses_cudf_for_cuda_text() -> None:
     pytest.importorskip("cudf")
     table = TableTensor(
         columns={"text": ("title",)},
@@ -118,7 +116,7 @@ def test_llm_text_embed_uses_cudf_for_cuda_text() -> None:
         ),
     )
 
-    output = ModelTextEmbed(
+    output = ModelEmbed(
         _CudfEmbeddingModel(),
         embedding_dim=2,
     ).transform(table)
@@ -131,9 +129,9 @@ def test_llm_text_embed_uses_cudf_for_cuda_text() -> None:
     )
 
 
-def test_llm_text_embed_in_stype_dispatch_route() -> None:
+def test_model_embed_in_stype_dispatch_route() -> None:
     dispatch = StypeDispatch(
-        text=ModelTextEmbed(
+        text=ModelEmbed(
             _FakeEmbeddingModel(),
             embedding_dim=2,
         )
@@ -145,10 +143,10 @@ def test_llm_text_embed_in_stype_dispatch_route() -> None:
     assert output.columns[Stype.text] == ()
 
 
-def test_llm_text_embed_deepcopy_shares_embedding_model() -> None:
+def test_model_embed_deepcopy_shares_embedding_model() -> None:
     embedding_model = torch.nn.Linear(2, 2)
     recipe = Recipe(
-        features=ModelTextEmbed(
+        features=ModelEmbed(
             embedding_model,
             embedding_dim=2,
         )
@@ -158,5 +156,5 @@ def test_llm_text_embed_deepcopy_shares_embedding_model() -> None:
 
     assert copied is not recipe
     assert copied.features is not recipe.features
-    assert isinstance(copied.features, ModelTextEmbed)
+    assert isinstance(copied.features, ModelEmbed)
     assert copied.features.get_submodule("_embedding_model") is embedding_model

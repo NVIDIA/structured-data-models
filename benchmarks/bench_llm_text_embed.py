@@ -1,4 +1,4 @@
-r"""Benchmark ``ModelTextEmbed.transform`` on STRABLE text columns.
+r"""Benchmark ``ModelEmbed.transform`` on STRABLE text columns.
 
 This times the processor path directly: text extraction from
 :class:`~sdm.tensor.TableTensor`, the user-provided embedding model call,
@@ -33,7 +33,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm.processing import ModelTextEmbed
+from sdm.processing.text.model_embed import ModelEmbed
 
 
 class SentenceTransformerEmbeddingModel(torch.nn.Module):
@@ -274,7 +274,7 @@ def _sync(device: torch.device) -> None:
 
 
 def _time_transform(
-    processor: ModelTextEmbed,
+    processor: ModelEmbed,
     table: TableTensor,
     *,
     device: torch.device,
@@ -365,7 +365,7 @@ def _make_embedding_processor(
     model_name: str,
     table: TableTensor,
     args: argparse.Namespace,
-) -> tuple[ModelTextEmbed, float, int]:
+) -> tuple[ModelEmbed, float, int]:
     device = torch.device(args.device)
     dtype = _resolve_dtype(args.dtype)
 
@@ -379,7 +379,7 @@ def _make_embedding_processor(
         trust_remote_code=args.trust_remote_code,
     )
     embedding_dim = _embedding_dim(model, table)
-    processor = ModelTextEmbed(
+    processor = ModelEmbed(
         embedding_model=model,
         embedding_dim=embedding_dim,
         dtype=dtype,
@@ -592,7 +592,7 @@ def _run_tabicl_model(
 
 
 def main() -> None:
-    """Run ``ModelTextEmbed.transform`` for the requested STRABLE table."""
+    """Run ``ModelEmbed.transform`` for the requested STRABLE table."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
     parser.add_argument(
