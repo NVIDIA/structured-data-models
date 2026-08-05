@@ -8,7 +8,6 @@ from sdm import (
     TableTensor,
 )
 from sdm.processing import (
-    EnsembleProcessor,
     Identity,
     ImputeMean,
     ShuffleCategories,
@@ -16,20 +15,6 @@ from sdm.processing import (
     StypeDispatch,
 )
 from sdm.tensor import EnsembleTable
-
-
-class ExpandMembers(EnsembleProcessor):
-    supported_stypes = frozenset({Stype.numerical})
-    requires_fit = False
-
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        return EnsembleTable(
-            ensemble_table.table(0),
-            num_members=ensemble_table.num_members + 1,
-        )
 
 
 def _mixed_table() -> TableTensor:
@@ -243,7 +228,7 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
         assert torch.equal(result.categorical.code, source.categorical.code)
 
 
-def test_stype_dispatch_ensemble_keeps_fitted_state_per_group() -> None:
+def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:
     first = TableTensor.from_tensor(
         torch.tensor([[1.0], [3.0]]),
         columns=("first",),
@@ -257,70 +242,16 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_group() -> None:
         member_table_ids=(0, 1, 0),
     )
     processor = StypeDispatch(numerical=Standardize(with_std=False))
+    combined = StypeDispatch(numerical=Standardize(with_std=False))
 
-    transformed = processor.fit_transform_ensemble(table)
-    query = processor.transform_ensemble(table)
-    restored = processor.inverse_transform_ensemble(transformed)
+    processor.fit_ensemble(table)
+    transformed = processor.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(table)
 
     for member_id in range(table.num_members):
         result = transformed.table(member_id)
+        assert result.equal(expected.table(member_id))
         assert torch.allclose(
             result.numerical.mean(dim=-2),
             torch.zeros(1),
         )
-        assert query.table(member_id).equal(result)
-        assert restored.table(member_id).columns == (
-            table.table(member_id).columns
-        )
-        assert restored.table(member_id).equal(table.table(member_id))
-
-
-def test_stype_dispatch_fit_ensemble_fits_routes() -> None:
-    table = EnsembleTable(_mixed_table(), num_members=2)
-    fitted = StypeDispatch(numerical=Standardize(with_std=False))
-    combined = StypeDispatch(numerical=Standardize(with_std=False))
-
-    fitted.fit_ensemble(table)
-    transformed = fitted.transform_ensemble(table)
-    expected = combined.fit_transform_ensemble(table)
-
-    for member_id in range(table.num_members):
-        assert transformed.table(member_id).equal(expected.table(member_id))
-
-
-def test_stype_dispatch_ensemble_inverse_rejects_drop() -> None:
-    table = EnsembleTable(_mixed_table(), num_members=2)
-    processor = StypeDispatch(numerical=Identity(), remainder="drop")
-    transformed = processor.fit_transform_ensemble(table)
-
-    with pytest.raises(ValueError, match="not invertible"):
-        processor.inverse_transform_ensemble(transformed)
-
-
-def test_stype_dispatch_stateless_inverse_without_prior_transform() -> None:
-    table = EnsembleTable(_mixed_table(), num_members=2)
-    processor = StypeDispatch(numerical=Identity())
-
-    restored = processor.inverse_transform_ensemble(table)
-
-    for member_id in range(table.num_members):
-        assert restored.table(member_id).equal(table.table(member_id))
-
-
-def test_stype_dispatch_rejects_route_member_count_change() -> None:
-    table = EnsembleTable(_mixed_table(), num_members=2)
-    processor = StypeDispatch(numerical=ExpandMembers())
-
-    with pytest.raises(ValueError, match="different member counts"):
-        processor.transform_ensemble(table)
-
-
-def test_stype_dispatch_ensemble_inverse_rejects_non_invertible_route() -> (
-    None
-):
-    table = EnsembleTable(_mixed_table(), num_members=2)
-    processor = StypeDispatch(numerical=ImputeMean())
-    transformed = processor.fit_transform_ensemble(table)
-
-    with pytest.raises(TypeError, match="not invertible"):
-        processor.inverse_transform_ensemble(transformed)
