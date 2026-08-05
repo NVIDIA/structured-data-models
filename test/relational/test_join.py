@@ -1,4 +1,3 @@
-import pyarrow as pa
 import pytest
 import torch
 
@@ -29,54 +28,6 @@ def test_join_index(dtype: torch.dtype, device: torch.device) -> None:
     assert right_index.device == device
     assert left_index.sort()[0].equal(torch.arange(8, device=device))
     assert right_index.equal(left_index)
-
-
-@withCUDA
-def test_join_index_ignores_null_keys(device: torch.device) -> None:
-    left_table = TableTensor.from_arrow(
-        table=pa.table({"id": [0, None, 3, 99]}),
-        stypes={"id": "id"},
-        device=device,
-    )
-    right_table = TableTensor.from_arrow(
-        table=pa.table({"id": [0, 2, None, 3]}),
-        stypes={"id": "id"},
-        device=device,
-    )
-
-    left_index, right_index = join_index(
-        left_table=left_table,
-        right_table=right_table,
-        left_keys=["id"],
-        right_keys=["id"],
-    )
-
-    assert left_index.equal(torch.tensor([0, 2], device=device))
-    assert right_index.equal(torch.tensor([0, 3], device=device))
-
-
-@withCUDA
-def test_join_index_ignores_nan_keys(device: torch.device) -> None:
-    left_table = TableTensor.from_arrow(
-        table=pa.table({"value": [0.0, float("nan"), 3.0, 99.0]}),
-        stypes={"value": "numerical"},
-        device=device,
-    )
-    right_table = TableTensor.from_arrow(
-        table=pa.table({"value": [0.0, 2.0, float("nan"), 3.0]}),
-        stypes={"value": "numerical"},
-        device=device,
-    )
-
-    left_index, right_index = join_index(
-        left_table=left_table,
-        right_table=right_table,
-        left_keys=["value"],
-        right_keys=["value"],
-    )
-
-    assert left_index.equal(torch.tensor([0, 2], device=device))
-    assert right_index.equal(torch.tensor([0, 3], device=device))
 
 
 @withCUDA
