@@ -4,12 +4,12 @@ import functools
 import math
 from collections.abc import Callable, Sequence
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor import NullableIntTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
