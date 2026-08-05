@@ -1,0 +1,78 @@
+r"""Run TabICLv2 on text and numerical features from STRABLE.
+
+Predicts the human-rated reading difficulty (``BT Easiness``) of a prose
+passage from the CLEAR corpus. The passage is encoded as character n-gram
+TF-IDF features, which carry most of the signal here since difficulty lives in
+the text itself. CUDA execution of the text encoder requires cuDF.
+"""
+
+import pyarrow.parquet as pq
+import torch
+from huggingface_hub import hf_hub_download
+
+import sdm
+from sdm.processing import TFIDF, StypeDispatch
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+data_path = hf_hub_download(
+    repo_id="inria-soda/STRABLE-benchmark",
+    filename="clear-corpus/data.parquet",
+    repo_type="dataset",
+)
+# Drop the pre-computed readability scores (Flesch, SMOG, word counts, ...):
+# they are derived from the passage text, so keeping them would make the text
+# features redundant instead of the primary signal.
+readability_columns = [
+    "Google WC",
+    "Joon WC v1",
+    "British WC",
+    "British Words",
+    "Sentence Count v1",
+    "Sentence Count v2",
+    "Paragraphs",
+    "Flesch-Reading-Ease",
+    "Flesch-Kincaid-Grade-Level",
+    "Automated Readability Index",
+    "SMOG Readability",
+    "New Dale-Chall Readability Formula",
+    "CAREC",
+    "CAREC_M",
+    "CARES",
+    "CML2RI",
+]
+arrow_table = (
+    pq.read_table(data_path).drop_columns(readability_columns).slice(0, 640)
+)
+table = sdm.TableTensor.from_arrow(
+    table=arrow_table,
+    stypes=sdm.infer_stypes(arrow_table, allow_text=True),
+    device=device,
+)
+
+text_encoder = TFIDF(
+    ngram_range=(4, 6),
+    max_features=256,
+)
+
+model = sdm.models.TabICLv2(device=device)
+recipe = model.default_recipe()
+recipe.features = StypeDispatch(text=text_encoder) + recipe.features
+
+target_name = "BT Easiness"
+context = table[:512]
+query = table[512:]
+with torch.amp.autocast(
+    device.type,
+    torch.float16,
+    enabled=table.is_cuda,
+):
+    model.fit(
+        x=context.drop_columns(target_name),
+        y=context[:, target_name],
+        recipe=recipe,
+    )
+    prediction = model.predict(query.drop_columns(target_name))
+    model.clear()
+
+print(prediction)
