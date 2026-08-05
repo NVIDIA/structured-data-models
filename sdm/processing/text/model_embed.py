@@ -16,7 +16,7 @@ class ModelEmbed(Processor):
     Each text column is embedded cell-by-cell through ``embedding_model``.
     The model must return one embedding per text value as a
     :class:`torch.Tensor` with shape ``[n, embedding_dim]``. Embedding
-    blocks are concatenated in column order into the numerical output.
+    Embeddings are concatenated in column order into the numerical output.
 
     Args:
         embedding_model: Pre-loaded model called on each flattened text column.
@@ -43,7 +43,6 @@ class ModelEmbed(Processor):
             embedding_dim=self._embedding_dim,
         )
         memo[id(self)] = copied
-        copied._fitted = self._fitted
         copied.training = self.training
         return copied
 
@@ -51,26 +50,29 @@ class ModelEmbed(Processor):
         device = table.device
         dtype = torch.get_default_dtype()
 
-        text_names = table.columns[Stype.text]
+        text_columns = table.columns[Stype.text]
         leading_shape = table.text.shape[:-1]
         embedding_model = self._embedding_model
         embedding_dim = self._embedding_dim
 
-        blocks: list[Tensor] = []
-        names: list[str] = []
-        for col_idx, col_name in enumerate(text_names):
-            column_text = cast(
-                StringTensor,
-                table.text[..., col_idx].reshape(-1),
+        col_names: list[str] = []
+        for col_name in text_columns:
+            col_names.extend(f"{col_name}_{i}" for i in range(embedding_dim))
+
+        n_rows = leading_shape.numel()
+        if n_rows == 0:
+            numerical = torch.zeros(
+                (*leading_shape, len(col_names)),
+                dtype=dtype,
+                device=device,
             )
-            n_values = column_text.numel()
-            if n_values == 0:
-                block = torch.zeros(
-                    (*leading_shape, embedding_dim),
-                    dtype=dtype,
-                    device=device,
+        else:
+            embeddings: list[Tensor] = []
+            for col_idx in range(len(text_columns)):
+                column_text = cast(
+                    StringTensor,
+                    table.text[..., col_idx].reshape(-1),
                 )
-            else:
                 strings = (
                     column_text.to_cudf()
                     if column_text.is_cuda
@@ -79,27 +81,22 @@ class ModelEmbed(Processor):
                 block = embedding_model(strings)
                 if (
                     block.dim() != 2
-                    or block.size(0) != n_values
+                    or block.size(0) != n_rows
                     or block.size(-1) != embedding_dim
                 ):
                     raise ValueError(
                         f"Expected 'embedding_model' to return a "
-                        f"[{n_values}, {embedding_dim}] tensor "
+                        f"[{n_rows}, {embedding_dim}] tensor "
                         f"(got {tuple(block.size())})"
                     )
-                block = block.to(device=device, dtype=dtype).reshape(
-                    *leading_shape,
-                    embedding_dim,
+                embeddings.append(
+                    block.to(device=device, dtype=dtype).reshape(
+                        *leading_shape,
+                        embedding_dim,
+                    )
                 )
-            blocks.append(block)
-            names.extend(f"{col_name}_{i}" for i in range(embedding_dim))
-
-        numerical = (
-            torch.cat(blocks, dim=-1)
-            if blocks
-            else torch.zeros((*leading_shape, 0), dtype=dtype, device=device)
-        )
+            numerical = torch.cat(embeddings, dim=-1)
         return table.__class__(
-            columns={Stype.numerical: tuple(names)},
+            columns={Stype.numerical: tuple(col_names)},
             numerical=numerical,
         )
