@@ -1,5 +1,3 @@
-import math
-
 import torch
 
 from sdm.processing.base import Processor
@@ -23,8 +21,6 @@ class ImputeMean(Processor):
         fill_value: float = 0.0,
     ) -> None:
         super().__init__()
-        if not math.isfinite(fill_value):
-            raise ValueError("fill_value must be finite.")
         self.fill_value = fill_value
         self.register_buffer("_mean", torch.empty(0))
 

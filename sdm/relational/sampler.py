@@ -34,11 +34,6 @@ class TemporalSamplingConfig:
     def __post_init__(self) -> None:
         if len(self.time_columns) == 0:
             raise ValueError("Expected at least one time column")
-        if self.strategy not in ("uniform", "last"):
-            raise ValueError(
-                f"Expected temporal strategy to be 'uniform' or 'last' "
-                f"(got '{self.strategy}')"
-            )
 
 
 def _validate_time_columns(
