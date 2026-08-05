@@ -142,7 +142,7 @@ class EnsembleTable:
 
         ensemble = cls.__new__(cls)
         ensemble._groups = tuple(groups)
-        ensemble._member_locations = tuple(
+        ensemble._locations = tuple(
             input_locations[index] for index in member_table_ids
         )
         return ensemble
