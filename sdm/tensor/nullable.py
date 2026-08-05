@@ -204,6 +204,9 @@ class NullableIntTensor(Tensor):
             size: The shape of the tensor.
             device: The device.
         """
+        import cupy as cp
+        import pylibcudf as plc
+
         if size is None:
             size = (len(ser),)
         elif math.prod(size) != len(ser):
@@ -212,7 +215,20 @@ class NullableIntTensor(Tensor):
                 f"{len(ser)} elements (got {math.prod(size)})"
             )
 
-        data = torch.from_dlpack(ser.to_dlpack()).to(device, dtype)
+        column, _ = ser.to_pylibcudf()
+        cp_dtype = {
+            plc.TypeId.UINT8: cp.uint8,
+            plc.TypeId.UINT16: cp.uint16,
+            plc.TypeId.UINT32: cp.uint32,
+            plc.TypeId.UINT64: cp.uint64,
+            plc.TypeId.INT8: cp.int8,
+            plc.TypeId.INT16: cp.int16,
+            plc.TypeId.INT32: cp.int32,
+            plc.TypeId.INT64: cp.int64,
+        }[column.type().id()]
+        data = torch.from_dlpack(cp.asarray(column.data()).view(cp_dtype))
+        start = column.offset()
+        data = data[start : start + len(ser)].to(device=device, dtype=dtype)
 
         if ser.hasnans:
             valid = torch.from_dlpack(ser.notnull().to_cupy()).to(device)
