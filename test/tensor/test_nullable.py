@@ -49,3 +49,13 @@ def test_cudf() -> None:
 
     tensor = NullableIntTensor.from_cudf(cudf.Series([], dtype="int32"))
     assert tensor.size() == (0,)
+
+
+def test_nan_to_num() -> None:
+    tensor = NullableIntTensor.from_list([1, None, 3])
+
+    out = torch.nan_to_num(tensor)
+    assert out.equal(torch.tensor([1, 0, 3]))
+
+    out = torch.nan_to_num(tensor, nan=-1)
+    assert out.equal(torch.tensor([1, -1, 3]))
