@@ -1,4 +1,4 @@
-r"""Benchmark ``ModelEmbed.transform`` on STRABLE text columns.
+r"""Benchmark ``EmbedText.transform`` on STRABLE text columns.
 
 This times the processor path directly: text extraction from
 :class:`~sdm.tensor.TableTensor`, the user-provided embedding model call,
@@ -7,7 +7,7 @@ It does not run a downstream model such as TabICLv2.
 
 Workflow:
 
-    python benchmarks/bench_llm_text_embed.py \
+    python benchmarks/bench_embed_text.py \
         --dataset financial-product-complaint \
         --models sentence-transformers/all-MiniLM-L6-v2 intfloat/e5-small-v2 \
         --batch-size 128 --max-rows 4096
@@ -33,7 +33,7 @@ import torch
 from torch import Tensor
 
 from sdm import Stype, TableTensor
-from sdm.processing.text.model_embed import ModelEmbed
+from sdm.processing import EmbedText
 
 
 class SentenceTransformerEmbeddingModel(torch.nn.Module):
@@ -274,7 +274,7 @@ def _sync(device: torch.device) -> None:
 
 
 def _time_transform(
-    processor: ModelEmbed,
+    processor: EmbedText,
     table: TableTensor,
     *,
     device: torch.device,
@@ -365,7 +365,7 @@ def _make_embedding_processor(
     model_name: str,
     table: TableTensor,
     args: argparse.Namespace,
-) -> tuple[ModelEmbed, float, int]:
+) -> tuple[EmbedText, float, int]:
     device = torch.device(args.device)
     dtype = _resolve_dtype(args.dtype)
 
@@ -379,7 +379,7 @@ def _make_embedding_processor(
         trust_remote_code=args.trust_remote_code,
     )
     embedding_dim = _embedding_dim(model, table)
-    processor = ModelEmbed(
+    processor = EmbedText(
         embedding_model=model,
         embedding_dim=embedding_dim,
         dtype=dtype,
@@ -592,7 +592,7 @@ def _run_tabicl_model(
 
 
 def main() -> None:
-    """Run ``ModelEmbed.transform`` for the requested STRABLE table."""
+    """Run ``EmbedText.transform`` for the requested STRABLE table."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", required=True)
     parser.add_argument(

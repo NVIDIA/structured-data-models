@@ -10,7 +10,7 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
-class ModelEmbed(Processor):
+class EmbedText(Processor):
     r"""Embed text columns with a user-provided embedding model.
 
     Each text column is embedded cell-by-cell through ``embedding_model``.
@@ -37,7 +37,7 @@ class ModelEmbed(Processor):
         self._embedding_model: torch.nn.Module = embedding_model
         self._embedding_dim: int = embedding_dim
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> ModelEmbed:
+    def __deepcopy__(self, memo: dict[int, Any]) -> EmbedText:
         copied = type(self)(
             embedding_model=self._embedding_model,
             embedding_dim=self._embedding_dim,
