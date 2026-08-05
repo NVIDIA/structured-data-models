@@ -17,9 +17,7 @@ from sdm.tensor import EnsembleTable
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     r"""Apply processors and callables to a table in sequence.
 
-    Each child consumes the previous child's output. Ordinary processors are
-    adapted once when an ensemble is processed; ensemble processors are used
-    directly.
+    Each child consumes the previous child's output.
 
     Args:
         args: Sequence of :class:`Processor` instances or callables.
@@ -106,14 +104,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        """Apply fitted child inverses in reverse order.
-
-        Args:
-            ensemble_table: Ensemble table in the transformed representation.
-
-        Returns:
-            Ensemble table restored to its representation before transform.
-        """
         out = ensemble_table
         for name, child in reversed(tuple(self._modules.items())):
             if not isinstance(child, EnsembleProcessor):
