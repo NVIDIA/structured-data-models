@@ -37,12 +37,9 @@ class Sequential(Processor, InvertibleMixin):
             processor: The processor to append.
         """
         processor = Processor.as_processor(processor)
-        if (
-            isinstance(processor, Sequential)
-            and (
-                len(processor.passthrough_stypes) == 0
-                or processor.passthrough_stypes == self.passthrough_stypes
-            )
+        if isinstance(processor, Sequential) and (
+            len(processor.passthrough_stypes) == 0
+            or processor.passthrough_stypes == self.passthrough_stypes
         ):
             for child in processor.children():
                 self.add_module(str(len(self)), child)
