@@ -3,14 +3,9 @@ from typing import Literal
 import pytest
 import torch
 
-from sdm import (
-    CategoricalTensor,
-    EnsembleTable,
-    StringTensor,
-    Stype,
-    TableTensor,
-)
+from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.processing import ShuffleColumns
+from sdm.tensor import EnsembleTable
 
 
 def _table() -> TableTensor:
@@ -118,9 +113,9 @@ def test_shuffle_columns_ensemble_matches_independent_processors(
             generator=reference_generator,
         )
         expected_query = processor.transform(query)
-        assert context_output.representation(member_id).equal(expected_context)
-        assert query_output.representation(member_id).equal(expected_query)
-        assert restored.representation(member_id).equal(context)
+        assert context_output.table(member_id).equal(expected_context)
+        assert query_output.table(member_id).equal(expected_query)
+        assert restored.table(member_id).equal(context)
 
 
 def test_shuffle_columns_reuses_equal_member_permutations() -> None:
@@ -131,12 +126,10 @@ def test_shuffle_columns_reuses_equal_member_permutations() -> None:
     )
 
     unique_columns = {
-        output.representation(member_id).columns[Stype.numerical]
+        output.table(member_id).columns[Stype.numerical]
         for member_id in range(output.num_members)
     }
-    assert sum(
-        packed.size(0) for packed in output.iter_packed_representations()
-    ) == len(unique_columns)
+    assert sum(group.size(0) for group in output) == len(unique_columns)
 
     with pytest.raises(RuntimeError, match="same number"):
         processor.transform(_table())
