@@ -108,7 +108,7 @@ class TaskDispatch(EnsembleProcessor):
                 f"{self.__class__.__name__!r} has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
-        route = EnsembleProcessorAdapter.adapt(
+        route = EnsembleProcessorAdapter(
             cast(Processor, self.processors[self._task])
         )
         self.processors[self._task] = route
@@ -116,17 +116,19 @@ class TaskDispatch(EnsembleProcessor):
 
     def _fit_transform_ensemble(
         self,
-        table: EnsembleTable,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         return self._ensemble_route().fit_transform_ensemble(
-            table,
+            ensemble_table,
             generator=generator,
         )
 
-    def _transform_ensemble(self, table: EnsembleTable) -> EnsembleTable:
-        return self._ensemble_route().transform_ensemble(table)
+    def _transform_ensemble(
+        self, ensemble_table: EnsembleTable
+    ) -> EnsembleTable:
+        return self._ensemble_route().transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

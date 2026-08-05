@@ -3,7 +3,7 @@ from textwrap import dedent
 import pytest
 import torch
 
-from sdm import CategoricalTensor, EnsembleTable, StringTensor, TableTensor
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     EnsembleProcessor,
     Identity,
@@ -11,6 +11,7 @@ from sdm.processing import (
     Standardize,
     TaskDispatch,
 )
+from sdm.tensor import EnsembleTable
 
 
 def _categorical_target() -> TableTensor:
@@ -99,9 +100,9 @@ def test_task_dispatch_is_an_ensemble_processor() -> None:
 def test_task_dispatch_routes_packed_ensemble_output() -> None:
     first = _numerical_table(("a", "b"))
     second = first.replace_blocks(numerical=first.numerical.flip(-1))
-    table = EnsembleTable.from_representations(
+    table = EnsembleTable.from_tables(
         (first, second),
-        member_representation_ids=(1, 0, 1),
+        member_table_ids=(1, 0, 1),
     )
     dispatch = TaskDispatch(classification=Softmax())
     dispatch._resolve(_categorical_target())
@@ -110,6 +111,26 @@ def test_task_dispatch_routes_packed_ensemble_output() -> None:
 
     for member_id, source in enumerate((second, first, second)):
         torch.testing.assert_close(
-            output.representation(member_id).numerical,
+            output.table(member_id).numerical,
+            source.numerical.softmax(dim=-1),
+        )
+
+
+def test_task_dispatch_fit_transforms_ensemble_output() -> None:
+    first = _numerical_table(("a", "b"))
+    second = first.replace_blocks(numerical=first.numerical.flip(-1))
+    table = EnsembleTable.from_tables(
+        (first, second),
+        member_table_ids=(1, 0, 1),
+    )
+    dispatch = TaskDispatch(classification=Softmax())
+    dispatch._resolve(_categorical_target())
+
+    assert dispatch.fit_ensemble(table) is dispatch
+    output = dispatch.fit_transform_ensemble(table)
+
+    for member_id, source in enumerate((second, first, second)):
+        torch.testing.assert_close(
+            output.table(member_id).numerical,
             source.numerical.softmax(dim=-1),
         )

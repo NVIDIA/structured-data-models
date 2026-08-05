@@ -230,7 +230,8 @@ class CategoricalTensor(Tensor):
         from cudf.api.types import is_string_dtype
 
         if isinstance(ser.dtype, cudf.CategoricalDtype):
-            codes = ser.cat.codes.astype("int32", copy=False).to_cupy(
+            code_dtype = "int64" if dtype == torch.int64 else "int32"
+            codes = ser.cat.codes.astype(code_dtype, copy=False).to_cupy(
                 na_value=-1
             )
             categories = ser.cat.categories

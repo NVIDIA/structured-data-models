@@ -44,9 +44,6 @@ class DropConstantColumns(Processor):
         tolerance: float | None = None,
     ) -> None:
         super().__init__()
-        if method not in {"unique", "variance"}:
-            raise ValueError("method must be 'unique' or 'variance'")
-
         if method == "unique" and tolerance is not None:
             raise ValueError("tolerance must be None when method is 'unique'")
 
@@ -76,20 +73,23 @@ class DropConstantColumns(Processor):
 
         if self.method == "variance":
             keep = data.std(dim=0) > self.tolerance
-        # Preserve the schema when too few rows can exceed the threshold.
-        elif data.size(0) <= self.threshold:
-            keep = data.new_ones((data.size(-1),), dtype=torch.bool)
-        elif self.threshold == 1:
-            # Any mismatch with the first row proves a second unique value.
-            first = data[:1]
-            different = data != first
-            keep = different.any(dim=0)
+        elif self.method == "unique":
+            # Preserve the schema when too few rows can exceed the threshold.
+            if data.size(0) <= self.threshold:
+                keep = data.new_ones((data.size(-1),), dtype=torch.bool)
+            elif self.threshold == 1:
+                # Any mismatch with the first row proves a second unique value.
+                first = data[:1]
+                different = data != first
+                keep = different.any(dim=0)
+            else:
+                # A sorted column with k unique values has k - 1 transitions.
+                values = data.sort(dim=0).values
+                left, right = values[1:], values[:-1]
+                changed = left != right
+                keep = changed.sum(dim=0) >= self.threshold
         else:
-            # A sorted column with k unique values has k - 1 transitions.
-            values = data.sort(dim=0).values
-            left, right = values[1:], values[:-1]
-            changed = left != right
-            keep = changed.sum(dim=0) >= self.threshold
+            raise ValueError("method must be 'unique' or 'variance'")
 
         indices = keep.nonzero().flatten().tolist()
         columns = table.columns[Stype.numerical]

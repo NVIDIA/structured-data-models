@@ -225,7 +225,7 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
     for member_id, source in enumerate((second, first, second)):
         result = output.table(member_id)
         assert torch.equal(result.numerical, source.numerical.square())
-        assert torch.equal(result.categorical.code, source.categorical.code)
+        assert result.categorical.equal(source.categorical)
 
 
 def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:

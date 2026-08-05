@@ -104,10 +104,6 @@ class QuantileTransform(Processor, InvertibleMixin):
             raise ValueError("n_quantiles must be positive.")
         if subsample is not None and subsample <= 0:
             raise ValueError("subsample must be positive or None.")
-        if output_distribution not in {"uniform", "normal"}:
-            raise ValueError(
-                "output_distribution must be 'uniform' or 'normal'."
-            )
         self._n_quantiles = n_quantiles
         self.subsample = subsample
         self.output_distribution = output_distribution
@@ -182,9 +178,13 @@ class QuantileTransform(Processor, InvertibleMixin):
                 upper_bounds_idx = (
                     input_columns + bounds_thresh > upper_bound_x
                 )
-            else:
+            elif self.output_distribution == "uniform":
                 lower_bounds_idx = input_columns == lower_bound_x
                 upper_bounds_idx = input_columns == upper_bound_x
+            else:
+                raise ValueError(
+                    "output_distribution must be 'uniform' or 'normal'."
+                )
 
             finite = input_columns.isfinite()
             forward = _batched_interp(
@@ -233,9 +233,13 @@ class QuantileTransform(Processor, InvertibleMixin):
                 bounds_thresh = input_columns.new_tensor(BOUNDS_THRESH)
                 lower_bounds_idx = input_columns - bounds_thresh < 0.0
                 upper_bounds_idx = input_columns + bounds_thresh > 1.0
-            else:
+            elif self.output_distribution == "uniform":
                 lower_bounds_idx = input_columns == 0.0
                 upper_bounds_idx = input_columns == 1.0
+            else:
+                raise ValueError(
+                    "output_distribution must be 'uniform' or 'normal'."
+                )
 
             finite = input_columns.isfinite()
             output = _batched_interp(

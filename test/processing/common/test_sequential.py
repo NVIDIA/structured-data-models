@@ -223,3 +223,21 @@ def test_sequential_ensemble_matches_member_execution() -> None:
             source.replace_blocks(numerical=source.numerical.square())
         )
         assert output.table(member_id).equal(expected)
+
+
+def test_empty_ensemble_pipeline_passes_through_members() -> None:
+    first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+    second = _table(torch.tensor([[5.0, 6.0], [7.0, 8.0]]))
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
+    )
+    processor = Sequential()
+
+    for output in (
+        processor.transform_ensemble(table),
+        processor.fit_transform_ensemble(table),
+        processor.inverse_transform_ensemble(table),
+    ):
+        for member_id in range(table.num_members):
+            assert output.table(member_id).equal(table.table(member_id))
