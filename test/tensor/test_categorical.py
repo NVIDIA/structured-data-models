@@ -307,6 +307,7 @@ def test_from_cudf_numeric_values() -> None:
 
 
 @onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
 @pytest.mark.parametrize(
     ("values", "categories", "expected_code"),
     [
@@ -331,6 +332,7 @@ def test_from_cudf_categorical_values(
     values: list[str | int | None],
     categories: list[str | int],
     expected_code: list[list[int]],
+    dtype: torch.dtype,
 ) -> None:
     cudf = pytest.importorskip("cudf")
     series = cudf.Series(
@@ -338,9 +340,10 @@ def test_from_cudf_categorical_values(
         dtype=cudf.CategoricalDtype(categories=categories),
     )
 
-    tensor = CategoricalTensor.from_cudf(series)
+    tensor = CategoricalTensor.from_cudf(series, dtype=dtype)
 
     assert tensor.is_cuda
+    assert tensor.dtype == dtype
     assert tensor.code.equal(torch.tensor(expected_code, device=tensor.device))
     assert tensor.categories[0].is_cuda
     assert tensor.categories[0].tolist() == categories
