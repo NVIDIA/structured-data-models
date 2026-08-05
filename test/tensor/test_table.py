@@ -1165,7 +1165,7 @@ def test_cudf() -> None:
 
     data = {
         "age": [0.0, 1.0, None, 3.0],
-        "income": [10.0, 11.0, 12.0, 13.0],
+        "income": [10.0, None, 12.0, 13.0],
         "country": ["US", "CA", "", "US"],
         "time": [
             datetime(2024, 1, 1, 0, 0),
@@ -1194,12 +1194,14 @@ def test_cudf() -> None:
         torch.tensor(
             [
                 [0.0, 10.0],
-                [1.0, 11.0],
+                [1.0, float("nan")],
                 [float("nan"), 12.0],
                 [3.0, 13.0],
             ],
             device=tensor.device,
         ),
+        rtol=0,
+        atol=0,
         equal_nan=True,
     )
     assert tensor.categorical.code.equal(

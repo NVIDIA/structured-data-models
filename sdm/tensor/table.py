@@ -553,7 +553,11 @@ class TableTensor(Tensor):
                 dfs.append(df)
             else:
                 tensor = tensor.detach().movedim(-1, 0).contiguous()
-                valid = ~tensor.isnan() if tensor.is_floating_point() else None
+                valid = (
+                    tensor.isnan().logical_not_()
+                    if tensor.is_floating_point()
+                    else None
+                )
                 col_dict: dict[str, cudf.Series] = {}
                 for idx, (name, column) in enumerate(
                     zip(self._columns[stype], tensor)
