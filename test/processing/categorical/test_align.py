@@ -6,6 +6,7 @@ import torch
 
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import AlignCategories
+from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 
@@ -361,3 +362,141 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
     with pytest.raises(NotImplementedError):
         processor.transform(query)
+
+
+def test_align_categories_keeps_fitted_vocabularies_per_group() -> None:
+    first = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    second = _table(
+        [[1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    processor = AlignCategories()
+    context = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+
+    transformed = processor.fit_transform_ensemble(context)
+
+    assert transformed.table(0).categorical.categories[0].tolist() == [
+        "red",
+        "blue",
+    ]
+    assert transformed.table(1).categorical.categories[0].tolist() == [
+        "blue",
+        "green",
+    ]
+
+    query = _table(
+        [[0], [1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    query_output = processor.transform_ensemble(
+        EnsembleTable.from_tables(
+            tables=(query, query),
+            member_table_ids=(0, 1, 0, 1),
+        )
+    )
+    assert query_output.table(0).categorical.code.tolist() == [
+        [0],
+        [1],
+        [-1],
+    ]
+    assert query_output.table(1).categorical.code.tolist() == [
+        [-1],
+        [0],
+        [1],
+    ]
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=3))
+    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
+        processor.transform(query)
+
+
+def test_align_categories_keeps_shared_output_grouped() -> None:
+    table = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue"),),
+    )
+    output = AlignCategories().fit_transform_ensemble(
+        EnsembleTable(table, num_members=8)
+    )
+
+    assert sum(group.size(0) for group in output) == 1
+
+
+def test_align_categories_fit_ensemble_matches_fit_transform() -> None:
+    first = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    second = _table(
+        [[1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+    )
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+    fitted = AlignCategories()
+    combined = AlignCategories()
+
+    fitted.fit_ensemble(table)
+    transformed = fitted.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(table)
+
+    for member_id in range(table.num_members):
+        assert transformed.table(member_id).equal(expected.table(member_id))
+
+
+def test_align_categories_refit_clears_ensemble_state() -> None:
+    table = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue", "unused"),),
+    )
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = AlignCategories()
+    expected = AlignCategories().fit_transform(table)
+
+    processor.fit_transform_ensemble(ensemble_table)
+    processor.fit(table)
+    assert processor.transform(table).equal(expected)
+
+    processor.fit_transform_ensemble(ensemble_table)
+    assert processor.fit_transform(table).equal(expected)
+    assert processor.transform(table).equal(expected)
+
+
+def test_align_categories_failed_ensemble_refit_preserves_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue", "unused"),),
+    )
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = AlignCategories().fit_ensemble(ensemble_table)
+    expected = processor.transform_ensemble(ensemble_table)
+
+    def fail(*_: object, **__: object) -> None:
+        raise RuntimeError("fit failed")
+
+    monkeypatch.setattr(AlignCategories, "_fit", fail)
+    with pytest.raises(RuntimeError, match="fit failed"):
+        processor.fit_ensemble(ensemble_table)
+
+    output = processor.transform_ensemble(ensemble_table)
+    for member_id in range(ensemble_table.num_members):
+        assert output.table(member_id).equal(expected.table(member_id))
