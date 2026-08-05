@@ -337,8 +337,8 @@ class StringTensor(VarLenTensor):
 
     def __repr__(self, *, tensor_contents: Any = None) -> str:
         # TODO Support tensor content printing.
-        out = f"{self.__class__.__name__}(..."
-        out += f", size={tuple(self.size())}"
+        out = f"{self.__class__.__name__}("
+        out += f"size={tuple(self.size())}"
         if self.valid is not None:
             out += f", null_count={int((~self.valid).sum())}"
         if not self.is_cpu:

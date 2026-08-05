@@ -18,9 +18,11 @@ class TaskDispatch(Processor):
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
-        classification: Output processor for categorical targets. An iterable
-            is normalized to :class:`~sdm.processing.Sequential`.
-        regression: Output processor for numerical targets. An iterable is
+        classification: Output processor for categorical targets. If omitted,
+            :class:`~sdm.processing.Identity` is used. A sequence is
+            normalized to :class:`~sdm.processing.Sequential`.
+        regression: Output processor for numerical targets. If omitted,
+            :class:`~sdm.processing.Identity` is used. A sequence is
             normalized to :class:`~sdm.processing.Sequential`.
     """
 
@@ -79,11 +81,6 @@ class TaskDispatch(Processor):
                 f"categorical (got {stype!r})."
             )
 
-        if task not in self.processors:
-            raise ValueError(
-                f"{self.__class__.__name__!r} has no {task!r} route; "
-                f"configure {task}=... or use 'Identity()' for a no-op."
-            )
         self._task = task
 
     def _reset(self) -> None:
@@ -95,6 +92,8 @@ class TaskDispatch(Processor):
                 f"{self.__class__.__name__!r} has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
+        if self._task not in self.processors:
+            return table
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(table)
 
@@ -104,9 +103,9 @@ class TaskDispatch(Processor):
 
     def set_extra_state(self, state: str | None) -> None:
         r""":meta private:"""  # noqa: D415
-        if state is not None and state not in self.processors:
+        if state is not None and state not in ("classification", "regression"):
             raise ValueError(
-                f"Cannot restore unconfigured {state!r} task on "
+                f"Cannot restore invalid {state!r} task on "
                 f"{self.__class__.__name__!r}."
             )
         self._task = cast(
