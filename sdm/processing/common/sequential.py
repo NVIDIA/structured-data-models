@@ -13,9 +13,7 @@ class Sequential(Processor, InvertibleMixin):
 
     Args:
         args: Sequence of :class:`Processor` instances or callables.
-        passthrough_stypes: Semantic types passed unchanged around children
-            that do not include them in ``supported_stypes``. Children that
-            support a configured semantic type receive it normally.
+        passthrough_stypes: Column types preserved across unsupported steps.
     """
 
     supported_stypes = frozenset(Stype)
@@ -41,7 +39,10 @@ class Sequential(Processor, InvertibleMixin):
         processor = Processor.as_processor(processor)
         if (
             isinstance(processor, Sequential)
-            and len(processor.passthrough_stypes) == 0
+            and (
+                len(processor.passthrough_stypes) == 0
+                or processor.passthrough_stypes == self.passthrough_stypes
+            )
         ):
             for child in processor.children():
                 self.add_module(str(len(self)), child)
@@ -62,31 +63,6 @@ class Sequential(Processor, InvertibleMixin):
             self.append(processor)
         return self
 
-    def _split_passthrough(
-        self,
-        table: TableTensor,
-        child: Processor,
-    ) -> tuple[TableTensor, TableTensor | None]:
-        stypes = tuple(
-            stype
-            for stype, columns in table.columns.items()
-            if stype in self.passthrough_stypes
-            and stype not in child.supported_stypes
-            and len(columns) > 0
-        )
-        if len(stypes) == 0:
-            return table, None
-        return table.drop_stypes(stypes), table.select_stypes(stypes)
-
-    @staticmethod
-    def _restore_passthrough(
-        table: TableTensor,
-        passthrough: TableTensor | None,
-    ) -> TableTensor:
-        if passthrough is None:
-            return table
-        return cast(TableTensor, torch.cat((table, passthrough), dim=-1))
-
     def _fit(
         self,
         table: TableTensor,
@@ -95,22 +71,41 @@ class Sequential(Processor, InvertibleMixin):
     ) -> None:
         out = table
         for i, child in enumerate(self):
-            child_input, passthrough = self._split_passthrough(out, child)
+            passthrough_stypes = (
+                self.passthrough_stypes - child.supported_stypes
+            ) & out.active_stypes
+            child_input = (
+                out.drop_stypes(passthrough_stypes)
+                if passthrough_stypes
+                else out
+            )
             if i < len(self) - 1:
-                out = child.fit_transform(
-                    child_input,
-                    generator=generator,
+                passthrough = (
+                    out.select_stypes(passthrough_stypes)
+                    if passthrough_stypes
+                    else None
                 )
-                out = self._restore_passthrough(out, passthrough)
+                out = child.fit_transform(child_input, generator=generator)
+                if passthrough is not None:
+                    out = cast(
+                        TableTensor,
+                        torch.cat((out, passthrough), dim=-1),
+                    )
             else:
                 child.fit(child_input, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         out = table
         for child in self:
-            child_input, passthrough = self._split_passthrough(out, child)
-            out = child.transform(child_input)
-            out = self._restore_passthrough(out, passthrough)
+            passthrough_stypes = (
+                self.passthrough_stypes - child.supported_stypes
+            ) & out.active_stypes
+            if passthrough_stypes:
+                passthrough = out.select_stypes(passthrough_stypes)
+                out = child.transform(out.drop_stypes(passthrough_stypes))
+                out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
+            else:
+                out = child.transform(out)
         return out
 
     def _fit_transform(
@@ -121,26 +116,38 @@ class Sequential(Processor, InvertibleMixin):
     ) -> TableTensor:
         out = table
         for child in self:
-            child_input, passthrough = self._split_passthrough(out, child)
-            out = child.fit_transform(
-                child_input,
-                generator=generator,
-            )
-            out = self._restore_passthrough(out, passthrough)
+            passthrough_stypes = (
+                self.passthrough_stypes - child.supported_stypes
+            ) & out.active_stypes
+            if passthrough_stypes:
+                passthrough = out.select_stypes(passthrough_stypes)
+                out = child.fit_transform(
+                    out.drop_stypes(passthrough_stypes),
+                    generator=generator,
+                )
+                out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
+            else:
+                out = child.fit_transform(out, generator=generator)
         return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
         out = table
         for child in reversed(list(self)):
-            child_input, passthrough = self._split_passthrough(out, child)
             fn = getattr(child, "inverse_transform", None)
             if not callable(fn):
                 raise AttributeError(
                     f"{child.__class__.__name__!r} object has no attribute "
                     f"'inverse_transform'"
                 )
-            out = fn(child_input)
-            out = self._restore_passthrough(out, passthrough)
+            passthrough_stypes = (
+                self.passthrough_stypes - child.supported_stypes
+            ) & out.active_stypes
+            if passthrough_stypes:
+                passthrough = out.select_stypes(passthrough_stypes)
+                out = fn(out.drop_stypes(passthrough_stypes))
+                out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
+            else:
+                out = fn(out)
         return out
 
     def __iter__(self) -> Iterator[Processor]:
