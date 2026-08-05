@@ -38,6 +38,7 @@ parser.add_argument("--task", choices=SALT_PRESETS)
 parser.add_argument("--context_size", type=int, default=1_000)
 parser.add_argument("--num_neighbors", type=int)
 parser.add_argument("--num_estimators", type=int, default=1)
+parser.add_argument("--max_test_rows", type=int)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
 
@@ -146,8 +147,9 @@ def run_task(task_name: str) -> None:
     mrr = MeanMetric().to(device)
     accuracy = MeanMetric().to(device)
     batch_size = SALT_PRESETS[task_name][1]
+    test_table = task_tables[-1][: args.max_test_rows]
     for query in tqdm(
-        task_tables[-1].split(batch_size),
+        test_table.split(batch_size),
         desc=f"{SALT_DATASET}/{task_name}",
     ):
         y_query = query[task.target_col].to(device)
