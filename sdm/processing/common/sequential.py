@@ -159,13 +159,13 @@ class Sequential(Processor, InvertibleMixin):
 
     def __repr__(self, *, indent: int = 0) -> str:
         passthrough_repr = (
-            "{"
+            "["
             + ", ".join(
                 repr(stype.value)
                 for stype in Stype
                 if stype in self.passthrough_stypes
             )
-            + "}"
+            + "]"
         )
         if len(self) == 0:
             if len(self.passthrough_stypes) > 0:

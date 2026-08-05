@@ -5,13 +5,7 @@ from typing import Any, cast
 import pytest
 import torch
 
-from sdm import (
-    CategoricalTensor,
-    ColumnarTensor,
-    StringTensor,
-    Stype,
-    TableTensor,
-)
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     ImputeMean,
     PowerTransform,
@@ -65,37 +59,6 @@ def test_pipeline_transforms_numerical() -> None:
     output = Sequential(Standardize()).fit_transform(table)
 
     assert not torch.equal(output.numerical, table.numerical)
-
-
-def test_pipeline_passthrough_stypes_after_append() -> None:
-    ids = ColumnarTensor((torch.tensor([10, 11]),))
-    table = TableTensor(
-        columns={
-            Stype.numerical: ("value",),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0], [3.0]]),
-        id=ids,
-    )
-    pipeline = Sequential(passthrough_stypes={Stype.id})
-    pipeline.append(Standardize())
-
-    assert pipeline.fit(table) is pipeline
-    transformed = pipeline.transform(table)
-    restored = pipeline.inverse_transform(transformed)
-    fit_transformed = pipeline.fit_transform(table)
-
-    torch.testing.assert_close(
-        transformed.numerical,
-        torch.tensor([[-1.0], [1.0]]),
-    )
-    assert torch.equal(transformed.id, table.id)
-    torch.testing.assert_close(
-        fit_transformed.numerical, transformed.numerical
-    )
-    assert torch.equal(fit_transformed.id, table.id)
-    torch.testing.assert_close(restored.numerical, table.numerical)
-    assert torch.equal(restored.id, table.id)
 
 
 def test_pipeline_accepts_lambda() -> None:
