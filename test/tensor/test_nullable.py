@@ -31,6 +31,9 @@ def test_arrow() -> None:
     assert tensor.tolist() == [[1, None, 3]]
     assert tensor.to_arrow().to_pylist() == [1, None, 3]
 
+    tensor = NullableIntTensor.from_arrow(pa.array([], type=pa.int32()))
+    assert tensor.size() == (0,)
+
 
 @onlyCUDA
 def test_cudf() -> None:
@@ -43,3 +46,6 @@ def test_cudf() -> None:
     assert tensor.dtype == torch.int32
     assert tensor.tolist() == [[1, None, 3]]
     assert tensor.to_cudf().to_arrow().to_pylist() == [1, None, 3]
+
+    tensor = NullableIntTensor.from_cudf(cudf.Series([], dtype="int32"))
+    assert tensor.size() == (0,)
