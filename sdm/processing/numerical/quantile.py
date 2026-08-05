@@ -228,9 +228,9 @@ class QuantileTransform(EnsembleProcessor, EnsembleInvertibleMixin):
             state = cast(_QuantileState, self._states[0])
             table = ensemble_table.table(0)
             output = (
-                self._inverse_transform_table(table, state)
+                self._inverse_transform_with_state(table, state)
                 if inverse
-                else self._transform_table(table, state)
+                else self._transform_with_state(table, state)
             )
             return EnsembleTable(
                 output,
@@ -242,16 +242,16 @@ class QuantileTransform(EnsembleProcessor, EnsembleInvertibleMixin):
             state = cast(_QuantileState, self._states[state_id])
             table = ensemble_table.table(member_id)
             tables.append(
-                self._inverse_transform_table(table, state)
+                self._inverse_transform_with_state(table, state)
                 if inverse
-                else self._transform_table(table, state)
+                else self._transform_with_state(table, state)
             )
         return EnsembleTable.from_tables(
             tables=tables,
             member_table_ids=range(len(tables)),
         )
 
-    def _transform_table(
+    def _transform_with_state(
         self,
         table: TableTensor,
         state: _QuantileState,
@@ -311,7 +311,7 @@ class QuantileTransform(EnsembleProcessor, EnsembleInvertibleMixin):
             transformed[:, start:end] = output.T.contiguous()
         return table.replace_blocks(numerical=transformed)
 
-    def _inverse_transform_table(
+    def _inverse_transform_with_state(
         self,
         table: TableTensor,
         state: _QuantileState,
