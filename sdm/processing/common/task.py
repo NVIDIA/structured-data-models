@@ -3,7 +3,6 @@ from typing import Literal, cast
 import torch
 
 from sdm.processing.base import Processor
-from sdm.processing.common.identity import Identity
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -38,25 +37,12 @@ class TaskDispatch(Processor):
     ) -> None:
         super().__init__()
         self.processors = torch.nn.ModuleDict()
-
-        routes = (
+        for task, processor in (
             ("classification", classification),
             ("regression", regression),
-        )
-        explicit_tasks = {
-            task for task, processor in routes if processor is not None
-        }
-        if len(explicit_tasks) == 0:
-            raise ValueError(
-                f"{self.__class__.__name__!r} requires at least one route."
-            )
-        self._implicit_tasks = frozenset(
-            task for task, _ in routes if task not in explicit_tasks
-        )
-
-        for task, processor in routes:
+        ):
             if processor is None:
-                processor = Identity()
+                continue
             processor = Processor.as_processor(processor)
             if processor.requires_fit:
                 raise ValueError(
@@ -64,6 +50,11 @@ class TaskDispatch(Processor):
                     f"but the {task!r} route requires fit."
                 )
             self.processors[task] = processor
+
+        if len(self.processors) == 0:
+            raise ValueError(
+                f"{self.__class__.__name__!r} requires at least one route."
+            )
 
         self._task: Literal["classification", "regression"] | None = None
 
@@ -101,6 +92,8 @@ class TaskDispatch(Processor):
                 f"{self.__class__.__name__!r} has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
+        if self._task not in self.processors:
+            return table
         processor = cast(Processor, self.processors[self._task])
         return processor.transform(table)
 
@@ -110,7 +103,7 @@ class TaskDispatch(Processor):
 
     def set_extra_state(self, state: str | None) -> None:
         r""":meta private:"""  # noqa: D415
-        if state is not None and state not in self.processors:
+        if state is not None and state not in ("classification", "regression"):
             raise ValueError(
                 f"Cannot restore invalid {state!r} task on "
                 f"{self.__class__.__name__!r}."
@@ -123,8 +116,6 @@ class TaskDispatch(Processor):
     def __repr__(self, *, indent: int = 0) -> str:
         reprs = []
         for task, processor in self.processors.items():
-            if task in self._implicit_tasks:
-                continue
             processor = cast(Processor, processor)
             processor_repr = processor.__repr__(indent=indent + 2)
             processor_repr = processor_repr[indent + 2 :]
