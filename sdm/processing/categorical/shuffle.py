@@ -8,12 +8,35 @@ from sdm.processing.ensemble import EnsembleProcessor
 from sdm.tensor import EnsembleTable, TableTensor
 
 
+class _CategoryPermutations(torch.nn.Module):
+    """Store fitted categorical code permutations."""
+
+    permutations: Tensor
+    offsets: Tensor
+
+    def __init__(
+        self,
+        permutations: Tensor,
+        offsets: tuple[int, ...],
+    ) -> None:
+        super().__init__()
+        self.register_buffer("permutations", permutations)
+        self.register_buffer(
+            "offsets",
+            torch.tensor(
+                offsets,
+                dtype=torch.long,
+                device=permutations.device,
+            ),
+        )
+
+
 class ShuffleCategories(EnsembleProcessor):
     """Independently permute the integer codes of categorical columns.
 
     One permutation per categorical column is drawn when the processor is
     fitted; pass ``generator`` to ``fit()`` to make the draws reproducible.
-    Ensemble fitting draws one permutation per categorical column and member.
+    For an ensemble, each logical member receives independent permutations.
     Codes and their corresponding category vectors are permuted together so
     decoded values remain unchanged. Negative codes represent missing values
     and are preserved unchanged. Only categorical columns are supported; use
@@ -33,26 +56,37 @@ class ShuffleCategories(EnsembleProcessor):
         method: Literal["shift", "random"] = "shift",
     ) -> None:
         super().__init__()
-        if method not in {"shift", "random"}:
-            raise ValueError("method must be 'shift' or 'random'")
         self.method = method
-        self.register_buffer(
-            "permutations",
-            torch.empty(0, dtype=torch.long),
-        )
-        self.register_buffer(
-            "offsets",
-            torch.zeros(1, dtype=torch.long),
-        )
-        self.processors = torch.nn.ModuleList()
-        self._member_processor_ids: tuple[int, ...] = ()
+        self._permutations = torch.nn.ModuleList()
+        self._permutation_ids: tuple[int, ...] = ()
 
-    def _fit(
+    @property
+    def permutations(self) -> Tensor:
+        """Return fitted code permutations for a single table."""
+        return self._single_permutations().permutations
+
+    @property
+    def offsets(self) -> Tensor:
+        """Return fitted per-column permutation boundaries for one table."""
+        return self._single_permutations().offsets
+
+    def _single_permutations(self) -> _CategoryPermutations:
+        if len(self._permutation_ids) != 1:
+            raise RuntimeError(
+                "'ShuffleCategories' has no fitted state for a single table."
+            )
+        permutation_id = self._permutation_ids[0]
+        return cast(
+            _CategoryPermutations,
+            self._permutations[permutation_id],
+        )
+
+    def _draw_permutations(
         self,
         table: TableTensor,
         *,
         generator: torch.Generator | None = None,
-    ) -> None:
+    ) -> tuple[Tensor, tuple[int, ...]]:
         device = table.categorical.device
         permutations: list[Tensor] = []
         offsets = [0]
@@ -70,25 +104,41 @@ class ShuffleCategories(EnsembleProcessor):
                 permutation = (
                     torch.arange(n_classes, device=device) - offset
                 ) % n_classes
-            else:
+            elif self.method == "random":
                 permutation = torch.randperm(
                     n_classes,
                     generator=generator,
                     device=device,
                 )
+            else:
+                raise AssertionError(f"Unexpected method {self.method!r}")
             permutations.append(permutation)
             offsets.append(offsets[-1] + n_classes)
 
-        self.permutations = (
+        permutation = (
             torch.cat(permutations)
             if len(permutations) > 0
             else torch.empty(0, dtype=torch.long, device=device)
         )
-        self.offsets = torch.tensor(
-            offsets,
-            dtype=torch.long,
-            device=device,
+        return permutation, tuple(offsets)
+
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        permutations, offsets = self._draw_permutations(
+            table,
+            generator=generator,
         )
+        self._permutations = torch.nn.ModuleList(
+            [_CategoryPermutations(permutations, offsets)]
+        )
+        self._permutation_ids = (0,)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return self._permute(table, self._single_permutations())
 
     def _fit_transform(
         self,
@@ -105,100 +155,122 @@ class ShuffleCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self.processors = torch.nn.ModuleList()
-        member_processor_ids = []
-        fitted: dict[tuple[tuple[int, int], tuple[int, ...]], int] = {}
+        if ensemble_table.num_members == 1:
+            self._fit(
+                ensemble_table.table(0),
+                generator=generator,
+            )
+            return
+
+        self._permutations = torch.nn.ModuleList()
+        permutation_ids = []
+        permutation_id_by_key: dict[
+            tuple[torch.device, tuple[int, ...], tuple[int, ...]], int
+        ] = {}
 
         for member_id in range(ensemble_table.num_members):
-            processor = self.__class__(method=self.method)
-            processor.fit(
+            permutations, offsets = self._draw_permutations(
                 ensemble_table.table(member_id),
                 generator=generator,
             )
             key = (
-                ensemble_table._locations[member_id],
-                tuple(processor.permutations.tolist()),
+                permutations.device,
+                offsets,
+                tuple(permutations.tolist()),
             )
-            processor_id = fitted.get(key)
-            if processor_id is None:
-                processor_id = len(self.processors)
-                fitted[key] = processor_id
-                self.processors.append(processor)
-            member_processor_ids.append(processor_id)
+            permutation_id = permutation_id_by_key.get(key)
+            if permutation_id is None:
+                permutation_id = len(self._permutations)
+                permutation_id_by_key[key] = permutation_id
+                self._permutations.append(
+                    _CategoryPermutations(permutations, offsets)
+                )
+            permutation_ids.append(permutation_id)
 
-        self._member_processor_ids = tuple(member_processor_ids)
-
-    def _fit_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-        self._fit_ensemble(ensemble_table, generator=generator)
-        return self._transform_ensemble(ensemble_table)
+        self._permutation_ids = tuple(permutation_ids)
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._member_processor_ids) != ensemble_table.num_members:
+        if len(self._permutation_ids) != ensemble_table.num_members:
             raise RuntimeError(
                 "ShuffleCategories must be fitted with the same number of "
                 "ensemble members before transform."
             )
 
-        tables = []
-        member_table_ids = []
-        transformed: dict[tuple[tuple[int, int], int], int] = {}
-        for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (
-                ensemble_table._locations[member_id],
-                processor_id,
+        if ensemble_table.num_members == 1:
+            return EnsembleTable(
+                self._transform(ensemble_table.table(0)),
+                num_members=1,
             )
-            table_id = transformed.get(key)
-            if table_id is None:
-                processor = cast(
-                    ShuffleCategories,
-                    self.processors[processor_id],
-                )
-                table_id = len(tables)
-                transformed[key] = table_id
-                tables.append(
-                    processor.transform(ensemble_table.table(member_id))
-                )
-            member_table_ids.append(table_id)
 
-        return EnsembleTable.from_tables(
-            tables=tables,
-            member_table_ids=member_table_ids,
+        member_ids_by_permutation: dict[int, list[int]] = {}
+        for member_id, permutation_id in enumerate(self._permutation_ids):
+            member_ids_by_permutation.setdefault(permutation_id, []).append(
+                member_id
+            )
+
+        if len(member_ids_by_permutation) == ensemble_table.num_members:
+            member_tables: list[TableTensor] = []
+            for member_id, permutation_id in enumerate(self._permutation_ids):
+                permutations = cast(
+                    _CategoryPermutations,
+                    self._permutations[permutation_id],
+                )
+                member_tables.append(
+                    self._permute(
+                        ensemble_table.table(member_id),
+                        permutations,
+                    )
+                )
+            return EnsembleTable.from_tables(
+                tables=member_tables,
+                member_table_ids=range(ensemble_table.num_members),
+            )
+
+        outputs: dict[int, EnsembleTable] = {}
+        for permutation_id, member_ids in member_ids_by_permutation.items():
+            selected = ensemble_table.select_members(member_ids)
+            permutations = cast(
+                _CategoryPermutations,
+                self._permutations[permutation_id],
+            )
+            outputs[permutation_id] = selected.replace_groups(
+                [self._permute(group, permutations) for group in selected]
+            )
+
+        output_tables = []
+        member_ids = []
+        next_member_id_by_permutation: dict[int, int] = {}
+        for permutation_id in self._permutation_ids:
+            output_tables.append(outputs[permutation_id])
+            member_id = next_member_id_by_permutation.get(permutation_id, 0)
+            member_ids.append(member_id)
+            next_member_id_by_permutation[permutation_id] = member_id + 1
+
+        return EnsembleTable.gather_members(
+            tables=output_tables,
+            member_ids=member_ids,
         )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        if len(self.processors) > 0:
-            raise RuntimeError(
-                "'ShuffleCategories' was fitted for an ensemble; use "
-                "'transform_ensemble' instead of 'transform'."
-            )
-        offsets = self.offsets.tolist()
+    @staticmethod
+    def _permute(
+        table: TableTensor,
+        permutations: _CategoryPermutations,
+    ) -> TableTensor:
+        offsets = permutations.offsets.tolist()
         code = table.categorical.code.clone()
         valid_mask = table.categorical.isfinite()
         categories: list[Tensor] = []
         for index, category in enumerate(table.categorical.categories):
-            permutation = self.permutations[
+            permutation = permutations.permutations[
                 offsets[index] : offsets[index + 1]
             ]
             codes = code[..., index]
             valid = valid_mask[..., index]
-            if valid.any():
-                valid_codes = codes[valid].to(torch.long)
-                max_code = int(valid_codes.max().item())
-                if max_code >= permutation.numel():
-                    raise ValueError(
-                        "Expected category codes to be less than the fitted "
-                        f"class count (got max code {max_code} and "
-                        f"{permutation.numel()})"
-                    )
-                codes[valid] = permutation[valid_codes].to(codes.dtype)
+            valid_codes = codes[valid].to(torch.long)
+            codes[valid] = permutation[valid_codes].to(codes.dtype)
             categories.append(category[permutation.argsort()])
 
         categorical = CategoricalTensor(

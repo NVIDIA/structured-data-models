@@ -153,83 +153,81 @@ def test_shuffle_categories_preserves_missing() -> None:
 def test_shuffle_categories_ensemble_matches_independent_processors(
     method: Literal["shift", "random"],
 ) -> None:
-    context = _table(
+    first_context = _table(
         [[0, 0], [1, 1], [2, -1], [1, 0]],
         (("a", "b", "c"), ("x", "y")),
     )
-    query = _table(
+    second_context = _table(
+        [[0], [1], [3], [2]],
+        (("w", "x", "y", "z"),),
+    )
+    first_query = _table(
         [[2, 1], [0, -1]],
         (("a", "b", "c"), ("x", "y")),
+    )
+    second_query = _table(
+        [[3], [0]],
+        (("w", "x", "y", "z"),),
+    )
+    table_ids = (1, 0, 1, 0, 0, 1, 0, 1)
+    context = EnsembleTable.from_tables(
+        tables=(first_context, second_context),
+        member_table_ids=table_ids,
+    )
+    query = EnsembleTable.from_tables(
+        tables=(first_query, second_query),
+        member_table_ids=table_ids,
     )
     processor = ShuffleCategories(method=method)
 
     context_output = processor.fit_transform_ensemble(
-        EnsembleTable(context, num_members=8),
+        context,
         generator=torch.Generator().manual_seed(7),
     )
-    query_output = processor.transform_ensemble(
-        EnsembleTable(query, num_members=8)
-    )
+    query_output = processor.transform_ensemble(query)
 
     generator = torch.Generator().manual_seed(7)
-    references = [ShuffleCategories(method=method) for _ in range(8)]
-    for member_id, reference in enumerate(references):
+    context_tables = (first_context, second_context)
+    query_tables = (first_query, second_query)
+    for member_id, table_id in enumerate(table_ids):
+        reference = ShuffleCategories(method=method)
         expected_context = reference.fit_transform(
-            context,
+            context_tables[table_id],
             generator=generator,
         )
-        expected_query = reference.transform(query)
+        expected_query = reference.transform(query_tables[table_id])
         assert context_output.table(member_id).equal(expected_context)
         assert query_output.table(member_id).equal(expected_query)
 
 
-def test_shuffle_categories_reuses_equal_member_permutations() -> None:
+def test_shuffle_categories_requires_fitted_member_count() -> None:
     table = _table([[0], [1]], (("a", "b"),))
     processor = ShuffleCategories(method="shift")
-    output = processor.fit_transform_ensemble(
-        EnsembleTable(table, num_members=8),
-        generator=torch.Generator().manual_seed(9),
+    processor.fit_ensemble(EnsembleTable(table, num_members=2))
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(table, num_members=1))
+
+
+def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
+    table = _table(
+        [[0, 0], [1, 1], [2, -1], [1, 0]],
+        (("a", "b", "c"), ("x", "y")),
     )
-
-    unique_codes = {
-        tuple(
-            output.table(member_id)
-            .categorical.code.flatten()
-            .tolist()
-        )
-        for member_id in range(output.num_members)
-    }
-    assert sum(
-        group.size(0) for group in output
-    ) == len(unique_codes)
-
-    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
-        processor.transform(table)
-
-
-@pytest.mark.parametrize("method", ["shift", "random"])
-def test_shuffle_categories_fit_ensemble_matches_fit_transform(
-    method: Literal["shift", "random"],
-) -> None:
-    table = EnsembleTable(
-        _table(
-            [[0, 0], [1, 1], [2, -1], [1, 0]],
-            (("a", "b", "c"), ("x", "y")),
-        ),
-        num_members=8,
+    processor = ShuffleCategories(method="random").fit_ensemble(
+        EnsembleTable(table, num_members=2),
+        generator=torch.Generator().manual_seed(0),
     )
-    fitted = ShuffleCategories(method=method)
-    combined = ShuffleCategories(method=method)
-
-    fitted.fit_ensemble(
+    output = processor.fit_transform(
         table,
-        generator=torch.Generator().manual_seed(7),
+        generator=torch.Generator().manual_seed(1),
     )
-    transformed = fitted.transform_ensemble(table)
-    expected = combined.fit_transform_ensemble(
+    reference = ShuffleCategories(method="random")
+    expected = reference.fit_transform(
         table,
-        generator=torch.Generator().manual_seed(7),
+        generator=torch.Generator().manual_seed(1),
     )
 
-    for member_id in range(table.num_members):
-        assert transformed.table(member_id).equal(expected.table(member_id))
+    assert output.equal(expected)
+    assert torch.equal(processor.permutations, reference.permutations)
+    assert torch.equal(processor.offsets, reference.offsets)
