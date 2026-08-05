@@ -228,7 +228,8 @@ class EnsembleTable:
         # TODO: This fallback handles different member-to-group layouts. If it
         # becomes performance-relevant, build their common group refinement and
         # concatenate groups directly instead of unpacking logical members and
-        # repacking them in from_tables.
+        # TODO: Handle group by group, concatenate those that can be concatenate
+        # directly and only unpacking logical members if needed. 
         outputs: list[TableTensor] = []
         output_id_by_locations: dict[tuple[tuple[int, int], ...], int] = {}
         member_table_ids = []
