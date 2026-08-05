@@ -16,7 +16,10 @@ from typing_extensions import override
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import (
+    _contiguous_stride,
+    _resolve_device,
+)
 
 if TYPE_CHECKING:
     import cudf
@@ -130,7 +133,6 @@ class TableTensor(Tensor):
     _id: ColumnarTensor
     _columns: dict[Stype, tuple[str, ...]]
     _column_to_loc: dict[str, tuple[Stype, int]]
-
     # Route tensor operations through `__torch_dispatch__` only.
     __torch_function__ = torch._C._disabled_torch_function_impl  # type: ignore
 
@@ -149,7 +151,30 @@ class TableTensor(Tensor):
     ) -> None:
         pass
 
-    @torch.compiler.disable
+    @staticmethod
+    def _set_wrapper_attrs(
+        out: TableTensor,
+        numerical: Tensor,
+        categorical: CategoricalTensor,
+        datetime: Tensor,
+        text: StringTensor,
+        id: ColumnarTensor,
+        columns: Mapping[Stype, Sequence[str]],
+    ) -> None:
+        out._numerical = numerical
+        out._categorical = categorical
+        out._datetime = datetime
+        out._text = text
+        out._id = id
+        out._columns = {
+            stype: tuple(columns.get(stype, ())) for stype in Stype
+        }
+        out._column_to_loc = {
+            name: (stype, i)
+            for stype, names in out._columns.items()
+            for i, name in enumerate(names)
+        }
+
     def __new__(
         cls,
         size: Sequence[int] | None = None,
@@ -261,22 +286,24 @@ class TableTensor(Tensor):
         if len(column_names) != len(column_to_loc):
             raise ValueError("Expected column names to be unique")
 
+        wrapper_size = (*size, len(column_names))
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=(*size, len(column_names)),
+            size=wrapper_size,
+            strides=_contiguous_stride(wrapper_size),
             dtype=numerical.dtype,
             device=numerical.device,
             requires_grad=False,
         )
-
-        out._numerical = numerical
-        out._categorical = categorical
-        out._datetime = datetime
-        out._text = text
-        out._id = id
-        out._columns = columns
-        out._column_to_loc = column_to_loc
-
+        cls._set_wrapper_attrs(
+            out,
+            numerical,
+            categorical,
+            datetime,
+            text,
+            id,
+            cast(Mapping[Stype, Sequence[str]], columns),
+        )
         return out
 
     @classmethod
@@ -708,10 +735,7 @@ class TableTensor(Tensor):
             stypes = (stypes,)
         stypes = tuple(Stype(stype) for stype in stypes)
 
-        return self.__class__(
-            columns={stype: self._columns[stype] for stype in stypes},
-            **{stype.value: getattr(self, stype.value) for stype in stypes},
-        )
+        return cast(Self, _select_stypes(self, stypes))
 
     def drop_stypes(
         self,
@@ -827,6 +851,49 @@ class TableTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "numerical",
+            "categorical",
+            "datetime",
+            "text",
+            "id",
+        ]
+        ctx = (self.__class__, self._columns)
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> TableTensor:
+        cls, columns = ctx
+        numerical = inner_tensors["numerical"]
+        categorical = inner_tensors["categorical"]
+        datetime = inner_tensors["datetime"]
+        text = inner_tensors["text"]
+        id = inner_tensors["id"]
+        out = Tensor._make_wrapper_subclass(
+            cls,
+            size=outer_size,
+            strides=outer_stride,
+            dtype=numerical.dtype,
+            device=numerical.device,
+            requires_grad=False,
+        )
+        cls._set_wrapper_attrs(
+            out,
+            numerical,
+            categorical,
+            datetime,
+            text,
+            id,
+            columns,
+        )
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
@@ -1658,6 +1725,45 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
 
 
 # Helpers #####################################################################
+
+
+def _select_stypes(
+    table: TableTensor,
+    stypes: StypeLike | Iterable[StypeLike],
+) -> TableTensor:
+    if isinstance(stypes, (str, Stype)):
+        stypes = (stypes,)
+    selected = frozenset(Stype(stype) for stype in stypes)
+
+    def keep(stype: Stype) -> bool:
+        return stype in selected or len(table._columns[stype]) == 0
+
+    return table.__class__(
+        columns={stype: table._columns[stype] for stype in selected},
+        numerical=(
+            table.numerical
+            if keep(Stype.numerical)
+            else table.numerical[..., :0]
+        ),
+        categorical=(
+            table.categorical
+            if keep(Stype.categorical)
+            else cast(CategoricalTensor, table.categorical[..., :0])
+        ),
+        datetime=(
+            table.datetime if keep(Stype.datetime) else table.datetime[..., :0]
+        ),
+        text=(
+            table.text
+            if keep(Stype.text)
+            else cast(StringTensor, table.text[..., :0])
+        ),
+        id=(
+            table.id
+            if keep(Stype.id)
+            else cast(ColumnarTensor, table.id[..., :0])
+        ),
+    )
 
 
 def _block_size_repr(size: Sequence[int]) -> str:

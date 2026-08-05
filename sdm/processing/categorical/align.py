@@ -1,17 +1,17 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
 from sdm import (
     CategoricalTensor,
-    ColumnarTensor,
     StringTensor,
     Stype,
     TableTensor,
 )
 from sdm.processing import Processor
-from sdm.relational.join import join_index
+from sdm.tensor.categorical import _category
+from sdm.tensor.string import _pairwise_equal
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
@@ -96,13 +96,14 @@ class AlignCategories(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        mask = table.categorical.isfinite()
+        code = table.categorical.code
+        mask = code >= 0
 
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
             category, _ = self._fit_category(
                 category=category,
-                code=table.categorical[..., i].view(-1)[mask[..., i].view(-1)],
+                code=code[..., i].view(-1)[mask[..., i].view(-1)],
                 return_inverse=False,
             )
             categories.append(category)
@@ -115,14 +116,15 @@ class AlignCategories(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        mask = table.categorical.isfinite()
-        out = torch.full_like(table.categorical, -1)
+        code = table.categorical.code
+        mask = code >= 0
+        out = torch.full_like(code, -1)
 
         categories: list[Tensor] = []
         for i, category in enumerate(table.categorical.categories):
             category, inverse = self._fit_category(
                 category=category,
-                code=table.categorical[..., i].view(-1)[mask[..., i].view(-1)],
+                code=code[..., i].view(-1)[mask[..., i].view(-1)],
                 return_inverse=True,
             )
             categories.append(category)
@@ -137,41 +139,25 @@ class AlignCategories(Processor):
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        mask = table.categorical.isfinite()
-        out = torch.full_like(table.categorical, -1)
-        for i, (actual, expected) in enumerate(
-            zip(table.categorical.categories, self._categories)
-        ):
+        code = table.categorical.code
+        mask = code >= 0
+        out = torch.full_like(code, -1)
+        for i, expected in enumerate(self._categories):
+            actual = _category(table.categorical, i)
             if expected.numel() == 0:
                 continue
-            index = table.categorical[..., i].view(-1)
-            unique, inverse = index[mask[..., i].view(-1)].unique(
-                return_inverse=True,
-            )
-            if unique.numel() == 0:
-                continue
-            if unique.numel() == actual.numel():
-                pass
-            elif actual.dtype in _UNSIGNED_DTYPES and actual.is_cpu:
-                # PyTorch CPU index_select is not implemented for these dtypes.
-                actual = actual[unique]
-            else:
-                actual = actual.index_select(0, unique)
+            index = code[..., i].view(-1)
 
             if isinstance(actual, StringTensor):
-                # TODO Run join once with column-index composite key.
-                left_index, right_index = join_index(
-                    left_table=TableTensor(
-                        columns={"id": ("id",)},
-                        id=ColumnarTensor((actual,)),
-                    ),
-                    right_table=TableTensor(
-                        columns={"id": ("id",)},
-                        id=ColumnarTensor((expected,)),
-                    ),
-                    left_keys=["id"],
-                    right_keys=["id"],
-                    dtype=out.dtype,
+                match = _pairwise_equal(
+                    actual,
+                    cast(StringTensor, expected),
+                )
+                right_index = match.to(torch.int64).argmax(dim=1)
+                remapped = torch.where(
+                    match.any(dim=1),
+                    right_index.to(out.dtype),
+                    -1,
                 )
             else:
                 if (
@@ -185,12 +171,15 @@ class AlignCategories(Processor):
                 position = torch.searchsorted(expected, actual)
                 position = position.clamp(max=expected.numel() - 1)
                 match = expected[position] == actual
-                left_index = match.nonzero().view(-1)
-                right_index = perm[position[left_index]]
-
-            remapped = out.new_full((actual.numel(),), fill_value=-1)
-            remapped[left_index] = right_index.to(out.dtype)
-            out[..., i].view(-1)[mask[..., i].view(-1)] = remapped[inverse]
+                remapped = torch.where(
+                    match,
+                    perm[position].to(out.dtype),
+                    -1,
+                )
+            valid = mask[..., i].view(-1)
+            remapped = torch.cat((remapped, remapped.new_full((1,), -1)))
+            safe_index = torch.where(valid, index, actual.numel())
+            out[..., i] = remapped[safe_index].view_as(out[..., i])
 
         return table.replace_blocks(
             categorical=CategoricalTensor(out, categories=self._categories),

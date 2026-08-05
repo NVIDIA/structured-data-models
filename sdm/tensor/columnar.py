@@ -14,7 +14,10 @@ from typing_extensions import override
 from sdm.tensor import NullableIntTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.io.arrow import _combine_arrow_chunks
-from sdm.tensor.mixin import _resolve_device
+from sdm.tensor.mixin import (
+    _contiguous_stride,
+    _resolve_device,
+)
 
 if TYPE_CHECKING:
     import cudf
@@ -51,6 +54,7 @@ class ColumnarTensor(Tensor):
         dict[Callable[..., Any], Callable[..., Any]]
     ] = {}
 
+    _anchor: Tensor
     _columns: tuple[Tensor, ...]
 
     # Route tensor operations through `__torch_dispatch__` only.
@@ -66,7 +70,17 @@ class ColumnarTensor(Tensor):
     ) -> None:
         pass
 
-    @torch.compiler.disable
+    @staticmethod
+    def _set_wrapper_attrs(
+        out: ColumnarTensor,
+        anchor: Tensor,
+        columns: Sequence[Tensor],
+    ) -> None:
+        out._anchor = anchor
+        out._columns = tuple(columns)
+        for i, column in enumerate(out._columns):
+            setattr(out, f"_column_{i}", column)
+
     def __new__(
         cls,
         columns: Sequence[Tensor],
@@ -116,16 +130,17 @@ class ColumnarTensor(Tensor):
                 "Expected 'size' to be given for zero columnar data"
             )
 
+        wrapper_size = (*size, len(columns))
+        reference = torch.empty(0, dtype=torch.uint8, device=device)
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=(*size, len(columns)),
-            dtype=torch.uint8,  # NOTE Do not use.
+            size=wrapper_size,
+            strides=_contiguous_stride(wrapper_size),
+            dtype=torch.uint8,
             device=device,
             requires_grad=False,
         )
-
-        out._columns = columns
-
+        cls._set_wrapper_attrs(out, reference, columns)
         return out
 
     @classmethod
@@ -255,6 +270,37 @@ class ColumnarTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "_anchor",
+            *(f"_column_{i}" for i in range(len(self._columns))),
+        ]
+        ctx = (self.__class__, len(self._columns))
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> ColumnarTensor:
+        cls, num_columns = ctx
+        columns = tuple(
+            inner_tensors[f"_column_{i}"] for i in range(num_columns)
+        )
+        anchor = inner_tensors["_anchor"]
+        out = Tensor._make_wrapper_subclass(
+            cls,
+            size=outer_size,
+            strides=outer_stride,
+            dtype=torch.uint8,
+            device=anchor.device,
+            requires_grad=False,
+        )
+        cls._set_wrapper_attrs(out, anchor, columns)
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._columns, tuple(self.size())[:-1], self.device)

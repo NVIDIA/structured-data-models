@@ -13,6 +13,9 @@ from typing_extensions import override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
 from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.mixin import (
+    _contiguous_stride,
+)
 
 aten = torch.ops.aten
 
@@ -63,6 +66,7 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
+    _storage_offset: int | torch.SymInt
 
     # Constructors ############################################################
 
@@ -77,7 +81,19 @@ class VarLenTensor(Tensor):
     ) -> None:
         pass
 
-    @torch.compiler.disable
+    @staticmethod
+    def _set_wrapper_attrs(
+        out: VarLenTensor,
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        storage_offset: int | torch.SymInt,
+    ) -> None:
+        out._data = data
+        out._offset = offset
+        out._valid = valid
+        out._storage_offset = storage_offset
+
     def __new__(
         cls,
         data: Tensor,
@@ -215,10 +231,7 @@ class VarLenTensor(Tensor):
             device=data.device,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
-
-        out._data = data
-        out._offset = offset
-        out._valid = valid
+        cls._set_wrapper_attrs(out, data, offset, valid, storage_offset)
 
         return out
 
@@ -534,7 +547,7 @@ class VarLenTensor(Tensor):
         attrs = ["_data", "_offset"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (self.__class__, self.storage_offset())
+        ctx = (self.__class__, self._storage_offset)
         return attrs, ctx
 
     @staticmethod
@@ -545,14 +558,20 @@ class VarLenTensor(Tensor):
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
         cls, storage_offset = ctx
-        return cls(
-            data=inner_tensors["_data"],
-            offset=inner_tensors["_offset"],
-            valid=inner_tensors.get("_valid"),
+        data = inner_tensors["_data"]
+        offset = inner_tensors["_offset"]
+        valid = inner_tensors.get("_valid")
+        out = Tensor._make_wrapper_subclass(
+            cls,
             size=outer_size,
-            stride=outer_stride,
+            strides=outer_stride,
             storage_offset=storage_offset,
+            dtype=data.dtype,
+            device=data.device,
+            requires_grad=False,
         )
+        cls._set_wrapper_attrs(out, data, offset, valid, storage_offset)
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
@@ -1282,15 +1301,6 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
 
 # Helpers #####################################################################
-
-
-def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
-    value = 1
-    stride = []
-    for dim_size in reversed(size):
-        stride.append(value)
-        value *= dim_size
-    return tuple(stride[::-1])
 
 
 def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:

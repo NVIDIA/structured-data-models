@@ -1,7 +1,17 @@
 import abc
+from collections.abc import Sequence
 from typing import Self
 
 import torch
+
+
+def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
+    value = 1
+    stride = []
+    for dim_size in reversed(size):
+        stride.append(value)
+        value *= dim_size
+    return tuple(stride[::-1])
 
 
 class DeviceMixin(abc.ABC):

@@ -27,14 +27,18 @@ class ToNumerical(Processor):
         """Return ``table`` with categorical columns moved to ``numerical``."""
         # Already numerical-only: nothing to move.
         if all(
-            stype == Stype.numerical or block.size(-1) == 0
-            for stype, block in table.items()
+            block.size(-1) == 0
+            for block in (
+                table.categorical,
+                table.datetime,
+                table.text,
+                table.id,
+            )
         ):
             return table
 
-        # Casting to the (floating-point) numerical dtype also unwraps a
-        # CategoricalTensor to its raw ordinal ids as a plain tensor.
-        categorical = table.categorical.to(table.numerical.dtype)
+        # Cast the raw ordinal ids to the floating-point numerical dtype.
+        categorical = table.categorical.code.to(table.numerical.dtype)
         columns = (
             *table.columns[Stype.numerical],
             *table.columns[Stype.categorical],
@@ -45,6 +49,6 @@ class ToNumerical(Processor):
             else torch.cat((table.numerical, categorical), dim=-1)
         )
         return table.__class__(
-            columns={Stype.numerical: columns},
+            columns={Stype.numerical.value: columns},
             numerical=numerical,
         )
