@@ -9,7 +9,15 @@ from sdm.tensor import EnsembleTable, TableTensor
 
 
 class _ColumnPermutation(torch.nn.Module):
-    """Register one column permutation as PyTorch module state."""
+    """Store one fitted column permutation as registered module state.
+
+    The module wrapper allows :class:`ShuffleColumns` to keep variable-length
+    permutation tensors in a :class:`torch.nn.ModuleList`, so PyTorch moves
+    them between devices with the parent processor.
+
+    Args:
+        indices: Column indices in their permuted order.
+    """
 
     indices: Tensor
 
