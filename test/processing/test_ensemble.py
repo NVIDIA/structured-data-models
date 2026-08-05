@@ -2,7 +2,14 @@ import pytest
 import torch
 
 from sdm import Stype, TableTensor
-from sdm.processing import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing import (
+    EnsembleInvertibleMixin,
+    EnsembleProcessor,
+    EnsembleProcessorAdapter,
+    InvertibleMixin,
+    Processor,
+    Standardize,
+)
 from sdm.tensor import EnsembleTable
 
 
@@ -29,6 +36,17 @@ class InvertibleIdentityEnsembleProcessor(
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         return EnsembleTable(ensemble_table.table(0), num_members=1)
+
+
+class _StatelessProcessor(Processor, InvertibleMixin):
+    supported_stypes = frozenset({Stype.numerical})
+    requires_fit = False
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return table.replace_blocks(numerical=-table.numerical)
+
+    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+        return self._transform(table)
 
 
 def test_ensemble_processor_preserves_member_order_and_metadata() -> None:
@@ -126,3 +144,74 @@ def test_ensemble_processor_passthrough_for_empty_supported_blocks() -> None:
     )
     with pytest.raises(RuntimeError, match="not fitted"):
         processor.transform_ensemble(ensemble_table)
+
+
+def _two_group_ensemble_table() -> EnsembleTable:
+    first = TableTensor.from_tensor(
+        torch.tensor([[1.0], [3.0]]), columns=("first",)
+    )
+    second = TableTensor.from_tensor(
+        torch.tensor([[2.0], [6.0]]), columns=("second",)
+    )
+    return EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
+    )
+
+
+def test_adapter_fits_each_group_separately() -> None:
+    ensemble_table = _two_group_ensemble_table()
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    processor.fit_ensemble(ensemble_table)
+    output = processor.transform_ensemble(ensemble_table)
+
+    assert output.num_members == 3
+    assert output.table(0).numerical.tolist() == [[-2.0], [2.0]]
+    assert output.table(1).numerical.tolist() == [[-1.0], [1.0]]
+    assert output.table(2).equal(output.table(0))
+
+
+def test_adapter_fit_transform_matches_fit_then_transform() -> None:
+    ensemble_table = _two_group_ensemble_table()
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+    combined = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    processor.fit_ensemble(ensemble_table)
+    output = processor.transform_ensemble(ensemble_table)
+    expected = combined.fit_transform_ensemble(ensemble_table)
+
+    for member_id in range(ensemble_table.num_members):
+        assert output.table(member_id).equal(expected.table(member_id))
+
+
+def test_adapter_inverse_restores_input() -> None:
+    ensemble_table = _two_group_ensemble_table()
+    processor = EnsembleProcessorAdapter(Standardize(with_std=False))
+
+    output = processor.fit_transform_ensemble(ensemble_table)
+    restored = processor.inverse_transform_ensemble(output)
+
+    for member_id in range(ensemble_table.num_members):
+        assert restored.table(member_id).equal(ensemble_table.table(member_id))
+
+
+def test_stateless_adapter_supports_transform_and_inverse() -> None:
+    table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
+    processor = EnsembleProcessorAdapter(_StatelessProcessor())
+
+    transformed = processor.inverse_transform(table)
+
+    assert transformed.numerical.tolist() == [[-1.0], [-2.0]]
+    assert processor.transform(transformed).equal(table)
+    assert processor.inverse_transform(transformed).equal(table)
+
+
+def test_adapter_rejects_inverse_for_non_invertible_processor() -> None:
+    table = TableTensor.from_tensor(torch.ones(2, 1))
+    processor = EnsembleProcessorAdapter(
+        Processor.as_processor(lambda value: value)
+    )
+
+    with pytest.raises(TypeError, match="not invertible"):
+        processor.inverse_transform(table)
