@@ -896,3 +896,31 @@ def test_unsafe_view() -> None:
     assert out.storage_offset() == 0
     assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
     assert out._offset.equal(torch.arange(7))
+
+
+def test_reshape_under_inference_mode() -> None:
+    # Under inference mode reshape no longer decomposes into view/_unsafe_view,
+    # so it must be handled directly. A viewable reshape shares storage; a
+    # non-viewable one compacts the values first.
+    tensor = VarLenTensor(
+        data=torch.arange(12),
+        offset=torch.arange(13),
+        valid=None,
+        size=(3, 2),
+        stride=(4, 1),
+    )
+
+    with torch.inference_mode():
+        viewable = tensor[:, :1].reshape(-1)
+        compacted = tensor.reshape(2, 3)
+
+    assert isinstance(viewable, VarLenTensor)
+    assert viewable.size() == (3,)
+    assert viewable._offset.data_ptr() == tensor._offset.data_ptr()
+
+    assert isinstance(compacted, VarLenTensor)
+    assert compacted.size() == (2, 3)
+    assert compacted.stride() == (3, 1)
+    assert compacted.storage_offset() == 0
+    assert compacted._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
+    assert compacted._offset.equal(torch.arange(7))
