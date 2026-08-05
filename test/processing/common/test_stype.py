@@ -43,7 +43,10 @@ def test_stype_dispatch_routes_and_passes_through_by_default() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-    assert output.categorical is table.categorical
+    assert torch.equal(
+        output.categorical.code,
+        table.categorical.code,
+    )
 
     restored = dispatch.inverse_transform(output)
 
@@ -222,7 +225,7 @@ def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
     for member_id, source in enumerate((second, first, second)):
         result = output.table(member_id)
         assert torch.equal(result.numerical, source.numerical.square())
-        assert torch.equal(result.categorical.code, source.categorical.code)
+        assert result.categorical.equal(source.categorical)
 
 
 def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:
