@@ -10,6 +10,20 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
+class _ModuleReference(torch.nn.Module):
+    """Preserve a module reference across deep copies."""
+
+    def __init__(self, module: torch.nn.Module) -> None:
+        super().__init__()
+        self.module = module
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        return self.module(*args, **kwargs)
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _ModuleReference:
+        return type(self)(self.module)
+
+
 class EmbedText(Processor):
     r"""Embed text columns with a user-provided embedding model.
 
@@ -34,17 +48,8 @@ class EmbedText(Processor):
         embedding_dim: int,
     ) -> None:
         super().__init__()
-        self._embedding_model: torch.nn.Module = embedding_model
+        self._embedding_model = _ModuleReference(embedding_model)
         self._embedding_dim: int = embedding_dim
-
-    def __deepcopy__(self, memo: dict[int, Any]) -> EmbedText:
-        copied = type(self)(
-            embedding_model=self._embedding_model,
-            embedding_dim=self._embedding_dim,
-        )
-        memo[id(self)] = copied
-        copied.training = self.training
-        return copied
 
     def _transform(self, table: TableTensor) -> TableTensor:
         device = table.device

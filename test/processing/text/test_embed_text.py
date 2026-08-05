@@ -142,13 +142,15 @@ def test_in_stype_dispatch_route() -> None:
     assert output.columns[Stype.text] == ()
 
 
-def test_deepcopy_shares_embedding_model() -> None:
+def test_deepcopy_shares_only_embedding_model() -> None:
     embedding_model = torch.nn.Linear(2, 2)
+    processor = EmbedText(
+        embedding_model,
+        embedding_dim=2,
+    )
+    processor.register_buffer("state", torch.tensor([1.0]))
     recipe = Recipe(
-        features=EmbedText(
-            embedding_model,
-            embedding_dim=2,
-        )
+        features=processor,
     )
 
     copied = copy.deepcopy(recipe)
@@ -156,4 +158,11 @@ def test_deepcopy_shares_embedding_model() -> None:
     assert copied is not recipe
     assert copied.features is not recipe.features
     assert isinstance(copied.features, EmbedText)
-    assert copied.features.get_submodule("_embedding_model") is embedding_model
+    original_reference = processor.get_submodule("_embedding_model")
+    copied_reference = copied.features.get_submodule("_embedding_model")
+    assert copied_reference is not original_reference
+    assert copied_reference.get_submodule("module") is embedding_model
+    original_state = processor.get_buffer("state")
+    copied_state = copied.features.get_buffer("state")
+    assert copied_state is not original_state
+    assert torch.equal(copied_state, original_state)
