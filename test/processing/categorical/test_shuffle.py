@@ -5,12 +5,12 @@ import torch
 
 from sdm import (
     CategoricalTensor,
-    EnsembleTable,
     StringTensor,
     Stype,
     TableTensor,
 )
 from sdm.processing import ShuffleCategories
+from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 
@@ -179,8 +179,8 @@ def test_shuffle_categories_ensemble_matches_independent_processors(
             generator=generator,
         )
         expected_query = reference.transform(query)
-        assert context_output.representation(member_id).equal(expected_context)
-        assert query_output.representation(member_id).equal(expected_query)
+        assert context_output.table(member_id).equal(expected_context)
+        assert query_output.table(member_id).equal(expected_query)
 
 
 def test_shuffle_categories_reuses_equal_member_permutations() -> None:
@@ -193,14 +193,14 @@ def test_shuffle_categories_reuses_equal_member_permutations() -> None:
 
     unique_codes = {
         tuple(
-            output.representation(member_id)
+            output.table(member_id)
             .categorical.code.flatten()
             .tolist()
         )
         for member_id in range(output.num_members)
     }
     assert sum(
-        packed.size(0) for packed in output.iter_packed_representations()
+        group.size(0) for group in output
     ) == len(unique_codes)
 
     with pytest.raises(RuntimeError, match="fitted for an ensemble"):
