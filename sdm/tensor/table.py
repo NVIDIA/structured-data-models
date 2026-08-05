@@ -561,6 +561,9 @@ class TableTensor(Tensor):
                 )
                 dfs.append(df)
 
+        if len(dfs) == 1:
+            return dfs[0]
+
         return cudf.concat(dfs, axis=1)
 
     # Properties ##############################################################
