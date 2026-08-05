@@ -7,6 +7,7 @@ from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
     VarLenTensor,
     StringTensor,
+    NullableIntTensor,
     CategoricalTensor,
     ColumnarTensor,
     TableTensor,
@@ -32,6 +33,7 @@ __all__ = [
     "infer_stypes",
     "VarLenTensor",
     "StringTensor",
+    "NullableIntTensor",
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
