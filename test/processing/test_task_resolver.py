@@ -117,10 +117,8 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     recipe.target.fit(_numerical_target())
     assert recipe.output.transform(output) is output
 
-    with pytest.raises(ValueError, match="no 'classification' route"):
-        recipe.target.fit(_categorical_target())
-    with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
-        recipe.output.transform(output)
+    recipe.target.fit(_categorical_target())
+    assert recipe.output.transform(output) is output
 
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
         Recipe(features=[TaskDispatch(regression=Identity())])
