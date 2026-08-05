@@ -5,13 +5,60 @@ from math import prod
 from typing import Any, Literal, cast, overload
 
 import torch
+import torch.nn.attention as torch_attention
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm._warnings import warn_once
 from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 from sdm.nn.resolver import normalization_resolver
+
+activate_flash_attention_impl = cast(
+    Callable[[str], None] | None,
+    getattr(torch_attention, "activate_flash_attention_impl", None),
+)
+current_flash_attention_impl = cast(
+    Callable[[], str | None] | None,
+    getattr(torch_attention, "current_flash_attention_impl", None),
+)
+
+_fa3_activation_attempted = False
+
+
+@torch.compiler.assume_constant_result
+def _maybe_activate_fa3(device: torch.device) -> None:
+    global _fa3_activation_attempted
+
+    if (
+        _fa3_activation_attempted
+        or activate_flash_attention_impl is None
+        or current_flash_attention_impl is None
+        or device.type != "cuda"
+    ):
+        return
+
+    _fa3_activation_attempted = True
+    if current_flash_attention_impl() is not None:
+        return
+
+    device_majors = {
+        torch.cuda.get_device_capability(index)[0]
+        for index in range(torch.cuda.device_count())
+    }
+    if device_majors != {9}:
+        return
+
+    try:
+        activate_flash_attention_impl("FA3")
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
+        warn_once(
+            "fa3-activation-failed",
+            f"FA3 could not be enabled on Hopper ({error}); falling back "
+            "to PyTorch's default attention implementation.",
+            stacklevel=3,
+        )
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
@@ -371,6 +418,8 @@ class SDPA(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
+        _maybe_activate_fa3(query.device)
+
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
 
         if query.numel() == 0:
