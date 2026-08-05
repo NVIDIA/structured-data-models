@@ -173,11 +173,6 @@ class EnsembleTable:
     def replace_groups(self, groups: Sequence[TableTensor]) -> Self:
         """Return an ensemble table with its groups replaced.
 
-        Replacements are aligned with the current groups in iteration order.
-        Each replacement keeps the leading dimension of the group it replaces,
-        so every member resolves to the table processed on its behalf. Groups
-        are stored by reference, and this table is left unchanged.
-
         Args:
             groups: One replacement group per current group.
 
