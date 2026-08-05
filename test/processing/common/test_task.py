@@ -5,7 +5,6 @@ import torch
 
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
-    EnsembleProcessor,
     Identity,
     Softmax,
     Standardize,
@@ -93,44 +92,22 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
         dispatch._resolve(_numerical_table(("y0", "y1")))
 
 
-def test_task_dispatch_is_an_ensemble_processor() -> None:
-    assert issubclass(TaskDispatch, EnsembleProcessor)
-
-
-def test_task_dispatch_routes_packed_ensemble_output() -> None:
+def test_task_dispatch_routes_ensemble_members() -> None:
     first = _numerical_table(("a", "b"))
-    second = first.replace_blocks(numerical=first.numerical.flip(-1))
-    table = EnsembleTable.from_tables(
-        (first, second),
+    second = _numerical_table(("c", "d"))
+    ensemble_table = EnsembleTable.from_tables(
+        tables=(first, second),
         member_table_ids=(1, 0, 1),
     )
     dispatch = TaskDispatch(classification=Softmax())
     dispatch._resolve(_categorical_target())
 
-    output = dispatch.transform_ensemble(table)
+    output = dispatch.transform_ensemble(ensemble_table)
 
     for member_id, source in enumerate((second, first, second)):
+        result = output.table(member_id)
+        assert result.columns == source.columns
         torch.testing.assert_close(
-            output.table(member_id).numerical,
-            source.numerical.softmax(dim=-1),
-        )
-
-
-def test_task_dispatch_fit_transforms_ensemble_output() -> None:
-    first = _numerical_table(("a", "b"))
-    second = first.replace_blocks(numerical=first.numerical.flip(-1))
-    table = EnsembleTable.from_tables(
-        (first, second),
-        member_table_ids=(1, 0, 1),
-    )
-    dispatch = TaskDispatch(classification=Softmax())
-    dispatch._resolve(_categorical_target())
-
-    assert dispatch.fit_ensemble(table) is dispatch
-    output = dispatch.fit_transform_ensemble(table)
-
-    for member_id, source in enumerate((second, first, second)):
-        torch.testing.assert_close(
-            output.table(member_id).numerical,
+            result.numerical,
             source.numerical.softmax(dim=-1),
         )

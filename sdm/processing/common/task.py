@@ -22,10 +22,12 @@ class TaskDispatch(EnsembleProcessor):
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
-        classification: Output processor for categorical targets. An iterable
-            is normalized to :class:`~sdm.processing.Sequential`.
-        regression: Output processor for numerical targets. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
+        classification: Stateless output processor selected for a categorical
+            target. A sequence is normalized to
+            :class:`~sdm.processing.Sequential`.
+        regression: Stateless output processor selected for a numerical target.
+            A sequence is normalized to
+            :class:`~sdm.processing.Sequential`.
     """
 
     supported_stypes = frozenset(Stype)
@@ -51,6 +53,8 @@ class TaskDispatch(EnsembleProcessor):
                     f"{self.__class__.__name__!r} requires stateless routes, "
                     f"but the {task!r} route requires fit."
                 )
+            if not isinstance(processor, EnsembleProcessor):
+                processor = EnsembleProcessorAdapter(processor)
             self.processors[task] = processor
 
         if len(self.processors) == 0:
@@ -93,42 +97,17 @@ class TaskDispatch(EnsembleProcessor):
     def _reset(self) -> None:
         self._task = None
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        if self._task is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; call "
-                "'recipe.target.fit()' before transforming model output."
-            )
-        processor = cast(Processor, self.processors[self._task])
-        return processor.transform(table)
-
-    def _ensemble_route(self) -> EnsembleProcessor:
-        if self._task is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__!r} has no resolved task; call "
-                "'recipe.target.fit()' before transforming model output."
-            )
-        route = EnsembleProcessorAdapter(
-            cast(Processor, self.processors[self._task])
-        )
-        self.processors[self._task] = route
-        return route
-
-    def _fit_transform_ensemble(
+    def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        return self._ensemble_route().fit_transform_ensemble(
-            ensemble_table,
-            generator=generator,
-        )
-
-    def _transform_ensemble(
-        self, ensemble_table: EnsembleTable
-    ) -> EnsembleTable:
-        return self._ensemble_route().transform_ensemble(ensemble_table)
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; call "
+                "'recipe.target.fit()' before transforming model output."
+            )
+        processor = cast(EnsembleProcessor, self.processors[self._task])
+        return processor.transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415
