@@ -223,4 +223,3 @@ def test_sequential_ensemble_matches_member_execution() -> None:
             source.replace_blocks(numerical=source.numerical.square())
         )
         assert output.table(member_id).equal(expected)
-
