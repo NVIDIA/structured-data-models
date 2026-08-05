@@ -4,7 +4,7 @@ from typing import cast
 import torch
 from typing_extensions import Self
 
-from sdm import Stype, TableTensor
+from sdm import Stype
 from sdm.processing.base import Processor
 from sdm.processing.ensemble import (
     EnsembleInvertibleMixin,
@@ -53,50 +53,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         for processor in processors:
             self.append(processor)
         return self
-
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        out = table
-        n = len(self._modules)
-        for index, child in enumerate(self._modules.values()):
-            child = cast(Processor, child)
-            if index < n - 1:
-                out = child.fit_transform(out, generator=generator)
-            else:
-                child.fit(out, generator=generator)
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.fit_transform(out, generator=generator)
-        return out
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.transform(out)
-        return out
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in reversed(tuple(self)):
-            inverse = getattr(child, "inverse_transform", None)
-            if not callable(inverse):
-                raise AttributeError(
-                    f"{child.__class__.__name__!r} object has no attribute "
-                    "'inverse_transform'"
-                )
-            out = inverse(out)
-        return out
 
     def _fit_ensemble(
         self,

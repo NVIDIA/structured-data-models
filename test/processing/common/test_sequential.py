@@ -53,9 +53,9 @@ def _add_one(table: TableTensor) -> TableTensor:
 def test_empty_pipeline_returns_input_table() -> None:
     table = _table()
 
-    assert Sequential().transform(table) is table
-    assert Sequential().fit_transform(table) is table
-    assert Sequential().inverse_transform(table) is table
+    assert Sequential().transform(table).equal(table)
+    assert Sequential().fit_transform(table).equal(table)
+    assert Sequential().inverse_transform(table).equal(table)
 
 
 def test_pipeline_transforms_numerical() -> None:
@@ -180,10 +180,7 @@ def test_inverse_transform_rejects_non_invertible_step() -> None:
     processor = Sequential(ImputeMean())
     transformed = processor.fit_transform(_table())
 
-    with pytest.raises(
-        AttributeError,
-        match=r"ImputeMean.*inverse_transform",
-    ):
+    with pytest.raises(TypeError, match="'ImputeMean' is not invertible"):
         processor.inverse_transform(transformed)
 
 
