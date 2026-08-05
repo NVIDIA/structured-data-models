@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 import torch
 from typing_extensions import Self
@@ -29,7 +29,7 @@ class Processor(torch.nn.Module, abc.ABC):
     supported stypes with empty blocks.
     """
 
-    supported_stypes: ClassVar[SupportedStypes]
+    supported_stypes: SupportedStypes
     requires_fit: bool = True
 
     def __init__(self) -> None:

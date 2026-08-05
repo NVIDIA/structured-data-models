@@ -8,7 +8,14 @@ from sdm import (
     TableTensor,
 )
 from sdm.models import TabICLv2
-from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize
+from sdm.processing import (
+    Choice,
+    Identity,
+    InvertibleMixin,
+    Recipe,
+    Sequential,
+    Standardize,
+)
 from sdm.testing import withCUDA
 
 
@@ -64,7 +71,7 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
 
 
 def test_recipe_role_fit_accepts_table() -> None:
-    recipe = Recipe(features=[Standardize()])
+    recipe = Recipe(features=[Choice(Identity(), Standardize())])
     features = TableTensor(
         columns={
             Stype.numerical: ("x0", "x1"),
@@ -74,7 +81,10 @@ def test_recipe_role_fit_accepts_table() -> None:
         id=ColumnarTensor((torch.tensor([10, 11]),)),
     )
 
-    fitted = recipe.features.fit(features)
+    fitted = recipe.features.fit(
+        features,
+        generator=torch.Generator().manual_seed(1),
+    )
     transformed = recipe.features.transform(features)
 
     assert fitted is recipe.features

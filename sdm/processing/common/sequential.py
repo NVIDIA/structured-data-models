@@ -13,7 +13,7 @@ class Sequential(Processor, InvertibleMixin):
 
     Args:
         args: Sequence of :class:`Processor` instances or callables.
-        passthrough_stypes: Column types preserved across unsupported steps.
+        passthrough_stypes: Column types that bypass the sequence unchanged.
     """
 
     supported_stypes = frozenset(Stype)
@@ -66,44 +66,18 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        out = table
+        out, _ = self._split_passthrough(table)
         for i, child in enumerate(self):
-            passthrough_stypes = (
-                self.passthrough_stypes - child.supported_stypes
-            ) & out.active_stypes
-            child_input = (
-                out.drop_stypes(passthrough_stypes)
-                if passthrough_stypes
-                else out
-            )
             if i < len(self) - 1:
-                passthrough = (
-                    out.select_stypes(passthrough_stypes)
-                    if passthrough_stypes
-                    else None
-                )
-                out = child.fit_transform(child_input, generator=generator)
-                if passthrough is not None:
-                    out = cast(
-                        TableTensor,
-                        torch.cat((out, passthrough), dim=-1),
-                    )
+                out = child.fit_transform(out, generator=generator)
             else:
-                child.fit(child_input, generator=generator)
+                child.fit(out, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        out = table
+        out, passthrough = self._split_passthrough(table)
         for child in self:
-            passthrough_stypes = (
-                self.passthrough_stypes - child.supported_stypes
-            ) & out.active_stypes
-            if passthrough_stypes:
-                passthrough = out.select_stypes(passthrough_stypes)
-                out = child.transform(out.drop_stypes(passthrough_stypes))
-                out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
-            else:
-                out = child.transform(out)
-        return out
+            out = child.transform(out)
+        return self._restore_passthrough(out, passthrough)
 
     def _fit_transform(
         self,
@@ -111,24 +85,13 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        out = table
+        out, passthrough = self._split_passthrough(table)
         for child in self:
-            passthrough_stypes = (
-                self.passthrough_stypes - child.supported_stypes
-            ) & out.active_stypes
-            if passthrough_stypes:
-                passthrough = out.select_stypes(passthrough_stypes)
-                out = child.fit_transform(
-                    out.drop_stypes(passthrough_stypes),
-                    generator=generator,
-                )
-                out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
-            else:
-                out = child.fit_transform(out, generator=generator)
-        return out
+            out = child.fit_transform(out, generator=generator)
+        return self._restore_passthrough(out, passthrough)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        out = table
+        out, passthrough = self._split_passthrough(table)
         for child in reversed(list(self)):
             fn = getattr(child, "inverse_transform", None)
             if not callable(fn):
@@ -136,16 +99,29 @@ class Sequential(Processor, InvertibleMixin):
                     f"{child.__class__.__name__!r} object has no attribute "
                     f"'inverse_transform'"
                 )
-            passthrough_stypes = (
-                self.passthrough_stypes - child.supported_stypes
-            ) & out.active_stypes
-            if passthrough_stypes:
-                passthrough = out.select_stypes(passthrough_stypes)
-                out = fn(out.drop_stypes(passthrough_stypes))
-                out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
-            else:
-                out = fn(out)
-        return out
+            out = fn(out)
+        return self._restore_passthrough(out, passthrough)
+
+    def _split_passthrough(
+        self,
+        table: TableTensor,
+    ) -> tuple[TableTensor, TableTensor | None]:
+        passthrough_stypes = self.passthrough_stypes & table.active_stypes
+        if not passthrough_stypes:
+            return table, None
+        return (
+            table.drop_stypes(passthrough_stypes),
+            table.select_stypes(passthrough_stypes),
+        )
+
+    @staticmethod
+    def _restore_passthrough(
+        table: TableTensor,
+        passthrough: TableTensor | None,
+    ) -> TableTensor:
+        if passthrough is None:
+            return table
+        return cast(TableTensor, torch.cat((table, passthrough), dim=-1))
 
     def __iter__(self) -> Iterator[Processor]:
         return cast(Iterator[Processor], self.children())

@@ -27,8 +27,10 @@ class Choice(Processor, InvertibleMixin):
         *args: object,
     ) -> None:
         super().__init__()
-        self.options = torch.nn.ModuleList(
-            Processor.as_processor(arg) for arg in args
+        options = tuple(Processor.as_processor(arg) for arg in args)
+        self.options = torch.nn.ModuleList(options)
+        self.supported_stypes = frozenset(Stype).intersection(
+            *(option.supported_stypes for option in options)
         )
         self._index: int | None = None
 

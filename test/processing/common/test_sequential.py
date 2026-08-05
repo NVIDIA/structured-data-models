@@ -5,7 +5,13 @@ from typing import Any, cast
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, TableTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import (
     ImputeMean,
     PowerTransform,
@@ -71,6 +77,25 @@ def test_pipeline_accepts_lambda() -> None:
 
     assert not pipeline.requires_fit
     assert torch.equal(output.numerical, table.numerical.square())
+
+
+def test_passthrough_stypes_bypass_every_step() -> None:
+    table = TableTensor(
+        columns={
+            Stype.numerical: ("x",),
+            Stype.id: ("entity_id",),
+        },
+        numerical=torch.tensor([[1.0], [2.0]]),
+        id=ColumnarTensor((torch.tensor([10, 11]),)),
+    )
+    pipeline = Sequential(
+        lambda table: table.drop_stypes(Stype.id),
+        passthrough_stypes=(Stype.id,),
+    )
+
+    output = pipeline.fit_transform(table)
+
+    assert torch.equal(output.id, table.id)
 
 
 def test_pipeline_accepts_regular_callable() -> None:
