@@ -51,18 +51,11 @@ def test_shuffle_categories_shift_maps_single_target() -> None:
     output = processor.fit_transform(target)
 
     assert output.columns[Stype.categorical] == ("cat0",)
-    permutation = processor.permutations
-    codes = target.categorical.code
-    valid = target.categorical.isfinite()
     assert torch.equal(
-        output.categorical.code[valid],
-        permutation[codes[valid].to(torch.long)].to(codes.dtype),
+        output.categorical.code[:3, 0].sort().values,
+        torch.arange(3, dtype=torch.int32),
     )
     assert output.categorical.code[-1].item() == -1
-    assert (
-        output.categorical.categories[0].tolist()
-        == target.categorical.categories[0][permutation.argsort()].tolist()
-    )
     assert output.categorical.tolist() == target.categorical.tolist()
 
 
@@ -79,36 +72,20 @@ def test_shuffle_categories_random_permutes_each_categorical_column(
 
     transformed = processor.fit_transform(features)
 
-    offsets = processor.offsets.tolist()
-    input_codes = features.categorical.code
-    output_codes = transformed.categorical.code
     valid_mask = features.categorical.isfinite()
-    for index, category in enumerate(features.categorical.categories):
-        permutation = processor.permutations[
-            offsets[index] : offsets[index + 1]
-        ]
-        assert torch.equal(
-            permutation.sort().values,
-            torch.arange(category.numel(), device=device),
+    assert torch.equal(
+        transformed.categorical.code[~valid_mask],
+        features.categorical.code[~valid_mask],
+    )
+    assert transformed.categorical.code.device == device
+    for transformed_category, category in zip(
+        transformed.categorical.categories,
+        features.categorical.categories,
+        strict=True,
+    ):
+        assert sorted(transformed_category.tolist()) == sorted(
+            category.tolist()
         )
-        valid = valid_mask[..., index]
-        assert torch.equal(
-            output_codes[..., index][valid],
-            permutation[input_codes[..., index][valid].to(torch.long)].to(
-                input_codes.dtype
-            ),
-        )
-        assert torch.equal(
-            output_codes[..., index][~valid],
-            input_codes[..., index][~valid],
-        )
-        assert (
-            transformed.categorical.categories[index].tolist()
-            == category[permutation.argsort()].tolist()
-        )
-
-    assert processor.permutations.device == device
-    assert processor.offsets.device == device
     assert transformed.categorical.tolist() == features.categorical.tolist()
 
 
@@ -121,16 +98,16 @@ def test_shuffle_categories_is_reproducible_with_generator(
         (("a", "b", "c"), ("x", "y")),
     )
 
-    first = ShuffleCategories(method=method).fit(
+    first = ShuffleCategories(method=method).fit_transform(
         features,
         generator=torch.Generator().manual_seed(0),
     )
-    second = ShuffleCategories(method=method).fit(
+    second = ShuffleCategories(method=method).fit_transform(
         features,
         generator=torch.Generator().manual_seed(0),
     )
 
-    assert torch.equal(first.permutations, second.permutations)
+    assert first.equal(second)
 
 
 def test_shuffle_categories_preserves_missing() -> None:
@@ -142,8 +119,6 @@ def test_shuffle_categories_preserves_missing() -> None:
     processor = ShuffleCategories(method="random")
     output = processor.fit_transform(target)
 
-    assert processor.offsets.tolist() == [0, 4]
-    assert processor.permutations.numel() == 4
     assert output.categorical.categories[0].numel() == 4
     assert output.categorical.code[-1].item() == -1
     assert output.categorical.tolist() == target.categorical.tolist()
@@ -229,5 +204,3 @@ def test_shuffle_categories_refit_replaces_ensemble_state() -> None:
     )
 
     assert output.equal(expected)
-    assert torch.equal(processor.permutations, reference.permutations)
-    assert torch.equal(processor.offsets, reference.offsets)

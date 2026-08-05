@@ -60,27 +60,6 @@ class ShuffleCategories(EnsembleProcessor):
         self._permutations = torch.nn.ModuleList()
         self._permutation_ids: tuple[int, ...] = ()
 
-    @property
-    def permutations(self) -> Tensor:
-        """Return fitted code permutations for a single table."""
-        return self._single_permutations().permutations
-
-    @property
-    def offsets(self) -> Tensor:
-        """Return fitted per-column permutation boundaries for one table."""
-        return self._single_permutations().offsets
-
-    def _single_permutations(self) -> _CategoryPermutations:
-        if len(self._permutation_ids) != 1:
-            raise RuntimeError(
-                "'ShuffleCategories' has no fitted state for a single table."
-            )
-        permutation_id = self._permutation_ids[0]
-        return cast(
-            _CategoryPermutations,
-            self._permutations[permutation_id],
-        )
-
     def _draw_permutations(
         self,
         table: TableTensor,
@@ -122,45 +101,12 @@ class ShuffleCategories(EnsembleProcessor):
         )
         return permutation, tuple(offsets)
 
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        permutations, offsets = self._draw_permutations(
-            table,
-            generator=generator,
-        )
-        self._permutations = torch.nn.ModuleList(
-            [_CategoryPermutations(permutations, offsets)]
-        )
-        self._permutation_ids = (0,)
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self._permute(table, self._single_permutations())
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        self._fit(table, generator=generator)
-        return self._transform(table)
-
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        if ensemble_table.num_members == 1:
-            self._fit(
-                ensemble_table.table(0),
-                generator=generator,
-            )
-            return
 
         self._permutations = torch.nn.ModuleList()
         permutation_ids = []
@@ -197,12 +143,6 @@ class ShuffleCategories(EnsembleProcessor):
             raise RuntimeError(
                 "ShuffleCategories must be fitted with the same number of "
                 "ensemble members before transform."
-            )
-
-        if ensemble_table.num_members == 1:
-            return EnsembleTable(
-                self._transform(ensemble_table.table(0)),
-                num_members=1,
             )
 
         member_ids_by_permutation: dict[int, list[int]] = {}
