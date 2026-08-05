@@ -17,7 +17,7 @@ from sdm.processing.common import (
     ShuffleColumns,
     SelectColumns,
 )
-from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
+from sdm.processing.text.tfidf import TFIDF
 from sdm.processing.numerical import (
     Clip,
     ClipQuantiles,
@@ -53,7 +53,7 @@ __all__ = [
     "ToNumerical",
     "ShuffleColumns",
     "SelectColumns",
-    "TfidfTextEmbed",
+    "TFIDF",
     "Clip",
     "ClipQuantiles",
     "ClipSigma",
