@@ -125,6 +125,94 @@ def test_replace_groups_rejects_group_count_mismatch() -> None:
         ensemble_table.replace_groups(tuple(ensemble_table) * 2)
 
 
+def test_concatenate_columns_preserves_member_order() -> None:
+    left = EnsembleTable.from_tables(
+        tables=(
+            TableTensor.from_tensor(
+                torch.tensor([[1.0], [2.0]]),
+                columns=("left",),
+            ),
+            TableTensor.from_tensor(
+                torch.tensor([[3.0], [4.0]]),
+                columns=("left",),
+            ),
+        ),
+        member_table_ids=(1, 0, 1),
+    )
+    right = EnsembleTable.from_tables(
+        tables=(
+            TableTensor.from_tensor(
+                torch.tensor([[10.0], [20.0]]),
+                columns=("right",),
+            ),
+            TableTensor.from_tensor(
+                torch.tensor([[30.0], [40.0]]),
+                columns=("right",),
+            ),
+        ),
+        member_table_ids=(1, 0, 1),
+    )
+
+    output = EnsembleTable.concatenate_columns((left, right))
+
+    assert output.table(0).numerical.tolist() == [
+        [3.0, 30.0],
+        [4.0, 40.0],
+    ]
+    assert output.table(1).numerical.tolist() == [
+        [1.0, 10.0],
+        [2.0, 20.0],
+    ]
+    assert output.table(2).equal(output.table(0))
+
+
+def test_concatenate_columns_regroups_different_layouts() -> None:
+    left = EnsembleTable.from_tables(
+        tables=(
+            TableTensor.from_tensor(
+                torch.tensor([[1.0], [2.0]]),
+                columns=("left",),
+            ),
+            TableTensor.from_tensor(
+                torch.tensor([[3.0], [4.0]]),
+                columns=("left",),
+            ),
+        ),
+        member_table_ids=(1, 0, 1),
+    )
+    right = EnsembleTable(
+        TableTensor.from_tensor(
+            torch.tensor([[10.0], [20.0]]),
+            columns=("right",),
+        ),
+        num_members=3,
+    )
+
+    output = EnsembleTable.concatenate_columns((left, right))
+
+    assert output.table(0).numerical.tolist() == [
+        [3.0, 10.0],
+        [4.0, 20.0],
+    ]
+    assert output.table(1).numerical.tolist() == [
+        [1.0, 10.0],
+        [2.0, 20.0],
+    ]
+    assert output.table(2).equal(output.table(0))
+
+
+def test_concatenate_columns_rejects_different_member_counts() -> None:
+    table = TableTensor.from_tensor(torch.ones(2, 1))
+
+    with pytest.raises(ValueError, match="different member counts"):
+        EnsembleTable.concatenate_columns(
+            (
+                EnsembleTable(table, num_members=2),
+                EnsembleTable(table, num_members=3),
+            )
+        )
+
+
 def test_from_tables_separates_incompatible_layouts() -> None:
     dense = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     with torch.sparse.check_sparse_tensor_invariants():

@@ -392,4 +392,4 @@ def test_default_recipe_preserves_ids() -> None:
     transformed = KumoRFM.default_recipe().features.fit_transform(table)
 
     assert transformed.columns[Stype.id] == ("entity_id",)
-    assert transformed.id is table.id
+    assert transformed.id.equal(table.id)

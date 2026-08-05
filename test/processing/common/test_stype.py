@@ -11,8 +11,6 @@ from sdm.processing import (
     EnsembleProcessor,
     Identity,
     ImputeMean,
-    InvertibleMixin,
-    Processor,
     ShuffleCategories,
     Standardize,
     StypeDispatch,
@@ -20,34 +18,9 @@ from sdm.processing import (
 from sdm.tensor import EnsembleTable
 
 
-class Center(Processor, InvertibleMixin):
-    supported_stypes = frozenset({Stype.numerical})
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.register_buffer("mean", torch.empty(0))
-
-    def _fit(self, table: TableTensor, **_: object) -> None:
-        self.mean = table.numerical.mean(dim=-2, keepdim=True)
-
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical - self.mean)
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        return table.replace_blocks(numerical=table.numerical + self.mean)
-
-
 class ExpandMembers(EnsembleProcessor):
     supported_stypes = frozenset({Stype.numerical})
     requires_fit = False
-
-    def _fit_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-        return self._transform_ensemble(ensemble_table)
 
     def _transform_ensemble(
         self,
@@ -131,18 +104,18 @@ def test_stype_dispatch_passes_generator_to_routes() -> None:
         ),
     )
 
-    first = ShuffleCategories(method="random")
-    StypeDispatch(categorical=first).fit(
+    first = StypeDispatch(categorical=ShuffleCategories(method="random"))
+    first_output = first.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = ShuffleCategories(method="random")
-    StypeDispatch(categorical=second).fit(
+    second = StypeDispatch(categorical=ShuffleCategories(method="random"))
+    second_output = second.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
 
-    assert torch.equal(first.permutations, second.permutations)
+    assert first_output.equal(second_output)
 
 
 def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
@@ -170,17 +143,13 @@ def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
 
 def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     table = _mixed_table()
-    processor = Standardize()
     dispatch = StypeDispatch(
-        numerical=processor,
+        numerical=Standardize(),
         remainder="error",
     )
 
     with pytest.raises(ValueError, match=r"non-empty.*categorical.*no route"):
         dispatch.fit(table)
-
-    with pytest.raises(RuntimeError, match=r"Standardize.*not fitted"):
-        processor.transform(table.select_stypes(Stype.numerical))
 
 
 def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
@@ -287,7 +256,7 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_group() -> None:
         tables=(first, second),
         member_table_ids=(0, 1, 0),
     )
-    processor = StypeDispatch(numerical=Center())
+    processor = StypeDispatch(numerical=Standardize(with_std=False))
 
     transformed = processor.fit_transform_ensemble(table)
     query = processor.transform_ensemble(table)
@@ -308,8 +277,8 @@ def test_stype_dispatch_ensemble_keeps_fitted_state_per_group() -> None:
 
 def test_stype_dispatch_fit_ensemble_fits_routes() -> None:
     table = EnsembleTable(_mixed_table(), num_members=2)
-    fitted = StypeDispatch(numerical=Center())
-    combined = StypeDispatch(numerical=Center())
+    fitted = StypeDispatch(numerical=Standardize(with_std=False))
+    combined = StypeDispatch(numerical=Standardize(with_std=False))
 
     fitted.fit_ensemble(table)
     transformed = fitted.transform_ensemble(table)
@@ -328,12 +297,11 @@ def test_stype_dispatch_ensemble_inverse_rejects_drop() -> None:
         processor.inverse_transform_ensemble(transformed)
 
 
-def test_stype_dispatch_stateless_ensemble_inverse() -> None:
+def test_stype_dispatch_stateless_inverse_without_prior_transform() -> None:
     table = EnsembleTable(_mixed_table(), num_members=2)
     processor = StypeDispatch(numerical=Identity())
 
-    transformed = processor.transform_ensemble(table)
-    restored = processor.inverse_transform_ensemble(transformed)
+    restored = processor.inverse_transform_ensemble(table)
 
     for member_id in range(table.num_members):
         assert restored.table(member_id).equal(table.table(member_id))
@@ -343,7 +311,7 @@ def test_stype_dispatch_rejects_route_member_count_change() -> None:
     table = EnsembleTable(_mixed_table(), num_members=2)
     processor = StypeDispatch(numerical=ExpandMembers())
 
-    with pytest.raises(ValueError, match="preserve ensemble member count"):
+    with pytest.raises(ValueError, match="different member counts"):
         processor.transform_ensemble(table)
 
 
