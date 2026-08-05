@@ -11,6 +11,9 @@ from typing_extensions import Self
 from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
 from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
+from sdm.relational.nim import (
+    to_nim_config as related_tables_to_nim_config,
+)
 from sdm.tensor.mixin import DeviceMixin
 from sdm.tensor.table import TableSchema
 
@@ -265,6 +268,19 @@ class RelatedTables(DeviceMixin):
             other: The object to compare against.
         """
         return self.schema == other.schema
+
+    def to_nim_config(self, task_table: TableTensor) -> dict[str, Any]:
+        r"""Convert sampled relational data to NIM schema and data fragments.
+
+        The task table becomes the NIM ``instance_table``. The returned
+        dictionary contains a ``StructuredSchema`` and matching Arrow tables,
+        not a complete prediction request. The client encodes each table using
+        Arrow IPC and owns the HTTP transport.
+
+        Args:
+            task_table: Request-scoped task table from relational sampling.
+        """
+        return related_tables_to_nim_config(self, task_table)
 
     def select_tables(self, tables: Iterable[str]) -> Self:
         r"""Return related tables containing only ``tables``.
