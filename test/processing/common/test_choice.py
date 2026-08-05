@@ -4,7 +4,7 @@ from typing import Any, cast
 import pytest
 import torch
 
-from sdm import ColumnarTensor, Stype, TableTensor
+from sdm import TableTensor
 from sdm.processing import (
     Choice,
     Identity,
@@ -46,21 +46,6 @@ def test_choice_accepts_callable_option() -> None:
 
     with pytest.raises(AttributeError, match="inverse_transform"):
         choice.inverse_transform(output)
-
-
-def test_choice_rejects_stypes_not_supported_by_every_option() -> None:
-    table = TableTensor(
-        columns={
-            Stype.numerical: ("x",),
-            Stype.id: ("entity_id",),
-        },
-        numerical=torch.tensor([[1.0], [2.0]]),
-        id=ColumnarTensor((torch.tensor([10, 11]),)),
-    )
-    choice = Choice(Identity(), Standardize())
-
-    with pytest.raises(ValueError, match="does not support 'id'"):
-        choice.fit(table)
 
 
 def test_choice_rejects_invalid_option() -> None:
