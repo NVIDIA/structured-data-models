@@ -1,10 +1,8 @@
 """Benchmark KumoRFM on RelBench entity tasks.
 
 Without arguments, this runs every binary-classification and regression task
-in the public ``rel-*`` datasets except MIMIC-IV, which requires separate
-credentials. Pass ``--dataset`` to run one dataset or both ``--dataset`` and
-``--task`` to run one task. Text and unsupported multi-categorical features
-are omitted from the benchmark.
+in the public ``rel-*`` datasets except MIMIC-IV. Pass ``--dataset`` to run
+one dataset or both ``--dataset`` and ``--task`` to run one task.
 """
 
 import argparse
