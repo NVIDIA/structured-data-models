@@ -177,7 +177,7 @@ class ColumnarTensor(Tensor):
         elif ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
             column = NullableIntTensor.from_cudf(ser, device=device)
         else:
-            if ser._column.null_count > 0 and ser.dtype.kind == "f":
+            if ser._column.null_count > 0:
                 ser = ser.fillna(float("nan"))
             column = torch.from_dlpack(ser.to_dlpack()).to(device)
 
