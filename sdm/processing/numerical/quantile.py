@@ -1,11 +1,11 @@
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 from torch import Tensor
 
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 BOUNDS_THRESH = 1e-7
 _MAX_NUM_COLS = 32
@@ -74,8 +74,20 @@ def _batched_interp(
     return torch.where(values >= upper_boundary, upper, result)
 
 
-class QuantileTransform(Processor, InvertibleMixin):
-    """Map feature columns through their empirical quantiles.
+class _QuantileState(torch.nn.Module):
+    """Store fitted empirical quantiles."""
+
+    quantiles: Tensor
+    references: Tensor
+
+    def __init__(self, quantiles: Tensor, references: Tensor) -> None:
+        super().__init__()
+        self.register_buffer("quantiles", quantiles, persistent=False)
+        self.register_buffer("references", references, persistent=False)
+
+
+class QuantileTransform(EnsembleProcessor, EnsembleInvertibleMixin):
+    """Map numerical columns through their empirical quantiles.
 
     QuantileTransform grids are capped by the number of fitted rows and, when
     ``subsample`` is set, by ``20%`` of the subsample size to keep dense grids
@@ -107,10 +119,8 @@ class QuantileTransform(Processor, InvertibleMixin):
         self._n_quantiles = n_quantiles
         self.subsample = subsample
         self.output_distribution = output_distribution
-        self.n_quantiles = 0
-
-        self.register_buffer("quantiles", torch.empty(0))
-        self.register_buffer("references", torch.empty(0))
+        self._states = torch.nn.ModuleList()
+        self._state_ids: tuple[int, ...] = ()
 
     def _subsample_indices(
         self,
@@ -123,43 +133,129 @@ class QuantileTransform(Processor, InvertibleMixin):
             device=inp.device,
         )[: self.subsample]
 
-    def _fit(
+    def _fit_ensemble(
         self,
-        table: TableTensor,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = table.numerical
-        n_samples = numerical.shape[0]
-        quantile_limit = n_samples
-        if self.subsample is not None:
-            # Keep quantiles well below the subsample size; very dense
-            # percentile grids are slow to fit and add little resolution.
-            quantile_limit = min(quantile_limit, int(self.subsample * 0.2))
-        self.n_quantiles = max(1, min(self._n_quantiles, quantile_limit))
+        first_table = ensemble_table.table(0)
+        share_state = (
+            self.subsample is None or self.subsample >= first_table.size(-2)
+        ) and sum(group.size(0) for group in ensemble_table) == 1
+        num_states = 1 if share_state else ensemble_table.num_members
 
-        self.references = torch.linspace(
-            0,
-            1,
-            self.n_quantiles,
-            device=numerical.device,
-            dtype=numerical.dtype,
+        # TODO: For mixed ensembles, reuse deterministic states and outputs
+        # once EnsembleTable exposes public logical table identities.
+        states = []
+        for state_id in range(num_states):
+            table = ensemble_table.table(0 if share_state else state_id)
+            numerical = table.numerical
+            n_samples = numerical.shape[0]
+            quantile_limit = n_samples
+            if self.subsample is not None:
+                # Keep quantiles well below the subsample size; very dense
+                # percentile grids are slow to fit and add little resolution.
+                quantile_limit = min(
+                    quantile_limit,
+                    int(self.subsample * 0.2),
+                )
+            n_quantiles = max(
+                1,
+                min(self._n_quantiles, quantile_limit),
+            )
+            references = torch.linspace(
+                0,
+                1,
+                n_quantiles,
+                device=numerical.device,
+                dtype=numerical.dtype,
+            )
+
+            if self.subsample is not None and self.subsample < n_samples:
+                indices = self._subsample_indices(numerical, generator)
+                input_sample = numerical[indices]
+            else:
+                input_sample = numerical
+
+            states.append(
+                _QuantileState(
+                    torch.quantile(
+                        input_sample,
+                        references,
+                        dim=0,
+                    ),
+                    references,
+                )
+            )
+
+        self._states = torch.nn.ModuleList(states)
+        self._state_ids = (
+            (0,) * ensemble_table.num_members
+            if share_state
+            else tuple(range(ensemble_table.num_members))
         )
 
-        if self.subsample is not None and self.subsample < n_samples:
-            indices = self._subsample_indices(numerical, generator)
-            input_sample = numerical[indices]
-        else:
-            input_sample = numerical
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return self._apply_ensemble(ensemble_table, inverse=False)
 
-        self.quantiles = torch.quantile(
-            input_sample,
-            self.references,
-            dim=0,
+    def _inverse_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return self._apply_ensemble(ensemble_table, inverse=True)
+
+    def _apply_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        inverse: bool,
+    ) -> EnsembleTable:
+        if len(self._state_ids) != ensemble_table.num_members:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} was fitted with "
+                f"{len(self._state_ids)} ensemble members, but got "
+                f"{ensemble_table.num_members}."
+            )
+
+        if (
+            len(self._states) == 1
+            and sum(group.size(0) for group in ensemble_table) == 1
+        ):
+            state = cast(_QuantileState, self._states[0])
+            table = ensemble_table.table(0)
+            output = (
+                self._inverse_transform_table(table, state)
+                if inverse
+                else self._transform_table(table, state)
+            )
+            return EnsembleTable(
+                output,
+                num_members=ensemble_table.num_members,
+            )
+
+        tables = []
+        for member_id, state_id in enumerate(self._state_ids):
+            state = cast(_QuantileState, self._states[state_id])
+            table = ensemble_table.table(member_id)
+            tables.append(
+                self._inverse_transform_table(table, state)
+                if inverse
+                else self._transform_table(table, state)
+            )
+        return EnsembleTable.from_tables(
+            tables=tables,
+            member_table_ids=range(len(tables)),
         )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        """Transform ``table`` into the configured output distribution."""
+    def _transform_table(
+        self,
+        table: TableTensor,
+        state: _QuantileState,
+    ) -> TableTensor:
         numerical = table.numerical
         transformed = torch.empty_like(numerical)
         for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
@@ -167,7 +263,7 @@ class QuantileTransform(Processor, InvertibleMixin):
             # Searchsorted works over the innermost dimension, so columns
             # become independent rows: input ``[N, F]`` -> ``[F, N]``.
             input_columns = numerical[:, start:end].T.contiguous()
-            quantile_columns = self.quantiles[:, start:end].T.contiguous()
+            quantile_columns = state.quantiles[:, start:end].T.contiguous()
             lower_bound_x = quantile_columns[:, :1]
             upper_bound_x = quantile_columns[:, -1:]
             if self.output_distribution == "normal":
@@ -190,12 +286,12 @@ class QuantileTransform(Processor, InvertibleMixin):
             forward = _batched_interp(
                 input_columns,
                 quantile_columns,
-                self.references,
+                state.references,
             )
             backward = _batched_interp(
                 -input_columns,
                 -quantile_columns.flip(1),
-                -self.references.flip(0),
+                -state.references.flip(0),
             )
             output = 0.5 * (forward - backward)
 
@@ -215,7 +311,11 @@ class QuantileTransform(Processor, InvertibleMixin):
             transformed[:, start:end] = output.T.contiguous()
         return table.replace_blocks(numerical=transformed)
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
+    def _inverse_transform_table(
+        self,
+        table: TableTensor,
+        state: _QuantileState,
+    ) -> TableTensor:
         numerical = table.numerical
         inverse = torch.empty_like(numerical)
         for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
@@ -223,7 +323,7 @@ class QuantileTransform(Processor, InvertibleMixin):
             # Searchsorted works over the innermost dimension, so columns
             # become independent rows: input ``[N, F]`` -> ``[F, N]``.
             input_columns = numerical[:, start:end].T.contiguous()
-            quantile_columns = self.quantiles[:, start:end].T.contiguous()
+            quantile_columns = state.quantiles[:, start:end].T.contiguous()
             lower_bound_y = quantile_columns[:, :1]
             upper_bound_y = quantile_columns[:, -1:]
             if self.output_distribution == "normal":
@@ -244,7 +344,7 @@ class QuantileTransform(Processor, InvertibleMixin):
             finite = input_columns.isfinite()
             output = _batched_interp(
                 input_columns,
-                self.references,
+                state.references,
                 quantile_columns,
             )
             output = torch.where(finite, output, input_columns)

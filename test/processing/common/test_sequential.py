@@ -133,20 +133,19 @@ def test_pipeline_rejects_invalid_step() -> None:
 def test_pipeline_passes_generator_to_steps() -> None:
     table = _table(torch.arange(200.0).view(100, 2))
 
-    def _fit(seed: int) -> tuple[ShuffleColumns, QuantileTransform]:
-        permute = ShuffleColumns(method="random")
-        quantile = QuantileTransform(n_quantiles=6, subsample=32)
-        Sequential(permute, quantile).fit(
+    def _fit_transform(seed: int) -> TableTensor:
+        return Sequential(
+            ShuffleColumns(method="random"),
+            QuantileTransform(n_quantiles=6, subsample=32),
+        ).fit_transform(
             table,
             generator=torch.Generator().manual_seed(seed),
         )
-        return permute, quantile
 
-    first_permute, first_quantile = _fit(0)
-    second_permute, second_quantile = _fit(0)
+    first = _fit_transform(0)
+    second = _fit_transform(0)
 
-    assert torch.equal(first_permute.permutation, second_permute.permutation)
-    assert torch.equal(first_quantile.quantiles, second_quantile.quantiles)
+    assert first.equal(second)
 
 
 def test_repr() -> None:

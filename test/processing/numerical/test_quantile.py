@@ -3,6 +3,7 @@ import torch
 
 from sdm import TableTensor
 from sdm.processing import QuantileTransform
+from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -46,7 +47,6 @@ def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
     )
 
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-    assert torch.allclose(processor.references, expected[:, 0])
     assert torch.allclose(transformed, expected)
     assert transformed.device == device
     assert torch.allclose(
@@ -125,7 +125,7 @@ def test_quantile_transform_constant_columns_round_trip(
 
 
 @withCUDA
-def test_quantile_transform_single_quantile_maps_to_single_reference(
+def test_quantile_transform_single_quantile_maps_to_zero(
     device: torch.device,
 ) -> None:
     inp = torch.tensor(
@@ -148,7 +148,7 @@ def test_quantile_transform_single_quantile_maps_to_single_reference(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
         ).numerical,
-        processor.quantiles[0].expand_as(inp),
+        inp[:1].expand_as(inp),
     )
 
 
@@ -191,16 +191,69 @@ def test_quantile_transform_rejects_mismatched_generator_device() -> None:
 
 
 def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
-    # Distinct values: any other row subset changes the quantiles.
+    # Distinct values make the output sensitive to the sampled rows.
     inp = torch.arange(200.0).view(100, 2)
 
-    first = QuantileTransform(n_quantiles=6, subsample=32).fit(
-        TableTensor.from_tensor(inp),
+    table = TableTensor.from_tensor(inp)
+    first = QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
+        table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = QuantileTransform(n_quantiles=6, subsample=32).fit(
-        TableTensor.from_tensor(inp),
+    second = QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
+        table,
         generator=torch.Generator().manual_seed(0),
     )
 
-    assert torch.equal(first.quantiles, second.quantiles)
+    assert first.equal(second)
+
+
+@withCUDA
+@pytest.mark.parametrize("subsample", [None, 32])
+def test_quantile_transform_ensemble_matches_independent_processors(
+    device: torch.device,
+    subsample: int | None,
+) -> None:
+    context = TableTensor.from_tensor(
+        torch.arange(256.0, device=device).view(128, 2)
+    )
+    query = TableTensor.from_tensor(
+        torch.arange(32.0, device=device).view(16, 2) + 0.5
+    )
+    processor = QuantileTransform(n_quantiles=8, subsample=subsample)
+
+    context_output = processor.fit_transform_ensemble(
+        EnsembleTable(context, num_members=8),
+        generator=torch.Generator(device=device).manual_seed(7),
+    )
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=8)
+    )
+    restored = processor.inverse_transform_ensemble(context_output)
+
+    generator = torch.Generator(device=device).manual_seed(7)
+    for member_id in range(8):
+        reference = QuantileTransform(
+            n_quantiles=8,
+            subsample=subsample,
+        )
+        expected_context = reference.fit_transform(
+            context,
+            generator=generator,
+        )
+        expected_query = reference.transform(query)
+        expected_restored = reference.inverse_transform(expected_context)
+        assert context_output.table(member_id).equal(expected_context)
+        assert query_output.table(member_id).equal(expected_query)
+        assert restored.table(member_id).equal(expected_restored)
+
+
+def test_quantile_transform_checks_num_members() -> None:
+    table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
+    processor = QuantileTransform(n_quantiles=8, subsample=None)
+    processor.fit_ensemble(EnsembleTable(table, num_members=4))
+
+    with pytest.raises(
+        RuntimeError,
+        match="was fitted with 4 ensemble members, but got 3",
+    ):
+        processor.transform_ensemble(EnsembleTable(table, num_members=3))
