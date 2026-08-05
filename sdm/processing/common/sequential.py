@@ -66,7 +66,7 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        out, _ = self._split_passthrough(table)
+        out, _ = self._detach_passthrough_stypes(table)
         for i, child in enumerate(self):
             if i < len(self) - 1:
                 out = child.fit_transform(out, generator=generator)
@@ -74,10 +74,12 @@ class Sequential(Processor, InvertibleMixin):
                 child.fit(out, generator=generator)
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        out, passthrough = self._split_passthrough(table)
+        out, passthrough = self._detach_passthrough_stypes(table)
         for child in self:
             out = child.transform(out)
-        return self._restore_passthrough(out, passthrough)
+        if passthrough is not None:
+            out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
+        return out
 
     def _fit_transform(
         self,
@@ -85,13 +87,15 @@ class Sequential(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        out, passthrough = self._split_passthrough(table)
+        out, passthrough = self._detach_passthrough_stypes(table)
         for child in self:
             out = child.fit_transform(out, generator=generator)
-        return self._restore_passthrough(out, passthrough)
+        if passthrough is not None:
+            out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
+        return out
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        out, passthrough = self._split_passthrough(table)
+        out, passthrough = self._detach_passthrough_stypes(table)
         for child in reversed(list(self)):
             fn = getattr(child, "inverse_transform", None)
             if not callable(fn):
@@ -100,9 +104,11 @@ class Sequential(Processor, InvertibleMixin):
                     f"'inverse_transform'"
                 )
             out = fn(out)
-        return self._restore_passthrough(out, passthrough)
+        if passthrough is not None:
+            out = cast(TableTensor, torch.cat((out, passthrough), dim=-1))
+        return out
 
-    def _split_passthrough(
+    def _detach_passthrough_stypes(
         self,
         table: TableTensor,
     ) -> tuple[TableTensor, TableTensor | None]:
@@ -113,15 +119,6 @@ class Sequential(Processor, InvertibleMixin):
             table.drop_stypes(passthrough_stypes),
             table.select_stypes(passthrough_stypes),
         )
-
-    @staticmethod
-    def _restore_passthrough(
-        table: TableTensor,
-        passthrough: TableTensor | None,
-    ) -> TableTensor:
-        if passthrough is None:
-            return table
-        return cast(TableTensor, torch.cat((table, passthrough), dim=-1))
 
     def __iter__(self) -> Iterator[Processor]:
         return cast(Iterator[Processor], self.children())
