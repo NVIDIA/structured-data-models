@@ -1,8 +1,5 @@
 from pathlib import Path
 
-from huggingface_hub import hf_hub_download
-from huggingface_hub.utils import LocalEntryNotFoundError
-
 
 def download_checkpoint(
     repo_id: str,
@@ -18,6 +15,9 @@ def download_checkpoint(
     configured login or the ``HF_TOKEN`` environment variable for private
     repositories.
     """
+    from huggingface_hub import hf_hub_download  # noqa: PLC0415
+    from huggingface_hub.utils import LocalEntryNotFoundError  # noqa: PLC0415
+
     try:
         return hf_hub_download(
             repo_id=repo_id,
