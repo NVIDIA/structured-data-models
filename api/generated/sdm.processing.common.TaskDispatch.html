@@ -213,9 +213,11 @@ because output processing has no fitting data of its own. Configure
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>classification</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Output processor for categorical targets. An iterable
-is normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
-<li><p><strong>regression</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Output processor for numerical targets. An iterable is
+<li><p><strong>classification</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Output processor for categorical targets. If omitted,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Identity</span></code> is used. A sequence is
+normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
+<li><p><strong>regression</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Output processor for numerical targets. If omitted,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">Identity</span></code> is used. A sequence is
 normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
 </ul>
 </dd>
@@ -248,7 +250,7 @@ normalized to <code class="xref py py-class docutils literal notranslate"><span 
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=bed44d5a"></script>
+      <script src="../../_static/documentation_options.js?v=7cd9f443"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
