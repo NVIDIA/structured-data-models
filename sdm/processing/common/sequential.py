@@ -17,8 +17,6 @@ from sdm.tensor import EnsembleTable
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
     r"""Apply processors and callables to a table in sequence.
 
-    Each child consumes the previous child's output.
-
     Args:
         args: Sequence of :class:`Processor` instances or callables.
     """
