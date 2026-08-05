@@ -307,6 +307,46 @@ def test_from_cudf_numeric_values() -> None:
 
 
 @onlyCUDA
+@pytest.mark.parametrize(
+    ("values", "categories", "expected_code"),
+    [
+        (
+            ["b", None, "a", "b"],
+            ["unused", "a", "b"],
+            [[2], [-1], [1], [2]],
+        ),
+        (
+            [20, None, 10, 20],
+            [30, 10, 20],
+            [[2], [-1], [1], [2]],
+        ),
+        (
+            [None, None],
+            ["a", "b"],
+            [[-1], [-1]],
+        ),
+    ],
+)
+def test_from_cudf_categorical_values(
+    values: list[str | int | None],
+    categories: list[str | int],
+    expected_code: list[list[int]],
+) -> None:
+    cudf = pytest.importorskip("cudf")
+    series = cudf.Series(
+        values,
+        dtype=cudf.CategoricalDtype(categories=categories),
+    )
+
+    tensor = CategoricalTensor.from_cudf(series)
+
+    assert tensor.is_cuda
+    assert tensor.code.equal(torch.tensor(expected_code, device=tensor.device))
+    assert tensor.categories[0].is_cuda
+    assert tensor.categories[0].tolist() == categories
+
+
+@onlyCUDA
 def test_from_cudf_all_missing_values() -> None:
     cudf = pytest.importorskip("cudf")
 
