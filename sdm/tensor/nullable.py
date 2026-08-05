@@ -645,6 +645,16 @@ def _isfinite(inp: NullableIntTensor) -> Tensor:
     return inp._valid
 
 
+@NullableIntTensor.implements(aten.nan_to_num.default)
+def _nan_to_num(
+    inp: NullableIntTensor,
+    nan: int = 0,
+    posinf: Any = None,
+    neginf: Any = None,
+) -> Tensor:
+    return torch.where(inp._valid, inp._data, nan)
+
+
 @NullableIntTensor.implements(aten.equal.default)
 def _equal(inp: NullableIntTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:
