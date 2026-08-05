@@ -25,7 +25,7 @@ def to_cudf(tensor: Tensor, valid_mask: Tensor | None = None) -> cudf.Series:
 
     tensor = tensor.detach().contiguous().view(-1)
     with torch.cuda.device(tensor.device):
-        ser = cudf.Series(tensor, copy=False)
+        ser = cudf.Series(tensor, copy=False, nan_as_null=valid_mask is None)
 
     if valid_mask is None:
         return ser
