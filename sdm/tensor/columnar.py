@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self, override
 
-from sdm.tensor import NullableIntTensor, StringTensor
+from sdm.tensor import NullableIntTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.io.arrow import _combine_arrow_chunks
 from sdm.tensor.mixin import _resolve_device
@@ -200,7 +200,7 @@ class ColumnarTensor(Tensor):
         return pa.Table.from_arrays(
             arrays=[
                 column.to_arrow()
-                if isinstance(column, StringTensor | NullableIntTensor)
+                if isinstance(column, VarLenTensor | NullableIntTensor)
                 else to_arrow(column)
                 for column in self.unbind(-1)
             ],
