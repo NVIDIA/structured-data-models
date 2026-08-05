@@ -6,6 +6,7 @@ from sdm.tensor.nullable import NullableIntTensor
 from sdm.tensor.categorical import CategoricalTensor
 from sdm.tensor.columnar import ColumnarTensor
 from sdm.tensor.table import TableTensor
+from sdm.tensor.ensemble import EnsembleTable
 
 __all__ = [
     "VarLenTensor",
@@ -14,4 +15,5 @@ __all__ = [
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",
+    "EnsembleTable",
 ]
