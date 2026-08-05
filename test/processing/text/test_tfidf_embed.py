@@ -2,12 +2,12 @@ import pytest
 import torch
 
 from sdm import StringTensor, Stype, TableTensor
-from sdm.processing.text.tfidf_text_embed import TfidfTextEmbed
+from sdm.processing import TFIDF
 from sdm.testing import onlyCUDA
 
 
 def _numerical_by_column_ngram(
-    encoder: TfidfTextEmbed,
+    encoder: TFIDF,
     output: TableTensor,
 ) -> dict[tuple[int, str], torch.Tensor]:
     values: dict[tuple[int, str], torch.Tensor] = {}
@@ -31,7 +31,7 @@ def test_tfidf_encoder_preserves_leading_dimensions() -> None:
         )
     )
 
-    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+    output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
 
     assert output.numerical.shape[:-1] == (2, 2)
 
@@ -41,7 +41,7 @@ def test_tfidf_encoder_rows_are_l2_normalized() -> None:
         StringTensor.from_list([["short"], ["a much longer text cell"]])
     )
 
-    output = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
+    output = TFIDF(ngram_range=(2, 3)).fit_transform(table)
 
     assert torch.allclose(
         output.numerical.norm(dim=1),
@@ -54,7 +54,7 @@ def test_tfidf_encoder_exact_values() -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list([["ab"], ["ab ac"], ["ac"]])
     )
-    encoder = TfidfTextEmbed(ngram_range=(2, 2))
+    encoder = TFIDF(ngram_range=(2, 2))
     output = encoder.fit_transform(table)
 
     expected = {
@@ -78,7 +78,7 @@ def test_tfidf_encoder_ignores_unseen_ngrams() -> None:
     query = TableTensor.from_tensor(
         StringTensor.from_list([["zzz yyy"], ["aaa bbb"]])
     )
-    encoder = TfidfTextEmbed(ngram_range=(3, 3))
+    encoder = TFIDF(ngram_range=(3, 3))
     encoder.fit(train)
 
     output = encoder.transform(query)
@@ -91,8 +91,8 @@ def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
     table = TableTensor.from_tensor(
         StringTensor.from_list([["aa aa aa ab ab ac"]])
     )
-    full = TfidfTextEmbed(ngram_range=(2, 3)).fit_transform(table)
-    encoder = TfidfTextEmbed(ngram_range=(2, 3), max_features=3)
+    full = TFIDF(ngram_range=(2, 3)).fit_transform(table)
+    encoder = TFIDF(ngram_range=(2, 3), max_features=3)
     capped = encoder.fit_transform(table)
 
     assert full.numerical.size(-1) > 3
@@ -103,7 +103,7 @@ def test_tfidf_encoder_max_features_keeps_most_frequent_ngrams() -> None:
 def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([[""]]))
 
-    output = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(table)
+    output = TFIDF(ngram_range=(2, 2)).fit_transform(table)
 
     assert output.numerical.shape == (1, 0)
     assert output.columns[Stype.numerical] == ()
@@ -112,7 +112,7 @@ def test_tfidf_encoder_empty_string_yields_zero_width_output() -> None:
 def test_tfidf_encoder_short_word_counts_once() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
 
-    output = TfidfTextEmbed(ngram_range=(5, 5)).fit_transform(table)
+    output = TFIDF(ngram_range=(5, 5)).fit_transform(table)
 
     assert output.numerical.shape == (1, 1)
     assert torch.equal(output.numerical, torch.ones(1, 1))
@@ -121,8 +121,8 @@ def test_tfidf_encoder_short_word_counts_once() -> None:
 def test_tfidf_encoder_can_preserve_case() -> None:
     table = TableTensor.from_tensor(StringTensor.from_list([["CAT"], ["cat"]]))
 
-    lowercased = TfidfTextEmbed(ngram_range=(3, 3)).fit_transform(table)
-    case_sensitive = TfidfTextEmbed(
+    lowercased = TFIDF(ngram_range=(3, 3)).fit_transform(table)
+    case_sensitive = TFIDF(
         ngram_range=(3, 3),
         lowercase=False,
     ).fit_transform(table)
@@ -211,12 +211,12 @@ def test_tfidf_encoder_cuda_matches_cpu(
     cuda_train = TableTensor.from_tensor(
         StringTensor.from_list(train, device="cuda")
     )
-    cpu_encoder = TfidfTextEmbed(
+    cpu_encoder = TFIDF(
         ngram_range=ngram_range,
         max_features=max_features,
         lowercase=lowercase,
     )
-    cuda_encoder = TfidfTextEmbed(
+    cuda_encoder = TFIDF(
         ngram_range=ngram_range,
         max_features=max_features,
         lowercase=lowercase,
@@ -257,12 +257,12 @@ def test_tfidf_encoder_state_dict_round_trip(tmp_path) -> None:
             [["hello world", "cat"], ["hello there", "dog"]]
         )
     )
-    encoder = TfidfTextEmbed(ngram_range=(2, 3))
+    encoder = TFIDF(ngram_range=(2, 3))
     expected = encoder.fit_transform(table)
 
     path = tmp_path / "encoder.pt"
     torch.save(encoder.state_dict(), path)
-    restored = TfidfTextEmbed(ngram_range=(2, 3))
+    restored = TFIDF(ngram_range=(2, 3))
     restored.load_state_dict(torch.load(path, weights_only=True))
 
     assert torch.equal(restored.transform(table).numerical, expected.numerical)
@@ -273,10 +273,10 @@ def test_tfidf_encoder_load_state_dict_clears_stale_idf_buffers() -> None:
         StringTensor.from_list([["hello world", "cat dog"]])
     )
     narrow = TableTensor.from_tensor(StringTensor.from_list([["hello world"]]))
-    restored = TfidfTextEmbed(ngram_range=(2, 2))
+    restored = TFIDF(ngram_range=(2, 2))
     restored.fit(wide)
 
-    encoder = TfidfTextEmbed(ngram_range=(2, 2))
+    encoder = TFIDF(ngram_range=(2, 2))
     expected = encoder.fit_transform(narrow)
     restored.load_state_dict(encoder.state_dict(), strict=False)
 
@@ -291,7 +291,7 @@ def test_tfidf_encoder_failed_refit_preserves_previous_state(
     table = TableTensor.from_tensor(
         StringTensor.from_list([["hello world"], ["hello there"]])
     )
-    encoder = TfidfTextEmbed(ngram_range=(2, 2))
+    encoder = TFIDF(ngram_range=(2, 2))
     expected = encoder.fit_transform(table)
 
     def fail_bincount(*args: object, **kwargs: object) -> None:
@@ -312,9 +312,9 @@ def test_tfidf_encoder_refit_replaces_previous_state() -> None:
         StringTensor.from_list([["hello world", "cat dog"]])
     )
     narrow = TableTensor.from_tensor(StringTensor.from_list([["hello world"]]))
-    encoder = TfidfTextEmbed(ngram_range=(2, 2))
+    encoder = TFIDF(ngram_range=(2, 2))
     encoder.fit(wide)
-    expected = TfidfTextEmbed(ngram_range=(2, 2)).fit_transform(narrow)
+    expected = TFIDF(ngram_range=(2, 2)).fit_transform(narrow)
 
     output = encoder.fit_transform(narrow)
 
