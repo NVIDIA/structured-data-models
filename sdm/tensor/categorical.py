@@ -226,12 +226,19 @@ class CategoricalTensor(Tensor):
             dtype: The dtype.
             device: The device.
         """
+        import cudf
         from cudf.api.types import is_string_dtype
 
-        codes, categories = ser.factorize(
-            sort=False,
-            use_na_sentinel=True,
-        )
+        if isinstance(ser.dtype, cudf.CategoricalDtype):
+            codes = ser.cat.codes.astype("int32", copy=False).to_cupy(
+                na_value=-1
+            )
+            categories = ser.cat.categories
+        else:
+            codes, categories = ser.factorize(
+                sort=False,
+                use_na_sentinel=True,
+            )
         code = torch.from_dlpack(codes).unsqueeze(-1).to(device, dtype)
 
         if len(categories) == 0:
