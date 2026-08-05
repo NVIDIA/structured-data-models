@@ -202,35 +202,38 @@ data-aria-dark="Switch to auto color mode">
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.common.StypeDispatch">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.common.</span></span><span class="sig-name descname"><span class="pre">StypeDispatch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numerical</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">categorical</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">datetime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remainder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'passthrough'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'drop'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'error'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'passthrough'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.common.StypeDispatch" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
+<dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>, <a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html#sdm.processing.ensemble.EnsembleInvertibleMixin" title="sdm.processing.ensemble.EnsembleInvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleInvertibleMixin</span></code></a></p>
 <p>Apply separate processor pipelines to columns grouped by semantic type.</p>
-<p>For each configured route, the matching columns are selected into a
-<code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code> and passed to that processor. A route may change
-column values, names, count, or order. Route outputs are concatenated in
-semantic type order. With the default passthrough behavior, unconfigured
-semantic types follow in input order. A <code class="docutils literal notranslate"><span class="pre">generator</span></code> passed to <code class="docutils literal notranslate"><span class="pre">fit()</span></code>
-or <code class="docutils literal notranslate"><span class="pre">fit_transform()</span></code> is passed on to every route.</p>
+<p>For each configured route, matching columns from a
+<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">TableTensor</span></code></a> or
+<a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a> are passed to that processor. Ordinary
+processors learn separate state for each compatible ensemble group, while
+ensemble-aware processors operate on all groups directly. Compatible
+members are processed together and route outputs are concatenated in
+semantic type order while preserving logical member order. A route may
+change column values, names, count, or order. With the default passthrough
+behavior, unconfigured semantic types follow in input order. A
+<code class="docutils literal notranslate"><span class="pre">generator</span></code> passed during fitting is passed on to every route.</p>
 <p>Inverse transform supports routes that preserve their semantic type. Every
-active route must be invertible. Tracking transformed ownership for routes
-that change semantic type or share an output semantic type is deferred.
-Passthrough columns are preserved.
-<code class="docutils literal notranslate"><span class="pre">remainder=&quot;drop&quot;</span></code> is not invertible.</p>
+active route must be invertible, and routes must not share an output
+semantic type. Passthrough columns are preserved. <code class="docutils literal notranslate"><span class="pre">remainder=&quot;drop&quot;</span></code> is
+not invertible.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>numerical</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for numerical
-columns. An iterable is normalized to
+columns. A sequence is normalized to
 <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
 <li><p><strong>categorical</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for categorical
-columns. An iterable is normalized to
+columns. A sequence is normalized to
 <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
 <li><p><strong>datetime</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for datetime columns.
-An iterable is normalized to
+A sequence is normalized to
 <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
-<li><p><strong>text</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for text columns. An
-iterable is normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
-<li><p><strong>id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for identifier columns. An
-iterable is normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
+<li><p><strong>text</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for text columns. A
+sequence is normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
+<li><p><strong>id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Processor or stateless callable route for identifier columns. A
+sequence is normalized to <code class="xref py py-class docutils literal notranslate"><span class="pre">Sequential</span></code>.</p></li>
 <li><p><strong>remainder</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'passthrough'</em><em>, </em><em>'drop'</em><em>, </em><em>'error'</em><em>]</em>) – How to handle non-empty semantic types without a configured
 route. <code class="docutils literal notranslate"><span class="pre">&quot;passthrough&quot;</span></code> keeps them unchanged and is the default,
 <code class="docutils literal notranslate"><span class="pre">&quot;drop&quot;</span></code> removes them, and <code class="docutils literal notranslate"><span class="pre">&quot;error&quot;</span></code> raises.</p></li>
@@ -265,7 +268,7 @@ route. <code class="docutils literal notranslate"><span class="pre">&quot;passth
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=986df503"></script>
+      <script src="../../_static/documentation_options.js?v=0b2ba50b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

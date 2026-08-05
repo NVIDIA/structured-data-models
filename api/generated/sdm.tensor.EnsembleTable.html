@@ -167,6 +167,8 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.num_members"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.num_members</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.num_groups"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.num_groups</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.table"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.table()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.EnsembleTable.select_stypes"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.select_stypes()</span></code></a></li>
+<li><a class="reference internal" href="#sdm.tensor.EnsembleTable.concatenate_columns"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.concatenate_columns()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.tensor.EnsembleTable.replace_groups"><code class="docutils literal notranslate"><span class="pre">EnsembleTable.replace_groups()</span></code></a></li>
 </ul>
 </li>
@@ -310,6 +312,40 @@ the second table to member 1.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.select_stypes">
+<span class="sig-name descname"><span class="pre">select_stypes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stypes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><span class="pre">Stype</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.select_stypes" title="Link to this definition">#</a></dt>
+<dd><p>Return an ensemble table containing only <code class="docutils literal notranslate"><span class="pre">stypes</span></code> columns.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stypes</strong> (<a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><em>Stype</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference internal" href="sdm.Stype.html#sdm.Stype" title="sdm.stype.Stype"><em>Stype</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – The semantic type or semantic types to select.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An ensemble table preserving its logical member assignment.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Self</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.concatenate_columns">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">concatenate_columns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><span class="pre">Self</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.concatenate_columns" title="Link to this definition">#</a></dt>
+<dd><p>Concatenate ensemble tables column-wise by logical member.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tables</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><em>Self</em><em>]</em>) – Ensemble tables with the same number of logical members.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An ensemble table preserving logical member order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><em>Self</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="sdm.tensor.EnsembleTable.replace_groups">
 <span class="sig-name descname"><span class="pre">replace_groups</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">groups</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#sdm.tensor.EnsembleTable.replace_groups" title="Link to this definition">#</a></dt>
 <dd><p>Return an ensemble table with its groups replaced.</p>
@@ -355,7 +391,7 @@ assignment.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=986df503"></script>
+      <script src="../../_static/documentation_options.js?v=0b2ba50b"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
