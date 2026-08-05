@@ -11,7 +11,7 @@ from sdm.testing import onlyCUDA
 
 def test_dtype_conversion() -> None:
     tensor = VarLenTensor.from_tensor(torch.arange(4).view(2, 2))
-    assert repr(tensor) == "VarLenTensor(..., size=(2, 2), dtype=torch.int64)"
+    assert repr(tensor) == "VarLenTensor(size=(2, 2), dtype=torch.int64)"
 
     out = tensor.to(torch.float64)
     assert isinstance(out, VarLenTensor)
@@ -25,13 +25,13 @@ def test_autograd() -> None:
     tensor = VarLenTensor.from_tensor(data)
     assert tensor.requires_grad
     assert repr(tensor) == (
-        "VarLenTensor(..., size=(4,), dtype=torch.float32, requires_grad=True)"
+        "VarLenTensor(size=(4,), dtype=torch.float32, requires_grad=True)"
     )
 
     out = tensor.clone()
     assert isinstance(out, VarLenTensor)
     assert repr(out) == (
-        "VarLenTensor(..., size=(4,), dtype=torch.float32, "
+        "VarLenTensor(size=(4,), dtype=torch.float32, "
         "grad_fn=<ToCopyBackward0>)"
     )
 

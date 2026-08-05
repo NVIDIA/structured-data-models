@@ -427,6 +427,18 @@ class NullableIntTensor(Tensor):
             )
         return self.view(-1).tolist()[0]
 
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        # TODO Support tensor content printing.
+        out = f"{self.__class__.__name__}("
+        out += f"size={tuple(self.size())}"
+        if self.dtype != torch.int64:
+            out += f", dtype={self.dtype}"
+        out += f", null_count={int((~self.valid).sum())}"
+        if not self.is_cpu:
+            out += f", device={self.device}"
+        out += ")"
+        return out
+
 
 @NullableIntTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
@@ -457,7 +469,7 @@ def _to_dtype_layout(
 
     if (
         not copy
-        and (dtype is None and dtype == inp.dtype)
+        and (dtype is None or dtype == inp.dtype)
         and (device is None or torch.device(device) == inp.device)
         and (layout is None or layout == inp.layout)
         and (
@@ -744,6 +756,106 @@ def _narrow(
     length: int,
 ) -> NullableIntTensor:
     return _apply(inp, lambda x: aten.narrow.default(x, dim, start, length))
+
+
+@NullableIntTensor.implements(aten.unbind.int)
+@preserve_view_inference_mode
+def _unbind(
+    inp: NullableIntTensor,
+    dim: int = 0,
+) -> tuple[NullableIntTensor, ...]:
+    return tuple(
+        inp.__class__(data, valid)
+        for data, valid in zip(
+            inp._data.unbind(dim=dim),
+            inp._valid.unbind(dim=dim),
+        )
+    )
+
+
+@NullableIntTensor.implements(aten.split.Tensor)
+@preserve_view_inference_mode
+def _split(
+    inp: NullableIntTensor,
+    split_size: int,
+    dim: int = 0,
+) -> tuple[NullableIntTensor, ...]:
+    return tuple(
+        inp.__class__(data, valid)
+        for data, valid in zip(
+            inp._data.split(split_size, dim=dim),
+            inp._valid.split(split_size, dim=dim),
+        )
+    )
+
+
+@NullableIntTensor.implements(aten.split.sizes)
+@NullableIntTensor.implements(aten.split.default)
+@NullableIntTensor.implements(aten.split_with_sizes.default)
+@preserve_view_inference_mode
+def _split_with_sizes(
+    inp: NullableIntTensor,
+    split_sizes: Sequence[int],
+    dim: int = 0,
+) -> tuple[NullableIntTensor, ...]:
+    return tuple(
+        inp.__class__(data, valid)
+        for data, valid in zip(
+            inp._data.split(split_sizes, dim=dim),
+            inp._valid.split(split_sizes, dim=dim),
+        )
+    )
+
+
+@NullableIntTensor.implements(aten.masked_select.default)
+def _masked_select(inp: NullableIntTensor, mask: Tensor) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.masked_select.default(x, mask))
+
+
+@NullableIntTensor.implements(aten.index_select.default)
+def _index_select(
+    inp: NullableIntTensor,
+    dim: int,
+    index: Tensor,
+) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.index_select.default(x, dim, index))
+
+
+@NullableIntTensor.implements(aten.take.default)
+def _take(inp: NullableIntTensor, index: Tensor) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.take.default(x, index))
+
+
+@NullableIntTensor.implements(aten.index.Tensor)
+def _index(
+    inp: NullableIntTensor,
+    indices: Sequence[Tensor | None],
+) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.index.Tensor(x, indices))
+
+
+@NullableIntTensor.implements(aten.cat.default)
+def _cat(tensors: Sequence[Tensor], dim: int = 0) -> NullableIntTensor:
+    if len(tensors) == 0:
+        raise ValueError("Expected a non-empty list of Tensors")
+
+    if not isinstance(tensors[0], NullableIntTensor):
+        raise TypeError(
+            f"Expected {NullableIntTensor.__name__!r} as element 0, but got "
+            f"{tensors[0].__class__.__name__!r}"
+        )
+
+    tensors = cast(Sequence[NullableIntTensor], tensors)
+    return tensors[0].__class__(
+        data=torch.cat([tensor._data for tensor in tensors], dim=dim),
+        valid=torch.cat([tensor._valid for tensor in tensors], dim=dim),
+    )
+
+
+@NullableIntTensor.implements(aten.stack.default)
+def _stack(tensors: Sequence[Tensor], dim: int = 0) -> NullableIntTensor:
+    out = torch.cat([tensor.unsqueeze(dim) for tensor in tensors], dim=dim)
+    return cast(NullableIntTensor, out)
 
 
 # Helpers #####################################################################
