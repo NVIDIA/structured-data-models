@@ -47,7 +47,7 @@ def test_shuffle_categories_shift_maps_single_target() -> None:
     assert output.columns[Stype.categorical] == ("cat0",)
     permutation = processor.permutations
     codes = target.categorical.code
-    valid = codes >= 0
+    valid = target.categorical.isfinite()
     assert torch.equal(
         output.categorical.code[valid],
         permutation[codes[valid].to(torch.long)].to(codes.dtype),
@@ -76,6 +76,7 @@ def test_shuffle_categories_random_permutes_each_categorical_column(
     offsets = processor.offsets.tolist()
     input_codes = features.categorical.code
     output_codes = transformed.categorical.code
+    valid_mask = features.categorical.isfinite()
     for index, category in enumerate(features.categorical.categories):
         permutation = processor.permutations[
             offsets[index] : offsets[index + 1]
@@ -84,7 +85,7 @@ def test_shuffle_categories_random_permutes_each_categorical_column(
             permutation.sort().values,
             torch.arange(category.numel(), device=device),
         )
-        valid = input_codes[..., index] >= 0
+        valid = valid_mask[..., index]
         assert torch.equal(
             output_codes[..., index][valid],
             permutation[input_codes[..., index][valid].to(torch.long)].to(

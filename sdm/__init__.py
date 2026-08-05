@@ -2,10 +2,12 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from sdm._constants import NaT
 from sdm.stype import Stype, StypeLike, infer_stypes
 from sdm.tensor import (
     VarLenTensor,
     StringTensor,
+    NullableIntTensor,
     CategoricalTensor,
     ColumnarTensor,
     TableTensor,
@@ -25,11 +27,13 @@ except PackageNotFoundError:
     __version__ = "0+unknown"
 
 __all__ = [
+    "NaT",
     "Stype",
     "StypeLike",
     "infer_stypes",
     "VarLenTensor",
     "StringTensor",
+    "NullableIntTensor",
     "CategoricalTensor",
     "ColumnarTensor",
     "TableTensor",

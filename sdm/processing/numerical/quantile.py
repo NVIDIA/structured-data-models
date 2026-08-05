@@ -3,7 +3,6 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
@@ -134,7 +133,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         n_samples = numerical.shape[0]
         quantile_limit = n_samples
         if self.subsample is not None:
@@ -165,7 +164,7 @@ class QuantileTransform(Processor, InvertibleMixin):
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` into the configured output distribution."""
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         transformed = torch.empty_like(numerical)
         for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
             end = min(start + _MAX_NUM_COLS, numerical.shape[1])
@@ -217,7 +216,7 @@ class QuantileTransform(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=transformed)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         inverse = torch.empty_like(numerical)
         for start in range(0, numerical.shape[1], _MAX_NUM_COLS):
             end = min(start + _MAX_NUM_COLS, numerical.shape[1])

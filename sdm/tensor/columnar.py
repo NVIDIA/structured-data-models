@@ -249,8 +249,10 @@ class ColumnarTensor(Tensor):
 
         return pa.Table.from_arrays(
             arrays=[
-                to_arrow(column, valid)
-                for column, valid in zip(self._columns, self._validity)
+                column.to_arrow()
+                if isinstance(column, StringTensor)
+                else to_arrow(column)
+                for column in self.unbind(-1)
             ],
             names=names,
         )
@@ -273,12 +275,10 @@ class ColumnarTensor(Tensor):
 
         return cudf.DataFrame(
             {
-                name: to_cudf(column, valid)
-                for name, column, valid in zip(
-                    names,
-                    self._columns,
-                    self._validity,
-                )
+                name: column.to_cudf()
+                if isinstance(column, StringTensor)
+                else to_cudf(column)
+                for name, column in zip(names, self.unbind(-1))
             },
         )
 
@@ -442,36 +442,49 @@ def _alias(inp: ColumnarTensor) -> ColumnarTensor:
     )
 
 
-@ColumnarTensor.implements(aten._to_copy.default)
-def _to_copy(
+@ColumnarTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
     inp: ColumnarTensor,
     *,
     dtype: torch.dtype | None = None,
     layout: torch.layout | None = None,
     device: torch.device | str | None = None,
-    pin_memory: bool = False,
+    pin_memory: bool | None = None,
     non_blocking: bool = False,
+    copy: bool = False,
     memory_format: torch.memory_format | None = None,
-) -> Tensor:
+) -> ColumnarTensor:
 
-    # Wrapper dtype is a placeholder, so same dtype means no conversion:
-    if dtype == inp.dtype:
-        dtype = None
-
-    if dtype is not None:
+    if dtype is not None and dtype != inp.dtype:
         raise TypeError(
             f"Can't convert {inp.__class__.__name__!r} to dtype '{dtype}'"
         )
 
+    if (
+        not copy
+        and (device is None or torch.device(device) == inp.device)
+        and (layout is None or layout == inp.layout)
+        and (
+            memory_format is None
+            or memory_format == torch.preserve_format
+            or (
+                memory_format == torch.contiguous_format
+                and inp.is_contiguous()
+            )
+        )
+    ):
+        return inp
+
     return inp.__class__(
         columns=[
-            aten._to_copy.default(
+            aten.to.dtype_layout(
                 column,
-                device=device,
                 dtype=None,
                 layout=layout,
+                device=device,
                 pin_memory=pin_memory,
                 non_blocking=non_blocking,
+                copy=copy,
                 memory_format=memory_format,
             )
             for column in inp._columns
@@ -495,15 +508,91 @@ def _to_copy(
     )
 
 
+@ColumnarTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: ColumnarTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> ColumnarTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@ColumnarTensor.implements(aten.to.device)
+def _to_device(
+    inp: ColumnarTensor,
+    device: torch.device,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> ColumnarTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@ColumnarTensor.implements(aten.to.other)
+def _to_other(
+    inp: ColumnarTensor,
+    other: Tensor,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> ColumnarTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=other.dtype,
+        layout=other.layout,
+        device=other.device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@ColumnarTensor.implements(aten._to_copy.default)
+def _to_copy(
+    inp: ColumnarTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool = False,  # Ignored by PyTorch.
+    non_blocking: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> ColumnarTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        non_blocking=non_blocking,
+        copy=True,
+        memory_format=memory_format,
+    )
+
+
 @ColumnarTensor.implements(aten.clone.default)
 def _clone(
     inp: ColumnarTensor,
     *,
     memory_format: torch.memory_format | None = None,
 ) -> ColumnarTensor:
-    out = _to_copy(inp, memory_format=memory_format)
-    assert isinstance(out, ColumnarTensor)
-    return out
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
 
 
 @ColumnarTensor.implements(aten.contiguous.default)

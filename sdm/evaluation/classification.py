@@ -16,6 +16,34 @@ def to_class_indices(
         pred: Prediction table whose numerical columns contain class scores.
             Column names define the class order.
         target: Single-column categorical target.
+
+    >>> import torch
+    >>> import sdm
+    >>> from sdm.evaluation import to_class_indices
+    >>> pred = sdm.TableTensor.from_tensor(
+    ...     torch.tensor([[0.8, 0.1, 0.1], [0.1, 0.2, 0.7]]),
+    ...     columns=["cat", "dog", "bird"],
+    ... )
+    >>> target = sdm.CategoricalTensor(
+    ...     code=torch.tensor([[0], [2]]),
+    ...     categories=(sdm.StringTensor.from_list(["cat", "dog", "bird"]),),
+    ... )
+    >>> class_scores, class_indices = to_class_indices(pred, target)
+    >>> class_scores
+    tensor([[0.8000, 0.1000, 0.1000],
+            [0.1000, 0.2000, 0.7000]])
+    >>> class_indices
+    tensor([0, 2])
+    >>> pred = sdm.TableTensor.from_tensor(
+    ...     torch.tensor([[0.1, 0.8, 0.1], [0.7, 0.1, 0.2]]),
+    ...     columns=["bird", "cat", "dog"],
+    ... )
+    >>> class_scores, class_indices = to_class_indices(pred, target)
+    >>> class_scores
+    tensor([[0.8000, 0.1000, 0.1000],
+            [0.1000, 0.2000, 0.7000]])
+    >>> class_indices
+    tensor([0, 2])
     """
     if isinstance(target, TableTensor):
         if target.size(-1) != 1:
@@ -31,6 +59,9 @@ def to_class_indices(
             f"(got {target.size(-1)} columns)"
         )
 
+    if target.isnan().any():
+        raise ValueError("Expected target to not contain missing values")
+
     if pred.size()[:-1] != target.size()[:-1]:
         raise ValueError(
             f"Expected prediction and target row dimensions to match "
@@ -43,8 +74,6 @@ def to_class_indices(
 
     category = target.categories[0]
     code = target.code.squeeze(-1)
-    if (code < 0).any():
-        raise ValueError("Expected target to not contain missing values")
 
     if isinstance(category, StringTensor):
         classes = StringTensor.from_list(
@@ -76,6 +105,40 @@ def to_binary_class(
             Column names define the class order.
         target: Single-column categorical target.
         positive_class: Class value treated as the positive class.
+
+    >>> import torch
+    >>> import sdm
+    >>> from sdm.evaluation import to_binary_class
+    >>> pred = sdm.TableTensor.from_tensor(
+    ...     torch.tensor([[0.8, 0.2], [0.1, 0.9], [0.4, 0.6]]),
+    ...     columns=["false", "true"],
+    ... )
+    >>> target = sdm.CategoricalTensor(
+    ...     code=torch.tensor([[0], [1], [1]]),
+    ...     categories=(sdm.StringTensor.from_list(["false", "true"]),),
+    ... )
+    >>> positive_scores, binary_target = to_binary_class(
+    ...     pred,
+    ...     target,
+    ...     positive_class="true",
+    ... )
+    >>> positive_scores
+    tensor([0.2000, 0.9000, 0.6000])
+    >>> binary_target
+    tensor([False,  True,  True])
+    >>> pred = sdm.TableTensor.from_tensor(
+    ...     torch.tensor([[0.2, 0.8], [0.9, 0.1], [0.6, 0.4]]),
+    ...     columns=["true", "false"],
+    ... )
+    >>> positive_scores, binary_target = to_binary_class(
+    ...     pred,
+    ...     target,
+    ...     positive_class="true",
+    ... )
+    >>> positive_scores
+    tensor([0.2000, 0.9000, 0.6000])
+    >>> binary_target
+    tensor([False,  True,  True])
     """
     if isinstance(target, TableTensor):
         if target.size(-1) != 1:

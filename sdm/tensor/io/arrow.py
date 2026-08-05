@@ -68,39 +68,16 @@ def arrow_as_tensor(
         return torch.as_tensor(values, dtype=dtype, device=device)
 
 
-def to_arrow(tensor: Tensor, valid: Tensor | None = None) -> pa.Array:
+def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
     r"""Convert a tensor to a flat :class:`pyarrow.Array`.
 
     Args:
         tensor: The tensor.
-        valid: The validity bitmap.
+        valid_mask: Boolean mask indicating valid, non-null tensor elements.
     """
-    from sdm.tensor import VarLenTensor  # noqa: PLC0415
-
-    if isinstance(tensor, VarLenTensor):
-        array = tensor.to_arrow()
-        if valid is not None:
-            valid = valid.contiguous().view(-1).cpu()
-            if array.offset > 0:
-                valid = torch.cat([valid.new_ones(array.offset), valid])
-            buffers = list(array.buffers()[: array.type.num_buffers])
-            buffers[0] = pa.array(valid.numpy(), type=pa.bool_()).buffers()[1]
-            array = pa.Array.from_buffers(
-                type=array.type,
-                length=len(array),
-                buffers=buffers,
-                null_count=-1,
-                offset=array.offset,
-                children=[array.values]
-                if pa.types.is_list(array.type)
-                or pa.types.is_large_list(array.type)
-                else None,
-            )
-        return array
-
     tensor = tensor.detach().contiguous().view(-1).cpu()
-    if valid is not None:
-        valid = valid.contiguous().view(-1).cpu()
+    if valid_mask is not None:
+        valid_mask = valid_mask.contiguous().view(-1).cpu()
 
     arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
     if arrow_type is None:
@@ -110,9 +87,10 @@ def to_arrow(tensor: Tensor, valid: Tensor | None = None) -> pa.Array:
         type=arrow_type,
         length=tensor.numel(),
         buffers=[
-            pa.array(valid.numpy(), type=pa.bool_()).buffers()[1]
-            if valid is not None
+            pa.array(valid_mask.numpy(), type=pa.bool_()).buffers()[1]
+            if valid_mask is not None
             else None,
             pa.py_buffer(tensor.numpy()),
         ],
+        null_count=-1 if valid_mask is not None else 0,
     )
