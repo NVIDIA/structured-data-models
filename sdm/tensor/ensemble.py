@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import cast
 
 import torch
 from typing_extensions import Self
 
+from sdm.stype import Stype, StypeLike
 from sdm.tensor.table import TableTensor
 
 
@@ -169,6 +170,87 @@ class EnsembleTable:
     def __iter__(self) -> Iterator[TableTensor]:
         """Iterate over groups of compatible tables."""
         return iter(self._groups)
+
+    def select_stypes(
+        self,
+        stypes: StypeLike | Iterable[StypeLike],
+    ) -> Self:
+        r"""Return an ensemble table containing only ``stypes`` columns.
+
+        Args:
+            stypes: The semantic type or semantic types to select.
+
+        Returns:
+            An ensemble table preserving its logical member assignment.
+        """
+        if isinstance(stypes, (str, Stype)):
+            stypes = (stypes,)
+        stypes = tuple(Stype(stype) for stype in stypes)
+
+        if len(stypes) == 0:
+            return self.replace_groups(
+                [group.select_columns(()) for group in self]
+            )
+        return self.replace_groups(
+            [group.select_stypes(stypes) for group in self]
+        )
+
+    @classmethod
+    def concatenate_columns(cls, tables: Sequence[Self]) -> Self:
+        r"""Concatenate ensemble tables column-wise by logical member.
+
+        Args:
+            tables: Ensemble tables with the same number of logical members.
+
+        Returns:
+            An ensemble table preserving logical member order.
+        """
+        if len(tables) == 0:
+            raise ValueError("Expected at least one ensemble table")
+
+        first = tables[0]
+        if any(table.num_members != first.num_members for table in tables[1:]):
+            raise ValueError(
+                "Cannot concatenate ensemble tables with different member "
+                "counts"
+            )
+        if len(tables) == 1:
+            return first
+
+        if all(table._locations == first._locations for table in tables[1:]):
+            return first.replace_groups(
+                [
+                    cast(TableTensor, torch.cat(groups, dim=-1))
+                    for groups in zip(*tables, strict=True)
+                ]
+            )
+
+        # TODO: Concatenate compatible groups directly and unpack logical
+        # members only when their layouts differ.
+        outputs: list[TableTensor] = []
+        output_id_by_locations: dict[tuple[tuple[int, int], ...], int] = {}
+        member_table_ids = []
+        for member_id in range(first.num_members):
+            locations = tuple(table._locations[member_id] for table in tables)
+            output_id = output_id_by_locations.get(locations)
+            if output_id is None:
+                output_id = len(outputs)
+                output_id_by_locations[locations] = output_id
+                outputs.append(
+                    cast(
+                        TableTensor,
+                        torch.cat(
+                            tuple(table.table(member_id) for table in tables),
+                            dim=-1,
+                        ),
+                    )
+                )
+            member_table_ids.append(output_id)
+
+        return cls.from_tables(
+            tables=outputs,
+            member_table_ids=member_table_ids,
+        )
 
     def replace_groups(self, groups: Sequence[TableTensor]) -> Self:
         """Return an ensemble table with its groups replaced.
