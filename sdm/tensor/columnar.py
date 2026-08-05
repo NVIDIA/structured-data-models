@@ -11,7 +11,7 @@ import torch
 from torch import Tensor
 from typing_extensions import Self, override
 
-from sdm.tensor import StringTensor
+from sdm.tensor import NullableIntTensor, StringTensor, VarLenTensor
 from sdm.tensor.io import arrow_as_tensor, to_arrow, to_cudf
 from sdm.tensor.io.arrow import _combine_arrow_chunks
 from sdm.tensor.mixin import _resolve_device
@@ -150,11 +150,9 @@ class ColumnarTensor(Tensor):
         is_large_string = pa.types.is_large_string(array.type)
         if is_string or is_large_string:
             column = StringTensor.from_arrow(array, device=device)
+        elif array.null_count > 0 and pa.types.is_integer(array.type):
+            column = NullableIntTensor.from_arrow(array, device=device)
         else:
-            if array.null_count > 0 and pa.types.is_integer(array.type):
-                raise ValueError(
-                    f"{cls.__name__!r} cannot represent null integer values"
-                )
             column = arrow_as_tensor(array, device=device)
 
         return cls(columns=(column,), device=device)
@@ -176,12 +174,10 @@ class ColumnarTensor(Tensor):
 
         if is_string_dtype(ser.dtype):
             column = StringTensor.from_cudf(ser, device=device)
+        elif ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
+            column = NullableIntTensor.from_cudf(ser, device=device)
         else:
-            if ser._column.null_count > 0 and is_integer_dtype(ser.dtype):
-                raise ValueError(
-                    f"{cls.__name__!r} cannot represent null integer values"
-                )
-            if ser._column.null_count > 0 and ser.dtype.kind == "f":
+            if ser._column.null_count > 0:
                 ser = ser.fillna(float("nan"))
             column = torch.from_dlpack(ser.to_dlpack()).to(device)
 
@@ -204,7 +200,7 @@ class ColumnarTensor(Tensor):
         return pa.Table.from_arrays(
             arrays=[
                 column.to_arrow()
-                if isinstance(column, StringTensor)
+                if isinstance(column, VarLenTensor | NullableIntTensor)
                 else to_arrow(column)
                 for column in self.unbind(-1)
             ],
@@ -230,7 +226,7 @@ class ColumnarTensor(Tensor):
         return cudf.DataFrame(
             {
                 name: column.to_cudf()
-                if isinstance(column, StringTensor)
+                if isinstance(column, StringTensor | NullableIntTensor)
                 else to_cudf(column)
                 for name, column in zip(names, self.unbind(-1))
             },
