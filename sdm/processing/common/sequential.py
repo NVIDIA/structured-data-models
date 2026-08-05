@@ -11,7 +11,7 @@ from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleProcessorAdapter,
 )
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm.tensor import EnsembleTable
 
 
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -54,35 +54,15 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
             self.append(processor)
         return self
 
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        out = table
-        for i, child in enumerate(self):
-            if i < len(self) - 1:
-                out = child.fit_transform(out, generator=generator)
-            else:
-                child.fit(out, generator=generator)
+    @staticmethod
+    def _is_singleton_group(ensemble_table: EnsembleTable) -> bool:
+        """Return whether ``ensemble_table`` is one member-sized group.
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.transform(out)
-        return out
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.fit_transform(out, generator=generator)
-        return out
+        In that case ordinary children can run on :meth:`EnsembleTable.table`
+        directly and do not need :class:`EnsembleProcessorAdapter`.
+        """
+        groups = tuple(ensemble_table)
+        return len(groups) == 1 and groups[0].size(0) == 1
 
     def _fit_ensemble(
         self,
@@ -90,6 +70,16 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
+        if self._is_singleton_group(ensemble_table):
+            out = ensemble_table.table(0)
+            children = tuple(self)
+            for index, child in enumerate(children):
+                if index < len(children) - 1:
+                    out = child.fit_transform(out, generator=generator)
+                else:
+                    child.fit(out, generator=generator)
+            return
+
         out = ensemble_table
         children = tuple(self._modules.items())
         for index, (name, child) in enumerate(children):
@@ -110,6 +100,12 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
+        if self._is_singleton_group(ensemble_table):
+            out = ensemble_table.table(0)
+            for child in self:
+                out = child.fit_transform(out, generator=generator)
+            return EnsembleTable(out, num_members=ensemble_table.num_members)
+
         out = ensemble_table
         for name, child in tuple(self._modules.items()):
             processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
@@ -122,6 +118,12 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
+        if self._is_singleton_group(ensemble_table):
+            out = ensemble_table.table(0)
+            for child in self:
+                out = child.transform(out)
+            return EnsembleTable(out, num_members=ensemble_table.num_members)
+
         out = ensemble_table
         for name, child in tuple(self._modules.items()):
             processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
@@ -142,6 +144,18 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         Returns:
             Ensemble table restored to its representation before transform.
         """
+        if self._is_singleton_group(ensemble_table):
+            out = ensemble_table.table(0)
+            for child in reversed(tuple(self)):
+                fn = getattr(child, "inverse_transform", None)
+                if not callable(fn):
+                    raise AttributeError(
+                        f"{child.__class__.__name__!r} object has no "
+                        "attribute 'inverse_transform'"
+                    )
+                out = fn(out)
+            return EnsembleTable(out, num_members=ensemble_table.num_members)
+
         out = ensemble_table
         for name, child in reversed(tuple(self._modules.items())):
             processor = EnsembleProcessorAdapter.adapt(cast(Processor, child))
@@ -152,18 +166,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
                 raise AttributeError(
                     f"{processor.__class__.__name__!r} object has no "
                     "attribute 'inverse_transform_ensemble'"
-                )
-            out = fn(out)
-        return out
-
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in reversed(list(self)):
-            fn = getattr(child, "inverse_transform", None)
-            if not callable(fn):
-                raise AttributeError(
-                    f"{child.__class__.__name__!r} object has no attribute "
-                    f"'inverse_transform'"
                 )
             out = fn(out)
         return out

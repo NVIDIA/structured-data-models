@@ -292,7 +292,29 @@ def test_sequential_ensemble_inverse_requires_fit() -> None:
 
 
 def test_sequential_ensemble_inverse_rejects_non_invertible_step() -> None:
+    # Shared-table ensembles use the singleton passthrough (no adapter), so the
+    # error matches the ordinary inverse_transform contract.
     table = EnsembleTable(_table(), num_members=2)
+    processor = Sequential(ImputeMean())
+    transformed = processor.fit_transform_ensemble(table)
+
+    with pytest.raises(
+        AttributeError,
+        match=r"ImputeMean.*inverse_transform",
+    ):
+        processor.inverse_transform_ensemble(transformed)
+
+
+def test_sequential_multi_group_inverse_rejects_non_invertible_step() -> None:
+    first = _table(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
+    second = TableTensor.from_tensor(
+        torch.tensor([[3.0, 4.0], [5.0, 6.0]]),
+        columns=("other0", "other1"),
+    )
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
+    )
     processor = Sequential(ImputeMean())
     transformed = processor.fit_transform_ensemble(table)
 

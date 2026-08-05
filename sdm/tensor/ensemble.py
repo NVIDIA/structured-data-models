@@ -63,6 +63,11 @@ class EnsembleTable:
     def __init__(self, table: TableTensor, *, num_members: int) -> None:
         self._groups = (cast(TableTensor, table.unsqueeze(0)),)
         self._member_locations = ((0, 0),) * num_members
+        # Keep the input identity so table(i) can return ``table`` without
+        # re-indexing through the unsqueezed group view.
+        self._source_tables: tuple[TableTensor, ...] | None = (table,) * (
+            num_members
+        )
 
     @classmethod
     def from_tables(
@@ -139,6 +144,9 @@ class EnsembleTable:
         ensemble._member_locations = tuple(
             input_locations[index] for index in member_table_ids
         )
+        # Stacked/split groups are indexed views; do not cache sources that
+        # could diverge if a group tensor is updated in place.
+        ensemble._source_tables = None
         return ensemble
 
     @property
@@ -152,6 +160,8 @@ class EnsembleTable:
         Args:
             member_id: Zero-based member index.
         """
+        if self._source_tables is not None:
+            return self._source_tables[member_id]
         group_index, position = self._member_locations[member_id]
         return self._groups[group_index][position]
 
@@ -163,6 +173,7 @@ class EnsembleTable:
         table = self.__class__.__new__(self.__class__)
         table._groups = tuple(groups)
         table._member_locations = self._member_locations
+        table._source_tables = None
         return table
 
     def __repr__(self) -> str:

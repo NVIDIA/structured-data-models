@@ -16,7 +16,7 @@ def test_shared_member_table() -> None:
     assert groups[0].size() == (1, 2, 1)
     assert next(iter(ensemble_table)) is groups[0]
     for member_id in range(3):
-        assert ensemble_table.table(member_id).equal(data)
+        assert ensemble_table.table(member_id) is data
 
 
 def test_from_tables_stacks_compatible_schemas() -> None:
