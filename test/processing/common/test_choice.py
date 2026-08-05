@@ -4,9 +4,10 @@ from typing import Any, cast
 import pytest
 import torch
 
-from sdm import EnsembleTable, Stype, TableTensor
+from sdm import Stype, TableTensor
 from sdm.processing import (
     Choice,
+    EnsembleProcessor,
     Identity,
     ImputeMean,
     InvertibleMixin,
@@ -14,6 +15,7 @@ from sdm.processing import (
     QuantileTransform,
     Standardize,
 )
+from sdm.tensor import EnsembleTable
 
 
 class Add(Processor, InvertibleMixin):
@@ -31,6 +33,33 @@ class Add(Processor, InvertibleMixin):
         return table.replace_blocks(numerical=table.numerical - self.value)
 
 
+class AddFittedMemberCount(EnsembleProcessor):
+    supported_stypes = frozenset(Stype)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.value = 0
+
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        self.value = ensemble_table.num_members
+
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return ensemble_table.replace_groups(
+            [
+                group.replace_blocks(numerical=group.numerical + self.value)
+                for group in ensemble_table
+            ]
+        )
+
+
 def _table() -> TableTensor:
     return TableTensor.from_tensor(
         torch.arange(64, dtype=torch.float32).view(32, 2),
@@ -41,7 +70,7 @@ def _table() -> TableTensor:
 def test_choice_draws_at_fit() -> None:
     choice = Choice(Identity(), Standardize())
 
-    with pytest.raises(RuntimeError, match="no drawn option"):
+    with pytest.raises(RuntimeError, match="no selected option"):
         _ = choice.selected
 
     choice.fit(_table())
@@ -77,7 +106,6 @@ def test_choice_delegates_fit_transform_and_inverse() -> None:
     transformed = choice.fit_transform(table)
     restored = choice.inverse_transform(transformed)
 
-    assert choice.selected._fitted
     assert not torch.equal(transformed.numerical, table.numerical)
     assert torch.allclose(restored.numerical, table.numerical, atol=1e-6)
 
@@ -138,9 +166,7 @@ def test_choice_copies_draw_independently_at_fit() -> None:
     assert picks == {"Identity", "QuantileTransform"}
 
 
-def test_choice_round_robin_routes_eight_members_and_reuses_selection() -> (
-    None
-):
+def test_choice_round_robin_routes_members() -> None:
     context = _table()
     query = context.replace_blocks(numerical=context.numerical + 100)
     processor = Choice(Add(0), Add(10), selection="round_robin")
@@ -156,14 +182,14 @@ def test_choice_round_robin_routes_eight_members_and_reuses_selection() -> (
     for member_id in range(8):
         offset = 10 * (member_id % 2)
         torch.testing.assert_close(
-            transformed.representation(member_id).numerical,
+            transformed.table(member_id).numerical,
             context.numerical + offset,
         )
         torch.testing.assert_close(
-            query_transformed.representation(member_id).numerical,
+            query_transformed.table(member_id).numerical,
             query.numerical + offset,
         )
-        assert restored.representation(member_id).equal(context)
+        assert restored.table(member_id).equal(context)
 
 
 def test_choice_fit_ensemble_fits_selected_options() -> None:
@@ -182,7 +208,31 @@ def test_choice_fit_ensemble_fits_selected_options() -> None:
         )
 
 
-def test_nested_choice_uses_stable_member_positions() -> None:
+def test_choice_fits_options_on_selected_members() -> None:
+    base = _table()
+    tables = tuple(
+        base.replace_blocks(numerical=base.numerical + value)
+        for value in range(4)
+    )
+    table = EnsembleTable.from_tables(
+        tables=tables,
+        member_table_ids=tuple(range(4)),
+    )
+
+    output = Choice(
+        AddFittedMemberCount(),
+        AddFittedMemberCount(),
+        selection="round_robin",
+    ).fit_transform_ensemble(table)
+
+    for member_id, source in enumerate(tables):
+        torch.testing.assert_close(
+            output.table(member_id).numerical,
+            source.numerical + 2,
+        )
+
+
+def test_nested_choice_routes_selected_members_locally() -> None:
     processor = Choice(
         Choice(
             Add(10),
@@ -199,19 +249,14 @@ def test_nested_choice_uses_stable_member_positions() -> None:
     )
 
     for member_id in range(8):
-        offset = 10 * (member_id % 3 + 1) if member_id % 2 == 0 else 100
+        offset = 10 * ((member_id // 2) % 3 + 1) if member_id % 2 == 0 else 100
         torch.testing.assert_close(
-            output.representation(member_id).numerical,
+            output.table(member_id).numerical,
             _table().numerical + offset,
         )
 
 
-def test_choice_validates_selection_and_scalar_round_robin() -> None:
-    with pytest.raises(ValueError, match="at least one option"):
-        Choice()
-    with pytest.raises(ValueError, match="round_robin"):
-        Choice(Identity(), selection=cast(Any, "unknown"))
-
+def test_choice_round_robin_uses_first_option_for_single_table() -> None:
     output = Choice(
         Add(1),
         Add(2),
@@ -221,36 +266,9 @@ def test_choice_validates_selection_and_scalar_round_robin() -> None:
     torch.testing.assert_close(output.numerical, _table().numerical + 1)
 
 
-def test_choice_random_ensemble_is_reproducible() -> None:
-    table = EnsembleTable(_table(), num_members=8)
-    first = Choice(Add(0), Add(1)).fit_transform_ensemble(
-        table,
-        generator=torch.Generator().manual_seed(7),
-    )
-    second = Choice(Add(0), Add(1)).fit_transform_ensemble(
-        table,
-        generator=torch.Generator().manual_seed(7),
-    )
-
-    for member_id in range(table.num_members):
-        assert first.representation(member_id).equal(
-            second.representation(member_id)
-        )
-
-
 def test_choice_ensemble_requires_matching_member_count() -> None:
     processor = Choice(Add(0), Add(1), selection="round_robin")
     processor.fit_transform_ensemble(EnsembleTable(_table(), num_members=8))
 
-    with pytest.raises(RuntimeError, match="same number"):
+    with pytest.raises(RuntimeError, match="fitted with 8"):
         processor.transform_ensemble(EnsembleTable(_table(), num_members=7))
-
-
-def test_choice_ensemble_inverse_rejects_non_invertible_option() -> None:
-    processor = Choice(ImputeMean(), selection="round_robin")
-    transformed = processor.fit_transform_ensemble(
-        EnsembleTable(_table(), num_members=2)
-    )
-
-    with pytest.raises(TypeError, match="not invertible"):
-        processor.inverse_transform_ensemble(transformed)

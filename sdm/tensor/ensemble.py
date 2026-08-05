@@ -148,6 +148,112 @@ class EnsembleTable:
         )
         return ensemble
 
+    def select_members(self, member_ids: Sequence[int]) -> Self:
+        """Return the selected ensemble members in the requested order.
+
+        Args:
+            member_ids: Logical member positions to select.
+
+        Returns:
+            An ensemble table containing the selected members.
+        """
+        member_ids = tuple(member_ids)
+        if member_ids == tuple(range(self.num_members)):
+            return self
+
+        locations = tuple(
+            self._locations[member_id] for member_id in member_ids
+        )
+        positions_by_group: dict[int, dict[int, int]] = {}
+        for group_id, position in locations:
+            positions = positions_by_group.setdefault(group_id, {})
+            positions.setdefault(position, len(positions))
+
+        groups: list[TableTensor] = []
+        group_ids: dict[int, int] = {}
+        for new_group_id, (group_id, positions) in enumerate(
+            positions_by_group.items()
+        ):
+            group = self._groups[group_id]
+            selected_positions = tuple(positions)
+            group_ids[group_id] = new_group_id
+            if selected_positions == tuple(range(group.size(0))):
+                groups.append(group)
+            elif len(selected_positions) == 1:
+                groups.append(
+                    cast(
+                        TableTensor,
+                        group.narrow(0, selected_positions[0], 1),
+                    )
+                )
+            else:
+                groups.append(
+                    cast(
+                        TableTensor,
+                        torch.stack(
+                            [
+                                group[position]
+                                for position in selected_positions
+                            ],
+                            dim=0,
+                        ),
+                    )
+                )
+
+        ensemble = copy.copy(self)
+        ensemble._groups = tuple(groups)
+        ensemble._locations = tuple(
+            (group_ids[group_id], positions_by_group[group_id][position])
+            for group_id, position in locations
+        )
+        return ensemble
+
+    @classmethod
+    def gather_members(
+        cls,
+        tables: Sequence[Self],
+        member_ids: Sequence[int],
+    ) -> Self:
+        """Gather members from multiple ensemble tables.
+
+        ``tables[i].table(member_ids[i])`` supplies output member ``i``.
+
+        Args:
+            tables: Source ensemble table for each output member.
+            member_ids: Logical source member position for each output member.
+
+        Returns:
+            An ensemble table preserving logical member order.
+        """
+        if len(tables) != len(member_ids):
+            raise ValueError("Expected one source member per ensemble table")
+
+        first = tables[0]
+        if all(table is first for table in tables[1:]):
+            return first.select_members(member_ids)
+
+        # TODO: This path occurs when members come from multiple sources, such
+        # as different Choice options. It can be optimized by refining their
+        # compatible group layouts and gathering their rows directly into the
+        # output groups.
+        outputs: list[TableTensor] = []
+        output_id_by_source: dict[tuple[int, tuple[int, int]], int] = {}
+        member_table_ids = []
+        for table, member_id in zip(tables, member_ids, strict=True):
+            location = table._locations[member_id]
+            key = (id(table), location)
+            output_id = output_id_by_source.get(key)
+            if output_id is None:
+                output_id = len(outputs)
+                output_id_by_source[key] = output_id
+                outputs.append(table.table(member_id))
+            member_table_ids.append(output_id)
+
+        return cls.from_tables(
+            tables=outputs,
+            member_table_ids=member_table_ids,
+        )
+
     @property
     def num_members(self) -> int:
         """Return the number of ensemble members."""
