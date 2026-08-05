@@ -15,7 +15,7 @@ from sdm.tensor import StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
 
 
-class TfidfTextEmbed(Processor):
+class TfidfEmbed(Processor):
     """Encode text columns as character n-gram TF-IDF vectors.
 
     Tokenization follows scikit-learn's ``char_wb`` analyzer: whitespace-
