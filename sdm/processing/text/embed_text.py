@@ -55,6 +55,7 @@ class EmbedText(Processor):
         dtype = torch.get_default_dtype()
         col_names = table.columns[Stype.text]
         batch_shape = table.text.shape[:-1]
+
         out_col_names: list[str] = []
         for col_name in col_names:
             out_col_names.extend(
