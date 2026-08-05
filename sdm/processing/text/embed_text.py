@@ -62,18 +62,12 @@ class EmbedText(Processor):
                 f"{col_name}_{i}" for i in range(self._embedding_dim)
             )
 
-        if batch_shape.numel() == 0:
-            numerical = torch.zeros(
-                (*batch_shape, len(out_col_names)),
-                dtype=dtype,
-                device=device,
-            )
-        else:
-            numerical = torch.empty(
-                (*batch_shape, len(out_col_names)),
-                dtype=dtype,
-                device=device,
-            )
+        numerical = torch.empty(
+            (*batch_shape, len(out_col_names)),
+            dtype=dtype,
+            device=device,
+        )
+        if numerical.numel() != 0:
             # FIXME: There're currently multiple issues:
             # 1. Even though the same model gets applied to all columns, we run
             #    it once per column.
