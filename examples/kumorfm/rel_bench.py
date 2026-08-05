@@ -50,7 +50,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
         task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION
     )
 
-    # AutoCompleteTask removes the target and related leakage columns here.
+    # Task-owned DB removes autocomplete leakage and adds any required row key.
     db = task.dataset.get_db(upto_test_timestamp=False)
     tables = {}
     for name, table in db.table_dict.items():
@@ -59,6 +59,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
             *table.fkey_col_to_pkey_table,
         }
         stypes = {}
+        # Drop text and unsupported list features before tensor conversion.
         for column in table.df:
             try:
                 stype = sdm.infer_stypes(
@@ -115,6 +116,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
     ]
     task_df = pd.concat(dfs, ignore_index=True)
     if classification:
+        # Normalize 0/1, Boolean, and f/t labels so AUROC scores True.
         labels = sorted(
             pd.concat(dfs[:2], ignore_index=True)[task.target_col]
             .dropna()
