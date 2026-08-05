@@ -59,7 +59,6 @@ def run_task(dataset_name: str, task_name: str) -> None:
             *table.fkey_col_to_pkey_table,
         }
         stypes = {}
-        # Drop text and unsupported list features before tensor conversion.
         for column in table.df:
             try:
                 stype = sdm.infer_stypes(
