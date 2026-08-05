@@ -61,16 +61,15 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         out = ensemble_table
-        children = []
-        for name, child in tuple(self._modules.items()):
+        n = len(self._modules)
+        for index, (name, child) in enumerate(self._modules.items()):
             if not isinstance(child, EnsembleProcessor):
                 child = EnsembleProcessorAdapter(cast(Processor, child))
                 self._modules[name] = child
-            children.append(child)
-        for child in children[:-1]:
-            out = child.fit_transform_ensemble(out, generator=generator)
-        if children:
-            children[-1].fit_ensemble(out, generator=generator)
+            if index < n - 1:
+                out = child.fit_transform_ensemble(out, generator=generator)
+            else:
+                child.fit_ensemble(out, generator=generator)
 
     def _fit_transform_ensemble(
         self,
@@ -79,7 +78,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in tuple(self._modules.items()):
+        for name, child in self._modules.items():
             if not isinstance(child, EnsembleProcessor):
                 child = EnsembleProcessorAdapter(cast(Processor, child))
                 self._modules[name] = child
@@ -91,7 +90,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in tuple(self._modules.items()):
+        for name, child in self._modules.items():
             if not isinstance(child, EnsembleProcessor):
                 child = EnsembleProcessorAdapter(cast(Processor, child))
                 self._modules[name] = child
@@ -103,7 +102,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in reversed(tuple(self._modules.items())):
+        for name, child in reversed(self._modules.items()):
             if not isinstance(child, EnsembleProcessor):
                 child = EnsembleProcessorAdapter(cast(Processor, child))
                 self._modules[name] = child
