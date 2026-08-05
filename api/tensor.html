@@ -80,6 +80,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">sdm.tensor</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.VarLenTensor.html">VarLenTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.StringTensor.html">StringTensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.NullableIntTensor.html">NullableIntTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.CategoricalTensor.html">CategoricalTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.ColumnarTensor.html">ColumnarTensor</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.tensor.TableTensor.html">TableTensor</a></li>
@@ -200,16 +201,19 @@ data-aria-dark="Switch to auto color mode">
 <tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.tensor.StringTensor.html#sdm.tensor.StringTensor" title="sdm.tensor.StringTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.StringTensor</span></code></a></p></td>
 <td><p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> for UTF-8 encoded string values.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.CategoricalTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.CategoricalTensor</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.tensor.NullableIntTensor.html#sdm.tensor.NullableIntTensor" title="sdm.tensor.NullableIntTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.NullableIntTensor</span></code></a></p></td>
+<td><p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> for nullable integer values.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.tensor.CategoricalTensor.html#sdm.tensor.CategoricalTensor" title="sdm.tensor.CategoricalTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.CategoricalTensor</span></code></a></p></td>
 <td><p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> for categorical columns.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.tensor.ColumnarTensor.html#sdm.tensor.ColumnarTensor" title="sdm.tensor.ColumnarTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.ColumnarTensor</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.tensor.ColumnarTensor.html#sdm.tensor.ColumnarTensor" title="sdm.tensor.ColumnarTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.ColumnarTensor</span></code></a></p></td>
 <td><p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> for column-wise heterogeneous data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.TableTensor</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.TableTensor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.TableTensor</span></code></a></p></td>
 <td><p>A <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> for tensorized, lossless table data.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.EnsembleTable</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sdm.tensor.EnsembleTable</span></code></a></p></td>
 <td><p>Store and group input tables for an ensemble.</p></td>
 </tr>
 </tbody>
@@ -241,7 +245,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=2eea0845"></script>
+      <script src="../_static/documentation_options.js?v=397755a0"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
