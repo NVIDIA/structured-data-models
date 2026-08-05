@@ -23,10 +23,12 @@ class TaskDispatch(EnsembleProcessor):
 
     Args:
         classification: Stateless output processor selected for a categorical
-            target. A sequence is normalized to
+            target. If omitted, output passes through unchanged. A sequence is
+            normalized to
             :class:`~sdm.processing.Sequential`.
         regression: Stateless output processor selected for a numerical target.
-            A sequence is normalized to
+            If omitted, output passes through unchanged. A sequence is
+            normalized to
             :class:`~sdm.processing.Sequential`.
     """
 
@@ -87,11 +89,6 @@ class TaskDispatch(EnsembleProcessor):
                 f"categorical (got {stype!r})."
             )
 
-        if task not in self.processors:
-            raise ValueError(
-                f"{self.__class__.__name__!r} has no {task!r} route; "
-                f"configure {task}=... or use 'Identity()' for a no-op."
-            )
         self._task = task
 
     def _reset(self) -> None:
@@ -106,6 +103,8 @@ class TaskDispatch(EnsembleProcessor):
                 f"{self.__class__.__name__!r} has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
+        if self._task not in self.processors:
+            return ensemble_table
         processor = cast(EnsembleProcessor, self.processors[self._task])
         return processor.transform_ensemble(ensemble_table)
 
@@ -115,9 +114,9 @@ class TaskDispatch(EnsembleProcessor):
 
     def set_extra_state(self, state: str | None) -> None:
         r""":meta private:"""  # noqa: D415
-        if state is not None and state not in self.processors:
+        if state is not None and state not in ("classification", "regression"):
             raise ValueError(
-                f"Cannot restore unconfigured {state!r} task on "
+                f"Cannot restore invalid {state!r} task on "
                 f"{self.__class__.__name__!r}."
             )
         self._task = cast(

@@ -86,8 +86,8 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
 
     with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
         dispatch.transform(output)
-    with pytest.raises(ValueError, match="no 'classification' route"):
-        dispatch._resolve(_categorical_target())
+    dispatch._resolve(_categorical_target())
+    assert dispatch.transform(output) is output
     with pytest.raises(ValueError, match=r"exactly one.*got 2"):
         dispatch._resolve(_numerical_table(("y0", "y1")))
 
