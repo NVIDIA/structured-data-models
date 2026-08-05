@@ -10,6 +10,9 @@ Processor API
 
    ~sdm.processing.base.Processor
    ~sdm.processing.base.InvertibleMixin
+   ~sdm.processing.ensemble.EnsembleProcessor
+   ~sdm.processing.ensemble.EnsembleInvertibleMixin
+   ~sdm.processing.ensemble.EnsembleProcessorAdapter
    ~sdm.processing.recipe.Recipe
 
 Common Processors

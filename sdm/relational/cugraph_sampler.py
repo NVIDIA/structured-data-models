@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from sdm import TableTensor
+from sdm import NaT, Stype, TableTensor
 from sdm.relational.data import RelationalData
 from sdm.relational.join import join_index
 from sdm.relational.sampler import (
@@ -177,7 +177,6 @@ class CuGraphRelationalSampler(RelationalSampler):
         dsts: list[Tensor] = []
         edge_types: list[Tensor] = []
         edge_times: list[Tensor] = []
-        minimum_time = torch.iinfo(torch.int64).min
 
         times = {
             table_name: self.data.tables[table_name][
@@ -211,7 +210,7 @@ class CuGraphRelationalSampler(RelationalSampler):
                 if table_name in times:
                     edge_times.append(times[table_name][index])
                 else:
-                    edge_times.append(torch.full_like(index, minimum_time))
+                    edge_times.append(torch.full_like(index, NaT))
 
         if self._num_edge_types == 0:
             self._resource_handle = None
@@ -286,9 +285,7 @@ class CuGraphRelationalSampler(RelationalSampler):
         # ColumnarTensor stores numeric IDs as plain tensors. String and
         # composite IDs continue through the general cuDF join below.
         if (
-            task_value is None
-            or table_value is None
-            or task_value.__class__ is not Tensor
+            task_value.__class__ is not Tensor
             or table_value.__class__ is not Tensor
             or task_value.dtype != table_value.dtype
             or task_value.dtype not in _INTEGER_DTYPES
@@ -363,11 +360,9 @@ class CuGraphRelationalSampler(RelationalSampler):
         return seed
 
     @staticmethod
-    def _id_column(table: TableTensor, column: str) -> Tensor | None:
-        table = table[column]
-        if table.id._validity[0] is not None:
-            return None
-        return table.id[..., 0]
+    def _id_column(table: TableTensor, column: str) -> Tensor:
+        columns = dict(zip(table.columns[Stype.id], table.id.unbind(-1)))
+        return columns[column]
 
     def _sample_non_temporal(
         self,
