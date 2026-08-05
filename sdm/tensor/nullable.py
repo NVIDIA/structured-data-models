@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import functools
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
 
 import pyarrow as pa
@@ -19,6 +20,19 @@ from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 if TYPE_CHECKING:
     import cudf
+
+aten = torch.ops.aten
+
+
+def preserve_view_inference_mode(fn: Callable) -> Callable:
+    r"""Preserve input inference state for tensor view operations."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with torch.inference_mode(args[0].is_inference()):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 class NullableIntTensor(Tensor):
@@ -39,27 +53,41 @@ class NullableIntTensor(Tensor):
         torch.int32,
         torch.int64,
     )
+    HANDLED_FUNCTIONS: ClassVar[
+        dict[Callable[..., Any], Callable[..., Any]]
+    ] = {}
 
     _data: Tensor
-    _valid: Tensor | None
+    _valid: Tensor
 
     # Constructors ############################################################
 
-    def __init__(
-        self,
-        data: Tensor,
-        valid: Tensor | None = None,
-    ) -> None:
+    def __init__(self, data: Tensor, valid: Tensor) -> None:
         pass
 
-    def __new__(
-        cls,
-        data: Tensor,
-        valid: Tensor | None = None,
-    ) -> Self:
+    def __new__(cls, data: Tensor, valid: Tensor) -> Self:
         r"""Create a tensor wrapper."""
-        cls._validate_data(data)
-        cls._validate_valid(data, valid)
+        if data.dtype not in cls.ALLOWED_DTYPES:
+            raise ValueError(
+                f"Expected 'data' in {cls.__name__!r} to have integer "
+                f"dtype (got '{data.dtype}')"
+            )
+        if valid.dtype != torch.bool:
+            raise ValueError(
+                f"Expected 'valid' in {cls.__name__!r} to have 'torch.bool' "
+                f"dtype (got '{valid.dtype}')"
+            )
+        if valid.size() != data.size():
+            raise ValueError(
+                f"Expected 'data' and 'valid' in {cls.__name__!r} to have the "
+                f"same size (got {tuple(data.size())} and "
+                f"{tuple(valid.size())})"
+            )
+        if valid.device != data.device:
+            raise ValueError(
+                f"Expected 'data' and 'valid' in {cls.__name__!r} to be on "
+                f"the same device (got '{data.device}' and '{valid.device}')"
+            )
 
         out = Tensor._make_wrapper_subclass(
             cls,
@@ -75,6 +103,15 @@ class NullableIntTensor(Tensor):
         out._valid = valid
 
         return out
+
+    @classmethod
+    def from_tensor(cls, tensor: Tensor) -> Self:
+        r"""Wrap a tensor into a nullable tensor.
+
+        Args:
+            tensor: The tensor to wrap.
+        """
+        return cls(tensor, valid=torch.ones_like(tensor, dtype=torch.bool))
 
     @classmethod
     def from_arrow(
@@ -105,63 +142,47 @@ class NullableIntTensor(Tensor):
                 f"{len(array)} elements (got {math.prod(size)})"
             )
 
-        if not pa.types.is_integer(array.type):
-            raise TypeError(
-                f"Expected 'array' in '{cls.__name__}.from_arrow' to have "
-                f"integer type (got '{array.type}')"
-            )
-
         arrow_dtype = ARROW_TORCH_DTYPES.get(array.type)
-        if arrow_dtype is None or arrow_dtype not in cls.ALLOWED_DTYPES:
+        if arrow_dtype is None:
             raise TypeError(f"Unsupported value type '{array.type}'")
-        if dtype is not None:
-            cls._validate_dtype(dtype, name="dtype")
 
         buffer = array.buffers()[1]
         if buffer is not None and buffer.size > 0:
             data = torch.frombuffer(buffer, dtype=arrow_dtype)
-            data = data[array.offset : array.offset + len(array)]
-            if array.offset != 0:
-                data = data.contiguous()
-            data = data.to(device=device, dtype=dtype)
         else:
-            data = torch.empty(
-                len(array),
-                dtype=arrow_dtype if dtype is None else dtype,
-                device=device,
-            )
+            data = torch.empty(0, dtype=arrow_dtype, device=device)
+        data = torch.as_strided(
+            data,
+            size=size,
+            stride=_contiguous_stride(size),
+            storage_offset=array.offset,
+        ).to(device, dtype)
 
-        valid: Tensor | None = None
         if array.null_count > 0:
             valid = arrow_as_tensor(
                 array.is_valid(),
                 dtype=torch.bool,
                 device=device,
-            )
+            ).view(size)
+        else:
+            valid = torch.ones_like(data, dtype=torch.bool)
 
-        return cls(
-            data=data.view(size),
-            valid=valid.view(size) if valid is not None else None,
-        )
+        return cls(data, valid)
 
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
-        tensor = self.contiguous().cpu()
-        data = tensor._data.view(-1)
-        valid = tensor._valid.view(-1) if tensor._valid is not None else None
+        tensor = cast(NullableIntTensor, self.contiguous().view(-1).cpu())
 
-        arrow_type = TORCH_ARROW_DTYPES.get(data.dtype)
+        arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
         if arrow_type is None:
-            raise TypeError(f"Unsupported data type '{data.dtype}'")
+            raise TypeError(f"Unsupported data type '{tensor.dtype}'")
 
         return pa.Array.from_buffers(
             type=arrow_type,
-            length=data.numel(),
+            length=tensor.numel(),
             buffers=[
-                pa.array(valid.numpy(), type=pa.bool_()).buffers()[1]
-                if valid is not None
-                else None,
-                pa.py_buffer(data.numpy()),
+                pa.array(tensor._valid.numpy(), type=pa.bool_()).buffers()[1],
+                pa.py_buffer(tensor._data.numpy()),
             ],
             null_count=-1,
         )
@@ -183,8 +204,6 @@ class NullableIntTensor(Tensor):
             size: The shape of the tensor.
             device: The device.
         """
-        from cudf.api.types import is_integer_dtype
-
         if size is None:
             size = (len(ser),)
         elif math.prod(size) != len(ser):
@@ -193,29 +212,14 @@ class NullableIntTensor(Tensor):
                 f"{len(ser)} elements (got {math.prod(size)})"
             )
 
-        if not is_integer_dtype(ser.dtype):
-            raise TypeError(
-                f"Expected 'ser' in '{cls.__name__}.from_cudf' to have "
-                f"integer type (got '{ser.dtype}')"
-            )
-        if dtype is not None:
-            cls._validate_dtype(dtype, name="dtype")
+        data = torch.from_dlpack(ser.to_dlpack()).to(device, dtype)
 
-        valid: Tensor | None = None
-        data_ser = ser
         if ser.hasnans:
-            data_ser = ser.fillna(0)
             valid = torch.from_dlpack(ser.notnull().to_cupy()).to(device)
+        else:
+            valid = torch.ones_like(data, dtype=torch.bool)
 
-        data = torch.from_dlpack(data_ser.to_dlpack()).to(
-            device=device,
-            dtype=dtype,
-        )
-
-        return cls(
-            data=data.view(size),
-            valid=valid.view(size) if valid is not None else None,
-        )
+        return cls(data.view(size), valid.view(size))
 
     def to_cudf(self) -> cudf.Series:
         r"""Convert this CUDA tensor to a flat :class:`cudf.Series`."""
@@ -236,9 +240,6 @@ class NullableIntTensor(Tensor):
             dtype: The dtype.
             device: The device.
         """
-        if dtype is not None:
-            cls._validate_dtype(dtype, name="dtype")
-
         data: list[Any] = []
         valid: list[bool] = []
 
@@ -261,6 +262,11 @@ class NullableIntTensor(Tensor):
             if len(value) == 0:
                 return (0,)
 
+            if not is_sequence(value[0]):
+                data.extend(0 if item is None else item for item in value)
+                valid.extend(item is not None for item in value)
+                return (len(value),)
+
             child_size: tuple[int, ...] | None = None
             for item in value:
                 item_size = flatten(item)
@@ -275,44 +281,80 @@ class NullableIntTensor(Tensor):
             return (len(value), *child_size)
 
         size = flatten(values)
-        data_dtype = torch.int64 if dtype is None and len(data) == 0 else dtype
-        tensor = torch.tensor(data, dtype=data_dtype, device=device)
-        valid_tensor = None
-        if False in valid:
-            valid_tensor = torch.tensor(
-                valid,
-                dtype=torch.bool,
-                device=device,
-            )
+        dtype = torch.int64 if dtype is None and len(data) == 0 else dtype
 
         return cls(
-            data=tensor.view(size),
-            valid=valid_tensor.view(size)
-            if valid_tensor is not None
-            else None,
+            torch.tensor(data, dtype=dtype, device=device).view(size),
+            torch.tensor(valid, dtype=torch.bool, device=device).view(size),
         )
 
     # Properties ##############################################################
 
     @property
-    def values(self) -> Tensor:
+    def data(self) -> Tensor:
         r"""Return the integer values tensor."""
         return self._data
 
     @property
-    def valid(self) -> Tensor | None:
-        r"""Return the validity mask, or ``None`` when all values are valid."""
+    def valid(self) -> Tensor:
+        r"""Return the logical validity mask."""
         return self._valid
 
-    @property
-    def is_nullable(self) -> bool:
-        r"""Whether this tensor has a validity mask."""
-        return self._valid is not None
+    # Decorators ##############################################################
+
+    @classmethod
+    def implements(
+        cls,
+        torch_function: Callable[..., Any],
+    ) -> Callable[..., Any]:
+        r"""Register a ``__torch_dispatch__`` implementation.
+
+        See PyTorch's
+        :ref:`calling convention <torch-dispatch-calling-convention>`.
+        """
+        if "HANDLED_FUNCTIONS" not in cls.__dict__:
+            cls.HANDLED_FUNCTIONS = cls.HANDLED_FUNCTIONS.copy()
+
+        def decorator(my_function: Callable[..., Any]) -> Callable[..., Any]:
+            cls.HANDLED_FUNCTIONS[torch_function] = my_function
+            return my_function
+
+        return decorator
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = ["_data", "_valid"]
+        ctx = (self.__class__,)
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> NullableIntTensor:
+        (cls,) = ctx
+        return cls(inner_tensors["_data"], inner_tensors["_valid"])
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         return (self.__class__, (self._data, self._valid))
+
+    @classmethod
+    def __torch_function__(
+        cls,
+        func: Callable[..., Any],
+        types: tuple[type[Any], ...],
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        if func is torch.isfinite or func is Tensor.isfinite:
+            assert isinstance(args[0], NullableIntTensor)
+            return _isfinite(args[0])
+
+        with torch._C.DisableTorchFunction():
+            return func(*args, **(kwargs or {}))
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
@@ -322,55 +364,31 @@ class NullableIntTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
+            return handler(*args, **(kwargs or {}))
+
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
         )
 
     @override
     def is_shared(self) -> bool:
-        is_shared = self._data.is_shared()
-        return is_shared and (self._valid is None or self._valid.is_shared())
+        return self._data.is_shared() and self._valid.is_shared()
 
     @override
     def share_memory_(self) -> Self:
         self._data.share_memory_()
-        if self._valid is not None:
-            self._valid.share_memory_()
+        self._valid.share_memory_()
         return self
-
-    @override
-    def is_pinned(self) -> bool:
-        is_pinned = self._data.is_pinned()
-        return is_pinned and (self._valid is None or self._valid.is_pinned())
-
-    @override
-    def pin_memory(self, device: Any = None) -> Self:
-        if device is None:
-            return self.__class__(
-                data=self._data.pin_memory(),
-                valid=self._valid.pin_memory()
-                if self._valid is not None
-                else None,
-            )
-        return self.__class__(
-            data=self._data.pin_memory(device),
-            valid=self._valid.pin_memory(device)
-            if self._valid is not None
-            else None,
-        )
 
     @override
     def is_contiguous(
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
     ) -> bool:
-        is_contiguous = self._data.is_contiguous(
-            memory_format=memory_format,
-        )
-        return is_contiguous and (
-            self._valid is None
-            or self._valid.is_contiguous(memory_format=memory_format)
-        )
+        return self._data.is_contiguous(
+            memory_format=memory_format
+        ) and self._valid.is_contiguous(memory_format=memory_format)
 
     @override
     def contiguous(
@@ -381,53 +399,24 @@ class NullableIntTensor(Tensor):
             return self
         return self.__class__(
             data=self._data.contiguous(memory_format=memory_format),
-            valid=self._valid.contiguous(memory_format=memory_format)
-            if self._valid is not None
-            else None,
-        )
-
-    @override
-    def clone(
-        self,
-        *,
-        memory_format: torch.memory_format = torch.preserve_format,
-    ) -> Self:
-        return self.__class__(
-            data=self._data.clone(memory_format=memory_format),
-            valid=self._valid.clone(memory_format=memory_format)
-            if self._valid is not None
-            else None,
-        )
-
-    @override
-    def detach(self) -> Self:
-        return self.__class__(
-            data=self._data.detach(),
-            valid=self._valid.detach() if self._valid is not None else None,
-        )
-
-    @override
-    def detach_(self) -> Self:
-        raise RuntimeError(
-            f"Can't detach a '{self.__class__.__name__}' in-place. Use "
-            "'detach() instead."
-        )
-
-    @override
-    def cpu(self) -> Self:
-        return self.__class__(
-            data=self._data.cpu(),
-            valid=self._valid.cpu() if self._valid is not None else None,
+            valid=self._valid.contiguous(memory_format=memory_format),
         )
 
     @override
     def tolist(self) -> Any:
-        values = self._data.cpu().tolist()
-        valid = self._valid.cpu().tolist() if self._valid is not None else None
-        if valid is None:
-            return values
+        def apply_valid(data: Any, valid: Any) -> Any:
+            if isinstance(valid, bool):
+                return data if valid else None
 
-        return self._apply_valid(values, valid)
+            return [
+                apply_valid(value, is_valid)
+                for value, is_valid in zip(data, valid)
+            ]
+
+        return apply_valid(
+            data=self._data.cpu().tolist(),
+            valid=self._valid.cpu().tolist(),
+        )
 
     @override
     def item(self) -> int | None:  # type: ignore
@@ -436,67 +425,341 @@ class NullableIntTensor(Tensor):
                 f"{self.__class__.__name__!r} with {self._data.numel()} "
                 "elements cannot be converted to a single item"
             )
-        return cast(int | None, self.tolist())
+        return self.view(-1).tolist()[0]
 
-    def __repr__(self, *, tensor_contents: Any = None) -> str:
-        # TODO Support tensor content printing.
-        out = f"{self.__class__.__name__}(..."
-        out += f", size={tuple(self.size())}"
-        out += f", dtype={self.dtype}"
-        if self._valid is not None:
-            out += f", null_count={int((~self._valid).sum())}"
-        if not self.is_cpu:
-            out += f", device={self.device}"
-        out += ")"
-        return out
 
-    # Helpers ################################################################
+@NullableIntTensor.implements(aten.alias.default)
+@preserve_view_inference_mode
+def _alias(inp: NullableIntTensor) -> NullableIntTensor:
+    return inp.__class__(
+        data=aten.alias.default(inp._data),
+        valid=aten.alias.default(inp._valid),
+    )
 
-    @classmethod
-    def _validate_data(cls, data: Tensor) -> None:
-        cls._validate_dtype(data.dtype, name="data")
-        if not data.is_contiguous():
-            raise ValueError(
-                f"Expected 'data' in {cls.__name__!r} to be contiguous"
-            )
 
-    @classmethod
-    def _validate_valid(cls, data: Tensor, valid: Tensor | None) -> None:
-        if valid is None:
-            return
-        if valid.dtype != torch.bool:
-            raise ValueError(
-                f"Expected 'valid' in {cls.__name__!r} to have dtype "
-                f"'torch.bool' (got '{valid.dtype}')"
-            )
-        if valid.size() != data.size():
-            raise ValueError(
-                f"Expected 'valid' in {cls.__name__!r} to have size "
-                f"{tuple(data.size())} (got {tuple(valid.size())})"
-            )
-        if not valid.is_contiguous():
-            raise ValueError(
-                f"Expected 'valid' in {cls.__name__!r} to be contiguous"
-            )
-        if valid.device != data.device:
-            raise ValueError(
-                f"Expected 'data' and 'valid' in {cls.__name__!r} to be on "
-                f"the same device (got '{data.device}' and '{valid.device}')"
-            )
+@NullableIntTensor.implements(aten.to.dtype_layout)
+def _to_dtype_layout(
+    inp: NullableIntTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool | None = None,  # Ignored by PyTorch.
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> NullableIntTensor:
 
-    @classmethod
-    def _validate_dtype(cls, dtype: torch.dtype, *, name: str) -> None:
-        if dtype not in cls.ALLOWED_DTYPES:
-            raise ValueError(
-                f"Expected '{name}' in {cls.__name__!r} to have integer "
-                f"dtype (got '{dtype}')"
-            )
+    if dtype is not None and dtype not in inp.ALLOWED_DTYPES:
+        raise TypeError(
+            f"Can't convert {inp.__class__.__name__!r} to dtype '{dtype}'"
+        )
 
-    @classmethod
-    def _apply_valid(cls, values: Any, valid: Any) -> Any:
-        if isinstance(valid, bool):
-            return values if valid else None
-        return [
-            cls._apply_valid(value, is_valid)
-            for value, is_valid in zip(values, valid)
-        ]
+    if (
+        not copy
+        and (dtype is None and dtype == inp.dtype)
+        and (device is None or torch.device(device) == inp.device)
+        and (layout is None or layout == inp.layout)
+        and (
+            memory_format is None
+            or memory_format == torch.preserve_format
+            or (
+                memory_format == torch.contiguous_format
+                and inp.is_contiguous()
+            )
+        )
+    ):
+        return inp
+
+    return inp.__class__(
+        data=aten.to.dtype_layout(
+            inp._data,
+            dtype=dtype,
+            layout=layout,
+            device=device,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            copy=copy,
+            memory_format=memory_format,
+        ),
+        valid=aten.to.dtype_layout(
+            inp._valid,
+            dtype=None,
+            layout=layout,
+            device=device,
+            pin_memory=pin_memory,
+            non_blocking=non_blocking,
+            copy=copy,
+            memory_format=memory_format,
+        ),
+    )
+
+
+@NullableIntTensor.implements(aten.to.dtype)
+def _to_dtype(
+    inp: NullableIntTensor,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> NullableIntTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@NullableIntTensor.implements(aten.to.device)
+def _to_device(
+    inp: NullableIntTensor,
+    device: torch.device,
+    dtype: torch.dtype,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> NullableIntTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        device=device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@NullableIntTensor.implements(aten.to.other)
+def _to_other(
+    inp: NullableIntTensor,
+    other: Tensor,
+    non_blocking: bool = False,
+    copy: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> NullableIntTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=other.dtype,
+        layout=other.layout,
+        device=other.device,
+        non_blocking=non_blocking,
+        copy=copy,
+        memory_format=memory_format,
+    )
+
+
+@NullableIntTensor.implements(aten._to_copy.default)
+def _to_copy(
+    inp: NullableIntTensor,
+    *,
+    dtype: torch.dtype | None = None,
+    layout: torch.layout | None = None,
+    device: torch.device | str | None = None,
+    pin_memory: bool = False,  # Ignored by PyTorch.
+    non_blocking: bool = False,
+    memory_format: torch.memory_format | None = None,
+) -> NullableIntTensor:
+    return _to_dtype_layout(
+        inp,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        pin_memory=pin_memory,
+        non_blocking=non_blocking,
+        copy=True,
+        memory_format=memory_format,
+    )
+
+
+@NullableIntTensor.implements(aten.clone.default)
+def _clone(
+    inp: NullableIntTensor,
+    *,
+    memory_format: torch.memory_format | None = None,
+) -> NullableIntTensor:
+    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
+
+
+@NullableIntTensor.implements(aten.contiguous.default)
+def _contiguous(
+    inp: NullableIntTensor,
+    *,
+    memory_format: torch.memory_format = torch.contiguous_format,
+) -> NullableIntTensor:
+    return inp.__class__(
+        data=inp._data.contiguous(memory_format=memory_format),
+        valid=inp._valid.contiguous(memory_format=memory_format),
+    )
+
+
+@NullableIntTensor.implements(aten.is_pinned.default)
+def _is_pinned(inp: NullableIntTensor) -> bool:
+    return inp._data.is_pinned() and inp._valid.is_pinned()
+
+
+@NullableIntTensor.implements(aten._pin_memory.default)
+def _pin_memory(inp: NullableIntTensor) -> NullableIntTensor:
+    return inp.__class__(
+        data=inp._data.pin_memory(),
+        valid=inp._valid.pin_memory(),
+    )
+
+
+@NullableIntTensor.implements(aten.isnan.default)
+def _isnan(inp: NullableIntTensor) -> Tensor:
+    return ~inp._valid
+
+
+@NullableIntTensor.implements(aten.isfinite.default)
+def _isfinite(inp: NullableIntTensor) -> Tensor:
+    return inp._valid
+
+
+@NullableIntTensor.implements(aten.equal.default)
+def _equal(inp: NullableIntTensor, other: Tensor) -> bool:
+    if inp.__class__ is not other.__class__:
+        return False
+    if inp.size() != other.size():
+        return False
+
+    if not inp._valid.equal(other._valid):
+        return False
+
+    return inp._data[inp._valid].equal(other._data[other._valid])
+
+
+@NullableIntTensor.implements(aten.allclose.default)
+def _allclose(
+    inp: NullableIntTensor,
+    other: Tensor,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
+) -> bool:
+    return _equal(inp, other)
+
+
+@NullableIntTensor.implements(aten.view.default)
+@preserve_view_inference_mode
+def _view(inp: NullableIntTensor, size: Sequence[int]) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.view.default(x, size))
+
+
+@NullableIntTensor.implements(aten._unsafe_view.default)
+@preserve_view_inference_mode
+def _unsafe_view(
+    inp: NullableIntTensor,
+    size: Sequence[int],
+) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten._unsafe_view.default(x, size))
+
+
+@NullableIntTensor.implements(aten.squeeze.default)
+@preserve_view_inference_mode
+def _squeeze(inp: NullableIntTensor) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.squeeze.default(x))
+
+
+@NullableIntTensor.implements(aten.squeeze.dim)
+@preserve_view_inference_mode
+def _squeeze_dim(inp: NullableIntTensor, dim: int) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.squeeze.dim(x, dim))
+
+
+@NullableIntTensor.implements(aten.squeeze.dims)
+@preserve_view_inference_mode
+def _squeeze_dims(
+    inp: NullableIntTensor,
+    dim: Sequence[int],
+) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.squeeze.dims(x, dim))
+
+
+@NullableIntTensor.implements(aten.unsqueeze.default)
+@preserve_view_inference_mode
+def _unsqueeze(inp: NullableIntTensor, dim: int) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.unsqueeze.default(x, dim))
+
+
+@NullableIntTensor.implements(aten.expand.default)
+@preserve_view_inference_mode
+def _expand(
+    inp: NullableIntTensor,
+    size: Sequence[int],
+    *,
+    implicit: bool = False,
+) -> NullableIntTensor:
+    return _apply(
+        inp,
+        lambda x: aten.expand.default(x, size, implicit=implicit),
+    )
+
+
+@NullableIntTensor.implements(aten.t.default)
+@preserve_view_inference_mode
+def _t(inp: NullableIntTensor) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.t.default(x))
+
+
+@NullableIntTensor.implements(aten.transpose.int)
+@preserve_view_inference_mode
+def _transpose(
+    inp: NullableIntTensor, dim0: int, dim1: int
+) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.transpose.int(x, dim0, dim1))
+
+
+@NullableIntTensor.implements(aten.permute.default)
+@preserve_view_inference_mode
+def _permute(inp: NullableIntTensor, dims: Sequence[int]) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.permute.default(x, dims))
+
+
+@NullableIntTensor.implements(aten.select.int)
+@preserve_view_inference_mode
+def _select(inp: NullableIntTensor, dim: int, index: int) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.select.int(x, dim, index))
+
+
+@NullableIntTensor.implements(aten.slice.Tensor)
+@preserve_view_inference_mode
+def _slice(
+    inp: NullableIntTensor,
+    dim: int = 0,
+    start: int | None = None,
+    end: int | None = None,
+    step: int = 1,
+) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.slice.Tensor(x, dim, start, end, step))
+
+
+@NullableIntTensor.implements(aten.narrow.default)
+@preserve_view_inference_mode
+def _narrow(
+    inp: NullableIntTensor,
+    dim: int,
+    start: int,
+    length: int,
+) -> NullableIntTensor:
+    return _apply(inp, lambda x: aten.narrow.default(x, dim, start, length))
+
+
+# Helpers #####################################################################
+
+
+def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
+    value = 1
+    stride = []
+    for dim_size in reversed(size):
+        stride.append(value)
+        value *= dim_size
+    return tuple(stride[::-1])
+
+
+def _apply(
+    inp: NullableIntTensor,
+    fn: Callable[[Tensor], Tensor],
+) -> NullableIntTensor:
+    return inp.__class__(fn(inp._data), fn(inp._valid))
