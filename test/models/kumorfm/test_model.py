@@ -16,6 +16,7 @@ from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
+from sdm.models.kumorfm.task import TaskGraph
 from sdm.testing import withCUDA
 
 
@@ -393,3 +394,146 @@ def test_default_recipe_preserves_ids() -> None:
 
     assert transformed.columns[Stype.id] == ("entity_id",)
     assert transformed.id is table.id
+
+
+def _sample_related_tables(
+    relational_data: RelationalData,
+    user_ids: list[int],
+) -> tuple[TableTensor, RelatedTables]:
+    pytest.importorskip("pyg_lib")
+    return relational_data.sampler()(
+        task_table=TableTensor(
+            columns={Stype.id: ("user_id",)},
+            id=ColumnarTensor((torch.tensor(user_ids),)),
+        ),
+        task_link={
+            "task_column": "user_id",
+            "table": "users",
+            "table_column": "user_id",
+        },
+        num_neighbors=[10, 10],
+    )
+
+
+def test_sampled_task_graph_marks_complete_task_rows(
+    relational_data: RelationalData,
+) -> None:
+    task, related_tables = _sample_related_tables(
+        relational_data,
+        [3, 2, 1, 0],
+    )
+
+    graph = TaskGraph.from_input(task, related_tables)
+
+    assert graph.all_task_rows_assigned
+    for name, task_row in graph.task_row_by_table.items():
+        torch.testing.assert_close(
+            task_row,
+            related_tables.tables[name].id[..., -1],
+        )
+
+
+def test_sampled_task_graph_with_explicit_hops_uses_mask_fallback(
+    relational_data: RelationalData,
+) -> None:
+    task, related_tables = _sample_related_tables(
+        relational_data,
+        [0, 1],
+    )
+
+    graph = TaskGraph.from_input(task, related_tables, num_hops=1)
+
+    assert not graph.all_task_rows_assigned
+
+
+def test_sampled_fast_path_matches_public_mask_fallback(
+    relational_data: RelationalData,
+) -> None:
+    context, context_related = _sample_related_tables(
+        relational_data,
+        [0, 1, 2, 3],
+    )
+    query, query_related = _sample_related_tables(
+        relational_data,
+        [0, 1],
+    )
+    target = TableTensor(
+        columns={Stype.categorical: ("target",)},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [0], [1]], dtype=torch.int32),
+            categories=(torch.tensor([False, True]),),
+        ),
+    )
+    fallback_related = context_related.replace_tables(context_related.tables)
+    model = KumoRFM(pretrained=False)
+
+    torch.manual_seed(1)
+    direct = model(
+        x_context=context,
+        y_context=target,
+        x_query=query,
+        related_context_tables=context_related,
+        related_query_tables=query_related,
+    )
+    torch.manual_seed(1)
+    fallback = model(
+        x_context=context,
+        y_context=target,
+        x_query=query,
+        related_context_tables=fallback_related,
+        related_query_tables=query_related,
+    )
+    torch.testing.assert_close(direct.numerical, fallback.numerical)
+
+    torch.manual_seed(1)
+    model.fit(context, target, context_related)
+    predicted = model.predict(query, query_related)
+    model.clear()
+
+    torch.manual_seed(1)
+    model.fit(context, target, fallback_related)
+    fallback_predicted = model.predict(query, query_related)
+    model.clear()
+
+    torch.testing.assert_close(
+        predicted.numerical,
+        fallback_predicted.numerical,
+    )
+
+
+def test_manual_disconnected_row_uses_mask_fallback() -> None:
+    task = TableTensor(
+        columns={Stype.id: ("user_id", "__example__")},
+        id=ColumnarTensor(
+            (
+                torch.tensor([0, 1]),
+                torch.tensor([0, 1]),
+            )
+        ),
+    )
+    related_tables = RelatedTables(
+        tables={
+            "users": TableTensor(
+                columns={Stype.id: ("user_id", "__example__")},
+                id=ColumnarTensor(
+                    (
+                        torch.tensor([0, 1, 99]),
+                        torch.tensor([0, 1, 0]),
+                    )
+                ),
+            )
+        },
+        relationships=[],
+        task_links=[
+            {
+                "task_columns": ("user_id", "__example__"),
+                "table": "users",
+                "table_columns": ("user_id", "__example__"),
+            }
+        ],
+    )
+
+    graph = TaskGraph.from_input(task, related_tables)
+
+    assert not graph.all_task_rows_assigned
+    assert graph.task_row_by_table["users"].tolist() == [0, 1, -1]

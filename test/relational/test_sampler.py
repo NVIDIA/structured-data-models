@@ -1,3 +1,4 @@
+from dataclasses import replace
 from textwrap import dedent
 from typing import Any, cast
 
@@ -94,6 +95,25 @@ def test_sampler(relational_data: RelationalData) -> None:
         num_neighbors=[10, 10],
     )
 
+    assert related_tables._task_rows_complete
+    assert related_tables.to("cpu")._task_rows_complete
+    selected = related_tables.select_tables(related_tables.tables)
+    assert selected._task_rows_complete
+    assert not related_tables.select_tables(("users",))._task_rows_complete
+    assert not related_tables.replace_tables(
+        related_tables.tables
+    )._task_rows_complete
+    replaced = replace(related_tables, tables=related_tables.tables)
+    assert not replaced._task_rows_complete
+    replaced = related_tables._replace_processed_tables(related_tables.tables)
+    assert replaced._task_rows_complete
+    cloned_tables = dict(related_tables.tables)
+    cloned_tables["users"] = cast(
+        TableTensor,
+        related_tables.tables["users"].clone(),
+    )
+    replaced = related_tables._replace_processed_tables(cloned_tables)
+    assert not replaced._task_rows_complete
     assert task_table.columns[Stype.id] == ("user_id", "__example__")
     assert task_table.id[..., 0].equal(torch.tensor([3, 2, 1, 0]))
     assert task_table.id[..., 1].equal(torch.tensor([0, 1, 2, 3]))
