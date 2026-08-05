@@ -64,7 +64,6 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        # Only intermediate outputs are needed to fit the following child.
         out = ensemble_table
         children = []
         for name, child in tuple(self._modules.items()):
