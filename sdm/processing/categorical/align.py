@@ -1,4 +1,4 @@
-from typing import Literal, cast
+from typing import Literal
 
 import torch
 from torch import Tensor
@@ -39,9 +39,7 @@ class AlignCategories(EnsembleProcessor):
     ) -> None:
         super().__init__()
         self.sort_by = sort_by
-        self._categories: tuple[Tensor, ...] = ()
-        self.processors = torch.nn.ModuleList()
-        self._member_processor_ids: tuple[int, ...] = ()
+        self._categories_by_member: tuple[tuple[Tensor, ...], ...] = ()
 
     def _fit_category(
         self,
@@ -93,14 +91,7 @@ class AlignCategories(EnsembleProcessor):
 
         return category, inverse
 
-    def _fit(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        self.processors = torch.nn.ModuleList()
-        self._member_processor_ids = ()
+    def _fit_categories(self, table: TableTensor) -> tuple[Tensor, ...]:
         mask = table.categorical.isfinite()
 
         categories: list[Tensor] = []
@@ -112,16 +103,12 @@ class AlignCategories(EnsembleProcessor):
             )
             categories.append(category)
 
-        self._categories = tuple(categories)
+        return tuple(categories)
 
-    def _fit_transform(
+    def _fit_and_align(
         self,
         table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        self.processors = torch.nn.ModuleList()
-        self._member_processor_ids = ()
+    ) -> tuple[tuple[Tensor, ...], TableTensor]:
         mask = table.categorical.isfinite()
         out = torch.full_like(table.categorical, -1)
 
@@ -137,10 +124,63 @@ class AlignCategories(EnsembleProcessor):
             assert inverse is not None
             out[..., i].view(-1)[mask[..., i].view(-1)] = inverse.to(out.dtype)
 
-        self._categories = tuple(categories)
+        fitted_categories = tuple(categories)
+        output = table.replace_blocks(
+            categorical=CategoricalTensor(out, categories=fitted_categories),
+        )
+        return fitted_categories, output
 
-        return table.replace_blocks(
-            categorical=CategoricalTensor(out, categories=self._categories),
+    def _fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        categories = self._fit_categories(table)
+        self._categories_by_member = (categories,)
+
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        categories, output = self._fit_and_align(table)
+        self._categories_by_member = (categories,)
+        return output
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        return self._align_to_categories(
+            table,
+            self._categories_by_member[0],
+        )
+
+    @staticmethod
+    def _member_table_ids(
+        ensemble_table: EnsembleTable,
+    ) -> tuple[int, ...]:
+        groups = []
+        table_id = 0
+        for group in ensemble_table:
+            num_tables = group.size(0)
+            ids = torch.arange(
+                table_id,
+                table_id + num_tables,
+                dtype=torch.float32,
+            ).view(num_tables, 1, 1)
+            groups.append(
+                TableTensor.from_tensor(
+                    tensor=ids,
+                    columns=("table_id",),
+                )
+            )
+            table_id += num_tables
+
+        table_ids = ensemble_table.replace_groups(groups)
+        # IDs are intentionally on CPU, so this does not synchronize CUDA.
+        return tuple(
+            int(table_ids.table(member_id).numerical[0, 0].item())
+            for member_id in range(ensemble_table.num_members)
         )
 
     def _fit_ensemble(
@@ -149,26 +189,15 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        processors = torch.nn.ModuleList()
-        member_processor_ids = []
-        fitted: dict[tuple[int, int], int] = {}
-
-        for member_id in range(ensemble_table.num_members):
-            location = ensemble_table._member_location(member_id)
-            processor_id = fitted.get(location)
-            if processor_id is None:
-                processor = self.__class__(sort_by=self.sort_by)
-                processor.fit(
-                    ensemble_table.table(member_id),
-                    generator=generator,
-                )
-                processor_id = len(processors)
-                fitted[location] = processor_id
-                processors.append(processor)
-            member_processor_ids.append(processor_id)
-
-        self.processors = processors
-        self._member_processor_ids = tuple(member_processor_ids)
+        categories = tuple(
+            self._fit_categories(group[position])
+            for group in ensemble_table
+            for position in range(group.size(0))
+        )
+        member_table_ids = self._member_table_ids(ensemble_table)
+        self._categories_by_member = tuple(
+            categories[table_id] for table_id in member_table_ids
+        )
 
     def _fit_transform_ensemble(
         self,
@@ -176,82 +205,111 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        processors = torch.nn.ModuleList()
-        member_processor_ids = []
+        categories = []
         tables = []
-        member_table_ids = []
-        fitted: dict[tuple[int, int], int] = {}
-
-        for member_id in range(ensemble_table.num_members):
-            location = ensemble_table._member_location(member_id)
-            processor_id = fitted.get(location)
-            if processor_id is None:
-                processor = self.__class__(sort_by=self.sort_by)
-                table = processor.fit_transform(
-                    ensemble_table.table(member_id),
-                    generator=generator,
-                )
-                processor_id = len(processors)
-                fitted[location] = processor_id
-                processors.append(processor)
+        for group in ensemble_table:
+            for position in range(group.size(0)):
+                fitted_categories, table = self._fit_and_align(group[position])
+                categories.append(fitted_categories)
                 tables.append(table)
-            member_processor_ids.append(processor_id)
-            member_table_ids.append(processor_id)
 
+        member_table_ids = self._member_table_ids(ensemble_table)
         output = EnsembleTable.from_tables(
             tables=tables,
             member_table_ids=member_table_ids,
         )
-        self.processors = processors
-        self._member_processor_ids = tuple(member_processor_ids)
+        self._categories_by_member = tuple(
+            categories[table_id] for table_id in member_table_ids
+        )
         return output
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._member_processor_ids) != ensemble_table.num_members:
+        if len(self._categories_by_member) != ensemble_table.num_members:
             raise RuntimeError(
                 "AlignCategories must be fitted with the same number of "
                 "ensemble members before transform."
             )
 
-        tables = []
-        member_table_ids = []
-        transformed: dict[tuple[tuple[int, int], int], int] = {}
-        for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (
-                ensemble_table._member_location(member_id),
-                processor_id,
-            )
-            table_id = transformed.get(key)
-            if table_id is None:
-                processor = cast(
-                    AlignCategories,
-                    self.processors[processor_id],
-                )
-                table_id = len(tables)
-                transformed[key] = table_id
-                tables.append(
-                    processor.transform(ensemble_table.table(member_id))
-                )
-            member_table_ids.append(table_id)
+        route_id_by_categories: dict[int, int] = {}
+        routes = []
+        route_ids = []
+        for categories in self._categories_by_member:
+            identity = id(categories)
+            route_id = route_id_by_categories.get(identity)
+            if route_id is None:
+                route_id = len(routes)
+                route_id_by_categories[identity] = route_id
+                routes.append(categories)
+            route_ids.append(route_id)
 
-        return EnsembleTable.from_tables(
+        if len(routes) == 1:
+            categories = routes[0]
+            return ensemble_table.replace_groups(
+                [
+                    self._align_to_categories(group, categories)
+                    for group in ensemble_table
+                ]
+            )
+
+        if len(routes) == ensemble_table.num_members:
+            return EnsembleTable.from_tables(
+                tables=[
+                    self._align_to_categories(
+                        ensemble_table.table(member_id),
+                        categories,
+                    )
+                    for member_id, categories in enumerate(
+                        self._categories_by_member
+                    )
+                ],
+                member_table_ids=range(ensemble_table.num_members),
+            )
+
+        member_ids_by_route = [[] for _ in routes]
+        for member_id, route_id in enumerate(route_ids):
+            member_ids_by_route[route_id].append(member_id)
+
+        outputs = []
+        for categories, member_ids in zip(
+            routes,
+            member_ids_by_route,
+            strict=True,
+        ):
+            selected = ensemble_table.select_members(member_ids)
+            outputs.append(
+                selected.replace_groups(
+                    [
+                        self._align_to_categories(group, categories)
+                        for group in selected
+                    ]
+                )
+            )
+
+        tables = []
+        member_ids = []
+        next_member_ids = [0] * len(routes)
+        for route_id in route_ids:
+            tables.append(outputs[route_id])
+            member_ids.append(next_member_ids[route_id])
+            next_member_ids[route_id] += 1
+
+        return EnsembleTable.gather_members(
             tables=tables,
-            member_table_ids=member_table_ids,
+            member_ids=member_ids,
         )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        if len(self.processors) > 0:
-            raise RuntimeError(
-                "'AlignCategories' was fitted for an ensemble; use "
-                "'transform_ensemble' instead of 'transform'."
-            )
+    def _align_to_categories(
+        self,
+        table: TableTensor,
+        categories: tuple[Tensor, ...],
+    ) -> TableTensor:
         mask = table.categorical.isfinite()
         out = torch.full_like(table.categorical, -1)
         for i, (actual, expected) in enumerate(
-            zip(table.categorical.categories, self._categories)
+            zip(table.categorical.categories, categories)
         ):
             if expected.numel() == 0:
                 continue
@@ -304,7 +362,7 @@ class AlignCategories(EnsembleProcessor):
             out[..., i].view(-1)[mask[..., i].view(-1)] = remapped[inverse]
 
         return table.replace_blocks(
-            categorical=CategoricalTensor(out, categories=self._categories),
+            categorical=CategoricalTensor(out, categories=categories),
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
