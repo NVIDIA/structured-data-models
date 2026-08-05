@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm import TableTensor
-from sdm.processing import QuantileTransform
+from sdm.processing import EnsembleProcessorAdapter, QuantileTransform
 from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA, withCUDA
 
@@ -209,51 +209,53 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
 
 @withCUDA
 @pytest.mark.parametrize("subsample", [None, 32])
-def test_quantile_transform_ensemble_matches_independent_processors(
+def test_quantile_transform_adapter_matches_grouped_tables(
     device: torch.device,
     subsample: int | None,
 ) -> None:
-    context = TableTensor.from_tensor(
-        torch.arange(256.0, device=device).view(128, 2)
+    values = torch.arange(256.0, device=device).view(128, 2)
+    contexts = (
+        TableTensor.from_tensor(values),
+        TableTensor.from_tensor(values.flip(0)),
     )
-    query = TableTensor.from_tensor(
-        torch.arange(32.0, device=device).view(16, 2) + 0.5
+    query_values = torch.arange(32.0, device=device).view(16, 2) + 0.5
+    queries = (
+        TableTensor.from_tensor(query_values),
+        TableTensor.from_tensor(query_values.flip(0)),
     )
-    processor = QuantileTransform(n_quantiles=8, subsample=subsample)
+    member_table_ids = (1, 0, 1)
+    context = EnsembleTable.from_tables(contexts, member_table_ids)
+    query = EnsembleTable.from_tables(queries, member_table_ids)
+    processor = EnsembleProcessorAdapter(
+        QuantileTransform(n_quantiles=8, subsample=subsample)
+    )
 
     context_output = processor.fit_transform_ensemble(
-        EnsembleTable(context, num_members=8),
+        context,
         generator=torch.Generator(device=device).manual_seed(7),
     )
-    query_output = processor.transform_ensemble(
-        EnsembleTable(query, num_members=8)
-    )
+    query_output = processor.transform_ensemble(query)
     restored = processor.inverse_transform_ensemble(context_output)
 
-    generator = torch.Generator(device=device).manual_seed(7)
-    for member_id in range(8):
+    expected_contexts = []
+    expected_queries = []
+    expected_restored = []
+    for context_table, query_table in zip(contexts, queries, strict=True):
         reference = QuantileTransform(
             n_quantiles=8,
             subsample=subsample,
         )
         expected_context = reference.fit_transform(
-            context,
-            generator=generator,
+            context_table,
+            generator=torch.Generator(device=device).manual_seed(7),
         )
-        expected_query = reference.transform(query)
-        expected_restored = reference.inverse_transform(expected_context)
-        assert context_output.table(member_id).equal(expected_context)
-        assert query_output.table(member_id).equal(expected_query)
-        assert restored.table(member_id).equal(expected_restored)
+        expected_contexts.append(expected_context)
+        expected_queries.append(reference.transform(query_table))
+        expected_restored.append(reference.inverse_transform(expected_context))
 
-
-def test_quantile_transform_checks_num_members() -> None:
-    table = TableTensor.from_tensor(torch.arange(64.0).view(32, 2))
-    processor = QuantileTransform(n_quantiles=8, subsample=None)
-    processor.fit_ensemble(EnsembleTable(table, num_members=4))
-
-    with pytest.raises(
-        RuntimeError,
-        match="was fitted with 4 ensemble members, but got 3",
-    ):
-        processor.transform_ensemble(EnsembleTable(table, num_members=3))
+    for member_id, table_id in enumerate(member_table_ids):
+        assert context_output.table(member_id).equal(
+            expected_contexts[table_id]
+        )
+        assert query_output.table(member_id).equal(expected_queries[table_id])
+        assert restored.table(member_id).equal(expected_restored[table_id])
