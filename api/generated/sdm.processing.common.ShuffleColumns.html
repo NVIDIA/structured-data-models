@@ -162,7 +162,10 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.common.ShuffleColumns"><code class="docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.common.ShuffleColumns"><code class="docutils literal notranslate"><span class="pre">ShuffleColumns</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.processing.common.ShuffleColumns.permutation"><code class="docutils literal notranslate"><span class="pre">ShuffleColumns.permutation</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -202,11 +205,10 @@ data-aria-dark="Switch to auto color mode">
 <dl class="py class">
 <dt class="sig sig-object py" id="sdm.processing.common.ShuffleColumns">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">sdm.processing.common.</span></span><span class="sig-name descname"><span class="pre">ShuffleColumns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'shift'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'random'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'shift'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.common.ShuffleColumns" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a>, <a class="reference internal" href="sdm.processing.base.InvertibleMixin.html#sdm.processing.base.InvertibleMixin" title="sdm.processing.base.InvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">InvertibleMixin</span></code></a></p>
-<p>Permute the numerical feature columns.</p>
-<p>The permutation is drawn when the processor is fitted; pass
-<code class="docutils literal notranslate"><span class="pre">generator</span></code> to <code class="docutils literal notranslate"><span class="pre">fit()</span></code> to make it reproducible. Convert
-non-numerical feature stypes before this step, for example with
+<dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>, <a class="reference internal" href="sdm.processing.ensemble.EnsembleInvertibleMixin.html#sdm.processing.ensemble.EnsembleInvertibleMixin" title="sdm.processing.ensemble.EnsembleInvertibleMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleInvertibleMixin</span></code></a></p>
+<p>Permute numerical feature columns and their names.</p>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">generator</span></code> to <code class="docutils literal notranslate"><span class="pre">fit()</span></code> to make the permutation reproducible.
+Convert non-numerical feature stypes before this step, for example with
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ToNumerical</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -215,6 +217,12 @@ columns by a drawn offset, and <code class="docutils literal notranslate"><span 
 with a drawn permutation.</p>
 </dd>
 </dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="sdm.processing.common.ShuffleColumns.permutation">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">permutation</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.13)"><span class="pre">Tensor</span></a></em><a class="headerlink" href="#sdm.processing.common.ShuffleColumns.permutation" title="Link to this definition">#</a></dt>
+<dd><p>Return the fitted permutation for a single table.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -243,7 +251,7 @@ with a drawn permutation.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=12b35c7e"></script>
+      <script src="../../_static/documentation_options.js?v=a6b527d8"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
