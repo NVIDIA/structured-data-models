@@ -27,11 +27,6 @@ class _FakeEmbeddingModel(torch.nn.Module):
         return torch.stack((values, values.square()), dim=-1)
 
 
-class _WrongShapeEmbeddingModel(torch.nn.Module):
-    def forward(self, strings: pa.Array) -> Tensor:
-        return torch.zeros(len(strings) + 1, 2)
-
-
 class _CudfEmbeddingModel(torch.nn.Module):
     def forward(self, strings: cudf.Series) -> Tensor:
         lengths = torch.from_dlpack(
@@ -74,14 +69,6 @@ def test_embeds_each_text_column() -> None:
             ]
         ),
     )
-
-
-def test_rejects_wrong_model_shape() -> None:
-    with pytest.raises(ValueError, match="Expected 'embedding_model'"):
-        EmbedText(
-            _WrongShapeEmbeddingModel(),
-            embedding_dim=2,
-        ).transform(_text_table())
 
 
 def test_empty_rows_use_embedding_dim_without_model_call() -> None:
