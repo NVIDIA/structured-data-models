@@ -563,8 +563,8 @@ class TableTensor(Tensor):
                     zip(self._columns[stype], tensor)
                 ):
                     col_dict[name] = to_cudf(
-                        column,
-                        None if valid is None else valid[idx],
+                        tensor=column,
+                        valid_mask=None if valid is None else valid[idx],
                     )
 
                 df = cudf.DataFrame(col_dict)
