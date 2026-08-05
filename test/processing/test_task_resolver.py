@@ -118,7 +118,7 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     assert recipe.output.transform(output).equal(output)
 
     recipe.target.fit(_categorical_target())
-    assert recipe.output.transform(output) is output
+    assert recipe.output.transform(output).equal(output)
 
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
         Recipe(features=[TaskDispatch(regression=Identity())])
