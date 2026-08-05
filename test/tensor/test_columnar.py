@@ -4,7 +4,12 @@ import pyarrow as pa
 import pytest
 import torch
 
-from sdm import CategoricalTensor, ColumnarTensor, StringTensor
+from sdm import (
+    CategoricalTensor,
+    ColumnarTensor,
+    NullableIntTensor,
+    StringTensor,
+)
 from sdm.testing import onlyCUDA
 
 
@@ -57,8 +62,10 @@ def test_from_arrow() -> None:
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
-    with pytest.raises(ValueError, match="cannot represent null integer"):
-        ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+    tensor = ColumnarTensor.from_arrow(pa.array([1, None, 3]))
+    assert tensor.tolist() == [[1], [None], [3]]
+    assert isinstance(tensor._columns[0], NullableIntTensor)
+    assert tensor.to_arrow().to_pydict() == {"0": [1, None, 3]}
 
 
 def test_from_arrow_chunked_string() -> None:
@@ -107,10 +114,12 @@ def test_from_cudf() -> None:
     assert isinstance(tensor._columns[0], StringTensor)
     assert tensor.tolist() == [["a"], ["bb"], [""]]
 
-    with pytest.raises(ValueError, match="cannot represent null integer"):
-        ColumnarTensor.from_cudf(
-            cudf.Series([1, None, 3], dtype="int64"),
-        )
+    tensor = ColumnarTensor.from_cudf(
+        cudf.Series([1, None, 3], dtype="int64"),
+    )
+    assert tensor.tolist() == [[1], [None], [3]]
+    assert isinstance(tensor._columns[0], NullableIntTensor)
+    assert tensor.to_cudf().to_arrow().to_pydict() == {"0": [1, None, 3]}
 
 
 def test_to_arrow() -> None:

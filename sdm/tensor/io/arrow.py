@@ -75,6 +75,16 @@ def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
         tensor: The tensor.
         valid_mask: Boolean mask indicating valid, non-null tensor elements.
     """
+    from sdm.tensor import NullableIntTensor, VarLenTensor  # noqa: PLC0415
+
+    if isinstance(tensor, NullableIntTensor | VarLenTensor):
+        if valid_mask is not None:
+            raise ValueError(
+                f"Expected 'valid_mask' to be 'None' for "
+                f"{tensor.__class__.__name__!r}"
+            )
+        return tensor.to_arrow()
+
     tensor = tensor.detach().contiguous().view(-1).cpu()
     if valid_mask is not None:
         valid_mask = valid_mask.contiguous().view(-1).cpu()

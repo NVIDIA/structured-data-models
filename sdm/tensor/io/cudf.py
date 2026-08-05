@@ -18,6 +18,16 @@ def to_cudf(tensor: Tensor, valid_mask: Tensor | None = None) -> cudf.Series:
     """
     import cudf
 
+    from sdm.tensor import NullableIntTensor, StringTensor  # noqa: PLC0415
+
+    if isinstance(tensor, NullableIntTensor | StringTensor):
+        if valid_mask is not None:
+            raise ValueError(
+                f"Expected 'valid_mask' to be 'None' for "
+                f"{tensor.__class__.__name__!r}"
+            )
+        return tensor.to_cudf()
+
     if not tensor.is_cuda:
         raise ValueError(
             f"Expected tensor to be on a CUDA device (got '{tensor.device}')"
