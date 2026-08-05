@@ -28,17 +28,13 @@ def default_recipe() -> Recipe:  # noqa: D103
                     ToNumerical(),
                 ],
             ),
-            StypeDispatch(
-                numerical=[
-                    ImputeMean(),
-                    DropConstantColumns(),
-                    Standardize(epsilon=1e-6),
-                    Clip(min_value=-100.0, max_value=100.0),
-                    Choice(Identity(), PowerTransform()),
-                    ClipSigma(threshold=4.0),
-                    ShuffleColumns(method="shift"),
-                ],
-            ),
+            ImputeMean(),
+            DropConstantColumns(),
+            Standardize(epsilon=1e-6),
+            Clip(min_value=-100.0, max_value=100.0),
+            Choice(Identity(), PowerTransform()),
+            ClipSigma(threshold=4.0),
+            ShuffleColumns(method="shift"),
         ],
         target=[
             StypeDispatch(
