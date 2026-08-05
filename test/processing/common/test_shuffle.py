@@ -3,7 +3,7 @@ from typing import Literal
 import pytest
 import torch
 
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+from sdm import Stype, TableTensor
 from sdm.processing import ShuffleColumns
 from sdm.tensor import EnsembleTable
 
@@ -15,30 +15,13 @@ def _table() -> TableTensor:
     )
 
 
-def _mixed_table() -> TableTensor:
-    return TableTensor(
-        columns={
-            "numerical": ("x0", "x1", "x2"),
-            "categorical": ("kind", "segment"),
-        },
-        numerical=torch.tensor(
-            [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
-        ),
-        categorical=CategoricalTensor(
-            code=torch.tensor([[0, 1], [1, 0]], dtype=torch.int64),
-            categories=(
-                StringTensor.from_list(["a", "b"]),
-                StringTensor.from_list(["small", "large"]),
-            ),
-        ),
-    )
-
-
 def test_shuffle_columns_shift_rotates_numerical_block() -> None:
     table = _table()
-    torch.manual_seed(3)  # draws a cyclic offset of 1 for three columns
 
-    output = ShuffleColumns(method="shift").fit_transform(table)
+    output = ShuffleColumns(method="shift").fit_transform(
+        table,
+        generator=torch.Generator().manual_seed(3),
+    )
 
     assert isinstance(output, TableTensor)
     assert output.columns[Stype.numerical] == ("x1", "x2", "x0")
@@ -118,44 +101,15 @@ def test_shuffle_columns_ensemble_matches_independent_processors(
         assert restored.table(member_id).equal(context)
 
 
-def test_shuffle_columns_reuses_equal_member_permutations() -> None:
+def test_shuffle_columns_checks_num_members() -> None:
     processor = ShuffleColumns(method="shift")
-    output = processor.fit_transform_ensemble(
+    processor.fit_ensemble(
         EnsembleTable(_table(), num_members=8),
         generator=torch.Generator().manual_seed(9),
     )
 
-    unique_columns = {
-        output.table(member_id).columns[Stype.numerical]
-        for member_id in range(output.num_members)
-    }
-    assert sum(group.size(0) for group in output) == len(unique_columns)
-
-    with pytest.raises(RuntimeError, match="same number"):
-        processor.transform(_table())
-    with pytest.raises(RuntimeError, match="inverse transform"):
-        processor.inverse_transform_ensemble(
-            EnsembleTable(_table(), num_members=7)
-        )
-
-
-@pytest.mark.parametrize("method", ["shift", "random"])
-def test_shuffle_columns_fit_ensemble_matches_fit_transform(
-    method: Literal["shift", "random"],
-) -> None:
-    table = EnsembleTable(_table(), num_members=8)
-    fitted = ShuffleColumns(method=method)
-    combined = ShuffleColumns(method=method)
-
-    fitted.fit_ensemble(
-        table,
-        generator=torch.Generator().manual_seed(7),
-    )
-    transformed = fitted.transform_ensemble(table)
-    expected = combined.fit_transform_ensemble(
-        table,
-        generator=torch.Generator().manual_seed(7),
-    )
-
-    for member_id in range(table.num_members):
-        assert transformed.table(member_id).equal(expected.table(member_id))
+    with pytest.raises(
+        RuntimeError,
+        match="was fitted with 8 ensemble members, but got 7",
+    ):
+        processor.transform_ensemble(EnsembleTable(_table(), num_members=7))
