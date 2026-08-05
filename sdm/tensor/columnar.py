@@ -491,7 +491,14 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> ColumnarTensor:
-    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
+    return inp.__class__(
+        columns=[
+            column.contiguous(memory_format=memory_format)
+            for column in inp._columns
+        ],
+        size=inp.size()[:-1],
+        device=inp.device,
+    )
 
 
 @ColumnarTensor.implements(aten.is_pinned.default)
