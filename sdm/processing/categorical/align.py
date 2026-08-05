@@ -311,12 +311,14 @@ class AlignCategories(EnsembleProcessor):
         if not input_categories:
             return ()
 
+        # Pair IDs for each input category: (total_input_categories,).
         left_pair = torch.cat(
             [
                 codes.new_full((categories.numel(),), pair_index)
                 for pair_index, categories in enumerate(input_categories)
             ]
         )
+        # Pair IDs for each fitted category: (total_fitted_categories,).
         right_pair = torch.cat(
             [
                 codes.new_full((categories.numel(),), pair_index)
@@ -350,6 +352,7 @@ class AlignCategories(EnsembleProcessor):
                 for categories in fitted_categories
             ]
         )
+        # Fitted code for each input category: (total_input_categories,).
         lookup = codes.new_full(
             (sum(categories.numel() for categories in input_categories),),
             -1,

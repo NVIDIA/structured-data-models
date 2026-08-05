@@ -16,11 +16,12 @@ def _table(
     categories: tuple[tuple[str, ...], ...],
     columns: tuple[str, ...] = ("kind", "segment"),
     device: torch.device | str | None = None,
+    dtype: torch.dtype = torch.int32,
 ) -> TableTensor:
     return TableTensor(
         columns={"categorical": columns},
         categorical=CategoricalTensor(
-            code=torch.tensor(values, dtype=torch.int32, device=device),
+            code=torch.tensor(values, dtype=dtype, device=device),
             categories=tuple(
                 StringTensor.from_list(category, device=device)
                 for category in categories
@@ -60,13 +61,16 @@ def test_align_categories_remaps_independent_vocabularies(
 
 
 @withCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
 def test_align_categories_keeps_string_vocabularies_column_local(
     device: torch.device,
+    dtype: torch.dtype,
 ) -> None:
     context = _table(
         [[0, 0], [1, 1]],
         categories=(("shared", "left"), ("right", "shared")),
         device=device,
+        dtype=dtype,
     )
     query = _table(
         [[0, 0], [1, 1], [2, 2], [-1, -1]],
@@ -75,6 +79,7 @@ def test_align_categories_keeps_string_vocabularies_column_local(
             ("shared", "left", "right"),
         ),
         device=device,
+        dtype=dtype,
     )
 
     output = AlignCategories().fit(context).transform(query)
@@ -83,7 +88,7 @@ def test_align_categories_keeps_string_vocabularies_column_local(
         output.categorical.code,
         torch.tensor(
             [[0, 1], [-1, -1], [1, 0], [-1, -1]],
-            dtype=torch.int32,
+            dtype=dtype,
             device=device,
         ),
     )
