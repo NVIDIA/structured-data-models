@@ -4,10 +4,9 @@ import abc
 import copy
 from collections.abc import Iterable
 from itertools import repeat
-from typing import cast
+from typing import Self, cast
 
 import torch
-from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype

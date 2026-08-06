@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import re
 from collections.abc import Mapping
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 import pyarrow as pa
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import pandas as pd
 
 
-class Stype(str, Enum):
+class Stype(StrEnum):
     r"""The semantic type of a table column.
 
     A semantic type denotes the semantic meaning of a column, and denotes how

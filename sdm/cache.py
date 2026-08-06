@@ -1,12 +1,11 @@
 """Cache primitives."""
 
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
-from enum import Enum
-from typing import NamedTuple
+from enum import StrEnum
+from typing import NamedTuple, Self
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm.tensor.mixin import DeviceMixin
 
@@ -46,7 +45,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 class Cache(MutableMapping[str, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
-    class Mode(str, Enum):
+    class Mode(StrEnum):
         r"""The operating mode of a :class:`Cache`.
 
         A cache alternates between two phases: (1) recording key/value

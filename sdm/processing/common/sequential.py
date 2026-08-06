@@ -1,8 +1,7 @@
 from collections.abc import Iterable, Iterator
-from typing import cast
+from typing import Self, cast
 
 import torch
-from typing_extensions import Self
 
 from sdm import Stype
 from sdm.processing.base import Processor
