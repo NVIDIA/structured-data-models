@@ -169,7 +169,6 @@ def _fit_draws(
             related_context,
             recipe=_generator_recipe(),
             num_estimators=2,
-            processing="sequential",
             generator=generator,
         )
     else:
@@ -181,7 +180,6 @@ def _fit_draws(
             _related_tables(query=True),
             recipe=_generator_recipe(),
             num_estimators=2,
-            processing="sequential",
             generator=generator,
         )
 
@@ -240,7 +238,6 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
             related_query,
             recipe=_recipe(),
             num_estimators=2,
-            processing="sequential",
         ),
     )
 
@@ -292,7 +289,6 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         processing="sequential",
     )
     assert model._caches is not None
-    assert model._recipe_execution is not None
 
     prediction = model.predict(x_query, related_query)
 
