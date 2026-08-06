@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
+from torch.utils import _pytree as pytree
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm.tensor.io import (
@@ -17,6 +20,7 @@ from sdm.tensor.io import (
     to_cudf,
 )
 from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.mixin import _replay_as_strided
 
 if TYPE_CHECKING:
     import cudf
@@ -380,8 +384,15 @@ class NullableIntTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = kwargs or {}
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            out = handler(*args, **kwargs)
+            if pytree.tree_any(
+                lambda value: isinstance(value, NullableIntTensor),
+                out,
+            ):
+                return return_and_correct_aliasing(func, args, kwargs, out)
+            return out
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -449,7 +460,9 @@ class NullableIntTensor(Tensor):
         out += f"size={tuple(self.size())}"
         if self.dtype != torch.int64:
             out += f", dtype={self.dtype}"
-        out += f", null_count={int((~self.valid).sum())}"
+        valid = self.valid
+        if not is_fake(valid):
+            out += f", null_count={int((~valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
         out += ")"
@@ -693,6 +706,36 @@ def _allclose(
 @preserve_view_inference_mode
 def _view(inp: NullableIntTensor, size: Sequence[int]) -> NullableIntTensor:
     return _apply(inp, lambda x: aten.view.default(x, size))
+
+
+@NullableIntTensor.implements(aten.as_strided.default)
+@preserve_view_inference_mode
+def _as_strided(
+    inp: NullableIntTensor,
+    size: Sequence[int],
+    stride: Sequence[int],
+    storage_offset: int | torch.SymInt | None = None,
+) -> NullableIntTensor:
+    if storage_offset is None:
+        storage_offset = inp.storage_offset()
+    storage_delta = storage_offset - inp.storage_offset()
+    return inp.__class__(
+        data=aten.as_strided.default(
+            inp._data,
+            size,
+            stride,
+            inp._data.storage_offset() + storage_delta,
+        ),
+        valid=_replay_as_strided(
+            inp._valid,
+            source_size=inp.size(),
+            source_stride=inp.stride(),
+            size=size,
+            stride=stride,
+            storage_delta=storage_delta,
+            component="validity mask",
+        ),
+    )
 
 
 @NullableIntTensor.implements(aten._unsafe_view.default)
