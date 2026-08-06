@@ -15,6 +15,18 @@ from sdm.tensor import EnsembleTable, StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
 
 
+class _TFIDFState(torch.nn.Module):
+    def __init__(
+        self,
+        vocabularies: list[pa.Array],
+        idfs: list[Tensor],
+    ) -> None:
+        super().__init__()
+        self.vocabularies = vocabularies
+        for column, idf in enumerate(idfs):
+            self.register_buffer(f"idf_{column}", idf)
+
+
 class TFIDF(EnsembleProcessor):
     """Encode text columns as character n-gram TF-IDF vectors.
 
@@ -50,9 +62,8 @@ class TFIDF(EnsembleProcessor):
         self.ngram_range = ngram_range
         self.max_features = max_features
         self.lowercase = lowercase
-        self._vocabularies: list[pa.Array] = []
-        self.processors = torch.nn.ModuleList()
-        self._member_processor_ids: tuple[int, ...] = ()
+        self._states = torch.nn.ModuleList()
+        self._member_state_ids: tuple[int, ...] = ()
 
     def _character_ngrams(
         self,
@@ -171,12 +182,10 @@ class TFIDF(EnsembleProcessor):
         )
         return ngrams, offset
 
-    def _fit(
+    def _fit_table(
         self,
         table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
+    ) -> _TFIDFState:
         device = table.text.device
         vocabularies: list[pa.Array] = []
         idfs: list[Tensor] = []
@@ -250,26 +259,7 @@ class TFIDF(EnsembleProcessor):
             vocabularies.append(vocabulary)
             idfs.append(idf)
 
-        stale_idfs = [
-            name for name in self._buffers if name.startswith("idf_")
-        ]
-        for name in stale_idfs:
-            delattr(self, name)
-
-        self._vocabularies = vocabularies
-        for column, idf in enumerate(idfs):
-            self.register_buffer(f"idf_{column}", idf)
-        self.processors = torch.nn.ModuleList()
-        self._member_processor_ids = ()
-
-    def _fit_transform(
-        self,
-        table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        self._fit(table, generator=generator)
-        return self._transform(table)
+        return _TFIDFState(vocabularies, idfs)
 
     def _fit_ensemble(
         self,
@@ -277,39 +267,30 @@ class TFIDF(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        processors = torch.nn.ModuleList()
-        member_processor_ids: list[int] = []
-        fitted: dict[tuple[int, int], int] = {}
+        states = torch.nn.ModuleList()
+        member_state_ids: list[int] = []
+        state_ids: dict[tuple[int, int], int] = {}
 
         # TODO: Replace direct `_locations` access with a public
         # `EnsembleTable` iterator over stored tables and their logical member
         # IDs, then use the same abstraction when transforming.
         for member_id in range(ensemble_table.num_members):
             location = ensemble_table._locations[member_id]
-            processor_id = fitted.get(location)
-            if processor_id is None:
-                processor = self.__class__(
-                    ngram_range=self.ngram_range,
-                    max_features=self.max_features,
-                    lowercase=self.lowercase,
-                )
-                processor.fit(
-                    ensemble_table.table(member_id),
-                    generator=generator,
-                )
-                processor_id = len(processors)
-                fitted[location] = processor_id
-                processors.append(processor)
-            member_processor_ids.append(processor_id)
+            state_id = state_ids.get(location)
+            if state_id is None:
+                state_id = len(states)
+                state_ids[location] = state_id
+                states.append(self._fit_table(ensemble_table.table(member_id)))
+            member_state_ids.append(state_id)
 
-        self.processors = processors
-        self._member_processor_ids = tuple(member_processor_ids)
+        self._states = states
+        self._member_state_ids = tuple(member_state_ids)
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._member_processor_ids) != ensemble_table.num_members:
+        if len(self._member_state_ids) != ensemble_table.num_members:
             raise RuntimeError(
                 "TFIDF must be fitted with the same number of "
                 "ensemble members before transform."
@@ -321,18 +302,18 @@ class TFIDF(EnsembleProcessor):
         # TODO: Benchmark batching compatible query tables that share fitted
         # state on CUDA with cuDF. It was about 10% slower for four 50,000-row
         # tables on CPU.
-        for member_id, processor_id in enumerate(self._member_processor_ids):
-            key = (ensemble_table._locations[member_id], processor_id)
+        for member_id, state_id in enumerate(self._member_state_ids):
+            key = (ensemble_table._locations[member_id], state_id)
             table_id = transformed.get(key)
             if table_id is None:
-                processor = cast(
-                    TFIDF,
-                    self.processors[processor_id],
-                )
+                state = cast(_TFIDFState, self._states[state_id])
                 table_id = len(output_tables)
                 transformed[key] = table_id
                 output_tables.append(
-                    processor.transform(ensemble_table.table(member_id))
+                    self._transform_table(
+                        ensemble_table.table(member_id),
+                        state,
+                    )
                 )
             member_table_ids.append(table_id)
 
@@ -341,18 +322,22 @@ class TFIDF(EnsembleProcessor):
             member_table_ids,
         )
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform_table(
+        self,
+        table: TableTensor,
+        state: _TFIDFState,
+    ) -> TableTensor:
         device = table.text.device
         dtype = (
-            self.get_buffer("idf_0").dtype
-            if self._vocabularies
+            state.get_buffer("idf_0").dtype
+            if state.vocabularies
             else torch.get_default_dtype()
         )
         text_names = table.columns[Stype.text]
         leading_shape = table.text.shape[:-1]
         n_rows = math.prod(leading_shape)
 
-        vocab_sizes = [len(vocabulary) for vocabulary in self._vocabularies]
+        vocab_sizes = [len(vocabulary) for vocabulary in state.vocabularies]
         column_offsets = [0, *accumulate(vocab_sizes)]
         total_width = column_offsets[-1]
         numerical = torch.zeros(
@@ -363,8 +348,8 @@ class TFIDF(EnsembleProcessor):
         flat_numerical = numerical.view(n_rows, total_width)
         names: list[str] = []
         for column in range(table.text.size(-1)):
-            vocabulary = self._vocabularies[column]
-            idf = getattr(self, f"idf_{column}")
+            vocabulary = state.vocabularies[column]
+            idf = getattr(state, f"idf_{column}")
             vocab_size = vocab_sizes[column]
             column_start = column_offsets[column]
             column_slice = flat_numerical[
