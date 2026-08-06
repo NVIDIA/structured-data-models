@@ -1,4 +1,6 @@
+import copy
 import io
+from collections.abc import Callable
 from datetime import datetime
 from textwrap import dedent
 from typing import cast
@@ -74,6 +76,7 @@ def test_empty() -> None:
 
     tensor = TableTensor(size=(1, 4))
     assert tensor.size() == (1, 4, 0)
+    assert tensor.stride() == torch.empty(1, 4, 0).stride()
     assert tensor.numerical.size() == (1, 4, 0)
     assert tensor.categorical.size() == (1, 4, 0)
     assert tensor.columns == {
@@ -84,6 +87,77 @@ def test_empty() -> None:
         Stype.id: (),
     }
     assert tensor._column_to_loc == {}
+
+    out = tensor[:, 1:]
+    assert out.size() == (1, 3, 0)
+    assert out.stride() == (4, 1, 1)
+    assert out.storage_offset() == 1
+
+    compiled = torch.compile(
+        lambda value: value.unsqueeze(0),
+        fullgraph=True,
+        backend="eager",
+    )
+    compiled_out = compiled(out)
+    assert compiled_out.size() == (1, 1, 3, 0)
+    assert compiled_out.storage_offset() == out.storage_offset()
+
+
+def test_schema_does_not_mutate_table() -> None:
+    tensor = TableTensor.from_tensor(
+        torch.ones(2, 1),
+        columns=("value",),
+    )
+    schema_columns = cast(dict[Stype, tuple[str, ...]], tensor.schema.columns)
+
+    schema_columns[Stype.numerical] = ("renamed",)
+
+    assert tensor.columns[Stype.numerical] == ("value",)
+    assert tensor.column_names == frozenset({"value"})
+    assert tensor.stype("value") == Stype.numerical
+
+
+def test_tensor_flatten_round_trip() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ("value",),
+            "categorical": ("kind",),
+        },
+        numerical=torch.tensor([[1.0], [2.0]]),
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+    names, context = tensor.__tensor_flatten__()
+
+    hash(context[1])
+    out = TableTensor.__tensor_unflatten__(
+        {name: getattr(tensor, name) for name in names},
+        context,
+        tensor.size(),
+        tensor.stride(),
+    )
+
+    assert type(out) is type(tensor)
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out.columns == tensor.columns
+    assert out.numerical.equal(tensor.numerical)
+    assert out.categorical.equal(tensor.categorical)
+
+    view = tensor[1:]
+    assert isinstance(view, TableTensor)
+    names, context = view.__tensor_flatten__()
+    out = TableTensor.__tensor_unflatten__(
+        {name: getattr(view, name) for name in names},
+        context,
+        view.size(),
+        view.stride(),
+    )
+    assert out.storage_offset() == view.storage_offset()
+    assert out.numerical.equal(view.numerical)
+    assert out.categorical.equal(view.categorical)
 
 
 def test_column_names() -> None:
@@ -488,8 +562,32 @@ def test_drop_stypes() -> None:
         tensor.drop_stypes("unknown")
 
 
+def test_drop_stypes_preserves_wrapper_metadata() -> None:
+    class DerivedTableTensor(TableTensor):
+        pass
+
+    tensor = DerivedTableTensor(
+        columns={
+            "numerical": ("value",),
+            "categorical": ("kind",),
+        },
+        numerical=torch.tensor([[1.0], [2.0]], dtype=torch.float64),
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+
+    out = tensor.drop_stypes(Stype.numerical)
+
+    assert type(out) is DerivedTableTensor
+    assert out.dtype == tensor.dtype
+    assert out.numerical.dtype == tensor.numerical.dtype
+    assert out.device == tensor.device
+
+
 def test_save_load() -> None:
-    tensor = TableTensor(
+    base = TableTensor(
         columns={
             "numerical": ["age", "income"],
             "categorical": ["country"],
@@ -502,6 +600,7 @@ def test_save_load() -> None:
         ),
         datetime=torch.tensor([[1], [2], [3]], dtype=torch.int64),
     )
+    tensor = base[1:]
 
     buffer = io.BytesIO()
     torch.save(tensor, buffer)
@@ -510,6 +609,8 @@ def test_save_load() -> None:
 
     assert isinstance(out, TableTensor)
     assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out.storage_offset() == tensor.storage_offset()
     assert out.numerical.equal(tensor.numerical)
     assert out.categorical.equal(tensor.categorical)
     assert out.datetime.equal(tensor.datetime)
@@ -520,6 +621,49 @@ def test_save_load() -> None:
         tensor.categorical.categories,
     ):
         assert category1.equal(category2)
+
+    buffer = io.BytesIO()
+    torch.save((base, tensor), buffer)
+    buffer.seek(0)
+    loaded_base, loaded_view = torch.load(buffer, weights_only=False)
+
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        loaded_base,
+        loaded_view,
+    )
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        loaded_base.numerical,
+        loaded_view.numerical,
+    )
+
+
+def test_deepcopy_view() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ["value"],
+            "categorical": ["kind"],
+            "text": ["description"],
+            "id": ["key"],
+        },
+        numerical=torch.arange(5, dtype=torch.float32).unsqueeze(-1),
+        categorical=CategoricalTensor(
+            torch.arange(5).unsqueeze(-1),
+            (torch.arange(5),),
+        ),
+        text=cast(
+            StringTensor,
+            StringTensor.from_list(["a", "b", "c", "d", "e"]).unsqueeze(-1),
+        ),
+        id=ColumnarTensor((torch.arange(5),)),
+    )[1:]
+
+    out = copy.deepcopy(tensor)
+
+    assert isinstance(out, TableTensor)
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out.storage_offset() == tensor.storage_offset()
+    assert out.equal(tensor)
 
 
 def test_to_copy() -> None:
@@ -588,6 +732,46 @@ def test_clone_contiguous() -> None:
     assert out.is_contiguous()
     assert out.numerical.is_contiguous()
 
+    tensor = cast(
+        TableTensor,
+        TableTensor(
+            columns={"numerical": ["age", "income"]},
+            numerical=torch.arange(12, dtype=torch.float32).view(2, 3, 2),
+        ).transpose(0, 1),
+    )
+    out = cast(
+        TableTensor,
+        tensor.clone(memory_format=torch.preserve_format),
+    )
+    assert out.stride() == tensor.stride() == (2, 6, 1)
+    assert out.numerical.equal(tensor.numerical)
+
+
+def test_contiguous_column_slice_has_independent_blocks() -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ("value",),
+            "categorical": ("kind",),
+        },
+        numerical=torch.arange(2, dtype=torch.float32).unsqueeze(-1),
+        categorical=CategoricalTensor(
+            code=torch.arange(2, dtype=torch.int32).unsqueeze(-1),
+            categories=(torch.arange(2),),
+        ),
+    )
+    view = tensor.split(1, dim=-1)[1]
+    assert not view.is_contiguous()
+
+    out = view.contiguous()
+
+    assert isinstance(out, TableTensor)
+    assert out.is_contiguous()
+    assert out.categorical.code.equal(view.categorical.code)
+    out.categorical.code.fill_(-1)
+    assert tensor.categorical.code.equal(
+        torch.arange(2, dtype=torch.int32).unsqueeze(-1)
+    )
+
 
 def test_view_ops() -> None:
     tensor = TableTensor(
@@ -609,6 +793,10 @@ def test_view_ops() -> None:
     assert out.numerical.size() == (6, 2)
     assert out.categorical.size() == (6, 1)
     assert out.columns == tensor.columns
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
 
     with pytest.raises(RuntimeError, match="Can't reshape"):
         _ = tensor.view(-1)
@@ -636,6 +824,114 @@ def test_view_ops() -> None:
     assert out.size() == (3, 2, 3)
     assert out.numerical.size() == (3, 2, 2)
     assert out.categorical.size() == (3, 2, 1)
+
+
+@pytest.mark.parametrize("fullgraph", [False, True])
+def test_compile(fullgraph: bool) -> None:
+    tensor = TableTensor(
+        columns={
+            "numerical": ("value",),
+            "categorical": ("kind",),
+        },
+        numerical=torch.tensor([[1.0], [2.0]]),
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(StringTensor.from_list(["a", "b"]),),
+        ),
+    )
+    active_stypes = tuple(stype.value for stype in tensor.active_stypes)
+    compiled = torch.compile(
+        lambda value: value.select_stypes(active_stypes),
+        fullgraph=fullgraph,
+        backend="eager",
+    )
+
+    for _ in range(2):
+        out = compiled(tensor)
+        assert isinstance(out, TableTensor)
+        assert out.columns == tensor.columns
+        assert out.numerical.equal(tensor.numerical)
+        assert out.categorical.equal(tensor.categorical)
+
+    compiled_view = torch.compile(
+        lambda value: value.unsqueeze(0),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    for _ in range(2):
+        out = compiled_view(tensor)
+        assert isinstance(out, TableTensor)
+        assert out.size() == (1, 2, 2)
+        assert out.columns == tensor.columns
+        assert out[0].equal(tensor)
+        assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out,
+            tensor,
+        )
+
+    compiled_slice = torch.compile(
+        lambda value: value[1:],
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    eager = tensor[1:]
+    out = compiled_slice(tensor)
+    assert isinstance(eager, TableTensor)
+    assert isinstance(out, TableTensor)
+    assert out.numerical.equal(eager.numerical)
+    assert out.categorical.equal(eager.categorical)
+    assert out.stride() == eager.stride()
+    assert out.storage_offset() == eager.storage_offset()
+
+    out = compiled_view(eager)
+    assert isinstance(out, TableTensor)
+    assert out.numerical[0].equal(eager.numerical)
+    assert out.categorical[0].equal(eager.categorical)
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        eager,
+    )
+
+    compiled_column_split = torch.compile(
+        lambda value: value.split(1, dim=-1),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out_list = compiled_column_split(tensor)
+    assert [out.columns for out in out_list] == [
+        {
+            Stype.numerical: ("value",),
+            Stype.categorical: (),
+            Stype.datetime: (),
+            Stype.text: (),
+            Stype.id: (),
+        },
+        {
+            Stype.numerical: (),
+            Stype.categorical: ("kind",),
+            Stype.datetime: (),
+            Stype.text: (),
+            Stype.id: (),
+        },
+    ]
+    assert all(
+        torch._C._is_alias_of(tensor, out)  # ty: ignore[unresolved-attribute]
+        for out in out_list
+    )
+
+    replace = torch.compile(
+        lambda value: value.replace_blocks(
+            numerical=value.numerical + 1,
+        ),
+        fullgraph=fullgraph,
+        backend="eager",
+    )
+    for _ in range(2):
+        out = replace(tensor)
+        assert isinstance(out, TableTensor)
+        assert out.columns == tensor.columns
+        assert out.numerical.equal(tensor.numerical + 1)
+        assert out.categorical.equal(tensor.categorical)
 
 
 def test_slicing_ops() -> None:
@@ -696,12 +992,20 @@ def test_unbind_split() -> None:
     assert out[0].size() == (2, 4, 3)
     assert out[0].numerical.size() == (2, 4, 2)
     assert out[0].categorical.size() == (2, 4, 1)
+    assert all(
+        torch._C._is_alias_of(tensor, part)  # ty: ignore[unresolved-attribute]
+        for part in out
+    )
 
     out = tensor.split(2, dim=1)
     assert len(out) == 2
     assert all(isinstance(tensor, TableTensor) for tensor in out)
     assert out[0].size() == (2, 2, 4, 3)
     assert out[1].size() == (2, 1, 4, 3)
+    assert all(
+        torch._C._is_alias_of(tensor, part)  # ty: ignore[unresolved-attribute]
+        for part in out
+    )
 
     out = tensor.split([1, 2], dim=1)
     assert len(out) == 2
@@ -722,11 +1026,265 @@ def test_unbind_split() -> None:
         Stype.text: (),
         Stype.id: (),
     }
+    assert all(
+        torch._C._is_alias_of(tensor, part)  # ty: ignore[unresolved-attribute]
+        for part in out
+    )
 
     with pytest.raises(RuntimeError, match="split size 1"):
         _ = tensor.split(2, dim=-1)
     with pytest.raises(RuntimeError, match="Can't split"):
         _ = tensor.split([1, 2], dim=-1)
+
+
+def test_view_metadata_is_independent_of_block_layout() -> None:
+    values = torch.arange(48, dtype=torch.float32).view(2, 3, 8)
+    tensor = TableTensor(
+        columns={"numerical": ["left", "right"]},
+        numerical=values[..., :2],
+    )
+
+    out = tensor[:, 1:]
+
+    assert out.stride() == (6, 2, 1)
+    assert out.storage_offset() == 2
+    assert out.numerical.equal(values[:, 1:, :2])
+    assert not out.is_contiguous()
+    assert out.contiguous().is_contiguous()
+
+    compiled = torch.compile(
+        lambda value: value[:, 1:],
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    compiled_out = compiled(tensor)
+    assert compiled_out.stride() == out.stride()
+    assert compiled_out.storage_offset() == out.storage_offset()
+    assert compiled_out.numerical.equal(out.numerical)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        lambda value: value[-1],
+        lambda value: value[value.size(0) - 2 :],
+        lambda value: torch.narrow(value, 0, value.size(0) - 2, 2),
+    ],
+    ids=("select", "slice", "narrow"),
+)
+def test_compile_dynamic_view_offset(
+    operation: Callable[[TableTensor], torch.Tensor],
+) -> None:
+    compiled = torch.compile(
+        operation,
+        fullgraph=True,
+        dynamic=True,
+        backend="inductor",
+    )
+
+    for num_rows in (4, 6):
+        values = torch.arange(num_rows * 2, dtype=torch.float32).view(
+            num_rows,
+            2,
+        )
+        tensor = TableTensor(
+            columns={"numerical": ["left", "right"]},
+            numerical=values,
+        )
+        out = compiled(tensor)
+        expected = operation(tensor)
+        assert isinstance(out, TableTensor)
+        assert isinstance(expected, TableTensor)
+        assert out.numerical.equal(expected.numerical)
+        assert out.storage_offset() == expected.storage_offset()
+        assert out.numerical.storage_offset() == (
+            expected.numerical.storage_offset()
+        )
+        assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out,
+            tensor,
+        )
+        assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out.numerical,
+            tensor.numerical,
+        )
+
+
+def test_as_strided_layout_validation() -> None:
+    values = torch.arange(9, dtype=torch.float32).view(3, 3)
+    tensor = TableTensor(
+        columns={"numerical": ["left", "middle", "right"]},
+        numerical=values,
+    )
+
+    with pytest.raises(RuntimeError, match="mixes row and column"):
+        torch.as_strided(tensor, (1, 3), (3, 4), 0)
+
+
+def test_as_strided_replays_column_subset() -> None:
+    tensor = TableTensor(
+        columns={"numerical": ("left", "middle", "right")},
+        numerical=torch.arange(12, dtype=torch.float32).view(4, 3),
+    )
+    subset = cast(
+        TableTensor,
+        torch.as_strided(tensor, (4, 2), (3, 1), 1),
+    )
+
+    identity = cast(
+        TableTensor,
+        torch.as_strided(
+            subset,
+            subset.size(),
+            subset.stride(),
+            subset.storage_offset(),
+        ),
+    )
+    assert identity.columns == subset.columns
+    assert identity.numerical.equal(subset.numerical)
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        identity,
+        subset,
+    )
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        identity.numerical,
+        subset.numerical,
+    )
+
+    materialized = subset.contiguous()
+    materialized_identity = cast(
+        TableTensor,
+        torch.as_strided(
+            materialized,
+            materialized.size(),
+            materialized.stride(),
+            materialized.storage_offset(),
+        ),
+    )
+    assert materialized_identity.numerical.equal(materialized.numerical)
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        materialized_identity,
+        materialized,
+    )
+
+    compiled = torch.compile(
+        lambda value: value.unsqueeze(0),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = compiled(subset)
+    assert isinstance(out, TableTensor)
+    assert out.columns == subset.columns
+    assert out.numerical.equal(subset.numerical.unsqueeze(0))
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        subset,
+    )
+
+
+@pytest.mark.skipif(
+    tuple(
+        int(part)
+        for part in torch.__version__.split("+", maxsplit=1)[0].split(".")[:2]
+    )
+    < (2, 10),
+    reason=(
+        "PyTorch before 2.10 cannot regenerate dynamic multidimensional "
+        "TableTensor aliases"
+    ),
+)
+def test_compile_as_strided_layout() -> None:
+    compiled = torch.compile(
+        lambda value: torch.as_strided(
+            value,
+            (value.size(0), 4, 2),
+            value.stride(),
+            2,
+        ),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    for num_rows in (4, 6):
+        dynamic_values = torch.arange(
+            num_rows * 5 * 2,
+            dtype=torch.float32,
+        ).view(num_rows, 5, 2)
+        dynamic_tensor = TableTensor(
+            columns={"numerical": ["left", "right"]},
+            numerical=dynamic_values,
+        )
+        torch._dynamo.maybe_mark_dynamic(dynamic_tensor, 0)
+        out = cast(TableTensor, compiled(dynamic_tensor))
+        assert out.numerical.equal(dynamic_values[:, 1:])
+
+
+def test_as_strided_validates_non_affine_block_layout() -> None:
+    storage = torch.arange(200, dtype=torch.float32)
+    numerical = torch.as_strided(
+        storage,
+        (2, 3, 2),
+        (2, 20, 1),
+    )
+    tensor = TableTensor(
+        columns={"numerical": ("left", "right")},
+        numerical=numerical,
+    )
+
+    identity = cast(
+        TableTensor,
+        torch.as_strided(
+            tensor,
+            tensor.size(),
+            tensor.stride(),
+            tensor.storage_offset(),
+        ),
+    )
+    assert identity.numerical.equal(numerical)
+
+    with pytest.raises(RuntimeError, match="cannot be replayed"):
+        torch.as_strided(tensor, (6, 2), (2, 1), 0)
+
+    one_row = cast(
+        TableTensor,
+        torch.as_strided(tensor, (1, 2), (2, 1), 0),
+    )
+    restored = cast(
+        TableTensor,
+        torch.as_strided(one_row, (3, 2), (2, 1), 0),
+    )
+    assert restored.numerical.equal(numerical[0])
+
+    padded = torch.arange(48, dtype=torch.float32).view(2, 3, 8)[..., :2]
+    proportional = TableTensor(
+        columns={"numerical": ("left", "right")},
+        numerical=padded,
+    )
+    flattened = cast(
+        TableTensor,
+        torch.as_strided(proportional, (6, 2), (2, 1), 0),
+    )
+    assert flattened.numerical.equal(padded.reshape(6, 2))
+
+    partial_storage = torch.arange(300, dtype=torch.float32)
+    partial = torch.as_strided(
+        partial_storage,
+        (2, 3, 4, 2),
+        (100, 32, 8, 1),
+    )
+    partially_proportional = TableTensor(
+        columns={"numerical": ("left", "right")},
+        numerical=partial,
+    )
+    collapsed = cast(
+        TableTensor,
+        torch.as_strided(
+            partially_proportional,
+            (2, 12, 2),
+            (24, 2, 1),
+            0,
+        ),
+    )
+    assert collapsed.numerical.equal(partial.view(2, 12, 2))
 
 
 def test_index_ops() -> None:

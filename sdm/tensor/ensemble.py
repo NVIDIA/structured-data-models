@@ -109,7 +109,13 @@ class EnsembleTable:
                         block.layout,
                         block.dtype,
                     )
-                    for stype, block in table.items()
+                    for stype, block in (
+                        (Stype.numerical, table.numerical),
+                        (Stype.categorical, table.categorical),
+                        (Stype.datetime, table.datetime),
+                        (Stype.text, table.text),
+                        (Stype.id, table.id),
+                    )
                 ),
                 table.device,
                 tuple(

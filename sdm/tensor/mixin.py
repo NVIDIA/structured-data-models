@@ -77,7 +77,12 @@ def _replay_as_strided(
             pass
         else:
             if view.stride() == stride:
-                return target.view((*size, *suffix_size))
+                try:
+                    target_view = target.view((*size, *suffix_size))
+                except RuntimeError:
+                    pass
+                else:
+                    return target_view
 
     coordinates = _storage_delta_coordinates(
         source_size,
