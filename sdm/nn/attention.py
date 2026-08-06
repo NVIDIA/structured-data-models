@@ -630,6 +630,15 @@ class Attention(torch.nn.Module):
             q_weight = self.qkv_lin.weight[: self.q_dim]
             q_bias = self.qkv_lin.bias[: self.q_dim]
             query = F.linear(query, q_weight, q_bias)
+            if (
+                key_value.key.dtype != query.dtype
+                or key_value.value.dtype != query.dtype
+            ):
+                raise ValueError(
+                    f"Key/value projections were cached under dtypes "
+                    f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
+                    f"the query has dtype '{query.dtype}'"
+                )
             key = key_value.key
             value = key_value.value
         elif key_value is None:

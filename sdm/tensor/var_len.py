@@ -3,13 +3,13 @@ from __future__ import annotations
 import functools
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, SupportsIndex, cast
+from typing import Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
 from sdm.tensor.io.arrow import _combine_arrow_chunks
@@ -921,6 +921,16 @@ def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
     )
 
 
+@VarLenTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: VarLenTensor,
+    device: torch.device | None = None,
+) -> VarLenTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @VarLenTensor.implements(aten.isnan.default)
 def _isnan(inp: VarLenTensor) -> Tensor:
     valid = inp.valid
@@ -1048,6 +1058,18 @@ def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
 def _movedim(inp: VarLenTensor, source: int, destination: int) -> VarLenTensor:
     view = _layout_view(inp).movedim(source, destination)
     return _from_layout_view(inp, view)
+  
+ 
+@VarLenTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: VarLenTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
 
 
 @VarLenTensor.implements(aten.squeeze.default)

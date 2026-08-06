@@ -896,3 +896,20 @@ def test_unsafe_view() -> None:
     assert out.storage_offset() == 0
     assert out._data.equal(torch.tensor([0, 1, 4, 5, 8, 9]))
     assert out._offset.equal(torch.arange(7))
+
+
+def test_reshape_inference_mode() -> None:
+    tensor = VarLenTensor(
+        data=torch.arange(12),
+        offset=torch.arange(13),
+        valid=None,
+        size=(3, 2),
+        stride=(4, 1),
+    )
+
+    with torch.inference_mode():
+        view = tensor.reshape(3, 2)
+        copied = tensor.reshape(2, 3)
+
+    assert not torch.is_inference(view)
+    assert torch.is_inference(copied)

@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable, Iterator, Sequence
-from typing import cast
+from typing import Self, cast
 
 import torch
-from typing_extensions import Self
 
 from sdm.stype import Stype, StypeLike
 from sdm.tensor.table import TableTensor

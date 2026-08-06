@@ -27,7 +27,13 @@ data = sdm.RelationalData(
     tables={
         name: sdm.TableTensor.from_pandas(
             df=table.df,
-            stypes=sdm.infer_stypes(table.df),
+            stypes=sdm.infer_stypes(
+                table.df,
+                overrides={
+                    cast(str, table.pkey_col): "id",
+                    **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
+                },
+            ),
         )
         for name, table in db.table_dict.items()
     },
@@ -114,8 +120,8 @@ for batch in tqdm.tqdm(query.split(args.batch_size)):
         pred, target = sdm.evaluation.to_binary_class(
             out, y_query, positive_class=1
         )
-    metric.update(pred, target)
+    metric.update(pred, target)  # type: ignore
 if task.task_type == relbench.base.TaskType.REGRESSION:
-    print(f"MAE: {metric.compute():.4f}")
+    print(f"MAE: {metric.compute():.4f}")  # type: ignore
 else:
-    print(f"AUROC: {metric.compute():.4f}")
+    print(f"AUROC: {metric.compute():.4f}")  # type: ignore

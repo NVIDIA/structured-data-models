@@ -3,10 +3,9 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import torch
-from typing_extensions import Self
 
 from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
