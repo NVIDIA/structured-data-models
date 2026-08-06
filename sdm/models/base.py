@@ -1,10 +1,12 @@
 import contextlib
 import copy
+import threading
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any, ClassVar, cast
 
 import torch
+import torch.nn.attention as torch_attention
 from torch import Tensor
 
 from sdm import Recipe, RelatedTables, Stype, TableTensor
@@ -13,6 +15,56 @@ from sdm.cache import Cache
 from sdm.processing.execution import RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
+
+_FLASH_ATTENTION_ACTIVATION_LOCK = threading.Lock()
+
+
+def _activate_flash_attention_impl(impl: str) -> None:
+    activate = getattr(
+        torch_attention,
+        "activate_flash_attention_impl",
+        None,
+    )
+    available = getattr(
+        torch_attention,
+        "list_flash_attention_impls",
+        None,
+    )
+    current = getattr(
+        torch_attention,
+        "current_flash_attention_impl",
+        None,
+    )
+    if not all(
+        callable(function) for function in (activate, available, current)
+    ):
+        raise RuntimeError(
+            "'flash_attention_impl' requires a PyTorch release with the "
+            "Flash Attention provider registry"
+        )
+    activate = cast(Callable[[str], None], activate)
+    available = cast(Callable[[], list[str]], available)
+    current = cast(Callable[[], str | None], current)
+
+    with _FLASH_ATTENTION_ACTIVATION_LOCK:
+        implementations = available()
+        if impl not in implementations:
+            raise ValueError(
+                f"Flash Attention implementation {impl!r} is not "
+                f"registered with PyTorch (available: {implementations})"
+            )
+
+        active = current()
+        if active == impl:
+            return
+        if active is not None:
+            raise RuntimeError(
+                f"Cannot activate Flash Attention implementation {impl!r} "
+                f"because {active!r} is already active. Provider activation "
+                f"is process-wide."
+            )
+
+        activate(impl)
 
 
 @contextlib.contextmanager

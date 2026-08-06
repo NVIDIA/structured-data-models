@@ -9,6 +9,7 @@ from sdm import Recipe, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
+from sdm.models.base import _activate_flash_attention_impl
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -103,6 +104,11 @@ class TabICLv2(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
+        flash_attention_impl: Registered implementation to activate in
+            PyTorch's Flash backend slot. For example, ``"FA3"`` activates
+            Flash Attention 3. Activation is process-wide. If ``None``, the
+            active implementation is left unchanged. A different
+            implementation reported as active raises an error.
     """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
@@ -117,6 +123,8 @@ class TabICLv2(ICLModel):
         self,
         pretrained: bool = True,
         device: torch.device | str | None = None,
+        *,
+        flash_attention_impl: str | None = None,
     ) -> None:
         super().__init__()
 
@@ -137,6 +145,8 @@ class TabICLv2(ICLModel):
             self._load_from_pretrained()
 
         self.eval()
+        if flash_attention_impl is not None:
+            _activate_flash_attention_impl(flash_attention_impl)
 
     @classmethod
     def default_recipe(cls) -> Recipe:
