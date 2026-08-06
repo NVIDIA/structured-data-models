@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import copy
 from typing import Any, cast
 
 import torch
@@ -11,26 +11,48 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
-class _EmbedModelRef:
-    """Preserve an embedding model reference across deep copies."""
+class _SentenceTransformerRef:
+    """Hold a SentenceTransformer.
 
-    def __init__(self, fn: Callable[..., Any]) -> None:
-        self.fn = fn
+    Shares it on deepcopy and reloads on unpickle.
+    """
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        return self.fn(*args, **kwargs)
+    def __init__(self, model_name: str) -> None:
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
-    def __deepcopy__(self, _memo: dict[int, Any]) -> _EmbedModelRef:
-        return type(self)(self.fn)
+        self.model_name = model_name
+        self.model = SentenceTransformer(model_name)
+
+    def encode(self, strings: list[str]) -> Tensor:
+        return self.model.encode(
+            strings,
+            convert_to_tensor=True,
+        )
+
+    @property
+    def embedding_dim(self) -> int:
+        dim = self.model.get_embedding_dimension()
+        assert isinstance(dim, int)
+        return dim
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _SentenceTransformerRef:
+        clone = copy.copy(self)
+        clone.model = self.model
+        return clone
+
+    def __getstate__(self) -> dict[str, Any]:
+        return {"model_name": self.model_name}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__init__(state["model_name"])  # type: ignore[misc]
 
 
 class EmbedText(Processor):
-    r"""Embed text columns with a user-provided embedding model.
+    r"""Embed text columns with a sentence-transformer model.
 
     Args:
-        embedding_model: Callable that maps a list of strings to a
-            :class:`torch.Tensor` with shape ``[n, embedding_dim]``.
-        embedding_dim: Width of each returned embedding.
+        model_name: Name of a ``sentence-transformers`` model to load
+            from the HuggingFace Hub.
         chunk_size: Maximum number of strings per model call. When set,
             the flattened strings are split into chunks of this size to
             avoid out-of-memory errors on large tables.
@@ -41,13 +63,11 @@ class EmbedText(Processor):
 
     def __init__(
         self,
-        embedding_model: Callable[[list[str]], Tensor],
-        embedding_dim: int,
+        model_name: str,
         chunk_size: int | None = None,
     ) -> None:
         super().__init__()
-        self._embedding_model = _EmbedModelRef(embedding_model)
-        self._embedding_dim: int = embedding_dim
+        self._model_ref = _SentenceTransformerRef(model_name)
         self._chunk_size = chunk_size
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -59,7 +79,7 @@ class EmbedText(Processor):
         out_col_names: list[str] = []
         for col_name in col_names:
             out_col_names.extend(
-                f"{col_name}_{i}" for i in range(self._embedding_dim)
+                f"{col_name}_{i}" for i in range(self._model_ref.embedding_dim)
             )
 
         numerical = torch.empty(
@@ -69,18 +89,19 @@ class EmbedText(Processor):
         )
         if numerical.numel() != 0:
             num_cols = len(col_names)
-            flat_strings = table.text.movedim(-1, 0).reshape(-1)
-            chunk_size = self._chunk_size or len(flat_strings)
+            flat_strings = cast(
+                StringTensor,
+                table.text.movedim(-1, 0).reshape(-1),
+            )
+            all_strings = flat_strings.to_arrow().to_pylist()
+            chunk_size = self._chunk_size or len(all_strings)
 
             chunks: list[Tensor] = []
-            for start in range(0, len(flat_strings), chunk_size):
-                chunk = cast(
-                    StringTensor,
-                    flat_strings[start : start + chunk_size],
-                )
-                strings = flat_strings.to_arrow().to_pylist()
+            for start in range(0, len(all_strings), chunk_size):
                 chunks.append(
-                    self._embedding_model(strings).to(
+                    self._model_ref.encode(
+                        all_strings[start : start + chunk_size],
+                    ).to(
                         device=device,
                         dtype=dtype,
                     )
@@ -91,7 +112,7 @@ class EmbedText(Processor):
                 all_embeddings.reshape(
                     num_cols,
                     *batch_shape,
-                    self._embedding_dim,
+                    self._model_ref.embedding_dim,
                 )
                 .movedim(0, -2)
                 .reshape(*batch_shape, len(out_col_names))
