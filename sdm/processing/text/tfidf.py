@@ -315,27 +315,30 @@ class TFIDF(EnsembleProcessor):
                 "ensemble members before transform."
             )
 
-        representations: list[TableTensor] = []
-        member_representation_ids: list[int] = []
+        output_tables: list[TableTensor] = []
+        member_table_ids: list[int] = []
         transformed: dict[tuple[tuple[int, int], int], int] = {}
+        # TODO: Benchmark batching compatible query tables that share fitted
+        # state on CUDA with cuDF. It was about 10% slower for four 50,000-row
+        # tables on CPU.
         for member_id, processor_id in enumerate(self._member_processor_ids):
             key = (ensemble_table._locations[member_id], processor_id)
-            representation_id = transformed.get(key)
-            if representation_id is None:
+            table_id = transformed.get(key)
+            if table_id is None:
                 processor = cast(
                     TFIDF,
                     self.processors[processor_id],
                 )
-                representation_id = len(representations)
-                transformed[key] = representation_id
-                representations.append(
+                table_id = len(output_tables)
+                transformed[key] = table_id
+                output_tables.append(
                     processor.transform(ensemble_table.table(member_id))
                 )
-            member_representation_ids.append(representation_id)
+            member_table_ids.append(table_id)
 
         return EnsembleTable.from_tables(
-            representations,
-            member_representation_ids,
+            output_tables,
+            member_table_ids,
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
