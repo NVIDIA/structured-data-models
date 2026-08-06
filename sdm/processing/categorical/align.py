@@ -48,14 +48,15 @@ class AlignCategories(EnsembleProcessor):
         *,
         return_aligned: bool,
     ) -> tuple[tuple[Tensor, ...], Tensor | None]:
-        num_tables = code.size(0)
+        batch_size = code.size(0)
         if category.numel() == 0:
             aligned = torch.full_like(code, -1) if return_aligned else None
-            return (category,) * num_tables, aligned
+            return (category,) * batch_size, aligned
 
         mask = code >= 0
         index = code.clamp_min(0).long()
-        counts = code.new_zeros((num_tables, category.numel()))
+        # Count categories independently per batch: [B, N] -> [B, K].
+        counts = code.new_zeros((batch_size, category.numel()))
         counts.scatter_add_(1, index, mask.to(code.dtype))
 
         if self.sort_by == "frequency":
@@ -71,19 +72,20 @@ class AlignCategories(EnsembleProcessor):
                 ordered_category = category.index_select(0, perm)
             else:
                 ordered_category, perm = category.sort()
-            order = perm.expand(num_tables, -1)
+            order = perm.expand(batch_size, -1)
         else:
             assert self.sort_by == "code"
             order = torch.arange(
                 category.numel(),
                 device=code.device,
-            ).expand(num_tables, -1)
+            ).expand(batch_size, -1)
             ordered_category = category
 
         present = counts.gather(1, order) > 0
+        # Only ragged vocabularies require per-batch materialization.
         categories = []
-        for table_id in range(num_tables):
-            selected = order[table_id, present[table_id]]
+        for batch_index in range(batch_size):
+            selected = order[batch_index, present[batch_index]]
             if (
                 selected.numel() == category.numel()
                 and self.sort_by != "frequency"
@@ -112,6 +114,7 @@ class AlignCategories(EnsembleProcessor):
         if code.dim() == 2:
             code = code.unsqueeze(0)
 
+        # Accumulate ragged vocabularies in batch-major order: [batch][column].
         categories: list[list[Tensor]] = [[] for _ in range(code.size(0))]
         for i, category in enumerate(table.categorical.categories):
             fitted, _ = self._fit_category(
@@ -138,6 +141,7 @@ class AlignCategories(EnsembleProcessor):
             code = code.unsqueeze(0)
         out = torch.full_like(code, -1)
 
+        # Each batch element gets an independent vocabulary and code mapping.
         categories: list[list[Tensor]] = [[] for _ in range(code.size(0))]
         for i, category in enumerate(table.categorical.categories):
             fitted, aligned = self._fit_category(
