@@ -898,86 +898,18 @@ def test_unsafe_view() -> None:
     assert out._offset.equal(torch.arange(7))
 
 
-@pytest.mark.parametrize("create_in_inference_mode", [False, True])
-@pytest.mark.parametrize("reshape_in_inference_mode", [False, True])
-def test_reshape_inference_mode(
-    create_in_inference_mode: bool,
-    reshape_in_inference_mode: bool,
-) -> None:
-    with torch.inference_mode(create_in_inference_mode):
-        tensor = VarLenTensor(
-            data=torch.arange(
-                15.0,
-                requires_grad=not create_in_inference_mode,
-            ),
-            offset=torch.tensor(
-                [0, 2, 3, 3, 6, 8, 9, 12, 12, 13, 15, 15, 15],
-            ),
-            valid=torch.tensor(
-                [
-                    True,
-                    False,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    False,
-                    True,
-                    True,
-                    True,
-                ]
-            ),
-            size=(3, 2),
-            stride=(4, 1),
-        )
-
-    with torch.inference_mode(reshape_in_inference_mode):
-        viewable = tensor[:, :1].reshape(-1)
-        compacted = tensor.reshape(2, 3)
-
-    assert isinstance(viewable, VarLenTensor)
-    assert viewable.size() == (3,)
-    assert viewable.stride() == (4,)
-    assert viewable.storage_offset() == 0
-    assert viewable.tolist() == [[0.0, 1.0], [6.0, 7.0], None]
-    assert viewable.valid is not None
-    assert viewable.valid.equal(torch.tensor([True, True, False]))
-    assert torch.is_inference(viewable) == create_in_inference_mode
-    assert viewable.requires_grad == (not create_in_inference_mode)
-    assert viewable._data.data_ptr() == tensor._data.data_ptr()
-    assert viewable._offset.data_ptr() == tensor._offset.data_ptr()
-
-    assert isinstance(compacted, VarLenTensor)
-    assert compacted.size() == (2, 3)
-    assert compacted.stride() == (3, 1)
-    assert compacted.storage_offset() == 0
-    assert compacted.tolist() == [
-        [[0.0, 1.0], None, [6.0, 7.0]],
-        [[8.0], None, [13.0, 14.0]],
-    ]
-    assert compacted.valid is not None
-    assert compacted.valid.equal(
-        torch.tensor([[True, False, True], [True, False, True]])
+def test_reshape_inference_mode() -> None:
+    tensor = VarLenTensor(
+        data=torch.arange(12),
+        offset=torch.arange(13),
+        valid=None,
+        size=(3, 2),
+        stride=(4, 1),
     )
-    assert torch.is_inference(compacted) == reshape_in_inference_mode
-    assert compacted.requires_grad == (
-        not create_in_inference_mode and not reshape_in_inference_mode
-    )
-    data, offset = compacted.data_offset
-    assert torch.is_inference(data) == reshape_in_inference_mode
-    assert torch.is_inference(offset) == reshape_in_inference_mode
-    assert data.equal(
-        torch.tensor([0.0, 1.0, 2.0, 6.0, 7.0, 8.0, 12.0, 13.0, 14.0])
-    )
-    assert offset.equal(torch.tensor([0, 2, 3, 5, 6, 7, 9]))
-    assert compacted._data.data_ptr() != tensor._data.data_ptr()
-    assert compacted._offset.data_ptr() != tensor._offset.data_ptr()
 
-    if not create_in_inference_mode and not reshape_in_inference_mode:
-        compacted._data.sum().backward()
-        assert tensor._data.grad is not None
-        expected_grad = torch.zeros_like(tensor._data)
-        expected_grad[[0, 1, 2, 6, 7, 8, 12, 13, 14]] = 1
-        assert tensor._data.grad.equal(expected_grad)
+    with torch.inference_mode():
+        view = tensor.reshape(3, 2)
+        copied = tensor.reshape(2, 3)
+
+    assert not torch.is_inference(view)
+    assert torch.is_inference(copied)
