@@ -1255,6 +1255,26 @@ def _unsafe_view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
     return _view(inp, size)
 
 
+@TableTensor.implements(aten.reshape.default)
+def _reshape(inp: ColumnarTensor, size: Sequence[int]) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
+
+
+@TableTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: TableTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
+
+
 @TableTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: TableTensor) -> TableTensor:
