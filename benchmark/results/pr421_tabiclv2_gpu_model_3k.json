@@ -1,15 +1,15 @@
 {
   "metadata": {
-    "timestamp_utc": "2026-08-06T19:10:38Z",
+    "timestamp_utc": "2026-08-06T20:06:27Z",
     "platform": "Linux-6.17.0-1017-aws-x86_64-with-glibc2.39",
     "cpu": "AMD EPYC 7R13 Processor",
     "torch_version": "2.13.0+cu130",
     "cuda_version": "13.0",
     "gpu": "NVIDIA L4",
     "gpu_total_memory_bytes": 23659151360,
-    "head_commit": "7c3ce2e7e561679b8984c3030f075a996f0440cb",
+    "head_commit": "1b742180cddf055f9fff0db2ae9968ce9eab1eb3",
     "main_commit": "0d3a0b8aaec16d6ff503119a4ea3ebc64c46e046",
-    "pr516_commit": "151be48af490cf550c934a126e216448f3ebc4ae"
+    "pr516_commit": "8b3eaca8eb0bccecfdd9379bf7279437779a83e8"
   },
   "configuration": {
     "tasks": [
@@ -49,11 +49,11 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2381.5929619999997,
-      "p95_ms": 2408.239048,
-      "enqueue_median_ms": 2381.5721615,
-      "synchronization_wait_median_ms": 0.021095000000000003,
-      "cuda_event_elapsed_median_ms": 2381.56640625,
+      "median_ms": 2321.2859725,
+      "p95_ms": 2339.655779,
+      "enqueue_median_ms": 2321.2671769999997,
+      "synchronization_wait_median_ms": 0.019104999999999997,
+      "cuda_event_elapsed_median_ms": 2321.2635498046875,
       "peak_memory_bytes": 1744193536,
       "absolute_peak_memory_bytes": 1985384960
     },
@@ -70,13 +70,13 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2601.3161155,
-      "p95_ms": 2615.102648,
-      "enqueue_median_ms": 2601.2966655,
-      "synchronization_wait_median_ms": 0.0197605,
-      "cuda_event_elapsed_median_ms": 2601.2861328125,
-      "peak_memory_bytes": 1736282624,
-      "absolute_peak_memory_bytes": 1977474048
+      "median_ms": 2514.6173325,
+      "p95_ms": 2542.075968,
+      "enqueue_median_ms": 2514.5994325,
+      "synchronization_wait_median_ms": 0.018735,
+      "cuda_event_elapsed_median_ms": 2514.59326171875,
+      "peak_memory_bytes": 1735167488,
+      "absolute_peak_memory_bytes": 1976358912
     },
     {
       "operation": "actual_model_end_to_end",
@@ -91,11 +91,11 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2470.0270689999998,
-      "p95_ms": 2526.750514,
-      "enqueue_median_ms": 2470.006749,
-      "synchronization_wait_median_ms": 0.019570999999999998,
-      "cuda_event_elapsed_median_ms": 2470.0047607421875,
+      "median_ms": 2398.1979650000003,
+      "p95_ms": 2411.408863,
+      "enqueue_median_ms": 2398.1788345,
+      "synchronization_wait_median_ms": 0.0193355,
+      "cuda_event_elapsed_median_ms": 2398.1727294921875,
       "peak_memory_bytes": 1761073152,
       "absolute_peak_memory_bytes": 2001215488
     },
@@ -112,13 +112,13 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2574.002339,
-      "p95_ms": 2618.146795,
-      "enqueue_median_ms": 2573.9827889999997,
-      "synchronization_wait_median_ms": 0.0201455,
-      "cuda_event_elapsed_median_ms": 2573.9801025390625,
-      "peak_memory_bytes": 1755163136,
-      "absolute_peak_memory_bytes": 1995305472
+      "median_ms": 2529.1237185,
+      "p95_ms": 2605.631784,
+      "enqueue_median_ms": 2529.1059685,
+      "synchronization_wait_median_ms": 0.018520000000000002,
+      "cuda_event_elapsed_median_ms": 2529.101318359375,
+      "peak_memory_bytes": 1754049024,
+      "absolute_peak_memory_bytes": 1994191360
     }
   ]
 }

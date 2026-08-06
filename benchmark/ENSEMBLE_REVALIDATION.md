@@ -46,8 +46,8 @@ float64 preprocessing:
 The strict suite compares feature and target preprocessing, every materialized
 member, model inputs, raw per-estimator checkpoint outputs, canonical output
 mapping, estimator reduction, final processing, direct public forward, and
-cached fit/predict. The result is **6 passed**. The complete affected suite is
-**103 passed, 2 expected compile skips**.
+cached fit/predict. The result is **6 passed**; final targeted coverage is
+**81 passed, 2 expected compile skips**. The complete repository pre-push suite is **584 passed, 105 skipped**.
 
 The first divergences found during revalidation were:
 
@@ -83,11 +83,11 @@ processing from their output aggregate.
 
 | Stage                          |                                 Original E2E |            Latest implementation | TabICLv2 |                                Speed-of-light |                                                   Difference |
 | ------------------------------ | -------------------------------------------: | -------------------------------: | -------: | --------------------------------------------: | -----------------------------------------------------------: |
-| Feature + target preprocessing |                 93.90 / 94.70; 86.80 / 90.60 |     88.40 / 99.94; 76.08 / 77.95 |     PASS |                  79.75 / 82.24; 73.07 / 73.83 |  −5.9% / −12.4% vs old median; +10.8% / +4.1% vs lower bound |
-| Canonical output mapping       | included in 0.66 / 0.76; 9.94 / 10.00 output |       1.72 / 2.02; 10.19 / 10.73 |     PASS |                    0.070 / 0.083; 2.17 / 2.27 |                              +1.65 / +8.02 ms vs lower bound |
-| Estimator reduction            |                                 not isolated |       0.209 / 0.226; 1.61 / 1.63 |     PASS |                            included in output |                                   no direct historical split |
-| Final output processing        |                                 not isolated |       0.832 / 0.948; 1.23 / 1.61 |     PASS | output aggregate 0.232 / 0.259; 0.496 / 0.594 |           latest output aggregate is +2.09 / +1.76 ms vs old |
-| Total processing overhead      |             128.60 / 129.80; 123.90 / 126.00 | 114.59 / 117.88; 111.74 / 120.26 |     PASS |                  78.95 / 79.49; 78.04 / 80.60 | −10.9% / −9.8% vs old median; +45.1% / +43.2% vs lower bound |
+| Feature + target preprocessing |                 93.90 / 94.70; 86.80 / 90.60 |     84.36 / 85.42; 75.29 / 78.21 |     PASS |                  79.75 / 82.24; 73.07 / 73.83 |  −10.2% / −13.3% vs old median; +5.8% / +3.0% vs lower bound |
+| Canonical output mapping       | included in 0.66 / 0.76; 9.94 / 10.00 output |       1.60 / 1.80; 10.00 / 10.13 |     PASS |                    0.070 / 0.083; 2.17 / 2.27 |                              +1.53 / +7.83 ms vs lower bound |
+| Estimator reduction            |                                 not isolated |       0.187 / 0.207; 1.60 / 1.63 |     PASS |                            included in output |                                   no direct historical split |
+| Final output processing        |                                 not isolated |       0.720 / 0.844; 1.05 / 1.22 |     PASS | output aggregate 0.232 / 0.259; 0.496 / 0.594 |           latest output aggregate is +1.78 / +1.63 ms vs old |
+| Total processing overhead      |             128.60 / 129.80; 123.90 / 126.00 | 108.82 / 109.89; 112.26 / 123.19 |     PASS |                  78.95 / 79.49; 78.04 / 80.60 | −15.4% / −9.4% vs old median; +37.8% / +43.8% vs lower bound |
 
 The speed-of-light Power Recipe is a practical lower-bound experiment, not a
 drop-in TabICLv2 implementation. Its analytic compiled Power fitter changes
@@ -98,22 +98,22 @@ localized change.
 
 | Task / device        | Original median / p95 |  Latest median / p95 | Latest peak delta | Median change |
 | -------------------- | --------------------: | -------------------: | ----------------: | ------------: |
-| Classification / CPU |    2265.4 / 2304.7 ms | 2244.96 / 2344.61 ms |     196.3 MiB RSS |         −0.9% |
-| Regression / CPU     |    2618.8 / 3057.2 ms | 2596.57 / 2747.77 ms |    1035.2 MiB RSS |         −0.8% |
-| Classification / L4  |      128.6 / 129.8 ms |   114.59 / 117.88 ms |         292.7 MiB |        −10.9% |
-| Regression / L4      |      123.9 / 126.0 ms |   111.74 / 120.26 ms |        1035.9 MiB |         −9.8% |
+| Classification / CPU |    2265.4 / 2304.7 ms | 2224.91 / 2320.28 ms |     211.4 MiB RSS |         −1.8% |
+| Regression / CPU     |    2618.8 / 3057.2 ms | 2571.84 / 2614.88 ms |    1124.8 MiB RSS |         −1.8% |
+| Classification / L4  |      128.6 / 129.8 ms |   108.82 / 109.89 ms |         292.7 MiB |        −15.4% |
+| Regression / L4      |      123.9 / 126.0 ms |   112.26 / 123.19 ms |        1035.9 MiB |         −9.4% |
 
-The current public zero-core processing boundary measures 112.00 / 116.83 ms
-for vectorized classification and 115.98 / 203.18 ms for vectorized
-regression. Sequential Recipe execution measures 379.22 / 402.66 ms and
-403.36 / 487.44 ms while lowering peak allocation to 146.7 MiB and 668.1 MiB,
+The current public zero-core processing boundary measures 105.50 / 111.08 ms
+for vectorized classification and 112.62 / 194.75 ms for vectorized
+regression. Sequential Recipe execution measures 358.03 / 370.36 ms and
+380.13 / 463.93 ms while lowering peak allocation to 146.1 MiB and 745.2 MiB,
 respectively. Sequential execution now intentionally fits/transforms one
 member at a time; it is a low-memory mode, not the historical shared-
 preprocessing model schedule.
 
 Regression's p95 tail is orchestration rather than a slow Processor. Its
 independently measured bind, query, mapping, reduction, and final stages have
-p95s of 77.95, 25.07, 10.73, 1.63, and 1.61 ms. A separate 40-sample
+p95s of 78.21, 23.11, 10.13, 1.63, and 1.22 ms. A separate 40-sample
 diagnostic reproduced one 182.6 ms outlier exactly when Python generation-2
 garbage collection ran over repeated deep-copied Recipe/module graphs; median
 was 107.6 ms and p95 122.6 ms in that diagnostic. Disabling automatic GC
@@ -123,24 +123,24 @@ semantic change.
 Regression Recipe peak allocation is 1035.9 MiB versus 914.9 MiB originally
 (+121.0 MiB, +13.2%). This is the remaining material processing-memory
 regression: current grouped output mapping keeps packed raw and decoded
-representations alive through reduction. The real-model result below remains
+representations alive through reduction. The production-model result remains
 far below the historical parallel peak.
 
 ## Processor timings
 
 | Processor operation                 |     CPU median / p95 |  L4 median / p95 |                         L4 speed-of-light |
 | ----------------------------------- | -------------------: | ---------------: | ----------------------------------------: |
-| `ImputeMean.fit_transform`          |       8.17 / 9.47 ms | 0.313 / 0.397 ms |                             current-scale |
-| `DropConstantColumns.fit_transform` |     16.43 / 17.91 ms | 0.818 / 0.876 ms |                             current-scale |
-| `Standardize.fit_transform`         |     12.31 / 12.46 ms | 0.347 / 0.385 ms |         0.165 / 0.193 ms affine candidate |
-| `PowerTransform.fit`                | 1602.22 / 1625.69 ms | 33.13 / 34.10 ms | 3.381 / 3.416 ms compiled analytic Newton |
-| `PowerTransform.fit_transform`      | 1633.67 / 1664.94 ms | 34.34 / 34.97 ms | 3.411 / 3.497 ms compiled analytic Newton |
-| `PowerTransform.transform`          |       7.06 / 8.52 ms | 0.395 / 0.420 ms |                          0.376 / 0.394 ms |
-| `PowerTransform.inverse_transform`  |   139.93 / 143.81 ms | 1.897 / 1.920 ms |                 0.278 / 0.308 ms compiled |
-| `ClipSigma.fit_transform`           |     29.69 / 31.87 ms | 1.002 / 1.055 ms |                          1.254 / 1.281 ms |
-| `ShuffleColumns.fit_transform`      |       3.72 / 4.14 ms | 1.557 / 1.790 ms |      0.074 / 0.101 ms direct index-select |
-| `AlignCategories.fit_transform`     |       3.60 / 3.89 ms |   3.98 / 4.62 ms |             0.362 / 0.394 ms dense lookup |
-| `AlignCategories.transform`         |       3.10 / 3.33 ms |   3.60 / 4.30 ms |            0.194 / 0.226 ms direct lookup |
+| `ImputeMean.fit_transform`          |       8.11 / 9.95 ms | 0.320 / 0.357 ms |                             current-scale |
+| `DropConstantColumns.fit_transform` |     15.82 / 16.29 ms | 0.637 / 0.681 ms |                             current-scale |
+| `Standardize.fit_transform`         |     12.21 / 12.38 ms | 0.292 / 0.312 ms |         0.165 / 0.193 ms affine candidate |
+| `PowerTransform.fit`                | 1566.84 / 1619.00 ms | 32.93 / 33.68 ms | 3.381 / 3.416 ms compiled analytic Newton |
+| `PowerTransform.fit_transform`      | 1590.12 / 1612.12 ms | 33.95 / 34.76 ms | 3.411 / 3.497 ms compiled analytic Newton |
+| `PowerTransform.transform`          |       7.15 / 7.69 ms | 0.415 / 0.517 ms |                          0.376 / 0.394 ms |
+| `PowerTransform.inverse_transform`  |   144.95 / 159.52 ms | 1.895 / 1.913 ms |                 0.278 / 0.308 ms compiled |
+| `ClipSigma.fit_transform`           |     31.74 / 40.41 ms | 1.010 / 1.079 ms |                          1.254 / 1.281 ms |
+| `ShuffleColumns.fit_transform`      |       3.65 / 3.83 ms | 1.432 / 1.556 ms |      0.074 / 0.101 ms direct index-select |
+| `AlignCategories.fit_transform`     |       3.74 / 4.20 ms |   3.90 / 4.13 ms |             0.362 / 0.394 ms dense lookup |
+| `AlignCategories.transform`         |       3.15 / 3.62 ms |   3.53 / 3.72 ms |            0.194 / 0.226 ms direct lookup |
 
 No timed numerical Processor fell back to CPU or transferred data between
 host and device. `PowerTransform.fit` remains the dominant latency. The
@@ -150,22 +150,22 @@ to justify a second specialized shuffle implementation. Dense category
 lookups remain a medium-risk future optimization because they need explicit
 dtype, unseen-category, and bounded-domain validation.
 
-## Large representative real-model run
+## Large representative production-model run
 
-The largest real-checkpoint workload that was rerun uses 2,400 context + 600
-query rows, 100 features, eight estimators, float32, five warmups, and 20
-repetitions on the L4.
+The largest production-architecture workload that was rerun uses 2,400
+context + 600 query rows, 100 features, eight estimators, float32, five
+warmups, and 20 repetitions on the L4.
 
 | Task / execution            | Original median / p95 |  Latest median / p95 | Original / latest peak | Median change |
 | --------------------------- | --------------------: | -------------------: | ---------------------: | ------------: |
-| Classification / vectorized |  2456.50 / 2466.29 ms | 2381.59 / 2408.24 ms |   13221.4 / 1663.4 MiB |         −3.1% |
-| Classification / sequential |  2478.10 / 2494.18 ms | 2601.32 / 2615.10 ms |    1661.2 / 1655.8 MiB |         +5.0% |
-| Regression / vectorized     |  2517.52 / 2551.87 ms | 2470.03 / 2526.75 ms |   13221.5 / 1679.5 MiB |         −1.9% |
-| Regression / sequential     |  2482.94 / 2499.95 ms | 2574.00 / 2618.15 ms |    1676.4 / 1673.9 MiB |         +3.7% |
+| Classification / vectorized |  2456.50 / 2466.29 ms | 2321.29 / 2339.66 ms |   13221.4 / 1663.4 MiB |         −5.5% |
+| Classification / sequential |  2478.10 / 2494.18 ms | 2514.62 / 2542.08 ms |    1661.2 / 1654.8 MiB |         +1.5% |
+| Regression / vectorized     |  2517.52 / 2551.87 ms | 2398.20 / 2411.41 ms |   13221.5 / 1679.5 MiB |         −4.7% |
+| Regression / sequential     |  2482.94 / 2499.95 ms | 2529.12 / 2605.63 ms |    1676.4 / 1672.8 MiB |         +1.9% |
 
 The default vectorized path is faster than the original and uses about 87%
 less peak GPU allocation because PR #516 keeps Recipe preprocessing
-vectorized while running the model once per estimator. Sequential's 4-5%
+vectorized while running the model once per estimator. Sequential's 1-2%
 runtime regression is explained by repeated one-member fitting and
 transformation; its low-memory behavior is preserved.
 
@@ -176,12 +176,12 @@ regression-output path. The first latest-code measurement was 16.71 ms for
 output transformation and 128.89 ms for the public vectorized boundary.
 Wrapping one already-stacked `EnsembleTable` group avoids the second
 materialization and reuses the current inverse/output processors. Remeasured
-GPU values are 11.70 ms and 115.98 ms. On CPU, this preserves final PR #516's
+GPU values are 11.57 ms and 112.62 ms. On CPU, this preserves final PR #516's
 ensemble-aware inverse semantics while reducing the public boundary from
-2734.26 to 2657.90 ms and peak RSS from 1264.0 to 1034.9 MiB.
+2734.26 to 2693.64 ms and peak RSS from 1264.0 to 1034.9 MiB.
 
-The remaining speed-of-light gap is 35.64 ms classification and 33.69 ms
-regression. Almost all of that is the 33.1 ms Power fit versus the 3.4 ms
+The remaining speed-of-light gap is 29.87 ms classification and 34.22 ms
+regression. Almost all of that is the 32.9 ms Power fit versus the 3.4 ms
 compiled analytic-Newton prototype. Adopting it would change the fitting
 algorithm and requires model-quality validation beyond execution parity;
 therefore it is not included as a minimal PR #421 fix. The categorical and
@@ -193,7 +193,7 @@ generic-Processor risk.
 - The speed-of-light rows were measured on an earlier main-state commit and
   are lower bounds, not pinned-reference timings.
 - The 50k Recipe p95 includes Python orchestration/GC by the original
-  methodology. Real-model p95 remains within about 1-3% of its median.
+  methodology. Production-model p95 remains within about 1-3% of its median.
 - KumoRFM functional behavior was rerun on CPU and CUDA using the current
   relational fixture. CUDA string sorts and joins emitted the expected CPU
   fallback warning because cuDF is not installed. The historical canonical
@@ -211,6 +211,10 @@ generic-Processor risk.
 ```bash
 env SDM_RUN_TABICLV2_GPU_PARITY=1 uv run pytest -q \
   test/integration/tabiclv2_parity/test_strict_ensemble.py
+
+uv run python benchmark/tabiclv2_ensemble_revalidation.py \
+  --devices cpu --executions vectorized sequential --include-processors \
+  --output benchmark/results/pr421_tabiclv2_cpu_processing.json
 
 uv run python benchmark/tabiclv2_ensemble_revalidation.py \
   --devices cuda --executions vectorized sequential --include-processors \
