@@ -151,6 +151,7 @@ class ICLModel(torch.nn.Module, ABC):
                     related_query_tables=related_query_tables,
                 )
 
+            member_outs: list[TableTensor] = []
             for context, query in zip(
                 execution.contexts,
                 queries,
@@ -181,19 +182,24 @@ class ICLModel(torch.nn.Module, ABC):
                     **kwargs,
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
-                # Regression: invert target before stacking estimator outputs.
-                if context.y.categorical.size(-1) == 0:
-                    if not isinstance(
-                        execution.recipe.target,
-                        InvertibleMixin,
-                    ):
-                        raise RuntimeError("Target recipe is not invertible")
-                    with torch.amp.autocast(
-                        x_query.device.type,
-                        enabled=False,
-                    ):
-                        out = execution.recipe.target.inverse_transform(out)
-                outs.append(out)
+                member_outs.append(out)
+
+            # Regression: invert target before stacking estimator outputs.
+            is_regression = execution.contexts[0].y.categorical.size(-1) == 0
+            if is_regression:
+                if not isinstance(
+                    execution.recipe.target,
+                    InvertibleMixin,
+                ):
+                    raise RuntimeError("Target recipe is not invertible")
+                with torch.amp.autocast(
+                    x_query.device.type,
+                    enabled=False,
+                ):
+                    member_outs = list(
+                        execution.inverse_transform_target(member_outs)
+                    )
+            outs.extend(member_outs)
 
             last_execution = execution
 
@@ -370,6 +376,7 @@ class ICLModel(torch.nn.Module, ABC):
                     related_query_tables=related_tables,
                 )
 
+            member_outs: list[TableTensor] = []
             for query in queries:
                 cache = self._caches[cache_index]
                 cache_index += 1
@@ -395,16 +402,21 @@ class ICLModel(torch.nn.Module, ABC):
                     **cast(dict[str, Any], cache["kwargs"]),
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
-                # classes is None for regression (see fit()).
-                if cache["classes"] is None:
-                    if not isinstance(
-                        execution.recipe.target,
-                        InvertibleMixin,
-                    ):
-                        raise RuntimeError("Target recipe is not invertible")
-                    with torch.amp.autocast(x.device.type, enabled=False):
-                        out = execution.recipe.target.inverse_transform(out)
-                outs.append(out)
+                member_outs.append(out)
+
+            # classes is None for regression (see fit()).
+            is_regression = self._caches[cache_index - 1]["classes"] is None
+            if is_regression:
+                if not isinstance(
+                    execution.recipe.target,
+                    InvertibleMixin,
+                ):
+                    raise RuntimeError("Target recipe is not invertible")
+                with torch.amp.autocast(x.device.type, enabled=False):
+                    member_outs = list(
+                        execution.inverse_transform_target(member_outs)
+                    )
+            outs.extend(member_outs)
 
             last_execution = execution
 
