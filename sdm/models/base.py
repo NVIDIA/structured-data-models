@@ -315,9 +315,7 @@ class ICLModel(torch.nn.Module, ABC):
 
         caches: list[Cache] = []
         for execution in executions:
-            for member_id, context in enumerate(
-                execution.contexts
-            ):
+            for member_id, context in enumerate(execution.contexts):
                 self._validate_context(
                     x=context.x,
                     y=context.y,
