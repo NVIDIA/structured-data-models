@@ -9,12 +9,7 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.processing.base import Processor
-from sdm.processing.ensemble import (
-    EnsembleInvertibleMixin,
-    EnsembleProcessor,
-    EnsembleProcessorAdapter,
-)
+from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.processing.output.reduce import ReduceEstimators
 from sdm.processing.recipe import Recipe
 from sdm.tensor import EnsembleTable
@@ -74,16 +69,14 @@ class _RecipeExecution:
         """Bind a recipe to context data and return the execution state."""
         recipe = copy.deepcopy(recipe)
 
-        features = _ensemble_processor(recipe.features)
-        target = _ensemble_processor(recipe.target)
-        object.__setattr__(recipe, "features", features)
-        object.__setattr__(recipe, "target", target)
-
         related_context_out: dict[str, EnsembleTable] = {}
         related_processors: dict[str, EnsembleProcessor] = {}
         if related_context_tables is not None:
             for table_name, table in related_context_tables.tables.items():
-                processor = _ensemble_processor(copy.deepcopy(features))
+                processor = cast(
+                    EnsembleProcessor,
+                    copy.deepcopy(recipe.features),
+                )
                 related_processors[table_name] = processor
                 related_context_out[table_name] = (
                     processor.fit_transform_ensemble(
@@ -94,6 +87,8 @@ class _RecipeExecution:
 
         x_ensemble = EnsembleTable(x_context, num_members=num_members)
         y_ensemble = EnsembleTable(y_context, num_members=num_members)
+        features = cast(EnsembleProcessor, recipe.features)
+        target = cast(EnsembleProcessor, recipe.target)
         x_context_out = features.fit_transform_ensemble(
             x_ensemble,
             generator=generator,
@@ -134,7 +129,8 @@ class _RecipeExecution:
             related_query_tables: Related query tables, or ``None``.
         """
         num_members = len(self.contexts)
-        x_query_out = _ensemble_processor(
+        x_query_out = cast(
+            EnsembleProcessor,
             self.recipe.features,
         ).transform_ensemble(EnsembleTable(x_query, num_members=num_members))
 
@@ -173,10 +169,9 @@ class _RecipeExecution:
         Args:
             outputs: One model output per ensemble member.
         """
-        target = _ensemble_processor(self.recipe.target)
         table = cast(
             EnsembleInvertibleMixin,
-            target,
+            self.recipe.target,
         ).inverse_transform_ensemble(self._ensemble_from_outputs(outputs))
         return tuple(
             table.table(member_id) for member_id in range(table.num_members)
@@ -196,7 +191,10 @@ class _RecipeExecution:
         """
         table = self._ensemble_from_outputs(outputs)
         input_members = table.num_members
-        table = _ensemble_processor(self.recipe.output).transform_ensemble(table)
+        table = cast(
+            EnsembleProcessor,
+            self.recipe.output,
+        ).transform_ensemble(table)
 
         reduced = table.num_members < input_members or (
             table.num_members == 1
@@ -245,9 +243,3 @@ class _RecipeExecution:
                 for table_name, table in tables.items()
             },
         )
-
-
-def _ensemble_processor(processor: Processor) -> EnsembleProcessor:
-    if isinstance(processor, EnsembleProcessor):
-        return processor
-    return EnsembleProcessorAdapter(processor)

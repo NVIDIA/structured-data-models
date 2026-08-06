@@ -161,6 +161,11 @@ class Recipe:
     ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
     ``target`` also selects its task-specific output route.
 
+    A pipeline given as a single :class:`~sdm.processing.base.Processor` that
+    is not already ensemble-aware is wrapped in a
+    :class:`~sdm.processing.common.Sequential` so it can still process
+    multiple estimators.
+
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
 
@@ -291,6 +296,8 @@ class Recipe:
             return Sequential()
         if not isinstance(processor, Processor):
             return Sequential(*processor)
+        if not isinstance(processor, EnsembleProcessor):
+            return Sequential(processor)
         return processor
 
     def __repr__(self) -> str:
