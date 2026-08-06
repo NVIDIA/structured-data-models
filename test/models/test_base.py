@@ -288,6 +288,20 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         num_estimators=2,
     )
     assert model._caches is not None
+    processors = [
+        cast(dict[str, Processor], cache["related_processors"])
+        for cache in model._caches
+    ]
+    assert (
+        len(
+            {
+                id(processor)
+                for estimator in processors
+                for processor in estimator.values()
+            }
+        )
+        == 4
+    )
 
     prediction = model.predict(x_query, related_query)
 
