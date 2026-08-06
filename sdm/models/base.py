@@ -10,7 +10,7 @@ from sdm import RelatedTables, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Recipe
-from sdm.processing._recipe_execution import _MemberContext, _RecipeExecution
+from sdm.processing._recipe_execution import _RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
 
@@ -29,30 +29,6 @@ def _maybe_inference_mode() -> Iterator[None]:
 
     with context_fn():
         yield
-
-
-def _target_classes(y: TableTensor) -> Tensor | None:
-    if y.categorical.size(-1) > 0:
-        return y.categorical.categories[0]
-    return None
-
-
-def _is_regression(contexts: tuple[_MemberContext, ...]) -> bool:
-    return all(_target_classes(context.y) is None for context in contexts)
-
-
-def _postprocess_outputs(
-    execution: _RecipeExecution,
-    outputs: list[TableTensor],
-    *,
-    device_type: str,
-) -> TableTensor:
-    with torch.amp.autocast(device_type, enabled=False):
-        if _is_regression(execution.contexts):
-            if not isinstance(execution.recipe.target, InvertibleMixin):
-                raise RuntimeError("Target recipe is not invertible")
-            outputs = list(execution.inverse_transform_target(outputs))
-        return execution.transform_output(outputs)
 
 
 class ICLModel(torch.nn.Module, ABC):
@@ -195,11 +171,18 @@ class ICLModel(torch.nn.Module, ABC):
                 out = cast(TableTensor, out.to(query.x.dtype))
                 outs.append(out)
 
-            return _postprocess_outputs(
-                execution,
-                outs,
-                device_type=x_query.device.type,
-            )
+            with torch.amp.autocast(x_query.device.type, enabled=False):
+                if all(
+                    context.y.categorical.size(-1) == 0
+                    for context in execution.contexts
+                ):
+                    if not isinstance(
+                        execution.recipe.target,
+                        InvertibleMixin,
+                    ):
+                        raise RuntimeError("Target recipe is not invertible")
+                    outs = list(execution.inverse_transform_target(outs))
+                return execution.transform_output(outs)
         if recipe_execution != "sequential":
             raise AssertionError(
                 f"Unexpected recipe_execution {recipe_execution!r}"
@@ -247,7 +230,7 @@ class ICLModel(torch.nn.Module, ABC):
                 **kwargs,
             )
             out = cast(TableTensor, out.to(query.x.dtype))
-            if _is_regression(execution.contexts):
+            if context.y.categorical.size(-1) == 0:
                 if not isinstance(execution.recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
                 with torch.amp.autocast(x_query.device.type, enabled=False):
@@ -354,7 +337,11 @@ class ICLModel(torch.nn.Module, ABC):
                     related_tables_schema=context.related_tables.schema
                     if context.related_tables is not None
                     else None,
-                    classes=_target_classes(context.y),
+                    classes=(
+                        context.y.categorical.categories[0]
+                        if context.y.categorical.size(-1) > 0
+                        else None
+                    ),
                     kwargs=kwargs,
                 )
 
@@ -460,11 +447,18 @@ class ICLModel(torch.nn.Module, ABC):
                 out = cast(TableTensor, out.to(query.x.dtype))
                 outs.append(out)
 
-            return _postprocess_outputs(
-                execution,
-                outs,
-                device_type=x.device.type,
-            )
+            with torch.amp.autocast(x.device.type, enabled=False):
+                if all(
+                    context.y.categorical.size(-1) == 0
+                    for context in execution.contexts
+                ):
+                    if not isinstance(
+                        execution.recipe.target,
+                        InvertibleMixin,
+                    ):
+                        raise RuntimeError("Target recipe is not invertible")
+                    outs = list(execution.inverse_transform_target(outs))
+                return execution.transform_output(outs)
 
         outs = []
         last_execution: _RecipeExecution | None = None
@@ -495,7 +489,7 @@ class ICLModel(torch.nn.Module, ABC):
                 **cast(dict[str, Any], cache["kwargs"]),
             )
             out = cast(TableTensor, out.to(query.x.dtype))
-            if _is_regression(execution.contexts):
+            if cache["classes"] is None:
                 if not isinstance(execution.recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
                 with torch.amp.autocast(x.device.type, enabled=False):
