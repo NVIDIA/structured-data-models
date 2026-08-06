@@ -52,15 +52,15 @@ def relational_data(device: torch.device) -> RelationalData:
         tables={
             "users": TableTensor.from_pandas(
                 df=users_df,
-                stypes=infer_stypes(users_df),
+                stypes=infer_stypes(users_df, with_id=True),
             ),
             "orders": TableTensor.from_pandas(
                 df=orders_df,
-                stypes=infer_stypes(orders_df),
+                stypes=infer_stypes(orders_df, with_id=True),
             ),
             "items": TableTensor.from_pandas(
                 df=items_df,
-                stypes=infer_stypes(items_df),
+                stypes=infer_stypes(items_df, with_id=True),
             ),
         },
         relationships=[

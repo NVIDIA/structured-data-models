@@ -3,6 +3,7 @@ import torch
 
 from sdm import Stype, TableTensor
 from sdm.processing import DropConstantColumns
+from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 
@@ -98,3 +99,62 @@ def test_drop_constant_columns_rejects_invalid_arguments() -> None:
         DropConstantColumns(threshold=0)
     with pytest.raises(ValueError, match="tolerance must be non-negative"):
         DropConstantColumns(method="variance", tolerance=-1.0)
+
+
+@withCUDA
+def test_drop_constant_columns_ensemble_matches_member_fits(
+    device: torch.device,
+) -> None:
+    first_context = TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0], [1.0, 3.0]], device=device),
+        columns=("a", "b"),
+    )
+    second_context = TableTensor.from_tensor(
+        torch.tensor([[1.0, 2.0], [3.0, 2.0]], device=device),
+        columns=("a", "b"),
+    )
+    member_table_ids = (1, 0, 1, 0, 0, 1, 1, 0)
+    context = EnsembleTable.from_tables(
+        tables=(first_context, second_context),
+        member_table_ids=member_table_ids,
+    )
+    query = TableTensor.from_tensor(
+        torch.tensor([[4.0, 5.0], [6.0, 7.0]], device=device),
+        columns=("a", "b"),
+    )
+    processor = DropConstantColumns()
+
+    context_output = processor.fit_transform_ensemble(context)
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=len(member_table_ids))
+    )
+    separate_query_output = processor.transform_ensemble(
+        EnsembleTable.from_tables(
+            tables=(query,) * len(member_table_ids),
+            member_table_ids=range(len(member_table_ids)),
+        )
+    )
+    references = [
+        DropConstantColumns().fit(first_context),
+        DropConstantColumns().fit(second_context),
+    ]
+    context_tables = (first_context, second_context)
+    for member_id, table_id in enumerate(member_table_ids):
+        reference = references[table_id]
+        assert context_output.table(member_id).equal(
+            reference.transform(context_tables[table_id])
+        )
+        expected_query = reference.transform(query)
+        assert query_output.table(member_id).equal(expected_query)
+        assert separate_query_output.table(member_id).equal(expected_query)
+        assert query_output.table(member_id).device == device
+
+
+def test_drop_constant_columns_requires_fitted_member_count() -> None:
+    table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
+    processor = DropConstantColumns().fit_ensemble(
+        EnsembleTable(table, num_members=2)
+    )
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(table, num_members=1))

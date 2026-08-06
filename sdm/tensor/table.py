@@ -6,12 +6,12 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm import NaT, Stype, StypeLike
 from sdm.tensor import CategoricalTensor, ColumnarTensor, StringTensor
@@ -1162,6 +1162,16 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
     )
 
 
+@TableTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> TableTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @TableTensor.implements(aten.equal.default)
 def _equal(inp: TableTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:
@@ -1253,6 +1263,26 @@ def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
 @preserve_view_inference_mode
 def _unsafe_view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
     return _view(inp, size)
+
+
+@TableTensor.implements(aten.reshape.default)
+def _reshape(inp: TableTensor, size: Sequence[int]) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
+
+
+@TableTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: TableTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> TableTensor:
+    return cast(
+        TableTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
 
 
 @TableTensor.implements(aten.squeeze.default)
@@ -1397,15 +1427,21 @@ def _slice(
     end: int | None = None,
     step: int = 1,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        if (
+            (start is None or start == 0 or start <= -inp.size(-1))
+            and (end is None or end >= inp.size(dim))
+            and step == 1
+        ):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't slice the column dimension of '{inp.__class__.__name__}'"
+        )
+
     blocks = {
         stype: aten.slice.Tensor(tensor, dim, start, end, step)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't slice the column dimension of {inp.__class__.__name__!r}"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
@@ -1421,15 +1457,17 @@ def _narrow(
     start: int,
     length: int,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
+        )
+
     blocks = {
         stype: tensor.narrow(dim, start, length)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't narrow the column dimension of {inp.__class__.__name__!r}"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),

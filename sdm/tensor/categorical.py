@@ -3,13 +3,13 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor import StringTensor, VarLenTensor
 from sdm.tensor.io import (
@@ -600,9 +600,27 @@ def _contiguous(
     return inp.__class__(code, inp._categories)
 
 
+@CategoricalTensor.implements(aten.is_pinned.default)
+def _is_pinned(inp: CategoricalTensor) -> bool:
+    return inp._code.is_pinned() and all(
+        category.is_pinned() for category in inp._categories
+    )
+
+
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
-    return inp.__class__(inp._code.pin_memory(), inp._categories)
+    categories = tuple(category.pin_memory() for category in inp._categories)
+    return inp.__class__(inp._code.pin_memory(), categories)
+
+
+@CategoricalTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: CategoricalTensor,
+    device: torch.device | None = None,
+) -> CategoricalTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
 
 
 @CategoricalTensor.implements(aten.equal.default)
@@ -643,6 +661,20 @@ def _view(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
 @preserve_view_inference_mode
 def _unsafe_view(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
     return _maybe_wrap(inp, aten._unsafe_view(inp._code, size))
+
+
+@CategoricalTensor.implements(aten.reshape.default)
+def _reshape(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
+    return aten.reshape.default.decompose(inp, size)
+
+
+@CategoricalTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: CategoricalTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> Tensor:
+    return aten.flatten.using_ints.decompose(inp, start_dim, end_dim)
 
 
 @CategoricalTensor.implements(aten.squeeze.default)

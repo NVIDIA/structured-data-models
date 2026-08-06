@@ -1,8 +1,7 @@
 from collections.abc import Iterable, Iterator
-from typing import cast
+from typing import Self, cast
 
 import torch
-from typing_extensions import Self
 
 from sdm import Stype
 from sdm.processing.base import Processor
@@ -11,7 +10,7 @@ from sdm.processing.ensemble import (
     EnsembleProcessor,
     EnsembleProcessorAdapter,
 )
-from sdm.tensor import EnsembleTable
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -53,6 +52,12 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         for processor in processors:
             self.append(processor)
         return self
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        out = table
+        for child in self:
+            out = child.transform(out)
+        return out
 
     def _fit_ensemble(
         self,
