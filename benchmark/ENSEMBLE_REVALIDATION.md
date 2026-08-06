@@ -81,13 +81,13 @@ Cells below are classification / regression median / p95 milliseconds.
 The historical and speed-of-light runs did not isolate reduction and final
 processing from their output aggregate.
 
-| Stage                          | Original E2E | Latest implementation | TabICLv2 | Speed-of-light | Difference |
-| ------------------------------ | -----------: | --------------------: | -------: | -------------: | ---------: |
-| Feature + target preprocessing | 93.90 / 94.70; 86.80 / 90.60 | 88.40 / 99.94; 76.08 / 77.95 | PASS | 79.75 / 82.24; 73.07 / 73.83 | −5.9% / −12.4% vs old median; +10.8% / +4.1% vs lower bound |
-| Canonical output mapping       | included in 0.66 / 0.76; 9.94 / 10.00 output | 1.72 / 2.02; 10.19 / 10.73 | PASS | 0.070 / 0.083; 2.17 / 2.27 | +1.65 / +8.02 ms vs lower bound |
-| Estimator reduction            | not isolated | 0.209 / 0.226; 1.61 / 1.63 | PASS | included in output | no direct historical split |
-| Final output processing        | not isolated | 0.832 / 0.948; 1.23 / 1.61 | PASS | output aggregate 0.232 / 0.259; 0.496 / 0.594 | latest output aggregate is +2.09 / +1.76 ms vs old |
-| Total processing overhead      | 128.60 / 129.80; 123.90 / 126.00 | 114.59 / 117.88; 111.74 / 120.26 | PASS | 78.95 / 79.49; 78.04 / 80.60 | −10.9% / −9.8% vs old median; +45.1% / +43.2% vs lower bound |
+| Stage                          |                                 Original E2E |            Latest implementation | TabICLv2 |                                Speed-of-light |                                                   Difference |
+| ------------------------------ | -------------------------------------------: | -------------------------------: | -------: | --------------------------------------------: | -----------------------------------------------------------: |
+| Feature + target preprocessing |                 93.90 / 94.70; 86.80 / 90.60 |     88.40 / 99.94; 76.08 / 77.95 |     PASS |                  79.75 / 82.24; 73.07 / 73.83 |  −5.9% / −12.4% vs old median; +10.8% / +4.1% vs lower bound |
+| Canonical output mapping       | included in 0.66 / 0.76; 9.94 / 10.00 output |       1.72 / 2.02; 10.19 / 10.73 |     PASS |                    0.070 / 0.083; 2.17 / 2.27 |                              +1.65 / +8.02 ms vs lower bound |
+| Estimator reduction            |                                 not isolated |       0.209 / 0.226; 1.61 / 1.63 |     PASS |                            included in output |                                   no direct historical split |
+| Final output processing        |                                 not isolated |       0.832 / 0.948; 1.23 / 1.61 |     PASS | output aggregate 0.232 / 0.259; 0.496 / 0.594 |           latest output aggregate is +2.09 / +1.76 ms vs old |
+| Total processing overhead      |             128.60 / 129.80; 123.90 / 126.00 | 114.59 / 117.88; 111.74 / 120.26 |     PASS |                  78.95 / 79.49; 78.04 / 80.60 | −10.9% / −9.8% vs old median; +45.1% / +43.2% vs lower bound |
 
 The speed-of-light Power Recipe is a practical lower-bound experiment, not a
 drop-in TabICLv2 implementation. Its analytic compiled Power fitter changes
@@ -96,12 +96,12 @@ localized change.
 
 ## Original versus latest 50k Recipe
 
-| Task / device | Original median / p95 | Latest median / p95 | Latest peak delta | Median change |
-| ------------- | --------------------: | ------------------: | ----------------: | ------------: |
-| Classification / CPU | 2265.4 / 2304.7 ms | 2244.96 / 2344.61 ms | 196.3 MiB RSS | −0.9% |
-| Regression / CPU | 2618.8 / 3057.2 ms | 2596.57 / 2747.77 ms | 1035.2 MiB RSS | −0.8% |
-| Classification / L4 | 128.6 / 129.8 ms | 114.59 / 117.88 ms | 292.7 MiB | −10.9% |
-| Regression / L4 | 123.9 / 126.0 ms | 111.74 / 120.26 ms | 1035.9 MiB | −9.8% |
+| Task / device        | Original median / p95 |  Latest median / p95 | Latest peak delta | Median change |
+| -------------------- | --------------------: | -------------------: | ----------------: | ------------: |
+| Classification / CPU |    2265.4 / 2304.7 ms | 2244.96 / 2344.61 ms |     196.3 MiB RSS |         −0.9% |
+| Regression / CPU     |    2618.8 / 3057.2 ms | 2596.57 / 2747.77 ms |    1035.2 MiB RSS |         −0.8% |
+| Classification / L4  |      128.6 / 129.8 ms |   114.59 / 117.88 ms |         292.7 MiB |        −10.9% |
+| Regression / L4      |      123.9 / 126.0 ms |   111.74 / 120.26 ms |        1035.9 MiB |         −9.8% |
 
 The current public zero-core processing boundary measures 112.00 / 116.83 ms
 for vectorized classification and 115.98 / 203.18 ms for vectorized
@@ -128,19 +128,19 @@ far below the historical parallel peak.
 
 ## Processor timings
 
-| Processor operation | CPU median / p95 | L4 median / p95 | L4 speed-of-light |
-| ------------------- | ----------------: | ---------------: | ----------------: |
-| `ImputeMean.fit_transform` | 8.17 / 9.47 ms | 0.313 / 0.397 ms | current-scale |
-| `DropConstantColumns.fit_transform` | 16.43 / 17.91 ms | 0.818 / 0.876 ms | current-scale |
-| `Standardize.fit_transform` | 12.31 / 12.46 ms | 0.347 / 0.385 ms | 0.165 / 0.193 ms affine candidate |
-| `PowerTransform.fit` | 1602.22 / 1625.69 ms | 33.13 / 34.10 ms | 3.381 / 3.416 ms compiled analytic Newton |
-| `PowerTransform.fit_transform` | 1633.67 / 1664.94 ms | 34.34 / 34.97 ms | 3.411 / 3.497 ms compiled analytic Newton |
-| `PowerTransform.transform` | 7.06 / 8.52 ms | 0.395 / 0.420 ms | 0.376 / 0.394 ms |
-| `PowerTransform.inverse_transform` | 139.93 / 143.81 ms | 1.897 / 1.920 ms | 0.278 / 0.308 ms compiled |
-| `ClipSigma.fit_transform` | 29.69 / 31.87 ms | 1.002 / 1.055 ms | 1.254 / 1.281 ms |
-| `ShuffleColumns.fit_transform` | 3.72 / 4.14 ms | 1.557 / 1.790 ms | 0.074 / 0.101 ms direct index-select |
-| `AlignCategories.fit_transform` | 3.60 / 3.89 ms | 3.98 / 4.62 ms | 0.362 / 0.394 ms dense lookup |
-| `AlignCategories.transform` | 3.10 / 3.33 ms | 3.60 / 4.30 ms | 0.194 / 0.226 ms direct lookup |
+| Processor operation                 |     CPU median / p95 |  L4 median / p95 |                         L4 speed-of-light |
+| ----------------------------------- | -------------------: | ---------------: | ----------------------------------------: |
+| `ImputeMean.fit_transform`          |       8.17 / 9.47 ms | 0.313 / 0.397 ms |                             current-scale |
+| `DropConstantColumns.fit_transform` |     16.43 / 17.91 ms | 0.818 / 0.876 ms |                             current-scale |
+| `Standardize.fit_transform`         |     12.31 / 12.46 ms | 0.347 / 0.385 ms |         0.165 / 0.193 ms affine candidate |
+| `PowerTransform.fit`                | 1602.22 / 1625.69 ms | 33.13 / 34.10 ms | 3.381 / 3.416 ms compiled analytic Newton |
+| `PowerTransform.fit_transform`      | 1633.67 / 1664.94 ms | 34.34 / 34.97 ms | 3.411 / 3.497 ms compiled analytic Newton |
+| `PowerTransform.transform`          |       7.06 / 8.52 ms | 0.395 / 0.420 ms |                          0.376 / 0.394 ms |
+| `PowerTransform.inverse_transform`  |   139.93 / 143.81 ms | 1.897 / 1.920 ms |                 0.278 / 0.308 ms compiled |
+| `ClipSigma.fit_transform`           |     29.69 / 31.87 ms | 1.002 / 1.055 ms |                          1.254 / 1.281 ms |
+| `ShuffleColumns.fit_transform`      |       3.72 / 4.14 ms | 1.557 / 1.790 ms |      0.074 / 0.101 ms direct index-select |
+| `AlignCategories.fit_transform`     |       3.60 / 3.89 ms |   3.98 / 4.62 ms |             0.362 / 0.394 ms dense lookup |
+| `AlignCategories.transform`         |       3.10 / 3.33 ms |   3.60 / 4.30 ms |            0.194 / 0.226 ms direct lookup |
 
 No timed numerical Processor fell back to CPU or transferred data between
 host and device. `PowerTransform.fit` remains the dominant latency. The
@@ -156,12 +156,12 @@ The largest real-checkpoint workload that was rerun uses 2,400 context + 600
 query rows, 100 features, eight estimators, float32, five warmups, and 20
 repetitions on the L4.
 
-| Task / execution | Original median / p95 | Latest median / p95 | Original / latest peak | Median change |
-| ---------------- | --------------------: | ------------------: | ---------------------: | ------------: |
-| Classification / vectorized | 2456.50 / 2466.29 ms | 2381.59 / 2408.24 ms | 13221.4 / 1663.4 MiB | −3.1% |
-| Classification / sequential | 2478.10 / 2494.18 ms | 2601.32 / 2615.10 ms | 1661.2 / 1655.8 MiB | +5.0% |
-| Regression / vectorized | 2517.52 / 2551.87 ms | 2470.03 / 2526.75 ms | 13221.5 / 1679.5 MiB | −1.9% |
-| Regression / sequential | 2482.94 / 2499.95 ms | 2574.00 / 2618.15 ms | 1676.4 / 1673.9 MiB | +3.7% |
+| Task / execution            | Original median / p95 |  Latest median / p95 | Original / latest peak | Median change |
+| --------------------------- | --------------------: | -------------------: | ---------------------: | ------------: |
+| Classification / vectorized |  2456.50 / 2466.29 ms | 2381.59 / 2408.24 ms |   13221.4 / 1663.4 MiB |         −3.1% |
+| Classification / sequential |  2478.10 / 2494.18 ms | 2601.32 / 2615.10 ms |    1661.2 / 1655.8 MiB |         +5.0% |
+| Regression / vectorized     |  2517.52 / 2551.87 ms | 2470.03 / 2526.75 ms |   13221.5 / 1679.5 MiB |         −1.9% |
+| Regression / sequential     |  2482.94 / 2499.95 ms | 2574.00 / 2618.15 ms |    1676.4 / 1673.9 MiB |         +3.7% |
 
 The default vectorized path is faster than the original and uses about 87%
 less peak GPU allocation because PR #516 keeps Recipe preprocessing

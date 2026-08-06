@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+from typing import Literal, cast
 
 import numpy as np
 import pytest
@@ -16,7 +17,7 @@ from test.integration.tabiclv2_parity.harness import (
     strict_parity_enabled,
 )
 
-from sdm import Stype
+from sdm import Stype, TableTensor
 from sdm.models.tabiclv2.recipe import default_recipe
 
 
@@ -24,12 +25,12 @@ from sdm.models.tabiclv2.recipe import default_recipe
 @pytest.mark.parametrize("task", ["classification", "regression"])
 def test_eight_member_preprocessing_parity(
     task: Task,
-    recipe_execution: str,
+    recipe_execution: Literal["vectorized", "sequential"],
 ) -> None:
     assert recipe_execution in {"sequential", "vectorized"}
     assert_preprocessing_parity(
         task,
-        recipe_execution=recipe_execution,  # type: ignore[arg-type]
+        recipe_execution=recipe_execution,
     )
 
 
@@ -211,9 +212,14 @@ def test_eight_member_public_forward_and_fit_predict_parity(
         rtol=member_rtol,
         err_msg="first divergence: estimator reduction",
     )
-    final_stage = execution.recipe.output.transform(
-        torch.stack(mapped_tables, dim=0)
+    stacked_mapped = cast(
+        TableTensor,
+        torch.stack(
+            cast(list[torch.Tensor], mapped_tables),
+            dim=0,
+        ),
     )
+    final_stage = execution.recipe.output.transform(stacked_mapped)
     if task == "classification":
         assert final_stage.columns[Stype.numerical] == canonical_columns
     np.testing.assert_allclose(
