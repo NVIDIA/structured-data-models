@@ -507,6 +507,68 @@ def test_sdpa_errors() -> None:
         SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
 
 
+def test_flash_attention_activation_is_lazy_and_hopper_only() -> None:
+    with (
+        patch.object(
+            attention_module,
+            "_flash_attention_activation_attempted",
+            False,
+        ),
+        patch.object(
+            attention_module,
+            "current_flash_attention_impl",
+            side_effect=(None, "FA3"),
+        ),
+        patch.object(
+            attention_module,
+            "activate_flash_attention_impl",
+        ) as activate,
+        patch.object(torch.cuda, "device_count", return_value=2),
+        patch.object(
+            torch.cuda,
+            "get_device_capability",
+            return_value=(9, 0),
+        ),
+    ):
+        implementation = attention_module._maybe_activate_flash_attention(
+            torch.device("cuda")
+        )
+
+    assert implementation == "FA3"
+    activate.assert_called_once_with("FA3")
+
+
+def test_flash_attention_activation_skips_mixed_architectures() -> None:
+    with (
+        patch.object(
+            attention_module,
+            "_flash_attention_activation_attempted",
+            False,
+        ),
+        patch.object(
+            attention_module,
+            "current_flash_attention_impl",
+            return_value=None,
+        ),
+        patch.object(
+            attention_module,
+            "activate_flash_attention_impl",
+        ) as activate,
+        patch.object(torch.cuda, "device_count", return_value=2),
+        patch.object(
+            torch.cuda,
+            "get_device_capability",
+            side_effect=((9, 0), (10, 0)),
+        ),
+    ):
+        implementation = attention_module._maybe_activate_flash_attention(
+            torch.device("cuda")
+        )
+
+    assert implementation is None
+    activate.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("flash_attention_impl", "use_mask", "expected_backends"),
     [
