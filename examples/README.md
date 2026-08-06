@@ -1,9 +1,8 @@
 # Examples
 
-This folder contains runnable examples for Structured Data Models. A good first
-script is [`tabiclv2.py`](tabiclv2.py), which shows a minimal TabICLv2 forward
-pass and cached prediction flow.
+This folder contains runnable examples of ``structured-data-models``, grouped by model:
 
-For relational data, see [`kumorfm/rel_bench.py`](kumorfm/rel_bench.py).
+* [`tabiclv2/`](tabiclv2/): Examples of `sdm.models.TabICLv2`
+* [`kumorfm/`](kumorfm/): Examples of `sdm.models.KumoRFM`
 
-When adding a top-level example, keep it runnable and add it here.
+Check [`tabiclv2/quickstart.py`](tabiclv2/quickstart.py) for a minimal runnable example of `TabICLv2`.
