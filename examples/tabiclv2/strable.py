@@ -40,9 +40,9 @@ table = sdm.TableTensor.from_arrow(
     device=device,
 )
 target_name = "BT Easiness"
-split = int(0.8 * len(table))
-context = table[:split]
-query = table[split:]
+context_size = int(0.8 * len(table))
+context = table[:context_size]
+query = table[context_size:]
 ground_truth = query[:, target_name].as_tensor().squeeze()
 
 
