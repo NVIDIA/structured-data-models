@@ -32,6 +32,9 @@ class EmbedText(Processor):
             It must return a :class:`torch.Tensor` with shape
             ``[n, embedding_dim]``.
         embedding_dim: Width of each returned embedding.
+        chunk_size: Maximum number of strings per model call. When set,
+            the flattened strings are split into chunks of this size to
+            avoid out-of-memory errors on large tables.
     """
 
     requires_fit = False
@@ -41,10 +44,12 @@ class EmbedText(Processor):
         self,
         embedding_model: torch.nn.Module,
         embedding_dim: int,
+        chunk_size: int | None = None,
     ) -> None:
         super().__init__()
         self._embedding_model = _ModuleReference(embedding_model)
         self._embedding_dim: int = embedding_dim
+        self._chunk_size = chunk_size
 
     def _transform(self, table: TableTensor) -> TableTensor:
         device = table.device
@@ -71,15 +76,25 @@ class EmbedText(Processor):
                 table.text[..., i].reshape(-1) for i in range(num_cols)
             ]
             flat_strings = cast(StringTensor, torch.cat(all_cols))
-            strings = (
-                flat_strings.to_cudf()
-                if flat_strings.is_cuda
-                else flat_strings.to_arrow()
-            )
-            all_embeddings = self._embedding_model(strings).to(
-                device=device,
-                dtype=dtype,
-            )  # (num_cols * batch_numel, embedding_dim)
+            chunk_size = self._chunk_size or len(flat_strings)
+
+            chunks: list[Tensor] = []
+            for start in range(0, len(flat_strings), chunk_size):
+                chunk = cast(
+                    StringTensor,
+                    flat_strings[start : start + chunk_size],
+                )
+                strings = (
+                    chunk.to_cudf() if chunk.is_cuda else chunk.to_arrow()
+                )
+                chunks.append(
+                    self._embedding_model(strings).to(
+                        device=device,
+                        dtype=dtype,
+                    )
+                )
+            all_embeddings = torch.cat(chunks)
+            # (num_cols * batch_numel, embedding_dim)
             numerical = (
                 all_embeddings.reshape(
                     num_cols,
