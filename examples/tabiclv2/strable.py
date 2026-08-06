@@ -33,22 +33,20 @@ readability_columns = [
     "CARES",
     "CML2RI",
 ]
-arrow_table = pq.read_table(data_path)
-arrow_table = arrow_table.drop_columns(readability_columns)
+arrow_table = pq.read_table(data_path).drop_columns(readability_columns)
 table = sdm.TableTensor.from_arrow(
     table=arrow_table,
     stypes=sdm.infer_stypes(arrow_table, with_text=True),
     device=device,
 )
-
-model = sdm.models.TabICLv2(device=device)
-
 target_name = "BT Easiness"
 split = int(0.8 * len(table))
 context = table[:split]
 query = table[split:]
 ground_truth = query[:, target_name].as_tensor().squeeze()
 
+
+model = sdm.models.TabICLv2(device=device)
 recipe = model.default_recipe()
 recipe.features = (
     StypeDispatch(
