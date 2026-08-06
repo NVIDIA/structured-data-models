@@ -3,6 +3,6 @@
 This example predicts CLEAR Corpus readability with TabICLv2 and optional character n-gram TF-IDF text features.
 
 ```bash
-uv run python examples/tabiclv2/strable/main.py
-uv run python examples/tabiclv2/strable/main.py --disable-text
+python examples/tabiclv2/strable/main.py
+python examples/tabiclv2/strable/main.py --disable-text
 ```
