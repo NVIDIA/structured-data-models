@@ -8,6 +8,7 @@ from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
+    Choice,
     InvertibleMixin,
     Processor,
     Recipe,
@@ -397,6 +398,54 @@ def test_vectorized_and_sequential_recipe_parity(cached: bool) -> None:
             x_context,
             y_context,
             x_query,
+            num_estimators=2,
+        )
+
+    assert sequential_out.size() == vectorized_out.size()
+    torch.testing.assert_close(
+        sequential_out.numerical,
+        vectorized_out.numerical,
+    )
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_ensemble_aware_target_inverse_parity(cached: bool) -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    sequential_model = _RecordingModel()
+    vectorized_model = _RecordingModel()
+
+    if cached:
+        sequential_model.fit(
+            x_context,
+            y_context,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
+            num_estimators=2,
+            recipe_execution="sequential",
+        )
+        vectorized_model.fit(
+            x_context,
+            y_context,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
+            num_estimators=2,
+        )
+        sequential_out = sequential_model.predict(x_query)
+        vectorized_out = vectorized_model.predict(x_query)
+    else:
+        sequential_out = sequential_model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
+            num_estimators=2,
+            recipe_execution="sequential",
+        )
+        vectorized_out = vectorized_model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
             num_estimators=2,
         )
 
