@@ -1,0 +1,77 @@
+{
+  "metadata": {
+    "timestamp_utc": "2026-08-06T21:03:47Z",
+    "platform": "Linux-6.17.0-1017-aws-x86_64-with-glibc2.39",
+    "cpu": "AMD EPYC 7R13 Processor",
+    "torch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "gpu": "NVIDIA L4",
+    "gpu_total_memory_bytes": 23659151360,
+    "head_commit": "82dd59560796533d4e8142f4c770eda366af398a"
+  },
+  "configuration": {
+    "tasks": [
+      "classification",
+      "regression"
+    ],
+    "devices": [
+      "cpu"
+    ],
+    "context_rows": 40000,
+    "query_rows": 10000,
+    "features": 100,
+    "categorical_features": 10,
+    "vocabulary_size": 4096,
+    "num_estimators": 8,
+    "repetitions": 20,
+    "warmups": 5
+  },
+  "power_transform_members": {
+    "classification:cpu": 2,
+    "regression:cpu": 1
+  },
+  "results": [
+    {
+      "operation": "zero_core_processing_boundary",
+      "task": "classification",
+      "device": "cpu",
+      "execution": "pre_ensemble_8x_deepcopy_sequential",
+      "rows": 50000,
+      "context_rows": 40000,
+      "query_rows": 10000,
+      "features": 100,
+      "num_estimators": 8,
+      "dtype": "torch.float32",
+      "repetitions": 20,
+      "warmups": 5,
+      "median_ms": 4935.282042000001,
+      "p95_ms": 5034.292911,
+      "enqueue_median_ms": null,
+      "synchronization_wait_median_ms": null,
+      "cuda_event_elapsed_median_ms": null,
+      "peak_memory_bytes": 127102976,
+      "absolute_peak_memory_bytes": 794054656
+    },
+    {
+      "operation": "zero_core_processing_boundary",
+      "task": "regression",
+      "device": "cpu",
+      "execution": "pre_ensemble_8x_deepcopy_sequential",
+      "rows": 50000,
+      "context_rows": 40000,
+      "query_rows": 10000,
+      "features": 100,
+      "num_estimators": 8,
+      "dtype": "torch.float32",
+      "repetitions": 20,
+      "warmups": 5,
+      "median_ms": 3944.4497890000002,
+      "p95_ms": 4021.630579,
+      "enqueue_median_ms": null,
+      "synchronization_wait_median_ms": null,
+      "cuda_event_elapsed_median_ms": null,
+      "peak_memory_bytes": 686043136,
+      "absolute_peak_memory_bytes": 1356726272
+    }
+  ]
+}

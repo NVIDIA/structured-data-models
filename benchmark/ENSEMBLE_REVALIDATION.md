@@ -9,6 +9,7 @@ vectorized/sequential and cached execution also match.
 
 - Latest `main`: `d2ade8961e941536d8c0ede2c044f276295eb4fa`
 - Final PR #516 commit: `8b3eaca8eb0bccecfdd9379bf7279437779a83e8`
+- Pre-EnsembleProcessor baseline: `82dd59560796533d4e8142f4c770eda366af398a`
 - TabICLv2 reference: `f719c886a586ed4a29236345e319ac1ea596c478`
   (`tabicl==2.0.0`)
 - Checkpoints: classifier SHA-256
@@ -77,16 +78,24 @@ is sampled RSS.
 Hardware is an NVIDIA L4 with 23,659,151,360 bytes device memory and an AMD
 EPYC 7R13 host. Software is PyTorch 2.13.0+cu130 and CUDA 13.0.
 
-The benchmark artifacts were captured at source head `1b742180`, immediately
-before latest main `d2ade896` was merged. That three-commit main delta changes
-only documentation/example layout, git-blame metadata, full-column no-op slice
-compatibility, and composite `pin_memory` dispatch. The benchmark invokes none
-of those branches; strict parity, the affected suite, and the full repository
-gate were rerun after the merge.
+The latest implementation artifacts were captured at source head `1b742180`,
+immediately before latest main `d2ade896` was merged. That three-commit main
+delta changes only documentation/example layout, git-blame metadata,
+full-column no-op slice compatibility, and composite `pin_memory` dispatch.
+The benchmark invokes none of those branches; strict parity, the affected
+suite, and the full repository gate were rerun after the merge. The exact
+pre-EnsembleProcessor artifacts were captured from detached commit `82dd5956`,
+the parent of `123807c7` (`Introduce EnsembleProcessor base class (#497)`), in
+the same PyTorch/CUDA environment and on the same host and L4.
 
 Cells below are classification / regression median / p95 milliseconds.
 The historical and speed-of-light runs did not isolate reduction and final
 processing from their output aggregate.
+
+Here, **Original E2E** means the already optimized ensemble-aware
+implementation originally benchmarked in PR #421. It does **not** mean the
+older implementation that deep-copied the Recipe eight times. That exact
+pre-EnsembleProcessor baseline is reported separately below.
 
 | Stage                          |                                 Original E2E |            Latest implementation | TabICLv2 |                                Speed-of-light |                                                   Difference |
 | ------------------------------ | -------------------------------------------: | -------------------------------: | -------: | --------------------------------------------: | -----------------------------------------------------------: |
@@ -101,6 +110,50 @@ drop-in TabICLv2 implementation. Its analytic compiled Power fitter changes
 the fitting algorithm, so matching its number is not a parity-preserving
 localized change.
 
+## Before EnsembleProcessor: exact eight-copy baseline
+
+Commit `82dd5956` is the last main commit before `EnsembleProcessor` existed.
+Its public `ICLModel.forward` constructs
+`[copy.deepcopy(recipe) for _ in range(num_estimators)]` and then executes all
+feature fit/transform, target fit/transform, model-boundary, inverse mapping,
+and output work estimator by estimator in a Python loop. The table below
+compares that exact code with the latest public vectorized zero-core boundary;
+the zero core deliberately removes model-forward time from both sides.
+
+| Task / device        | Pre-EnsembleProcessor median / p95 | Latest vectorized median / p95 | Median speedup | Old / latest Power members | Old / latest peak delta |
+| -------------------- | ---------------------------------: | -----------------------------: | -------------: | -------------------------: | ----------------------: |
+| Classification / CPU |               4935.28 / 5034.29 ms |           2225.29 / 2267.11 ms |          2.22× |                      2 / 4 |       121.2 / 271.8 MiB |
+| Regression / CPU     |               3944.45 / 4021.63 ms |           2693.64 / 2791.63 ms |          1.46× |                      1 / 4 |      654.3 / 1034.9 MiB |
+| Classification / L4  |                 341.05 / 387.21 ms |             105.50 / 111.08 ms |          3.23× |                      4 / 4 |       149.8 / 291.8 MiB |
+| Regression / L4      |                 394.39 / 469.74 ms |             112.62 / 194.75 ms |          3.50× |                      5 / 4 |      681.3 / 1067.1 MiB |
+
+The L4 result is the meaningful historical architecture comparison: the old
+seed-42 device RNG selected four Power members for classification and five for
+regression, while the latest parity-aware plan deterministically selects four
+for both. The current path calls the adapted `PowerTransform` once for the
+selected member group instead of fitting four or five copied processors. It
+is 3.23-3.50× faster, close to the expected 4× but not exactly 4× because the
+remaining processors still handle member-sized tensors, and canonical
+mapping, reduction, output processing, grouping, and materialization remain.
+The extra fifth historical regression Power fit also makes that row a slightly
+easier speedup target.
+
+The raw CPU ratio is not a controlled four-Power comparison. The historical
+CPU RNG happened to select only two Power members for classification and one
+for regression at the required seed, whereas the latest TabICLv2-parity plan
+uses four. For a semantically controlled 4/4 comparison, latest sequential
+Recipe execution measures 8739.04 / 10456.31 ms and 9064.93 / 9172.80 ms,
+which makes vectorized execution 3.93× and 3.37× faster. The exact historical
+L4 results also validate that this current sequential proxy is close to the
+old eight-copy architecture: it differs by +5.0% for classification and
+−3.6% for regression at the median.
+
+The higher latest peak allocation is the intentional batching tradeoff: the
+old loop retained one estimator's processing intermediates at a time, while
+the vectorized path packs compatible members to remove repeated calls and
+launches. Production model execution remains estimator-sequential after PR
+#516, so it does not recreate the old eight-model activation peak.
+
 ## Original versus latest 50k Recipe
 
 | Task / device        | Original median / p95 |  Latest median / p95 | Latest peak delta | Median change |
@@ -112,11 +165,10 @@ localized change.
 
 The current public zero-core processing boundary measures 105.50 / 111.08 ms
 for vectorized classification and 112.62 / 194.75 ms for vectorized
-regression. Sequential Recipe execution measures 358.03 / 370.36 ms and
-380.13 / 463.93 ms while lowering peak allocation to 146.1 MiB and 745.2 MiB,
-respectively. Sequential execution now intentionally fits/transforms one
-member at a time; it is a low-memory mode, not the historical shared-
-preprocessing model schedule.
+regression. Current sequential Recipe execution measures 358.03 / 370.36 ms
+and 380.13 / 463.93 ms while lowering peak allocation to 146.1 MiB and
+745.2 MiB, respectively. It is the semantically controlled 4/4 low-memory
+comparison; the exact pre-EnsembleProcessor measurements are reported above.
 
 Regression's p95 tail is orchestration rather than a slow Processor. Its
 independently measured bind, query, mapping, reduction, and final stages have
@@ -214,6 +266,8 @@ generic-Processor risk.
 - `results/pr421_tabiclv2_cpu_processing.json`
 - `results/pr421_tabiclv2_gpu_processing.json`
 - `results/pr421_tabiclv2_gpu_model_3k.json`
+- `results/pr421_pre_ensemble_cpu_processing.json`
+- `results/pr421_pre_ensemble_gpu_processing.json`
 
 ```bash
 env SDM_RUN_TABICLV2_GPU_PARITY=1 uv run pytest -q \
