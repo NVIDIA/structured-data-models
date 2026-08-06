@@ -183,8 +183,7 @@ class _RecipeExecution:
         self,
         outputs: Sequence[TableTensor],
     ) -> TableTensor:
-        """Postprocess member outputs via inverse target (if regression) and
-        ``recipe.output``.
+        """Postprocess member outputs via inverse target and ``recipe.output``.
 
         Stacks members on dim 0 unless the output pipeline reduces the
         ensemble dimension (e.g. :class:`~sdm.processing.ReduceEstimators`).
