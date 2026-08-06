@@ -1429,7 +1429,7 @@ def _slice(
 ) -> TableTensor:
     if _is_column_dim(inp, dim):
         if (
-            (start is None or start == 0)
+            (start is None or start == 0 or start <= -inp.size(-1))
             and (end is None or end >= inp.size(dim))
             and step == 1
         ):
@@ -1458,7 +1458,7 @@ def _narrow(
     length: int,
 ) -> TableTensor:
     if _is_column_dim(inp, dim):
-        if start == 0 and length == inp.size(-1):
+        if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
             return _alias(inp)
         raise RuntimeError(
             f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
