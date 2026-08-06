@@ -2,7 +2,8 @@ import pytest
 import torch
 
 from sdm import TableTensor
-from sdm.processing import QuantileTransform
+from sdm.processing import EnsembleProcessorAdapter, QuantileTransform
+from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -46,7 +47,6 @@ def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
     )
 
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
-    assert torch.allclose(processor.references, expected[:, 0])
     assert torch.allclose(transformed, expected)
     assert transformed.device == device
     assert torch.allclose(
@@ -125,7 +125,7 @@ def test_quantile_transform_constant_columns_round_trip(
 
 
 @withCUDA
-def test_quantile_transform_single_quantile_maps_to_single_reference(
+def test_quantile_transform_single_quantile_maps_to_zero(
     device: torch.device,
 ) -> None:
     inp = torch.tensor(
@@ -148,7 +148,7 @@ def test_quantile_transform_single_quantile_maps_to_single_reference(
         processor.inverse_transform(
             TableTensor.from_tensor(transformed)
         ).numerical,
-        processor.quantiles[0].expand_as(inp),
+        inp[:1].expand_as(inp),
     )
 
 
@@ -191,16 +191,71 @@ def test_quantile_transform_rejects_mismatched_generator_device() -> None:
 
 
 def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
-    # Distinct values: any other row subset changes the quantiles.
+    # Distinct values make the output sensitive to the sampled rows.
     inp = torch.arange(200.0).view(100, 2)
 
-    first = QuantileTransform(n_quantiles=6, subsample=32).fit(
-        TableTensor.from_tensor(inp),
+    table = TableTensor.from_tensor(inp)
+    first = QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
+        table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = QuantileTransform(n_quantiles=6, subsample=32).fit(
-        TableTensor.from_tensor(inp),
+    second = QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
+        table,
         generator=torch.Generator().manual_seed(0),
     )
 
-    assert torch.equal(first.quantiles, second.quantiles)
+    assert first.equal(second)
+
+
+@withCUDA
+@pytest.mark.parametrize("subsample", [None, 32])
+def test_quantile_transform_adapter_matches_grouped_tables(
+    device: torch.device,
+    subsample: int | None,
+) -> None:
+    values = torch.arange(256.0, device=device).view(128, 2)
+    contexts = (
+        TableTensor.from_tensor(values),
+        TableTensor.from_tensor(values.flip(0)),
+    )
+    query_values = torch.arange(32.0, device=device).view(16, 2) + 0.5
+    queries = (
+        TableTensor.from_tensor(query_values),
+        TableTensor.from_tensor(query_values.flip(0)),
+    )
+    member_table_ids = (1, 0, 1)
+    context = EnsembleTable.from_tables(contexts, member_table_ids)
+    query = EnsembleTable.from_tables(queries, member_table_ids)
+    processor = EnsembleProcessorAdapter(
+        QuantileTransform(n_quantiles=8, subsample=subsample)
+    )
+
+    context_output = processor.fit_transform_ensemble(
+        context,
+        generator=torch.Generator(device=device).manual_seed(7),
+    )
+    query_output = processor.transform_ensemble(query)
+    restored = processor.inverse_transform_ensemble(context_output)
+
+    expected_contexts = []
+    expected_queries = []
+    expected_restored = []
+    for context_table, query_table in zip(contexts, queries, strict=True):
+        reference = QuantileTransform(
+            n_quantiles=8,
+            subsample=subsample,
+        )
+        expected_context = reference.fit_transform(
+            context_table,
+            generator=torch.Generator(device=device).manual_seed(7),
+        )
+        expected_contexts.append(expected_context)
+        expected_queries.append(reference.transform(query_table))
+        expected_restored.append(reference.inverse_transform(expected_context))
+
+    for member_id, table_id in enumerate(member_table_ids):
+        assert context_output.table(member_id).equal(
+            expected_contexts[table_id]
+        )
+        assert query_output.table(member_id).equal(expected_queries[table_id])
+        assert restored.table(member_id).equal(expected_restored[table_id])
