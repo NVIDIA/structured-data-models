@@ -36,6 +36,10 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
     return wrapper
 
 
+def _category(inp: CategoricalTensor, index: int) -> Tensor:
+    return CategoricalTensor.category(inp, index)
+
+
 class CategoricalTensor(Tensor):
     r"""A :class:`torch.Tensor` for categorical columns.
 
@@ -79,6 +83,17 @@ class CategoricalTensor(Tensor):
     ) -> None:
         pass
 
+    @staticmethod
+    def _set_wrapper_attrs(
+        out: CategoricalTensor,
+        code: Tensor,
+        categories: Sequence[Tensor],
+    ) -> None:
+        out._code = code
+        out._categories = tuple(categories)
+        for i, category in enumerate(out._categories):
+            setattr(out, f"_category_{i}", category)
+
     def __new__(
         cls,
         code: Tensor,
@@ -121,10 +136,7 @@ class CategoricalTensor(Tensor):
             device=code.device,
             requires_grad=False,
         )
-
-        out._code = code
-        out._categories = tuple(categories)
-
+        cls._set_wrapper_attrs(out, code, categories)
         return out
 
     @classmethod
@@ -320,6 +332,10 @@ class CategoricalTensor(Tensor):
         r"""Return category vector for each categorical column."""
         return self._categories
 
+    def category(self, index: int) -> Tensor:
+        r"""Return the category vector for one categorical column."""
+        return getattr(self, f"_category_{index}")
+
     # Decorators ##############################################################
 
     @classmethod
@@ -342,6 +358,38 @@ class CategoricalTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "code",
+            *(f"_category_{i}" for i in range(len(self._categories))),
+        ]
+        ctx = (self.__class__, len(self._categories))
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> CategoricalTensor:
+        cls, num_categories = ctx
+        categories = tuple(
+            inner_tensors[f"_category_{i}"] for i in range(num_categories)
+        )
+        code = inner_tensors["code"]
+        out = Tensor._make_wrapper_subclass(
+            cls,
+            size=outer_size,
+            strides=outer_stride,
+            storage_offset=code.storage_offset(),
+            dtype=code.dtype,
+            device=code.device,
+            requires_grad=False,
+        )
+        cls._set_wrapper_attrs(out, code, categories)
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._code, self._categories)
@@ -427,6 +475,15 @@ class CategoricalTensor(Tensor):
             for column in self.split(1, dim=-1)
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
+
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        out = f"{self.__class__.__name__}(..."
+        out += f", size={tuple(self.size())}"
+        out += f", dtype={self.dtype}"
+        if not self.is_cpu:
+            out += f", device={self.device}"
+        out += ")"
+        return out
 
 
 @CategoricalTensor.implements(aten.isnan.default)
