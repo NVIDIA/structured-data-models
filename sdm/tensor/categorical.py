@@ -457,14 +457,13 @@ def _contiguous(
     return inp.__class__(data, inp._categories)
 
 
-@CategoricalTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
-    return inp.__class__(inp._data.pin_memory(), inp._categories)
+@CategoricalTensor.implements(aten.is_pinned.default)
+def _is_pinned(inp: CategoricalTensor) -> bool:
+    return inp._data.is_pinned() and all(
+        category.is_pinned() for category in inp._categories
+    )
 
 
-# On CUDA machines, the composite `pin_memory` reaches `__torch_dispatch__`
-# undecomposed for blocks pinned inside `TableTensor`'s handler; without an
-# explicit handler, the vanilla-tensor fallback drops the categories.
 @CategoricalTensor.implements(aten.pin_memory.default)
 def _pin_memory_composite(
     inp: CategoricalTensor,
@@ -473,6 +472,12 @@ def _pin_memory_composite(
     if inp.is_pinned():
         return inp
     return cast(CategoricalTensor, aten._pin_memory.default(inp))
+
+
+@CategoricalTensor.implements(aten._pin_memory.default)
+def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
+    categories = tuple(category.pin_memory() for category in inp._categories)
+    return inp.__class__(inp._data.pin_memory(), categories)
 
 
 @CategoricalTensor.implements(aten.view.default)
