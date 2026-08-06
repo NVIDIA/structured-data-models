@@ -45,11 +45,6 @@ pip install structured-data-models
 
 ## Quick Tour
 
-## Examples
-
-For a quick start, run [examples/tabiclv2.py](examples/tabiclv2.py). More
-examples are listed in [examples/README.md](examples/README.md).
-
 ```python
 from sklearn.datasets import load_breast_cancer
 
@@ -84,3 +79,5 @@ model.fit(
 model.predict(table[300:].drop_columns("target"))
 model.clear()
 ```
+
+More examples are listed in [`examples/`](examples).
