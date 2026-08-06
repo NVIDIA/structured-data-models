@@ -42,7 +42,7 @@ readability_columns = [
 arrow_table = pq.read_table(data_path).drop_columns(readability_columns)
 table = sdm.TableTensor.from_arrow(
     table=arrow_table,
-    stypes=sdm.infer_stypes(arrow_table, with_text=True),
+    stypes=sdm.infer_stypes(arrow_table, with_text=args.disable_text),
     device=device,
 )
 target_name = "BT Easiness"
