@@ -507,11 +507,15 @@ class _KumoRFM(torch.nn.Module):
             assert task_row is not None
             x = x_context
             train_mask = task_row >= 0
-            y = y[task_row[train_mask]]
+            valid_task_row = task_row[train_mask]  # Unavoidable device sync.
+            y = y[valid_task_row]
+            if valid_task_row.numel() == task_row.numel():
+                train_mask = None
             if x_query is not None:
                 x = torch.cat([x, x_query], dim=-2)
-                test_mask = train_mask.new_zeros(x_query.size(-2))
-                train_mask = torch.cat([train_mask, test_mask])
+                if train_mask is not None:
+                    test_mask = train_mask.new_zeros(x_query.size(-2))
+                    train_mask = torch.cat([train_mask, test_mask])
         else:
             assert x_query is not None
             x = x_query

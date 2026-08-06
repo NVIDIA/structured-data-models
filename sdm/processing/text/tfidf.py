@@ -1,7 +1,7 @@
 import math
 import re
 from itertools import accumulate
-from typing import Any, cast
+from typing import cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -9,13 +9,25 @@ import torch
 from torch import Tensor
 from torch.utils.dlpack import from_dlpack
 
-from sdm.processing.base import Processor
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.stype import Stype
-from sdm.tensor import StringTensor, TableTensor
+from sdm.tensor import EnsembleTable, StringTensor, TableTensor
 from sdm.tensor.io import arrow_as_tensor
 
 
-class TFIDF(Processor):
+class _TFIDFState(torch.nn.Module):
+    def __init__(
+        self,
+        vocabularies: list[pa.Array],
+        idfs: list[Tensor],
+    ) -> None:
+        super().__init__()
+        self.vocabularies = vocabularies
+        for column, idf in enumerate(idfs):
+            self.register_buffer(f"idf_{column}", idf)
+
+
+class TFIDF(EnsembleProcessor):
     """Encode text columns as character n-gram TF-IDF vectors.
 
     Tokenization follows scikit-learn's ``char_wb`` analyzer: whitespace-
@@ -24,6 +36,9 @@ class TFIDF(Processor):
     weights per text column. Transform replaces text with concatenated
     numerical features (one per retained n-gram), applies those idf weights,
     L2-normalizes each row, and ignores n-grams unseen at fit time.
+    When fitted on an :class:`~sdm.tensor.EnsembleTable`, distinct member
+    tables learn independent vocabularies and can produce different numerical
+    schemas; members assigned the same table share fitted state.
 
     Args:
         ngram_range: Inclusive ``(min_n, max_n)`` character-window sizes.
@@ -50,51 +65,8 @@ class TFIDF(Processor):
         self.ngram_range = ngram_range
         self.max_features = max_features
         self.lowercase = lowercase
-        self._vocabularies: list[pa.Array] = []
-        self._register_load_state_dict_pre_hook(self._recreate_idf_buffers)
-
-    def get_extra_state(self) -> dict[str, Any]:
-        r""":meta private:"""  # noqa: D415
-        return {
-            "vocabularies": [
-                StringTensor.from_arrow(vocabulary).data_offset
-                for vocabulary in self._vocabularies
-            ],
-            "fitted": self._fitted,
-        }
-
-    def set_extra_state(self, state: dict[str, Any]) -> None:
-        r""":meta private:"""  # noqa: D415
-        """Restore the fitted state from a checkpoint."""
-        self._vocabularies = [
-            StringTensor(
-                data=data,
-                offset=offset,
-                valid=None,
-                size=(offset.numel() - 1,),
-            ).to_arrow()
-            for data, offset in state["vocabularies"]
-        ]
-        self._fitted = state["fitted"]
-
-    def _recreate_idf_buffers(
-        self,
-        state_dict: dict[str, Any],
-        prefix: str,
-        *args: Any,
-    ) -> None:
-        """Restore buffers from a checkpoint."""
-        stale_idfs = [
-            name for name in self._buffers if name.startswith("idf_")
-        ]
-        for name in stale_idfs:
-            delattr(self, name)
-
-        idf_keys = [
-            key for key in state_dict if key.startswith(f"{prefix}idf_")
-        ]
-        for key in idf_keys:
-            self.register_buffer(key[len(prefix) :], state_dict[key])
+        self._states = torch.nn.ModuleList()
+        self._member_state_ids: tuple[int, ...] = ()
 
     def _character_ngrams(
         self,
@@ -213,12 +185,10 @@ class TFIDF(Processor):
         )
         return ngrams, offset
 
-    def _fit(
+    def _learn_state(
         self,
         table: TableTensor,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
+    ) -> _TFIDFState:
         device = table.text.device
         vocabularies: list[pa.Array] = []
         idfs: list[Tensor] = []
@@ -292,28 +262,87 @@ class TFIDF(Processor):
             vocabularies.append(vocabulary)
             idfs.append(idf)
 
-        stale_idfs = [
-            name for name in self._buffers if name.startswith("idf_")
-        ]
-        for name in stale_idfs:
-            delattr(self, name)
+        return _TFIDFState(vocabularies, idfs)
 
-        self._vocabularies = vocabularies
-        for column, idf in enumerate(idfs):
-            self.register_buffer(f"idf_{column}", idf)
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        states = torch.nn.ModuleList()
+        member_state_ids: list[int] = []
+        state_ids: dict[tuple[int, int], int] = {}
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+        # TODO: Replace direct `_locations` access with a public
+        # `EnsembleTable` iterator over stored tables and their logical member
+        # IDs, then use the same abstraction when transforming.
+        for member_id in range(ensemble_table.num_members):
+            location = ensemble_table._locations[member_id]
+            state_id = state_ids.get(location)
+            if state_id is None:
+                state_id = len(states)
+                state_ids[location] = state_id
+                states.append(
+                    self._learn_state(ensemble_table.table(member_id))
+                )
+            member_state_ids.append(state_id)
+
+        self._states = states
+        self._member_state_ids = tuple(member_state_ids)
+
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        if len(self._member_state_ids) != ensemble_table.num_members:
+            raise RuntimeError(
+                "TFIDF must be fitted with the same number of "
+                "ensemble members before transform."
+            )
+
+        output_tables: list[TableTensor] = []
+        member_table_ids: list[int] = []
+        transformed: dict[tuple[tuple[int, int], int], int] = {}
+        # TODO: Benchmark batching compatible query tables that share fitted
+        # state on CUDA with cuDF. It was about 10% slower for four 50,000-row
+        # tables on CPU.
+        for member_id, state_id in enumerate(self._member_state_ids):
+            key = (ensemble_table._locations[member_id], state_id)
+            table_id = transformed.get(key)
+            if table_id is None:
+                state = cast(_TFIDFState, self._states[state_id])
+                table_id = len(output_tables)
+                transformed[key] = table_id
+                output_tables.append(
+                    self._encode(
+                        ensemble_table.table(member_id),
+                        state,
+                    )
+                )
+            member_table_ids.append(table_id)
+
+        return EnsembleTable.from_tables(
+            output_tables,
+            member_table_ids,
+        )
+
+    def _encode(
+        self,
+        table: TableTensor,
+        state: _TFIDFState,
+    ) -> TableTensor:
         device = table.text.device
         dtype = (
-            self.get_buffer("idf_0").dtype
-            if self._vocabularies
+            state.get_buffer("idf_0").dtype
+            if state.vocabularies
             else torch.get_default_dtype()
         )
         text_names = table.columns[Stype.text]
         leading_shape = table.text.shape[:-1]
         n_rows = math.prod(leading_shape)
 
-        vocab_sizes = [len(vocabulary) for vocabulary in self._vocabularies]
+        vocab_sizes = [len(vocabulary) for vocabulary in state.vocabularies]
         column_offsets = [0, *accumulate(vocab_sizes)]
         total_width = column_offsets[-1]
         numerical = torch.zeros(
@@ -324,8 +353,8 @@ class TFIDF(Processor):
         flat_numerical = numerical.view(n_rows, total_width)
         names: list[str] = []
         for column in range(table.text.size(-1)):
-            vocabulary = self._vocabularies[column]
-            idf = getattr(self, f"idf_{column}")
+            vocabulary = state.vocabularies[column]
+            idf = getattr(state, f"idf_{column}")
             vocab_size = vocab_sizes[column]
             column_start = column_offsets[column]
             column_slice = flat_numerical[
