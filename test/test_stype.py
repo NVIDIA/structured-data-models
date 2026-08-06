@@ -99,7 +99,7 @@ def test_infer_stypes(
 def test_infer_stypes_pandas_object_strings() -> None:
     table = pd.DataFrame(
         {
-            "city": pd.Series(["NYC", "LA"], dtype=object),
+            "city": pd.Series(["NY", None], dtype=object),
             "user_id": pd.Series(["a", "b"], dtype=object),
             "segment_id": pd.Series(["x", "y"], dtype="category"),
         }

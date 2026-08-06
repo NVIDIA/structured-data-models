@@ -177,6 +177,7 @@ def _infer_pandas_stype(
 ) -> Stype:
     import pandas as pd
     from pandas.api.types import (
+        infer_dtype,
         is_bool_dtype,
         is_datetime64_any_dtype,
         is_float_dtype,
@@ -189,7 +190,7 @@ def _infer_pandas_stype(
 
     is_string = is_string_dtype(dtype)
     if is_object_dtype(dtype):
-        is_string = is_string_dtype(column)
+        is_string = infer_dtype(column, skipna=True) == "string"
 
     if (
         with_id
