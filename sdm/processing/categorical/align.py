@@ -55,11 +55,11 @@ class AlignCategories(EnsembleProcessor):
 
         mask = code >= 0
         index = code.clamp_min(0).long()
-        count = code.new_zeros((num_tables, category.numel()))
-        count.scatter_add_(1, index, mask.to(code.dtype))
+        counts = code.new_zeros((num_tables, category.numel()))
+        counts.scatter_add_(1, index, mask.to(code.dtype))
 
         if self.sort_by == "frequency":
-            order = count.argsort(dim=1, descending=True, stable=True)
+            order = counts.argsort(dim=1, descending=True, stable=True)
             ordered_category = category
         elif self.sort_by == "value":
             if category.is_cuda and category.dtype in _UNSIGNED_DTYPES:
@@ -80,7 +80,7 @@ class AlignCategories(EnsembleProcessor):
             ).expand(num_tables, -1)
             ordered_category = category
 
-        present = count.gather(1, order) > 0
+        present = counts.gather(1, order) > 0
         categories = []
         for table_id in range(num_tables):
             selected = order[table_id, present[table_id]]
@@ -99,7 +99,7 @@ class AlignCategories(EnsembleProcessor):
             return tuple(categories), None
 
         rank = present.cumsum(dim=1, dtype=code.dtype) - 1
-        lookup = torch.full_like(count, -1)
+        lookup = torch.full_like(counts, -1)
         lookup.scatter_(1, order, torch.where(present, rank, -1))
         aligned = torch.where(mask, lookup.gather(1, index), -1)
         return tuple(categories), aligned
@@ -264,87 +264,90 @@ class AlignCategories(EnsembleProcessor):
                 "ensemble members before transform."
             )
 
-        states = []
-        state_ids = []
-        state_id_by_categories: dict[int, int] = {}
-        for categories in self._categories:
-            identity = id(categories)
-            state_id = state_id_by_categories.get(identity)
-            if state_id is None:
-                state_id = len(states)
-                state_id_by_categories[identity] = state_id
-                states.append(categories)
-            state_ids.append(state_id)
-
-        physical_tables = tuple(
-            group[position]
-            for group in ensemble_table
-            for position in range(group.size(0))
-        )
         table_ids = self._member_table_ids(ensemble_table)
-        state_id_by_table: dict[int, int] = {}
-        for state_id, table_id in zip(state_ids, table_ids, strict=True):
-            previous = state_id_by_table.setdefault(table_id, state_id)
-            if previous != state_id:
-                break
-        else:
-            categories = tuple(
-                states[state_id_by_table[table_id]]
-                for table_id in range(len(physical_tables))
-            )
-            outputs = []
-            offset = 0
-            for group in ensemble_table:
-                end = offset + group.size(0)
-                outputs.extend(
-                    self._align_tables(group, categories[offset:end])
+        categories_by_table: dict[int, tuple[Tensor, ...]] = {}
+        for categories, table_id in zip(
+            self._categories,
+            table_ids,
+            strict=True,
+        ):
+            previous = categories_by_table.get(table_id)
+            if previous is not None and previous is not categories:
+                outputs = [
+                    self._align_tables(
+                        ensemble_table.table(member_id),
+                        (member_categories,),
+                    )[0]
+                    for member_id, member_categories in enumerate(
+                        self._categories
+                    )
+                ]
+                return EnsembleTable.from_tables(
+                    tables=outputs,
+                    member_table_ids=range(ensemble_table.num_members),
                 )
-                offset = end
-            return EnsembleTable.from_tables(
-                tables=outputs,
-                member_table_ids=table_ids,
-            )
+            categories_by_table[table_id] = categories
 
-        route_id_by_state_and_table: dict[tuple[int, int], int] = {}
-        routes = []
-        route_ids = []
-        for state_id, table_id in zip(state_ids, table_ids, strict=True):
-            key = (state_id, table_id)
-            route_id = route_id_by_state_and_table.get(key)
-            if route_id is None:
-                route_id = len(routes)
-                route_id_by_state_and_table[key] = route_id
-                routes.append(key)
-            route_ids.append(route_id)
-
-        # One physical query table needs multiple outputs when its members
-        # learned different vocabularies. Pack those routes so their row data
-        # can still be aligned together.
-        routed = EnsembleTable.from_tables(
-            tables=[physical_tables[table_id] for _, table_id in routes],
-            member_table_ids=range(len(routes)),
+        categories = tuple(
+            categories_by_table[table_id]
+            for table_id in range(len(categories_by_table))
         )
-        routed_table_ids = self._member_table_ids(routed)
-        categories: list[tuple[Tensor, ...]] = [()] * len(routes)
-        for route_id, table_id in enumerate(routed_table_ids):
-            state_id, _ = routes[route_id]
-            categories[table_id] = states[state_id]
-
         outputs = []
         offset = 0
-        for group in routed:
+        for group in ensemble_table:
             end = offset + group.size(0)
-            outputs.extend(
-                self._align_tables(group, tuple(categories[offset:end]))
-            )
+            outputs.extend(self._align_tables(group, categories[offset:end]))
             offset = end
 
         return EnsembleTable.from_tables(
             tables=outputs,
-            member_table_ids=[
-                routed_table_ids[route_id] for route_id in route_ids
-            ],
+            member_table_ids=table_ids,
         )
+
+    @staticmethod
+    def _category_lookup(
+        actual: Tensor,
+        expected: Tensor,
+        code: Tensor,
+    ) -> Tensor:
+        lookup = code.new_full((actual.numel(),), -1)
+        if expected.numel() == 0:
+            return lookup
+
+        if isinstance(actual, StringTensor):
+            # TODO Join once with a column-index composite key.
+            left_index, right_index = join_index(
+                left_table=TableTensor(
+                    columns={"id": ("id",)},
+                    id=ColumnarTensor((actual,)),
+                ),
+                right_table=TableTensor(
+                    columns={"id": ("id",)},
+                    id=ColumnarTensor((expected,)),
+                ),
+                left_keys=["id"],
+                right_keys=["id"],
+                dtype=code.dtype,
+            )
+        else:
+            comparable = actual
+            fitted = expected
+            if (
+                comparable.dtype == torch.bool
+                or comparable.dtype in _UNSIGNED_DTYPES
+            ):
+                comparable = comparable.to(torch.int64)
+                fitted = fitted.to(torch.int64)
+
+            fitted, perm = fitted.sort()
+            position = torch.searchsorted(fitted, comparable)
+            position = position.clamp(max=fitted.numel() - 1)
+            match = fitted[position] == comparable
+            left_index = match.nonzero().view(-1)
+            right_index = perm[position[left_index]]
+
+        lookup[left_index] = right_index.to(code.dtype)
+        return lookup
 
     def _align_tables(
         self,
@@ -359,8 +362,7 @@ class AlignCategories(EnsembleProcessor):
         for i, actual in enumerate(table.categorical.categories):
             if actual.numel() == 0:
                 continue
-            values = code[..., i]
-            mask = values >= 0
+
             lookups = []
             lookup_by_categories: dict[int, Tensor] = {}
             for fitted_categories in categories:
@@ -368,44 +370,12 @@ class AlignCategories(EnsembleProcessor):
                 identity = id(expected)
                 lookup = lookup_by_categories.get(identity)
                 if lookup is None:
-                    lookup = out.new_full((actual.numel(),), -1)
-                    if expected.numel() > 0:
-                        if isinstance(actual, StringTensor):
-                            # TODO Join once with a column-index composite key.
-                            left_index, right_index = join_index(
-                                left_table=TableTensor(
-                                    columns={"id": ("id",)},
-                                    id=ColumnarTensor((actual,)),
-                                ),
-                                right_table=TableTensor(
-                                    columns={"id": ("id",)},
-                                    id=ColumnarTensor((expected,)),
-                                ),
-                                left_keys=["id"],
-                                right_keys=["id"],
-                                dtype=out.dtype,
-                            )
-                        else:
-                            comparable = actual
-                            fitted = expected
-                            if (
-                                comparable.dtype == torch.bool
-                                or comparable.dtype in _UNSIGNED_DTYPES
-                            ):
-                                comparable = comparable.to(torch.int64)
-                                fitted = fitted.to(torch.int64)
-
-                            fitted, perm = fitted.sort()
-                            position = torch.searchsorted(fitted, comparable)
-                            position = position.clamp(max=fitted.numel() - 1)
-                            match = fitted[position] == comparable
-                            left_index = match.nonzero().view(-1)
-                            right_index = perm[position[left_index]]
-
-                        lookup[left_index] = right_index.to(out.dtype)
+                    lookup = self._category_lookup(actual, expected, code)
                     lookup_by_categories[identity] = lookup
                 lookups.append(lookup)
 
+            values = code[..., i]
+            mask = values >= 0
             lookup = torch.stack(lookups)
             index = values.clamp_min(0).long()
             out[..., i] = torch.where(
