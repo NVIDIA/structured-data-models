@@ -98,21 +98,27 @@ class _RecipeExecution:
             generator=generator,
         )
 
-        contexts = tuple(
-            _MemberContext(
-                x=x_context_out.table(member_id),
-                y=y_context_out.table(member_id),
-                related_tables=cls._replace_with_member_tables(
+        contexts = []
+        for member_id in range(num_members):
+            related_tables = None
+            if related_context_tables is not None:
+                related_tables = replace(
                     related_context_tables,
-                    related_context_out,
-                    member_id,
-                ),
+                    tables={
+                        table_name: table.table(member_id)
+                        for table_name, table in related_context_out.items()
+                    },
+                )
+            contexts.append(
+                _MemberContext(
+                    x=x_context_out.table(member_id),
+                    y=y_context_out.table(member_id),
+                    related_tables=related_tables,
+                )
             )
-            for member_id in range(num_members)
-        )
         return cls(
             recipe=recipe,
-            contexts=contexts,
+            contexts=tuple(contexts),
             related_processors=related_processors or None,
         )
 
@@ -148,17 +154,24 @@ class _RecipeExecution:
                     EnsembleTable(table, num_members=num_members)
                 )
 
-        return tuple(
-            _MemberQuery(
-                x=x_query_out.table(member_id),
-                related_tables=self._replace_with_member_tables(
+        queries = []
+        for member_id in range(num_members):
+            related_tables = None
+            if related_query_tables is not None:
+                related_tables = replace(
                     related_query_tables,
-                    related_query_out,
-                    member_id,
-                ),
+                    tables={
+                        table_name: table.table(member_id)
+                        for table_name, table in related_query_out.items()
+                    },
+                )
+            queries.append(
+                _MemberQuery(
+                    x=x_query_out.table(member_id),
+                    related_tables=related_tables,
+                )
             )
-            for member_id in range(num_members)
-        )
+        return tuple(queries)
 
     def inverse_transform_target(
         self,
@@ -169,10 +182,20 @@ class _RecipeExecution:
         Args:
             outputs: One model output per ensemble member.
         """
+        num_members = len(self.contexts)
+        if len(outputs) != num_members:
+            raise ValueError(
+                f"Expected {num_members} member outputs (got {len(outputs)})"
+            )
         table = cast(
             EnsembleInvertibleMixin,
             self.recipe.target,
-        ).inverse_transform_ensemble(self._ensemble_from_outputs(outputs))
+        ).inverse_transform_ensemble(
+            EnsembleTable.from_tables(
+                tables=outputs,
+                member_table_ids=tuple(range(num_members)),
+            )
+        )
         return tuple(
             table.table(member_id) for member_id in range(table.num_members)
         )
@@ -189,7 +212,15 @@ class _RecipeExecution:
         Args:
             outputs: One model output per ensemble member.
         """
-        table = self._ensemble_from_outputs(outputs)
+        num_members = len(self.contexts)
+        if len(outputs) != num_members:
+            raise ValueError(
+                f"Expected {num_members} member outputs (got {len(outputs)})"
+            )
+        table = EnsembleTable.from_tables(
+            tables=outputs,
+            member_table_ids=tuple(range(num_members)),
+        )
         input_members = table.num_members
         table = cast(
             EnsembleProcessor,
@@ -212,34 +243,4 @@ class _RecipeExecution:
         return cast(
             TableTensor,
             torch.stack(cast(list[Tensor], members), dim=0),
-        )
-
-    def _ensemble_from_outputs(
-        self,
-        outputs: Sequence[TableTensor],
-    ) -> EnsembleTable:
-        num_members = len(self.contexts)
-        if len(outputs) != num_members:
-            raise ValueError(
-                f"Expected {num_members} member outputs (got {len(outputs)})"
-            )
-        return EnsembleTable.from_tables(
-            tables=outputs,
-            member_table_ids=tuple(range(num_members)),
-        )
-
-    @staticmethod
-    def _replace_with_member_tables(
-        template: RelatedTables | None,
-        tables: Mapping[str, EnsembleTable] | None,
-        member_id: int,
-    ) -> RelatedTables | None:
-        if template is None or tables is None:
-            return None
-        return replace(
-            template,
-            tables={
-                table_name: table.table(member_id)
-                for table_name, table in tables.items()
-            },
         )

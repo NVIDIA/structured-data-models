@@ -125,7 +125,7 @@ class ICLModel(torch.nn.Module, ABC):
         recipe = self.default_recipe() if recipe is None else recipe
 
         # Bind chunks: vectorized -> (E,), sequential -> (1,) * E.
-        # The model always runs once per member either way.
+        # The model runs once per estimator
         if recipe_execution == "vectorized":
             member_counts = (num_estimators,)
         elif recipe_execution == "sequential":
@@ -253,7 +253,9 @@ class ICLModel(torch.nn.Module, ABC):
         recipe = self.default_recipe() if recipe is None else recipe
 
         self.clear()
-        # Same chunking as forward: keep every execution for predict().
+
+        # Bind chunks: vectorized -> (E,), sequential -> (1,) * E.
+        # The model runs once per estimator
         if recipe_execution == "vectorized":
             member_counts = (num_estimators,)
         elif recipe_execution == "sequential":
@@ -358,7 +360,6 @@ class ICLModel(torch.nn.Module, ABC):
 
         assert self._recipe_executions is not None
 
-        # Walk executions in fit order; each owns len(contexts) caches.
         outs: list[TableTensor] = []
         last_execution: _RecipeExecution | None = None
         cache_index = 0
