@@ -600,9 +600,27 @@ def _contiguous(
     return inp.__class__(code, inp._categories)
 
 
+@CategoricalTensor.implements(aten.is_pinned.default)
+def _is_pinned(inp: CategoricalTensor) -> bool:
+    return inp._code.is_pinned() and all(
+        category.is_pinned() for category in inp._categories
+    )
+
+
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
-    return inp.__class__(inp._code.pin_memory(), inp._categories)
+    categories = tuple(category.pin_memory() for category in inp._categories)
+    return inp.__class__(inp._code.pin_memory(), categories)
+
+
+@CategoricalTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: CategoricalTensor,
+    device: torch.device | None = None,
+) -> CategoricalTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
 
 
 @CategoricalTensor.implements(aten.equal.default)

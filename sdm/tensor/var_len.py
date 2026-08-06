@@ -921,6 +921,16 @@ def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
     )
 
 
+@VarLenTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: VarLenTensor,
+    device: torch.device | None = None,
+) -> VarLenTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @VarLenTensor.implements(aten.isnan.default)
 def _isnan(inp: VarLenTensor) -> Tensor:
     valid = inp.valid
