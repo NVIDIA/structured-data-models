@@ -1111,19 +1111,15 @@ def _slice(
     step: int = 1,
 ) -> TableTensor:
     if _is_column_dim(inp, dim):
-        # `x[..., :]`-style indexing emits a no-op slice over the trailing
-        # dimension on torch<2.9 (newer releases elide it); pass it through
-        # since it keeps every column, and keep rejecting actual slicing.
-        full = (
+        if (
             (start is None or start == 0)
             and (end is None or end >= inp.size(dim))
             and step == 1
+        ):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't slice the column dimension of '{inp.__class__.__name__}'"
         )
-        if not full:
-            raise RuntimeError(
-                f"Can't slice the column dimension of "
-                f"'{inp.__class__.__name__}'"
-            )
 
     blocks = {
         stype: aten.slice.Tensor(tensor, dim, start, end, step)
@@ -1144,15 +1140,17 @@ def _narrow(
     start: int,
     length: int,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        if start == 0 and length == inp.size(-1):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
+        )
+
     blocks = {
         stype: tensor.narrow(dim, start, length)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
