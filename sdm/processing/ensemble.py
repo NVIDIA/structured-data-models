@@ -51,6 +51,8 @@ class EnsembleProcessor(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
+        if not self.requires_fit:
+            return self._transform(table)
         output = self._fit_transform_ensemble(
             EnsembleTable(table, num_members=1),
             generator=generator,
