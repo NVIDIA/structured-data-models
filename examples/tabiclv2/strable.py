@@ -68,13 +68,13 @@ tfidf_recipe = model.default_recipe()
 tfidf_recipe.features = (
     StypeDispatch(text=tfidf_encoder) + tfidf_recipe.features
 )
-configs["+ tfidf (4,6)/256"] = tfidf_recipe
+configs["tfidf (4,6)/256"] = tfidf_recipe
 
 embed_recipe = model.default_recipe()
 embed_recipe.features = (
     StypeDispatch(text=embed_encoder) + embed_recipe.features
 )
-configs["+ embed (MiniLM)"] = embed_recipe
+configs["embed (MiniLM)"] = embed_recipe
 
 for name, recipe in configs.items():
     with torch.amp.autocast(

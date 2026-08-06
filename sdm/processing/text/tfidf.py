@@ -226,7 +226,7 @@ class TFIDF(Processor):
         for column in range(table.text.size(-1)):
             column_text = cast(
                 StringTensor,
-                table.text[..., column].reshape(-1),
+                table.text[..., column].view(-1),
             )
             flat, offsets = self._character_ngrams(
                 column_text,
@@ -335,7 +335,7 @@ class TFIDF(Processor):
             if vocab_size > 0:
                 column_text = cast(
                     StringTensor,
-                    table.text[..., column].reshape(-1),
+                    table.text[..., column].view(-1),
                 )
                 flat, offsets = self._character_ngrams(
                     column_text,
