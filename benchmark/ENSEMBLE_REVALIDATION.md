@@ -8,7 +8,7 @@ both vectorized and sequential Recipe execution. Current-API KumoRFM
 vectorized/sequential and cached execution also match.
 
 - Latest `main`: `0d3a0b8aaec16d6ff503119a4ea3ebc64c46e046`
-- Final PR #516 commit: `151be48af490cf550c934a126e216448f3ebc4ae`
+- Final PR #516 commit: `8b3eaca8eb0bccecfdd9379bf7279437779a83e8`
 - TabICLv2 reference: `f719c886a586ed4a29236345e319ac1ea596c478`
   (`tabicl==2.0.0`)
 - Checkpoints: classifier SHA-256

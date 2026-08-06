@@ -224,16 +224,11 @@ class _RecipeExecution:
             outputs: One model output per member, or an already-stacked table.
             inverse_target: Whether to invert the fitted target pipeline.
         """
-        num_members = len(self.contexts)
-        output_members = (
+        num_members = (
             outputs.size(0)
             if isinstance(outputs, TableTensor)
             else len(outputs)
         )
-        if output_members != num_members:
-            raise ValueError(
-                f"Expected {num_members} member outputs (got {output_members})"
-            )
         table = (
             EnsembleTable._from_group(outputs)
             if isinstance(outputs, TableTensor)

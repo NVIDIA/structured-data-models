@@ -770,7 +770,7 @@ def metadata() -> dict[str, object]:
         ),
         "head_commit": _git_revision("HEAD"),
         "main_commit": _git_revision("origin/main"),
-        "pr516_commit": "151be48af490cf550c934a126e216448f3ebc4ae",
+        "pr516_commit": "8b3eaca8eb0bccecfdd9379bf7279437779a83e8",
     }
 
 

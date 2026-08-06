@@ -140,7 +140,7 @@ class ICLModel(torch.nn.Module, ABC):
         )
 
         outs: list[TableTensor] = []
-        last_execution: _RecipeExecution | None = None
+        execution: _RecipeExecution | None = None
         member_offset = 0
         for num_members in member_counts:
             member_ids = tuple(
@@ -211,9 +211,7 @@ class ICLModel(torch.nn.Module, ABC):
                     )
             outs.extend(member_outs)
 
-            last_execution = execution
-
-        assert last_execution is not None
+        assert execution is not None
         if packed_inverse_target:
             out = cast(
                 TableTensor,
@@ -225,18 +223,13 @@ class ICLModel(torch.nn.Module, ABC):
                 x_query.device.type,
                 enabled=False,
             ):
-                return last_execution.transform_output(
+                return execution.transform_output(
                     out,
                     inverse_target=True,
                 )
 
-        # Stack members on dim 0, then apply recipe.output (e.g. reduce).
-        out = cast(
-            TableTensor,
-            torch.stack(cast(list[Tensor], outs), dim=0),
-        )
         with torch.amp.autocast(x_query.device.type, enabled=False):
-            return last_execution.recipe.output.transform(out)
+            return execution.transform_output(outs)
 
     @_maybe_inference_mode()
     def fit(
@@ -403,7 +396,7 @@ class ICLModel(torch.nn.Module, ABC):
         )
 
         outs: list[TableTensor] = []
-        last_execution: _RecipeExecution | None = None
+        execution: _RecipeExecution | None = None
         cache_index = 0
         for execution in self._recipe_executions:
             with torch.amp.autocast(x.device.type, enabled=False):
@@ -454,9 +447,7 @@ class ICLModel(torch.nn.Module, ABC):
                     )
             outs.extend(member_outs)
 
-            last_execution = execution
-
-        assert last_execution is not None
+        assert execution is not None
         assert cache_index == len(self._caches)
         if packed_inverse_target:
             out = cast(
@@ -469,17 +460,13 @@ class ICLModel(torch.nn.Module, ABC):
                 x.device.type,
                 enabled=False,
             ):
-                return last_execution.transform_output(
+                return execution.transform_output(
                     out,
                     inverse_target=True,
                 )
 
-        out = cast(
-            TableTensor,
-            torch.stack(cast(list[Tensor], outs), dim=0),
-        )
         with torch.amp.autocast(x.device.type, enabled=False):
-            return last_execution.recipe.output.transform(out)
+            return execution.transform_output(outs)
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
