@@ -22,12 +22,14 @@ class TaskDispatch(EnsembleProcessor):
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
-        classification: Output processor for categorical targets. If omitted,
-            :class:`~sdm.processing.Identity` is used. A sequence is
-            normalized to :class:`~sdm.processing.Sequential`.
-        regression: Output processor for numerical targets. If omitted,
-            :class:`~sdm.processing.Identity` is used. A sequence is
-            normalized to :class:`~sdm.processing.Sequential`.
+        classification: Stateless output processor selected for a categorical
+            target. If omitted, output passes through unchanged. A sequence is
+            normalized to
+            :class:`~sdm.processing.Sequential`.
+        regression: Stateless output processor selected for a numerical target.
+            If omitted, output passes through unchanged. A sequence is
+            normalized to
+            :class:`~sdm.processing.Sequential`.
     """
 
     supported_stypes = frozenset(Stype)

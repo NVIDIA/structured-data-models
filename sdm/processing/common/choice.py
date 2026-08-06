@@ -1,4 +1,3 @@
-from collections.abc import Mapping, Sequence
 from typing import Literal, cast
 
 import torch
@@ -10,22 +9,22 @@ from sdm.processing.ensemble import (
     EnsembleProcessorAdapter,
 )
 from sdm.stype import Stype
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm.tensor import EnsembleTable
 
 
 class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
-    """Delegate each table or ensemble member to one selected option.
+    """Route each table or ensemble member through one selected option.
 
-    The option is drawn when the processor is fitted; pass ``generator``
-    to ``fit()`` to make it reproducible. The generator is also passed on
-    to fit the drawn option. Only the drawn option is fitted; refitting
-    draws again. Ensemble execution selects one option per member.
+    Options are selected when the processor is fitted. Pass ``generator`` to
+    ``fit()`` to make random selection reproducible; it is also passed to the
+    selected options. Only selected options are fitted, and refitting selects
+    again.
 
     Args:
-        args: Sequence of candidate processors or stateless callables. Each
-            callable accepts and returns a :class:`~sdm.tensor.TableTensor`.
-        selection: Selection strategy. Round-robin assigns options by ensemble
-            member position and selects the first option for a single table.
+        args: Candidate processors or stateless callables.
+        selection: How to select options. ``"random"`` samples uniformly;
+            ``"round_robin"`` assigns options by ensemble member position and
+            selects the first option for a single table.
     """
 
     supported_stypes = frozenset(Stype)
@@ -36,87 +35,95 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         selection: Literal["random", "round_robin"] = "random",
     ) -> None:
         super().__init__()
-        if len(args) == 0:
-            raise ValueError("'Choice' requires at least one option.")
-        if selection not in {"random", "round_robin"}:
-            raise ValueError("Expected 'random' or 'round_robin' selection.")
-        self.options = torch.nn.ModuleList(
-            Processor.as_processor(arg) for arg in args
-        )
+        options = []
+        for arg in args:
+            option = Processor.as_processor(arg)
+            if not isinstance(option, EnsembleProcessor):
+                option = EnsembleProcessorAdapter(option)
+            options.append(option)
+        self.options = torch.nn.ModuleList(options)
         self.selection = selection
-        self._selections: tuple[int, ...] = ()
+        self._option_ids: tuple[int, ...] = ()
 
     @property
     def selected(self) -> Processor:
         """The drawn option."""
-        if len(self._selections) == 0:
+        if len(self._option_ids) == 0:
             raise RuntimeError(
-                f"{self.__class__.__name__!r} has no drawn option; "
+                f"{self.__class__.__name__!r} has no selected option; "
                 "call 'fit()' before."
             )
-        if len(self._selections) > 1:
+        if len(self._option_ids) > 1:
             raise RuntimeError(
-                f"{self.__class__.__name__!r} has multiple drawn options."
+                f"{self.__class__.__name__!r} has multiple selected options."
             )
 
-        option = cast(Processor, self.options[self._selections[0]])
+        option = cast(Processor, self.options[self._option_ids[0]])
         if not isinstance(option, EnsembleProcessorAdapter):
             return option
         if len(option._group_processors) == 0:
             return option.processor
         return cast(Processor, option._group_processors[0])
 
-    @staticmethod
-    def _combine_ensemble_tables(
-        member_selections: Sequence[int],
-        ensemble_tables_by_selection: Mapping[int, EnsembleTable],
-    ) -> EnsembleTable:
-        tables: list[TableTensor] = []
-        locations: dict[tuple[int, tuple[int, int]], int] = {}
-        member_table_ids = []
-        for member_id, selection in enumerate(member_selections):
-            ensemble_table = ensemble_tables_by_selection[selection]
-            location = ensemble_table._member_location(member_id)
-            key = (selection, location)
-            if key not in locations:
-                locations[key] = len(tables)
-                tables.append(ensemble_table.table(member_id))
-            member_table_ids.append(locations[key])
-
-        return EnsembleTable.from_tables(
-            tables=tables,
-            member_table_ids=member_table_ids,
-        )
-
-    def _assign_processors_to_members(
+    def _draw_option_ids(
         self,
         ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> None:
-        for index, option in enumerate(tuple(self.options)):
-            option = cast(Processor, option)
-            if not isinstance(option, EnsembleProcessor):
-                self.options[index] = EnsembleProcessorAdapter(option)
-
+    ) -> tuple[int, ...]:
         if self.selection == "round_robin":
-            self._selections = tuple(
+            return tuple(
                 member_id % len(self.options)
                 for member_id in range(ensemble_table.num_members)
             )
-        else:
+        if self.selection == "random":
             device = (
                 next(iter(ensemble_table)).device
                 if generator is None
                 else generator.device
             )
-            self._selections = tuple(
+            return tuple(
                 torch.randint(
                     len(self.options),
                     (ensemble_table.num_members,),
                     generator=generator,
                     device=device,
                 ).tolist()
+            )
+        raise AssertionError(f"Unexpected selection {self.selection!r}")
+
+    def _tables_by_option(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> dict[int, EnsembleTable]:
+        member_ids_by_option: dict[int, list[int]] = {}
+        for member_id, option_id in enumerate(self._option_ids):
+            member_ids_by_option.setdefault(option_id, []).append(member_id)
+        return {
+            option_id: ensemble_table.select_members(member_ids)
+            for option_id, member_ids in sorted(member_ids_by_option.items())
+        }
+
+    def _gather_outputs(
+        self,
+        outputs: dict[int, EnsembleTable],
+    ) -> EnsembleTable:
+        tables = []
+        member_ids = []
+        next_member_id_by_option: dict[int, int] = {}
+        for option_id in self._option_ids:
+            tables.append(outputs[option_id])
+            member_id = next_member_id_by_option.get(option_id, 0)
+            member_ids.append(member_id)
+            next_member_id_by_option[option_id] = member_id + 1
+        return EnsembleTable.gather_members(tables, member_ids)
+
+    def _check_num_members(self, ensemble_table: EnsembleTable) -> None:
+        if len(self._option_ids) != ensemble_table.num_members:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} was fitted with "
+                f"{len(self._option_ids)} ensemble members, but got "
+                f"{ensemble_table.num_members}."
             )
 
     def _fit_ensemble(
@@ -125,13 +132,13 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        self._assign_processors_to_members(
+        self._option_ids = self._draw_option_ids(
             ensemble_table,
             generator=generator,
         )
-        for option in sorted(set(self._selections)):
-            processor = cast(EnsembleProcessor, self.options[option])
-            processor.fit_ensemble(ensemble_table, generator=generator)
+        for option_id, table in self._tables_by_option(ensemble_table).items():
+            processor = cast(EnsembleProcessor, self.options[option_id])
+            processor.fit_ensemble(table, generator=generator)
 
     def _fit_transform_ensemble(
         self,
@@ -139,62 +146,54 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        self._assign_processors_to_members(
+        self._option_ids = self._draw_option_ids(
             ensemble_table,
             generator=generator,
         )
-
-        # Each option sees stable member positions, including nested choices.
         outputs = {
-            option: cast(
+            option_id: cast(
                 EnsembleProcessor,
-                self.options[option],
+                self.options[option_id],
             ).fit_transform_ensemble(
-                ensemble_table,
+                table,
                 generator=generator,
             )
-            for option in sorted(set(self._selections))
+            for option_id, table in self._tables_by_option(
+                ensemble_table
+            ).items()
         }
-        return self._combine_ensemble_tables(self._selections, outputs)
+        return self._gather_outputs(outputs)
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._selections) != ensemble_table.num_members:
-            raise RuntimeError(
-                "Choice must be fitted with the same number of ensemble "
-                "members before transform."
-            )
+        self._check_num_members(ensemble_table)
         outputs = {
-            option: cast(
+            option_id: cast(
                 EnsembleProcessor,
-                self.options[option],
-            ).transform_ensemble(ensemble_table)
-            for option in sorted(set(self._selections))
+                self.options[option_id],
+            ).transform_ensemble(table)
+            for option_id, table in self._tables_by_option(
+                ensemble_table
+            ).items()
         }
-        return self._combine_ensemble_tables(self._selections, outputs)
+        return self._gather_outputs(outputs)
 
     def _inverse_transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._selections) != ensemble_table.num_members:
-            raise RuntimeError(
-                "Choice must be fitted with the same number of ensemble "
-                "members before transform."
-            )
+        self._check_num_members(ensemble_table)
         outputs = {}
-        for option in sorted(set(self._selections)):
-            processor = cast(EnsembleProcessor, self.options[option])
-            inverse = getattr(processor, "inverse_transform_ensemble", None)
-            if not callable(inverse):
-                raise AttributeError(
-                    f"{processor.__class__.__name__!r} object has no "
-                    "attribute 'inverse_transform_ensemble'"
+        for option_id, table in self._tables_by_option(ensemble_table).items():
+            processor = cast(EnsembleProcessor, self.options[option_id])
+            if not isinstance(processor, EnsembleInvertibleMixin):
+                raise TypeError(
+                    f"{processor.__class__.__name__!r} is not invertible."
                 )
-            outputs[option] = inverse(ensemble_table)
-        return self._combine_ensemble_tables(self._selections, outputs)
+            outputs[option_id] = processor.inverse_transform_ensemble(table)
+        return self._gather_outputs(outputs)
 
     def __repr__(self, *, indent: int = 0) -> str:
         inner = ",\n".join(

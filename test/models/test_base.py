@@ -286,7 +286,6 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         related_context,
         recipe=_recipe(),
         num_estimators=2,
-        processing="sequential",
     )
     assert model._caches is not None
 
