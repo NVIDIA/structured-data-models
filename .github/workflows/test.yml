@@ -1,6 +1,7 @@
 name: Test
 
 on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -23,13 +24,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           activate-environment: true
 
       - name: Install package
         run: |
           # `-e` for coverage report.
-          uv pip install --torch-backend=cpu -e '.[test]'
+          uv pip install --torch-backend=cpu --group=test -e .
 
       - name: Run tests
         env:

@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
@@ -9,7 +10,7 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import ClipQuantiles, Processor, Standardize
+from sdm.processing import PCA, ClipQuantiles, Processor, Standardize
 from sdm.processing.base import InvertibleMixin
 
 ProcessorFactory = Callable[[], Processor]
@@ -101,3 +102,11 @@ def test_processor_rejects_unsupported_stype_on_forward_paths() -> None:
 def test_processor_rejects_id_stype() -> None:
     with pytest.raises(ValueError, match="id"):
         Standardize().fit(_id_table())
+
+
+def test_processor_fit_transform_handles_empty_table() -> None:
+    table = TableTensor.from_tensor(torch.empty(3, 0))
+    output = PCA(num_components=2).fit_transform(table)
+
+    assert output.size() == table.size()
+    assert output.schema == table.schema

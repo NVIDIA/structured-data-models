@@ -1,8 +1,8 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Self
 
 import torch
-from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.common.sequential import Sequential

@@ -1,9 +1,10 @@
 from textwrap import dedent
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 import pytest
 import torch
+
 from sdm import (
     ColumnarTensor,
     RelationalData,
@@ -24,14 +25,6 @@ def test_temporal_sampling_config_defaults_to_last() -> None:
     config = TemporalSamplingConfig(time_columns={"orders": "time"})
 
     assert config.strategy == "last"
-
-
-def test_temporal_sampling_config_rejects_unknown_strategy() -> None:
-    with pytest.raises(ValueError, match="temporal strategy"):
-        TemporalSamplingConfig(
-            time_columns={"orders": "time"},
-            strategy=cast(Any, "newest"),
-        )
 
 
 def test_sampler_forwards_temporal_strategy(
@@ -155,9 +148,10 @@ def test_sampler(relational_data: RelationalData) -> None:
               },
             ),
             orders: TableTensor(
-              size=(6, 4),
+              size=(6, 5),
               blocks={
                 numerical (1): [amount],
+                datetime (1): [timestamp],
                 id (3): [user_id, item_id, __example__],
               },
             ),

@@ -8,6 +8,7 @@ from sdm.processing.common.task import TaskDispatch
 from sdm.processing.common.choice import Choice
 from sdm.processing.common.to_numerical import ToNumerical
 from sdm.processing.common.shuffle import ShuffleColumns
+from sdm.processing.common.select import SelectColumns
 
 __all__ = [
     "Identity",
@@ -18,4 +19,5 @@ __all__ = [
     "Choice",
     "ToNumerical",
     "ShuffleColumns",
+    "SelectColumns",
 ]

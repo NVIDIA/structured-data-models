@@ -7,9 +7,11 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 import torch
+
 from sdm import (
     CategoricalTensor,
     ColumnarTensor,
+    NaT,
     StringTensor,
     Stype,
     TableTensor,
@@ -245,6 +247,18 @@ def test_from_tensor() -> None:
     assert tensor.categorical.categories[0].equal(torch.tensor([-2, -1, 0, 1]))
     assert tensor.categorical.categories[1].equal(torch.tensor([10, 20]))
     assert TableTensor.from_tensor(data[:, :0]).size() == (4, 0)
+
+    data = StringTensor.from_list([["left", "right"], ["up", "down"]])
+    tensor = TableTensor.from_tensor(data)
+    assert tensor.size() == (2, 2)
+    assert tensor.columns == {
+        Stype.numerical: (),
+        Stype.categorical: (),
+        Stype.datetime: (),
+        Stype.text: ("0", "1"),
+        Stype.id: (),
+    }
+    assert tensor.text.equal(data)
 
 
 def test_inference_mode() -> None:
@@ -1030,7 +1044,7 @@ def test_arrow() -> None:
         torch.tensor(
             [
                 [1704067200000000],
-                [-9223372036854775808],
+                [NaT],
                 [1704153600000000],
                 [1704240000000000],
             ]
@@ -1150,8 +1164,8 @@ def test_cudf() -> None:
     cudf = pytest.importorskip("cudf")
 
     data = {
-        "age": [0.0, 1.0, 2.0, 3.0],
-        "income": [10.0, 11.0, 12.0, 13.0],
+        "age": [0.0, 1.0, None, 3.0],
+        "income": [10.0, None, 12.0, 13.0],
         "country": ["US", "CA", "", "US"],
         "time": [
             datetime(2024, 1, 1, 0, 0),
@@ -1176,16 +1190,19 @@ def test_cudf() -> None:
     )
 
     assert tensor.size() == (4, 6)
-    assert tensor.numerical.equal(
+    assert tensor.numerical.allclose(
         torch.tensor(
             [
                 [0.0, 10.0],
-                [1.0, 11.0],
-                [2.0, 12.0],
+                [1.0, float("nan")],
+                [float("nan"), 12.0],
                 [3.0, 13.0],
             ],
             device=tensor.device,
-        )
+        ),
+        rtol=0,
+        atol=0,
+        equal_nan=True,
     )
     assert tensor.categorical.code.equal(
         torch.tensor([[0], [1], [2], [0]], device=tensor.device)
@@ -1195,7 +1212,7 @@ def test_cudf() -> None:
         torch.tensor(
             [
                 [1704067200000000],
-                [-9223372036854775808],
+                [NaT],
                 [1704153600000000],
                 [1704240000000000],
             ],

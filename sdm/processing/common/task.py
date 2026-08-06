@@ -3,11 +3,15 @@ from typing import Literal, cast
 import torch
 
 from sdm.processing.base import Processor
+from sdm.processing.ensemble import (
+    EnsembleProcessor,
+    EnsembleProcessorAdapter,
+)
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
-class TaskDispatch(Processor):
+class TaskDispatch(EnsembleProcessor):
     """Route model output by the transformed target's semantic type.
 
     When used in :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
@@ -18,10 +22,14 @@ class TaskDispatch(Processor):
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
-        classification: Output processor for categorical targets. An iterable
-            is normalized to :class:`~sdm.processing.Sequential`.
-        regression: Output processor for numerical targets. An iterable is
-            normalized to :class:`~sdm.processing.Sequential`.
+        classification: Stateless output processor selected for a categorical
+            target. If omitted, output passes through unchanged. A sequence is
+            normalized to
+            :class:`~sdm.processing.Sequential`.
+        regression: Stateless output processor selected for a numerical target.
+            If omitted, output passes through unchanged. A sequence is
+            normalized to
+            :class:`~sdm.processing.Sequential`.
     """
 
     supported_stypes = frozenset(Stype)
@@ -47,6 +55,8 @@ class TaskDispatch(Processor):
                     f"{self.__class__.__name__!r} requires stateless routes, "
                     f"but the {task!r} route requires fit."
                 )
+            if not isinstance(processor, EnsembleProcessor):
+                processor = EnsembleProcessorAdapter(processor)
             self.processors[task] = processor
 
         if len(self.processors) == 0:
@@ -79,24 +89,24 @@ class TaskDispatch(Processor):
                 f"categorical (got {stype!r})."
             )
 
-        if task not in self.processors:
-            raise ValueError(
-                f"{self.__class__.__name__!r} has no {task!r} route; "
-                f"configure {task}=... or use 'Identity()' for a no-op."
-            )
         self._task = task
 
     def _reset(self) -> None:
         self._task = None
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
         if self._task is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
-        processor = cast(Processor, self.processors[self._task])
-        return processor.transform(table)
+        if self._task not in self.processors:
+            return ensemble_table
+        processor = cast(EnsembleProcessor, self.processors[self._task])
+        return processor.transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415
@@ -104,9 +114,9 @@ class TaskDispatch(Processor):
 
     def set_extra_state(self, state: str | None) -> None:
         r""":meta private:"""  # noqa: D415
-        if state is not None and state not in self.processors:
+        if state is not None and state not in ("classification", "regression"):
             raise ValueError(
-                f"Cannot restore unconfigured {state!r} task on "
+                f"Cannot restore invalid {state!r} task on "
                 f"{self.__class__.__name__!r}."
             )
         self._task = cast(

@@ -4,18 +4,10 @@ from typing import cast
 import pandas as pd
 import relbench
 import torch
-from relbench.datasets import get_dataset
-from relbench.tasks import get_task
-from sdm import (
-    RelationalData,
-    TableTensor,
-    TemporalSamplingConfig,
-    infer_stypes,
-)
-from sdm.models import KumoRFM
-from torchmetrics.classification import BinaryAUROC
-from torchmetrics.regression import MeanAbsoluteError
-from tqdm import tqdm
+import torchmetrics
+import tqdm
+
+import sdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, required=True)
@@ -29,12 +21,19 @@ torch.manual_seed(args.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Collect Relational Data #####################################################
-db = get_dataset(args.dataset, download=True).get_db(upto_test_timestamp=False)
-data = RelationalData(
+dataset = relbench.datasets.get_dataset(args.dataset, download=True)
+db = dataset.get_db(upto_test_timestamp=False)
+data = sdm.RelationalData(
     tables={
-        name: TableTensor.from_pandas(
+        name: sdm.TableTensor.from_pandas(
             df=table.df,
-            stypes=infer_stypes(table.df),
+            stypes=sdm.infer_stypes(
+                table.df,
+                overrides={
+                    cast(str, table.pkey_col): "id",
+                    **dict.fromkeys(table.fkey_col_to_pkey_table, "id"),
+                },
+            ),
         )
         for name, table in db.table_dict.items()
     },
@@ -56,7 +55,7 @@ time_columns = {
 }
 sampler = data.sampler(
     temporal=(
-        TemporalSamplingConfig(
+        sdm.TemporalSamplingConfig(
             time_columns=time_columns,
             strategy="last",
         )
@@ -66,12 +65,12 @@ sampler = data.sampler(
 )
 
 # Collect Task Table ##########################################################
-task = get_task(args.dataset, args.task, download=True)
+task = relbench.tasks.get_task(args.dataset, args.task, download=True)
 dfs = [
     task.get_table(split, mask_input_cols=False).df
     for split in ["train", "val", "test"]
 ]
-task_table = TableTensor.from_pandas(
+task_table = sdm.TableTensor.from_pandas(
     df=pd.concat(dfs, ignore_index=True),
     stypes={
         task.entity_col: "id",
@@ -85,7 +84,7 @@ context, query = task_table.split([len(dfs[0]) + len(dfs[1]), len(dfs[2])])
 context = context[torch.randperm(len(context))[: args.context_size]]
 
 # Execute Model ###############################################################
-model = KumoRFM(device=device)
+model = sdm.models.KumoRFM(device=device)
 
 kwargs = {
     "task_link": {
@@ -97,30 +96,32 @@ kwargs = {
     "task_time_column": task.time_col,
 }
 context, related_tables = sampler(context, **kwargs).to(device)
-model.fit(
-    x=context.drop_columns(task.target_col),
-    y=context[task.target_col],
-    related_tables=related_tables,
-    num_estimators=1,
-)
+with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+    model.fit(
+        x=context.drop_columns(task.target_col),
+        y=context[task.target_col],
+        related_tables=related_tables,
+        num_estimators=1,
+    )
 
 if task.task_type == relbench.base.TaskType.REGRESSION:
-    metric = MeanAbsoluteError().to(device)
+    metric = torchmetrics.regression.MeanAbsoluteError().to(device)
 else:
-    metric = BinaryAUROC().to(device)
-for batch in tqdm(query.split(args.batch_size)):
+    metric = torchmetrics.classification.BinaryAUROC().to(device)
+for batch in tqdm.tqdm(query.split(args.batch_size)):
     x_query = batch.drop_columns(task.target_col)
     y_query = batch[task.target_col].to(device)
-    out = model.predict(*sampler(x_query, **kwargs).to(device))
+    with torch.amp.autocast(device.type, torch.bfloat16, enabled=True):
+        out = model.predict(*sampler(x_query, **kwargs).to(device))
     if task.task_type == relbench.base.TaskType.REGRESSION:
-        out = out["q500"].numerical  # Median prediction.
-        y_query = y_query.numerical
+        pred = out["q500"].numerical.squeeze(-1)  # Median prediction.
+        target = y_query.numerical.squeeze(-1)
     else:
-        out = out["1"].numerical  # Positive class.
-        # Decode ground-truth codes to class values:
-        y_query = y_query.categorical.categories[0][y_query.categorical.code]
-    metric.update(out, y_query)
+        pred, target = sdm.evaluation.to_binary_class(
+            out, y_query, positive_class=1
+        )
+    metric.update(pred, target)  # type: ignore
 if task.task_type == relbench.base.TaskType.REGRESSION:
-    print(f"MAE: {metric.compute():.4f}")
+    print(f"MAE: {metric.compute():.4f}")  # type: ignore
 else:
-    print(f"AUROC: {metric.compute():.4f}")
+    print(f"AUROC: {metric.compute():.4f}")  # type: ignore

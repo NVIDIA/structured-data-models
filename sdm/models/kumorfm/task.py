@@ -1,8 +1,8 @@
 from dataclasses import dataclass
+from typing import Self
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import RelatedTables, TableTensor
 from sdm.models.kumorfm.graph import HomogeneousGraph

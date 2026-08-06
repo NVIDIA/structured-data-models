@@ -4,9 +4,8 @@ from typing import Any, ClassVar, cast
 
 import torch
 from torch import Tensor
-from torch.nn import GELU, Linear, Sequential
 
-from sdm import RelatedTables, Relationship, Stype, TableTensor
+from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.models._huggingface import download_checkpoint
@@ -15,7 +14,7 @@ from sdm.models.kumorfm.recipe import default_recipe
 from sdm.models.kumorfm.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import Recipe
+from sdm.processing import Recipe, Standardize
 
 
 class KumoRFM(ICLModel):
@@ -23,8 +22,12 @@ class KumoRFM(ICLModel):
     from the `"KumoRFM-2: Scaling Foundation Models for Relational Learning"
     <https://arxiv.org/abs/2604.12596>`_ paper.
 
-    .. image:: https://arxiv.org/html/2604.12596v1/x3.png
-        :align: center
+    .. figure:: /images/rfm_light.svg
+        :figclass: light-only
+        :width: 100%
+
+    .. figure:: /images/rfm_dark.svg
+        :figclass: dark-only
         :width: 100%
 
     :class:`KumoRFM` extends the in-context learning structure of tabular
@@ -48,7 +51,7 @@ class KumoRFM(ICLModel):
       Context rows carry target information, while query rows attend to the
       labeled context to produce class logits or regression quantiles.
 
-    .. code-block:: python
+    .. testcode::
 
         from sdm import RelatedTables, TableTensor
         from sdm.models import KumoRFM
@@ -67,7 +70,10 @@ class KumoRFM(ICLModel):
                     device="cuda",
                 ),
                 "orders": TableTensor.from_columns(
-                    {"user_id": [0, 0, 1, 3, 3, 3], "amount": [9.99, 4.99, ...]},
+                    {
+                        "user_id": [0, 0, 1, 3, 3, 3],
+                        "amount": [9.99, 4.99, 12.99, 7.99, 3.99, 5.99],
+                    },
                     stypes={"user_id": "id", "amount": "numerical"},
                     device="cuda",
                 ),
@@ -117,7 +123,7 @@ class KumoRFM(ICLModel):
     Args:
         pretrained: Whether to load the pretrained checkpoint.
         device: The device.
-    """  # noqa: E501
+    """
 
     supported_feature_stypes: ClassVar[frozenset[Stype]] = frozenset(
         {Stype.numerical, Stype.datetime}
@@ -254,7 +260,6 @@ class _KumoRFM(torch.nn.Module):
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
-        self.num_classes = num_classes
         self.max_train_size = max_train_size
 
         self.row_embedding = RowEmbedding(
@@ -274,24 +279,13 @@ class _KumoRFM(torch.nn.Module):
         )
         self.icl_block = ICLBlock(
             num_classes=num_classes,
+            out_channels=num_classes or num_quantiles,
             channels=num_readout_tokens * channels,
             num_layers=num_icl_layers,
             num_heads=num_icl_heads,
             norm_bias=norm_bias,
+            temperature=0.9,
             **factory_kwargs,
-        )
-        self.head = Sequential(
-            Linear(
-                in_features=num_readout_tokens * channels,
-                out_features=2 * num_readout_tokens * channels,
-                **factory_kwargs,
-            ),
-            GELU(),
-            Linear(
-                in_features=2 * num_readout_tokens * channels,
-                out_features=num_classes or num_quantiles,
-                **factory_kwargs,
-            ),
         )
 
     def forward(
@@ -364,7 +358,6 @@ class _KumoRFM(torch.nn.Module):
                 num_hops=num_hops,
             )
 
-        # TODO Support computing relative time.
         # TODO Inject random heterogeneous GNN.
 
         # Reason within each Table ############################################
@@ -379,34 +372,60 @@ class _KumoRFM(torch.nn.Module):
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
         for name in table_names:
-            x_context_i = task_row_i = None
+            standardizer = Standardize()  # Relative time standardization.
+            x_context_i = context_task_row_i = None
             if context is not None:
+                assert x_context is not None
                 x_context_i = context.related_tables.tables[name].numerical
-                task_row_i = context.task_row_by_table[name]
+                context_task_row_i = context.task_row_by_table[name]
                 if name == readout_table:  # Inject task features:
-                    assert x_context is not None
                     x_context_i = self._inject_task(
                         x=x_context_i,
                         task=x_context.numerical,
                         readout_index=context.readout_index,
                     )
+                if cache is not None and cache.is_recording:
+                    cache[f"table_{name}.standardizer"] = standardizer
+                rel_time_i = self._get_rel_time(  # Inject relative time:
+                    datetime=context.related_tables.tables[name].datetime,
+                    seed_datetime=x_context.datetime,
+                    task_row=context_task_row_i,
+                    standardizer=standardizer,
+                )
+                if rel_time_i is not None:
+                    rel_time_i = rel_time_i.to(x_context_i.dtype)
+                    x_context_i = torch.cat([x_context_i, rel_time_i], dim=-1)
 
             x_query_i = None
             if query is not None and name in query.related_tables.tables:
+                assert x_query is not None
                 x_query_i = query.related_tables.tables[name].numerical
+                query_task_row_i = query.task_row_by_table[name]
                 if name == readout_table:  # Inject task features:
-                    assert x_query is not None
                     x_query_i = self._inject_task(
                         x=x_query_i,
                         task=x_query.numerical,
                         readout_index=query.readout_index,
                     )
+                rel_time_i = self._get_rel_time(  # Inject relative time:
+                    datetime=query.related_tables.tables[name].datetime,
+                    seed_datetime=x_query.datetime,
+                    task_row=query_task_row_i,
+                    standardizer=cast(
+                        Standardize, cache[f"table_{name}.standardizer"]
+                    )
+                    if cache is not None and cache.is_replaying
+                    else standardizer,
+                )
+                if rel_time_i is not None:
+                    rel_time_i = rel_time_i.to(x_query_i.dtype)
+                    x_query_i = torch.cat([x_query_i, rel_time_i], dim=-1)
 
             xs_context[name], xs_query[name] = self._embed_table(
                 x_context=x_context_i,
                 x_query=x_query_i,
                 y=y,
-                task_row=task_row_i,
+                task_row=context_task_row_i,
                 num_classes=num_classes,
                 cache_key=f"table_{name}",
                 cache=cache,
@@ -457,8 +476,12 @@ class _KumoRFM(torch.nn.Module):
             x = torch.cat([x_context, x_query], dim=-2)
             del x_context
             del x_query
-        x = self.icl_block(x, y, cache=cache)
-        return self.head(x)
+        return self.icl_block(
+            x=x,
+            y=y,
+            num_classes=num_classes,
+            cache=cache,
+        )
 
     def _embed_table(
         self,
@@ -484,11 +507,15 @@ class _KumoRFM(torch.nn.Module):
             assert task_row is not None
             x = x_context
             train_mask = task_row >= 0
-            y = y[task_row[train_mask]]
+            valid_task_row = task_row[train_mask]  # Unavoidable device sync.
+            y = y[valid_task_row]
+            if valid_task_row.numel() == task_row.numel():
+                train_mask = None
             if x_query is not None:
                 x = torch.cat([x, x_query], dim=-2)
-                test_mask = train_mask.new_zeros(x_query.size(-2))
-                train_mask = torch.cat([train_mask, test_mask])
+                if train_mask is not None:
+                    test_mask = train_mask.new_zeros(x_query.size(-2))
+                    train_mask = torch.cat([train_mask, test_mask])
         else:
             assert x_query is not None
             x = x_query
@@ -529,6 +556,45 @@ class _KumoRFM(torch.nn.Module):
         x[..., readout_index, -task.size(-1) :] = task
         return x
 
+    def _get_rel_time(
+        self,
+        datetime: Tensor,
+        seed_datetime: Tensor,
+        task_row: Tensor,
+        standardizer: Standardize,
+    ) -> Tensor | None:
+
+        if datetime.size(-1) == 0 or seed_datetime.size(-1) == 0:
+            return None
+
+        seed_datetime = seed_datetime[task_row]
+
+        na_mask = (task_row < 0).unsqueeze(-1) | (seed_datetime == NaT)
+        na_mask = na_mask.unsqueeze(-2) | (datetime == NaT).unsqueeze(-1)
+        na_mask = na_mask.flatten(-2)
+
+        rel_time = seed_datetime.unsqueeze(-2) - datetime.unsqueeze(-1)
+        rel_time = rel_time.flatten(-2) / (24 * 60 * 60 * 1_000_000)
+        rel_time = rel_time.sign() * rel_time.abs().log1p()
+
+        if not standardizer._fitted:
+            rel_time[na_mask] = float("NaN")
+            rel_time = torch.where(
+                na_mask,
+                rel_time.nanmean(dim=-2, keepdim=True).nan_to_num(0.0),
+                rel_time,
+            )
+            rel_time = standardizer.fit_transform(
+                TableTensor.from_tensor(rel_time)
+            ).numerical
+        else:
+            rel_time = standardizer.transform(
+                TableTensor.from_tensor(rel_time)
+            ).numerical
+            rel_time[na_mask] = 0.0
+
+        return rel_time
+
 
 def _remap_v2_1_checkpoint(
     state_dict: dict[str, Tensor],
@@ -562,7 +628,7 @@ def _remap_v2_1_checkpoint(
         variant_replacements = (
             ("row_embedding.y_cls_lin.", "row_embedding.y_emb."),
             ("icl_block.y_cls_lin.", "icl_block.y_emb."),
-            ("icl_block.cls_head.", "head.2."),
+            ("icl_block.cls_head.", "icl_block.head.2."),
         )
     else:
         ignored_prefixes = (
@@ -573,7 +639,7 @@ def _remap_v2_1_checkpoint(
         variant_replacements = (
             ("row_embedding.y_reg_lin.", "row_embedding.y_lin."),
             ("icl_block.y_reg_lin.", "icl_block.y_lin."),
-            ("icl_block.reg_head.", "head.2."),
+            ("icl_block.reg_head.", "icl_block.head.2."),
         )
 
     prefix_replacements = (
@@ -581,7 +647,7 @@ def _remap_v2_1_checkpoint(
         ("gnn.post_lin.", "gnn.out_lin."),
         ("gnn.post_norm.", "gnn.out_norm."),
         ("icl_block.mlp.0.", "icl_block.norm."),
-        ("icl_block.mlp.1.", "head.0."),
+        ("icl_block.mlp.1.", "icl_block.head.0."),
     )
     remapped: dict[str, Tensor] = {}
 

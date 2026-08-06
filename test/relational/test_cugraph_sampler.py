@@ -1,8 +1,10 @@
 from typing import Any, cast
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 import torch
+
 from sdm import (
     ColumnarTensor,
     RelationalData,
@@ -273,6 +275,36 @@ def test_cugraph_sampler_resolves_numeric_seed_without_cudf_join(
     assert _rows(
         output.related_tables.tables["users"], EXAMPLE_ID, "user_id"
     ) == [(0, 20), (1, 30)]
+
+
+@onlyCUDA
+def test_cugraph_sampler_does_not_match_null_seed_to_zero() -> None:
+    _require_rapids()
+    data = RelationalData(
+        tables={
+            "users": _table(
+                {"user_id": [0, 1]},
+                {"user_id": Stype.id},
+            )
+        },
+        relationships=[],
+    )
+    task_table = TableTensor.from_arrow(
+        table=pa.table({"entity": pa.array([None], type=pa.int64())}),
+        stypes={"entity": Stype.id},
+        device="cuda",
+    )
+
+    with pytest.raises(ValueError, match="match exactly one row"):
+        data.sampler()(
+            task_table=task_table,
+            task_link={
+                "task_column": "entity",
+                "table": "users",
+                "table_column": "user_id",
+            },
+            num_neighbors=[0],
+        )
 
 
 @onlyCUDA

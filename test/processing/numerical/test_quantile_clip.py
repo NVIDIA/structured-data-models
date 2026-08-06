@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from sdm import TableTensor
 from sdm.processing import ClipQuantiles
 from sdm.testing import withCUDA
@@ -24,6 +25,7 @@ def test_clip_quantiles_bounds_and_transform(device: torch.device) -> None:
         inp,
         torch.tensor([0.25, 0.75], device=device),
         dim=0,
+        keepdim=True,
     )
     expected = inp.clamp(min=expected_bounds[0], max=expected_bounds[1])
 
@@ -47,11 +49,11 @@ def test_clip_quantiles_default_uses_min_max_bounds(
 
     assert torch.equal(
         processor.lower_bound,
-        torch.tensor([0.0, 5.0], device=device),
+        torch.tensor([[0.0, 5.0]], device=device),
     )
     assert torch.equal(
         processor.upper_bound,
-        torch.tensor([4.0, 9.0], device=device),
+        torch.tensor([[4.0, 9.0]], device=device),
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
@@ -69,10 +71,10 @@ def test_clip_quantiles_constant_columns_are_exact(
     )
 
     assert torch.equal(
-        processor.lower_bound, torch.full((2,), 3.0, device=device)
+        processor.lower_bound, torch.full((1, 2), 3.0, device=device)
     )
     assert torch.equal(
-        processor.upper_bound, torch.full((2,), 3.0, device=device)
+        processor.upper_bound, torch.full((1, 2), 3.0, device=device)
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
     assert torch.equal(transformed, inp)
@@ -82,3 +84,36 @@ def test_clip_quantiles_constant_columns_are_exact(
 def test_clip_quantiles_rejects_invalid_quantiles() -> None:
     with pytest.raises(ValueError, match="q_low <= q_high"):
         ClipQuantiles(q_low=0.75, q_high=0.25)
+
+
+@withCUDA
+def test_clip_quantiles_fits_leading_batches_independently(
+    device: torch.device,
+) -> None:
+    context = torch.tensor(
+        [[[0.0], [2.0]], [[10.0], [20.0]]],
+        device=device,
+    )
+    query = torch.tensor(
+        [[[-1.0], [3.0]], [[5.0], [25.0]]],
+        device=device,
+    )
+
+    processor = ClipQuantiles().fit(TableTensor.from_tensor(context))
+    transformed = processor.transform(TableTensor.from_tensor(query)).numerical
+
+    assert torch.equal(
+        processor.lower_bound,
+        torch.tensor([[[0.0]], [[10.0]]], device=device),
+    )
+    assert torch.equal(
+        processor.upper_bound,
+        torch.tensor([[[2.0]], [[20.0]]], device=device),
+    )
+    assert torch.equal(
+        transformed,
+        torch.tensor(
+            [[[0.0], [2.0]], [[10.0], [20.0]]],
+            device=device,
+        ),
+    )

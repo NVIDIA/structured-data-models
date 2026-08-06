@@ -3,8 +3,10 @@ from typing import Literal
 import pandas as pd
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import AlignCategories
+from sdm.tensor import EnsembleTable
 from sdm.testing import withCUDA
 
 
@@ -360,3 +362,55 @@ def test_align_categories_rejects_changed_category_value_type() -> None:
 
     with pytest.raises(NotImplementedError):
         processor.transform(query)
+
+
+@withCUDA
+def test_align_categories_ensemble_matches_member_fits(
+    device: torch.device,
+) -> None:
+    first_context = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    second_context = _table(
+        [[1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    member_table_ids = (1, 0, 1, 0, 0, 1, 1, 0)
+    context = EnsembleTable.from_tables(
+        tables=(first_context, second_context),
+        member_table_ids=member_table_ids,
+    )
+    query = _table(
+        [[0], [1], [2]],
+        columns=("kind",),
+        categories=(("red", "blue", "green"),),
+        device=device,
+    )
+    query_ensemble = EnsembleTable.from_tables(
+        tables=(query, query),
+        member_table_ids=member_table_ids,
+    )
+    combined = AlignCategories()
+    fitted = AlignCategories().fit_ensemble(context)
+
+    context_output = combined.fit_transform_ensemble(context)
+    query_output = combined.transform_ensemble(query_ensemble)
+    fitted_query_output = fitted.transform_ensemble(query_ensemble)
+    references = [
+        AlignCategories().fit(first_context),
+        AlignCategories().fit(second_context),
+    ]
+    context_tables = (first_context, second_context)
+    for member_id, table_id in enumerate(member_table_ids):
+        reference = references[table_id]
+        assert context_output.table(member_id).equal(
+            reference.transform(context_tables[table_id])
+        )
+        expected_query = reference.transform(query)
+        assert query_output.table(member_id).equal(expected_query)
+        assert fitted_query_output.table(member_id).equal(expected_query)

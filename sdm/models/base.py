@@ -9,6 +9,7 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, Stype, TableTensor
+from sdm._warnings import warn_once
 from sdm.cache import Cache
 from sdm.processing import InvertibleMixin, Processor, Recipe
 from sdm.relational.task import RelatedTablesSchema
@@ -117,40 +118,40 @@ class ICLModel(torch.nn.Module, ABC):
 
         outs: Sequence[TableTensor] = []
         for recipe in recipes:
-            x_context_i = recipe.features.fit_transform(
-                x_context,
-                generator=generator,
-            )
-            y_context_i = recipe.target.fit_transform(
-                y_context,
-                generator=generator,
-            )
-            x_query_i = recipe.features.transform(x_query)
+            with torch.amp.autocast(x_query.device.type, enabled=False):
+                x_context_i = recipe.features.fit_transform(
+                    x_context,
+                    generator=generator,
+                )
+                y_context_i = recipe.target.fit_transform(
+                    y_context,
+                    generator=generator,
+                )
+                x_query_i = recipe.features.transform(x_query)
 
-            related_context_tables_i = related_query_tables_i = None
-            if related_context_tables is not None:
-                related_processors = {
-                    table_name: copy.deepcopy(recipe.features)
-                    for table_name in related_context_tables.tables
-                }
-                related_context_tables_i = replace(
-                    related_context_tables,
-                    tables={
-                        name: related_processors[name].fit_transform(
-                            t,
-                            generator=generator,
-                        )
-                        for name, t in related_context_tables.tables.items()
-                    },
-                )
-                assert related_query_tables is not None
-                related_query_tables_i = replace(
-                    related_query_tables,
-                    tables={
-                        name: related_processors[name].transform(t)
-                        for name, t in related_query_tables.tables.items()
-                    },
-                )
+                related_context_tables_i = related_query_tables_i = None
+                if related_context_tables is not None:
+                    related_processors = {
+                        table_name: copy.deepcopy(recipe.features)
+                        for table_name in related_context_tables.tables
+                    }
+                    related_context_tables_i = replace(
+                        related_context_tables,
+                        tables={
+                            k: related_processors[k].fit_transform(
+                                v, generator=generator
+                            )
+                            for k, v in related_context_tables.tables.items()
+                        },
+                    )
+                    assert related_query_tables is not None
+                    related_query_tables_i = replace(
+                        related_query_tables,
+                        tables={
+                            k: related_processors[k].transform(v)
+                            for k, v in related_query_tables.tables.items()
+                        },
+                    )
 
             self._validate_context(
                 x=x_context_i,
@@ -176,15 +177,17 @@ class ICLModel(torch.nn.Module, ABC):
                 generator=generator,
                 **kwargs,
             )
+            out = out.to(x_query_i.dtype)
             if y_context_i.numerical.size(-1) == 1:
                 if not isinstance(recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
-                out = recipe.target.inverse_transform(out)
+                with torch.amp.autocast(x_query.device.type, enabled=False):
+                    out = recipe.target.inverse_transform(out)
             outs.append(out)
 
-        out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        out = cast(TableTensor, out.to(x_query_i.dtype))
-        return recipe.output.transform(out)
+            out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
+        with torch.amp.autocast(x_query.device.type, enabled=False):
+            return recipe.output.transform(out)
 
     @_maybe_inference_mode()
     def fit(
@@ -229,26 +232,26 @@ class ICLModel(torch.nn.Module, ABC):
         self.clear()
         caches: list[Cache] = []
         for recipe in recipes:
-            x_i = recipe.features.fit_transform(x, generator=generator)
-            y_i = recipe.target.fit_transform(y, generator=generator)
+            with torch.amp.autocast(x.device.type, enabled=False):
+                x_i = recipe.features.fit_transform(x, generator=generator)
+                y_i = recipe.target.fit_transform(y, generator=generator)
 
-            related_tables_i = None
-            related_processors = None
-            if related_tables is not None:
-                related_processors = {
-                    table_name: copy.deepcopy(recipe.features)
-                    for table_name in related_tables.tables
-                }
-                related_tables_i = replace(
-                    related_tables,
-                    tables={
-                        name: related_processors[name].fit_transform(
-                            t,
-                            generator=generator,
-                        )
-                        for name, t in related_tables.tables.items()
-                    },
-                )
+                related_tables_i = None
+                related_processors = None
+                if related_tables is not None:
+                    related_processors = {
+                        table_name: copy.deepcopy(recipe.features)
+                        for table_name in related_tables.tables
+                    }
+                    related_tables_i = replace(
+                        related_tables,
+                        tables={
+                            k: related_processors[k].fit_transform(
+                                v, generator=generator
+                            )
+                            for k, v in related_tables.tables.items()
+                        },
+                    )
 
             self._validate_context(
                 x=x_i,
@@ -330,21 +333,22 @@ class ICLModel(torch.nn.Module, ABC):
         outs: Sequence[TableTensor] = []
         for cache in self._caches:
             recipe = cast(Recipe, cache["recipe"])
-            x_i = recipe.features.transform(x)
+            with torch.amp.autocast(x.device.type, enabled=False):
+                x_i = recipe.features.transform(x)
 
-            related_tables_i = None
-            if related_tables is not None:
-                related_processors = cast(
-                    Mapping[str, Processor],
-                    cache["related_processors"],
-                )
-                related_tables_i = replace(
-                    related_tables,
-                    tables={
-                        name: related_processors[name].transform(t)
-                        for name, t in related_tables.tables.items()
-                    },
-                )
+                related_tables_i = None
+                if related_tables is not None:
+                    related_processors = cast(
+                        Mapping[str, Processor],
+                        cache["related_processors"],
+                    )
+                    related_tables_i = replace(
+                        related_tables,
+                        tables={
+                            k: related_processors[k].transform(v)
+                            for k, v in related_tables.tables.items()
+                        },
+                    )
 
             self._validate_query(
                 x_context=cast(TableSchema, cache["x_schema"]),
@@ -366,15 +370,17 @@ class ICLModel(torch.nn.Module, ABC):
                 generator=None,
                 **cast(dict[str, Any], cache["kwargs"]),
             )
+            out = out.to(x_i.dtype)
             if cache["classes"] is None:
                 if not isinstance(recipe.target, InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
-                out = recipe.target.inverse_transform(out)
+                with torch.amp.autocast(x.device.type, enabled=False):
+                    out = recipe.target.inverse_transform(out)
             outs.append(out)
 
         out: TableTensor = cast(TableTensor, torch.stack(outs, dim=0))
-        out = cast(TableTensor, out.to(x_i.dtype))
-        return recipe.output.transform(out)
+        with torch.amp.autocast(x.device.type, enabled=False):
+            return recipe.output.transform(out)
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
@@ -428,15 +434,21 @@ class ICLModel(torch.nn.Module, ABC):
             )
         invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
         if len(invalid) > 0:
-            raise ValueError(
-                f"{self.__class__.__name__!r} received unsupported feature "
-                f"stypes: {', '.join(stype.value for stype in invalid)}"
+            stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
+            warn_once(
+                key="model-unsupported-feature-stypes",
+                message=(
+                    f"{self.__class__.__name__!r} received unsupported "
+                    f"feature stypes {stypes}. Columns with unsupported "
+                    f"feature stypes will not be consumed by the model."
+                ),
             )
         invalid = y.active_stypes - self.supported_target_stypes
         if len(invalid) > 0:
+            stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
             raise ValueError(
                 f"{self.__class__.__name__!r} received unsupported target "
-                f"stypes: {', '.join(stype.value for stype in invalid)}"
+                f"stypes {stypes}"
             )
 
         if related_tables is not None:
@@ -449,10 +461,16 @@ class ICLModel(torch.nn.Module, ABC):
                 invalid = table.active_stypes - self.supported_feature_stypes
                 invalid = invalid - {Stype.id}
                 if len(invalid) > 0:
-                    raise ValueError(
-                        f"{self.__class__.__name__!r} received unsupported "
-                        f"feature stypes in related table {table_name!r}: "
-                        f"{', '.join(stype.value for stype in invalid)}"
+                    stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
+                    warn_once(
+                        key="model-unsupported-feature-stypes",
+                        message=(
+                            f"{self.__class__.__name__!r} received "
+                            f"unsupported feature stypes {stypes} in related "
+                            f"table {table_name!r}. Columns with unsupported "
+                            f"feature stypes will not be consumed by the "
+                            f"model."
+                        ),
                     )
 
     def _validate_query(

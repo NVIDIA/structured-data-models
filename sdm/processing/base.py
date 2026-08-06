@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, Self, TypeAlias
 
 import torch
-from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 
@@ -22,7 +21,11 @@ class Processor(torch.nn.Module, abc.ABC):
     :class:`~sdm.tensor.TableTensor` for feature, target and output
     preprocessing.
     A :class:`Processor` learns any required state via :meth:`fit`, and applies
-    the transformation via :meth:`transform`.
+    the transformation via :meth:`transform`. Implementations preserve the row
+    and batch dimensions. Batch dimensions are processed independently.
+
+    :meth:`fit`, :meth:`transform`, and :meth:`fit_transform` are no-ops for
+    supported stypes with empty blocks.
     """
 
     supported_stypes: ClassVar[SupportedStypes]
@@ -107,6 +110,8 @@ class Processor(torch.nn.Module, abc.ABC):
             generator: Pseudorandom number generator used for sampling.
         """
         self._check_supported_stypes(table)
+        if len(table.active_stypes & self.supported_stypes) == 0:
+            return self
         if self.requires_fit:
             self._fit(table, generator=generator)
             self._fitted = True
@@ -116,12 +121,14 @@ class Processor(torch.nn.Module, abc.ABC):
         r"""Transform ``table``.
 
         Args:
-            table: The stTable to transform.
+            table: The table to transform.
 
         Returns:
             The transformed table.
         """
         self._check_supported_stypes(table)
+        if len(table.active_stypes & self.supported_stypes) == 0:
+            return table
         self._check_is_fitted()
         return self._transform(table)
 
@@ -145,6 +152,8 @@ class Processor(torch.nn.Module, abc.ABC):
             The transformed table.
         """
         self._check_supported_stypes(table)
+        if len(table.active_stypes & self.supported_stypes) == 0:
+            return table
         out = self._fit_transform(table, generator=generator)
         if self.requires_fit:
             self._fitted = True

@@ -3,7 +3,6 @@ import math
 import torch
 from torch import Tensor
 
-from sdm.processing._utils import _as_float
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.numerical._stats import _constant_feature_mask
 from sdm.stype import Stype
@@ -26,7 +25,6 @@ def _yeojohnson_transform(
     if negative_log is None:
         negative_log = (-inp).clamp_min(0).log1p()
 
-    lambdas = lambdas.unsqueeze(0)
     eps = torch.finfo(inp.dtype).eps
 
     positive = (lambdas * positive_log).expm1() / lambdas
@@ -44,7 +42,6 @@ def _yeojohnson_transform(
 
 
 def _yeojohnson_inverse_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
-    lambdas = lambdas.unsqueeze(0)
     positive = inp >= 0
     eps = torch.finfo(inp.dtype).eps
 
@@ -71,7 +68,7 @@ def _yeojohnson_inverse_transform(inp: Tensor, lambdas: Tensor) -> Tensor:
 
 
 def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
-    max_abs = inp.abs().max(dim=0).values
+    max_abs = inp.abs().max(dim=-2, keepdim=True).values
     log1p_max_x = (20 * max_abs).log1p()
     log1p_max_x = torch.where(
         max_abs == 0,
@@ -88,8 +85,8 @@ def _yeojohnson_bounds(inp: Tensor) -> tuple[Tensor, Tensor]:
     positive_lower = lower_bound
     positive_upper = upper_bound
 
-    all_negative = (inp < 0).all(dim=0)
-    any_negative = (inp < 0).any(dim=0)
+    all_negative = (inp < 0).all(dim=-2, keepdim=True)
+    any_negative = (inp < 0).any(dim=-2, keepdim=True)
 
     mixed_lower = torch.maximum(2 - positive_upper, positive_lower)
     mixed_upper = torch.minimum(2 - mixed_lower, positive_upper)
@@ -121,9 +118,9 @@ def _yeojohnson_log_likelihood(
         positive_log=positive_log,
         negative_log=negative_log,
     )
-    variance = transformed.var(dim=0, correction=0)
+    variance = transformed.var(dim=-2, correction=0, keepdim=True)
     tiny = torch.finfo(inp.dtype).tiny
-    loglike = -inp.size(0) / 2 * variance.log() + (lambdas - 1) * log_jacobian
+    loglike = -inp.size(-2) / 2 * variance.log() + (lambdas - 1) * log_jacobian
     return torch.where(
         variance.isfinite() & (variance >= tiny),
         loglike,
@@ -164,7 +161,8 @@ class PowerTransform(Processor, InvertibleMixin):
         positive_log = inp.clamp_min(0).log1p()
         negative_log = (-inp).clamp_min(0).log1p()
         log_jacobian = torch.where(inp >= 0, positive_log, -negative_log).sum(
-            dim=0
+            dim=-2,
+            keepdim=True,
         )
 
         left, right = _yeojohnson_bounds(inp)
@@ -232,12 +230,12 @@ class PowerTransform(Processor, InvertibleMixin):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        numerical = _as_float(table.numerical)
-        n_samples, n_features = numerical.shape
+        numerical = table.numerical
+        n_samples = numerical.size(-2)
 
-        var = numerical.var(dim=0, correction=0)
-        mean = numerical.mean(dim=0)
-        self.max = numerical.max(dim=0).values
+        var = numerical.var(dim=-2, correction=0, keepdim=True)
+        mean = numerical.mean(dim=-2, keepdim=True)
+        self.max = numerical.max(dim=-2, keepdim=True).values
         constant_features = _constant_feature_mask(var, mean, n_samples)
         self.lambdas = self._optimize_lambdas(numerical, constant_features)
 
@@ -247,24 +245,24 @@ class PowerTransform(Processor, InvertibleMixin):
 
         if self.standardize:
             transformed = _yeojohnson_transform(numerical, self.lambdas)
-            self.mean = transformed.mean(dim=0)
-            var = transformed.var(dim=0, correction=0)
+            self.mean = transformed.mean(dim=-2, keepdim=True)
+            var = transformed.var(dim=-2, correction=0, keepdim=True)
             scale = var.sqrt()
             scale[_constant_feature_mask(var, self.mean, n_samples)] = 1.0
             self.scale = scale
         else:
-            self.mean = numerical.new_zeros(n_features)
-            self.scale = numerical.new_ones(n_features)
+            self.mean = torch.zeros_like(self.lambdas)
+            self.scale = torch.ones_like(self.lambdas)
 
     def _transform(self, table: TableTensor) -> TableTensor:
         """Transform ``table`` with fitted Yeo-Johnson parameters."""
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         transformed = _yeojohnson_transform(numerical, self.lambdas)
         numerical = (transformed - self.mean) / self.scale
         return table.replace_blocks(numerical=numerical)
 
     def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        numerical = _as_float(table.numerical)
+        numerical = table.numerical
         unscaled = numerical * self.scale + self.mean
         inverse = _yeojohnson_inverse_transform(unscaled, self.lambdas)
 
@@ -276,6 +274,10 @@ class PowerTransform(Processor, InvertibleMixin):
         )
         inverse = torch.where(out_of_bounds, bounded_inverse, inverse)
         invalid = inverse.isinf()
-        inverse = torch.where(invalid, torch.fmin(inverse, self.max), inverse)
+        inverse = torch.where(
+            invalid,
+            torch.fmin(inverse, self.max),
+            inverse,
+        )
 
         return table.replace_blocks(numerical=inverse)

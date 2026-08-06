@@ -1,6 +1,12 @@
 import pytest
 import torch
-from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
+
+from sdm import (
+    CategoricalTensor,
+    StringTensor,
+    Stype,
+    TableTensor,
+)
 from sdm.processing import (
     Identity,
     ImputeMean,
@@ -8,6 +14,7 @@ from sdm.processing import (
     Standardize,
     StypeDispatch,
 )
+from sdm.tensor import EnsembleTable
 
 
 def _mixed_table() -> TableTensor:
@@ -69,7 +76,7 @@ def test_stype_dispatch_accepts_callable_route() -> None:
         table.categorical.code,
     )
 
-    with pytest.raises(TypeError, match="non-invertible"):
+    with pytest.raises(TypeError, match=r"'Callable' is not invertible"):
         dispatch.inverse_transform(output)
 
 
@@ -82,18 +89,18 @@ def test_stype_dispatch_passes_generator_to_routes() -> None:
         ),
     )
 
-    first = ShuffleCategories(method="random")
-    StypeDispatch(categorical=first).fit(
+    first = StypeDispatch(categorical=ShuffleCategories(method="random"))
+    first_output = first.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = ShuffleCategories(method="random")
-    StypeDispatch(categorical=second).fit(
+    second = StypeDispatch(categorical=ShuffleCategories(method="random"))
+    second_output = second.fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
 
-    assert torch.equal(first.permutations, second.permutations)
+    assert first_output.equal(second_output)
 
 
 def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
@@ -102,7 +109,7 @@ def test_stype_dispatch_inverse_rejects_noninvertible_route() -> None:
 
     output = dispatch.fit_transform(table)
 
-    with pytest.raises(TypeError, match=r"numerical.*ImputeMean"):
+    with pytest.raises(TypeError, match=r"'ImputeMean' is not invertible"):
         dispatch.inverse_transform(output)
 
 
@@ -121,17 +128,13 @@ def test_stype_dispatch_inverse_rejects_dropped_remainder() -> None:
 
 def test_stype_dispatch_rejects_remainder_before_fitting_routes() -> None:
     table = _mixed_table()
-    processor = Standardize()
     dispatch = StypeDispatch(
-        numerical=processor,
+        numerical=Standardize(),
         remainder="error",
     )
 
     with pytest.raises(ValueError, match=r"non-empty.*categorical.*no route"):
         dispatch.fit(table)
-
-    with pytest.raises(RuntimeError, match=r"Standardize.*not fitted"):
-        processor.transform(table.select_stypes(Stype.numerical))
 
 
 def test_stype_dispatch_drops_remainder_and_empty_outputs() -> None:
@@ -200,3 +203,55 @@ def test_stype_dispatch_uses_route_fitted_state() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
+
+
+def test_stype_dispatch_ensemble_routes_members_and_preserves_order() -> None:
+    first = _mixed_table()
+    second = _mixed_table().replace_blocks(
+        numerical=torch.tensor([[2.0, 3.0], [4.0, 5.0]])
+    )
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(1, 0, 1),
+    )
+    processor = StypeDispatch(
+        numerical=lambda value: value.replace_blocks(
+            numerical=value.numerical.square()
+        )
+    )
+
+    output = processor.transform_ensemble(table)
+
+    for member_id, source in enumerate((second, first, second)):
+        result = output.table(member_id)
+        assert torch.equal(result.numerical, source.numerical.square())
+        assert result.categorical.equal(source.categorical)
+
+
+def test_stype_dispatch_ensemble_fits_routes_per_group() -> None:
+    first = TableTensor.from_tensor(
+        torch.tensor([[1.0], [3.0]]),
+        columns=("first",),
+    )
+    second = TableTensor.from_tensor(
+        torch.tensor([[10.0], [14.0]]),
+        columns=("second",),
+    )
+    table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0),
+    )
+    processor = StypeDispatch(numerical=Standardize(with_std=False))
+    combined = StypeDispatch(numerical=Standardize(with_std=False))
+
+    processor.fit_ensemble(table)
+    transformed = processor.transform_ensemble(table)
+    expected = combined.fit_transform_ensemble(table)
+
+    for member_id in range(table.num_members):
+        result = transformed.table(member_id)
+        assert result.equal(expected.table(member_id))
+        assert torch.allclose(
+            result.numerical.mean(dim=-2),
+            torch.zeros(1),
+        )

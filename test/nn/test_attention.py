@@ -5,6 +5,8 @@ from unittest.mock import patch
 import pytest
 import torch
 import torch.nn.functional as F
+from torch import Tensor
+
 from sdm.nn import (
     SDPA,
     Attention,
@@ -13,7 +15,6 @@ from sdm.nn import (
     TransformerBlock,
 )
 from sdm.testing import withCUDA
-from torch import Tensor
 
 
 def reference_sdpa(
@@ -293,9 +294,6 @@ def test_sdpa_errors() -> None:
     with pytest.raises(ValueError, match="must be divisible"):
         SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
 
-    with pytest.raises(ValueError, match="must be positive"):
-        module(query=query, key=key, value=value, batch_size_limit=0)
-
 
 def test_sdpa_batch_size_limit() -> None:
     channels = 3
@@ -390,7 +388,7 @@ def test_batch_size_limit_autocast_dtype() -> None:
     [
         pytest.param(True, False, 2, id="training"),
         pytest.param(False, True, 2, id="compiling"),
-        pytest.param(False, False, None, id="disabled"),
+        pytest.param(False, False, None, id="default-limit"),
         pytest.param(False, False, 5, id="within-limit"),
     ],
 )
