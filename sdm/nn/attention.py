@@ -30,6 +30,17 @@ _flash_attention_impls: dict[int, tuple[Literal["FA3", "FA4"], str]] = {
     9: ("FA3", "Hopper"),
     10: ("FA4", "Blackwell"),
 }
+_flash_first_backends = [
+    torch_attention.SDPBackend.FLASH_ATTENTION,
+    torch_attention.SDPBackend.CUDNN_ATTENTION,
+    torch_attention.SDPBackend.EFFICIENT_ATTENTION,
+    torch_attention.SDPBackend.MATH,
+]
+_flash_fallback_backends = [
+    torch_attention.SDPBackend.CUDNN_ATTENTION,
+    torch_attention.SDPBackend.EFFICIENT_ATTENTION,
+    torch_attention.SDPBackend.MATH,
+]
 
 
 @torch.compiler.assume_constant_result
@@ -73,6 +84,24 @@ def _maybe_activate_flash_attention(device: torch.device) -> str | None:
         )
 
     return current_flash_attention_impl()
+
+
+def _active_flash_attention_supported(
+    implementation: str | None,
+    query: Tensor,
+    attn_mask: Tensor | None,
+) -> bool:
+    if (
+        implementation not in ("FA3", "FA4")
+        or query.dtype not in (torch.float16, torch.bfloat16)
+        or attn_mask is not None
+    ):
+        return False
+    head_dim = query.size(-1)
+    if implementation == "FA3":
+        # SDM's FA3 extension is compiled with the HDIM64 kernel profile.
+        return 8 <= head_dim <= 64 and head_dim % 8 == 0
+    return (8 <= head_dim <= 128 and head_dim % 8 == 0) or head_dim == 256
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
@@ -525,19 +554,29 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
-        if flash_attention_impl == "FA4":
+        flash_attention_supported = _active_flash_attention_supported(
+            flash_attention_impl,
+            query,
+            attn_mask,
+        )
+        if flash_attention_impl == "FA4" and flash_attention_supported:
             # FA4's CuTe cache key does not distinguish broadcast strides.
             # Materialize them so one compiled signature remains reusable.
             query = _materialize_broadcasted_tensor(query)
             key = _materialize_broadcasted_tensor(key)
             value = _materialize_broadcasted_tensor(value)
-        sdpa_context = (
-            torch_attention.sdpa_kernel(
-                torch_attention.SDPBackend.FLASH_ATTENTION
+        if flash_attention_impl in ("FA3", "FA4"):
+            backends = (
+                _flash_first_backends
+                if flash_attention_supported
+                else _flash_fallback_backends
             )
-            if flash_attention_impl in ("FA3", "FA4")
-            else nullcontext()
-        )
+            sdpa_context = torch_attention.sdpa_kernel(
+                backends,
+                set_priority=True,
+            )
+        else:
+            sdpa_context = nullcontext()
         with sdpa_context:
             out = F.scaled_dot_product_attention(
                 query=query.transpose(-3, -2),  # [B, Hq, Q, C],
