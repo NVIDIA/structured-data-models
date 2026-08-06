@@ -93,7 +93,9 @@ class EmbedText(Processor):
                 StringTensor,
                 table.text.movedim(-1, 0).reshape(-1),
             )
-            all_strings = flat_strings.to_arrow().to_pylist()
+            all_strings = [
+                s or "" for s in flat_strings.to_arrow().to_pylist()
+            ]
             chunk_size = self._chunk_size or len(all_strings)
 
             chunks: list[Tensor] = []
