@@ -281,6 +281,9 @@ class TFIDF(EnsembleProcessor):
         member_processor_ids: list[int] = []
         fitted: dict[tuple[int, int], int] = {}
 
+        # TODO: Replace direct `_locations` access with a public
+        # `EnsembleTable` iterator over stored tables and their logical member
+        # IDs, then use the same abstraction when transforming.
         for member_id in range(ensemble_table.num_members):
             location = ensemble_table._locations[member_id]
             processor_id = fitted.get(location)
