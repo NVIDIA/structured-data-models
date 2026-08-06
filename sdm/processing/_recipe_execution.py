@@ -213,11 +213,7 @@ class _RecipeExecution:
         Args:
             outputs: One model output per ensemble member.
         """
-        num_members = len(self.contexts)
-        if len(outputs) != num_members:
-            raise ValueError(
-                f"Expected {num_members} member outputs (got {len(outputs)})"
-            )
+        num_members = len(outputs)
         table = EnsembleTable.from_tables(
             tables=outputs,
             member_table_ids=tuple(range(num_members)),
