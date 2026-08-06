@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from typing import cast
-from unittest.mock import PropertyMock, patch
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -15,7 +15,20 @@ from sdm.nn import (
     RotaryEmbedding,
     TransformerBlock,
 )
-from sdm.testing import withCUDA
+from sdm.nn import attention as attention_module
+from sdm.testing import onlyCUDA, withCUDA
+
+FLASH_FIRST_BACKENDS = [
+    torch_attention.SDPBackend.FLASH_ATTENTION,
+    torch_attention.SDPBackend.CUDNN_ATTENTION,
+    torch_attention.SDPBackend.EFFICIENT_ATTENTION,
+    torch_attention.SDPBackend.MATH,
+]
+FLASH_FALLBACK_BACKENDS = [
+    torch_attention.SDPBackend.CUDNN_ATTENTION,
+    torch_attention.SDPBackend.EFFICIENT_ATTENTION,
+    torch_attention.SDPBackend.MATH,
+]
 
 
 def reference_sdpa(
@@ -305,25 +318,122 @@ def test_sdpa_errors() -> None:
         SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
 
 
+def test_flash_attention_activation_is_lazy_and_hopper_only() -> None:
+    with (
+        patch.object(
+            attention_module,
+            "_flash_attention_activation_attempted",
+            False,
+        ),
+        patch.object(
+            attention_module,
+            "current_flash_attention_impl",
+            side_effect=(None, "FA3"),
+        ),
+        patch.object(
+            attention_module,
+            "activate_flash_attention_impl",
+        ) as activate,
+        patch.object(torch.cuda, "device_count", return_value=2),
+        patch.object(
+            torch.cuda,
+            "get_device_capability",
+            return_value=(9, 0),
+        ),
+    ):
+        implementation = attention_module._maybe_activate_flash_attention(
+            torch.device("cuda")
+        )
+
+    assert implementation == "FA3"
+    activate.assert_called_once_with("FA3")
+
+
+def test_flash_attention_activation_skips_mixed_architectures() -> None:
+    with (
+        patch.object(
+            attention_module,
+            "_flash_attention_activation_attempted",
+            False,
+        ),
+        patch.object(
+            attention_module,
+            "current_flash_attention_impl",
+            return_value=None,
+        ),
+        patch.object(
+            attention_module,
+            "activate_flash_attention_impl",
+        ) as activate,
+        patch.object(torch.cuda, "device_count", return_value=2),
+        patch.object(
+            torch.cuda,
+            "get_device_capability",
+            side_effect=((9, 0), (10, 0)),
+        ),
+    ):
+        implementation = attention_module._maybe_activate_flash_attention(
+            torch.device("cuda")
+        )
+
+    assert implementation is None
+    activate.assert_not_called()
+
+
 @pytest.mark.parametrize(
-    ("is_cuda", "flash_attention_impl", "force_flash"),
+    ("head_dim", "supported"),
     [
-        pytest.param(True, "FA3", True, id="cuda-fa3"),
-        pytest.param(False, "FA3", False, id="cpu-fa3"),
-        pytest.param(True, None, False, id="cuda-default"),
+        pytest.param(7, False, id="below-minimum"),
+        pytest.param(8, True, id="minimum"),
+        pytest.param(64, True, id="maximum"),
+        pytest.param(72, False, id="disabled-profile"),
+    ],
+)
+def test_fa3_head_dim_support(head_dim: int, supported: bool) -> None:
+    query = torch.empty(1, 1, 1, head_dim, dtype=torch.bfloat16)
+    assert (
+        attention_module._active_flash_attention_supported("FA3", query, None)
+        is supported
+    )
+
+
+@pytest.mark.parametrize(
+    ("flash_attention_impl", "use_mask", "expected_backends"),
+    [
+        pytest.param("FA3", False, FLASH_FIRST_BACKENDS, id="fa3"),
+        pytest.param(
+            "FA3",
+            True,
+            FLASH_FALLBACK_BACKENDS,
+            id="fa3-mask-fallback",
+        ),
+        pytest.param(None, False, None, id="default"),
     ],
 )
 def test_sdpa_backend_selection(
-    is_cuda: bool,
     flash_attention_impl: str | None,
-    force_flash: bool,
+    use_mask: bool,
+    expected_backends: list[torch_attention.SDPBackend] | None,
 ) -> None:
-    module = SDPA(channels=3, num_query_heads=2)
-    query = torch.randn(2, 3, 2, 3)
-    key = torch.randn(2, 4, 2, 3)
-    value = torch.randn(2, 4, 2, 3)
+    module = SDPA(channels=16, num_query_heads=2)
+    query = torch.randn(2, 3, 2, 16, dtype=torch.bfloat16)
+    key = torch.randn(2, 4, 2, 16, dtype=torch.bfloat16)
+    value = torch.randn(2, 4, 2, 16, dtype=torch.bfloat16)
+    attn_mask = torch.ones(2, 3, 4, dtype=torch.bool) if use_mask else None
     initial_backend_state = cuda_sdp_backend_state()
     observed_backend_state: tuple[bool, bool, bool, bool] | None = None
+    observed_priority: tuple[list[torch_attention.SDPBackend], bool] | None = (
+        None
+    )
+    original_sdpa_kernel = torch_attention.sdpa_kernel
+
+    def record_sdpa_kernel(
+        backends: list[torch_attention.SDPBackend],
+        set_priority: bool = False,
+    ) -> object:
+        nonlocal observed_priority
+        observed_priority = (backends, set_priority)
+        return original_sdpa_kernel(backends, set_priority=set_priority)
 
     def record_backend_state(*, query: Tensor, **_: object) -> Tensor:
         nonlocal observed_backend_state
@@ -332,16 +442,14 @@ def test_sdpa_backend_selection(
 
     with (
         patch.object(
-            Tensor,
-            "is_cuda",
-            new_callable=PropertyMock,
-            return_value=is_cuda,
+            attention_module,
+            "_maybe_activate_flash_attention",
+            return_value=flash_attention_impl,
         ),
         patch.object(
             torch_attention,
-            "current_flash_attention_impl",
-            return_value=flash_attention_impl,
-            create=True,
+            "sdpa_kernel",
+            side_effect=record_sdpa_kernel,
         ),
         patch.object(
             F,
@@ -349,13 +457,99 @@ def test_sdpa_backend_selection(
             side_effect=record_backend_state,
         ),
     ):
-        module(query=query, key=key, value=value)
+        module(query=query, key=key, value=value, attn_mask=attn_mask)
 
-    expected_backend_state = (
-        (True, False, False, False) if force_flash else initial_backend_state
-    )
+    expected_backend_state = initial_backend_state
+    if expected_backends is not None:
+        expected_backend_state = (
+            torch_attention.SDPBackend.FLASH_ATTENTION in expected_backends,
+            torch_attention.SDPBackend.EFFICIENT_ATTENTION
+            in expected_backends,
+            torch_attention.SDPBackend.MATH in expected_backends,
+            torch_attention.SDPBackend.CUDNN_ATTENTION in expected_backends,
+        )
     assert observed_backend_state == expected_backend_state
     assert cuda_sdp_backend_state() == initial_backend_state
+    if expected_backends is not None:
+        assert observed_priority == (expected_backends, True)
+    else:
+        assert observed_priority is None
+
+
+@onlyCUDA
+def test_sdpa_flash_priority_falls_back_for_float32() -> None:
+    module = SDPA(channels=64, num_query_heads=2, device="cuda")
+    query = torch.randn(2, 3, 2, 64, device="cuda")
+    key = torch.randn(2, 4, 2, 64, device="cuda")
+    value = torch.randn(2, 4, 2, 64, device="cuda")
+
+    with (
+        patch.object(
+            attention_module,
+            "_maybe_activate_flash_attention",
+            return_value=None,
+        ),
+        torch_attention.sdpa_kernel(torch_attention.SDPBackend.MATH),
+    ):
+        expected = module(query=query, key=key, value=value)
+
+    with patch.object(
+        attention_module,
+        "_maybe_activate_flash_attention",
+        return_value="FA3",
+    ):
+        out = module(query=query, key=key, value=value)
+
+    torch.testing.assert_close(out, expected)
+
+
+@onlyCUDA
+def test_sdpa_flash_priority_falls_back_for_attention_mask() -> None:
+    module = SDPA(
+        channels=64,
+        num_query_heads=2,
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    query = torch.randn(2, 3, 2, 64, device="cuda", dtype=torch.bfloat16)
+    key = torch.randn(2, 4, 2, 64, device="cuda", dtype=torch.bfloat16)
+    value = torch.randn(2, 4, 2, 64, device="cuda", dtype=torch.bfloat16)
+    attn_mask = torch.tensor(
+        [
+            [[True, False, True, False]] * 3,
+            [[False, True, True, False]] * 3,
+        ],
+        device="cuda",
+    )
+
+    with (
+        patch.object(
+            attention_module,
+            "_maybe_activate_flash_attention",
+            return_value=None,
+        ),
+        torch_attention.sdpa_kernel(torch_attention.SDPBackend.MATH),
+    ):
+        expected = module(
+            query=query,
+            key=key,
+            value=value,
+            attn_mask=attn_mask,
+        )
+
+    with patch.object(
+        attention_module,
+        "_maybe_activate_flash_attention",
+        return_value="FA3",
+    ):
+        out = module(
+            query=query,
+            key=key,
+            value=value,
+            attn_mask=attn_mask,
+        )
+
+    torch.testing.assert_close(out, expected, rtol=1e-2, atol=1e-2)
 
 
 def test_sdpa_batch_size_limit() -> None:

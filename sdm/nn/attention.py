@@ -11,9 +11,86 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
 
+from sdm._warnings import warn_once
 from sdm.cache import KVCacheEntry
 from sdm.nn import RotaryEmbedding
 from sdm.nn.resolver import normalization_resolver
+
+activate_flash_attention_impl = cast(
+    Callable[[str], None] | None,
+    getattr(torch_attention, "activate_flash_attention_impl", None),
+)
+current_flash_attention_impl = cast(
+    Callable[[], str | None] | None,
+    getattr(torch_attention, "current_flash_attention_impl", None),
+)
+
+_flash_attention_activation_attempted = False
+_flash_first_backends = [
+    torch_attention.SDPBackend.FLASH_ATTENTION,
+    torch_attention.SDPBackend.CUDNN_ATTENTION,
+    torch_attention.SDPBackend.EFFICIENT_ATTENTION,
+    torch_attention.SDPBackend.MATH,
+]
+_flash_fallback_backends = [
+    torch_attention.SDPBackend.CUDNN_ATTENTION,
+    torch_attention.SDPBackend.EFFICIENT_ATTENTION,
+    torch_attention.SDPBackend.MATH,
+]
+
+
+@torch.compiler.assume_constant_result
+def _maybe_activate_flash_attention(device: torch.device) -> str | None:
+    global _flash_attention_activation_attempted
+
+    if current_flash_attention_impl is None or device.type != "cuda":
+        return None
+
+    active_implementation = current_flash_attention_impl()
+    if (
+        _flash_attention_activation_attempted
+        or activate_flash_attention_impl is None
+    ):
+        return active_implementation
+
+    _flash_attention_activation_attempted = True
+    if active_implementation is not None:
+        return active_implementation
+
+    device_majors = {
+        torch.cuda.get_device_capability(index)[0]
+        for index in range(torch.cuda.device_count())
+    }
+    if device_majors != {9}:
+        return None
+
+    try:
+        activate_flash_attention_impl("FA3")
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
+        warn_once(
+            "fa3-activation-failed",
+            f"FA3 could not be enabled on Hopper ({error}); falling back "
+            "to PyTorch's default attention implementation.",
+            stacklevel=3,
+        )
+
+    return current_flash_attention_impl()
+
+
+def _active_flash_attention_supported(
+    implementation: str | None,
+    query: Tensor,
+    attn_mask: Tensor | None,
+) -> bool:
+    if (
+        implementation != "FA3"
+        or query.dtype not in (torch.float16, torch.bfloat16)
+        or attn_mask is not None
+    ):
+        return False
+    head_dim = query.size(-1)
+    # SDM's FA3 extension is compiled with the HDIM64 kernel profile.
+    return 8 <= head_dim <= 64 and head_dim % 8 == 0
 
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
@@ -373,6 +450,8 @@ class SDPA(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
+        flash_attention_impl = _maybe_activate_flash_attention(query.device)
+
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
 
         if query.numel() == 0:
@@ -458,18 +537,22 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
-        current_flash_attention_impl = getattr(
-            torch_attention, "current_flash_attention_impl", None
-        )
-        backend_context = (
-            torch_attention.sdpa_kernel(
-                torch_attention.SDPBackend.FLASH_ATTENTION
+        if flash_attention_impl == "FA3":
+            backends = (
+                _flash_first_backends
+                if _active_flash_attention_supported(
+                    flash_attention_impl,
+                    query,
+                    attn_mask,
+                )
+                else _flash_fallback_backends
             )
-            if query.is_cuda
-            and current_flash_attention_impl is not None
-            and current_flash_attention_impl() == "FA3"
-            else nullcontext()
-        )
+            backend_context = torch_attention.sdpa_kernel(
+                backends,
+                set_priority=True,
+            )
+        else:
+            backend_context = nullcontext()
         with backend_context:
             out = F.scaled_dot_product_attention(
                 query=query.transpose(-3, -2),  # [B, Hq, Q, C],
