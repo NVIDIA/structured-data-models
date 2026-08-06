@@ -3,12 +3,12 @@ from __future__ import annotations
 import functools
 import math
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, SupportsIndex, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor.io import (
     ARROW_TORCH_DTYPES,
@@ -244,7 +244,7 @@ class NullableIntTensor(Tensor):
     @classmethod
     def from_list(
         cls,
-        values: int | None | Sequence[Any],
+        values: int | Sequence[Any] | None,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
@@ -635,6 +635,16 @@ def _pin_memory(inp: NullableIntTensor) -> NullableIntTensor:
     )
 
 
+@NullableIntTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: NullableIntTensor,
+    device: torch.device | None = None,
+) -> NullableIntTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @NullableIntTensor.implements(aten.isnan.default)
 def _isnan(inp: NullableIntTensor) -> Tensor:
     return ~inp._valid
@@ -692,6 +702,26 @@ def _unsafe_view(
     size: Sequence[int],
 ) -> NullableIntTensor:
     return _apply(inp, lambda x: aten._unsafe_view.default(x, size))
+
+
+@NullableIntTensor.implements(aten.reshape.default)
+def _reshape(inp: NullableIntTensor, size: Sequence[int]) -> NullableIntTensor:
+    return cast(
+        NullableIntTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
+
+
+@NullableIntTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: NullableIntTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> NullableIntTensor:
+    return cast(
+        NullableIntTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
 
 
 @NullableIntTensor.implements(aten.squeeze.default)

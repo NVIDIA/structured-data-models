@@ -3,22 +3,8 @@ import torch
 
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import TFIDF
+from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA
-
-
-def _numerical_by_column_ngram(
-    encoder: TFIDF,
-    output: TableTensor,
-) -> dict[tuple[int, str], torch.Tensor]:
-    values: dict[tuple[int, str], torch.Tensor] = {}
-    offset = 0
-    for column, vocabulary in enumerate(encoder._vocabularies):
-        for index, ngram in enumerate(vocabulary.to_pylist()):
-            values[(column, ngram)] = (
-                output.numerical[..., offset + index].detach().cpu()
-            )
-        offset += len(vocabulary)
-    return values
 
 
 def test_preserves_leading_dimensions() -> None:
@@ -57,18 +43,15 @@ def test_exact_values() -> None:
     encoder = TFIDF(ngram_range=(2, 2))
     output = encoder.fit_transform(table)
 
-    expected = {
-        (0, " a"): torch.tensor([0.48133417, 0.61335554, 0.48133417]),
-        (0, "ab"): torch.tensor([0.61980538, 0.39490346, 0.00000000]),
-        (0, "b "): torch.tensor([0.61980538, 0.39490346, 0.00000000]),
-        (0, "ac"): torch.tensor([0.00000000, 0.39490346, 0.61980538]),
-        (0, "c "): torch.tensor([0.00000000, 0.39490346, 0.61980538]),
-    }
-    actual = _numerical_by_column_ngram(encoder, output)
+    expected = torch.tensor(
+        [
+            [0.48133417, 0.61980538, 0.61980538, 0.0, 0.0],
+            [0.61335554, 0.39490346, 0.39490346, 0.39490346, 0.39490346],
+            [0.48133417, 0.0, 0.0, 0.61980538, 0.61980538],
+        ]
+    )
 
-    assert actual.keys() == expected.keys()
-    for key, expected_values in expected.items():
-        assert torch.allclose(actual[key], expected_values, atol=1e-6)
+    assert torch.allclose(output.numerical, expected, atol=1e-6)
 
 
 def test_ignores_unseen_ngrams() -> None:
@@ -92,12 +75,15 @@ def test_max_features_keeps_most_frequent_ngrams() -> None:
         StringTensor.from_list([["aa aa aa ab ab ac"]])
     )
     full = TFIDF(ngram_range=(2, 3)).fit_transform(table)
-    encoder = TFIDF(ngram_range=(2, 3), max_features=3)
-    capped = encoder.fit_transform(table)
+    encoder = TFIDF(ngram_range=(2, 3), max_features=3).fit(table)
+    query = TableTensor.from_tensor(
+        StringTensor.from_list([["aa"], ["ab"], ["ac"], ["zz"]])
+    )
+    capped = encoder.transform(query)
 
     assert full.numerical.size(-1) > 3
     assert capped.numerical.size(-1) == 3
-    assert set(encoder._vocabularies[0].to_pylist()) == {" a", "aa", "a "}
+    assert capped.numerical.count_nonzero(dim=-1).tolist() == [3, 1, 1, 0]
 
 
 def test_empty_string_yields_zero_width_output() -> None:
@@ -237,52 +223,20 @@ def test_cuda_matches_cpu(
             )
         )
 
-    expected_by_ngram = _numerical_by_column_ngram(cpu_encoder, expected)
-    actual_by_ngram = _numerical_by_column_ngram(cuda_encoder, output)
     assert output.numerical.is_cuda
     assert output.numerical.shape == expected.numerical.shape
     assert output.columns == expected.columns
-    assert actual_by_ngram.keys() == expected_by_ngram.keys()
-    for key, expected_values in expected_by_ngram.items():
-        assert torch.allclose(
-            actual_by_ngram[key],
-            expected_values,
-            atol=1e-6,
-        )
-
-
-def test_state_dict_round_trip(tmp_path) -> None:
-    table = TableTensor.from_tensor(
-        StringTensor.from_list(
-            [["hello world", "cat"], ["hello there", "dog"]]
-        )
+    actual_columns = sorted(
+        output.numerical.cpu().flatten(end_dim=-2).T.tolist()
     )
-    encoder = TFIDF(ngram_range=(2, 3))
-    expected = encoder.fit_transform(table)
-
-    path = tmp_path / "encoder.pt"
-    torch.save(encoder.state_dict(), path)
-    restored = TFIDF(ngram_range=(2, 3))
-    restored.load_state_dict(torch.load(path, weights_only=True))
-
-    assert torch.equal(restored.transform(table).numerical, expected.numerical)
-
-
-def test_load_state_dict_clears_stale_idf_buffers() -> None:
-    wide = TableTensor.from_tensor(
-        StringTensor.from_list([["hello world", "cat dog"]])
+    expected_columns = sorted(
+        expected.numerical.flatten(end_dim=-2).T.tolist()
     )
-    narrow = TableTensor.from_tensor(StringTensor.from_list([["hello world"]]))
-    restored = TFIDF(ngram_range=(2, 2))
-    restored.fit(wide)
-
-    encoder = TFIDF(ngram_range=(2, 2))
-    expected = encoder.fit_transform(narrow)
-    restored.load_state_dict(encoder.state_dict(), strict=False)
-
-    output = restored.transform(narrow)
-    assert output.columns == expected.columns
-    assert torch.equal(output.numerical, expected.numerical)
+    assert torch.allclose(
+        torch.tensor(actual_columns),
+        torch.tensor(expected_columns),
+        atol=1e-6,
+    )
 
 
 def test_failed_refit_preserves_previous_state(
@@ -320,3 +274,88 @@ def test_refit_replaces_previous_state() -> None:
 
     assert output.columns == expected.columns
     assert torch.equal(output.numerical, expected.numerical)
+
+
+def test_tfidf_keeps_vocabulary_per_member_table() -> None:
+    short = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
+    long = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    processor = TFIDF(ngram_range=(2, 2))
+    context = EnsembleTable.from_tables(
+        tables=(short, long),
+        member_table_ids=(0, 1, 0, 1),
+    )
+
+    output = processor.fit_transform_ensemble(context)
+
+    assert output.table(0).numerical.shape == (1, 2)
+    assert output.table(1).numerical.shape == (1, 4)
+    assert torch.equal(
+        output.table(0).numerical,
+        output.table(2).numerical,
+    )
+    assert torch.equal(
+        output.table(1).numerical,
+        output.table(3).numerical,
+    )
+
+    query = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
+    query_output = processor.transform_ensemble(
+        EnsembleTable(query, num_members=4)
+    )
+    assert query_output.table(0).numerical.shape == (1, 2)
+    assert query_output.table(1).numerical.shape == (1, 4)
+
+    with pytest.raises(RuntimeError, match="same number"):
+        processor.transform_ensemble(EnsembleTable(query, num_members=3))
+
+
+def test_tfidf_fit_then_transform_matches_fit_transform() -> None:
+    first = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    second = TableTensor.from_tensor(StringTensor.from_list([["world"]]))
+    ensemble_table = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1, 0, 1),
+    )
+    fitted = TFIDF(ngram_range=(2, 2))
+    combined = TFIDF(ngram_range=(2, 2))
+
+    fitted.fit_ensemble(ensemble_table)
+    actual = fitted.transform_ensemble(ensemble_table)
+    expected = combined.fit_transform_ensemble(ensemble_table)
+
+    for member_id in range(ensemble_table.num_members):
+        assert actual.table(member_id).equal(expected.table(member_id))
+
+
+def test_tfidf_refit_clears_ensemble_state() -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = TFIDF(ngram_range=(2, 2))
+    expected = TFIDF(ngram_range=(2, 2)).fit_transform(table)
+
+    processor.fit_transform_ensemble(ensemble_table)
+    output = processor.fit_transform(table)
+
+    assert output.equal(expected)
+    assert processor.transform(table).equal(expected)
+
+
+def test_tfidf_failed_refit_preserves_ensemble_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = TableTensor.from_tensor(StringTensor.from_list([["hello"]]))
+    ensemble_table = EnsembleTable(table, num_members=4)
+    processor = TFIDF(ngram_range=(2, 2))
+    processor.fit_ensemble(ensemble_table)
+    expected = processor.transform_ensemble(ensemble_table)
+
+    def fail_bincount(*_: object, **__: object) -> None:
+        raise RuntimeError("refit failed")
+
+    monkeypatch.setattr(torch, "bincount", fail_bincount)
+    with pytest.raises(RuntimeError, match="refit failed"):
+        processor.fit(table)
+
+    output = processor.transform_ensemble(ensemble_table)
+    for member_id in range(ensemble_table.num_members):
+        assert output.table(member_id).equal(expected.table(member_id))

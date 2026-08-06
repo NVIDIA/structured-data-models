@@ -4,10 +4,9 @@ import abc
 import copy
 from collections.abc import Iterable
 from itertools import repeat
-from typing import cast
+from typing import Self, cast
 
 import torch
-from typing_extensions import Self
 
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.stype import Stype
@@ -52,6 +51,8 @@ class EnsembleProcessor(Processor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
+        if not self.requires_fit:
+            return self._transform(table)
         output = self._fit_transform_ensemble(
             EnsembleTable(table, num_members=1),
             generator=generator,

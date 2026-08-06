@@ -127,21 +127,20 @@ def test_choice_is_reproducible_with_generator() -> None:
     first = Choice(
         Identity(),
         QuantileTransform(n_quantiles=6, subsample=16),
-    ).fit(
+    ).fit_transform(
         table,
         generator=torch.Generator().manual_seed(1),
     )
     second = Choice(
         Identity(),
         QuantileTransform(n_quantiles=6, subsample=16),
-    ).fit(
+    ).fit_transform(
         table,
         generator=torch.Generator().manual_seed(1),
     )
 
-    assert isinstance(first.selected, QuantileTransform)
-    assert type(first.selected) is type(second.selected)
-    assert torch.equal(first.selected.quantiles, second.selected.quantiles)
+    assert first.equal(second)
+    assert not first.equal(table)
 
 
 def test_choice_repr_shows_all_options() -> None:
