@@ -11,6 +11,7 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
+    ReduceEstimators,
     Standardize,
     StypeDispatch,
 )
@@ -370,3 +371,79 @@ def test_related_table_validation() -> None:
     )
     with pytest.raises(ValueError, match="share the same schema"):
         model.predict(x_query, mismatched_query)
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_ensemble_and_sequential_forward_parity(cached: bool) -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    sequential_model = _RecordingModel()
+    ensemble_model = _RecordingModel()
+
+    if cached:
+        sequential_model.fit(
+            x_context,
+            y_context,
+            num_estimators=2,
+        )
+        ensemble_model.fit(
+            x_context,
+            y_context,
+            num_estimators=2,
+            allow_ensemble=True,
+        )
+        sequential_out = sequential_model.predict(x_query)
+        ensemble_out = ensemble_model.predict(x_query)
+    else:
+        sequential_out = sequential_model(
+            x_context,
+            y_context,
+            x_query,
+            num_estimators=2,
+        )
+        ensemble_out = ensemble_model(
+            x_context,
+            y_context,
+            x_query,
+            num_estimators=2,
+            allow_ensemble=True,
+        )
+
+    assert sequential_out.size() == ensemble_out.size()
+
+
+def test_ensemble_output_preserves_estimator_dimension() -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    model = _RecordingModel()
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=Recipe(),
+        num_estimators=1,
+        allow_ensemble=True,
+    )
+
+    assert out.size() == (1, 2, 3)
+
+
+def test_ensemble_output_reduces_with_reduce_estimators() -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    model = _RecordingModel()
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=Recipe(output=ReduceEstimators()),
+        num_estimators=2,
+        allow_ensemble=True,
+    )
+
+    assert out.size() == (2, 3)

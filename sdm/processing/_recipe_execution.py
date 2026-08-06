@@ -122,8 +122,6 @@ class _RecipeExecution:
             generator=generator,
         )
 
-        is_regression = y_context.categorical.size(-1) == 0
-
         context_inputs = []
         classes = []
         for member_id in range(num_members):
@@ -140,8 +138,12 @@ class _RecipeExecution:
                 )
             )
             classes.append(
-                None if is_regression else y_i.categorical.categories[0]
+                y_i.categorical.categories[0]
+                if y_i.categorical.size(-1) > 0
+                else None
             )
+
+        is_regression = all(c is None for c in classes)
 
         return cls(
             recipe=recipe,
@@ -223,11 +225,13 @@ class _RecipeExecution:
         if self.is_regression:
             target = cast(EnsembleInvertibleMixin, recipe.target)
             table = target.inverse_transform_ensemble(table)
+        input_members = table.num_members
         table = cast(
             EnsembleProcessor,
             recipe.output,
         ).transform_ensemble(table)
-        if table.num_members == 1:
+
+        if table.num_members < input_members:
             return table.table(0)
 
         members = [
