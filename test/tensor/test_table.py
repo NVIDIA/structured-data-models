@@ -669,6 +669,8 @@ def test_slicing_ops() -> None:
     assert out.numerical.size() == (2, 3, 2, 2)
     assert out.categorical.size() == (2, 3, 2, 1)
 
+    with pytest.raises(RuntimeError, match="Can't slice"):
+        _ = torch.ops.aten.slice.Tensor(tensor, -1, 0, 1, 1)
     with pytest.raises(RuntimeError, match="Can't select"):
         _ = tensor.select(-1, 0)
     with pytest.raises(RuntimeError, match="Can't select"):
@@ -974,14 +976,21 @@ def test_pin_memory() -> None:
 @onlyCUDA
 def test_pin_memory_cuda() -> None:
     tensor = TableTensor(
-        columns={"numerical": ["age", "income"]},
+        columns={
+            "numerical": ["age", "income"],
+            "categorical": ["country"],
+        },
         numerical=torch.randn(2, 2),
+        categorical=CategoricalTensor(
+            code=torch.randint(0, 2, (2, 1), dtype=torch.int32),
+            categories=(torch.arange(2),),
+        ),
     )
 
     out = cast(TableTensor, tensor.pin_memory())
     assert out.is_pinned()
     assert out.numerical.is_pinned()
-    assert out.categorical is tensor.categorical
+    assert out.categorical.is_pinned()
     assert out.datetime is tensor.datetime
     assert out.id is tensor.id
 

@@ -511,6 +511,16 @@ def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
     )
 
 
+@ColumnarTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: ColumnarTensor,
+    device: torch.device | None = None,
+) -> ColumnarTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @ColumnarTensor.implements(aten.equal.default)
 def _equal(inp: ColumnarTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:

@@ -79,3 +79,5 @@ model.fit(
 model.predict(table[300:].drop_columns("target"))
 model.clear()
 ```
+
+More examples are listed under [`examples/`](examples), grouped by model architecture.
