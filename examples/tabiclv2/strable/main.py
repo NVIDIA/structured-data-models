@@ -81,4 +81,4 @@ with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
 rmse = (prediction - ground_truth).pow(2).mean().sqrt()
 mae = (prediction - ground_truth).abs().mean()
 
-print(f"RMSE: {rmse:>8.3f} MAE: {mae:>8.3f}")
+print(f"RMSE: {rmse:.3f}, MAE: {mae:.3f}")
