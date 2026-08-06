@@ -50,7 +50,7 @@ StypeLike: TypeAlias = Stype | str
 _WORD_PATTERN = re.compile(r"[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
 
 _TEXT_MIN_UNIQUE_VALUES = 200
-_TEXT_MIN_UNIQUE_RATIO = 0.2
+_TEXT_MIN_UNIQUE_RATIO = 0.05
 _TEXT_MIN_AVERAGE_WORD_COUNT = 3
 
 
@@ -73,8 +73,8 @@ def infer_stypes(
     Optionally, infer the following semantic types based on best-effort:
 
     * String columns are inferred as :attr:`~Stype.text` if they contain at
-      least ``200`` unique string values, a unique value ratio greater than
-      ``0.2``, and an average of at least ``3`` words per unique value.
+      least 200 distinct string values, a distinct non-null value ratio of at
+      least 5%, and an average of at least ``3`` words per distinct value.
     * Integer or (non-dictionary) string columns are inferred as
       :attr:`~Stype.id` if its name contains ``"id"`` as a whole word
       (*e.g.*, ``"user_id"``, ``"userId"``, ``"id"``, but not ``"solid"`` or
