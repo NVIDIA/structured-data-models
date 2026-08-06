@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm.nn import InducedTransformerBlock, TransformerBlock
-from sdm.testing import onlyCUDA, withCUDA
+from sdm.testing import withCUDA
 
 
 @withCUDA
@@ -157,9 +157,10 @@ def test_induced_transformer_block_kv_cache() -> None:
     torch.testing.assert_close(self_cached_out, self_out)
 
 
-@onlyCUDA
-def test_induced_transformer_block_transformer_2_fp32() -> None:
-    device = torch.device("cuda")
+@withCUDA
+def test_induced_transformer_block_transformer_2_float32(
+    device: torch.device,
+) -> None:
     output_mlp = torch.nn.Sequential(
         torch.nn.Linear(8, 16, device=device),
         torch.nn.GELU(),
@@ -184,12 +185,13 @@ def test_induced_transformer_block_transformer_2_fp32() -> None:
     )
     query = torch.randn(2, 6, 8, device=device)
     key_value = torch.randn(2, 5, 8, device=device)
+    autocast_dtype = torch.float16 if device.type == "cuda" else torch.bfloat16
     torch.nn.init.constant_(module.output_block.attn.out_lin.weight, 0.02)
     mlp_out = module.output_block.mlp[-1]
     assert isinstance(mlp_out, torch.nn.Linear)
     torch.nn.init.constant_(mlp_out.weight, 0.02)
 
-    with torch.amp.autocast(device.type, dtype=torch.float16):
+    with torch.amp.autocast(device.type, dtype=autocast_dtype):
         induced = module.inducing_block(
             query=module.inducing_points,
             key_value=key_value,
@@ -200,12 +202,12 @@ def test_induced_transformer_block_transformer_2_fp32() -> None:
             key_value=induced.float(),
             return_key_value=True,
         )
-    with torch.amp.autocast(device.type, dtype=torch.float16):
+    with torch.amp.autocast(device.type, dtype=autocast_dtype):
         out, kv = module(
             query=query,
             key_value=key_value,
             return_key_value=True,
-            _transformer_2_fp32=True,
+            _transformer_2_float32=True,
         )
 
     assert out.dtype == torch.float32

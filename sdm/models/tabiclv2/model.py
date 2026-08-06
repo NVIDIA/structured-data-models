@@ -254,7 +254,6 @@ class _TabICLv2(torch.nn.Module):
             num_inducing_points=num_inducing_points,
             num_readout_tokens=num_readout_tokens,
             norm_bias=norm_bias,
-            stabilize_float16_context=True,
             **factory_kwargs,
         )
         self.icl_block = ICLBlock(

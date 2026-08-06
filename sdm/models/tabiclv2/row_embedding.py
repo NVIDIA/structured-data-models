@@ -26,13 +26,11 @@ class RowEmbedding(torch.nn.Module):
         norm_bias: bool,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
-        stabilize_float16_context: bool = False,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
-        self._stabilize_float16_context = stabilize_float16_context
 
         self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
@@ -107,14 +105,6 @@ class RowEmbedding(torch.nn.Module):
         K = self.readout_token.size(-2)
         train_mask: Any = slice(R_train) if train_mask is None else train_mask
         recording = cache is not None and cache.is_recording
-        stabilize_float16 = (
-            y.numel() > 0
-            and self._stabilize_float16_context
-            and x.is_cuda
-            and self.lin.weight.dtype == torch.float32
-            and torch.is_autocast_enabled(x.device.type)
-            and torch.get_autocast_dtype(x.device.type) == torch.float16
-        )
 
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
@@ -157,6 +147,12 @@ class RowEmbedding(torch.nn.Module):
             else:
                 x = self.lin(x, out=buffer[..., K:, :])  # [..., R, C, D]
 
+        stabilize_float16 = (
+            y.numel() > 0
+            and x.is_cuda
+            and x.dtype == torch.float16
+            and self.lin.weight.dtype == torch.float32
+        )
         if stabilize_float16:
             # Preserve the residual carrier before target injection.
             if buffer is None:
@@ -195,7 +191,7 @@ class RowEmbedding(torch.nn.Module):
                 key_value=key_value,  # [..., C, R_train, D]
                 return_key_value=recording,
                 # The target-conditioned column blocks are FP16-sensitive.
-                _transformer_2_fp32=stabilize_float16,
+                _transformer_2_float32=stabilize_float16,
                 batch_size_limit="auto",
                 out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
