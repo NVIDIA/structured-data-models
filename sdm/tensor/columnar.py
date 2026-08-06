@@ -610,7 +610,7 @@ def _reshape(inp: ColumnarTensor, size: Sequence[int]) -> ColumnarTensor:
 
 @ColumnarTensor.implements(aten.flatten.using_ints)
 def _flatten(
-    inp: VarLenTensor,
+    inp: ColumnarTensor,
     start_dim: int = 0,
     end_dim: int = -1,
 ) -> ColumnarTensor:
