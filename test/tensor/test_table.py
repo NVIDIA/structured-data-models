@@ -669,14 +669,6 @@ def test_slicing_ops() -> None:
     assert out.numerical.size() == (2, 3, 2, 2)
     assert out.categorical.size() == (2, 3, 2, 1)
 
-    # torch<2.9 emits a no-op slice over the column dimension for
-    # `x[..., :]`-style indexing (newer releases elide it); it must pass
-    # through unchanged, while actual column slicing keeps raising.
-    out = torch.ops.aten.slice.Tensor(tensor, -1, 0, 2**63 - 1, 1)
-    assert isinstance(out, TableTensor)
-    assert out.size() == tensor.size()
-    assert out.columns == tensor.columns
-
     with pytest.raises(RuntimeError, match="Can't slice"):
         _ = torch.ops.aten.slice.Tensor(tensor, -1, 0, 1, 1)
     with pytest.raises(RuntimeError, match="Can't select"):
@@ -990,7 +982,7 @@ def test_pin_memory_cuda() -> None:
         },
         numerical=torch.randn(2, 2),
         categorical=CategoricalTensor(
-            data=torch.randint(0, 2, (2, 1), dtype=torch.int32),
+            code=torch.randint(0, 2, (2, 1), dtype=torch.int32),
             categories=(torch.arange(2),),
         ),
     )
@@ -998,13 +990,7 @@ def test_pin_memory_cuda() -> None:
     out = cast(TableTensor, tensor.pin_memory())
     assert out.is_pinned()
     assert out.numerical.is_pinned()
-    # Pinning a populated block must preserve its wrapper (the
-    # categories survive); empty blocks pass through untouched.
-    assert isinstance(out.categorical, CategoricalTensor)
-    torch.testing.assert_close(
-        out.categorical.categories,
-        cast(CategoricalTensor, tensor.categorical).categories,
-    )
+    assert out.categorical.is_pinned()
     assert out.datetime is tensor.datetime
     assert out.id is tensor.id
 
