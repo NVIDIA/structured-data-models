@@ -26,6 +26,7 @@ class TaskGraph:  # noqa: D101
         related_tables: RelatedTables,
         num_hops: int | None = None,
     ) -> Self:
+
         if x.dim() != 2:
             raise ValueError("Tables need to be two-dimensional")
 
