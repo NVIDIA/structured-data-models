@@ -41,11 +41,6 @@ table = sdm.TableTensor.from_arrow(
     device=device,
 )
 
-text_encoder = TFIDF(
-    ngram_range=(4, 6),
-    max_features=256,
-)
-
 model = sdm.models.TabICLv2(device=device)
 
 target_name = "BT Easiness"
@@ -54,31 +49,30 @@ context = table[:split]
 query = table[split:]
 ground_truth = query[:, target_name].as_tensor().squeeze()
 
-results = {}
-configs = {
-    "numerical only": model.default_recipe(),
-}
-text_recipe = model.default_recipe()
-text_recipe.features = StypeDispatch(text=text_encoder) + text_recipe.features
-configs["+ text (4,6)/256"] = text_recipe
-
-for name, recipe in configs.items():
-    with torch.amp.autocast(
-        device.type,
-        torch.float16,
-        enabled=table.is_cuda,
-    ):
-        model.fit(
-            x=context.drop_columns(target_name),
-            y=context[:, target_name],
-            recipe=recipe,
+recipe = model.default_recipe()
+recipe.features = (
+    StypeDispatch(
+        text=TFIDF(
+            ngram_range=(4, 6),
+            max_features=256,
         )
-        prediction = model.predict(query.drop_columns(target_name))
-        model.clear()
-    rmse = (prediction - ground_truth).pow(2).mean().sqrt()
-    mae = (prediction - ground_truth).abs().mean()
-    results[name] = (rmse.item(), mae.item())
+    )
+    + recipe.features
+)
 
-print(f"{'config':<20s} {'RMSE':>8s} {'MAE':>8s}")
-for name, (rmse, mae) in results.items():
-    print(f"{name:<20s} {rmse:>8.3f} {mae:>8.3f}")
+with torch.amp.autocast(
+    device.type,
+    torch.float16,
+    enabled=table.is_cuda,
+):
+    model.fit(
+        x=context.drop_columns(target_name),
+        y=context[:, target_name],
+        recipe=recipe,
+    )
+    prediction = model.predict(query.drop_columns(target_name))
+
+rmse = (prediction - ground_truth).pow(2).mean().sqrt()
+mae = (prediction - ground_truth).abs().mean()
+
+print(f"RMSE: {rmse:>8.3f} MAE: {mae:>8.3f}")
