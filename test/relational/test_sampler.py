@@ -1,7 +1,10 @@
 from textwrap import dedent
+from typing import Any
 
+import pandas as pd
 import pytest
 import torch
+
 from sdm import (
     ColumnarTensor,
     RelationalData,
@@ -9,13 +12,68 @@ from sdm import (
     Stype,
     TableTensor,
     TaskLink,
+    TemporalSamplingConfig,
 )
 
 
-def test_sampler(data: RelationalData) -> None:
+def test_temporal_sampling_config_requires_time_columns() -> None:
+    with pytest.raises(ValueError, match="at least one time column"):
+        TemporalSamplingConfig(time_columns={})
+
+
+def test_temporal_sampling_config_defaults_to_last() -> None:
+    config = TemporalSamplingConfig(time_columns={"orders": "time"})
+
+    assert config.strategy == "last"
+
+
+def test_sampler_forwards_temporal_strategy(
+    temporal_data: RelationalData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("pyg_lib")
+    sample = torch.ops.pyg.hetero_neighbor_sample
+    strategies: list[str] = []
+
+    def capture(*args: Any, **kwargs: Any) -> Any:
+        strategies.append(kwargs["temporal_strategy"])
+        return sample(*args, **kwargs)
+
+    monkeypatch.setattr(torch.ops.pyg, "hetero_neighbor_sample", capture)
+    sampler = temporal_data.sampler(
+        temporal={
+            "time_columns": {"first": "time", "second": "time"},
+            "strategy": "uniform",
+        }
+    )
+    task_table = TableTensor.from_pandas(
+        df=pd.DataFrame(
+            {
+                "entity": [0],
+                "cutoff": pd.to_datetime([10], unit="s"),
+            }
+        ),
+        stypes={"entity": Stype.id, "cutoff": Stype.datetime},
+    )
+
+    sampler(
+        task_table=task_table,
+        task_link={
+            "task_column": "entity",
+            "table": "roots",
+            "table_column": "root_id",
+        },
+        num_neighbors=[-1],
+        task_time_column="cutoff",
+    )
+
+    assert strategies == ["uniform"]
+
+
+def test_sampler(relational_data: RelationalData) -> None:
     pytest.importorskip("pyg_lib")
 
-    task_table, related_tables = data.sampler()(
+    task_table, related_tables = relational_data.sampler()(
         task_table=TableTensor(
             columns={"id": ("user_id",)},
             id=ColumnarTensor((torch.tensor([3, 2, 1, 0]),)),
@@ -90,9 +148,10 @@ def test_sampler(data: RelationalData) -> None:
               },
             ),
             orders: TableTensor(
-              size=(6, 4),
+              size=(6, 5),
               blocks={
                 numerical (1): [amount],
+                datetime (1): [timestamp],
                 id (3): [user_id, item_id, __example__],
               },
             ),
@@ -112,14 +171,3 @@ def test_sampler(data: RelationalData) -> None:
             [user_id,__example__] > users.[user_id,__example__],
           ],
         )""")
-
-    edge_indices, task_links = related_tables.edge_indices(task_table)
-    assert len(edge_indices) == 2
-    assert edge_indices[0].equal(
-        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 0, 2, 3, 3]])
-    )
-    assert edge_indices[1].equal(
-        torch.tensor([[0, 1, 2, 3, 4, 5], [0, 1, 0, 2, 3, 4]])
-    )
-    assert len(task_links) == 1
-    assert task_links[0].equal(torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]]))

@@ -5,6 +5,8 @@ from unittest.mock import patch
 import pytest
 import torch
 import torch.nn.functional as F
+from torch import Tensor
+
 from sdm.nn import (
     SDPA,
     Attention,
@@ -13,7 +15,6 @@ from sdm.nn import (
     TransformerBlock,
 )
 from sdm.testing import withCUDA
-from torch import Tensor
 
 
 def reference_sdpa(
@@ -21,6 +22,7 @@ def reference_sdpa(
     key: Tensor,
     value: Tensor,
     attn_mask: Tensor | None = None,
+    scale: float | None = None,
 ) -> Tensor:
     # Expand KV for MQA and GQA
     groups = query.size(-2) // key.size(-2)
@@ -31,6 +33,7 @@ def reference_sdpa(
         key=key.transpose(-3, -2),
         value=value.transpose(-3, -2),
         attn_mask=attn_mask.unsqueeze(-3) if attn_mask is not None else None,
+        scale=scale,
     ).transpose(-3, -2)
 
 
@@ -121,6 +124,18 @@ def test_sdpa(
     )
     torch.testing.assert_close(out, expected)
 
+    # Empty key/value sequences produce a zero attention result.
+    query = torch.randn(2, 3, num_query_heads, channels, device=device)
+    key = torch.empty(1, 0, num_key_value_heads, channels, device=device)
+    value = torch.empty(2, 0, num_key_value_heads, channels, device=device)
+    out = module(
+        query=query,
+        key=key,
+        value=value,
+    )
+    assert out.size() == query.size()
+    torch.testing.assert_close(out, torch.zeros_like(query))
+
     # Apply sequence lengths to mask keys.
     batch_size = 2
     query_len = 4
@@ -209,6 +224,32 @@ def test_sdpa(
     torch.testing.assert_close(out, expected)
 
 
+@withCUDA
+def test_sdpa_scale(device: torch.device) -> None:
+    channels = 4
+    num_heads = 2
+    scale = 1.0
+    module = SDPA(
+        channels=channels,
+        num_query_heads=num_heads,
+        scale=scale,
+        device=device,
+    )
+    query = torch.randn(2, 3, num_heads, channels, device=device)
+    key = torch.randn(2, 5, num_heads, channels, device=device)
+    value = torch.randn(2, 5, num_heads, channels, device=device)
+
+    out = module(query=query, key=key, value=value)
+    expected = reference_sdpa(
+        query=query,
+        key=key,
+        value=value,
+        scale=scale,
+    )
+
+    torch.testing.assert_close(out, expected)
+
+
 def test_sdpa_errors() -> None:
     channels = 3
     num_heads = 2
@@ -252,9 +293,6 @@ def test_sdpa_errors() -> None:
 
     with pytest.raises(ValueError, match="must be divisible"):
         SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
-
-    with pytest.raises(ValueError, match="must be positive"):
-        module(query=query, key=key, value=value, batch_size_limit=0)
 
 
 def test_sdpa_batch_size_limit() -> None:
@@ -350,7 +388,7 @@ def test_batch_size_limit_autocast_dtype() -> None:
     [
         pytest.param(True, False, 2, id="training"),
         pytest.param(False, True, 2, id="compiling"),
-        pytest.param(False, False, None, id="disabled"),
+        pytest.param(False, False, None, id="default-limit"),
         pytest.param(False, False, 5, id="within-limit"),
     ],
 )
@@ -854,6 +892,52 @@ def test_transformer_block(
         rope=rotary_embedding,
     )
     torch.testing.assert_close(out1, out3)
+
+
+def test_transformer_block_norm_kwargs_precedence() -> None:
+    # User-provided `norm_kwargs` win over the `device`/`dtype` arguments.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm_kwargs={"dtype": torch.float64},
+    )
+    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+        assert next(norm.parameters()).dtype == torch.float64
+
+    # The `dtype` argument still applies when `norm_kwargs` does not set it.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm_kwargs={"eps": 1e-6},
+        dtype=torch.float64,
+    )
+    for norm in (module.q_norm, module.kv_norm, module.mlp[0]):
+        assert next(norm.parameters()).dtype == torch.float64
+
+
+def test_transformer_block_norm_callable() -> None:
+    # A norm class is instantiated per site, so no site shares an instance.
+    module = TransformerBlock(
+        channels=8,
+        num_query_heads=2,
+        feedforward_channels=16,
+        norm=torch.nn.RMSNorm,
+        norm_kwargs={"eps": 1e-6, "dtype": torch.float64},
+    )
+    norms = (module.q_norm, module.kv_norm, module.mlp[0])
+    for norm in norms:
+        assert isinstance(norm, torch.nn.RMSNorm)
+        assert norm.normalized_shape == (8,)
+        assert norm.eps == 1e-6
+        assert next(norm.parameters()).dtype == torch.float64
+    assert len({id(norm) for norm in norms}) == 3
+
+    param_ids = [{id(param) for param in norm.parameters()} for norm in norms]
+    assert param_ids[0].isdisjoint(param_ids[1])
+    assert param_ids[0].isdisjoint(param_ids[2])
+    assert param_ids[1].isdisjoint(param_ids[2])
 
 
 def test_transformer_block_kv_cache() -> None:

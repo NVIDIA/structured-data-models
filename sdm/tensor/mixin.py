@@ -1,7 +1,7 @@
 import abc
+from typing import Self
 
 import torch
-from typing_extensions import Self
 
 
 class DeviceMixin(abc.ABC):
@@ -41,3 +41,14 @@ class DeviceMixin(abc.ABC):
     def is_cuda(self) -> bool:
         r"""Whether the data is stored on the GPU."""
         return self.device.type == "cuda"
+
+
+def _resolve_device(
+    device: torch.device | str | None,
+) -> torch.device | None:
+    if device is None:
+        return None
+    device = torch.device(device)
+    if device.type == "cuda" and device.index is None:
+        return torch.device("cuda", torch.cuda.current_device())
+    return device

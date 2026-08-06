@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 import torch
+
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     Choice,
@@ -10,8 +11,8 @@ from sdm.processing import (
     InvertibleMixin,
     Processor,
     Recipe,
-    SoftmaxTemperature,
-    StandardScale,
+    Softmax,
+    Standardize,
     TaskDispatch,
     ToNumerical,
 )
@@ -22,7 +23,7 @@ def _categorical_target(device: torch.device | None = None) -> TableTensor:
     return TableTensor(
         columns={"categorical": ("target",)},
         categorical=CategoricalTensor(
-            data=torch.tensor(
+            code=torch.tensor(
                 [[0], [1]],
                 dtype=torch.int32,
                 device=device,
@@ -51,7 +52,7 @@ def _recipe(*, target: Processor | None = None) -> Recipe:
         target=target,
         output=[
             TaskDispatch(
-                classification=SoftmaxTemperature(),
+                classification=Softmax(),
                 regression=Identity(),
             )
         ],
@@ -82,7 +83,7 @@ def test_task_resolver_uses_final_target_type_once(
     )
 
     recipe.target.fit(_numerical_target(device))
-    assert recipe.output.transform(output) is output
+    assert recipe.output.transform(output).equal(output)
 
     converted = Recipe(
         target=[ToNumerical()],
@@ -91,10 +92,10 @@ def test_task_resolver_uses_final_target_type_once(
     transformed_target = converted.target.fit_transform(categorical_target)
 
     assert transformed_target.numerical.size(-1) == 1
-    assert converted.output.transform(output) is output
+    assert converted.output.transform(output).equal(output)
 
     scaled = Recipe(
-        target=[StandardScale()],
+        target=[Standardize()],
         output=[TaskDispatch(regression=Identity())],
     )
     numerical_target = _numerical_target(device)
@@ -114,12 +115,10 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     assert "_TaskResolver" not in repr(recipe)
 
     recipe.target.fit(_numerical_target())
-    assert recipe.output.transform(output) is output
+    assert recipe.output.transform(output).equal(output)
 
-    with pytest.raises(ValueError, match="no 'classification' route"):
-        recipe.target.fit(_categorical_target())
-    with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
-        recipe.output.transform(output)
+    recipe.target.fit(_categorical_target())
+    assert recipe.output.transform(output).equal(output)
 
     with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
         Recipe(features=[TaskDispatch(regression=Identity())])
@@ -151,4 +150,4 @@ def test_task_resolver_copies_recipes_independently() -> None:
         classification.output.transform(output).numerical.sum(dim=-1),
         torch.ones(2),
     )
-    assert regression.output.transform(output) is output
+    assert regression.output.transform(output).equal(output)

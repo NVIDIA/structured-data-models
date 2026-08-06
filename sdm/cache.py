@@ -1,12 +1,11 @@
 """Cache primitives."""
 
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
-from enum import Enum
-from typing import NamedTuple
+from enum import StrEnum
+from typing import NamedTuple, Self
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm.tensor.mixin import DeviceMixin
 
@@ -46,7 +45,7 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
 class Cache(MutableMapping[str, object], DeviceMixin):
     r"""A mutable mapping of model cache values."""
 
-    class Mode(str, Enum):
+    class Mode(StrEnum):
         r"""The operating mode of a :class:`Cache`.
 
         A cache alternates between two phases: (1) recording key/value
@@ -80,9 +79,40 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         r"""Whether the cache is in replaying mode."""
         return self._mode == Cache.Mode.replay
 
-    def freeze(self) -> None:
+    def size(self) -> int:
+        r"""The size in bytes of key/value entries in supported containers."""
+
+        def _size(value: object) -> int:
+            if isinstance(value, KVCacheEntry):
+                return (
+                    value.key.numel() * value.key.element_size()
+                    + value.value.numel() * value.value.element_size()
+                )
+            if isinstance(value, list | tuple):
+                return sum(_size(item) for item in value)
+            if isinstance(value, dict | Cache):
+                return sum(_size(item) for item in value.values())
+            return 0
+
+        return _size(self)
+
+    def freeze(self) -> Self:
         r"""Freeze the cache to replay mode."""
-        self._mode = Cache.Mode.replay
+
+        def _freeze(value: object) -> None:
+            if isinstance(value, Cache):
+                value._mode = Cache.Mode.replay
+                for item in value.values():
+                    _freeze(item)
+            elif isinstance(value, list | tuple):
+                for item in value:
+                    _freeze(item)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    _freeze(item)
+
+        _freeze(self)
+        return self
 
     def __setitem__(self, key: str, value: object) -> None:
         if not self.is_recording:
@@ -158,11 +188,11 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         if len(devices) == 0:
             raise RuntimeError(
                 f"Could not determine 'device' of empty "
-                f"'{self.__class__.__name__}'"
+                f"{self.__class__.__name__!r}"
             )
         if len(devices) > 1:
             raise RuntimeError(
-                f"Expected tensors in '{self.__class__.__name__}' to be on "
+                f"Expected tensors in {self.__class__.__name__!r} to be on "
                 f"the same device (got {list(devices)})"
             )
         return next(iter(devices))
