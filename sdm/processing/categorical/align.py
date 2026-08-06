@@ -121,14 +121,13 @@ class AlignCategories(EnsembleProcessor):
         align_codes: bool,
     ) -> tuple[tuple[tuple[Tensor, ...], ...], Tensor | None]:
         codes = table.categorical.code
-        batch_size = codes.size(0)
         if codes.dim() == 2:
             codes = codes.unsqueeze(0)
         aligned_codes = torch.full_like(codes, -1) if align_codes else None
 
         # Accumulate ragged vocabularies in batch-major order: [batch][column].
         categories_by_batch: list[list[Tensor]] = [
-            [] for _ in range(batch_size)
+            [] for _ in range(codes.size(0))
         ]
         for column_index, input_categories in enumerate(
             table.categorical.categories
