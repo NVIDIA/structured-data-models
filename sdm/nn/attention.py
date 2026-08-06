@@ -634,15 +634,10 @@ class Attention(torch.nn.Module):
                 key_value.key.dtype != query.dtype
                 or key_value.value.dtype != query.dtype
             ):
-                # Compare against the projected query so autocast runs (which
-                # cast at the projection) validate correctly.
                 raise ValueError(
                     f"Key/value projections were cached under dtypes "
                     f"'{key_value.key.dtype}'/'{key_value.value.dtype}' but "
-                    f"the query projects to dtype '{query.dtype}'. Re-run "
-                    f"the caching step under the current dtype "
-                    f"configuration, or restore the configuration that was "
-                    f"active when caching."
+                    f"the query has dtype '{query.dtype}'"
                 )
             key = key_value.key
             value = key_value.value

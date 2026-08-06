@@ -4,7 +4,6 @@ from sklearn.datasets import load_breast_cancer
 import sdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-torch.set_float32_matmul_precision("high")
 df = load_breast_cancer(as_frame=True).frame
 
 table = sdm.TableTensor.from_pandas(
@@ -13,8 +12,6 @@ table = sdm.TableTensor.from_pandas(
     device=device,
 )
 model = sdm.models.TabICLv2(device=device)
-# Optionally, torch.compile the model
-# model.cls_model.compile(fullgraph=True)
 
 # Default in-context learning forward pass:
 with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
