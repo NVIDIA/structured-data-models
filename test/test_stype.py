@@ -96,6 +96,22 @@ def test_infer_stypes(
     }
 
 
+def test_infer_stypes_pandas_object_strings() -> None:
+    table = pd.DataFrame(
+        {
+            "city": pd.Series(["NY", None], dtype=object),
+            "user_id": pd.Series(["a", "b"], dtype=object),
+            "segment_id": pd.Series(["x", "y"], dtype="category"),
+        }
+    )
+
+    assert infer_stypes(table, with_id=True) == {
+        "city": Stype.categorical,
+        "user_id": Stype.id,
+        "segment_id": Stype.categorical,
+    }
+
+
 def test_id_detection() -> None:
     table = pa.table(
         {
