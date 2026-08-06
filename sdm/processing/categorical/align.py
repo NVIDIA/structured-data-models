@@ -239,10 +239,7 @@ class AlignCategories(EnsembleProcessor):
                 align_codes=False,
             )
             fitted_categories.extend(group_categories)
-        member_table_ids = self._member_table_ids(ensemble_table)
-        self._categories = tuple(
-            fitted_categories[table_id] for table_id in member_table_ids
-        )
+        self._categories = tuple(fitted_categories)
 
     def _fit_transform_ensemble(
         self,
@@ -262,49 +259,14 @@ class AlignCategories(EnsembleProcessor):
             tables=aligned_tables,
             member_table_ids=member_table_ids,
         )
-        self._categories = tuple(
-            fitted_categories[table_id] for table_id in member_table_ids
-        )
+        self._categories = tuple(fitted_categories)
         return output
 
     def _transform_ensemble(
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        if len(self._categories) != ensemble_table.num_members:
-            raise RuntimeError(
-                "AlignCategories must be fitted with the same number of "
-                "ensemble members before transform."
-            )
-
         table_ids = self._member_table_ids(ensemble_table)
-        fitted_categories_by_table: dict[int, tuple[Tensor, ...]] = {}
-        for member_categories, table_id in zip(
-            self._categories,
-            table_ids,
-            strict=True,
-        ):
-            previous = fitted_categories_by_table.get(table_id)
-            if previous is not None and previous is not member_categories:
-                aligned_tables = [
-                    self._align_to_categories(
-                        ensemble_table.table(member_id),
-                        (member_categories,),
-                    )[0]
-                    for member_id, member_categories in enumerate(
-                        self._categories
-                    )
-                ]
-                return EnsembleTable.from_tables(
-                    tables=aligned_tables,
-                    member_table_ids=range(ensemble_table.num_members),
-                )
-            fitted_categories_by_table[table_id] = member_categories
-
-        fitted_categories = tuple(
-            fitted_categories_by_table[table_id]
-            for table_id in range(len(fitted_categories_by_table))
-        )
         aligned_tables = []
         offset = 0
         for group in ensemble_table:
@@ -312,7 +274,7 @@ class AlignCategories(EnsembleProcessor):
             aligned_tables.extend(
                 self._align_to_categories(
                     group,
-                    fitted_categories[offset:end],
+                    self._categories[offset:end],
                 )
             )
             offset = end

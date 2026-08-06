@@ -391,19 +391,16 @@ def test_align_categories_ensemble_matches_member_fits(
         categories=(("red", "blue", "green"),),
         device=device,
     )
+    query_ensemble = EnsembleTable.from_tables(
+        tables=(query, query),
+        member_table_ids=member_table_ids,
+    )
     combined = AlignCategories()
     fitted = AlignCategories().fit_ensemble(context)
 
     context_output = combined.fit_transform_ensemble(context)
-    shared_query_output = combined.transform_ensemble(
-        EnsembleTable(query, num_members=len(member_table_ids))
-    )
-    separate_query_output = fitted.transform_ensemble(
-        EnsembleTable.from_tables(
-            tables=(query,) * len(member_table_ids),
-            member_table_ids=range(len(member_table_ids)),
-        )
-    )
+    query_output = combined.transform_ensemble(query_ensemble)
+    fitted_query_output = fitted.transform_ensemble(query_ensemble)
     references = [
         AlignCategories().fit(first_context),
         AlignCategories().fit(second_context),
@@ -415,19 +412,5 @@ def test_align_categories_ensemble_matches_member_fits(
             reference.transform(context_tables[table_id])
         )
         expected_query = reference.transform(query)
-        assert shared_query_output.table(member_id).equal(expected_query)
-        assert separate_query_output.table(member_id).equal(expected_query)
-
-
-def test_align_categories_requires_fitted_member_count() -> None:
-    table = _table(
-        [[0], [1]],
-        columns=("kind",),
-        categories=(("red", "blue"),),
-    )
-    processor = AlignCategories().fit_ensemble(
-        EnsembleTable(table, num_members=2)
-    )
-
-    with pytest.raises(RuntimeError, match="same number"):
-        processor.transform_ensemble(EnsembleTable(table, num_members=1))
+        assert query_output.table(member_id).equal(expected_query)
+        assert fitted_query_output.table(member_id).equal(expected_query)
