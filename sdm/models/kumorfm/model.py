@@ -507,7 +507,7 @@ class _KumoRFM(torch.nn.Module):
             assert task_row is not None
             x = x_context
             train_mask = task_row >= 0
-            valid_task_row = task_row[train_mask]
+            valid_task_row = task_row[train_mask]  # Unavoidable device sync.
             y = y[valid_task_row]
             if valid_task_row.numel() == task_row.numel():
                 train_mask = None
