@@ -3,7 +3,7 @@ import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import replace
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import torch
 from torch import Tensor
@@ -69,7 +69,7 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-        allow_ensemble: bool = False,
+        recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> TableTensor:  # Recipe-defined output shape.
@@ -87,7 +87,12 @@ class ICLModel(torch.nn.Module, ABC):
             related_query_tables: Related context for query examples.
             recipe: The recipe for pre- and post-processing.
             num_estimators: The number of estimators ``E`` for ensembling.
-            allow_ensemble: Use the optimized ensemble execution path.
+            recipe_execution: How to run the recipe across estimators.
+                ``"sequential"`` processes one estimator at a time (less
+                memory). ``"vectorized"`` processes all estimators in one
+                batched pass (faster, more GPU memory; fall back to
+                ``"sequential"`` on out-of-memory errors). The model
+                itself always runs once per estimator either way.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -119,7 +124,7 @@ class ICLModel(torch.nn.Module, ABC):
 
         recipe = self.default_recipe() if recipe is None else recipe
 
-        if allow_ensemble:
+        if recipe_execution == "vectorized":
             return self._forward_ensemble(
                 x_context=x_context,
                 y_context=y_context,
@@ -130,6 +135,10 @@ class ICLModel(torch.nn.Module, ABC):
                 num_estimators=num_estimators,
                 generator=generator,
                 **kwargs,
+            )
+        if recipe_execution != "sequential":
+            raise AssertionError(
+                f"Unexpected recipe_execution {recipe_execution!r}"
             )
 
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
@@ -282,7 +291,7 @@ class ICLModel(torch.nn.Module, ABC):
         *,
         recipe: Recipe | None = None,
         num_estimators: int = 1,
-        allow_ensemble: bool = False,
+        recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
         **kwargs: Any,
     ) -> None:
@@ -300,7 +309,12 @@ class ICLModel(torch.nn.Module, ABC):
             recipe: The recipe for pre- and post-processing. If ``None``, no
                 recipe is applied.
             num_estimators: The number of estimators for ensembling.
-            allow_ensemble: Use the optimized ensemble execution path.
+            recipe_execution: How to run the recipe across estimators.
+                ``"sequential"`` processes one estimator at a time (less
+                memory). ``"vectorized"`` processes all estimators in one
+                batched pass (faster, more GPU memory; fall back to
+                ``"sequential"`` on out-of-memory errors). The model
+                itself always runs once per estimator either way.
             generator: Pseudorandom number generator used for sampling during
                 pre-processing and model execution.
             kwargs: Additional keyword arguments passed to the model.
@@ -315,7 +329,7 @@ class ICLModel(torch.nn.Module, ABC):
         recipe = self.default_recipe() if recipe is None else recipe
 
         self.clear()
-        if allow_ensemble:
+        if recipe_execution == "vectorized":
             self._fit_ensemble(
                 x=x,
                 y=y,
@@ -326,6 +340,10 @@ class ICLModel(torch.nn.Module, ABC):
                 **kwargs,
             )
             return
+        if recipe_execution != "sequential":
+            raise AssertionError(
+                f"Unexpected recipe_execution {recipe_execution!r}"
+            )
 
         recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
 

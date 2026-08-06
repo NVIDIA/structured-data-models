@@ -170,6 +170,7 @@ def _fit_draws(
             related_context,
             recipe=_generator_recipe(),
             num_estimators=2,
+            recipe_execution="sequential",
             generator=generator,
         )
     else:
@@ -181,6 +182,7 @@ def _fit_draws(
             _related_tables(query=True),
             recipe=_generator_recipe(),
             num_estimators=2,
+            recipe_execution="sequential",
             generator=generator,
         )
 
@@ -239,6 +241,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
             related_query,
             recipe=_recipe(),
             num_estimators=2,
+            recipe_execution="sequential",
         ),
     )
 
@@ -287,6 +290,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         related_context,
         recipe=_recipe(),
         num_estimators=2,
+        recipe_execution="sequential",
     )
     assert model._caches is not None
     processors = [
@@ -374,43 +378,43 @@ def test_related_table_validation() -> None:
 
 
 @pytest.mark.parametrize("cached", [False, True])
-def test_ensemble_and_sequential_forward_parity(cached: bool) -> None:
+def test_vectorized_and_sequential_recipe_parity(cached: bool) -> None:
     x_context = torch.randn(4, 3)
     y_context = torch.randn(4, 1)
     x_query = torch.randn(2, 3)
     sequential_model = _RecordingModel()
-    ensemble_model = _RecordingModel()
+    vectorized_model = _RecordingModel()
 
     if cached:
         sequential_model.fit(
             x_context,
             y_context,
             num_estimators=2,
+            recipe_execution="sequential",
         )
-        ensemble_model.fit(
+        vectorized_model.fit(
             x_context,
             y_context,
             num_estimators=2,
-            allow_ensemble=True,
         )
         sequential_out = sequential_model.predict(x_query)
-        ensemble_out = ensemble_model.predict(x_query)
+        vectorized_out = vectorized_model.predict(x_query)
     else:
         sequential_out = sequential_model(
             x_context,
             y_context,
             x_query,
             num_estimators=2,
+            recipe_execution="sequential",
         )
-        ensemble_out = ensemble_model(
+        vectorized_out = vectorized_model(
             x_context,
             y_context,
             x_query,
             num_estimators=2,
-            allow_ensemble=True,
         )
 
-    assert sequential_out.size() == ensemble_out.size()
+    assert sequential_out.size() == vectorized_out.size()
 
 
 def test_ensemble_output_preserves_estimator_dimension() -> None:
@@ -425,7 +429,7 @@ def test_ensemble_output_preserves_estimator_dimension() -> None:
         x_query,
         recipe=Recipe(),
         num_estimators=1,
-        allow_ensemble=True,
+        recipe_execution="vectorized",
     )
 
     assert out.size() == (1, 2, 3)
@@ -443,7 +447,7 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
         x_query,
         recipe=Recipe(output=ReduceEstimators()),
         num_estimators=2,
-        allow_ensemble=True,
+        recipe_execution="vectorized",
     )
 
     assert out.size() == (2, 3)
