@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
 import pytest
@@ -7,6 +7,7 @@ import torch
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import AlignCategories
 from sdm.tensor import EnsembleTable
+from sdm.tensor.string import _hash_strings, _string_metadata
 from sdm.testing import withCUDA
 
 
@@ -73,6 +74,193 @@ def test_align_categories_removes_query_only_joint_vocabulary() -> None:
     assert context.categorical.code.squeeze(-1).tolist() == [0, 1]
     assert query.categorical.categories[0].tolist() == ["red", "blue"]
     assert query.categorical.code.squeeze(-1).tolist() == [-1, 1]
+
+
+@pytest.mark.parametrize("fullgraph", [False, True])
+def test_align_categories_compile(fullgraph: bool) -> None:
+    torch._dynamo.reset()
+    context = _table(
+        [[0], [1], [0]],
+        columns=("kind",),
+        categories=(("red", "blue", "unused"),),
+    )
+    query = _table(
+        [[0], [1], [2], [-1]],
+        columns=("kind",),
+        categories=(("green", "blue", "red"),),
+    )
+    processor = AlignCategories().fit(context)
+    transform = torch.compile(
+        processor.transform,
+        fullgraph=fullgraph,
+        backend="eager",
+    )
+
+    for _ in range(2):
+        output = transform(query)
+        assert output.categorical.code.squeeze(-1).tolist() == [-1, 1, 0, -1]
+        assert output.categorical.categories[0].tolist() == ["red", "blue"]
+
+
+def test_align_categories_compile_empty_string_vocabulary() -> None:
+    torch._dynamo.reset()
+    size = 65
+    index = torch.arange(size, dtype=torch.int32)
+    columns = (
+        "empty",
+        "empty_to_value",
+        "value_to_empty",
+        "mixed",
+    )
+    context = TableTensor(
+        columns={"categorical": columns},
+        categorical=CategoricalTensor(
+            code=torch.stack((index, index, index, index % 2), dim=1),
+            categories=(
+                StringTensor.from_list([""] * size),
+                StringTensor.from_list([""] * size),
+                StringTensor.from_list(["value"] * size),
+                StringTensor.from_list(["", "value"]),
+            ),
+        ),
+    )
+    query = TableTensor(
+        columns={"categorical": columns},
+        categorical=CategoricalTensor(
+            code=torch.stack((index, index, index, index % 3), dim=1),
+            categories=(
+                StringTensor.from_list([""] * size),
+                StringTensor.from_list(["value"] * size),
+                StringTensor.from_list([""] * size),
+                StringTensor.from_list(["value", "", "other"]),
+            ),
+        ),
+    )
+    processor = AlignCategories().fit(context)
+    transform = torch.compile(
+        processor.transform,
+        fullgraph=True,
+        backend="inductor",
+    )
+
+    output = transform(query)
+
+    assert output.categorical.code.equal(
+        torch.stack(
+            (
+                torch.zeros_like(index),
+                torch.full_like(index, -1),
+                torch.full_like(index, -1),
+                torch.tensor((1, 0, -1), dtype=torch.int32).repeat(22)[:size],
+            ),
+            dim=1,
+        )
+    )
+
+
+def test_align_categories_compile_chunked_empty_string_vocabulary() -> None:
+    torch._dynamo.reset()
+    size = 1025
+    index = torch.arange(size, dtype=torch.int32)
+    empty_categories = StringTensor.from_list([""] * size)
+    value_categories = StringTensor.from_list(
+        [f"value-{value:04d}" for value in range(size)]
+    )
+    context = TableTensor(
+        columns={"categorical": ("empty", "value")},
+        categorical=CategoricalTensor(
+            code=torch.stack((index, index), dim=1),
+            categories=(empty_categories, value_categories),
+        ),
+    )
+    query = TableTensor(
+        columns={"categorical": ("empty", "value")},
+        categorical=CategoricalTensor(
+            code=torch.stack((index, index), dim=1),
+            categories=(
+                empty_categories.clone(),
+                value_categories.index_select(
+                    0,
+                    torch.arange(size - 1, -1, -1),
+                ),
+            ),
+        ),
+    )
+    transform = torch.compile(
+        AlignCategories().fit(context).transform,
+        fullgraph=True,
+        backend="inductor",
+    )
+
+    output = transform(query)
+
+    assert output.categorical.code.equal(
+        torch.stack((torch.zeros_like(index), index.flip(0)), dim=1)
+    )
+
+
+def test_align_categories_compile_with_aliased_string_backing() -> None:
+    backing = StringTensor.from_list(
+        ["red", "blue", "green", "x" * (1024 * 1024)]
+    )
+    category = cast(StringTensor, backing[:3])
+    context = TableTensor(
+        columns={"categorical": ("kind",)},
+        categorical=CategoricalTensor(
+            code=torch.arange(3, dtype=torch.int32).unsqueeze(-1),
+            categories=(category,),
+        ),
+    )
+    aliased_category = StringTensor(
+        data=torch.ops.aten.alias.default(category._data),
+        offset=torch.ops.aten.alias.default(category._offset),
+        valid=None,
+        size=category.size(),
+    )
+    query = TableTensor(
+        columns={"categorical": ("kind",)},
+        categorical=CategoricalTensor(
+            code=torch.arange(3, dtype=torch.int32).unsqueeze(-1),
+            categories=(aliased_category,),
+        ),
+    )
+    processor = AlignCategories().fit(context)
+    match_category = cast(StringTensor, processor._match_categories[0][0])
+    assert match_category._data.numel() == len("redbluegreen")
+
+    transform = torch.compile(
+        lambda table: processor.transform(table),
+        fullgraph=True,
+        dynamic=True,
+        backend="aot_eager",
+    )
+
+    output = transform(query)
+
+    assert output.categorical.code.squeeze(-1).tolist() == [0, 1, 2]
+
+
+def test_align_categories_owns_fitted_string_vocabulary() -> None:
+    category = StringTensor.from_list(["red", "blue"])
+    context = TableTensor(
+        columns={"categorical": ("kind",)},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1]], dtype=torch.int32),
+            categories=(category,),
+        ),
+    )
+    processor = AlignCategories().fit(context)
+
+    category._data[0] = ord("x")
+    query = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue"),),
+    )
+    output = processor.transform(query)
+
+    assert output.categorical.code.squeeze(-1).tolist() == [0, 1]
+    assert output.categorical.categories[0].tolist() == ["red", "blue"]
 
 
 @pytest.mark.parametrize("sort_by", ["code", "frequency", "value"])
@@ -246,6 +434,246 @@ def test_align_categories_scales_to_large_numeric_vocabulary() -> None:
     )
 
 
+def test_align_categories_ignores_unused_string_vocabulary() -> None:
+    size = 2_048
+    categories = tuple(f"value-{i}" for i in range(size))
+    context = _table(
+        [[i] for i in range(size)],
+        columns=("value",),
+        categories=(categories,),
+    )
+    query = _table(
+        [[size // 2]],
+        columns=("value",),
+        categories=(tuple(reversed(categories)),),
+    )
+
+    output = AlignCategories().fit(context).transform(query)
+
+    assert output.categorical.code.item() == size // 2 - 1
+
+
+@withCUDA
+def test_align_categories_reuses_duplicate_string_codes(
+    device: torch.device,
+) -> None:
+    size = 256
+    categories = tuple(f"value-{i:03d}-" + "x" * 48 for i in range(size))
+    context = _table(
+        [[i] for i in range(size)],
+        columns=("value",),
+        categories=(categories,),
+        device=device,
+    )
+    query = _table(
+        [[0]] * 1_024,
+        columns=("value",),
+        categories=(tuple(reversed(categories)),),
+        device=device,
+    )
+    processor = AlignCategories().fit(context)
+    transform = torch.compile(
+        lambda table: processor.transform(table),
+        fullgraph=True,
+        # Category vocabularies are schema state rather than batch dimensions.
+        dynamic=False,
+        backend="aot_eager",
+    )
+
+    output = transform(query)
+
+    assert output.categorical.code.squeeze(-1).equal(
+        torch.full(
+            (1_024,),
+            size - 1,
+            dtype=torch.int32,
+            device=device,
+        )
+    )
+
+    different_shape = _table(
+        [[0], [1], [1]],
+        columns=("value",),
+        categories=(("missing-" + "y" * 67, categories[3]),),
+        device=device,
+    )
+    output = transform(different_shape)
+
+    assert output.categorical.code.squeeze(-1).tolist() == [-1, 3, 3]
+
+
+@withCUDA
+def test_align_categories_handles_duplicate_nonempty_vocabularies(
+    device: torch.device,
+) -> None:
+    size = 2_000
+    category = StringTensor.from_list(
+        ["duplicate-" + "x" * 54] * size,
+        device=device,
+    )
+    code = torch.arange(size, dtype=torch.int32, device=device).unsqueeze(-1)
+    table = TableTensor(
+        columns={"categorical": ("value",)},
+        categorical=CategoricalTensor(code=code, categories=(category,)),
+    )
+    processor = AlignCategories().fit(table)
+    transform = torch.compile(
+        lambda table: processor.transform(table),
+        fullgraph=True,
+        dynamic=True,
+        backend="aot_eager",
+    )
+
+    output = transform(table)
+
+    assert output.categorical.code.squeeze(-1).equal(
+        torch.zeros_like(code[:, 0])
+    )
+
+
+def test_align_categories_handles_empty_string_vocabularies() -> None:
+    size = 2_000
+    category = StringTensor.from_list([""] * size)
+    code = torch.arange(size, dtype=torch.int32).unsqueeze(-1)
+    table = TableTensor(
+        columns={"categorical": ("value",)},
+        categorical=CategoricalTensor(code=code, categories=(category,)),
+    )
+
+    output = AlignCategories().fit(table).transform(table)
+
+    assert output.categorical.code.squeeze(-1).equal(
+        torch.zeros_like(code[:, 0])
+    )
+
+    context = _table(
+        [[0]],
+        columns=("value",),
+        categories=(("nonempty",),),
+    )
+    query = _table(
+        [[0]],
+        columns=("value",),
+        categories=(("",),),
+    )
+    assert (
+        AlignCategories().fit(context).transform(query).categorical.code.item()
+        == -1
+    )
+
+
+def test_align_categories_handles_strided_string_vocabulary() -> None:
+    context = _table(
+        [[0], [1], [2]],
+        columns=("value",),
+        categories=(("a", "", "z"),),
+    )
+    category = cast(
+        StringTensor,
+        StringTensor.from_list(
+            ["junk", "a", "unused", "", "other", "a", "ignored"]
+        )[1::2],
+    )
+    query = TableTensor(
+        columns={"categorical": ("value",)},
+        categorical=CategoricalTensor(
+            code=torch.tensor([[0], [1], [2], [-1]], dtype=torch.int32),
+            categories=(category,),
+        ),
+    )
+
+    output = AlignCategories().fit(context).transform(query)
+
+    assert output.categorical.code.squeeze(-1).tolist() == [0, 1, 0, -1]
+
+
+def test_align_categories_ignores_retained_string_backing() -> None:
+    context = _table(
+        [[0]],
+        columns=("value",),
+        categories=(("match",),),
+    )
+    category = cast(
+        StringTensor,
+        StringTensor.from_list(["x" * (1 << 20), "match"])[1:],
+    )
+    query = TableTensor(
+        columns={"categorical": ("value",)},
+        categorical=CategoricalTensor(
+            code=torch.zeros((1, 1), dtype=torch.int32),
+            categories=(category,),
+        ),
+    )
+    processor = AlignCategories().fit(context)
+    transform = torch.compile(
+        lambda table: processor.transform(table),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+
+    output = transform(query)
+
+    assert output.categorical.code.item() == 0
+
+
+def test_align_categories_handles_unmatched_long_strings() -> None:
+    context = _table(
+        [[0]],
+        columns=("value",),
+        categories=(("short",),),
+    )
+    query = _table(
+        [[0]],
+        columns=("value",),
+        categories=(("x" * (1 << 16),),),
+    )
+    processor = AlignCategories().fit(context)
+    transform = torch.compile(
+        lambda table: processor.transform(table),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+
+    output = transform(query)
+
+    assert output.categorical.code.item() == -1
+
+
+@withCUDA
+def test_align_categories_verifies_string_hash_collisions(
+    device: torch.device,
+) -> None:
+    value1 = "\x01\x00\x1c\x00F\x00\x1c\x00\x01"
+    value2 = "\x00\x08\x008\x008\x00\x08\x00"
+    collision = StringTensor.from_list((value1, value2), device=device)
+    hashes = _hash_strings(collision._data, _string_metadata(collision))
+    assert value1 != value2
+    assert hashes[0].equal(hashes[1])
+    context = _table(
+        [[0], [1], [2]],
+        columns=("value",),
+        categories=((value1, value2, value2),),
+        device=device,
+    )
+    query = _table(
+        [[0], [1]],
+        columns=("value",),
+        categories=((value2, value1),),
+        device=device,
+    )
+    processor = AlignCategories().fit(context)
+    transform = torch.compile(
+        lambda table: processor.transform(table),
+        fullgraph=True,
+        dynamic=True,
+        backend="aot_eager",
+    )
+
+    output = transform(query)
+
+    assert output.categorical.code.squeeze(-1).tolist() == [1, 0]
+
+
 @pytest.mark.parametrize(
     ("dtype", "largest"),
     [
@@ -348,19 +776,30 @@ def test_align_categories_all_missing_pandas_context_accepts_strings() -> None:
     assert output.categorical.code.squeeze(-1).tolist() == [-1, -1]
 
 
-def test_align_categories_rejects_changed_category_value_type() -> None:
-    processor = AlignCategories().fit(
-        _table([[0]], columns=("kind",), categories=(("red",),))
+@pytest.mark.parametrize("fit_strings", [False, True])
+def test_align_categories_rejects_changed_category_value_type(
+    fit_strings: bool,
+) -> None:
+    string_table = _table(
+        [[0]],
+        columns=("kind",),
+        categories=(("red",),),
     )
-    query = TableTensor(
+    numeric_table = TableTensor(
         columns={"categorical": ("kind",)},
         categorical=CategoricalTensor(
             code=torch.tensor([[0]], dtype=torch.int32),
             categories=(torch.tensor([1]),),
         ),
     )
+    context, query = (
+        (string_table, numeric_table)
+        if fit_strings
+        else (numeric_table, string_table)
+    )
+    processor = AlignCategories().fit(context)
 
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match="category value types"):
         processor.transform(query)
 
 
@@ -414,3 +853,33 @@ def test_align_categories_ensemble_matches_member_fits(
         expected_query = reference.transform(query)
         assert query_output.table(member_id).equal(expected_query)
         assert fitted_query_output.table(member_id).equal(expected_query)
+
+
+def test_align_categories_ensemble_state_follows_logical_members() -> None:
+    first_context = _table(
+        [[0]],
+        columns=("kind",),
+        categories=(("red", "blue"),),
+    )
+    second_context = _table(
+        [[1]],
+        columns=("kind",),
+        categories=(("red", "blue"),),
+    )
+    context = EnsembleTable.from_tables(
+        tables=(first_context, second_context),
+        member_table_ids=(0, 1),
+    )
+    query = _table(
+        [[0], [1]],
+        columns=("kind",),
+        categories=(("red", "blue"),),
+    )
+    processor = AlignCategories().fit_ensemble(context)
+
+    output = processor.transform_ensemble(EnsembleTable(query, num_members=2))
+
+    assert output.table(0).categorical.code.squeeze(-1).tolist() == [0, -1]
+    assert output.table(0).categorical.categories[0].tolist() == ["red"]
+    assert output.table(1).categorical.code.squeeze(-1).tolist() == [-1, 0]
+    assert output.table(1).categorical.categories[0].tolist() == ["blue"]

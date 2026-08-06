@@ -21,6 +21,11 @@ if TYPE_CHECKING:
 
 aten = torch.ops.aten
 
+_STRING_HASH_BASE = 257
+_STRING_HASH_LENGTH_MIX = -7046029288634856825
+_STRING_MATCH_BYTE_LANES = 64
+_STRING_MATCH_ROW_LANES = 1024
+
 
 class StringTensor(VarLenTensor):
     r"""A :class:`torch.Tensor` for UTF-8 encoded string values.
@@ -36,6 +41,7 @@ class StringTensor(VarLenTensor):
 
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
+    __hash__ = Tensor.__hash__
 
     @override
     @classmethod
@@ -347,6 +353,362 @@ class StringTensor(VarLenTensor):
             out += f", device={self.device}"
         out += ")"
         return out
+
+
+def _validate_find_equal_inputs(
+    left: StringTensor,
+    right: StringTensor,
+) -> None:
+    if left.dim() != 1 or right.dim() != 1:
+        raise ValueError("Expected one-dimensional string tensors")
+    if left.device != right.device:
+        raise RuntimeError(
+            "Expected both tensors to be on the same device "
+            f"(got '{left.device}' and '{right.device}')"
+        )
+
+
+def _string_bounds(
+    inp: StringTensor,
+) -> tuple[Tensor, Tensor, Tensor]:
+    position = torch.arange(
+        inp.size(0),
+        dtype=torch.int64,
+        device=inp.device,
+    )
+    position = position * inp.stride(0) + inp._storage_offset
+    start = inp._offset[position]
+    end = inp._offset[position + 1]
+    if inp._valid is None:
+        valid = torch.ones(inp.size(), dtype=torch.bool, device=inp.device)
+    else:
+        valid = inp._valid[position]
+    return start, end, valid
+
+
+def _string_metadata(
+    inp: StringTensor,
+    *,
+    active: Tensor | None = None,
+) -> tuple[Tensor, Tensor, Tensor]:
+    start, end, valid = _string_bounds(inp)
+    if active is not None:
+        valid = valid & active
+    start = start.to(torch.int64)
+    length = (end.to(torch.int64) - start).masked_fill(~valid, 0)
+    return start, length, valid
+
+
+def _hash_strings(
+    data: Tensor,
+    metadata: tuple[Tensor, Tensor, Tensor],
+) -> Tensor:
+    start, length, valid = metadata
+    row_lanes = torch.arange(
+        min(start.numel(), _STRING_MATCH_ROW_LANES),
+        dtype=torch.int64,
+        device=data.device,
+    )
+    byte_lanes = torch.arange(
+        _STRING_MATCH_BYTE_LANES,
+        dtype=torch.int64,
+        device=data.device,
+    )
+    minimum = torch.iinfo(torch.int64).min
+    output_size = length.numel()
+    if output_size > _STRING_MATCH_ROW_LANES:
+        output_size = (
+            (output_size + _STRING_MATCH_ROW_LANES - 1)
+            // _STRING_MATCH_ROW_LANES
+            * _STRING_MATCH_ROW_LANES
+        )
+    output = length.new_full((output_size,), minimum)
+    row_offset = row_lanes.new_zeros(())
+
+    def row_cond(row_offset: Tensor, output: Tensor) -> Tensor:
+        return row_offset < start.numel()
+
+    def row_body(
+        row_offset: Tensor,
+        output: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        unbounded_rows = row_offset + row_lanes
+        row_valid = unbounded_rows < start.numel()
+        rows = unbounded_rows.clamp(max=start.numel() - 1)
+        row_start = start[rows]
+        row_length = length[rows]
+        row_active = valid[rows] & row_valid
+        position = byte_lanes.new_zeros(())
+        row_hash = torch.zeros_like(row_length)
+
+        def byte_cond(position: Tensor, row_hash: Tensor) -> Tensor:
+            return ((position < row_length) & row_active).any()
+
+        def byte_body(
+            position: Tensor,
+            row_hash: Tensor,
+        ) -> tuple[Tensor, Tensor]:
+            byte_position = position + byte_lanes
+            byte_valid = (
+                byte_position < row_length.unsqueeze(1)
+            ) & row_active.unsqueeze(1)
+            data_index = (row_start.unsqueeze(1) + byte_position).clamp(
+                max=data.numel() - 1
+            )
+            byte = (data[data_index].to(torch.int64) + 1).masked_fill(
+                ~byte_valid,
+                0,
+            )
+            segment_length = (row_length - position).clamp(
+                min=0,
+                max=_STRING_MATCH_BYTE_LANES,
+            )
+            exponent = (
+                segment_length.unsqueeze(1) - byte_lanes - 1
+            ).clamp_min(0)
+            base = torch.full_like(byte_lanes, _STRING_HASH_BASE)
+            segment_hash = (byte * base.pow(exponent)).sum(dim=1)
+            row_hash = (
+                row_hash
+                * torch.full_like(segment_length, _STRING_HASH_BASE).pow(
+                    segment_length
+                )
+                + segment_hash
+            )
+            return position + _STRING_MATCH_BYTE_LANES, row_hash
+
+        row_hash = torch.while_loop(
+            byte_cond,
+            byte_body,
+            (position, row_hash),
+        )[1]
+        row_hash = (
+            row_hash + row_length * _STRING_HASH_LENGTH_MIX
+        ).masked_fill(~row_active, 0)
+        # One complete lane block is already in output order.
+        if start.numel() <= _STRING_MATCH_ROW_LANES:
+            output = row_hash
+        else:
+            output = output.index_copy(
+                0,
+                unbounded_rows,
+                row_hash.masked_fill(~row_valid, minimum),
+            )
+        return row_offset + row_lanes.numel(), output
+
+    return torch.while_loop(
+        row_cond,
+        row_body,
+        (row_offset, output),
+    )[1][: length.numel()]
+
+
+def _match_hash_candidates(
+    left_data: Tensor,
+    right_data: Tensor,
+    permutation: Tensor,
+    lower: Tensor,
+    upper: Tensor,
+    left: tuple[Tensor, Tensor, Tensor],
+    right: tuple[Tensor, Tensor, Tensor],
+) -> Tensor:
+    left_start, left_length, left_valid = left
+    right_start, right_length, right_valid = right
+    # Higher-order operators reject aliased closure inputs. Metadata is small
+    # compared with the byte buffers, so make the candidate side independent.
+    right_start = right_start.clone()
+    right_length = right_length.clone()
+    right_valid = right_valid.clone()
+    row_lanes = torch.arange(
+        min(left_start.numel(), _STRING_MATCH_ROW_LANES),
+        dtype=torch.int64,
+        device=left_data.device,
+    )
+    byte_lanes = torch.arange(
+        _STRING_MATCH_BYTE_LANES,
+        dtype=torch.int64,
+        device=left_data.device,
+    )
+    output_size = lower.numel()
+    if output_size > _STRING_MATCH_ROW_LANES:
+        output_size = (
+            (output_size + _STRING_MATCH_ROW_LANES - 1)
+            // _STRING_MATCH_ROW_LANES
+            * _STRING_MATCH_ROW_LANES
+        )
+    output = lower.new_full((output_size,), -1)
+    row_offset = row_lanes.new_zeros(())
+
+    def row_cond(row_offset: Tensor, output: Tensor) -> Tensor:
+        return row_offset < left_start.numel()
+
+    def row_body(
+        row_offset: Tensor,
+        output: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        unbounded_rows = row_offset + row_lanes
+        row_valid = unbounded_rows < left_start.numel()
+        rows = unbounded_rows.clamp(max=left_start.numel() - 1)
+        row_start = left_start[rows]
+        row_length = left_length[rows]
+        row_active = left_valid[rows] & row_valid
+        row_lower = lower[rows]
+        row_upper = upper[rows]
+
+        def bounded_candidate_match(
+            candidate: Tensor,
+            pending: Tensor,
+        ) -> Tensor:
+            match = (
+                pending
+                & right_valid[candidate]
+                & (row_length == right_length[candidate])
+            )
+            position = byte_lanes.new_zeros(())
+
+            def compare_cond(position: Tensor, match: Tensor) -> Tensor:
+                return ((position < row_length) & match).any()
+
+            def compare_body(
+                position: Tensor,
+                match: Tensor,
+            ) -> tuple[Tensor, Tensor]:
+                byte_position = position + byte_lanes
+                byte_valid = (
+                    byte_position < row_length.unsqueeze(1)
+                ) & match.unsqueeze(1)
+                left_index = row_start.unsqueeze(1) + byte_position
+                right_index = (
+                    right_start[candidate].unsqueeze(1) + byte_position
+                )
+                left_index = left_index.clamp(max=left_data.numel() - 1)
+                right_index = right_index.clamp(max=right_data.numel() - 1)
+                if left_data is right_data:
+                    byte_equal = (
+                        left_data[left_index] == left_data[right_index]
+                    )
+                else:
+                    byte_equal = (
+                        left_data[left_index] == right_data[right_index]
+                    )
+                byte_match = torch.where(byte_valid, byte_equal, True)
+                match = match & byte_match.all(dim=1)
+                return position + _STRING_MATCH_BYTE_LANES, match
+
+            return torch.while_loop(
+                compare_cond,
+                compare_body,
+                (position, match),
+            )[1]
+
+        candidate_offset = row_lower.new_zeros(())
+        pending = (row_lower < row_upper) & row_active
+        first_candidate = permutation[
+            row_lower.clamp(max=permutation.numel() - 1)
+        ]
+        # Most buckets contain one value; duplicate buckets match their stable
+        # first candidate without materializing the bucket's Cartesian product.
+        first_match = bounded_candidate_match(first_candidate, pending)
+        row_output = torch.where(first_match, first_candidate, -1)
+        candidate_offset = candidate_offset + 1
+
+        def candidate_cond(
+            candidate_offset: Tensor,
+            row_output: Tensor,
+        ) -> Tensor:
+            return (
+                (row_lower + candidate_offset < row_upper)
+                & (row_output < 0)
+                & row_active
+            ).any()
+
+        def candidate_body(
+            candidate_offset: Tensor,
+            row_output: Tensor,
+        ) -> tuple[Tensor, Tensor]:
+            pending = (
+                (row_lower + candidate_offset < row_upper)
+                & (row_output < 0)
+                & row_active
+            )
+            candidate_position = (row_lower + candidate_offset).clamp(
+                max=permutation.numel() - 1
+            )
+            candidate = permutation[candidate_position]
+            match = bounded_candidate_match(candidate, pending)
+            row_output = torch.where(match, candidate, row_output)
+            return candidate_offset + 1, row_output
+
+        row_output = torch.while_loop(
+            candidate_cond,
+            candidate_body,
+            (candidate_offset, row_output),
+        )[1]
+        # One complete lane block is already in output order.
+        if left_start.numel() <= _STRING_MATCH_ROW_LANES:
+            output = row_output
+        else:
+            output = output.index_copy(
+                0,
+                unbounded_rows,
+                row_output.masked_fill(~row_valid, -1),
+            )
+        return row_offset + row_lanes.numel(), output
+
+    return torch.while_loop(
+        row_cond,
+        row_body,
+        (row_offset, output),
+    )[1][: left_start.numel()]
+
+
+def _find_equal_indices(
+    left: StringTensor,
+    right: StringTensor,
+    *,
+    left_active: Tensor | None = None,
+) -> Tensor:
+    _validate_find_equal_inputs(left, right)
+    num_left = left.numel()
+    num_right = right.numel()
+    if num_left == 0 or num_right == 0:
+        return torch.full(
+            (num_left,),
+            -1,
+            dtype=torch.int64,
+            device=left.device,
+        )
+
+    # Inductor lowers loop bodies even when all string lengths are zero, so
+    # keep their otherwise-empty byte buffers safe to index.
+    same_data = left._data is right._data
+    left_data = left._data
+    if left_data.numel() == 0:
+        left_data = left_data.new_zeros(1)
+    if same_data:
+        right_data = left_data
+    else:
+        right_data = right._data
+        if right_data.numel() == 0:
+            right_data = right_data.new_zeros(1)
+
+    left_metadata = _string_metadata(left, active=left_active)
+    right_metadata = _string_metadata(right)
+    # Hashing narrows candidate ranges; matches are still verified bytewise.
+    left_hash = _hash_strings(left_data, left_metadata)
+    right_hash = _hash_strings(right_data, right_metadata)
+    sorted_hash, permutation = right_hash.sort(stable=True)
+    lower = torch.searchsorted(sorted_hash, left_hash)
+    upper = torch.searchsorted(sorted_hash, left_hash, right=True)
+    return _match_hash_candidates(
+        left_data,
+        right_data,
+        permutation,
+        lower,
+        upper,
+        left_metadata,
+        right_metadata,
+    )
 
 
 @StringTensor.implements(aten.eq.Tensor)

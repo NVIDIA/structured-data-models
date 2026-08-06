@@ -89,6 +89,21 @@ class EnsembleTable:
         Returns:
             An ensemble table preserving member order.
         """
+        return cls._from_tables(tables, member_table_ids)
+
+    @classmethod
+    def _from_tables(
+        cls,
+        tables: Sequence[TableTensor],
+        member_table_ids: Sequence[int],
+        *,
+        category_keys: Sequence[object] | None = None,
+    ) -> Self:
+        if category_keys is not None and len(category_keys) != len(tables):
+            raise ValueError(
+                "Expected one category key for each available table"
+            )
+
         referenced_table_ids = set(member_table_ids)
         compatible_groups: dict[tuple[object, ...], list[int]] = {}
         for index, table in enumerate(tables):
@@ -118,8 +133,13 @@ class EnsembleTable:
                     )
                 ),
                 table.device,
-                tuple(
-                    id(category) for category in table.categorical.categories
+                (
+                    category_keys[index]
+                    if category_keys is not None
+                    else tuple(
+                        id(category)
+                        for category in table.categorical.categories
+                    )
                 ),
             )
             compatible_groups.setdefault(compatibility_key, []).append(index)
