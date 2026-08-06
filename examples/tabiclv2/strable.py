@@ -18,10 +18,11 @@ data_path = hf_hub_download(
     filename="clear-corpus/data.parquet",
     repo_type="dataset",
 )
-# Drop the pre-computed readability scores (Flesch, SMOG, word counts, ...):
-# they are derived from the passage text, so keeping them would make the text
-# features redundant instead of the primary signal.
-readability_columns = [
+# Drop the row identifier and pre-computed readability scores (Flesch, SMOG,
+# word counts, ...). The scores are derived from the passage text, so keeping
+# them would make the text features redundant instead of the primary signal.
+exclude_cols = [
+    "ID",
     "Google WC",
     "Joon WC v1",
     "British WC",
@@ -39,16 +40,19 @@ readability_columns = [
     "CARES",
     "CML2RI",
 ]
-arrow_table = pq.read_table(data_path).drop_columns(readability_columns)
+arrow_table = pq.read_table(data_path).drop_columns(exclude_cols)
 table = sdm.TableTensor.from_arrow(
     table=arrow_table,
     stypes=sdm.infer_stypes(arrow_table, with_text=not args.disable_text),
     device=device,
 )
 target_name = "BT Easiness"
-context_size = int(0.8 * len(table))
-context = table[:context_size]
-query = table[context_size:]
+generator = torch.Generator(device=device).manual_seed(42)
+num_rows = len(table)
+perm = torch.randperm(num_rows, generator=generator, device=device)
+context_size = int(0.8 * num_rows)
+context = table[perm[:context_size]]
+query = table[perm[context_size:]]
 ground_truth = query[:, target_name].numerical.squeeze(-1)
 
 
@@ -69,6 +73,7 @@ with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
         x=context.drop_columns(target_name),
         y=context[:, target_name],
         recipe=recipe,
+        generator=generator,
     )
     prediction = model.predict(query.drop_columns(target_name)).numerical
     prediction = prediction.mean(dim=-1)
