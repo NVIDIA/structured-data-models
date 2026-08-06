@@ -124,13 +124,26 @@ class ICLModel(torch.nn.Module, ABC):
 
         recipe = self.default_recipe() if recipe is None else recipe
 
+        # Bind chunks: vectorized -> (E,), sequential -> (1,) * E.
+        # The model always runs once per member either way.
         if recipe_execution == "vectorized":
+            member_counts = (num_estimators,)
+        elif recipe_execution == "sequential":
+            member_counts = (1,) * num_estimators
+        else:
+            raise AssertionError(
+                f"Unexpected recipe_execution {recipe_execution!r}"
+            )
+
+        outs: list[TableTensor] = []
+        last_execution: _RecipeExecution | None = None
+        for num_members in member_counts:
             with torch.amp.autocast(x_query.device.type, enabled=False):
                 execution = recipe.bind(
                     x_context=x_context,
                     y_context=y_context,
                     related_context_tables=related_context_tables,
-                    num_members=num_estimators,
+                    num_members=num_members,
                     generator=generator,
                 )
                 queries = execution.transform(
@@ -138,7 +151,6 @@ class ICLModel(torch.nn.Module, ABC):
                     related_query_tables=related_query_tables,
                 )
 
-            outs: list[TableTensor] = []
             for context, query in zip(
                 execution.contexts,
                 queries,
@@ -169,76 +181,24 @@ class ICLModel(torch.nn.Module, ABC):
                     **kwargs,
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
-                outs.append(out)
-
-            with torch.amp.autocast(x_query.device.type, enabled=False):
-                if all(
-                    context.y.categorical.size(-1) == 0
-                    for context in execution.contexts
-                ):
+                # Regression: invert target before stacking estimator outputs.
+                if context.y.categorical.size(-1) == 0:
                     if not isinstance(
                         execution.recipe.target,
                         InvertibleMixin,
                     ):
                         raise RuntimeError("Target recipe is not invertible")
-                    outs = list(execution.inverse_transform_target(outs))
-                return execution.transform_output(outs)
-        if recipe_execution != "sequential":
-            raise AssertionError(
-                f"Unexpected recipe_execution {recipe_execution!r}"
-            )
+                    with torch.amp.autocast(
+                        x_query.device.type,
+                        enabled=False,
+                    ):
+                        out = execution.recipe.target.inverse_transform(out)
+                outs.append(out)
 
-        outs = []
-        last_execution: _RecipeExecution | None = None
-        for _ in range(num_estimators):
-            with torch.amp.autocast(x_query.device.type, enabled=False):
-                execution = recipe.bind(
-                    x_context=x_context,
-                    y_context=y_context,
-                    related_context_tables=related_context_tables,
-                    num_members=1,
-                    generator=generator,
-                )
-                (query,) = execution.transform(
-                    x_query=x_query,
-                    related_query_tables=related_query_tables,
-                )
-            (context,) = execution.contexts
-
-            self._validate_context(
-                x=context.x,
-                y=context.y,
-                related_tables=context.related_tables,
-            )
-            self._validate_query(
-                x_context=context.x.schema,
-                x_query=query.x,
-                related_context_tables=context.related_tables.schema
-                if context.related_tables is not None
-                else None,
-                related_query_tables=query.related_tables,
-            )
-
-            out = self._forward(
-                x_context=context.x,
-                y_context=context.y,
-                x_query=query.x,
-                related_context_tables=context.related_tables,
-                related_query_tables=query.related_tables,
-                cache=None,
-                generator=generator,
-                **kwargs,
-            )
-            out = cast(TableTensor, out.to(query.x.dtype))
-            if context.y.categorical.size(-1) == 0:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                with torch.amp.autocast(x_query.device.type, enabled=False):
-                    (out,) = execution.inverse_transform_target([out])
-            outs.append(out)
             last_execution = execution
 
         assert last_execution is not None
+        # Stack members on dim 0, then apply recipe.output (e.g. reduce).
         out = cast(
             TableTensor,
             torch.stack(cast(list[Tensor], outs), dim=0),
@@ -293,38 +253,29 @@ class ICLModel(torch.nn.Module, ABC):
         recipe = self.default_recipe() if recipe is None else recipe
 
         self.clear()
+        # Same chunking as forward: keep every execution for predict().
         if recipe_execution == "vectorized":
-            with torch.amp.autocast(x.device.type, enabled=False):
-                executions = (
-                    recipe.bind(
-                        x_context=x,
-                        y_context=y,
-                        related_context_tables=related_tables,
-                        num_members=num_estimators,
-                        generator=generator,
-                    ),
-                )
+            member_counts = (num_estimators,)
         elif recipe_execution == "sequential":
-            sequential_executions: list[_RecipeExecution] = []
-            for _ in range(num_estimators):
-                with torch.amp.autocast(x.device.type, enabled=False):
-                    sequential_executions.append(
-                        recipe.bind(
-                            x_context=x,
-                            y_context=y,
-                            related_context_tables=related_tables,
-                            num_members=1,
-                            generator=generator,
-                        )
-                    )
-            executions = tuple(sequential_executions)
+            member_counts = (1,) * num_estimators
         else:
             raise AssertionError(
                 f"Unexpected recipe_execution {recipe_execution!r}"
             )
 
+        executions: list[_RecipeExecution] = []
         caches: list[Cache] = []
-        for execution in executions:
+        for num_members in member_counts:
+            with torch.amp.autocast(x.device.type, enabled=False):
+                execution = recipe.bind(
+                    x_context=x,
+                    y_context=y,
+                    related_context_tables=related_tables,
+                    num_members=num_members,
+                    generator=generator,
+                )
+            executions.append(execution)
+
             for context in execution.contexts:
                 self._validate_context(
                     x=context.x,
@@ -359,8 +310,9 @@ class ICLModel(torch.nn.Module, ABC):
                     cache = cache.cpu()
                 cache = cache.freeze()
                 caches.append(cache)
+
         self._caches = caches
-        self._recipe_executions = executions
+        self._recipe_executions = tuple(executions)
 
     @_maybe_inference_mode()
     def predict(
@@ -406,24 +358,21 @@ class ICLModel(torch.nn.Module, ABC):
 
         assert self._recipe_executions is not None
 
-        queries = []
-        with torch.amp.autocast(x.device.type, enabled=False):
-            for execution in self._recipe_executions:
-                queries.extend(
-                    execution.transform(
-                        x_query=x,
-                        related_query_tables=related_tables,
-                    )
+        # Walk executions in fit order; each owns len(contexts) caches.
+        outs: list[TableTensor] = []
+        last_execution: _RecipeExecution | None = None
+        cache_index = 0
+        for execution in self._recipe_executions:
+            with torch.amp.autocast(x.device.type, enabled=False):
+                queries = execution.transform(
+                    x_query=x,
+                    related_query_tables=related_tables,
                 )
 
-        if len(self._recipe_executions) == 1:
-            (execution,) = self._recipe_executions
-            outs: list[TableTensor] = []
-            for cache, query in zip(
-                self._caches,
-                queries,
-                strict=True,
-            ):
+            for query in queries:
+                cache = self._caches[cache_index]
+                cache_index += 1
+
                 self._validate_query(
                     x_context=cast(TableSchema, cache["x_schema"]),
                     x_query=query.x,
@@ -445,59 +394,21 @@ class ICLModel(torch.nn.Module, ABC):
                     **cast(dict[str, Any], cache["kwargs"]),
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
-                outs.append(out)
-
-            with torch.amp.autocast(x.device.type, enabled=False):
-                if all(
-                    context.y.categorical.size(-1) == 0
-                    for context in execution.contexts
-                ):
+                # classes is None for regression (see fit()).
+                if cache["classes"] is None:
                     if not isinstance(
                         execution.recipe.target,
                         InvertibleMixin,
                     ):
                         raise RuntimeError("Target recipe is not invertible")
-                    outs = list(execution.inverse_transform_target(outs))
-                return execution.transform_output(outs)
+                    with torch.amp.autocast(x.device.type, enabled=False):
+                        out = execution.recipe.target.inverse_transform(out)
+                outs.append(out)
 
-        outs = []
-        last_execution: _RecipeExecution | None = None
-        for execution, cache, query in zip(
-            self._recipe_executions,
-            self._caches,
-            queries,
-            strict=True,
-        ):
-            self._validate_query(
-                x_context=cast(TableSchema, cache["x_schema"]),
-                x_query=query.x,
-                related_context_tables=cast(
-                    RelatedTablesSchema,
-                    cache["related_tables_schema"],
-                ),
-                related_query_tables=query.related_tables,
-            )
-
-            out = self._forward(
-                x_context=None,
-                y_context=None,
-                x_query=query.x,
-                related_context_tables=None,
-                related_query_tables=query.related_tables,
-                cache=cache.to(query.x.device),
-                generator=None,
-                **cast(dict[str, Any], cache["kwargs"]),
-            )
-            out = cast(TableTensor, out.to(query.x.dtype))
-            if cache["classes"] is None:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                with torch.amp.autocast(x.device.type, enabled=False):
-                    (out,) = execution.inverse_transform_target([out])
-            outs.append(out)
             last_execution = execution
 
         assert last_execution is not None
+        assert cache_index == len(self._caches)
         out = cast(
             TableTensor,
             torch.stack(cast(list[Tensor], outs), dim=0),
