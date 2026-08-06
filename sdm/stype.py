@@ -187,7 +187,9 @@ def _infer_pandas_stype(
 
     dtype = column.dtype
 
-    is_string = is_string_dtype(dtype) and not is_object_dtype(dtype)
+    is_string = is_string_dtype(dtype)
+    if is_object_dtype(dtype):
+        is_string = is_string_dtype(column)
 
     if (
         with_id
