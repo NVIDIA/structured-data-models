@@ -202,28 +202,17 @@ class AlignCategories(EnsembleProcessor):
     def _member_table_ids(
         ensemble_table: EnsembleTable,
     ) -> tuple[int, ...]:
-        groups = []
-        table_id = 0
+        group_offsets = []
+        offset = 0
         for group in ensemble_table:
-            num_tables = group.size(0)
-            ids = torch.arange(
-                table_id,
-                table_id + num_tables,
-                dtype=torch.float32,
-            ).view(num_tables, 1, 1)
-            groups.append(
-                TableTensor.from_tensor(
-                    tensor=ids,
-                    columns=("table_id",),
-                )
-            )
-            table_id += num_tables
+            group_offsets.append(offset)
+            offset += group.size(0)
 
-        table_ids = ensemble_table.replace_groups(groups)
-        # IDs are intentionally on CPU, so this does not synchronize CUDA.
+        # TODO: Replace this private access with a public EnsembleTable
+        # operation returning flattened tables and member table IDs.
         return tuple(
-            int(table_ids.table(member_id).numerical[0, 0].item())
-            for member_id in range(ensemble_table.num_members)
+            group_offsets[group_index] + position
+            for group_index, position in ensemble_table._locations
         )
 
     def _fit_ensemble(
