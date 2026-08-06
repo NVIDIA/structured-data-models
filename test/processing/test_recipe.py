@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
@@ -70,6 +71,54 @@ def test_recipe_role_fit_accepts_table() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
+
+
+@pytest.mark.parametrize(
+    "fullgraph",
+    [False, True],
+    ids=["default", "fullgraph"],
+)
+@withCUDA
+def test_tabiclv2_feature_recipe_compile(
+    device: torch.device,
+    fullgraph: bool,
+) -> None:
+    recipe = TabICLv2.default_recipe()
+    features = TableTensor(
+        columns={
+            "numerical": ("a", "b"),
+            "categorical": ("kind",),
+        },
+        numerical=torch.tensor(
+            [
+                [1.0, 2.0],
+                [3.0, 5.0],
+                [7.0, 11.0],
+                [13.0, 17.0],
+            ],
+            device=device,
+        ),
+        categorical=CategoricalTensor(
+            code=torch.tensor(
+                [[0], [1], [0], [1]],
+                dtype=torch.int32,
+                device=device,
+            ),
+            categories=(StringTensor.from_list(["a", "b"], device=device),),
+        ),
+    )
+    recipe.features.fit(features)
+    expected = recipe.features.transform(features)
+
+    transform = torch.compile(
+        recipe.features.transform,
+        backend="inductor",
+        fullgraph=fullgraph,
+    )
+    actual = transform(features)
+
+    torch.testing.assert_close(actual.numerical, expected.numerical)
+    assert actual.columns == expected.columns
 
 
 @withCUDA
