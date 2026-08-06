@@ -163,6 +163,7 @@ class ICLModel(torch.nn.Module, ABC):
                     related_query_tables=related_query_tables,
                 )
 
+            member_outs: list[TableTensor] = []
             for context, query in zip(
                 execution.contexts,
                 queries,
@@ -193,21 +194,24 @@ class ICLModel(torch.nn.Module, ABC):
                     **kwargs,
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
-                # Regression: invert target before stacking estimator outputs.
-                # CUDA vectorized execution performs this once on its packed
-                # output below. The member-wise path is faster on CPU.
-                if inverse_target and not packed_inverse_target:
-                    if not isinstance(
-                        execution.recipe.target,
-                        InvertibleMixin,
-                    ):
-                        raise RuntimeError("Target recipe is not invertible")
-                    with torch.amp.autocast(
-                        x_query.device.type,
-                        enabled=False,
-                    ):
-                        out = execution.recipe.target.inverse_transform(out)
-                outs.append(out)
+                member_outs.append(out)
+
+            # Regression: invert target before stacking estimator outputs.
+            # The CUDA vectorized path defers this to its packed output below.
+            if inverse_target and not packed_inverse_target:
+                if not isinstance(
+                    execution.recipe.target,
+                    InvertibleMixin,
+                ):
+                    raise RuntimeError("Target recipe is not invertible")
+                with torch.amp.autocast(
+                    x_query.device.type,
+                    enabled=False,
+                ):
+                    member_outs = list(
+                        execution.inverse_transform_target(member_outs)
+                    )
+            outs.extend(member_outs)
 
             last_execution = execution
 
@@ -218,6 +222,7 @@ class ICLModel(torch.nn.Module, ABC):
                 torch.stack(cast(list[Tensor], outs), dim=0),
             )
             outs.clear()
+            member_outs.clear()
             with torch.amp.autocast(
                 x_query.device.type,
                 enabled=False,
@@ -411,6 +416,7 @@ class ICLModel(torch.nn.Module, ABC):
                     related_query_tables=related_tables,
                 )
 
+            member_outs: list[TableTensor] = []
             for query in queries:
                 cache = self._caches[cache_index]
                 cache_index += 1
@@ -436,18 +442,21 @@ class ICLModel(torch.nn.Module, ABC):
                     **cast(dict[str, Any], cache["kwargs"]),
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
-                # classes is None for regression (see fit()).
-                # A single CUDA vectorized execution performs this once on its
-                # packed output below. The member-wise path is faster on CPU.
-                if inverse_target and not packed_inverse_target:
-                    if not isinstance(
-                        execution.recipe.target,
-                        InvertibleMixin,
-                    ):
-                        raise RuntimeError("Target recipe is not invertible")
-                    with torch.amp.autocast(x.device.type, enabled=False):
-                        out = execution.recipe.target.inverse_transform(out)
-                outs.append(out)
+                member_outs.append(out)
+
+            # Regression: invert target before stacking estimator outputs.
+            # The CUDA vectorized path defers this to its packed output below.
+            if inverse_target and not packed_inverse_target:
+                if not isinstance(
+                    execution.recipe.target,
+                    InvertibleMixin,
+                ):
+                    raise RuntimeError("Target recipe is not invertible")
+                with torch.amp.autocast(x.device.type, enabled=False):
+                    member_outs = list(
+                        execution.inverse_transform_target(member_outs)
+                    )
+            outs.extend(member_outs)
 
             last_execution = execution
 
@@ -459,6 +468,7 @@ class ICLModel(torch.nn.Module, ABC):
                 torch.stack(cast(list[Tensor], outs), dim=0),
             )
             outs.clear()
+            member_outs.clear()
             with torch.amp.autocast(
                 x.device.type,
                 enabled=False,

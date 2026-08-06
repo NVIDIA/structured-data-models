@@ -8,7 +8,7 @@ both vectorized and sequential Recipe execution. Current-API KumoRFM
 vectorized/sequential and cached execution also match.
 
 - Latest `main`: `0d3a0b8aaec16d6ff503119a4ea3ebc64c46e046`
-- Final PR #516 commit: `6727c1026be72ad9b8deeaa4b28817f3472d1ffa`
+- Final PR #516 commit: `151be48af490cf550c934a126e216448f3ebc4ae`
 - TabICLv2 reference: `f719c886a586ed4a29236345e319ac1ea596c478`
   (`tabicl==2.0.0`)
 - Checkpoints: classifier SHA-256
@@ -47,7 +47,7 @@ The strict suite compares feature and target preprocessing, every materialized
 member, model inputs, raw per-estimator checkpoint outputs, canonical output
 mapping, estimator reduction, final processing, direct public forward, and
 cached fit/predict. The result is **6 passed**. The complete affected suite is
-**101 passed, 2 expected compile skips**.
+**103 passed, 2 expected compile skips**.
 
 The first divergences found during revalidation were:
 
