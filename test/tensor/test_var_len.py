@@ -4,6 +4,7 @@ import pyarrow as pa
 import pytest
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import FakeTensorMode
 
 from sdm import VarLenTensor
 from sdm.testing import onlyCUDA
@@ -93,6 +94,23 @@ def test_offset_dtype() -> None:
     assert out._offset.dtype == torch.int64
 
 
+def test_fake_data_validates_offset_dtype_capacity() -> None:
+    with FakeTensorMode():
+        data = torch.empty(torch.iinfo(torch.int32).max + 1)
+        offset = torch.zeros(2, dtype=torch.int32)
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"'torch\.int32' can only represent 2147483647 elements",
+        ):
+            VarLenTensor(
+                data=data,
+                offset=offset,
+                valid=None,
+                size=(1,),
+            )
+
+
 def test_arrow() -> None:
     tensor = VarLenTensor.from_arrow(
         pa.array([[1, 2], [], [3]], type=pa.list_(pa.int64())),
@@ -165,6 +183,219 @@ def test_list() -> None:
     assert tensor[0, 0].item() == [1, 2]
     assert tensor[1, 0].item() == []
     assert tensor[2, 1].item() is None
+
+
+def test_tensor_flatten_round_trip() -> None:
+    tensor = cast(
+        VarLenTensor,
+        VarLenTensor.from_list([[1, 2], None, [3]])[1:],
+    )
+    names, context = tensor.__tensor_flatten__()
+
+    out = VarLenTensor.__tensor_unflatten__(
+        {name: getattr(tensor, name) for name in names},
+        context,
+        tensor.size(),
+        tensor.stride(),
+    )
+
+    assert type(out) is type(tensor)
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out.storage_offset() == tensor.storage_offset()
+    assert out.tolist() == tensor.tolist()
+
+
+def test_empty_contiguous_stride() -> None:
+    tensor = VarLenTensor(
+        data=torch.empty(0),
+        offset=torch.zeros(1, dtype=torch.int64),
+        valid=None,
+        size=(2, 0, 4),
+    )
+
+    assert tensor.stride() == torch.empty(2, 0, 4).stride()
+
+
+def test_empty_view_storage_offset() -> None:
+    tensor = VarLenTensor(
+        data=torch.empty(0),
+        offset=torch.zeros(1, dtype=torch.int64),
+        valid=torch.empty(0, dtype=torch.bool),
+        size=(2, 3, 4, 0),
+    )
+
+    out = cast(VarLenTensor, tensor[:, :, 1:3])
+
+    assert out.size() == (2, 3, 2, 0)
+    assert out.stride() == (12, 4, 1, 1)
+    assert out.storage_offset() == 1
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
+    assert out.valid is not None
+    assert out.valid.size() == out.size()
+
+    data, offset = out.data_offset
+    assert data.numel() == 0
+    assert offset.equal(torch.zeros(1, dtype=torch.int64))
+    assert out.to_arrow().to_pylist() == []
+
+    cloned = out.clone()
+    assert isinstance(cloned, VarLenTensor)
+    assert cloned.size() == out.size()
+    assert cloned.stride() == out.stride()
+    assert cloned.storage_offset() == 0
+    assert cloned._offset.equal(torch.zeros(1, dtype=torch.int64))
+    assert cloned._valid is not None
+    assert cloned._valid.numel() == 0
+
+    compiled_clone = torch.compile(
+        lambda value: value.clone(),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    compiled = compiled_clone(out)
+    assert compiled.size() == out.size()
+    assert compiled.stride() == out.stride()
+    assert compiled.storage_offset() == 0
+    assert compiled._offset.equal(torch.zeros(1, dtype=torch.int64))
+
+
+def test_compile() -> None:
+    tensor = VarLenTensor.from_list([[1], [2, 3]])
+    compiled = torch.compile(
+        lambda value: value.view(-1),
+        fullgraph=True,
+        backend="eager",
+    )
+
+    for _ in range(2):
+        out = compiled(tensor)
+        assert isinstance(out, VarLenTensor)
+        assert out.tolist() == tensor.tolist()
+        assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out,
+            tensor,
+        )
+
+    compiled_view = torch.compile(
+        lambda value: value.unsqueeze(0),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    for _ in range(2):
+        out = compiled_view(tensor)
+        assert isinstance(out, VarLenTensor)
+        assert out.size() == (1, 2)
+        assert out.tolist() == [tensor.tolist()]
+        assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out,
+            tensor,
+        )
+
+    data = torch.tensor([1, 2, 3])
+    offset = torch.tensor([0, 1, 3])
+    construct = torch.compile(
+        lambda values, offsets: VarLenTensor(
+            data=values,
+            offset=offsets,
+            valid=None,
+            size=(2,),
+        ),
+        fullgraph=True,
+        backend="eager",
+    )
+
+    for _ in range(2):
+        out = construct(data, offset)
+        assert isinstance(out, VarLenTensor)
+        assert out.tolist() == [[1], [2, 3]]
+
+    clone = torch.compile(
+        lambda value: value.clone(),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    for _ in range(2):
+        out = clone(tensor)
+        assert isinstance(out, VarLenTensor)
+        assert out.tolist() == tensor.tolist()
+        assert not torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out,
+            tensor,
+        )
+
+    sliced = cast(VarLenTensor, tensor[1:])
+    out = clone(sliced)
+    assert out.tolist() == sliced.tolist()
+    assert out.storage_offset() == 0
+
+    convert = torch.compile(
+        lambda value: value.to(torch.float64),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = convert(tensor)
+    assert isinstance(out, VarLenTensor)
+    assert out.dtype == torch.float64
+    assert out.tolist() == tensor.tolist()
+
+    values = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    reduce = torch.compile(
+        lambda data, offsets: VarLenTensor(
+            data=data + 0,
+            offset=offsets,
+            valid=None,
+            size=(2,),
+        )._data.sum(),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    reduce(values, offset).backward()
+    assert values.grad is not None
+    assert values.grad.equal(torch.ones_like(values))
+
+
+@pytest.mark.skipif(
+    tuple(
+        int(part)
+        for part in torch.__version__.split("+", maxsplit=1)[0].split(".")[:2]
+    )
+    < (2, 10),
+    reason="PyTorch before 2.10 cannot compile dynamic VarLen compaction",
+)
+def test_compile_materializes_non_dense_layouts() -> None:
+    tensor = VarLenTensor.from_list(
+        [[value, value + 1] for value in range(12)]
+    ).view(3, 4)
+    inputs = (
+        cast(VarLenTensor, tensor[:, ::2]),
+        cast(VarLenTensor, tensor[:1].expand(3, 4)),
+    )
+    clone = torch.compile(
+        lambda value: value.clone(),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    convert = torch.compile(
+        lambda value: value.to(torch.float64),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+
+    for inp in inputs:
+        cloned = clone(inp)
+        assert isinstance(cloned, VarLenTensor)
+        assert cloned.is_contiguous()
+        assert cloned.tolist() == inp.tolist()
+
+        converted = convert(inp)
+        assert isinstance(converted, VarLenTensor)
+        assert converted.is_contiguous()
+        assert converted.dtype == torch.float64
+        assert converted.tolist() == inp.tolist()
 
 
 def test_to_copy() -> None:
@@ -610,6 +841,10 @@ def test_view() -> None:
     assert out.storage_offset() == 0
     assert out._data.data_ptr() == tensor._data.data_ptr()
     assert out._offset.data_ptr() == tensor._offset.data_ptr()
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
 
     out = tensor.view(1, -1)
     assert isinstance(out, VarLenTensor)
@@ -835,6 +1070,10 @@ def test_unbind() -> None:
     assert isinstance(out[1], VarLenTensor)
     assert out[1]._data.data_ptr() == tensor._data.data_ptr()
     assert out[1]._offset.data_ptr() == tensor._offset.data_ptr()
+    assert all(
+        torch._C._is_alias_of(tensor, value)  # ty: ignore[unresolved-attribute]
+        for value in out
+    )
 
     out = tuple(tensor)
     assert len(out) == 2
@@ -863,6 +1102,10 @@ def test_split() -> None:
     assert isinstance(out[1], VarLenTensor)
     assert out[1]._data.data_ptr() == tensor._data.data_ptr()
     assert out[1]._offset.data_ptr() == tensor._offset.data_ptr()
+    assert all(
+        torch._C._is_alias_of(tensor, value)  # ty: ignore[unresolved-attribute]
+        for value in out
+    )
 
     out = tensor.split([1, 2], dim=-2)
     assert len(out) == 2
@@ -870,6 +1113,10 @@ def test_split() -> None:
     assert out[0].storage_offset() == 1
     assert out[1].size() == (2, 2, 4)
     assert out[1].storage_offset() == 5
+    assert all(
+        torch._C._is_alias_of(tensor, value)  # ty: ignore[unresolved-attribute]
+        for value in out
+    )
 
 
 def test_unsafe_view() -> None:

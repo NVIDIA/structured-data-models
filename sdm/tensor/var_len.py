@@ -8,11 +8,17 @@ from typing import Any, ClassVar, Self, SupportsIndex, cast
 import pyarrow as pa
 import torch
 from torch import Tensor
+from torch._subclasses.fake_tensor import is_fake
 from torch.overrides import enable_reentrant_dispatch
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
 from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.mixin import (
+    _contiguous_stride,
+    _make_wrapper_subclass,
+)
 
 aten = torch.ops.aten
 
@@ -63,6 +69,7 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
+    _storage_offset: int | torch.SymInt
 
     # Constructors ############################################################
 
@@ -75,7 +82,20 @@ class VarLenTensor(Tensor):
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
     ) -> None:
-        pass
+        self._set_wrapper_attrs(self, data, offset, valid, storage_offset)
+
+    @staticmethod
+    def _set_wrapper_attrs(
+        out: VarLenTensor,
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        storage_offset: int | torch.SymInt,
+    ) -> None:
+        out._data = data
+        out._offset = offset
+        out._valid = valid
+        out._storage_offset = storage_offset
 
     def __new__(
         cls,
@@ -180,32 +200,42 @@ class VarLenTensor(Tensor):
                 f"Expected 'storage_offset' in {cls.__name__!r} to be "
                 f"non-negative"
             )
-        if storage_offset + _span_len(size, stride) >= offset.numel():
+        span_len = _span_len(size, stride)
+        is_empty = math.prod(size) == 0
+        required_offset_entries = (
+            1 if is_empty else storage_offset + span_len + 1
+        )
+        if offset.numel() < required_offset_entries:
             raise ValueError(
                 f"'offset' in {cls.__name__!r} is out of bounds (got "
                 f"{offset.numel()} entries, but expected at least "
-                f"{storage_offset + _span_len(size, stride) + 1} entries)"
+                f"{required_offset_entries} entries)"
             )
-        if (
-            valid is not None
-            and storage_offset + _span_len(size, stride) > valid.numel()
-        ):
+        required_valid_entries = 0 if is_empty else storage_offset + span_len
+        if valid is not None and required_valid_entries > valid.numel():
             raise ValueError(
                 f"'valid' in {cls.__name__!r} is out of bounds (got "
                 f"{valid.numel()} entries, but expected at least "
-                f"{storage_offset + _span_len(size, stride)} entries)"
+                f"{required_valid_entries} entries)"
             )
-        if data.numel() > torch.iinfo(offset.dtype).max:
-            raise ValueError(
+        offset_limit = torch.iinfo(offset.dtype).max
+
+        def offset_error() -> str:
+            return (
                 f"Expected 'offset' in {cls.__name__!r} to represent "
                 f"{data.numel()} elements, but '{offset.dtype}' can only "
-                f"represent {torch.iinfo(offset.dtype).max} elements"
+                f"represent {offset_limit} elements"
             )
+
+        if is_fake(data):
+            torch._check(data.numel() <= offset_limit, offset_error)
+        elif data.numel() > offset_limit:
+            raise ValueError(offset_error())
 
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
-        out = Tensor._make_wrapper_subclass(
+        return _make_wrapper_subclass(
             cls,
             size=size,
             strides=stride,
@@ -214,12 +244,6 @@ class VarLenTensor(Tensor):
             device=data.device,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
-
-        out._data = data
-        out._offset = offset
-        out._valid = valid
-
-        return out
 
     @classmethod
     def from_tensor(
@@ -343,6 +367,8 @@ class VarLenTensor(Tensor):
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
         tensor = cast(VarLenTensor, self.detach().contiguous().cpu())
+        if tensor.numel() == 0 and tensor.storage_offset() != 0:
+            tensor = cast(VarLenTensor, tensor.clone())
         array = to_arrow(tensor._data)
 
         return pa.Array.from_buffers(
@@ -476,6 +502,10 @@ class VarLenTensor(Tensor):
                 f"{self.__class__.__name__!r}"
             )
 
+        if self.numel() == 0:
+            offset = self._offset[:1]
+            return self._data[:0], offset - offset[0]
+
         start = int(self.storage_offset())
         offset = self._offset[start : start + self.numel() + 1]
         data = self._data[offset[0] : offset[-1]]
@@ -533,7 +563,7 @@ class VarLenTensor(Tensor):
         attrs = ["_data", "_offset"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (self.__class__, self.storage_offset())
+        ctx = (self.__class__, self._storage_offset)
         return attrs, ctx
 
     @staticmethod
@@ -544,14 +574,20 @@ class VarLenTensor(Tensor):
         outer_stride: tuple[int, ...],
     ) -> VarLenTensor:
         cls, storage_offset = ctx
-        return cls(
-            data=inner_tensors["_data"],
-            offset=inner_tensors["_offset"],
-            valid=inner_tensors.get("_valid"),
+        data = inner_tensors["_data"]
+        offset = inner_tensors["_offset"]
+        valid = inner_tensors.get("_valid")
+        out = _make_wrapper_subclass(
+            cls,
             size=outer_size,
-            stride=outer_stride,
+            strides=outer_stride,
             storage_offset=storage_offset,
+            dtype=data.dtype,
+            device=data.device,
+            requires_grad=False,  # Autograd lives on `_data` only.
         )
+        cls._set_wrapper_attrs(out, data, offset, valid, storage_offset)
+        return out
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
@@ -587,9 +623,11 @@ class VarLenTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = kwargs or {}
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             with enable_reentrant_dispatch():  # Record autograd in `_data`.
-                return handler(*args, **(kwargs or {}))
+                out = handler(*args, **kwargs)
+            return return_and_correct_aliasing(func, args, kwargs, out)
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -666,8 +704,9 @@ class VarLenTensor(Tensor):
         out = f"{self.__class__.__name__}("
         out += f"size={tuple(self.size())}"
         out += f", dtype={self.dtype}"
-        if self.valid is not None:
-            out += f", null_count={int((~self.valid).sum())}"
+        valid = self.valid
+        if valid is not None and not is_fake(valid):
+            out += f", null_count={int((~valid).sum())}"
         if not self.is_cpu:
             out += f", device={self.device}"
         if self._data.grad_fn is not None:
@@ -744,6 +783,38 @@ def _to_dtype_layout(
     ):
         return inp
 
+    # The common contiguous layout can copy the backing tensors directly.
+    # Besides avoiding needless compaction, this keeps the copy path traceable:
+    # slicing ``_data`` at values read from ``_offset`` would require turning
+    # device tensor values into Python slice bounds.
+    if inp.is_contiguous() and inp._storage_offset == 0:
+        numel = inp.numel()
+        copy_offset = copy or dtype != inp.dtype or device != inp.device
+        copy_valid = copy or device != inp.device
+        return inp.__class__(
+            data=inp._data.to(
+                device=device,
+                dtype=dtype,
+                non_blocking=non_blocking,
+                copy=copy,
+            ),
+            offset=inp._offset[: numel + 1].to(
+                device=device,
+                non_blocking=non_blocking,
+                copy=copy_offset,
+            ),
+            valid=inp._valid[:numel].to(
+                device=device,
+                non_blocking=non_blocking,
+                copy=copy_valid,
+            )
+            if inp._valid is not None
+            else None,
+            size=inp.size(),
+            stride=inp.stride(),
+            storage_offset=0,
+        )
+
     # Copying has two cases:
     # 1. Slice when the output layout can reuse the input storage order.
     # 2. Materialize in case of holes, overlaps, or change in memory format.
@@ -755,6 +826,37 @@ def _to_dtype_layout(
         )
         or (memory_format == torch.contiguous_format and inp.is_contiguous())
     )
+    tracing = _is_tracing_tensor(inp._offset)
+    if tracing and use_slice and inp.numel() != 0:
+        storage_offset = inp._storage_offset
+        span_len = _span_len(inp.size(), inp.stride())
+        return inp.__class__(
+            data=inp._data.to(
+                device=device,
+                dtype=dtype,
+                non_blocking=non_blocking,
+                copy=copy,
+            ),
+            offset=inp._offset[
+                storage_offset : storage_offset + span_len + 1
+            ].to(
+                device=device,
+                non_blocking=non_blocking,
+                copy=True,
+            ),
+            valid=inp._valid[storage_offset : storage_offset + span_len].to(
+                device=device,
+                non_blocking=non_blocking,
+                copy=copy or device != inp.device,
+            )
+            if inp._valid is not None
+            else None,
+            size=inp.size(),
+            stride=inp.stride()
+            if memory_format == torch.preserve_format
+            else None,
+            storage_offset=0,
+        )
     if not use_slice:
         return _materialize(
             inp,
@@ -762,6 +864,36 @@ def _to_dtype_layout(
             device=device,
             dtype=dtype,
             non_blocking=non_blocking,
+        )
+
+    if inp.numel() == 0:
+        offset = inp._offset.new_zeros(1)
+        return inp.__class__(
+            data=inp._data[:0].to(
+                device=device,
+                dtype=dtype,
+                non_blocking=non_blocking,
+                copy=copy,
+            ),
+            offset=offset.to(
+                device=device,
+                non_blocking=non_blocking,
+                copy=copy,
+            ),
+            valid=inp._valid[:0].to(
+                device=device,
+                non_blocking=non_blocking,
+                copy=copy,
+            )
+            if inp._valid is not None
+            else None,
+            size=inp.size(),
+            stride=(
+                inp.stride()
+                if memory_format == torch.preserve_format
+                else None
+            ),
+            storage_offset=0,
         )
 
     storage_offset = int(inp.storage_offset())
@@ -1046,6 +1178,23 @@ def _unsafe_view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     return _from_layout_view(inp, view)
 
 
+@VarLenTensor.implements(aten.as_strided.default)
+@preserve_view_inference_mode
+def _as_strided(
+    inp: VarLenTensor,
+    size: Sequence[int],
+    stride: Sequence[int],
+    storage_offset: int | None = None,
+) -> VarLenTensor:
+    view = aten.as_strided.default(
+        _layout_view(inp),
+        size,
+        stride,
+        storage_offset,
+    )
+    return _from_layout_view(inp, view)
+
+
 @VarLenTensor.implements(aten.reshape.default)
 def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     return cast(
@@ -1161,10 +1310,10 @@ def _narrow(
 
 @VarLenTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
-    return tuple(
+def _unbind(inp: VarLenTensor, dim: int = 0) -> list[VarLenTensor]:
+    return [
         _from_layout_view(inp, view) for view in _layout_view(inp).unbind(dim)
-    )
+    ]
 
 
 @VarLenTensor.implements(aten.split.Tensor)
@@ -1173,11 +1322,11 @@ def _split(
     inp: VarLenTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[VarLenTensor, ...]:
-    return tuple(
+) -> list[VarLenTensor]:
+    return [
         _from_layout_view(inp, view)
         for view in _layout_view(inp).split(split_size, dim)
-    )
+    ]
 
 
 @VarLenTensor.implements(aten.split.sizes)
@@ -1188,11 +1337,11 @@ def _split_with_sizes(
     inp: VarLenTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[VarLenTensor, ...]:
-    return tuple(
+) -> list[VarLenTensor]:
+    return [
         _from_layout_view(inp, view)
         for view in _layout_view(inp).split(tuple(split_sizes), dim)
-    )
+    ]
 
 
 @VarLenTensor.implements(aten.masked_select.default)
@@ -1303,15 +1452,6 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 
 
 # Helpers #####################################################################
-
-
-def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
-    value = 1
-    stride = []
-    for dim_size in reversed(size):
-        stride.append(value)
-        value *= dim_size
-    return tuple(stride[::-1])
 
 
 def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
@@ -1435,3 +1575,13 @@ def _materialize(
         stride=stride,
         storage_offset=0,
     )
+
+
+def _is_tracing_tensor(tensor: Tensor) -> bool:
+    if torch.compiler.is_compiling() or is_fake(tensor):
+        return True
+    if torch._is_functional_tensor(tensor):
+        return True
+    # PyTorch 2.5 wraps the C++ functional tensor in a Python FunctionalTensor.
+    elem = getattr(tensor, "elem", None)
+    return elem is not None and torch._is_functional_tensor(elem)

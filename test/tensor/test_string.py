@@ -110,6 +110,18 @@ def test_from_arrow_zero_string_chunks(arrow_type: pa.DataType) -> None:
     assert tensor.to_arrow().to_pylist() == []
 
 
+def test_empty_view_to_arrow() -> None:
+    tensor = StringTensor.from_arrow(
+        pa.array([], type=pa.string()),
+        size=(2, 3, 4, 0),
+    )
+    view = cast(StringTensor, tensor[:, :, 1:3])
+
+    assert view.storage_offset() == 1
+    assert view.to_arrow().to_pylist() == []
+    assert view.tolist() == torch.empty(view.size()).tolist()
+
+
 @onlyCUDA
 def test_from_cudf() -> None:
     cudf = pytest.importorskip("cudf")

@@ -1,7 +1,21 @@
 import abc
+from collections.abc import Sequence
 from typing import Self
 
 import torch
+
+_make_wrapper_subclass = torch.compiler.allow_in_graph(
+    torch.Tensor._make_wrapper_subclass
+)
+
+
+def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
+    value = 1
+    stride = []
+    for dim_size in reversed(size):
+        stride.append(value)
+        value *= torch.sym_max(dim_size, 1)
+    return tuple(stride[::-1])
 
 
 class DeviceMixin(abc.ABC):

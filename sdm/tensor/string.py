@@ -111,6 +111,8 @@ class StringTensor(VarLenTensor):
     def to_arrow(self) -> pa.Array:
         r"""Convert this tensor to a flat :class:`pyarrow.Array`."""
         tensor = cast(StringTensor, self.contiguous().cpu())
+        if tensor.numel() == 0 and tensor.storage_offset() != 0:
+            tensor = cast(StringTensor, tensor.clone())
 
         return pa.Array.from_buffers(
             pa.string()
