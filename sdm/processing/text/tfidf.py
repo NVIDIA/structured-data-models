@@ -36,6 +36,9 @@ class TFIDF(EnsembleProcessor):
     weights per text column. Transform replaces text with concatenated
     numerical features (one per retained n-gram), applies those idf weights,
     L2-normalizes each row, and ignores n-grams unseen at fit time.
+    When fitted on an :class:`~sdm.tensor.EnsembleTable`, distinct member
+    tables learn independent vocabularies and can produce different numerical
+    schemas; members assigned the same table share fitted state.
 
     Args:
         ngram_range: Inclusive ``(min_n, max_n)`` character-window sizes.
