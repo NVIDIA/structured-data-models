@@ -93,7 +93,7 @@ class EmbedText(Processor):
             for col in range(num_cols):
                 col_tensor = cast(
                     StringTensor,
-                    table.text[..., col].view(-1),
+                    table.text[..., col].reshape(-1),
                 )
                 all_strings.extend(col_tensor.to_arrow().to_pylist())
 
