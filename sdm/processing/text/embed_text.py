@@ -27,12 +27,6 @@ class _EmbedModelRef:
 class EmbedText(Processor):
     r"""Embed text columns with a user-provided embedding model.
 
-    All text columns are flattened into a single list of strings and
-    passed to ``embedding_model`` in one call. The model must return one
-    embedding per string as a :class:`torch.Tensor` with shape
-    ``[n, embedding_dim]``. Embeddings are concatenated in column order
-    into the numerical output.
-
     Args:
         embedding_model: Callable that maps a list of strings to a
             :class:`torch.Tensor` with shape ``[n, embedding_dim]``.
