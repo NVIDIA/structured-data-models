@@ -33,9 +33,8 @@ readability_columns = [
     "CARES",
     "CML2RI",
 ]
-arrow_table = (
-    pq.read_table(data_path).drop_columns(readability_columns).slice(0, 640)
-)
+arrow_table = pq.read_table(data_path)
+arrow_table = arrow_table.drop_columns(readability_columns)
 table = sdm.TableTensor.from_arrow(
     table=arrow_table,
     stypes=sdm.infer_stypes(arrow_table, allow_text=True),
@@ -48,23 +47,38 @@ text_encoder = TFIDF(
 )
 
 model = sdm.models.TabICLv2(device=device)
-recipe = model.default_recipe()
-recipe.features = StypeDispatch(text=text_encoder) + recipe.features
 
 target_name = "BT Easiness"
-context = table[:512]
-query = table[512:]
-with torch.amp.autocast(
-    device.type,
-    torch.float16,
-    enabled=table.is_cuda,
-):
-    model.fit(
-        x=context.drop_columns(target_name),
-        y=context[:, target_name],
-        recipe=recipe,
-    )
-    prediction = model.predict(query.drop_columns(target_name))
-    model.clear()
+split = int(0.8 * len(table))
+context = table[:split]
+query = table[split:]
+ground_truth = query[:, target_name].as_tensor().squeeze()
 
-print(prediction)
+results = {}
+configs = {
+    "numerical only": model.default_recipe(),
+}
+text_recipe = model.default_recipe()
+text_recipe.features = StypeDispatch(text=text_encoder) + text_recipe.features
+configs["+ text (4,6)/256"] = text_recipe
+
+for name, recipe in configs.items():
+    with torch.amp.autocast(
+        device.type,
+        torch.float16,
+        enabled=table.is_cuda,
+    ):
+        model.fit(
+            x=context.drop_columns(target_name),
+            y=context[:, target_name],
+            recipe=recipe,
+        )
+        prediction = model.predict(query.drop_columns(target_name))
+        model.clear()
+    rmse = (prediction - ground_truth).pow(2).mean().sqrt()
+    mae = (prediction - ground_truth).abs().mean()
+    results[name] = (rmse.item(), mae.item())
+
+print(f"{'config':<20s} {'RMSE':>8s} {'MAE':>8s}")
+for name, (rmse, mae) in results.items():
+    print(f"{name:<20s} {rmse:>8.3f} {mae:>8.3f}")
