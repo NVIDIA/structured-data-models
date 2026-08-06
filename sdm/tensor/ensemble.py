@@ -272,6 +272,10 @@ class EnsembleTable:
         group_index, position = self._locations[member_id]
         return self._groups[group_index][position]
 
+    def _member_location(self, member_id: int) -> tuple[int, int]:
+        """Return the ``(group_index, position)`` pair for a member."""
+        return self._locations[member_id]
+
     def __iter__(self) -> Iterator[TableTensor]:
         """Iterate over groups of compatible tables."""
         return iter(self._groups)
