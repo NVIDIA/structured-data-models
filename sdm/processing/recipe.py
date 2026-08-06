@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Self
 
 import torch
 
+from sdm import RelatedTables, TableTensor
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.common.sequential import Sequential
 from sdm.processing.common.task import TaskDispatch
 from sdm.processing.ensemble import EnsembleProcessor
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
 
 
 class _TaskResolver(Processor, InvertibleMixin):
@@ -118,6 +120,9 @@ class Recipe:
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
 
+    Bind a recipe to context data with :meth:`bind` to obtain a reusable
+    execution for query and output transforms.
+
     Args:
         features: Steps applied to model inputs before the model.
         target: Steps applied to labels. Invertible numerical target steps map
@@ -203,6 +208,36 @@ class Recipe:
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "output", output)
 
+    def bind(
+        self,
+        *,
+        x_context: TableTensor,
+        y_context: TableTensor,
+        related_context_tables: RelatedTables | None = None,
+        num_members: int = 1,
+        generator: torch.Generator | None = None,
+    ) -> _RecipeExecution:
+        """Bind this recipe to context data and return an execution.
+
+        Fits ``features`` and ``target`` on the context and returns state for
+        query and output transforms. The caller's recipe is left unchanged.
+
+        Args:
+            x_context: Feature table for in-context examples.
+            y_context: Target table for in-context examples.
+            related_context_tables: Related context tables, or ``None``.
+            num_members: Number of ensemble members.
+            generator: Pseudorandom number generator for sampling.
+        """
+        return _RecipeExecution._bind(
+            recipe=self,
+            x_context=x_context,
+            y_context=y_context,
+            related_context_tables=related_context_tables,
+            num_members=num_members,
+            generator=generator,
+        )
+
     @staticmethod
     def _as_ensemble_processor(
         processor: Processor | Iterable[Processor] | None,
@@ -223,3 +258,6 @@ class Recipe:
             f"  output={self.output.__repr__(indent=2)[2:]},\n"
             ")"
         )
+
+
+from sdm.processing._recipe_execution import _RecipeExecution  # noqa: E402

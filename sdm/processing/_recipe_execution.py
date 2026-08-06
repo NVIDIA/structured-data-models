@@ -15,58 +15,53 @@ from sdm.tensor import EnsembleTable
 
 
 @dataclass(frozen=True)
-class _ContextInput:
+class _MemberContext:
+    """Transformed context tables for one ensemble member."""
+
     x: TableTensor
     y: TableTensor
     related_tables: RelatedTables | None
 
 
 @dataclass(frozen=True)
-class _QueryInput:
+class _MemberQuery:
+    """Transformed query tables for one ensemble member."""
+
     x: TableTensor
     related_tables: RelatedTables | None
 
 
 class _RecipeExecution:
-    """Batched recipe preprocessing for ensemble models.
+    """Bound recipe state for one ensemble preprocessing pass.
 
-    Fits and applies :class:`~sdm.processing.recipe.Recipe` steps (features,
-    target, output) across all ensemble members in a single pass using
-    :class:`~sdm.tensor.EnsembleTable`, rather than looping over members
-    sequentially.
+    Internal helper for :class:`~sdm.models.base.ICLModel`. Construct via
+    :meth:`~sdm.processing.recipe.Recipe.bind`, then :meth:`transform` and
+    :meth:`transform_output`.
 
-    Use :meth:`fit_context` to create an instance from raw context data,
-    :meth:`transform_query` to preprocess unseen query data with the
-    fitted state, and :meth:`transform_output` to apply inverse-target
-    and output postprocessing to the stacked member predictions.
-
-    Args:
-        recipe: Deepcopied recipe whose processors hold fitted state.
-        context_inputs: Per-member preprocessed context tables.
-        classes: Per-member class labels, or ``None`` for regression members.
-        is_regression: Whether the target is regression (no categorical
-            columns).
-        related_processors: Per-related-table fitted feature processors,
-            or ``None`` when no related tables are used.
+    Attributes:
+        recipe: Recipe with fitted ``features`` and ``target``.
+        contexts: Transformed context tables, one per member.
+        classes: Per-member class labels, or ``None`` for regression.
+        is_regression: ``True`` when every member has a regression target.
     """
 
     def __init__(
         self,
         *,
         recipe: Recipe,
-        context_inputs: Sequence[_ContextInput],
+        contexts: Sequence[_MemberContext],
         classes: Sequence[Tensor | None],
         is_regression: bool,
         related_processors: Mapping[str, EnsembleProcessor] | None,
     ) -> None:
         self.recipe = recipe
-        self.context_inputs = tuple(context_inputs)
+        self.contexts = tuple(contexts)
         self.classes = tuple(classes)
         self.is_regression = is_regression
         self._related_processors = related_processors
 
     @classmethod
-    def fit_context(
+    def _bind(
         cls,
         *,
         recipe: Recipe,
@@ -76,21 +71,7 @@ class _RecipeExecution:
         num_members: int,
         generator: torch.Generator | None,
     ) -> _RecipeExecution:
-        """Fit recipe processors on context data and return execution state.
-
-        Deepcopies the recipe, fits feature and target processors on
-        ensemble-wrapped context tables, and extracts per-member
-        preprocessed inputs. Related tables are fitted with independent
-        copies of the feature processor taken before the main fit.
-
-        Args:
-            recipe: Recipe to deepcopy and fit.
-            x_context: Feature table for in-context examples.
-            y_context: Target table for in-context examples.
-            related_context_tables: Related context tables, or ``None``.
-            num_members: Number of ensemble members.
-            generator: Pseudorandom number generator for sampling.
-        """
+        """Bind a recipe to context data and return the execution state."""
         recipe = copy.deepcopy(recipe)
 
         related_context_out: dict[str, EnsembleTable] = {}
@@ -122,12 +103,12 @@ class _RecipeExecution:
             generator=generator,
         )
 
-        context_inputs = []
+        contexts = []
         classes = []
         for member_id in range(num_members):
             y_i = y_context_out.table(member_id)
-            context_inputs.append(
-                _ContextInput(
+            contexts.append(
+                _MemberContext(
                     x=x_context_out.table(member_id),
                     y=y_i,
                     related_tables=cls._replace_with_member_tables(
@@ -147,25 +128,25 @@ class _RecipeExecution:
 
         return cls(
             recipe=recipe,
-            context_inputs=tuple(context_inputs),
+            contexts=tuple(contexts),
             classes=tuple(classes),
             is_regression=is_regression,
             related_processors=related_processors or None,
         )
 
-    def transform_query(
+    def transform(
         self,
         *,
         x_query: TableTensor,
         related_query_tables: RelatedTables | None,
-    ) -> tuple[_QueryInput, ...]:
-        """Transform query features using the fitted recipe processors.
+    ) -> tuple[_MemberQuery, ...]:
+        """Transform query features with the fitted processors.
 
         Args:
             x_query: Feature table for query examples.
             related_query_tables: Related query tables, or ``None``.
         """
-        num_members = len(self.context_inputs)
+        num_members = len(self.contexts)
         x_query_out = cast(
             EnsembleProcessor,
             self.recipe.features,
@@ -186,7 +167,7 @@ class _RecipeExecution:
                 )
 
         return tuple(
-            _QueryInput(
+            _MemberQuery(
                 x=x_query_out.table(member_id),
                 related_tables=self._replace_with_member_tables(
                     related_query_tables,
@@ -201,17 +182,16 @@ class _RecipeExecution:
         self,
         outputs: Sequence[TableTensor],
     ) -> TableTensor:
-        """Apply inverse-target and output postprocessing to member outputs.
+        """Postprocess member outputs via inverse target (if regression) and
+        ``recipe.output``.
 
-        For regression tasks, applies the fitted target's inverse
-        transform before the output processor. Returns a single table
-        when ``num_members`` is one, otherwise stacks members along a
-        leading dimension.
+        Returns one table for a single member, otherwise stacks members on
+        dim 0.
 
         Args:
             outputs: One raw model output per ensemble member.
         """
-        num_members = len(self.context_inputs)
+        num_members = len(self.contexts)
         if len(outputs) != num_members:
             raise ValueError(
                 f"Expected {num_members} member outputs (got {len(outputs)})"
