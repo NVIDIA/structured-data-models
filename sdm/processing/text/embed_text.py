@@ -29,8 +29,6 @@ class EmbedText(Processor):
 
     Args:
         embedding_model: Pre-loaded model called on the flattened text values.
-            It must return a :class:`torch.Tensor` with shape
-            ``[n, embedding_dim]``.
         embedding_dim: Width of each returned embedding.
         chunk_size: Maximum number of strings per model call. When set,
             the flattened strings are split into chunks of this size to
