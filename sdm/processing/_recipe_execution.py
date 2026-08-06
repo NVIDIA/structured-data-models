@@ -158,6 +158,7 @@ class _RecipeExecution:
         for member_id in range(num_members):
             related_tables = None
             if related_query_tables is not None:
+                assert related_query_out is not None
                 related_tables = replace(
                     related_query_tables,
                     tables={
