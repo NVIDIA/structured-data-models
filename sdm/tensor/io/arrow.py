@@ -1,3 +1,5 @@
+import warnings
+
 import pyarrow as pa
 import torch
 from torch import Tensor
@@ -20,18 +22,62 @@ ARROW_TORCH_DTYPES = {
 TORCH_ARROW_DTYPES = {value: key for key, value in ARROW_TORCH_DTYPES.items()}
 
 
-def to_arrow(tensor: Tensor) -> pa.Array:
+def _combine_arrow_chunks(array: pa.ChunkedArray) -> pa.Array:
+    r"""Combine chunks after promoting 32-bit string offsets."""
+    if array.num_chunks == 0:
+        return array.combine_chunks()
+    if array.num_chunks == 1:
+        return array.chunk(0)
+
+    if pa.types.is_string(array.type):
+        array = array.cast(pa.large_string())
+    elif pa.types.is_dictionary(array.type) and pa.types.is_string(
+        array.type.value_type
+    ):
+        array = array.cast(
+            pa.dictionary(
+                array.type.index_type,
+                pa.large_string(),
+                ordered=array.type.ordered,
+            )
+        )
+
+    return array.combine_chunks()
+
+
+def arrow_as_tensor(
+    array: pa.Array | pa.ChunkedArray,
+    *,
+    dtype: torch.dtype | None = None,
+    device: torch.device | str | None = None,
+) -> Tensor:
+    r"""Convert a :class:`pyarrow.Array` to a tensor.
+
+    Args:
+        array: The :class:`pyarrow.Array` or :class:`pyarrow.ChunkedArray`.
+        dtype: The dtype.
+        device: The device.
+    """
+    values = array.to_numpy(zero_copy_only=False)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="The given NumPy array is not writable",
+        )
+        return torch.as_tensor(values, dtype=dtype, device=device)
+
+
+def to_arrow(tensor: Tensor, valid_mask: Tensor | None = None) -> pa.Array:
     r"""Convert a tensor to a flat :class:`pyarrow.Array`.
 
     Args:
         tensor: The tensor.
+        valid_mask: Boolean mask indicating valid, non-null tensor elements.
     """
-    from sdm.tensor import VarLenTensor
-
-    if isinstance(tensor, VarLenTensor):
-        return tensor.to_arrow()
-
     tensor = tensor.detach().contiguous().view(-1).cpu()
+    if valid_mask is not None:
+        valid_mask = valid_mask.contiguous().view(-1).cpu()
 
     arrow_type = TORCH_ARROW_DTYPES.get(tensor.dtype)
     if arrow_type is None:
@@ -40,5 +86,11 @@ def to_arrow(tensor: Tensor) -> pa.Array:
     return pa.Array.from_buffers(
         type=arrow_type,
         length=tensor.numel(),
-        buffers=[None, pa.py_buffer(tensor.numpy())],
+        buffers=[
+            pa.array(valid_mask.numpy(), type=pa.bool_()).buffers()[1]
+            if valid_mask is not None
+            else None,
+            pa.py_buffer(tensor.numpy()),
+        ],
+        null_count=-1 if valid_mask is not None else 0,
     )

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 import torch
@@ -8,18 +9,22 @@ def _normalize_string(value: str) -> str:
 
 
 def normalization_resolver(
-    query: torch.nn.Module | str,
+    query: str | Callable[..., torch.nn.Module],
     *args: Any,
     **kwargs: Any,
 ) -> torch.nn.Module:
-    """Resolve a public PyTorch normalization name to a module.
+    """Resolve a normalization layer name or callable to a module.
 
-    Names are case-insensitive and may contain hyphens, underscores, or spaces.
-    The ``"norm"`` suffix is optional.
+    Names are matched against the public PyTorch normalization layers,
+    case-insensitively; hyphens, underscores, and spaces are ignored and the
+    ``"norm"`` suffix is optional. A callable (*e.g.*, a layer class) is
+    called with the given arguments, so every resolution yields a fresh
+    module. A module instance is returned unchanged and is therefore shared
+    across resolution sites.
 
     Args:
-        query: The normalization name or an existing module to return
-            unchanged.
+        query: The normalization layer name, a callable returning the
+            normalization layer, or a module to return unchanged.
         *args: Additional positional arguments passed to the normalization
             layer constructor.
         **kwargs: Additional keyword arguments passed to the normalization
@@ -27,6 +32,9 @@ def normalization_resolver(
     """
     if isinstance(query, torch.nn.Module):
         return query
+
+    if not isinstance(query, str):
+        return query(*args, **kwargs)
 
     modules: tuple[type[torch.nn.Module], ...] = tuple(
         value
@@ -45,6 +53,6 @@ def normalization_resolver(
             return cls(*args, **kwargs)
 
     raise ValueError(
-        f"Could not resolve normalization '{query}'. "
+        f"Could not resolve normalization {query!r}. "
         f"Available choices: {', '.join(cls.__name__ for cls in modules)}"
     )

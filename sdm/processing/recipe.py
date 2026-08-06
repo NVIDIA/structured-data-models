@@ -1,11 +1,12 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Self
 
-from typing_extensions import Self
+import torch
 
 from sdm.processing.base import InvertibleMixin, Processor
-from sdm.processing.sequential import Sequential
-from sdm.processing.task_dispatch import TaskDispatch
+from sdm.processing.common.sequential import Sequential
+from sdm.processing.common.task import TaskDispatch
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -29,11 +30,21 @@ class _TaskResolver(Processor, InvertibleMixin):
         self.processor = processor
         self._task_dispatchers = task_dispatchers
 
-    def fit(self, table: TableTensor) -> Self:
-        self.fit_transform(table)
+    def fit(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        self.fit_transform(table, generator=generator)
         return self
 
-    def fit_transform(self, table: TableTensor) -> TableTensor:
+    def fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
         self._check_supported_stypes(table)
         self._fitted = False
         for task_dispatcher in self._task_dispatchers:
@@ -41,7 +52,10 @@ class _TaskResolver(Processor, InvertibleMixin):
 
         succeeded = False
         try:
-            target = self.processor.fit_transform(table)
+            target = self.processor.fit_transform(
+                table,
+                generator=generator,
+            )
             for task_dispatcher in self._task_dispatchers:
                 task_dispatcher._resolve(target)
             self._fitted = True
@@ -59,7 +73,7 @@ class _TaskResolver(Processor, InvertibleMixin):
         fn = getattr(self.processor, "inverse_transform", None)
         if not callable(fn):
             raise AttributeError(
-                f"'{self.processor.__class__.__name__}' object has no "
+                f"{self.processor.__class__.__name__!r} object has no "
                 "attribute 'inverse_transform'"
             )
         return fn(table)
@@ -68,7 +82,7 @@ class _TaskResolver(Processor, InvertibleMixin):
         return self.processor.__repr__(indent=indent)
 
 
-@dataclass(frozen=True, init=False, repr=False)
+@dataclass(init=False, repr=False)
 class Recipe:
     """Processing contract around an external model boundary.
 
@@ -79,14 +93,21 @@ class Recipe:
     - ``target``: labels transformed forward before the model. Regression
       predictions are inverted through this pipeline; classification outputs
       are reconstructed from the fitted target categories instead.
-    - ``output``: shape-preserving cleanup of the model output.
+    - ``output``: transforms member outputs after they have been mapped to a
+      common class or target space and stacked as ``[E, ..., R, O]``. An
+      explicit dimension-changing step such as
+      :class:`~sdm.processing.ReduceEstimators` removes ``E``; without one,
+      the output remains stacked. Steps before the reducer must support
+      stacked outputs, while steps after it receive already-reduced outputs.
 
     Each pipeline exposes ``fit``/``transform``/``fit_transform`` and, when its
     steps are invertible, ``inverse_transform``. Call them directly, e.g.
     ``recipe.features.transform(table)`` or
-    ``recipe.target.inverse_transform(prediction)``. When ``output`` contains
-    :class:`~sdm.processing.TaskDispatch`, fitting ``target`` also selects its
-    task-specific output route.
+    ``recipe.target.inverse_transform(prediction)``. Recipes do not infer each
+    step's non-finite input contract; order steps so values are imputed before
+    processors that do not explicitly document non-finite support. When
+    ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
+    ``target`` also selects its task-specific output route.
 
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
@@ -95,8 +116,9 @@ class Recipe:
         features: Steps applied to model inputs before the model.
         target: Steps applied to labels. Invertible numerical target steps map
             regression output back to the original space.
-        output: Steps applied after member outputs have been mapped to a
-            common class or target space and aggregated.
+        output: Steps applied to stacked member outputs after member-local
+            mappings. Estimator reduction, when desired, is an explicit step
+            in this pipeline.
     """
 
     features: Processor
@@ -137,12 +159,12 @@ class Recipe:
             ):
                 raise ValueError(
                     f"'TaskDispatch' is only supported in 'Recipe.output' "
-                    f"(found in '{role}')."
+                    f"(found in {role!r})."
                 )
 
         # Common output steps can remain adjacent; nesting would require
         # defining whether dispatchers in inactive branches are resolved.
-        task_dispatcher_entries = tuple(
+        task_dispatch_entries = tuple(
             (path, module)
             for path, module in output.named_modules(remove_duplicate=False)
             if isinstance(module, TaskDispatch)
@@ -152,7 +174,7 @@ class Recipe:
         elif isinstance(output, Sequential):
             direct_paths = {
                 str(index)
-                for index, step in enumerate(output.steps)
+                for index, step in enumerate(output)
                 if isinstance(step, TaskDispatch)
             }
         else:
@@ -160,7 +182,7 @@ class Recipe:
 
         nested_paths = tuple(
             path
-            for path, _ in task_dispatcher_entries
+            for path, _ in task_dispatch_entries
             if path not in direct_paths
         )
         if len(nested_paths) > 0:
@@ -172,7 +194,7 @@ class Recipe:
 
         task_dispatchers = tuple(
             module
-            for path, module in task_dispatcher_entries
+            for path, module in task_dispatch_entries
             if path in direct_paths
         )
 

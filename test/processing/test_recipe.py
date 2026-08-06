@@ -1,7 +1,8 @@
 import torch
+
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.processing import InvertibleMixin, Recipe, Sequential, StandardScale
+from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize
 from sdm.testing import withCUDA
 
 
@@ -12,20 +13,20 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
 
 
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
-    recipe = Recipe(features=[StandardScale()], target=None, output=[])
+    recipe = Recipe(features=[Standardize()], target=None, output=[])
 
     assert isinstance(recipe.features, Sequential)
     assert isinstance(recipe.target, Sequential)
     assert isinstance(recipe.output, Sequential)
-    assert len(recipe.features.steps) == 1
-    assert len(recipe.target.steps) == 0
-    assert len(recipe.output.steps) == 0
+    assert len(recipe.features) == 1
+    assert len(recipe.target) == 0
+    assert len(recipe.output) == 0
     assert "features=Sequential" in repr(recipe)
     assert "target=Sequential()" in repr(recipe)
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
-    recipe = Recipe(target=[StandardScale()])
+    recipe = Recipe(target=[Standardize()])
     table = _table()
 
     assert isinstance(recipe.target, Sequential)
@@ -37,7 +38,7 @@ def test_target_forward_then_inverse_round_trips() -> None:
 
 
 def test_recipe_roles_fit_transform_features_and_target() -> None:
-    recipe = Recipe(features=[StandardScale()], target=[StandardScale()])
+    recipe = Recipe(features=[Standardize()], target=[Standardize()])
     features = _table()
     target = _table(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
 
@@ -57,7 +58,7 @@ def test_recipe_roles_fit_transform_features_and_target() -> None:
 
 
 def test_recipe_role_fit_accepts_table() -> None:
-    recipe = Recipe(features=[StandardScale()])
+    recipe = Recipe(features=[Standardize()])
     features = _table()
 
     fitted = recipe.features.fit(features)
@@ -82,10 +83,15 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
         },
         numerical=torch.randn(8, 2, device=device),
         categorical=CategoricalTensor(
-            data=(
-                torch.arange(8, dtype=torch.int32, device=device) % 2
-            ).unsqueeze(-1),
-            categories=(StringTensor.from_list(["a", "b"], device=device),),
+            code=torch.tensor(
+                [[1], [3]], dtype=torch.int32, device=device
+            ).repeat(4, 1),
+            categories=(
+                StringTensor.from_list(
+                    ["unused-a", "a", "unused-b", "b"],
+                    device=device,
+                ),
+            ),
         ),
     )
     target = TableTensor.from_tensor(
@@ -106,3 +112,9 @@ def test_tabiclv2_default_recipe_on_device(device: torch.device) -> None:
     assert isinstance(recipe.target, InvertibleMixin)
     restored = recipe.target.inverse_transform(model_target)
     torch.testing.assert_close(restored.numerical, target.numerical)
+
+    # The original categorical column uses sparse codes 1 and 3.
+    transformed = TabICLv2.default_recipe().target.fit_transform(
+        features.select_columns("kind")
+    )
+    assert transformed.categorical.unique().sort().values.tolist() == [0, 1]

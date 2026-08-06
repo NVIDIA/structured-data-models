@@ -1,6 +1,7 @@
 name: GPU Test
 
 on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -12,16 +13,31 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   pytest-gpu:
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Check for ci-full-test label
+        id: ci-full-test-label
+        if: startsWith(github.ref_name, 'pull-request/')
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          result-encoding: string
+          script: |
+            const pullNumber = Number(context.ref.split('/').at(-1));
+            const { data: pull } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: pullNumber,
+            });
+            return pull.labels.some(({ name }) => name === 'ci-full-test');
 
       - name: Set up proxy cache
         uses: nv-gha-runners/setup-proxy-cache@main
@@ -41,16 +57,47 @@ jobs:
 
       - name: Install package
         run: |
-          uv pip install --torch-backend=cu128 '.[test]' 'cudf-cu12==25.12.*'
+          RAPIDS_INDEX_URL="${NV_GHA_RUNNERS_PYPI_ANACONDA_CACHE_URL:-https://pypi.nvidia.com}"
+          uv pip install \
+            --torch-backend=cu130 \
+            --extra-index-url="${RAPIDS_INDEX_URL}" \
+            --index-strategy=unsafe-best-match \
+            --group=test \
+            . \
+            'cudf-cu13>=26.6' \
+            'pandas<3' \
+            'pylibcugraph-cu13>=26.6'
+          uv pip install \
+            --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
+            pyg-lib
 
       - name: GPU sanity check
         run: |
           nvidia-smi
-          python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available to torch'"
-          python -c "import cudf; print('cudf', cudf.__version__)"
+          python - <<'PY'
+          from importlib.metadata import version
+
+          import cudf
+          import cupy
+          import pyg_lib
+          import pylibcugraph
+          import torch
+
+          assert torch.cuda.is_available(), "CUDA not available to torch"
+          assert hasattr(pylibcugraph, "heterogeneous_uniform_neighbor_sample")
+          assert hasattr(
+              pylibcugraph,
+              "heterogeneous_uniform_temporal_neighbor_sample",
+          )
+          print("torch", torch.__version__)
+          print("cudf", cudf.__version__)
+          print("cupy", cupy.__version__)
+          print("pylibcugraph", version("pylibcugraph-cu13"))
+          print("pyg-lib", version("pyg-lib"))
+          PY
 
       - name: Run tests
         env:
-          FULL_TEST: ${{ github.ref_name == 'main' && '1' || '0' }}
+          FULL_TEST: ${{ (github.ref_name == 'main' || steps.ci-full-test-label.outputs.result == 'true') && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25

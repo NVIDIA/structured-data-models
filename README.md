@@ -1,48 +1,81 @@
-# Structured Data Models
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/source/images/logo_light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/source/images/logo_dark.svg">
+  <img src="docs/source/images/logo_light.svg" width="125">
+</picture>
+</p>
 
-Python package for structured data models.
+<h1 align="center">Structured Data Models
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-brightgreen.svg?style=flat&color=76B900)](https://www.python.org/downloads)
+[![License: Apache 2.0](https://img.shields.io/badge/license-apache%202.0-brightgreen.svg?style=flat&color=76B900)](https://opensource.org/licenses/Apache-2.0)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat&color=76B900)](CONTRIBUTING.md)
+[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat&color=76B900)](https://musical-invention-2y4yjlw.pages.github.io)
+
+</h1>
+
+**A GPU-native library of foundation models, tensor subclasses, and data processors for structured data.**
+
+- **Models**: Reference implementations of structured data foundation models such as [`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2) and [`KumoRFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRFM), built on a unified interface with room for future model families.
+- **Tensor-native**: PyTorch-compatible tensor types for numerical, categorical, datetime, text, and relational data.
+- **Data processing**: Composable, extensible, and GPU-accelerated preprocessing and postprocessing for structured data workflows.
+
+## Installation
+
+The `structured-data-models` package is available from Python 3.11 and PyTorch 2.5 onwards.
+Install via:
+
+```bash
+pip install structured-data-models
+```
+
+> [!NOTE]
+> For CUDA workloads, we highly recommend installing [`cudf`](https://docs.rapids.ai/install) as an additional dependency to keep dataframe-style operations on GPU and avoid unnecessary data movement.
+
+## Model Families
+
+**Tabular Foundation Models:**
+
+- **[`TabICLv2`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.TabICLv2)** from Qu *et al.*: [TabICLv2: A Better, Faster, Scalable, and Open Tabular Foundation Model](https://arxiv.org/abs/2602.11139) (ICML '26)
+
+**Relational Foundation Models:**
+
+- **[`KumoRFM`](https://musical-invention-2y4yjlw.pages.github.io/api/generated/sdm.models.KumoRFM)** from Hudovernik *et al.*: [KumoRFM-2: Scaling Foundation Models for Relational Learning](https://arxiv.org/abs/2604.12596) (CoRR '26)
+
+## Quick Tour
 
 ```python
-import torch
 from sklearn.datasets import load_breast_cancer
 
-from sdm import TableTensor, infer_stypes
-from sdm.models import TabICLv2
-from sdm.processing import Recipe
+import sdm
 
 df = load_breast_cancer(as_frame=True).frame
 
 # A lossless, fully tensorized representation of the raw data on GPU:
-table = TableTensor.from_pandas(
+table = sdm.TableTensor.from_pandas(
     df=df,
-    stypes=infer_stypes(df),
-    device=device,
+    stypes=sdm.infer_stypes(df),
+    device="cuda",
 )
 
 # Access to a variety of pre-trained structured data models:
-model = TabICLv2(device=device)
+model = sdm.models.TabICLv2(device="cuda")
 
-# Unified and custom recipes for pre- and post-processing:
-recipe = Recipe(
-    features=[
-        ShuffleColumns(),
-        ImputeMissing(),
-        StandardScale(),
-        SigmaClip(threshold=4.0),
-
-    ],
-    target=[
-        ShuffleClasses(),
-    ],
+# Default in-context learning forward pass:
+model(
+    x_context=table[:300].drop_columns("target"),
+    y_context=table[:300, "target"],
+    x_query=table[300:].drop_columns("target"),
+    num_estimators=8,
 )
 
-# Common execution interface:
-with torch.amp.autocast(device.type, torch.bfloat16, enabled=table.is_cuda):
-    model(
-        x_context=table[:300].drop_columns("target"),
-        y_context=table[:300, "target"],
-        x_query=table[300:].drop_columns("target"),
-        recipe=recipe,
-        num_estimators=8,
-    )
+# Fit + Predict forward pass via key/value caching for fast inference:
+model.fit(
+    x=table[:300].drop_columns("target"),
+    y=table[:300, "target"],
+    num_estimators=8,
+)
+model.predict(table[300:].drop_columns("target"))
+model.clear()
 ```
