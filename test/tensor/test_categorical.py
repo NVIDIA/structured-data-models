@@ -1,3 +1,4 @@
+import io
 import warnings
 from typing import cast
 
@@ -6,6 +7,7 @@ import pytest
 import torch
 
 from sdm import CategoricalTensor, StringTensor
+from sdm.tensor.categorical import _make_categorical_tensor
 from sdm.testing import onlyCUDA, withCUDA
 
 
@@ -27,6 +29,276 @@ def test_to_copy_string_categories() -> None:
     assert out.dtype == torch.int32
     for out_category, category in zip(out.categories, categories):
         assert out_category.tolist() == category.tolist()
+
+
+def test_tensor_flatten_round_trip() -> None:
+    tensor = CategoricalTensor(
+        code=torch.tensor([[0, 1], [1, 0]], dtype=torch.int32),
+        categories=(
+            StringTensor.from_list(["a", "b"]),
+            torch.tensor([10, 20]),
+        ),
+    )
+    names, context = tensor.__tensor_flatten__()
+
+    out = CategoricalTensor.__tensor_unflatten__(
+        {name: getattr(tensor, name) for name in names},
+        context,
+        tensor.size(),
+        tensor.stride(),
+    )
+
+    assert type(out) is type(tensor)
+    assert out.size() == tensor.size()
+    assert out.stride() == tensor.stride()
+    assert out.code.equal(tensor.code)
+    assert out.categories[0].tolist() == tensor.categories[0].tolist()
+    assert out.categories[1].equal(tensor.categories[1])
+
+    tensor = cast(CategoricalTensor, tensor[..., 1:])
+    names, context = tensor.__tensor_flatten__()
+    out = CategoricalTensor.__tensor_unflatten__(
+        {name: getattr(tensor, name) for name in names},
+        context,
+        tensor.size(),
+        tensor.stride(),
+    )
+
+    assert out.code.equal(tensor.code)
+    assert len(out.categories) == 1
+    assert out.categories[0].equal(tensor.categories[0])
+
+
+def test_category_uses_logical_column_index() -> None:
+    categories = tuple(torch.tensor([10 * index]) for index in range(4))
+    tensor = CategoricalTensor(
+        code=torch.zeros((2, 4), dtype=torch.int32),
+        categories=categories,
+    )
+    view = cast(CategoricalTensor, tensor[..., 1:3])
+
+    assert view.category(0) is categories[1]
+    assert view.category(-1) is categories[2]
+    with pytest.raises(IndexError):
+        view.category(2)
+
+    compiled = torch.compile(
+        lambda value: value.category(-1),
+        fullgraph=True,
+        backend="eager",
+    )
+    assert compiled(view).equal(categories[2])
+
+    compiled_view = torch.compile(
+        lambda value: value[..., 1:3].category(-1),
+        fullgraph=True,
+        backend="eager",
+    )
+    assert compiled_view(tensor).equal(categories[2])
+
+
+def test_save_load_preserves_sliced_category_topology() -> None:
+    tensor = cast(
+        CategoricalTensor,
+        CategoricalTensor(
+            code=torch.zeros((2, 4), dtype=torch.int32),
+            categories=tuple(torch.tensor([10 * i]) for i in range(4)),
+        )[..., 1:3],
+    )
+    before = torch.as_strided(tensor, (2, 2), (2, 1), 1)
+    assert type(before) is torch.Tensor
+
+    buffer = io.BytesIO()
+    torch.save(tensor, buffer)
+    buffer.seek(0)
+    out = torch.load(buffer, weights_only=False)
+
+    assert isinstance(out, CategoricalTensor)
+    assert out.categories == tensor.categories
+    after = torch.as_strided(out, (2, 2), (2, 1), 1)
+    assert type(after) is torch.Tensor
+    assert after.equal(before)
+
+
+def test_materialized_slice_resets_category_topology() -> None:
+    tensor = cast(
+        CategoricalTensor,
+        CategoricalTensor(
+            code=torch.zeros((2, 4), dtype=torch.int32),
+            categories=tuple(torch.tensor([10 * i]) for i in range(4)),
+        )[..., 1:],
+    )
+    materialized = (tensor.clone(), tensor.contiguous())
+    identity_as_strided = torch.compile(
+        lambda value: torch.as_strided(
+            value,
+            (2, 3),
+            (3, 1),
+            0,
+        ),
+        fullgraph=True,
+        backend="eager",
+    )
+
+    for out in materialized:
+        assert isinstance(out, CategoricalTensor)
+        assert out.categories == tensor.categories
+        identity = identity_as_strided(out)
+        assert isinstance(identity, CategoricalTensor)
+        assert identity.categories == tensor.categories
+
+
+def test_compile() -> None:
+    tensor = CategoricalTensor(
+        code=torch.tensor([[0], [1]], dtype=torch.int32),
+        categories=(StringTensor.from_list(["a", "b"]),),
+    )
+    compiled = torch.compile(
+        lambda value: value.view(-1, 1),
+        fullgraph=True,
+        backend="eager",
+    )
+
+    for _ in range(2):
+        out = compiled(tensor)
+        assert isinstance(out, CategoricalTensor)
+        assert out.tolist() == tensor.tolist()
+        assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out,
+            tensor,
+        )
+
+    compiled_view = torch.compile(
+        lambda value: value.unsqueeze(0),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    for _ in range(2):
+        out = compiled_view(tensor)
+        assert isinstance(out, CategoricalTensor)
+        assert out.size() == (1, 2, 1)
+        assert out.tolist() == [tensor.tolist()]
+        assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+            out,
+            tensor,
+        )
+
+    code = torch.tensor([[0], [1]], dtype=torch.int32)
+    category = StringTensor.from_list(["a", "b"])
+    construct = torch.compile(
+        lambda value, categories: _make_categorical_tensor(
+            value + 0,
+            (categories,),
+        ),
+        fullgraph=True,
+        backend="eager",
+    )
+
+    for _ in range(2):
+        out = construct(code, category)
+        assert isinstance(out, CategoricalTensor)
+        assert out.code.equal(code)
+        assert out.categories[0].tolist() == category.tolist()
+
+    clone = torch.compile(
+        lambda value: value.clone(),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = clone(tensor)
+    assert isinstance(out, CategoricalTensor)
+    assert out.tolist() == tensor.tolist()
+
+    convert = torch.compile(
+        lambda value: value.to(torch.int64),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = convert(tensor)
+    assert isinstance(out, CategoricalTensor)
+    assert out.dtype == torch.int64
+    assert out.tolist() == tensor.tolist()
+
+    tensor = CategoricalTensor(
+        torch.tensor([[0, 1, 2, 3]], dtype=torch.int32),
+        tuple(torch.arange(4) + 10 * i for i in range(4)),
+    )
+    slice_columns = torch.compile(
+        lambda value: value[..., 1:3],
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = slice_columns(tensor)
+    assert isinstance(out, CategoricalTensor)
+    assert out.categories == tensor.categories[1:3]
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
+
+    tensor = CategoricalTensor(
+        torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]], dtype=torch.int32),
+        tensor.categories,
+    )
+    chained_view = torch.compile(
+        lambda value: torch.as_strided(
+            value[..., ::2],
+            (2, 1),
+            (4, 2),
+            2,
+        ),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = chained_view(tensor)
+    assert isinstance(out, CategoricalTensor)
+    assert out.categories == (tensor.categories[2],)
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
+
+    slice_alternating_columns = torch.compile(
+        lambda value: value[..., ::2],
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = slice_alternating_columns(tensor)
+    assert isinstance(out, CategoricalTensor)
+    assert out.categories == tensor.categories[::2]
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
+
+    split_columns = torch.compile(
+        lambda value: value.split(2, dim=-1),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out_list = split_columns(tensor)
+    assert all(isinstance(value, CategoricalTensor) for value in out_list)
+    assert [value.categories for value in out_list] == [
+        tensor.categories[:2],
+        tensor.categories[2:],
+    ]
+    assert all(
+        torch._C._is_alias_of(tensor, value)  # ty: ignore[unresolved-attribute]
+        for value in out_list
+    )
+
+    repeat_column = torch.compile(
+        lambda value: torch.as_strided(value, (1, 4), (4, 0), 1),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    out = repeat_column(tensor)
+    assert isinstance(out, CategoricalTensor)
+    assert out.categories == 4 * (tensor.categories[1],)
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
 
 
 def test_reject_nullable() -> None:
@@ -400,6 +672,10 @@ def test_view_ops() -> None:
     out = tensor.view(6, 4)
     assert isinstance(out, CategoricalTensor)
     assert out.size() == (6, 4)
+    assert torch._C._is_alias_of(  # ty: ignore[unresolved-attribute]
+        out,
+        tensor,
+    )
 
     out = tensor.view(-1)
     assert not isinstance(out, CategoricalTensor)
@@ -456,6 +732,39 @@ def test_slicing_ops() -> None:
     assert out.size() == (2, 3)
 
 
+def test_as_strided_category_positions() -> None:
+    tensor = CategoricalTensor(
+        torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]], dtype=torch.int32),
+        tuple(torch.arange(4) + 10 * i for i in range(4)),
+    )
+
+    out = torch.as_strided(tensor, (1, 4), (4, 0), 1)
+    assert isinstance(out, CategoricalTensor)
+    assert out.categories == 4 * (tensor.categories[1],)
+
+    out = torch.as_strided(tensor, (2, 2), (1, 1), 0)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.equal(torch.as_strided(tensor.code, (2, 2), (1, 1), 0))
+
+    out = torch.as_strided(tensor, (1, 6), (4, 0), 1)
+    assert not isinstance(out, CategoricalTensor)
+    assert out.equal(torch.as_strided(tensor.code, (1, 6), (4, 0), 1))
+
+    stepped = tensor[..., ::2]
+    out = torch.as_strided(stepped, (2, 1), (4, 2), 2)
+    assert isinstance(out, CategoricalTensor)
+    assert out.categories == (tensor.categories[2],)
+
+    code = torch.as_strided(
+        torch.tensor([0, 1, 2, 3], dtype=torch.int32),
+        (2, 2),
+        (1, 1),
+    )
+    irregular = CategoricalTensor(code, tensor.categories[:2])
+    out = torch.as_strided(irregular, (2, 2), (2, 1), 0)
+    assert not isinstance(out, CategoricalTensor)
+
+
 def test_split_ops() -> None:
     data = torch.randint(0, 4, (2, 3, 4))
     categories = tuple(torch.arange(4) for _ in range(data.size(-1)))
@@ -465,6 +774,10 @@ def test_split_ops() -> None:
     assert all(isinstance(item, CategoricalTensor) for item in out)
     assert [item.size() for item in out] == 2 * [(3, 4)]
     assert all(item.categories == tensor.categories for item in out)
+    assert all(
+        torch._C._is_alias_of(tensor, item)  # ty: ignore[unresolved-attribute]
+        for item in out
+    )
 
     out = tensor.unbind(-1)
     assert all(not isinstance(item, CategoricalTensor) for item in out)
@@ -476,6 +789,10 @@ def test_split_ops() -> None:
         categories[:2],
         categories[2:],
     ]
+    assert all(
+        torch._C._is_alias_of(tensor, item)  # ty: ignore[unresolved-attribute]
+        for item in out
+    )
 
     out = tensor.split([1, 3], dim=-1)
     assert all(isinstance(item, CategoricalTensor) for item in out)
@@ -483,6 +800,10 @@ def test_split_ops() -> None:
         categories[:1],
         categories[1:],
     ]
+    assert all(
+        torch._C._is_alias_of(tensor, item)  # ty: ignore[unresolved-attribute]
+        for item in out
+    )
 
 
 def test_index_ops() -> None:

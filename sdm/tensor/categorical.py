@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import math
 from collections.abc import Callable, Sequence
 from itertools import accumulate, chain
 from typing import TYPE_CHECKING, Any, ClassVar, Self, SupportsIndex, cast
@@ -9,6 +10,7 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm.tensor import StringTensor, VarLenTensor
@@ -18,6 +20,7 @@ from sdm.tensor.io import (
     to_cudf,
 )
 from sdm.tensor.io.arrow import _combine_arrow_chunks
+from sdm.tensor.mixin import _make_wrapper_subclass
 
 if TYPE_CHECKING:
     import cudf
@@ -34,6 +37,10 @@ def preserve_view_inference_mode(fn: Callable) -> Callable:
             return fn(*args, **kwargs)
 
     return wrapper
+
+
+def _category(inp: CategoricalTensor, index: int) -> Tensor:
+    return CategoricalTensor.category(inp, index)
 
 
 class CategoricalTensor(Tensor):
@@ -77,7 +84,43 @@ class CategoricalTensor(Tensor):
         code: Tensor,
         categories: Sequence[Tensor],
     ) -> None:
-        pass
+        self._set_wrapper_attrs(self, code, categories)
+
+    @staticmethod
+    def _set_wrapper_attrs(
+        out: CategoricalTensor,
+        code: Tensor,
+        categories: Sequence[Tensor],
+    ) -> None:
+        out._code = code
+        out._categories = tuple(categories)
+        for i, category in enumerate(out._categories):
+            setattr(out, f"_category_{i}", category)
+
+    @classmethod
+    def _new_wrapper(
+        cls,
+        code: Tensor,
+        categories: Sequence[Tensor],
+        *,
+        size: Sequence[int] | None = None,
+        stride: Sequence[int] | None = None,
+    ) -> Self:
+        if size is None:
+            size = code.size()
+        if stride is None:
+            stride = code.stride()
+        out = _make_wrapper_subclass(
+            cls,
+            size=size,
+            strides=stride,
+            storage_offset=code.storage_offset(),
+            dtype=code.dtype,
+            device=code.device,
+            requires_grad=False,
+        )
+        cls._set_wrapper_attrs(out, code, categories)
+        return out
 
     def __new__(
         cls,
@@ -112,20 +155,10 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
-        out = Tensor._make_wrapper_subclass(
-            cls,
-            size=code.size(),
-            strides=code.stride(),
-            storage_offset=code.storage_offset(),
-            dtype=code.dtype,
-            device=code.device,
-            requires_grad=False,
+        return cls._new_wrapper(
+            code,
+            categories,
         )
-
-        out._code = code
-        out._categories = tuple(categories)
-
-        return out
 
     @classmethod
     def from_arrow(
@@ -318,7 +351,16 @@ class CategoricalTensor(Tensor):
     @property
     def categories(self) -> tuple[Tensor, ...]:
         r"""Return category vector for each categorical column."""
-        return self._categories
+        return self._categories[: self.size(-1)]
+
+    def category(self, index: int) -> Tensor:
+        r"""Return the category vector for one categorical column."""
+        num_columns = self.size(-1)
+        if index < 0:
+            index += num_columns
+        if index < 0 or index >= num_columns:
+            raise IndexError("Categorical column index out of range")
+        return getattr(self, f"_category_{index}")
 
     # Decorators ##############################################################
 
@@ -343,9 +385,36 @@ class CategoricalTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "code",
+            *(f"_category_{i}" for i in range(len(self._categories))),
+        ]
+        ctx = (self.__class__, len(self._categories))
+        return attrs, ctx
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Any],
+        ctx: tuple[Any, ...],
+        outer_size: tuple[int, ...],
+        outer_stride: tuple[int, ...],
+    ) -> CategoricalTensor:
+        cls, num_categories = ctx
+        categories = tuple(
+            inner_tensors[f"_category_{i}"] for i in range(num_categories)
+        )
+        code = inner_tensors["code"]
+        return cls._new_wrapper(
+            code,
+            categories,
+            size=outer_size,
+            stride=outer_stride,
+        )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
-        args = (self._code, self._categories)
-        return (self.__class__, args)
+        args = (self.__class__, self._code, self._categories)
+        return (_rebuild_categorical_tensor, args)
 
     @classmethod
     def __torch_function__(
@@ -370,15 +439,22 @@ class CategoricalTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = kwargs or {}
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            out = handler(*args, **kwargs)
+            if pytree.tree_any(
+                lambda value: isinstance(value, CategoricalTensor),
+                out,
+            ):
+                return return_and_correct_aliasing(func, args, kwargs, out)
+            return out
 
         # Operate on vanilla tensors for all non-handled functions:
         args = pytree.tree_map_only(CategoricalTensor, lambda x: x._code, args)
         kwargs = pytree.tree_map_only(
             CategoricalTensor, lambda x: x._code, kwargs
         )
-        return func(*args, **(kwargs or {}))
+        return func(*args, **kwargs)
 
     @override
     def is_shared(self) -> bool:
@@ -428,6 +504,31 @@ class CategoricalTensor(Tensor):
         ]
         return columns_to_rows(columns, tuple(self.size()[:-1]))
 
+    def __repr__(self, *, tensor_contents: Any = None) -> str:
+        out = f"{self.__class__.__name__}(..."
+        out += f", size={tuple(self.size())}"
+        out += f", dtype={self.dtype}"
+        if not self.is_cpu:
+            out += f", device={self.device}"
+        out += ")"
+        return out
+
+
+def _rebuild_categorical_tensor(
+    cls: type[CategoricalTensor],
+    code: Tensor,
+    categories: tuple[Tensor, ...],
+) -> CategoricalTensor:
+    return cls._new_wrapper(code, categories)
+
+
+@torch.compiler.allow_in_graph
+def _make_categorical_tensor(
+    code: Tensor,
+    categories: tuple[Tensor, ...],
+) -> CategoricalTensor:
+    return CategoricalTensor(code, categories)
+
 
 @CategoricalTensor.implements(aten.isnan.default)
 def _isnan(inp: CategoricalTensor) -> Tensor:
@@ -442,7 +543,10 @@ def _isfinite(inp: CategoricalTensor) -> Tensor:
 @CategoricalTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: CategoricalTensor) -> CategoricalTensor:
-    return inp.__class__(aten.alias.default(inp._code), inp._categories)
+    return inp.__class__._new_wrapper(
+        aten.alias.default(inp._code),
+        inp._categories,
+    )
 
 
 @CategoricalTensor.implements(aten.to.dtype_layout)
@@ -487,6 +591,8 @@ def _to_dtype_layout(
     if code.dtype not in inp.ALLOWED_DTYPES or code.layout != torch.strided:
         return code
 
+    # A copy of a view owns only its logical code layout, so any hidden
+    # categories retained to describe the source storage are no longer valid.
     categories = tuple(
         aten.to.dtype_layout(
             category,
@@ -498,9 +604,12 @@ def _to_dtype_layout(
             copy=copy,
             memory_format=None,
         )
-        for category in inp._categories
+        for category in inp.categories
     )
-    return inp.__class__(code, categories)
+    return inp.__class__._new_wrapper(
+        code,
+        categories,
+    )
 
 
 @CategoricalTensor.implements(aten.to.dtype)
@@ -597,7 +706,11 @@ def _contiguous(
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> CategoricalTensor:
     code = inp._code.contiguous(memory_format=memory_format)
-    return inp.__class__(code, inp._categories)
+    categories = inp._categories if code is inp._code else inp.categories
+    return inp.__class__._new_wrapper(
+        code,
+        categories,
+    )
 
 
 @CategoricalTensor.implements(aten.is_pinned.default)
@@ -609,8 +722,12 @@ def _is_pinned(inp: CategoricalTensor) -> bool:
 
 @CategoricalTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
-    categories = tuple(category.pin_memory() for category in inp._categories)
-    return inp.__class__(inp._code.pin_memory(), categories)
+    code = inp._code.pin_memory()
+    categories = tuple(category.pin_memory() for category in inp.categories)
+    return inp.__class__._new_wrapper(
+        code,
+        categories,
+    )
 
 
 @CategoricalTensor.implements(aten.pin_memory.default)
@@ -633,7 +750,7 @@ def _equal(inp: CategoricalTensor, other: Tensor) -> bool:
     if not inp._code.equal(other._code):
         return False
 
-    for category1, category2 in zip(inp._categories, other._categories):
+    for category1, category2 in zip(inp.categories, other.categories):
         if not category1.equal(category2):
             return False
 
@@ -675,6 +792,26 @@ def _flatten(
     end_dim: int = -1,
 ) -> Tensor:
     return aten.flatten.using_ints.decompose(inp, start_dim, end_dim)
+
+
+@CategoricalTensor.implements(aten.as_strided.default)
+@preserve_view_inference_mode
+def _as_strided(
+    inp: CategoricalTensor,
+    size: Sequence[int],
+    stride: Sequence[int],
+    storage_offset: int | None = None,
+) -> Tensor:
+    code = aten.as_strided.default(
+        inp._code,
+        size,
+        stride,
+        storage_offset,
+    )
+    category_positions = _view_category_positions(inp, code)
+    if category_positions is None:
+        return code
+    return _from_code(inp, code, category_positions)
 
 
 @CategoricalTensor.implements(aten.squeeze.default)
@@ -721,7 +858,7 @@ def _transpose(inp: CategoricalTensor, dim0: int, dim1: int) -> Tensor:
     dim1 %= inp.dim()
     if dim0 != dim1 and inp.dim() - 1 in (dim0, dim1):
         return code
-    return inp.__class__(code, inp.categories)
+    return _from_code(inp, code)
 
 
 @CategoricalTensor.implements(aten.permute.default)
@@ -731,7 +868,7 @@ def _permute(inp: CategoricalTensor, dims: Sequence[int]) -> Tensor:
     dims = tuple(dim % inp.dim() for dim in dims)
     if dims[-1] != inp.dim() - 1:
         return code
-    return inp.__class__(code, inp.categories)
+    return _from_code(inp, code)
 
 
 @CategoricalTensor.implements(aten.select.int)
@@ -741,7 +878,7 @@ def _select(inp: CategoricalTensor, dim: int, index: int) -> Tensor:
     dim %= inp.dim()
     if dim == inp.dim() - 1:
         return code
-    return inp.__class__(code, inp.categories)
+    return _from_code(inp, code)
 
 
 @CategoricalTensor.implements(aten.slice.Tensor)
@@ -756,8 +893,13 @@ def _slice(
     code = aten.slice.Tensor(inp._code, dim, start, end, step)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return inp.__class__(code, inp.categories)
-    return inp.__class__(code, inp.categories[slice(start, end, step)])
+        return _from_code(inp, code)
+    positions = tuple(range(inp.size(-1)))[slice(start, end, step)]
+    return _from_code(
+        inp,
+        code,
+        positions,
+    )
 
 
 @CategoricalTensor.implements(aten.narrow.default)
@@ -771,20 +913,24 @@ def _narrow(
     code = inp._code.narrow(dim, start, length)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return inp.__class__(code, inp.categories)
+        return _from_code(inp, code)
     if start < 0:
         start += inp.size(dim)
-    return inp.__class__(code, inp.categories[start : start + length])
+    return _from_code(
+        inp,
+        code,
+        range(start, start + length),
+    )
 
 
 @CategoricalTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: CategoricalTensor, dim: int = 0) -> tuple[Tensor, ...]:
+def _unbind(inp: CategoricalTensor, dim: int = 0) -> list[Tensor]:
     code_list = inp._code.unbind(dim)
     dim %= inp.dim()
     if dim == inp.dim() - 1:
-        return code_list
-    return tuple(inp.__class__(code, inp.categories) for code in code_list)
+        return list(code_list)
+    return [_from_code(inp, code) for code in code_list]
 
 
 @CategoricalTensor.implements(aten.split.Tensor)
@@ -793,15 +939,19 @@ def _split(
     inp: CategoricalTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[CategoricalTensor, ...]:
+) -> list[CategoricalTensor]:
     code_list = inp._code.split(split_size, dim)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return tuple(inp.__class__(code, inp.categories) for code in code_list)
-    return tuple(
-        inp.__class__(code, inp.categories[i : i + split_size])
+        return [_from_code(inp, code) for code in code_list]
+    return [
+        _from_code(
+            inp,
+            code,
+            range(i, min(i + split_size, inp.size(dim))),
+        )
         for code, i in zip(code_list, range(0, inp.size(dim), split_size))
-    )
+    ]
 
 
 @CategoricalTensor.implements(aten.split.sizes)
@@ -812,17 +962,17 @@ def _split_with_sizes(
     inp: CategoricalTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[CategoricalTensor, ...]:
+) -> list[CategoricalTensor]:
     code_list = inp._code.split(tuple(split_sizes), dim)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return tuple(inp.__class__(code, inp.categories) for code in code_list)
+        return [_from_code(inp, code) for code in code_list]
 
     offset = (0, *accumulate(split_sizes))
-    return tuple(
-        inp.__class__(code, inp.categories[start:end])
+    return [
+        _from_code(inp, code, range(start, end))
         for code, start, end in zip(code_list, offset[:-1], offset[1:])
-    )
+    ]
 
 
 @CategoricalTensor.implements(aten.index_select.default)
@@ -834,7 +984,7 @@ def _index_select(
     code = inp._code.index_select(dim, index)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return inp.__class__(code, inp.categories)
+        return _from_code(inp, code)
     categories = tuple(inp.categories[i] for i in index.tolist())
     return inp.__class__(code, categories)
 
@@ -915,8 +1065,68 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> Tensor:
 
 def _maybe_wrap(inp: CategoricalTensor, code: Tensor) -> Tensor:
     if code.dim() > 0 and code.size(-1) == inp.size(-1):
-        return inp.__class__(code, inp.categories)
+        return _from_code(inp, code)
     return code
+
+
+def _from_code(
+    inp: CategoricalTensor,
+    code: Tensor,
+    category_positions: Sequence[int] | None = None,
+) -> CategoricalTensor:
+    categories = inp._categories
+    if category_positions is not None:
+        selected = tuple(categories[i] for i in category_positions)
+        categories = (*selected, *categories)[: len(categories)]
+    return inp.__class__._new_wrapper(
+        code,
+        categories,
+    )
+
+
+def _view_category_positions(
+    inp: CategoricalTensor,
+    code: Tensor,
+) -> tuple[int, ...] | None:
+    if code.dim() == 0:
+        return None
+
+    num_slots = len(inp._categories)
+    if num_slots == 0:
+        return () if code.size(-1) == 0 else None
+    if code.size(-1) > num_slots:
+        return None
+
+    category_stride = inp.stride(-1)
+    if category_stride == 0 or code.stride(-1) % category_stride != 0:
+        return None
+
+    period = num_slots * category_stride
+    for dim_size, dim_stride in zip(inp.size()[:-1], inp.stride()[:-1]):
+        if dim_size > 1:
+            period = math.gcd(period, dim_stride)
+
+    category_residues = tuple(
+        i * category_stride % period for i in range(inp.size(-1))
+    )
+    if len(set(category_residues)) != inp.size(-1):
+        return None
+
+    if any(
+        dim_size > 1 and dim_stride % period != 0
+        for dim_size, dim_stride in zip(code.size()[:-1], code.stride()[:-1])
+    ):
+        return None
+
+    offset = code.storage_offset() - inp.storage_offset()
+    output_residues = tuple(
+        (offset + i * code.stride(-1)) % period for i in range(code.size(-1))
+    )
+    if any(residue not in category_residues for residue in output_residues):
+        return None
+    return tuple(
+        category_residues.index(residue) for residue in output_residues
+    )
 
 
 def _as_tensor(inp: Tensor) -> Tensor:
