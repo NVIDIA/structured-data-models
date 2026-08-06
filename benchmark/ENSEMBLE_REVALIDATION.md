@@ -7,7 +7,7 @@ at every requested semantic boundary for classification and regression, in
 both vectorized and sequential Recipe execution. Current-API KumoRFM
 vectorized/sequential and cached execution also match.
 
-- Latest `main`: `0d3a0b8aaec16d6ff503119a4ea3ebc64c46e046`
+- Latest `main`: `d2ade8961e941536d8c0ede2c044f276295eb4fa`
 - Final PR #516 commit: `8b3eaca8eb0bccecfdd9379bf7279437779a83e8`
 - TabICLv2 reference: `f719c886a586ed4a29236345e319ac1ea596c478`
   (`tabicl==2.0.0`)
@@ -47,7 +47,7 @@ The strict suite compares feature and target preprocessing, every materialized
 member, model inputs, raw per-estimator checkpoint outputs, canonical output
 mapping, estimator reduction, final processing, direct public forward, and
 cached fit/predict. The result is **6 passed**; final targeted coverage is
-**81 passed, 2 expected compile skips**. The complete repository pre-push suite is **584 passed, 105 skipped**.
+**117 passed, 4 expected skips**. The complete repository pre-push suite is **584 passed, 105 skipped**.
 
 The first divergences found during revalidation were:
 
@@ -76,6 +76,13 @@ is sampled RSS.
 
 Hardware is an NVIDIA L4 with 23,659,151,360 bytes device memory and an AMD
 EPYC 7R13 host. Software is PyTorch 2.13.0+cu130 and CUDA 13.0.
+
+The benchmark artifacts were captured at source head `1b742180`, immediately
+before latest main `d2ade896` was merged. That three-commit main delta changes
+only documentation/example layout, git-blame metadata, full-column no-op slice
+compatibility, and composite `pin_memory` dispatch. The benchmark invokes none
+of those branches; strict parity, the affected suite, and the full repository
+gate were rerun after the merge.
 
 Cells below are classification / regression median / p95 milliseconds.
 The historical and speed-of-light runs did not isolate reduction and final
