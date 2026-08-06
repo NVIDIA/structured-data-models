@@ -511,17 +511,14 @@ def _pin_memory(inp: ColumnarTensor) -> ColumnarTensor:
     )
 
 
-# On CUDA machines, the composite `pin_memory` reaches `__torch_dispatch__`
-# undecomposed for column-less instances (`is_pinned` is vacuously true, so
-# it never redispatches to `_pin_memory`).
 @ColumnarTensor.implements(aten.pin_memory.default)
 def _pin_memory_composite(
     inp: ColumnarTensor,
     device: torch.device | None = None,
 ) -> ColumnarTensor:
-    if inp.is_pinned():
+    if _is_pinned(inp):
         return inp
-    return cast(ColumnarTensor, aten._pin_memory.default(inp))
+    return _pin_memory(inp)
 
 
 @ColumnarTensor.implements(aten.equal.default)
