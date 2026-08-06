@@ -161,16 +161,11 @@ class Recipe:
     ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
     ``target`` also selects its task-specific output route.
 
-    A pipeline given as a single :class:`~sdm.processing.base.Processor` that
-    is not already ensemble-aware is wrapped in a
-    :class:`~sdm.processing.common.Sequential` so it can still process
-    multiple estimators.
-
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
 
     Bind a recipe to context data with :meth:`bind` to obtain a reusable
-    execution for query and output transforms.
+    execution for query, inverse-target, and output transforms.
 
     Args:
         features: Steps applied to model inputs before the model.
@@ -192,9 +187,9 @@ class Recipe:
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
 
-        features = self._as_ensemble_processor(features)
-        target = self._as_ensemble_processor(target)
-        output = self._as_ensemble_processor(output)
+        features = self._as_sequential(features)
+        target = self._as_sequential(target)
+        output = self._as_sequential(output)
 
         # TODO: Support TaskDispatch in features after defining task-aware
         # feature fit ordering.
@@ -269,7 +264,8 @@ class Recipe:
         """Bind this recipe to context data and return an execution.
 
         Fits ``features`` and ``target`` on the context and returns state for
-        query and output transforms. The caller's recipe is left unchanged.
+        query, inverse-target, and output transforms. The caller's recipe is
+        left unchanged.
 
         Args:
             x_context: Feature table for in-context examples.
@@ -288,15 +284,13 @@ class Recipe:
         )
 
     @staticmethod
-    def _as_ensemble_processor(
+    def _as_sequential(
         processor: Processor | Iterable[Processor] | None,
     ) -> Processor:
         if processor is None:
             return Sequential()
         if not isinstance(processor, Processor):
             return Sequential(*processor)
-        if not isinstance(processor, EnsembleProcessor):
-            return Sequential(processor)
         return processor
 
     def __repr__(self) -> str:

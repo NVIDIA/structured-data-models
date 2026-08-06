@@ -36,14 +36,12 @@ class _RecipeExecution:
     """Bound recipe state for one ensemble preprocessing pass.
 
     Internal helper for :class:`~sdm.models.base.ICLModel`. Construct via
-    :meth:`~sdm.processing.recipe.Recipe.bind`, then :meth:`transform` and
-    :meth:`transform_output`.
+    :meth:`~sdm.processing.recipe.Recipe.bind`, then :meth:`transform`,
+    :meth:`inverse_transform_target`, and :meth:`transform_output`.
 
     Attributes:
         recipe: Recipe with fitted ``features`` and ``target``.
         contexts: Transformed context tables, one per member.
-        classes: Per-member class labels, or ``None`` for regression.
-        is_regression: ``True`` when every member has a regression target.
     """
 
     def __init__(
@@ -51,14 +49,10 @@ class _RecipeExecution:
         *,
         recipe: Recipe,
         contexts: Sequence[_MemberContext],
-        classes: Sequence[Tensor | None],
-        is_regression: bool,
         related_processors: Mapping[str, EnsembleProcessor] | None,
     ) -> None:
         self.recipe = recipe
         self.contexts = tuple(contexts)
-        self.classes = tuple(classes)
-        self.is_regression = is_regression
         self._related_processors = related_processors
 
     @classmethod
@@ -104,34 +98,21 @@ class _RecipeExecution:
             generator=generator,
         )
 
-        contexts = []
-        classes = []
-        for member_id in range(num_members):
-            y_i = y_context_out.table(member_id)
-            contexts.append(
-                _MemberContext(
-                    x=x_context_out.table(member_id),
-                    y=y_i,
-                    related_tables=cls._replace_with_member_tables(
-                        related_context_tables,
-                        related_context_out,
-                        member_id,
-                    ),
-                )
+        contexts = tuple(
+            _MemberContext(
+                x=x_context_out.table(member_id),
+                y=y_context_out.table(member_id),
+                related_tables=cls._replace_with_member_tables(
+                    related_context_tables,
+                    related_context_out,
+                    member_id,
+                ),
             )
-            classes.append(
-                y_i.categorical.categories[0]
-                if y_i.categorical.size(-1) > 0
-                else None
-            )
-
-        is_regression = all(c is None for c in classes)
-
+            for member_id in range(num_members)
+        )
         return cls(
             recipe=recipe,
-            contexts=tuple(contexts),
-            classes=tuple(classes),
-            is_regression=is_regression,
+            contexts=contexts,
             related_processors=related_processors or None,
         )
 
@@ -179,43 +160,47 @@ class _RecipeExecution:
             for member_id in range(num_members)
         )
 
+    def inverse_transform_target(
+        self,
+        outputs: Sequence[TableTensor],
+    ) -> tuple[TableTensor, ...]:
+        """Invert fitted target transforms on member outputs.
+
+        Args:
+            outputs: One model output per ensemble member.
+        """
+        table = cast(
+            EnsembleInvertibleMixin,
+            self.recipe.target,
+        ).inverse_transform_ensemble(self._ensemble_from_outputs(outputs))
+        return tuple(
+            table.table(member_id) for member_id in range(table.num_members)
+        )
+
     def transform_output(
         self,
         outputs: Sequence[TableTensor],
     ) -> TableTensor:
-        """Postprocess member outputs via inverse target and ``recipe.output``.
+        """Apply ``recipe.output`` to member outputs.
 
         Stacks members on dim 0 unless the output pipeline reduces the
         ensemble dimension (e.g. :class:`~sdm.processing.ReduceEstimators`).
 
         Args:
-            outputs: One raw model output per ensemble member.
+            outputs: One model output per ensemble member.
         """
-        num_members = len(self.contexts)
-        if len(outputs) != num_members:
-            raise ValueError(
-                f"Expected {num_members} member outputs (got {len(outputs)})"
-            )
-
-        recipe = self.recipe
-        table = EnsembleTable.from_tables(
-            tables=outputs,
-            member_table_ids=tuple(range(num_members)),
-        )
-        if self.is_regression:
-            target = cast(EnsembleInvertibleMixin, recipe.target)
-            table = target.inverse_transform_ensemble(table)
+        table = self._ensemble_from_outputs(outputs)
         input_members = table.num_members
         table = cast(
             EnsembleProcessor,
-            recipe.output,
+            self.recipe.output,
         ).transform_ensemble(table)
 
         reduced = table.num_members < input_members or (
             table.num_members == 1
             and any(
                 isinstance(module, ReduceEstimators)
-                for module in recipe.output.modules()
+                for module in self.recipe.output.modules()
             )
         )
         if reduced:
@@ -226,7 +211,21 @@ class _RecipeExecution:
         ]
         return cast(
             TableTensor,
-            torch.stack(cast(list[torch.Tensor], members), dim=0),
+            torch.stack(cast(list[Tensor], members), dim=0),
+        )
+
+    def _ensemble_from_outputs(
+        self,
+        outputs: Sequence[TableTensor],
+    ) -> EnsembleTable:
+        num_members = len(self.contexts)
+        if len(outputs) != num_members:
+            raise ValueError(
+                f"Expected {num_members} member outputs (got {len(outputs)})"
+            )
+        return EnsembleTable.from_tables(
+            tables=outputs,
+            member_table_ids=tuple(range(num_members)),
         )
 
     @staticmethod
