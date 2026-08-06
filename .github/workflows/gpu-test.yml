@@ -18,7 +18,7 @@ permissions:
 jobs:
   pytest-gpu:
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7
@@ -66,7 +66,17 @@ jobs:
             . \
             'cudf-cu13>=26.6' \
             'pandas<3' \
-            'pylibcugraph-cu13>=26.6'
+            'pylibcugraph-cu13>=26.6' \
+            'autogluon.common@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=common' \
+            'autogluon.core@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=core' \
+            'autogluon.features@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=features' \
+            'autogluon.tabular@git+https://github.com/autogluon/autogluon.git@0e2db0c68f4f54ba9c2c418721c8dba92a34df72#subdirectory=tabular' \
+            'bencheval@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/bencheval' \
+            'tabarena[plot]@git+https://github.com/autogluon/tabarena.git@7fee3bef1670be0bd52b4ecb99f7761e97b06068#subdirectory=packages/tabarena' \
+            relbench \
+            scikit-learn \
+            torchmetrics \
+            tqdm
           uv pip install \
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             pyg-lib
@@ -101,3 +111,31 @@ jobs:
           FULL_TEST: ${{ (github.ref_name == 'main' || steps.ci-full-test-label.outputs.result == 'true') && '1' || '0' }}
         run: |
           pytest -m cuda -rs --durations=25
+
+      - name: Run examples
+        run: |
+          python examples/tabiclv2/quickstart.py
+          python examples/kumorfm/rel_bench.py \
+            --dataset=rel-f1 \
+            --task=driver-position
+          python - <<'PY'
+          import runpy
+          import sys
+          from pathlib import Path
+
+          from tabarena.contexts import TabArenaContext
+
+          example = Path("examples/tabiclv2/tabarena/main.py")
+          sys.path.insert(0, str(example.parent))
+          build_and_run_jobs = TabArenaContext.build_and_run_jobs
+
+          def build_and_run_one_dataset(self, experiments, **kwargs):
+              kwargs["build_kwargs"] = {
+                  "dataset_names": ["blood-transfusion-service-center"],
+              }
+              return build_and_run_jobs(self, experiments, **kwargs)
+
+          TabArenaContext.build_and_run_jobs = build_and_run_one_dataset
+          runpy.run_path(str(example), run_name="__main__")
+          PY
+          python examples/tabiclv2/tabarena/evaluate.py
