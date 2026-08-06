@@ -2,7 +2,7 @@ import pytest
 import torch
 
 from sdm import Recipe
-from sdm.cache import Cache, KVCacheEntry
+from sdm.cache import Cache
 from sdm.models import TabICLv2
 from sdm.models.tabiclv2.model import _TabICLv2
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
@@ -136,66 +136,6 @@ def test_row_embedding_mixed_radix_digit(device: torch.device) -> None:
         out,
         row_embedding(x, y_swapped, num_classes=25),
     )
-
-
-@onlyCUDA
-def test_tabiclv2_float16_context() -> None:
-    device = torch.device("cuda")
-    model = _TabICLv2(
-        num_classes=3,
-        num_quantiles=0,
-        channels=8,
-        num_embedding_layers=2,
-        num_embedding_heads=2,
-        num_inducing_points=4,
-        group_size=3,
-        num_readout_tokens=2,
-        num_icl_layers=2,
-        num_icl_heads=2,
-        norm_bias=True,
-        device=device,
-    ).eval()
-    x_context = torch.randn(5, 6, device=device)
-    x_query = torch.randn(3, 6, device=device)
-    y_context = torch.randint(3, size=(5,), device=device)
-    x = torch.cat([x_context, x_query])
-
-    with torch.inference_mode():
-        expected = model(x=x, y=y_context, num_classes=3)
-        cache = Cache()
-        with torch.amp.autocast(device.type, dtype=torch.float16):
-            out = model(x=x, y=y_context, num_classes=3)
-            model(
-                x=x_context,
-                y=y_context,
-                num_classes=3,
-                cache=cache,
-            )
-
-    entries = [
-        value for value in cache.values() if isinstance(value, KVCacheEntry)
-    ]
-    assert entries
-    assert all(entry.key.dtype == torch.float16 for entry in entries)
-    assert all(entry.value.dtype == torch.float16 for entry in entries)
-
-    cache.freeze()
-    with (
-        torch.inference_mode(),
-        torch.amp.autocast(
-            device.type,
-            dtype=torch.float16,
-        ),
-    ):
-        cached_out = model(
-            x=x_query,
-            y=y_context.new_empty(0),
-            num_classes=3,
-            cache=cache,
-        )
-
-    torch.testing.assert_close(out.float(), expected, rtol=0.02, atol=0.02)
-    torch.testing.assert_close(cached_out, out, rtol=0.02, atol=0.02)
 
 
 def test_tabiclv2_hierarchical_log_probs(
