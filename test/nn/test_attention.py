@@ -1,12 +1,15 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import cast
 from unittest.mock import patch
 
 import pytest
 import torch
+import torch.nn.attention as torch_attention
 import torch.nn.functional as F
 from torch import Tensor
 
+import sdm.nn.attention as attention_module
 from sdm.nn import (
     SDPA,
     Attention,
@@ -221,6 +224,160 @@ def test_sdpa(
         key=key.expand(-1, num_test, -1, -1, -1),
         value=value.expand(-1, num_test, -1, -1, -1),
     )
+    torch.testing.assert_close(out, expected)
+
+
+def test_flash_attention_activation_reports_active_fa4_on_cuda() -> None:
+    with (
+        patch.object(
+            attention_module,
+            "_flash_attention_activation_attempted",
+            True,
+        ),
+        patch.object(
+            attention_module,
+            "current_flash_attention_impl",
+            return_value="FA4",
+        ),
+    ):
+        implementation = attention_module._maybe_activate_flash_attention(
+            torch.device("cuda")
+        )
+
+    assert implementation == "FA4"
+
+
+def test_sdpa_fa4_uses_flash_attention_backend() -> None:
+    module = SDPA(channels=4, num_query_heads=2)
+    query = torch.randn(2, 3, 2, 4)
+    key = torch.randn(2, 5, 2, 4)
+    value = torch.randn(2, 5, 2, 4)
+    flash_backend_active = False
+
+    @contextmanager
+    def flash_attention_context(
+        backend: torch_attention.SDPBackend,
+    ) -> Iterator[None]:
+        nonlocal flash_backend_active
+        assert backend is torch_attention.SDPBackend.FLASH_ATTENTION
+        flash_backend_active = True
+        try:
+            yield
+        finally:
+            flash_backend_active = False
+
+    def scaled_dot_product_attention(
+        *, query: Tensor, **_kwargs: object
+    ) -> Tensor:
+        assert flash_backend_active
+        return torch.zeros_like(query)
+
+    with (
+        patch.object(
+            attention_module,
+            "_maybe_activate_flash_attention",
+            return_value="FA4",
+        ),
+        patch.object(
+            torch_attention,
+            "sdpa_kernel",
+            side_effect=flash_attention_context,
+        ),
+        patch.object(
+            F,
+            "scaled_dot_product_attention",
+            side_effect=scaled_dot_product_attention,
+        ),
+    ):
+        out = module(query=query, key=key, value=value)
+
+    assert not flash_backend_active
+    torch.testing.assert_close(out, torch.zeros_like(query))
+
+
+def test_sdpa_fa4_stabilizes_broadcast_query_stride() -> None:
+    module = SDPA(channels=4, num_query_heads=2)
+    broadcast_query = torch.randn(1, 3, 2, 4).expand(2, -1, -1, -1)
+    dense_query = broadcast_query.clone()
+    packed_key_value = torch.randn(2, 5, 2, 8)
+    key = packed_key_value[..., :4]
+    value = packed_key_value[..., 4:]
+    compiled_query_stride: tuple[int, ...] | None = None
+    key_strides: list[tuple[int, ...]] = []
+    value_strides: list[tuple[int, ...]] = []
+
+    @contextmanager
+    def flash_attention_context(
+        backend: torch_attention.SDPBackend,
+    ) -> Iterator[None]:
+        assert backend is torch_attention.SDPBackend.FLASH_ATTENTION
+        yield
+
+    def cached_scaled_dot_product_attention(
+        *, query: Tensor, key: Tensor, value: Tensor, **_kwargs: object
+    ) -> Tensor:
+        nonlocal compiled_query_stride
+        query_stride = query.stride()
+        if compiled_query_stride is None:
+            compiled_query_stride = query_stride
+        else:
+            assert query_stride == compiled_query_stride
+        key_strides.append(key.stride())
+        value_strides.append(value.stride())
+        return torch.zeros_like(query)
+
+    with (
+        patch.object(
+            attention_module,
+            "_maybe_activate_flash_attention",
+            return_value="FA4",
+        ),
+        patch.object(
+            torch_attention,
+            "sdpa_kernel",
+            side_effect=flash_attention_context,
+        ),
+        patch.object(
+            F,
+            "scaled_dot_product_attention",
+            side_effect=cached_scaled_dot_product_attention,
+        ),
+    ):
+        broadcast_out = module(
+            query=broadcast_query,
+            key=key,
+            value=value,
+        )
+        dense_out = module(query=dense_query, key=key, value=value)
+
+    assert compiled_query_stride is not None
+    assert 0 not in compiled_query_stride
+    assert key_strides == [key.transpose(-3, -2).stride()] * 2
+    assert value_strides == [value.transpose(-3, -2).stride()] * 2
+    torch.testing.assert_close(
+        broadcast_out, torch.zeros_like(broadcast_query)
+    )
+    torch.testing.assert_close(dense_out, torch.zeros_like(dense_query))
+
+
+def test_sdpa_cpu_ignores_active_fa4() -> None:
+    module = SDPA(channels=4, num_query_heads=2)
+    query = torch.randn(2, 3, 2, 4)
+    key = torch.randn(2, 5, 2, 4)
+    value = torch.randn(2, 5, 2, 4)
+    expected = reference_sdpa(query=query, key=key, value=value)
+
+    with (
+        patch.object(
+            attention_module,
+            "current_flash_attention_impl",
+            return_value="FA4",
+        ),
+        patch.object(torch_attention, "sdpa_kernel") as sdpa_kernel,
+    ):
+        out = module(query=query, key=key, value=value)
+
+    sdpa_kernel.assert_not_called()
     torch.testing.assert_close(out, expected)
 
 

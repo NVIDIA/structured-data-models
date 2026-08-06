@@ -1,6 +1,7 @@
 """Attention modules for structured tensor models."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from math import prod
 from typing import Any, Literal, cast, overload
 
@@ -32,31 +33,33 @@ _flash_attention_impls: dict[int, tuple[Literal["FA3", "FA4"], str]] = {
 
 
 @torch.compiler.assume_constant_result
-def _maybe_activate_flash_attention(device: torch.device) -> None:
+def _maybe_activate_flash_attention(device: torch.device) -> str | None:
     global _flash_attention_activation_attempted
 
+    if current_flash_attention_impl is None or device.type != "cuda":
+        return None
+
+    active_implementation = current_flash_attention_impl()
     if (
         _flash_attention_activation_attempted
         or activate_flash_attention_impl is None
-        or current_flash_attention_impl is None
-        or device.type != "cuda"
     ):
-        return
+        return active_implementation
 
     _flash_attention_activation_attempted = True
-    if current_flash_attention_impl() is not None:
-        return
+    if active_implementation is not None:
+        return active_implementation
 
     device_majors = {
         torch.cuda.get_device_capability(index)[0]
         for index in range(torch.cuda.device_count())
     }
     if len(device_majors) != 1:
-        return
+        return None
 
     implementation = _flash_attention_impls.get(device_majors.pop())
     if implementation is None:
-        return
+        return None
     name, architecture = implementation
 
     try:
@@ -69,11 +72,19 @@ def _maybe_activate_flash_attention(device: torch.device) -> None:
             stacklevel=3,
         )
 
+    return current_flash_attention_impl()
+
 
 def _resolve_batch_size_limit(batch_size_limit: int | None) -> int:
     if batch_size_limit is None:
         return 65_535
     return min(batch_size_limit, 65_535)
+
+
+def _materialize_broadcasted_tensor(tensor: Tensor) -> Tensor:
+    if 0 not in tensor.stride():
+        return tensor
+    return tensor.clone(memory_format=torch.contiguous_format)
 
 
 def _batch_chunk(
@@ -427,7 +438,7 @@ class SDPA(torch.nn.Module):
         Returns:
             Tensor with shape ``[..., Q, Hq, C]``.
         """
-        _maybe_activate_flash_attention(query.device)
+        flash_attention_impl = _maybe_activate_flash_attention(query.device)
 
         batch_size_limit = _resolve_batch_size_limit(batch_size_limit)
 
@@ -514,16 +525,28 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
-        out = F.scaled_dot_product_attention(
-            query=query.transpose(-3, -2),  # [B, Hq, Q, C],
-            key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
-            value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-            if attn_mask is not None
-            else None,
-            enable_gqa=self.num_query_heads != self.num_key_value_heads,
-            scale=self.scale,
-        ).transpose(-3, -2)  # [B, Q, Hq, C]
+        if flash_attention_impl == "FA4":
+            # FA4's CuTe cache key does not distinguish broadcast strides.
+            # Materialize them so one compiled signature remains reusable.
+            query = _materialize_broadcasted_tensor(query)
+            key = _materialize_broadcasted_tensor(key)
+            value = _materialize_broadcasted_tensor(value)
+            sdpa_context = torch_attention.sdpa_kernel(
+                torch_attention.SDPBackend.FLASH_ATTENTION
+            )
+        else:
+            sdpa_context = nullcontext()
+        with sdpa_context:
+            out = F.scaled_dot_product_attention(
+                query=query.transpose(-3, -2),  # [B, Hq, Q, C],
+                key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
+                value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
+                attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
+                if attn_mask is not None
+                else None,
+                enable_gqa=self.num_query_heads != self.num_key_value_heads,
+                scale=self.scale,
+            ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
