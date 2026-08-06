@@ -1150,16 +1150,6 @@ def _is_pinned(inp: TableTensor) -> bool:
     )
 
 
-@TableTensor.implements(aten.pin_memory.default)
-def _pin_memory_composite(
-    inp: TableTensor,
-    device: torch.device | None = None,
-) -> TableTensor:
-    if inp.is_pinned():
-        return inp
-    return cast(TableTensor, aten._pin_memory.default(inp))
-
-
 @TableTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: TableTensor) -> TableTensor:
     blocks = {
@@ -1170,6 +1160,16 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
         **blocks,
     )
+
+
+@TableTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> TableTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
 
 
 @TableTensor.implements(aten.equal.default)
