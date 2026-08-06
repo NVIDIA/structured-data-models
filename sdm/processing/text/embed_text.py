@@ -72,10 +72,7 @@ class EmbedText(Processor):
             # FIXME: The embedding_model currently must take in a
             # dataframe and not a Tensor.
             num_cols = len(col_names)
-            all_cols: list[Tensor] = [
-                table.text[..., i].reshape(-1) for i in range(num_cols)
-            ]
-            flat_strings = cast(StringTensor, torch.cat(all_cols))
+            flat_strings = table.text.movedim(-1, 0).reshape(-1)
             chunk_size = self._chunk_size or len(flat_strings)
 
             chunks: list[Tensor] = []
