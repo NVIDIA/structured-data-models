@@ -4,9 +4,9 @@ from typing import Any, cast
 
 import torch
 
-from sdm.processing.base import Processor
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.stype import Stype
-from sdm.tensor import StringTensor, TableTensor
+from sdm.tensor import EnsembleTable, StringTensor, TableTensor
 
 
 class _ModuleReference(torch.nn.Module):
@@ -23,7 +23,7 @@ class _ModuleReference(torch.nn.Module):
         return type(self)(self.module)
 
 
-class EmbedText(Processor):
+class EmbedText(EnsembleProcessor):
     r"""Embed text columns with a user-provided embedding model.
 
     Each text column is embedded cell-by-cell through ``embedding_model``.
@@ -96,3 +96,10 @@ class EmbedText(Processor):
             columns={Stype.numerical: tuple(out_col_names)},
             numerical=numerical,
         )
+
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        outputs = [self._transform(group) for group in ensemble_table]
+        return ensemble_table.replace_groups(outputs)
