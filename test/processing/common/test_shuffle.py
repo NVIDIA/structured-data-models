@@ -50,6 +50,29 @@ def test_shuffle_columns_scalar_fit_transform_and_inverse(
 
 
 @pytest.mark.parametrize("method", ["shift", "random"])
+def test_shuffle_columns_uses_transformed_table_column_names(
+    method: Literal["shift", "random"],
+) -> None:
+    processor = ShuffleColumns(method=method).fit(
+        _table(),
+        generator=torch.Generator().manual_seed(0),
+    )
+    table = TableTensor.from_tensor(
+        _table().numerical,
+        columns=("a", "b", "c"),
+    )
+
+    transformed = processor.transform(table)
+    restored = processor.inverse_transform(transformed)
+
+    order = processor.permutation.tolist()
+    assert transformed.columns[Stype.numerical] == tuple(
+        table.columns[Stype.numerical][index] for index in order
+    )
+    assert restored.equal(table)
+
+
+@pytest.mark.parametrize("method", ["shift", "random"])
 def test_shuffle_columns_is_reproducible_with_generator(
     method: Literal["shift", "random"],
 ) -> None:

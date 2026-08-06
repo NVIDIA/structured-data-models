@@ -12,12 +12,25 @@ class _ColumnPermutation(torch.nn.Module):
     """Store one fitted column permutation."""
 
     indices: Tensor
+    inverse_indices: Tensor
     order: tuple[int, ...]
+    inverse_order: tuple[int, ...]
 
-    def __init__(self, indices: Tensor, order: tuple[int, ...]) -> None:
+    def __init__(
+        self,
+        indices: Tensor,
+        order: tuple[int, ...],
+        inverse_order: tuple[int, ...],
+    ) -> None:
         super().__init__()
         self.register_buffer("indices", indices, persistent=False)
+        self.register_buffer(
+            "inverse_indices",
+            indices.argsort(),
+            persistent=False,
+        )
         self.order = order
+        self.inverse_order = inverse_order
 
 
 class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -93,8 +106,14 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
                 ensemble_table.table(member_id),
                 generator=generator,
             )
+            order = tuple(indices.tolist())
+            inverse_order = tuple(indices.argsort().tolist())
             permutations.append(
-                _ColumnPermutation(indices, tuple(indices.tolist()))
+                _ColumnPermutation(
+                    indices,
+                    order,
+                    inverse_order,
+                )
             )
         self._permutations = torch.nn.ModuleList(permutations)
 
@@ -126,8 +145,8 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         tables: list[TableTensor] = []
         for member_id, module in enumerate(self._permutations):
             state = cast(_ColumnPermutation, module)
-            permutation = state.indices.argsort() if inverse else state.indices
-            order = tuple(permutation.tolist()) if inverse else state.order
+            permutation = state.inverse_indices if inverse else state.indices
+            order = state.inverse_order if inverse else state.order
             tables.append(
                 self._permute(
                     ensemble_table.table(member_id),

@@ -127,7 +127,7 @@ class DropConstantColumns(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        groups = tuple(ensemble_table)
+        groups = ensemble_table._groups
         if sum(group.size(0) for group in groups) == 1:
             group = groups[0]
             keep = self._keep_mask(group.numerical)[0].tolist()
@@ -186,7 +186,7 @@ class DropConstantColumns(EnsembleProcessor):
             )
 
         if (
-            sum(group.size(0) for group in ensemble_table)
+            sum(group.size(0) for group in ensemble_table._groups)
             == ensemble_table.num_members
         ):
             tables = [
@@ -212,7 +212,7 @@ class DropConstantColumns(EnsembleProcessor):
             return ensemble_table.replace_groups(
                 [
                     self._select_columns(group, kept_indices)
-                    for group in ensemble_table
+                    for group in ensemble_table._groups
                 ]
             )
 
@@ -222,7 +222,7 @@ class DropConstantColumns(EnsembleProcessor):
             outputs[kept_indices] = selected.replace_groups(
                 [
                     self._select_columns(group, kept_indices)
-                    for group in selected
+                    for group in selected._groups
                 ]
             )
 

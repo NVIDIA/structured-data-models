@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import abc
 import copy
-from collections.abc import Iterable
 from itertools import repeat
 from typing import Self, cast
 
 import torch
 
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import (
+    InvertibleMixin,
+    Processor,
+    _has_supported_stypes,
+)
 from sdm.stype import Stype
 from sdm.tensor import EnsembleTable, TableTensor
 
@@ -95,11 +98,11 @@ class EnsembleProcessor(Processor):
             ensemble_table: Ensemble table used to compute the processor state.
             generator: Pseudorandom number generator used for sampling.
         """
-        for group in ensemble_table:
+        for group in ensemble_table._groups:
             self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes
-            for group in ensemble_table
+            _has_supported_stypes(group, self.supported_stypes)
+            for group in ensemble_table._groups
         ):
             return self
         if self.requires_fit:
@@ -119,11 +122,11 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for group in ensemble_table:
+        for group in ensemble_table._groups:
             self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes
-            for group in ensemble_table
+            _has_supported_stypes(group, self.supported_stypes)
+            for group in ensemble_table._groups
         ):
             return ensemble_table
         self._check_is_fitted()
@@ -144,11 +147,11 @@ class EnsembleProcessor(Processor):
         Returns:
             The transformed ensemble table.
         """
-        for group in ensemble_table:
+        for group in ensemble_table._groups:
             self._check_supported_stypes(group)
         if not any(
-            group.active_stypes & self.supported_stypes
-            for group in ensemble_table
+            _has_supported_stypes(group, self.supported_stypes)
+            for group in ensemble_table._groups
         ):
             return ensemble_table
         output = self._fit_transform_ensemble(
@@ -223,7 +226,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         processors = []
-        for group in ensemble_table:
+        for group in ensemble_table._groups:
             processor = copy.deepcopy(self.processor)
             processor.fit(group, generator=generator)
             processors.append(processor)
@@ -240,7 +243,7 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
 
         processors = []
         outputs = []
-        for group in ensemble_table:
+        for group in ensemble_table._groups:
             processor = copy.deepcopy(self.processor)
             outputs.append(processor.fit_transform(group, generator=generator))
             processors.append(processor)
@@ -252,18 +255,17 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         processors = (
-            cast(Iterable[Processor], self._group_processors)
+            self._group_processors
             if self.requires_fit
             else repeat(self.processor, ensemble_table.num_groups)
         )
-        outputs = [
-            processor.transform(group)
-            for group, processor in zip(
-                ensemble_table,
-                processors,
-                strict=True,
-            )
-        ]
+        outputs = []
+        for group, processor in zip(
+            ensemble_table._groups,
+            processors,
+            strict=True,
+        ):
+            outputs.append(cast(Processor, processor).transform(group))
         return ensemble_table.replace_groups(outputs)
 
     def _inverse_transform_ensemble(
@@ -271,16 +273,17 @@ class EnsembleProcessorAdapter(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         processors = (
-            cast(Iterable[Processor], self._group_processors)
+            self._group_processors
             if self.requires_fit
             else repeat(self.processor, ensemble_table.num_groups)
         )
         outputs = []
         for group, processor in zip(
-            ensemble_table,
+            ensemble_table._groups,
             processors,
             strict=True,
         ):
+            processor = cast(Processor, processor)
             if not isinstance(processor, InvertibleMixin):
                 raise TypeError(
                     f"{processor.__class__.__name__!r} is not invertible."

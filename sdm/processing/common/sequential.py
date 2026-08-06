@@ -121,7 +121,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         return out
 
     def __iter__(self) -> Iterator[Processor]:
-        return cast(Iterator[Processor], self.children())
+        return self.children()  # ty: ignore[invalid-return-type]
 
     def __len__(self) -> int:
         return len(self._modules)

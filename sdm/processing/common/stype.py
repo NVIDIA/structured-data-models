@@ -11,6 +11,8 @@ from sdm.processing.ensemble import (
 )
 from sdm.tensor import EnsembleTable
 
+_STYPES = tuple(Stype)
+
 
 class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     r"""Apply separate processor pipelines to columns grouped by semantic type.
@@ -50,7 +52,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             ``"drop"`` removes them, and ``"error"`` raises.
     """
 
-    supported_stypes = frozenset(Stype)
+    supported_stypes = frozenset(_STYPES)
 
     def __init__(
         self,
@@ -93,7 +95,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             for stype in self.processors
             if any(
                 len(group.columns[Stype(stype)]) > 0
-                for group in ensemble_table
+                for group in ensemble_table._groups
             )
         )
 
@@ -103,9 +105,12 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
 
         remainder_stypes = [
             stype
-            for stype in Stype
+            for stype in _STYPES
             if stype.value not in self.processors
-            and any(len(group.columns[stype]) > 0 for group in ensemble_table)
+            and any(
+                len(group.columns[stype]) > 0
+                for group in ensemble_table._groups
+            )
         ]
         if len(remainder_stypes) == 0:
             return
@@ -215,7 +220,9 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         return ensemble_table.select_stypes(
             tuple(
-                stype for stype in Stype if stype.value not in self.processors
+                stype
+                for stype in _STYPES
+                if stype.value not in self.processors
             )
         )
 

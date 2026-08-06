@@ -4,6 +4,18 @@ import torch
 from sdm.tensor import EnsembleTable, TableTensor
 
 
+class TaggedEnsembleTable(EnsembleTable):
+    def __init__(
+        self,
+        table: TableTensor,
+        *,
+        num_members: int,
+        tag: str,
+    ) -> None:
+        super().__init__(table, num_members=num_members)
+        self.tag = tag
+
+
 def test_shared_member_table() -> None:
     data = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
     ensemble_table = EnsembleTable(data, num_members=3)
@@ -115,6 +127,25 @@ def test_replace_groups_keeps_member_assignment() -> None:
     assert replaced.table(1).numerical.tolist() == [[-1.0], [-2.0]]
     assert replaced.table(2).equal(replaced.table(0))
     assert ensemble_table.table(0).equal(second)
+
+
+def test_reconstruction_preserves_subclass_semantics() -> None:
+    table = TableTensor.from_tensor(torch.tensor([[1.0], [2.0]]))
+    ensemble_table = TaggedEnsembleTable(
+        table,
+        num_members=2,
+        tag="state",
+    )
+
+    replaced = ensemble_table.replace_groups(tuple(ensemble_table))
+    constructed = TaggedEnsembleTable.from_tables(
+        tables=(table,),
+        member_table_ids=(0, 0),
+    )
+
+    assert isinstance(replaced, TaggedEnsembleTable)
+    assert replaced.tag == "state"
+    assert isinstance(constructed, TaggedEnsembleTable)
 
 
 def test_replace_groups_rejects_group_count_mismatch() -> None:

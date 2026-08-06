@@ -166,7 +166,10 @@ class EnsembleTable:
                 }
             )
 
-        ensemble = cls.__new__(cls)
+        if torch.compiler.is_compiling() and len(groups) > 0:
+            ensemble = cls(groups[0], num_members=len(member_table_ids))
+        else:
+            ensemble = cls.__new__(cls)
         ensemble._groups = tuple(groups)
         ensemble._locations = tuple(
             input_locations[index] for index in member_table_ids
@@ -316,14 +319,17 @@ class EnsembleTable:
         """
         if isinstance(stypes, (str, Stype)):
             stypes = (stypes,)
-        stypes = tuple(Stype(stype) for stype in stypes)
+        stypes = tuple(
+            stype if isinstance(stype, Stype) else Stype(stype)
+            for stype in stypes
+        )
 
         if len(stypes) == 0:
             return self.replace_groups(
-                [group.select_columns(()) for group in self]
+                [group.select_columns(()) for group in self._groups]
             )
         return self.replace_groups(
-            [group.select_stypes(stypes) for group in self]
+            [group.select_stypes(stypes) for group in self._groups]
         )
 
     @classmethod
@@ -352,7 +358,10 @@ class EnsembleTable:
             return first.replace_groups(
                 [
                     cast(TableTensor, torch.cat(groups, dim=-1))
-                    for groups in zip(*tables, strict=True)
+                    for groups in zip(
+                        *(table._groups for table in tables),
+                        strict=True,
+                    )
                 ]
             )
 
@@ -398,8 +407,15 @@ class EnsembleTable:
                 f"Expected one replacement per group of compatible tables "
                 f"({self.num_groups}), got {len(groups)}."
             )
-        ensemble = copy.copy(self)
+        if torch.compiler.is_compiling() and len(groups) > 0:
+            ensemble = self.__class__(
+                groups[0],
+                num_members=self.num_members,
+            )
+        else:
+            ensemble = copy.copy(self)
         ensemble._groups = tuple(groups)
+        ensemble._locations = self._locations
         return ensemble
 
     def __repr__(self) -> str:
