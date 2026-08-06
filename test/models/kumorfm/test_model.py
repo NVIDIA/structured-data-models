@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 import torch
 
@@ -228,9 +229,17 @@ def test_forward(
         ],
     )
 
-    x = TableTensor(
-        columns={"id": ("user_id",)},
-        id=ColumnarTensor((torch.arange(4, device=device),)),
+    x = TableTensor.from_pandas(
+        df=pd.DataFrame(
+            {
+                "user_id": [0, 1, 2, 3],
+                "timestamp": pd.to_datetime(
+                    ["2024-01-03", "2024-01-04", None, "2024-01-06"]
+                ),
+            }
+        ),
+        stypes={"user_id": "id", "timestamp": "datetime"},
+        device=device,
     )
 
     if dtype.is_floating_point:
@@ -383,4 +392,4 @@ def test_default_recipe_preserves_ids() -> None:
     transformed = KumoRFM.default_recipe().features.fit_transform(table)
 
     assert transformed.columns[Stype.id] == ("entity_id",)
-    assert transformed.id is table.id
+    assert transformed.id.equal(table.id)

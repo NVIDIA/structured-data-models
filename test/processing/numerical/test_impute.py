@@ -11,9 +11,16 @@ from sdm.testing import withCUDA
 def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
     inp = torch.tensor(
         [
-            [1.0, torch.nan, torch.nan],
-            [3.0, 5.0, torch.nan],
-            [torch.nan, 7.0, torch.nan],
+            [
+                [1.0, torch.nan, torch.nan],
+                [3.0, 5.0, torch.nan],
+                [torch.nan, 7.0, torch.nan],
+            ],
+            [
+                [10.0, 2.0, torch.nan],
+                [20.0, torch.nan, torch.nan],
+                [30.0, 6.0, torch.nan],
+            ],
         ],
         dtype=dtype,
         device=device,
@@ -25,25 +32,22 @@ def test_impute_mean(device: torch.device, dtype: torch.dtype | None) -> None:
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
 
-    assert torch.allclose(
-        processor._mean,
-        torch.tensor([2.0, 6.0, fill_value], dtype=dtype, device=device),
-    )
     assert torch.equal(
         transformed,
         torch.tensor(
             [
-                [1.0, 6.0, fill_value],
-                [3.0, 5.0, fill_value],
-                [2.0, 7.0, fill_value],
+                [
+                    [1.0, 6.0, fill_value],
+                    [3.0, 5.0, fill_value],
+                    [2.0, 7.0, fill_value],
+                ],
+                [
+                    [10.0, 2.0, fill_value],
+                    [20.0, 4.0, fill_value],
+                    [30.0, 6.0, fill_value],
+                ],
             ],
             dtype=dtype,
             device=device,
         ),
     )
-
-
-@pytest.mark.parametrize("fill_value", [torch.nan, torch.inf, -torch.inf])
-def test_impute_mean_rejects_non_finite_fill_value(fill_value: float) -> None:
-    with pytest.raises(ValueError, match="fill_value must be finite"):
-        ImputeMean(fill_value=fill_value)

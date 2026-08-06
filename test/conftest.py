@@ -29,6 +29,16 @@ def relational_data(device: torch.device) -> RelationalData:
             "user_id": [0, 0, 1, 3, 3, 3],
             "item_id": ["A", "B", "C", "A", "B", "A"],
             "amount": [29.99, 49.99, 19.99, 99.99, 199.99, 39.99],
+            "timestamp": pd.to_datetime(
+                [
+                    "2024-01-01",
+                    "2024-01-03",
+                    None,
+                    "2024-01-04",
+                    "2024-01-05",
+                    "2024-01-07",
+                ]
+            ),
         }
     )
     items_df = pd.DataFrame(
@@ -42,15 +52,15 @@ def relational_data(device: torch.device) -> RelationalData:
         tables={
             "users": TableTensor.from_pandas(
                 df=users_df,
-                stypes=infer_stypes(users_df),
+                stypes=infer_stypes(users_df, with_id=True),
             ),
             "orders": TableTensor.from_pandas(
                 df=orders_df,
-                stypes=infer_stypes(orders_df),
+                stypes=infer_stypes(orders_df, with_id=True),
             ),
             "items": TableTensor.from_pandas(
                 df=items_df,
-                stypes=infer_stypes(items_df),
+                stypes=infer_stypes(items_df, with_id=True),
             ),
         },
         relationships=[

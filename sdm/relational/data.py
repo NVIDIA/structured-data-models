@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import torch
 from torch import Tensor
-from typing_extensions import Self
 
 from sdm import Stype, TableTensor
 from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID, join_index

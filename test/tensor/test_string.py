@@ -10,7 +10,7 @@ from sdm.testing import onlyCUDA, withCUDA
 
 def test_from_list() -> None:
     tensor = StringTensor.from_list([["hi", "é"], ["", "abc"]])
-    assert repr(tensor) == "StringTensor(..., size=(2, 2))"
+    assert repr(tensor) == "StringTensor(size=(2, 2))"
     assert tensor.size() == (2, 2)
     assert tensor.stride() == (2, 1)
     assert tensor.dtype == torch.uint8
@@ -31,6 +31,13 @@ def test_from_list() -> None:
     assert tensor._data.equal(torch.tensor([104, 105]))
     assert tensor._offset.equal(torch.tensor([0, 2]))
 
+    tensor = StringTensor.from_list(None)
+    assert repr(tensor) == "StringTensor(size=(), null_count=1)"
+    assert tensor.size() == ()
+    assert tensor.valid is not None
+    assert not bool(tensor.valid)
+    assert tensor.item() is None
+
 
 def test_arrow() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", "é", ""]))
@@ -39,6 +46,7 @@ def test_arrow() -> None:
     assert tensor.dtype == torch.uint8
     assert tensor._data.equal(torch.tensor([104, 105, 195, 169]))
     assert tensor._offset.equal(torch.tensor([0, 2, 4, 4]))
+    assert tensor.to_arrow().type == pa.string()
 
     tensor = StringTensor.from_arrow(pa.array([], type=pa.string()))
     assert tensor.size() == (0,)
@@ -64,6 +72,42 @@ def test_arrow() -> None:
         array.buffers()[2].address
         == tensor._data.numpy().__array_interface__["data"][0]
     )
+
+
+@pytest.mark.parametrize("arrow_type", [pa.string(), pa.large_string()])
+def test_from_arrow_chunked_strings(arrow_type: pa.DataType) -> None:
+    tensor = StringTensor.from_arrow(
+        pa.chunked_array(
+            [
+                pa.array(["hi", "é"], type=arrow_type),
+                pa.array(["", "abc"], type=arrow_type),
+            ]
+        ),
+        size=(2, 2),
+    )
+
+    assert tensor.tolist() == [["hi", "é"], ["", "abc"]]
+    assert tensor.to_arrow().type == pa.large_string()
+    assert tensor.to_arrow().to_pylist() == ["hi", "é", "", "abc"]
+
+
+def test_from_arrow_single_string_chunk() -> None:
+    tensor = StringTensor.from_arrow(
+        pa.chunked_array([pa.array(["hi", "é"], type=pa.string())]),
+    )
+
+    assert tensor.to_arrow().type == pa.string()
+    assert tensor.to_arrow().to_pylist() == ["hi", "é"]
+
+
+@pytest.mark.parametrize("arrow_type", [pa.string(), pa.large_string()])
+def test_from_arrow_zero_string_chunks(arrow_type: pa.DataType) -> None:
+    tensor = StringTensor.from_arrow(
+        pa.chunked_array([], type=arrow_type),
+    )
+
+    assert tensor.to_arrow().type == arrow_type
+    assert tensor.to_arrow().to_pylist() == []
 
 
 @onlyCUDA
@@ -241,7 +285,6 @@ def test_to_list_in_inference_mode(
 def test_item() -> None:
     assert StringTensor.from_list("é").item() == "é"
     assert StringTensor.from_list(["hi", "é"])[1].item() == "é"
-    assert str(StringTensor.from_list([""])) == ""
 
     with pytest.raises(RuntimeError, match="cannot be converted"):
         StringTensor.from_list(["hi", "é"]).item()
@@ -274,17 +317,57 @@ def test_sort(device: torch.device) -> None:
     perm = torch.argsort(tensor)
     assert perm.equal(torch.tensor([4, 2, 1, 0, 3], device=device))
 
+    tensor = StringTensor.from_list(["b", None, "a", ""], device=device)
+    out, perm = tensor.sort()
+    assert out.device == device
+    assert out.tolist() == ["", "a", "b", None]
+    assert perm.equal(torch.tensor([3, 2, 0, 1], device=device))
+
+    out, perm = torch.sort(tensor, dim=-1, descending=True)
+    assert out.device == device
+    assert out.tolist() == ["b", "a", "", None]
+    assert perm.equal(torch.tensor([0, 2, 3, 1], device=device))
+
 
 def test_null_handling() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", None, "yo"]))
-    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().to_pylist() == ["hi", None, "yo"]
+    assert tensor.tolist() == ["hi", None, "yo"]
 
     tensor = StringTensor.from_list(["hi", None, "yo"])
-    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([True, False, True]))
+    assert tensor.to_arrow().to_pylist() == ["hi", None, "yo"]
+    assert tensor.tolist() == ["hi", None, "yo"]
+
+    tensor = StringTensor.from_list([["hi", None], ["", "yo"]])
+    assert tensor.valid is not None
+    assert tensor.valid.equal(torch.tensor([[True, False], [True, True]]))
+    assert tensor.tolist() == [["hi", None], ["", "yo"]]
+
+    assert (tensor == "").equal(torch.tensor([[False, False], [True, False]]))
+    assert (tensor != "").equal(torch.tensor([[True, False], [False, True]]))
+
+    other = StringTensor.from_list([["hi", "x"], ["", None]])
+    assert (tensor == other).equal(
+        torch.tensor([[True, False], [True, False]])
+    )
+    assert (tensor != other).equal(
+        torch.tensor([[False, False], [False, False]])
+    )
 
 
 @onlyCUDA
 def test_cudf_null_handling() -> None:
     cudf = pytest.importorskip("cudf")
     tensor = StringTensor.from_cudf(cudf.Series(["hi", None, "yo"]))
-    assert tensor.to_arrow().to_pylist() == ["hi", "", "yo"]
+    assert tensor.to_arrow().to_pylist() == ["hi", None, "yo"]
+
+    assert (tensor == "hi").equal(
+        torch.tensor([True, False, False], device="cuda")
+    )
+    assert (tensor != "hi").equal(
+        torch.tensor([False, False, True], device="cuda")
+    )

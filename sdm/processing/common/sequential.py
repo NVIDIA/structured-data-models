@@ -1,15 +1,20 @@
 from collections.abc import Iterable, Iterator
-from typing import cast
+from typing import Self, cast
 
 import torch
-from typing_extensions import Self
 
-from sdm import Stype, TableTensor
-from sdm.processing import InvertibleMixin, Processor
+from sdm import Stype
+from sdm.processing.base import Processor
+from sdm.processing.ensemble import (
+    EnsembleInvertibleMixin,
+    EnsembleProcessor,
+    EnsembleProcessorAdapter,
+)
+from sdm.tensor import EnsembleTable
 
 
-class Sequential(Processor, InvertibleMixin):
-    r"""Apply processors and callables in sequence.
+class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
+    r"""Apply processors and callables to a table in sequence.
 
     Args:
         args: Sequence of :class:`Processor` instances or callables.
@@ -48,44 +53,63 @@ class Sequential(Processor, InvertibleMixin):
             self.append(processor)
         return self
 
-    def _fit(
+    def _fit_ensemble(
         self,
-        table: TableTensor,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        out = table
-        for i, child in enumerate(self):
-            if i < len(self) - 1:
-                out = child.fit_transform(out, generator=generator)
+        out = ensemble_table
+        n = len(self._modules)
+        for index, (name, child) in enumerate(self._modules.items()):
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            if index < n - 1:
+                out = child.fit_transform_ensemble(out, generator=generator)
             else:
-                child.fit(out, generator=generator)
+                child.fit_ensemble(out, generator=generator)
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.transform(out)
-        return out
-
-    def _fit_transform(
+    def _fit_transform_ensemble(
         self,
-        table: TableTensor,
+        ensemble_table: EnsembleTable,
         *,
         generator: torch.Generator | None = None,
-    ) -> TableTensor:
-        out = table
-        for child in self:
-            out = child.fit_transform(out, generator=generator)
+    ) -> EnsembleTable:
+        out = ensemble_table
+        for name, child in self._modules.items():
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            out = child.fit_transform_ensemble(out, generator=generator)
         return out
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        out = table
-        for child in reversed(list(self)):
-            fn = getattr(child, "inverse_transform", None)
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        out = ensemble_table
+        for name, child in self._modules.items():
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            out = child.transform_ensemble(out)
+        return out
+
+    def _inverse_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        out = ensemble_table
+        for name, child in reversed(self._modules.items()):
+            if not isinstance(child, EnsembleProcessor):
+                child = EnsembleProcessorAdapter(cast(Processor, child))
+                self._modules[name] = child
+            fn = getattr(child, "inverse_transform_ensemble", None)
             if not callable(fn):
                 raise AttributeError(
-                    f"{child.__class__.__name__!r} object has no attribute "
-                    f"'inverse_transform'"
+                    f"{child.__class__.__name__!r} object has no "
+                    "attribute 'inverse_transform_ensemble'"
                 )
             out = fn(out)
         return out

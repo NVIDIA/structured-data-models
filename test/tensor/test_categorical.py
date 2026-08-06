@@ -29,6 +29,14 @@ def test_to_copy_string_categories() -> None:
         assert out_category.tolist() == category.tolist()
 
 
+def test_reject_nullable() -> None:
+    with pytest.raises(ValueError, match="null values"):
+        CategoricalTensor(
+            code=torch.tensor([[0], [-1]]),
+            categories=(StringTensor.from_list(["a", None]),),
+        )
+
+
 def test_to_copy() -> None:
     data = torch.tensor([[0, -1, 2], [2, 1, 0]])
     categories = tuple(torch.arange(3) for _ in range(data.size(-1)))
@@ -55,6 +63,7 @@ def test_from_arrow_string_values() -> None:
     assert tensor.dtype == torch.int32
     assert tensor.code.equal(torch.tensor([[0], [1], [-1], [0]]))
     assert tensor.categories[0].tolist() == ["b", "a"]
+    assert tensor.to_arrow().column(0).chunk(0).dictionary.type == pa.string()
 
 
 def test_from_arrow_chunked_values() -> None:
@@ -65,6 +74,50 @@ def test_from_arrow_chunked_values() -> None:
     assert tensor.dtype == torch.int32
     assert tensor.code.equal(torch.tensor([[0], [-1], [1], [0]]))
     assert tensor.categories[0].tolist() == ["b", "a"]
+    assert (
+        tensor.to_arrow().column(0).chunk(0).dictionary.type
+        == pa.large_string()
+    )
+
+
+def test_from_arrow_chunked_large_string_values() -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.chunked_array(
+            [
+                pa.array(["b", None], type=pa.large_string()),
+                pa.array(["a", "b"], type=pa.large_string()),
+            ]
+        ),
+    )
+
+    assert tensor.code.equal(torch.tensor([[0], [-1], [1], [0]]))
+    assert tensor.categories[0].tolist() == ["b", "a"]
+    assert tensor.to_arrow().to_pydict() == {
+        "0": ["b", None, "a", "b"],
+    }
+    assert (
+        tensor.to_arrow().column(0).chunk(0).dictionary.type
+        == pa.large_string()
+    )
+
+
+def test_from_arrow_chunked_dictionary_string_values() -> None:
+    tensor = CategoricalTensor.from_arrow(
+        pa.chunked_array(
+            [
+                pa.DictionaryArray.from_arrays([0, 1], ["b", "a"]),
+                pa.DictionaryArray.from_arrays([0, 1], ["a", "c"]),
+            ]
+        ),
+    )
+
+    assert tensor.to_arrow().to_pydict() == {
+        "0": ["b", "a", "a", "c"],
+    }
+    assert (
+        tensor.to_arrow().column(0).chunk(0).dictionary.type
+        == pa.large_string()
+    )
 
 
 def test_from_arrow_numeric_values() -> None:
@@ -251,6 +304,49 @@ def test_from_cudf_numeric_values() -> None:
     )
     assert tensor.categories[0].is_cuda
     assert tensor.categories[0].tolist() == [10, 20]
+
+
+@onlyCUDA
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize(
+    ("values", "categories", "expected_code"),
+    [
+        (
+            ["b", None, "a", "b"],
+            ["unused", "a", "b"],
+            [[2], [-1], [1], [2]],
+        ),
+        (
+            [20, None, 10, 20],
+            [30, 10, 20],
+            [[2], [-1], [1], [2]],
+        ),
+        (
+            [None, None],
+            ["a", "b"],
+            [[-1], [-1]],
+        ),
+    ],
+)
+def test_from_cudf_categorical_values(
+    values: list[str | int | None],
+    categories: list[str | int],
+    expected_code: list[list[int]],
+    dtype: torch.dtype,
+) -> None:
+    cudf = pytest.importorskip("cudf")
+    series = cudf.Series(
+        values,
+        dtype=cudf.CategoricalDtype(categories=categories),
+    )
+
+    tensor = CategoricalTensor.from_cudf(series, dtype=dtype)
+
+    assert tensor.is_cuda
+    assert tensor.dtype == dtype
+    assert tensor.code.equal(torch.tensor(expected_code, device=tensor.device))
+    assert tensor.categories[0].is_cuda
+    assert tensor.categories[0].tolist() == categories
 
 
 @onlyCUDA
