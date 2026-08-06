@@ -401,6 +401,10 @@ def test_vectorized_and_sequential_recipe_parity(cached: bool) -> None:
         )
 
     assert sequential_out.size() == vectorized_out.size()
+    torch.testing.assert_close(
+        sequential_out.numerical,
+        vectorized_out.numerical,
+    )
 
 
 def test_ensemble_output_preserves_estimator_dimension() -> None:
