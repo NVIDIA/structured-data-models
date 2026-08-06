@@ -219,7 +219,6 @@ class QuantileTransform(Processor, InvertibleMixin):
                     "output_distribution must be 'uniform' or 'normal'."
                 )
 
-            finite = input_chunk.isfinite()
             forward = _batched_interp(
                 input_chunk,
                 quantile_chunk,
@@ -232,7 +231,6 @@ class QuantileTransform(Processor, InvertibleMixin):
             )
             output = 0.5 * (forward - backward)
 
-            output = torch.where(finite, output, input_chunk)
             output = torch.where(upper_bounds_idx, 1.0, output)
             output = torch.where(lower_bounds_idx, 0.0, output)
 
@@ -289,13 +287,11 @@ class QuantileTransform(Processor, InvertibleMixin):
                     "output_distribution must be 'uniform' or 'normal'."
                 )
 
-            finite = input_chunk.isfinite()
             output = _batched_interp(
                 input_chunk,
                 self._references,
                 quantile_chunk,
             )
-            output = torch.where(finite, output, input_chunk)
             output = torch.where(upper_bounds_idx, upper_bound_y, output)
             output = torch.where(lower_bounds_idx, lower_bound_y, output)
             inverse_columns[start:end] = output
