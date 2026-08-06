@@ -1,10 +1,12 @@
 """Attention modules for structured tensor models."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from math import prod
 from typing import Any, Literal, cast, overload
 
 import torch
+import torch.nn.attention as torch_attention
 import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import GELU, Linear, Sequential
@@ -456,16 +458,29 @@ class SDPA(torch.nn.Module):
             attn_mask = key_index.unsqueeze(0) < seqused_key_value
             attn_mask = attn_mask.unsqueeze(-2).expand(-1, query.size(-3), -1)
 
-        out = F.scaled_dot_product_attention(
-            query=query.transpose(-3, -2),  # [B, Hq, Q, C],
-            key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
-            value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
-            attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
-            if attn_mask is not None
-            else None,
-            enable_gqa=self.num_query_heads != self.num_key_value_heads,
-            scale=self.scale,
-        ).transpose(-3, -2)  # [B, Q, Hq, C]
+        current_flash_attention_impl = getattr(
+            torch_attention, "current_flash_attention_impl", None
+        )
+        backend_context = (
+            torch_attention.sdpa_kernel(
+                torch_attention.SDPBackend.FLASH_ATTENTION
+            )
+            if query.is_cuda
+            and current_flash_attention_impl is not None
+            and current_flash_attention_impl() == "FA3"
+            else nullcontext()
+        )
+        with backend_context:
+            out = F.scaled_dot_product_attention(
+                query=query.transpose(-3, -2),  # [B, Hq, Q, C],
+                key=key.transpose(-3, -2),  # [B, Hkv, KV, C],
+                value=value.transpose(-3, -2),  # [B, Hkv, KV, C],
+                attn_mask=attn_mask.unsqueeze(-3)  # [B, 1, Q, KV]
+                if attn_mask is not None
+                else None,
+                enable_gqa=self.num_query_heads != self.num_key_value_heads,
+                scale=self.scale,
+            ).transpose(-3, -2)  # [B, Q, Hq, C]
 
         return out.view(batch_shape + out.size()[-3:])  # [..., Q, Hq, C]
 
