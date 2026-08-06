@@ -1256,7 +1256,7 @@ def _unsafe_view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
 
 
 @TableTensor.implements(aten.reshape.default)
-def _reshape(inp: ColumnarTensor, size: Sequence[int]) -> TableTensor:
+def _reshape(inp: TableTensor, size: Sequence[int]) -> TableTensor:
     return cast(
         TableTensor,
         aten.reshape.default.decompose(inp, size),
