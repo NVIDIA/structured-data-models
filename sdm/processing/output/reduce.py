@@ -5,7 +5,7 @@ import torch
 
 from sdm.processing.ensemble import EnsembleProcessor
 from sdm.stype import Stype
-from sdm.tensor import EnsembleTable
+from sdm.tensor import EnsembleTable, TableTensor
 
 
 class ReduceEstimators(EnsembleProcessor):
@@ -103,6 +103,24 @@ class ReduceEstimators(EnsembleProcessor):
             numerical=total / ensemble_table.num_members
         )
         return EnsembleTable(output, num_members=1)
+
+    def _transform(self, table: TableTensor) -> TableTensor:
+        if table.dim() < 3:
+            raise ValueError(
+                "Expected a leading ensemble dimension in an output table "
+                f"with at least 3 dimensions (got {table.dim()}D)."
+            )
+        if table.size(0) == 0:
+            raise ValueError("Expected at least one ensemble member.")
+
+        if self.method == "mean":
+            numerical = table.numerical.mean(dim=0)
+        else:
+            raise ValueError("method must be 'mean'")
+        return table.__class__(
+            columns={Stype.numerical.value: table.columns[Stype.numerical]},
+            numerical=numerical,
+        )
 
     def __repr__(self, *, indent: int = 0) -> str:
         return (
