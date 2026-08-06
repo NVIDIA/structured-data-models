@@ -1046,10 +1046,8 @@ def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
 
 @VarLenTensor.implements(aten.movedim.int)
 def _movedim(inp: VarLenTensor, source: int, destination: int) -> VarLenTensor:
-    return cast(
-        VarLenTensor,
-        aten.movedim.int.decompose(inp, source, destination),
-    )
+    view = _layout_view(inp).movedim(source, destination)
+    return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.squeeze.default)
