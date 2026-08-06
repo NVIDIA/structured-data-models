@@ -1,9 +1,15 @@
+import argparse
+
 import pyarrow.parquet as pq
 import torch
 from huggingface_hub import hf_hub_download
 
 import sdm
 from sdm.processing import TFIDF, StypeDispatch
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--disable-text", action="store_true")
+args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -43,7 +49,7 @@ target_name = "BT Easiness"
 context_size = int(0.8 * len(table))
 context = table[:context_size]
 query = table[context_size:]
-ground_truth = query[:, target_name].as_tensor().squeeze()
+ground_truth = query.select_columns(target_name)
 
 
 model = sdm.models.TabICLv2(device=device)
@@ -58,11 +64,7 @@ recipe.features = (
     + recipe.features
 )
 
-with torch.amp.autocast(
-    device.type,
-    torch.float16,
-    enabled=table.is_cuda,
-):
+with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
     model.fit(
         x=context.drop_columns(target_name),
         y=context[:, target_name],
