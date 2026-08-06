@@ -645,6 +645,20 @@ def _unsafe_view(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
     return _maybe_wrap(inp, aten._unsafe_view(inp._code, size))
 
 
+@CategoricalTensor.implements(aten.reshape.default)
+def _reshape(inp: CategoricalTensor, size: Sequence[int]) -> Tensor:
+    return aten.reshape.default.decompose(inp, size)
+
+
+@CategoricalTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: CategoricalTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> Tensor:
+    return aten.flatten.using_ints.decompose(inp, start_dim, end_dim)
+
+
 @CategoricalTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: CategoricalTensor) -> Tensor:

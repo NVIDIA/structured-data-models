@@ -694,6 +694,26 @@ def _unsafe_view(
     return _apply(inp, lambda x: aten._unsafe_view.default(x, size))
 
 
+@NullableIntTensor.implements(aten.reshape.default)
+def _reshape(inp: NullableIntTensor, size: Sequence[int]) -> NullableIntTensor:
+    return cast(
+        NullableIntTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
+
+
+@NullableIntTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: NullableIntTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> NullableIntTensor:
+    return cast(
+        NullableIntTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
+
+
 @NullableIntTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: NullableIntTensor) -> NullableIntTensor:

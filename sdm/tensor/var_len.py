@@ -1044,6 +1044,18 @@ def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     )
 
 
+@VarLenTensor.implements(aten.flatten.using_ints)
+def _flatten(
+    inp: VarLenTensor,
+    start_dim: int = 0,
+    end_dim: int = -1,
+) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.flatten.using_ints.decompose(inp, start_dim, end_dim),
+    )
+
+
 @VarLenTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: VarLenTensor) -> VarLenTensor:
