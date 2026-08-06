@@ -252,40 +252,6 @@ def test_cuda_matches_cpu(
         )
 
 
-def test_state_dict_round_trip(tmp_path) -> None:
-    table = TableTensor.from_tensor(
-        StringTensor.from_list(
-            [["hello world", "cat"], ["hello there", "dog"]]
-        )
-    )
-    encoder = TFIDF(ngram_range=(2, 3))
-    expected = encoder.fit_transform(table)
-
-    path = tmp_path / "encoder.pt"
-    torch.save(encoder.state_dict(), path)
-    restored = TFIDF(ngram_range=(2, 3))
-    restored.load_state_dict(torch.load(path, weights_only=True))
-
-    assert torch.equal(restored.transform(table).numerical, expected.numerical)
-
-
-def test_load_state_dict_clears_stale_idf_buffers() -> None:
-    wide = TableTensor.from_tensor(
-        StringTensor.from_list([["hello world", "cat dog"]])
-    )
-    narrow = TableTensor.from_tensor(StringTensor.from_list([["hello world"]]))
-    restored = TFIDF(ngram_range=(2, 2))
-    restored.fit(wide)
-
-    encoder = TFIDF(ngram_range=(2, 2))
-    expected = encoder.fit_transform(narrow)
-    restored.load_state_dict(encoder.state_dict(), strict=False)
-
-    output = restored.transform(narrow)
-    assert output.columns == expected.columns
-    assert torch.equal(output.numerical, expected.numerical)
-
-
 def test_failed_refit_preserves_previous_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -358,8 +324,6 @@ def test_tfidf_text_embed_keeps_vocabulary_per_representation() -> None:
 
     with pytest.raises(RuntimeError, match="same number"):
         processor.transform_ensemble(EnsembleTable(query, num_members=3))
-    with pytest.raises(RuntimeError, match="fitted for an ensemble"):
-        processor.transform(query)
 
 
 def test_tfidf_text_embed_keeps_shared_output_packed() -> None:

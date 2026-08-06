@@ -1,7 +1,7 @@
 import math
 import re
 from itertools import accumulate
-from typing import Any, cast
+from typing import cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -51,52 +51,8 @@ class TFIDF(EnsembleProcessor):
         self.max_features = max_features
         self.lowercase = lowercase
         self._vocabularies: list[pa.Array] = []
-        self._register_load_state_dict_pre_hook(self._recreate_idf_buffers)
         self.processors = torch.nn.ModuleList()
         self._member_processor_ids: tuple[int, ...] = ()
-
-    def get_extra_state(self) -> dict[str, Any]:
-        r""":meta private:"""  # noqa: D415
-        return {
-            "vocabularies": [
-                StringTensor.from_arrow(vocabulary).data_offset
-                for vocabulary in self._vocabularies
-            ],
-            "fitted": self._fitted,
-        }
-
-    def set_extra_state(self, state: dict[str, Any]) -> None:
-        r""":meta private:"""  # noqa: D415
-        """Restore the fitted state from a checkpoint."""
-        self._vocabularies = [
-            StringTensor(
-                data=data,
-                offset=offset,
-                valid=None,
-                size=(offset.numel() - 1,),
-            ).to_arrow()
-            for data, offset in state["vocabularies"]
-        ]
-        self._fitted = state["fitted"]
-
-    def _recreate_idf_buffers(
-        self,
-        state_dict: dict[str, Any],
-        prefix: str,
-        *args: Any,
-    ) -> None:
-        """Restore buffers from a checkpoint."""
-        stale_idfs = [
-            name for name in self._buffers if name.startswith("idf_")
-        ]
-        for name in stale_idfs:
-            delattr(self, name)
-
-        idf_keys = [
-            key for key in state_dict if key.startswith(f"{prefix}idf_")
-        ]
-        for key in idf_keys:
-            self.register_buffer(key[len(prefix) :], state_dict[key])
 
     def _character_ngrams(
         self,
@@ -306,6 +262,15 @@ class TFIDF(EnsembleProcessor):
         self.processors = torch.nn.ModuleList()
         self._member_processor_ids = ()
 
+    def _fit_transform(
+        self,
+        table: TableTensor,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> TableTensor:
+        self._fit(table, generator=generator)
+        return self._transform(table)
+
     def _fit_ensemble(
         self,
         ensemble_table: EnsembleTable,
@@ -371,11 +336,6 @@ class TFIDF(EnsembleProcessor):
         )
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        if len(self.processors) > 0:
-            raise RuntimeError(
-                "'TfidfTextEmbed' was fitted for an ensemble; use "
-                "'transform_ensemble' instead of 'transform'."
-            )
         device = table.text.device
         dtype = (
             self.get_buffer("idf_0").dtype
