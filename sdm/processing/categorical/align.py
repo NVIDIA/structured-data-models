@@ -41,134 +41,156 @@ class AlignCategories(EnsembleProcessor):
         self.sort_by = sort_by
         self._categories: tuple[tuple[Tensor, ...], ...] = ()
 
-    def _fit_category(
+    def _fit_column(
         self,
-        category: Tensor,
-        code: Tensor,
+        input_categories: Tensor,
+        codes: Tensor,
         *,
-        return_aligned: bool,
+        return_aligned_codes: bool,
     ) -> tuple[tuple[Tensor, ...], Tensor | None]:
-        batch_size = code.size(0)
-        if category.numel() == 0:
-            aligned = torch.full_like(code, -1) if return_aligned else None
-            return (category,) * batch_size, aligned
+        batch_size = codes.size(0)
+        if input_categories.numel() == 0:
+            aligned_codes = (
+                torch.full_like(codes, -1) if return_aligned_codes else None
+            )
+            return (input_categories,) * batch_size, aligned_codes
 
-        mask = code >= 0
-        index = code.clamp_min(0).long()
+        mask = codes >= 0
+        indices = codes.clamp_min(0).long()
         # Count categories independently per batch: [B, N] -> [B, K].
-        counts = code.new_zeros((batch_size, category.numel()))
-        counts.scatter_add_(1, index, mask.to(code.dtype))
+        counts = codes.new_zeros((batch_size, input_categories.numel()))
+        counts.scatter_add_(1, indices, mask.to(codes.dtype))
 
         if self.sort_by == "frequency":
             order = counts.argsort(dim=1, descending=True, stable=True)
-            ordered_category = category
+            ordered_categories = input_categories
         elif self.sort_by == "value":
-            if category.is_cuda and category.dtype in _UNSIGNED_DTYPES:
-                key = category.to(torch.int64)
-                if category.dtype == torch.uint64:
+            if (
+                input_categories.is_cuda
+                and input_categories.dtype in _UNSIGNED_DTYPES
+            ):
+                key = input_categories.to(torch.int64)
+                if input_categories.dtype == torch.uint64:
                     # Map unsigned integer order onto signed integer order.
                     key = key.bitwise_xor(torch.iinfo(torch.int64).min)
                 perm = key.argsort()
-                ordered_category = category.index_select(0, perm)
+                ordered_categories = input_categories.index_select(0, perm)
             else:
-                ordered_category, perm = category.sort()
+                ordered_categories, perm = input_categories.sort()
             order = perm.expand(batch_size, -1)
         else:
             assert self.sort_by == "code"
             order = torch.arange(
-                category.numel(),
-                device=code.device,
+                input_categories.numel(),
+                device=codes.device,
             ).expand(batch_size, -1)
-            ordered_category = category
+            ordered_categories = input_categories
 
-        present = counts.gather(1, order) > 0
+        observed = counts.gather(1, order) > 0
         # Only ragged vocabularies require per-batch materialization.
-        categories = []
+        fitted_categories = []
         for batch_index in range(batch_size):
-            selected = order[batch_index, present[batch_index]]
+            selected_indices = order[batch_index, observed[batch_index]]
             if (
-                selected.numel() == category.numel()
+                selected_indices.numel() == input_categories.numel()
                 and self.sort_by != "frequency"
             ):
-                categories.append(ordered_category)
-            elif category.dtype in _UNSIGNED_DTYPES and category.is_cpu:
+                fitted_categories.append(ordered_categories)
+            elif (
+                input_categories.dtype in _UNSIGNED_DTYPES
+                and input_categories.is_cpu
+            ):
                 # PyTorch CPU index_select is not implemented for these dtypes.
-                categories.append(category[selected])
+                fitted_categories.append(input_categories[selected_indices])
             else:
-                categories.append(category.index_select(0, selected))
+                fitted_categories.append(
+                    input_categories.index_select(0, selected_indices)
+                )
 
-        if not return_aligned:
-            return tuple(categories), None
+        if not return_aligned_codes:
+            return tuple(fitted_categories), None
 
-        rank = present.cumsum(dim=1, dtype=code.dtype) - 1
+        rank = observed.cumsum(dim=1, dtype=codes.dtype) - 1
         lookup = torch.full_like(counts, -1)
-        lookup.scatter_(1, order, torch.where(present, rank, -1))
-        aligned = torch.where(mask, lookup.gather(1, index), -1)
-        return tuple(categories), aligned
+        lookup.scatter_(1, order, torch.where(observed, rank, -1))
+        aligned_codes = torch.where(mask, lookup.gather(1, indices), -1)
+        return tuple(fitted_categories), aligned_codes
 
     def _fit_categories(
         self,
         table: TableTensor,
     ) -> tuple[tuple[Tensor, ...], ...]:
-        code = table.categorical.code
-        if code.dim() == 2:
-            code = code.unsqueeze(0)
+        codes = table.categorical.code
+        if codes.dim() == 2:
+            codes = codes.unsqueeze(0)
 
         # Accumulate ragged vocabularies in batch-major order: [batch][column].
-        categories: list[list[Tensor]] = [[] for _ in range(code.size(0))]
-        for i, category in enumerate(table.categorical.categories):
-            fitted, _ = self._fit_category(
-                category=category,
-                code=code[..., i],
-                return_aligned=False,
+        categories_by_batch: list[list[Tensor]] = [
+            [] for _ in range(codes.size(0))
+        ]
+        for column_index, input_categories in enumerate(
+            table.categorical.categories
+        ):
+            fitted_categories, _ = self._fit_column(
+                input_categories=input_categories,
+                codes=codes[..., column_index],
+                return_aligned_codes=False,
             )
-            for table_categories, fitted_category in zip(
-                categories,
-                fitted,
+            for batch_categories, column_categories in zip(
+                categories_by_batch,
+                fitted_categories,
                 strict=True,
             ):
-                table_categories.append(fitted_category)
+                batch_categories.append(column_categories)
 
-        return tuple(tuple(category) for category in categories)
+        return tuple(
+            tuple(batch_categories) for batch_categories in categories_by_batch
+        )
 
     def _fit_and_align(
         self,
         table: TableTensor,
     ) -> tuple[tuple[tuple[Tensor, ...], ...], tuple[TableTensor, ...]]:
-        code = table.categorical.code
-        single_table = code.dim() == 2
+        codes = table.categorical.code
+        single_table = codes.dim() == 2
         if single_table:
-            code = code.unsqueeze(0)
-        out = torch.full_like(code, -1)
+            codes = codes.unsqueeze(0)
+        aligned_codes = torch.full_like(codes, -1)
 
         # Each batch element gets an independent vocabulary and code mapping.
-        categories: list[list[Tensor]] = [[] for _ in range(code.size(0))]
-        for i, category in enumerate(table.categorical.categories):
-            fitted, aligned = self._fit_category(
-                category=category,
-                code=code[..., i],
-                return_aligned=True,
+        categories_by_batch: list[list[Tensor]] = [
+            [] for _ in range(codes.size(0))
+        ]
+        for column_index, input_categories in enumerate(
+            table.categorical.categories
+        ):
+            fitted_categories, aligned_column_codes = self._fit_column(
+                input_categories=input_categories,
+                codes=codes[..., column_index],
+                return_aligned_codes=True,
             )
-            assert aligned is not None
-            out[..., i] = aligned
-            for table_categories, fitted_category in zip(
-                categories,
-                fitted,
+            assert aligned_column_codes is not None
+            aligned_codes[..., column_index] = aligned_column_codes
+            for batch_categories, column_categories in zip(
+                categories_by_batch,
+                fitted_categories,
                 strict=True,
             ):
-                table_categories.append(fitted_category)
+                batch_categories.append(column_categories)
 
-        fitted_categories = tuple(tuple(category) for category in categories)
-        outputs = tuple(
-            (table if single_table else table[table_id]).replace_blocks(
+        fitted_categories = tuple(
+            tuple(batch_categories) for batch_categories in categories_by_batch
+        )
+        aligned_tables = tuple(
+            (table if single_table else table[batch_index]).replace_blocks(
                 categorical=CategoricalTensor(
-                    out[table_id],
-                    categories=table_categories,
+                    aligned_codes[batch_index],
+                    categories=batch_categories,
                 ),
             )
-            for table_id, table_categories in enumerate(fitted_categories)
+            for batch_index, batch_categories in enumerate(fitted_categories)
         )
-        return fitted_categories, outputs
+        return fitted_categories, aligned_tables
 
     def _fit(
         self,
@@ -184,12 +206,12 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> TableTensor:
-        categories, outputs = self._fit_and_align(table)
-        self._categories = categories
-        return outputs[0]
+        fitted_categories, aligned_tables = self._fit_and_align(table)
+        self._categories = fitted_categories
+        return aligned_tables[0]
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        return self._align_tables(table, self._categories)[0]
+        return self._align_to_categories(table, self._categories)[0]
 
     @staticmethod
     def _member_table_ids(
@@ -225,14 +247,14 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> None:
-        categories = tuple(
-            fitted
+        fitted_categories = tuple(
+            batch_categories
             for group in ensemble_table
-            for fitted in self._fit_categories(group)
+            for batch_categories in self._fit_categories(group)
         )
         member_table_ids = self._member_table_ids(ensemble_table)
         self._categories = tuple(
-            categories[table_id] for table_id in member_table_ids
+            fitted_categories[table_id] for table_id in member_table_ids
         )
 
     def _fit_transform_ensemble(
@@ -241,20 +263,20 @@ class AlignCategories(EnsembleProcessor):
         *,
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
-        categories = []
-        tables = []
+        fitted_categories = []
+        aligned_tables = []
         for group in ensemble_table:
-            fitted, outputs = self._fit_and_align(group)
-            categories.extend(fitted)
-            tables.extend(outputs)
+            group_categories, group_tables = self._fit_and_align(group)
+            fitted_categories.extend(group_categories)
+            aligned_tables.extend(group_tables)
 
         member_table_ids = self._member_table_ids(ensemble_table)
         output = EnsembleTable.from_tables(
-            tables=tables,
+            tables=aligned_tables,
             member_table_ids=member_table_ids,
         )
         self._categories = tuple(
-            categories[table_id] for table_id in member_table_ids
+            fitted_categories[table_id] for table_id in member_table_ids
         )
         return output
 
@@ -269,16 +291,16 @@ class AlignCategories(EnsembleProcessor):
             )
 
         table_ids = self._member_table_ids(ensemble_table)
-        categories_by_table: dict[int, tuple[Tensor, ...]] = {}
-        for categories, table_id in zip(
+        fitted_categories_by_table: dict[int, tuple[Tensor, ...]] = {}
+        for member_categories, table_id in zip(
             self._categories,
             table_ids,
             strict=True,
         ):
-            previous = categories_by_table.get(table_id)
-            if previous is not None and previous is not categories:
-                outputs = [
-                    self._align_tables(
+            previous = fitted_categories_by_table.get(table_id)
+            if previous is not None and previous is not member_categories:
+                aligned_tables = [
+                    self._align_to_categories(
                         ensemble_table.table(member_id),
                         (member_categories,),
                     )[0]
@@ -287,115 +309,129 @@ class AlignCategories(EnsembleProcessor):
                     )
                 ]
                 return EnsembleTable.from_tables(
-                    tables=outputs,
+                    tables=aligned_tables,
                     member_table_ids=range(ensemble_table.num_members),
                 )
-            categories_by_table[table_id] = categories
+            fitted_categories_by_table[table_id] = member_categories
 
-        categories = tuple(
-            categories_by_table[table_id]
-            for table_id in range(len(categories_by_table))
+        fitted_categories = tuple(
+            fitted_categories_by_table[table_id]
+            for table_id in range(len(fitted_categories_by_table))
         )
-        outputs = []
+        aligned_tables = []
         offset = 0
         for group in ensemble_table:
             end = offset + group.size(0)
-            outputs.extend(self._align_tables(group, categories[offset:end]))
+            aligned_tables.extend(
+                self._align_to_categories(
+                    group,
+                    fitted_categories[offset:end],
+                )
+            )
             offset = end
 
         return EnsembleTable.from_tables(
-            tables=outputs,
+            tables=aligned_tables,
             member_table_ids=table_ids,
         )
 
     @staticmethod
     def _category_lookup(
-        actual: Tensor,
-        expected: Tensor,
-        code: Tensor,
+        input_categories: Tensor,
+        fitted_categories: Tensor,
+        codes: Tensor,
     ) -> Tensor:
-        lookup = code.new_full((actual.numel(),), -1)
-        if expected.numel() == 0:
+        lookup = codes.new_full((input_categories.numel(),), -1)
+        if fitted_categories.numel() == 0:
             return lookup
 
-        if isinstance(actual, StringTensor):
+        if isinstance(input_categories, StringTensor):
             # TODO Join once with a column-index composite key.
             left_index, right_index = join_index(
                 left_table=TableTensor(
                     columns={"id": ("id",)},
-                    id=ColumnarTensor((actual,)),
+                    id=ColumnarTensor((input_categories,)),
                 ),
                 right_table=TableTensor(
                     columns={"id": ("id",)},
-                    id=ColumnarTensor((expected,)),
+                    id=ColumnarTensor((fitted_categories,)),
                 ),
                 left_keys=["id"],
                 right_keys=["id"],
-                dtype=code.dtype,
+                dtype=codes.dtype,
             )
         else:
-            comparable = actual
-            fitted = expected
+            comparable_categories = input_categories
+            sorted_categories = fitted_categories
             if (
-                comparable.dtype == torch.bool
-                or comparable.dtype in _UNSIGNED_DTYPES
+                comparable_categories.dtype == torch.bool
+                or comparable_categories.dtype in _UNSIGNED_DTYPES
             ):
-                comparable = comparable.to(torch.int64)
-                fitted = fitted.to(torch.int64)
+                comparable_categories = comparable_categories.to(torch.int64)
+                sorted_categories = sorted_categories.to(torch.int64)
 
-            fitted, perm = fitted.sort()
-            position = torch.searchsorted(fitted, comparable)
-            position = position.clamp(max=fitted.numel() - 1)
-            match = fitted[position] == comparable
+            sorted_categories, perm = sorted_categories.sort()
+            position = torch.searchsorted(
+                sorted_categories,
+                comparable_categories,
+            )
+            position = position.clamp(max=sorted_categories.numel() - 1)
+            match = sorted_categories[position] == comparable_categories
             left_index = match.nonzero().view(-1)
             right_index = perm[position[left_index]]
 
-        lookup[left_index] = right_index.to(code.dtype)
+        lookup[left_index] = right_index.to(codes.dtype)
         return lookup
 
-    def _align_tables(
+    def _align_to_categories(
         self,
         table: TableTensor,
-        categories: tuple[tuple[Tensor, ...], ...],
+        fitted_categories: tuple[tuple[Tensor, ...], ...],
     ) -> tuple[TableTensor, ...]:
-        code = table.categorical.code
-        single_table = code.dim() == 2
+        codes = table.categorical.code
+        single_table = codes.dim() == 2
         if single_table:
-            code = code.unsqueeze(0)
-        out = torch.full_like(code, -1)
-        for i, actual in enumerate(table.categorical.categories):
-            if actual.numel() == 0:
+            codes = codes.unsqueeze(0)
+        aligned_codes = torch.full_like(codes, -1)
+        for column_index, input_categories in enumerate(
+            table.categorical.categories
+        ):
+            if input_categories.numel() == 0:
                 continue
 
             lookups = []
             lookup_by_categories: dict[int, Tensor] = {}
-            for fitted_categories in categories:
-                expected = fitted_categories[i]
-                identity = id(expected)
+            for batch_categories in fitted_categories:
+                column_categories = batch_categories[column_index]
+                identity = id(column_categories)
                 lookup = lookup_by_categories.get(identity)
                 if lookup is None:
-                    lookup = self._category_lookup(actual, expected, code)
+                    lookup = self._category_lookup(
+                        input_categories,
+                        column_categories,
+                        codes,
+                    )
                     lookup_by_categories[identity] = lookup
                 lookups.append(lookup)
 
-            values = code[..., i]
-            mask = values >= 0
+            column_codes = codes[..., column_index]
+            mask = column_codes >= 0
             lookup = torch.stack(lookups)
-            index = values.clamp_min(0).long()
-            out[..., i] = torch.where(
+            indices = column_codes.clamp_min(0).long()
+            aligned_codes[..., column_index] = torch.where(
                 mask,
-                lookup.gather(1, index),
+                lookup.gather(1, indices),
                 -1,
             )
 
         return tuple(
-            (table if single_table else table[table_id]).replace_blocks(
+            (table if single_table else table[batch_index]).replace_blocks(
                 categorical=CategoricalTensor(
-                    out[table_id],
-                    categories=table_categories,
+                    aligned_codes[batch_index],
+                    categories=batch_categories,
                 ),
             )
-            for table_id, table_categories in enumerate(categories)
+            for batch_index, batch_categories in enumerate(fitted_categories)
         )
 
     def __repr__(self, *, indent: int = 0) -> str:
