@@ -1,15 +1,15 @@
 {
   "metadata": {
-    "timestamp_utc": "2026-08-06T18:48:38Z",
+    "timestamp_utc": "2026-08-06T19:10:38Z",
     "platform": "Linux-6.17.0-1017-aws-x86_64-with-glibc2.39",
     "cpu": "AMD EPYC 7R13 Processor",
     "torch_version": "2.13.0+cu130",
     "cuda_version": "13.0",
     "gpu": "NVIDIA L4",
     "gpu_total_memory_bytes": 23659151360,
-    "head_commit": "2796f66a9bf9980138a0b4e9013d4988fa42271f",
+    "head_commit": "7c3ce2e7e561679b8984c3030f075a996f0440cb",
     "main_commit": "0d3a0b8aaec16d6ff503119a4ea3ebc64c46e046",
-    "pr516_commit": "6727c1026be72ad9b8deeaa4b28817f3472d1ffa"
+    "pr516_commit": "151be48af490cf550c934a126e216448f3ebc4ae"
   },
   "configuration": {
     "tasks": [
@@ -49,11 +49,11 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2328.4460605,
-      "p95_ms": 2345.477534,
-      "enqueue_median_ms": 2328.426885,
-      "synchronization_wait_median_ms": 0.019205,
-      "cuda_event_elapsed_median_ms": 2328.4228515625,
+      "median_ms": 2381.5929619999997,
+      "p95_ms": 2408.239048,
+      "enqueue_median_ms": 2381.5721615,
+      "synchronization_wait_median_ms": 0.021095000000000003,
+      "cuda_event_elapsed_median_ms": 2381.56640625,
       "peak_memory_bytes": 1744193536,
       "absolute_peak_memory_bytes": 1985384960
     },
@@ -70,11 +70,11 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2534.0632285,
-      "p95_ms": 2578.310086,
-      "enqueue_median_ms": 2534.0439779999997,
-      "synchronization_wait_median_ms": 0.01883,
-      "cuda_event_elapsed_median_ms": 2534.0380859375,
+      "median_ms": 2601.3161155,
+      "p95_ms": 2615.102648,
+      "enqueue_median_ms": 2601.2966655,
+      "synchronization_wait_median_ms": 0.0197605,
+      "cuda_event_elapsed_median_ms": 2601.2861328125,
       "peak_memory_bytes": 1736282624,
       "absolute_peak_memory_bytes": 1977474048
     },
@@ -91,11 +91,11 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2426.9363430000003,
-      "p95_ms": 2485.484198,
-      "enqueue_median_ms": 2426.917018,
+      "median_ms": 2470.0270689999998,
+      "p95_ms": 2526.750514,
+      "enqueue_median_ms": 2470.006749,
       "synchronization_wait_median_ms": 0.019570999999999998,
-      "cuda_event_elapsed_median_ms": 2426.9127197265625,
+      "cuda_event_elapsed_median_ms": 2470.0047607421875,
       "peak_memory_bytes": 1761073152,
       "absolute_peak_memory_bytes": 2001215488
     },
@@ -112,13 +112,13 @@
       "dtype": "torch.float32",
       "repetitions": 20,
       "warmups": 5,
-      "median_ms": 2590.1745165,
-      "p95_ms": 2609.791472,
-      "enqueue_median_ms": 2590.1547615,
-      "synchronization_wait_median_ms": 0.01985,
-      "cuda_event_elapsed_median_ms": 2590.154296875,
-      "peak_memory_bytes": 1752764928,
-      "absolute_peak_memory_bytes": 1992907264
+      "median_ms": 2574.002339,
+      "p95_ms": 2618.146795,
+      "enqueue_median_ms": 2573.9827889999997,
+      "synchronization_wait_median_ms": 0.0201455,
+      "cuda_event_elapsed_median_ms": 2573.9801025390625,
+      "peak_memory_bytes": 1755163136,
+      "absolute_peak_memory_bytes": 1995305472
     }
   ]
 }

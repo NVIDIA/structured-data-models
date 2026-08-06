@@ -136,9 +136,7 @@ class ICLModel(torch.nn.Module, ABC):
             )
         inverse_target = y_context.categorical.size(-1) == 0
         packed_inverse_target = (
-            inverse_target
-            and recipe_execution == "vectorized"
-            and x_query.device.type == "cuda"
+            inverse_target and recipe_execution == "vectorized"
         )
 
         outs: list[TableTensor] = []
@@ -197,7 +195,7 @@ class ICLModel(torch.nn.Module, ABC):
                 member_outs.append(out)
 
             # Regression: invert target before stacking estimator outputs.
-            # The CUDA vectorized path defers this to its packed output below.
+            # The vectorized path defers this to its packed output below.
             if inverse_target and not packed_inverse_target:
                 if not isinstance(
                     execution.recipe.target,
@@ -401,9 +399,7 @@ class ICLModel(torch.nn.Module, ABC):
         assert self._recipe_executions is not None
         inverse_target = self._caches[0]["classes"] is None
         packed_inverse_target = (
-            inverse_target
-            and len(self._recipe_executions) == 1
-            and x.device.type == "cuda"
+            inverse_target and len(self._recipe_executions) == 1
         )
 
         outs: list[TableTensor] = []
@@ -445,7 +441,7 @@ class ICLModel(torch.nn.Module, ABC):
                 member_outs.append(out)
 
             # Regression: invert target before stacking estimator outputs.
-            # The CUDA vectorized path defers this to its packed output below.
+            # The vectorized path defers this to its packed output below.
             if inverse_target and not packed_inverse_target:
                 if not isinstance(
                     execution.recipe.target,

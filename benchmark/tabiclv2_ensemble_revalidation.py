@@ -419,15 +419,6 @@ def _map_output(
     execution: _RecipeExecution,
     outputs: Sequence[TableTensor],
 ) -> TableTensor:
-    if workload.task == "regression" and workload.device.type == "cpu":
-        mapped_members = execution.inverse_transform_target(outputs)
-        return cast(
-            TableTensor,
-            torch.stack(
-                cast(list[torch.Tensor], list(mapped_members)),
-                dim=0,
-            ),
-        )
 
     stacked = cast(
         TableTensor,
