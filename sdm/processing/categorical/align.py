@@ -309,6 +309,7 @@ class AlignCategories(EnsembleProcessor):
                 right_keys=["id"],
                 dtype=codes.dtype,
             )
+            lookup[left_index] = right_index
         else:
             comparable_categories = input_categories
             sorted_categories = fitted_categories
@@ -328,8 +329,7 @@ class AlignCategories(EnsembleProcessor):
             match = sorted_categories[position] == comparable_categories
             left_index = match.nonzero().view(-1)
             right_index = perm[position[left_index]]
-
-        lookup[left_index] = right_index.to(codes.dtype)
+            lookup[left_index] = right_index.to(codes.dtype)
         return lookup
 
     def _align_to_categories(
