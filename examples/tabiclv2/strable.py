@@ -42,14 +42,14 @@ readability_columns = [
 arrow_table = pq.read_table(data_path).drop_columns(readability_columns)
 table = sdm.TableTensor.from_arrow(
     table=arrow_table,
-    stypes=sdm.infer_stypes(arrow_table, with_text=args.disable_text),
+    stypes=sdm.infer_stypes(arrow_table, with_text=not args.disable_text),
     device=device,
 )
 target_name = "BT Easiness"
 context_size = int(0.8 * len(table))
 context = table[:context_size]
 query = table[context_size:]
-ground_truth = query.select_columns(target_name)
+ground_truth = query[:, target_name].numerical.squeeze(-1)
 
 
 model = sdm.models.TabICLv2(device=device)
@@ -70,7 +70,8 @@ with torch.amp.autocast(device.type, torch.float16, enabled=table.is_cuda):
         y=context[:, target_name],
         recipe=recipe,
     )
-    prediction = model.predict(query.drop_columns(target_name))
+    prediction = model.predict(query.drop_columns(target_name)).numerical
+    prediction = prediction.mean(dim=-1)
 
 rmse = (prediction - ground_truth).pow(2).mean().sqrt()
 mae = (prediction - ground_truth).abs().mean()
