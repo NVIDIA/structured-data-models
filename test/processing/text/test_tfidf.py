@@ -293,7 +293,7 @@ def test_tfidf_text_embed_is_an_ensemble_processor() -> None:
     assert issubclass(TFIDF, EnsembleProcessor)
 
 
-def test_tfidf_text_embed_keeps_vocabulary_per_representation() -> None:
+def test_tfidf_keeps_vocabulary_per_member_table() -> None:
     short = TableTensor.from_tensor(StringTensor.from_list([["a"]]))
     long = TableTensor.from_tensor(StringTensor.from_list([["abc"]]))
     processor = TFIDF(ngram_range=(2, 2))
