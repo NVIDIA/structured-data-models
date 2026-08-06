@@ -274,14 +274,44 @@ class Recipe:
             num_members: Number of ensemble members.
             generator: Pseudorandom number generator for sampling.
         """
+        return self._bind_members(
+            x_context=x_context,
+            y_context=y_context,
+            related_context_tables=related_context_tables,
+            member_ids=tuple(range(num_members)),
+            num_members_total=num_members,
+            generator=generator,
+        )
+
+    def _bind_members(
+        self,
+        *,
+        x_context: TableTensor,
+        y_context: TableTensor,
+        related_context_tables: RelatedTables | None,
+        member_ids: tuple[int, ...],
+        num_members_total: int,
+        generator: torch.Generator | None,
+    ) -> _RecipeExecution:
         return _RecipeExecution._bind(
             recipe=self,
             x_context=x_context,
             y_context=y_context,
             related_context_tables=related_context_tables,
-            num_members=num_members,
+            member_ids=member_ids,
+            num_members_total=num_members_total,
             generator=generator,
         )
+
+    def _prepare_members(
+        self,
+        *,
+        y_context: TableTensor,
+        member_ids: tuple[int, ...],
+        num_members_total: int,
+        generator: torch.Generator | None,
+    ) -> None:
+        pass
 
     @staticmethod
     def _as_sequential(

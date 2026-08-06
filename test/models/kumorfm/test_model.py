@@ -295,6 +295,52 @@ def test_forward(
     ).allclose(out)
     model.clear()
 
+    ensemble_arguments = {
+        "x_context": x,
+        "y_context": y,
+        "x_query": x,
+        "related_context_tables": related_tables,
+        "related_query_tables": related_tables,
+        "num_estimators": 2,
+        "num_hops": 2,
+    }
+    ensemble_outputs: dict[str, TableTensor] = {}
+    for recipe_execution in ("vectorized", "sequential"):
+        ensemble_outputs[recipe_execution] = model(
+            **ensemble_arguments,
+            recipe_execution=recipe_execution,
+            generator=torch.Generator(device=device).manual_seed(42),
+        )
+
+    vectorized = ensemble_outputs["vectorized"]
+    sequential = ensemble_outputs["sequential"]
+    assert vectorized.columns == sequential.columns
+    torch.testing.assert_close(
+        vectorized.numerical,
+        sequential.numerical,
+        atol=2e-5,
+        rtol=2e-5,
+    )
+
+    model.fit(
+        x,
+        y,
+        related_tables,
+        num_estimators=2,
+        recipe_execution="vectorized",
+        generator=torch.Generator(device=device).manual_seed(42),
+        num_hops=2,
+    )
+    cached = model.predict(x, related_tables)
+    assert vectorized.columns == cached.columns
+    torch.testing.assert_close(
+        vectorized.numerical,
+        cached.numerical,
+        atol=2e-5,
+        rtol=2e-5,
+    )
+    model.clear()
+
 
 @withCUDA
 def test_many_classes_forward_and_cache(

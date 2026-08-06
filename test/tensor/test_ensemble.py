@@ -39,6 +39,24 @@ def test_from_tables_stacks_compatible_schemas() -> None:
     assert ensemble_table.table(3).equal(second)
 
 
+def test_from_group_wraps_packed_members_without_copying() -> None:
+    group = TableTensor.from_tensor(
+        torch.tensor(
+            [
+                [[1.0], [2.0]],
+                [[3.0], [4.0]],
+            ]
+        )
+    )
+
+    ensemble_table = EnsembleTable._from_group(group)
+
+    assert next(iter(ensemble_table)) is group
+    assert ensemble_table.num_members == 2
+    assert ensemble_table.table(0).equal(group[0])
+    assert ensemble_table.table(1).equal(group[1])
+
+
 def test_from_tables_separates_incompatible_schemas() -> None:
     first = TableTensor.from_tensor(
         tensor=torch.tensor([[1.0], [2.0]]),

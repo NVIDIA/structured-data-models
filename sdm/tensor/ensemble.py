@@ -147,6 +147,16 @@ class EnsembleTable:
         )
         return ensemble
 
+    @classmethod
+    def _from_group(cls, group: TableTensor) -> Self:
+        """Wrap one already-packed group without copying it."""
+        ensemble = cls.__new__(cls)
+        ensemble._groups = (group,)
+        ensemble._locations = tuple(
+            (0, position) for position in range(group.size(0))
+        )
+        return ensemble
+
     def select_members(self, member_ids: Sequence[int]) -> Self:
         """Return the selected ensemble members in the requested order.
 

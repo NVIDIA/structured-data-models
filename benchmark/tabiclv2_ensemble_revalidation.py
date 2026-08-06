@@ -41,6 +41,8 @@ from sdm.processing import (
     Standardize,
 )
 from sdm.processing._recipe_execution import _RecipeExecution
+from sdm.processing.ensemble import EnsembleInvertibleMixin
+from sdm.tensor import EnsembleTable
 
 Task = Literal["classification", "regression"]
 Execution = Literal["vectorized", "sequential"]
@@ -412,21 +414,62 @@ def _raw_outputs(
     return tuple(outputs)
 
 
+def _map_output(
+    workload: Workload,
+    execution: _RecipeExecution,
+    outputs: Sequence[TableTensor],
+) -> TableTensor:
+    if workload.task == "regression" and workload.device.type == "cpu":
+        mapped_members = execution.inverse_transform_target(outputs)
+        return cast(
+            TableTensor,
+            torch.stack(
+                cast(list[torch.Tensor], list(mapped_members)),
+                dim=0,
+            ),
+        )
+
+    stacked = cast(
+        TableTensor,
+        torch.stack(cast(list[torch.Tensor], list(outputs)), dim=0),
+    )
+    if workload.task == "classification":
+        return stacked
+
+    mapped = cast(
+        EnsembleInvertibleMixin,
+        execution.recipe.target,
+    ).inverse_transform_ensemble(EnsembleTable._from_group(stacked))
+    assert mapped.num_groups == 1
+    return next(iter(mapped))
+
+
+def _reduce_output(
+    execution: _RecipeExecution,
+    mapped: TableTensor,
+) -> TableTensor:
+    reduce_estimators = next(iter(execution.recipe.output))
+    return reduce_estimators.transform(mapped)
+
+
+def _finalize_output(
+    execution: _RecipeExecution,
+    reduced: TableTensor,
+) -> TableTensor:
+    output = reduced
+    for processor in tuple(execution.recipe.output)[1:]:
+        output = processor.transform(output)
+    return output
+
+
 def _transform_output(
     workload: Workload,
     execution: _RecipeExecution,
     outputs: Sequence[TableTensor],
 ) -> TableTensor:
-    mapped = (
-        execution.inverse_transform_target(outputs)
-        if workload.task == "regression"
-        else tuple(outputs)
-    )
-    stacked = cast(
-        TableTensor,
-        torch.stack(cast(list[torch.Tensor], list(mapped)), dim=0),
-    )
-    return execution.recipe.output.transform(stacked)
+    mapped = _map_output(workload, execution, outputs)
+    reduced = _reduce_output(execution, mapped)
+    return _finalize_output(execution, reduced)
 
 
 def benchmark_recipe(
@@ -477,6 +520,28 @@ def benchmark_recipe(
         )
 
     add("recipe_output_transform", output_prepare)
+
+    def mapping_prepare() -> Callable[[], Any]:
+        execution = _bind(workload, num_estimators)
+        return lambda: _map_output(workload, execution, raw_outputs)
+
+    add("canonical_output_mapping", mapping_prepare)
+
+    mapped_output = _map_output(workload, template, raw_outputs)
+
+    def reduction_prepare() -> Callable[[], Any]:
+        execution = _bind(workload, num_estimators)
+        return lambda: _reduce_output(execution, mapped_output)
+
+    add("estimator_reduction", reduction_prepare)
+
+    reduced_output = _reduce_output(template, mapped_output)
+
+    def final_prepare() -> Callable[[], Any]:
+        execution = _bind(workload, num_estimators)
+        return lambda: _finalize_output(execution, reduced_output)
+
+    add("final_output_processing", final_prepare)
 
     def total_prepare() -> Callable[[], Any]:
         def run() -> TableTensor:

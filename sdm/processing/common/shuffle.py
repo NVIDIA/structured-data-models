@@ -1,3 +1,4 @@
+from collections.abc import Callable, Sequence
 from typing import Literal, cast
 
 import torch
@@ -38,9 +39,13 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
     def __init__(
         self,
         method: Literal["shift", "random"] = "shift",
+        *,
+        _ensemble_permutations: Callable[..., Sequence[Sequence[int]]]
+        | None = None,
     ) -> None:
         super().__init__()
         self.method = method
+        self._ensemble_permutations = _ensemble_permutations
         self._permutations = torch.nn.ModuleList()
 
     @property
@@ -88,14 +93,33 @@ class ShuffleColumns(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         permutations = []
+        planned = (
+            self._ensemble_permutations(
+                tuple(range(ensemble_table.num_members)),
+                tuple(
+                    ensemble_table.table(member_id).numerical.size(-1)
+                    for member_id in range(ensemble_table.num_members)
+                ),
+            )
+            if self._ensemble_permutations is not None
+            else None
+        )
         for member_id in range(ensemble_table.num_members):
-            indices = self._draw_permutation(
-                ensemble_table.table(member_id),
-                generator=generator,
-            )
-            permutations.append(
-                _ColumnPermutation(indices, tuple(indices.tolist()))
-            )
+            table = ensemble_table.table(member_id)
+            if planned is None:
+                indices = self._draw_permutation(
+                    table,
+                    generator=generator,
+                )
+                order = tuple(indices.tolist())
+            else:
+                order = tuple(planned[member_id])
+                indices = torch.tensor(
+                    order,
+                    dtype=torch.long,
+                    device=table.device,
+                )
+            permutations.append(_ColumnPermutation(indices, order))
         self._permutations = torch.nn.ModuleList(permutations)
 
     def _transform_ensemble(

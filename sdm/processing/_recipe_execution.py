@@ -63,11 +63,19 @@ class _RecipeExecution:
         x_context: TableTensor,
         y_context: TableTensor,
         related_context_tables: RelatedTables | None,
-        num_members: int,
+        member_ids: tuple[int, ...],
+        num_members_total: int,
         generator: torch.Generator | None,
     ) -> _RecipeExecution:
         """Bind a recipe to context data and return the execution state."""
         recipe = copy.deepcopy(recipe)
+        recipe._prepare_members(
+            y_context=y_context,
+            member_ids=member_ids,
+            num_members_total=num_members_total,
+            generator=generator,
+        )
+        num_members = len(member_ids)
 
         related_context_out: dict[str, EnsembleTable] = {}
         related_processors: dict[str, EnsembleProcessor] = {}
@@ -203,25 +211,43 @@ class _RecipeExecution:
 
     def transform_output(
         self,
-        outputs: Sequence[TableTensor],
+        outputs: Sequence[TableTensor] | TableTensor,
+        *,
+        inverse_target: bool = False,
     ) -> TableTensor:
         """Apply ``recipe.output`` to member outputs.
 
-        Stacks members on dim 0 unless the output pipeline reduces the
-        ensemble dimension (e.g. :class:`~sdm.processing.ReduceEstimators`).
+        Optionally invert the fitted target pipeline, then apply the output
+        processors without rematerializing the member tables.
 
         Args:
-            outputs: One model output per ensemble member.
+            outputs: One model output per member, or an already-stacked table.
+            inverse_target: Whether to invert the fitted target pipeline.
         """
         num_members = len(self.contexts)
-        if len(outputs) != num_members:
-            raise ValueError(
-                f"Expected {num_members} member outputs (got {len(outputs)})"
-            )
-        table = EnsembleTable.from_tables(
-            tables=outputs,
-            member_table_ids=tuple(range(num_members)),
+        output_members = (
+            outputs.size(0)
+            if isinstance(outputs, TableTensor)
+            else len(outputs)
         )
+        if output_members != num_members:
+            raise ValueError(
+                f"Expected {num_members} member outputs (got {output_members})"
+            )
+        table = (
+            EnsembleTable._from_group(outputs)
+            if isinstance(outputs, TableTensor)
+            else EnsembleTable.from_tables(
+                tables=outputs,
+                member_table_ids=tuple(range(num_members)),
+            )
+        )
+        if inverse_target:
+            target = self.recipe.target
+            if not isinstance(target, EnsembleInvertibleMixin):
+                raise RuntimeError("Target recipe is not invertible")
+            table = target.inverse_transform_ensemble(table)
+
         input_members = table.num_members
         table = cast(
             EnsembleProcessor,

@@ -1,3 +1,4 @@
+from collections.abc import Callable, Sequence
 from typing import Literal, cast
 
 import torch
@@ -54,9 +55,16 @@ class ShuffleCategories(EnsembleProcessor):
     def __init__(
         self,
         method: Literal["shift", "random"] = "shift",
+        *,
+        _ensemble_permutations: Callable[
+            ...,
+            Sequence[Sequence[Sequence[int]]],
+        ]
+        | None = None,
     ) -> None:
         super().__init__()
         self.method = method
+        self._ensemble_permutations = _ensemble_permutations
         self._permutations = torch.nn.ModuleList()
         self._permutation_ids: tuple[int, ...] = ()
 
@@ -113,12 +121,43 @@ class ShuffleCategories(EnsembleProcessor):
         permutation_id_by_key: dict[
             tuple[torch.device, tuple[int, ...], tuple[int, ...]], int
         ] = {}
+        planned = (
+            self._ensemble_permutations(
+                tuple(range(ensemble_table.num_members)),
+                tuple(
+                    tuple(
+                        category.numel()
+                        for category in ensemble_table.table(
+                            member_id
+                        ).categorical.categories
+                    )
+                    for member_id in range(ensemble_table.num_members)
+                ),
+            )
+            if self._ensemble_permutations is not None
+            else None
+        )
 
         for member_id in range(ensemble_table.num_members):
-            permutations, offsets = self._draw_permutations(
-                ensemble_table.table(member_id),
-                generator=generator,
-            )
+            table = ensemble_table.table(member_id)
+            if planned is None:
+                permutations, offsets = self._draw_permutations(
+                    table,
+                    generator=generator,
+                )
+            else:
+                mappings = tuple(
+                    tuple(mapping) for mapping in planned[member_id]
+                )
+                offsets_list = [0]
+                for mapping in mappings:
+                    offsets_list.append(offsets_list[-1] + len(mapping))
+                offsets = tuple(offsets_list)
+                permutations = torch.tensor(
+                    tuple(index for mapping in mappings for index in mapping),
+                    dtype=torch.long,
+                    device=table.device,
+                )
             key = (
                 permutations.device,
                 offsets,

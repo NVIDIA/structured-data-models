@@ -134,16 +134,28 @@ class ICLModel(torch.nn.Module, ABC):
             raise AssertionError(
                 f"Unexpected recipe_execution {recipe_execution!r}"
             )
+        inverse_target = y_context.categorical.size(-1) == 0
+        packed_inverse_target = (
+            inverse_target
+            and recipe_execution == "vectorized"
+            and x_query.device.type == "cuda"
+        )
 
         outs: list[TableTensor] = []
         last_execution: _RecipeExecution | None = None
+        member_offset = 0
         for num_members in member_counts:
+            member_ids = tuple(
+                range(member_offset, member_offset + num_members)
+            )
+            member_offset += num_members
             with torch.amp.autocast(x_query.device.type, enabled=False):
-                execution = recipe.bind(
+                execution = recipe._bind_members(
                     x_context=x_context,
                     y_context=y_context,
                     related_context_tables=related_context_tables,
-                    num_members=num_members,
+                    member_ids=member_ids,
+                    num_members_total=num_estimators,
                     generator=generator,
                 )
                 queries = execution.transform(
@@ -182,7 +194,9 @@ class ICLModel(torch.nn.Module, ABC):
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
                 # Regression: invert target before stacking estimator outputs.
-                if context.y.categorical.size(-1) == 0:
+                # CUDA vectorized execution performs this once on its packed
+                # output below. The member-wise path is faster on CPU.
+                if inverse_target and not packed_inverse_target:
                     if not isinstance(
                         execution.recipe.target,
                         InvertibleMixin,
@@ -198,6 +212,21 @@ class ICLModel(torch.nn.Module, ABC):
             last_execution = execution
 
         assert last_execution is not None
+        if packed_inverse_target:
+            out = cast(
+                TableTensor,
+                torch.stack(cast(list[Tensor], outs), dim=0),
+            )
+            outs.clear()
+            with torch.amp.autocast(
+                x_query.device.type,
+                enabled=False,
+            ):
+                return last_execution.transform_output(
+                    out,
+                    inverse_target=True,
+                )
+
         # Stack members on dim 0, then apply recipe.output (e.g. reduce).
         out = cast(
             TableTensor,
@@ -267,13 +296,19 @@ class ICLModel(torch.nn.Module, ABC):
 
         executions: list[_RecipeExecution] = []
         caches: list[Cache] = []
+        member_offset = 0
         for num_members in member_counts:
+            member_ids = tuple(
+                range(member_offset, member_offset + num_members)
+            )
+            member_offset += num_members
             with torch.amp.autocast(x.device.type, enabled=False):
-                execution = recipe.bind(
+                execution = recipe._bind_members(
                     x_context=x,
                     y_context=y,
                     related_context_tables=related_tables,
-                    num_members=num_members,
+                    member_ids=member_ids,
+                    num_members_total=num_estimators,
                     generator=generator,
                 )
             executions.append(execution)
@@ -359,6 +394,12 @@ class ICLModel(torch.nn.Module, ABC):
             )
 
         assert self._recipe_executions is not None
+        inverse_target = self._caches[0]["classes"] is None
+        packed_inverse_target = (
+            inverse_target
+            and len(self._recipe_executions) == 1
+            and x.device.type == "cuda"
+        )
 
         outs: list[TableTensor] = []
         last_execution: _RecipeExecution | None = None
@@ -396,7 +437,9 @@ class ICLModel(torch.nn.Module, ABC):
                 )
                 out = cast(TableTensor, out.to(query.x.dtype))
                 # classes is None for regression (see fit()).
-                if cache["classes"] is None:
+                # A single CUDA vectorized execution performs this once on its
+                # packed output below. The member-wise path is faster on CPU.
+                if inverse_target and not packed_inverse_target:
                     if not isinstance(
                         execution.recipe.target,
                         InvertibleMixin,
@@ -410,6 +453,21 @@ class ICLModel(torch.nn.Module, ABC):
 
         assert last_execution is not None
         assert cache_index == len(self._caches)
+        if packed_inverse_target:
+            out = cast(
+                TableTensor,
+                torch.stack(cast(list[Tensor], outs), dim=0),
+            )
+            outs.clear()
+            with torch.amp.autocast(
+                x.device.type,
+                enabled=False,
+            ):
+                return last_execution.transform_output(
+                    out,
+                    inverse_target=True,
+                )
+
         out = cast(
             TableTensor,
             torch.stack(cast(list[Tensor], outs), dim=0),
