@@ -17,7 +17,6 @@ class TaskGraph:  # noqa: D101
     readout_table: str
     readout_index: Tensor  # Entity-table rows ordered by task row.
     task_row_by_table: dict[str, Tensor]  # Per table task-row assignment.
-    all_task_rows_assigned: bool
     num_hops: int
 
     @classmethod
@@ -27,9 +26,6 @@ class TaskGraph:  # noqa: D101
         related_tables: RelatedTables,
         num_hops: int | None = None,
     ) -> Self:
-
-        propagate_to_exhaustion = num_hops is None
-
         if x.dim() != 2:
             raise ValueError("Tables need to be two-dimensional")
 
@@ -108,8 +104,5 @@ class TaskGraph:  # noqa: D101
                 table_name: task_row[graph.node_slice(table_name)]
                 for table_name in related_tables.tables
             },
-            all_task_rows_assigned=(
-                propagate_to_exhaustion and related_tables._task_rows_complete
-            ),
             num_hops=propagated_hops if num_hops is None else num_hops,
         )

@@ -426,11 +426,6 @@ class _KumoRFM(torch.nn.Module):
                 x_query=x_query_i,
                 y=y,
                 task_row=context_task_row_i,
-                all_task_rows_assigned=(
-                    context.all_task_rows_assigned
-                    if context is not None
-                    else False
-                ),
                 num_classes=num_classes,
                 cache_key=f"table_{name}",
                 cache=cache,
@@ -494,7 +489,6 @@ class _KumoRFM(torch.nn.Module):
         x_query: Tensor | None,
         y: Tensor,
         task_row: Tensor | None,
-        all_task_rows_assigned: bool,
         num_classes: int | None,
         cache_key: str,
         cache: Cache | None,
@@ -512,11 +506,11 @@ class _KumoRFM(torch.nn.Module):
         if x_context is not None:
             assert task_row is not None
             x = x_context
-            if all_task_rows_assigned:
-                y = y[task_row]
-            else:
-                train_mask = task_row >= 0
-                y = y[task_row[train_mask]]
+            train_mask = task_row >= 0
+            valid_task_row = task_row[train_mask]
+            y = y[valid_task_row]
+            if valid_task_row.numel() == task_row.numel():
+                train_mask = None
             if x_query is not None:
                 x = torch.cat([x, x_query], dim=-2)
                 if train_mask is not None:

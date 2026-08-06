@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from html import escape
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from typing_extensions import Self
 
-from sdm import Stype, TableTensor
+from sdm import TableTensor
 from sdm.relational import RelationalData, Relationship
 from sdm.relational.join import LEFT_ROW_ID, RIGHT_ROW_ID
 from sdm.tensor.mixin import DeviceMixin
@@ -194,12 +194,6 @@ class RelatedTables(DeviceMixin):
     tables: Mapping[str, TableTensor]
     relationships: tuple[Relationship, ...]
     task_links: tuple[TaskLink, ...]
-    _task_rows_complete: bool = field(
-        default=False,
-        init=False,
-        compare=False,
-        repr=False,
-    )
 
     def __init__(
         self,
@@ -208,8 +202,6 @@ class RelatedTables(DeviceMixin):
             Relationship | Mapping[str, str | Sequence[str]]
         ],
         task_links: Collection[TaskLink | Mapping[str, str | Sequence[str]]],
-        *,
-        _task_rows_complete: bool = False,
     ) -> None:
 
         relationships = tuple(
@@ -229,7 +221,6 @@ class RelatedTables(DeviceMixin):
         object.__setattr__(self, "tables", tables)
         object.__setattr__(self, "relationships", relationships)
         object.__setattr__(self, "task_links", task_links)
-        object.__setattr__(self, "_task_rows_complete", _task_rows_complete)
 
     def to(self, device: torch.device | str | None) -> Self:
         r""":meta private:"""  # noqa: D415
@@ -240,7 +231,6 @@ class RelatedTables(DeviceMixin):
             },
             relationships=self.relationships,
             task_links=self.task_links,
-            _task_rows_complete=self._task_rows_complete,
         )
 
     @property
@@ -284,13 +274,12 @@ class RelatedTables(DeviceMixin):
         """
         tables = set(tables)
 
-        selected_tables = {
-            table_name: table
-            for table_name, table in self.tables.items()
-            if table_name in tables
-        }
         return self.__class__(
-            tables=selected_tables,
+            tables={
+                table_name: table
+                for table_name, table in self.tables.items()
+                if table_name in tables
+            },
             relationships=tuple(
                 relationship
                 for relationship in self.relationships
@@ -301,10 +290,6 @@ class RelatedTables(DeviceMixin):
                 task_link
                 for task_link in self.task_links
                 if task_link.table in tables
-            ),
-            _task_rows_complete=(
-                self._task_rows_complete
-                and selected_tables.keys() == self.tables.keys()
             ),
         )
 
@@ -321,26 +306,6 @@ class RelatedTables(DeviceMixin):
             tables=tables,
             relationships=self.relationships,
             task_links=self.task_links,
-        )
-
-    def _replace_processed_tables(
-        self,
-        tables: Mapping[str, TableTensor],
-    ) -> Self:
-        if tables.keys() != self.tables.keys():
-            raise ValueError("Expected 'tables' to match existing table names")
-
-        task_rows_complete = self._task_rows_complete and all(
-            table.columns[Stype.id]
-            == self.tables[table_name].columns[Stype.id]
-            and table.id is self.tables[table_name].id
-            for table_name, table in tables.items()
-        )
-        return self.__class__(
-            tables=tables,
-            relationships=self.relationships,
-            task_links=self.task_links,
-            _task_rows_complete=task_rows_complete,
         )
 
     def to_graphviz(

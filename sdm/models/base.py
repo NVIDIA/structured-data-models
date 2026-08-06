@@ -2,6 +2,7 @@ import contextlib
 import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import replace
 from typing import Any, ClassVar, cast
 
 import torch
@@ -134,26 +135,22 @@ class ICLModel(torch.nn.Module, ABC):
                         table_name: copy.deepcopy(recipe.features)
                         for table_name in related_context_tables.tables
                     }
-                    related_context_tables_i = (
-                        related_context_tables._replace_processed_tables(
-                            tables={
-                                k: related_processors[k].fit_transform(
-                                    v, generator=generator
-                                )
-                                for k, v in (
-                                    related_context_tables.tables.items()
-                                )
-                            },
-                        )
+                    related_context_tables_i = replace(
+                        related_context_tables,
+                        tables={
+                            k: related_processors[k].fit_transform(
+                                v, generator=generator
+                            )
+                            for k, v in related_context_tables.tables.items()
+                        },
                     )
                     assert related_query_tables is not None
-                    related_query_tables_i = (
-                        related_query_tables._replace_processed_tables(
-                            tables={
-                                k: related_processors[k].transform(v)
-                                for k, v in related_query_tables.tables.items()
-                            },
-                        )
+                    related_query_tables_i = replace(
+                        related_query_tables,
+                        tables={
+                            k: related_processors[k].transform(v)
+                            for k, v in related_query_tables.tables.items()
+                        },
                     )
 
             self._validate_context(
@@ -246,15 +243,14 @@ class ICLModel(torch.nn.Module, ABC):
                         table_name: copy.deepcopy(recipe.features)
                         for table_name in related_tables.tables
                     }
-                    related_tables_i = (
-                        related_tables._replace_processed_tables(
-                            tables={
-                                k: related_processors[k].fit_transform(
-                                    v, generator=generator
-                                )
-                                for k, v in related_tables.tables.items()
-                            },
-                        )
+                    related_tables_i = replace(
+                        related_tables,
+                        tables={
+                            k: related_processors[k].fit_transform(
+                                v, generator=generator
+                            )
+                            for k, v in related_tables.tables.items()
+                        },
                     )
 
             self._validate_context(
@@ -346,13 +342,12 @@ class ICLModel(torch.nn.Module, ABC):
                         Mapping[str, Processor],
                         cache["related_processors"],
                     )
-                    related_tables_i = (
-                        related_tables._replace_processed_tables(
-                            tables={
-                                k: related_processors[k].transform(v)
-                                for k, v in related_tables.tables.items()
-                            },
-                        )
+                    related_tables_i = replace(
+                        related_tables,
+                        tables={
+                            k: related_processors[k].transform(v)
+                            for k, v in related_tables.tables.items()
+                        },
                     )
 
             self._validate_query(

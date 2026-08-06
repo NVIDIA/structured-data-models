@@ -1,6 +1,9 @@
+from typing import Any, cast
+
 import pandas as pd
 import pytest
 import torch
+from torch import Tensor
 
 from sdm import (
     CategoricalTensor,
@@ -417,7 +420,7 @@ def _sample_related_tables(
     )
 
 
-def test_sampled_task_graph_marks_complete_task_rows(
+def test_sampled_task_graph_assigns_all_task_rows(
     relational_data: RelationalData,
 ) -> None:
     task, related_tables = _sample_related_tables(
@@ -427,7 +430,6 @@ def test_sampled_task_graph_marks_complete_task_rows(
 
     graph = TaskGraph.from_input(task, related_tables)
 
-    assert graph.all_task_rows_assigned
     for name, task_row in graph.task_row_by_table.items():
         torch.testing.assert_close(
             task_row,
@@ -435,7 +437,7 @@ def test_sampled_task_graph_marks_complete_task_rows(
         )
 
 
-def test_sampled_task_graph_with_explicit_hops_uses_mask_fallback(
+def test_sampled_task_graph_with_explicit_hops_can_leave_rows_unassigned(
     relational_data: RelationalData,
 ) -> None:
     task, related_tables = _sample_related_tables(
@@ -445,11 +447,67 @@ def test_sampled_task_graph_with_explicit_hops_uses_mask_fallback(
 
     graph = TaskGraph.from_input(task, related_tables, num_hops=1)
 
-    assert not graph.all_task_rows_assigned
+    assert any(
+        (task_row < 0).any() for task_row in graph.task_row_by_table.values()
+    )
+
+
+def test_embed_table_uses_slice_for_complete_task_rows() -> None:
+    masks: list[Tensor | None] = []
+
+    class _CaptureRowEmbedding(torch.nn.Module):
+        def forward(
+            self,
+            x: Tensor,
+            y: Tensor,
+            *,
+            train_mask: Tensor | None,
+            **kwargs: object,
+        ) -> Tensor:
+            masks.append(train_mask)
+            return x.new_zeros(x.size(-2), 2)
+
+    model = _KumoRFM(
+        num_classes=2,
+        num_quantiles=0,
+        channels=8,
+        num_embedding_layers=1,
+        num_embedding_heads=1,
+        num_inducing_points=1,
+        num_readout_tokens=1,
+        num_icl_layers=1,
+        num_icl_heads=1,
+    )
+    model.row_embedding = cast(Any, _CaptureRowEmbedding())
+
+    model._embed_table(
+        x_context=torch.ones(3, 1),
+        x_query=torch.ones(2, 1),
+        y=torch.tensor([0, 1, 0]),
+        task_row=torch.tensor([0, 1, 2]),
+        num_classes=2,
+        cache_key="table",
+        cache=None,
+        generator=None,
+    )
+    model._embed_table(
+        x_context=torch.ones(3, 1),
+        x_query=torch.ones(2, 1),
+        y=torch.tensor([0, 1]),
+        task_row=torch.tensor([0, -1, 1]),
+        num_classes=2,
+        cache_key="table",
+        cache=None,
+        generator=None,
+    )
+
+    assert masks[0] is None
+    assert masks[1] is not None
+    assert masks[1].equal(torch.tensor([True, False, True, False, False]))
 
 
 @withCUDA
-def test_sampled_fast_path_matches_public_mask_fallback(
+def test_sampled_fast_path_is_stable(
     relational_data: RelationalData,
     device: torch.device,
 ) -> None:
@@ -472,7 +530,6 @@ def test_sampled_fast_path_matches_public_mask_fallback(
             categories=(torch.tensor([False, True], device=device),),
         ),
     )
-    fallback_related = context_related.replace_tables(context_related.tables)
     model = KumoRFM(pretrained=False, device=device)
 
     torch.manual_seed(1)
@@ -484,29 +541,20 @@ def test_sampled_fast_path_matches_public_mask_fallback(
         related_query_tables=query_related,
     )
     torch.manual_seed(1)
-    fallback = model(
-        x_context=context,
-        y_context=target,
-        x_query=query,
-        related_context_tables=fallback_related,
-        related_query_tables=query_related,
-    )
-    torch.testing.assert_close(direct.numerical, fallback.numerical)
-
-    torch.manual_seed(1)
     model.fit(context, target, context_related)
     predicted = model.predict(query, query_related)
     model.clear()
 
     torch.manual_seed(1)
-    model.fit(context, target, fallback_related)
-    fallback_predicted = model.predict(query, query_related)
-    model.clear()
-
-    torch.testing.assert_close(
-        predicted.numerical,
-        fallback_predicted.numerical,
+    cached = model(
+        x_context=context,
+        y_context=target,
+        x_query=query,
+        related_context_tables=context_related,
+        related_query_tables=query_related,
     )
+    torch.testing.assert_close(direct.numerical, cached.numerical)
+    assert predicted.numerical.size(-2) == query.size(-2)
 
 
 def test_manual_disconnected_row_uses_mask_fallback() -> None:
@@ -543,5 +591,4 @@ def test_manual_disconnected_row_uses_mask_fallback() -> None:
 
     graph = TaskGraph.from_input(task, related_tables)
 
-    assert not graph.all_task_rows_assigned
     assert graph.task_row_by_table["users"].tolist() == [0, 1, -1]

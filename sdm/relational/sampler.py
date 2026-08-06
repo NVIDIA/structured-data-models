@@ -362,7 +362,6 @@ class RelationalSampler:
                 tables=cast(dict[str, TableTensor], tables),
                 relationships=relationships,
                 task_links=(task_link,),
-                _task_rows_complete=True,
             ),
         )
 
