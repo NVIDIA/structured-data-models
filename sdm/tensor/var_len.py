@@ -1036,6 +1036,22 @@ def _unsafe_view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     return _from_layout_view(inp, view)
 
 
+@VarLenTensor.implements(aten.reshape.default)
+def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
+
+
+@VarLenTensor.implements(aten.movedim.int)
+def _movedim(inp: VarLenTensor, source: int, destination: int) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.movedim.int.decompose(inp, source, destination),
+    )
+
+
 @VarLenTensor.implements(aten.squeeze.default)
 @preserve_view_inference_mode
 def _squeeze(inp: VarLenTensor) -> VarLenTensor:
