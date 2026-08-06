@@ -40,6 +40,15 @@ def reference_sdpa(
     ).transpose(-3, -2)
 
 
+def cuda_sdp_backend_state() -> tuple[bool, bool, bool, bool]:
+    return (
+        torch.backends.cuda.flash_sdp_enabled(),
+        torch.backends.cuda.mem_efficient_sdp_enabled(),
+        torch.backends.cuda.math_sdp_enabled(),
+        torch.backends.cuda.cudnn_sdp_enabled(),
+    )
+
+
 @withCUDA
 @pytest.mark.parametrize(
     "key_len_fn",
@@ -450,6 +459,52 @@ def test_sdpa_errors() -> None:
 
     with pytest.raises(ValueError, match="must be divisible"):
         SDPA(channels=4, num_query_heads=4, num_key_value_heads=3)
+
+
+@pytest.mark.parametrize(
+    ("is_cuda", "flash_attention_impl", "force_flash"),
+    [
+        pytest.param(True, "FA3", True, id="cuda-fa3"),
+        pytest.param(False, "FA3", False, id="cpu-fa3"),
+        pytest.param(True, None, False, id="cuda-default"),
+    ],
+)
+def test_sdpa_backend_selection(
+    is_cuda: bool,
+    flash_attention_impl: str | None,
+    force_flash: bool,
+) -> None:
+    module = SDPA(channels=3, num_query_heads=2)
+    query = torch.randn(2, 3, 2, 3)
+    key = torch.randn(2, 4, 2, 3)
+    value = torch.randn(2, 4, 2, 3)
+    initial_backend_state = cuda_sdp_backend_state()
+    observed_backend_state: tuple[bool, bool, bool, bool] | None = None
+
+    def record_backend_state(*, query: Tensor, **_: object) -> Tensor:
+        nonlocal observed_backend_state
+        observed_backend_state = cuda_sdp_backend_state()
+        return query
+
+    with (
+        patch.object(
+            attention_module,
+            "_maybe_activate_flash_attention",
+            return_value=flash_attention_impl if is_cuda else None,
+        ),
+        patch.object(
+            F,
+            "scaled_dot_product_attention",
+            side_effect=record_backend_state,
+        ),
+    ):
+        module(query=query, key=key, value=value)
+
+    expected_backend_state = (
+        (True, False, False, False) if force_flash else initial_backend_state
+    )
+    assert observed_backend_state == expected_backend_state
+    assert cuda_sdp_backend_state() == initial_backend_state
 
 
 def test_sdpa_batch_size_limit() -> None:

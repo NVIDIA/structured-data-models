@@ -531,11 +531,13 @@ class SDPA(torch.nn.Module):
             query = _materialize_broadcasted_tensor(query)
             key = _materialize_broadcasted_tensor(key)
             value = _materialize_broadcasted_tensor(value)
-            sdpa_context = torch_attention.sdpa_kernel(
+        sdpa_context = (
+            torch_attention.sdpa_kernel(
                 torch_attention.SDPBackend.FLASH_ATTENTION
             )
-        else:
-            sdpa_context = nullcontext()
+            if flash_attention_impl in ("FA3", "FA4")
+            else nullcontext()
+        )
         with sdpa_context:
             out = F.scaled_dot_product_attention(
                 query=query.transpose(-3, -2),  # [B, Hq, Q, C],
