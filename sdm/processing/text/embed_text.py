@@ -101,5 +101,72 @@ class EmbedText(EnsembleProcessor):
         self,
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
-        outputs = [self._transform(group) for group in ensemble_table]
+        groups = list(ensemble_table)
+        if not groups:
+            return ensemble_table
+
+        ref = groups[0]
+        device = ref.device
+        dtype = torch.get_default_dtype()
+        col_names = ref.columns[Stype.text]
+        n_cols = len(col_names)
+
+        group_rows = [g.text.shape[:-1] for g in groups]
+        group_flat_rows = [
+            g.text[..., 0].reshape(-1).numel() for g in groups
+        ]
+        total_rows = sum(group_flat_rows)
+
+        out_col_names: list[str] = []
+        for col_name in col_names:
+            out_col_names.extend(
+                f"{col_name}_{i}" for i in range(self._embedding_dim)
+            )
+        total_width = len(out_col_names)
+
+        flat_numerical = torch.empty(
+            total_rows,
+            total_width,
+            dtype=dtype,
+            device=device,
+        )
+
+        if total_rows > 0:
+            for col_idx in range(n_cols):
+                col_parts = [
+                    cast(
+                        StringTensor,
+                        g.text[..., col_idx].reshape(-1),
+                    )
+                    for g in groups
+                ]
+                merged = cast(
+                    StringTensor,
+                    torch.cat(col_parts, dim=0),
+                )
+                strings = (
+                    merged.to_cudf()
+                    if merged.is_cuda
+                    else merged.to_arrow()
+                )
+                block = self._embedding_model(strings)
+                embeddings = block.to(
+                    device=device, dtype=dtype,
+                ).reshape(total_rows, self._embedding_dim)
+                start = col_idx * self._embedding_dim
+                end = start + self._embedding_dim
+                flat_numerical[:, start:end] = embeddings
+
+        outputs: list[TableTensor] = []
+        offset = 0
+        for batch_shape, n in zip(group_rows, group_flat_rows):
+            numerical = flat_numerical[offset:offset + n].reshape(
+                *batch_shape, total_width,
+            )
+            outputs.append(TableTensor(
+                columns={Stype.numerical: tuple(out_col_names)},
+                numerical=numerical,
+            ))
+            offset += n
+
         return ensemble_table.replace_groups(outputs)
