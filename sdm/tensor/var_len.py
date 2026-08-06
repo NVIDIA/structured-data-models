@@ -3,13 +3,13 @@ from __future__ import annotations
 import functools
 import math
 from collections.abc import Callable, Sequence
-from typing import Any, ClassVar, SupportsIndex, cast
+from typing import Any, ClassVar, Self, SupportsIndex, cast
 
 import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
 from sdm.tensor.io.arrow import _combine_arrow_chunks
@@ -1034,6 +1034,14 @@ def _view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
 def _unsafe_view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     view = aten._unsafe_view.default(_layout_view(inp), size)
     return _from_layout_view(inp, view)
+
+
+@VarLenTensor.implements(aten.reshape.default)
+def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
+    return cast(
+        VarLenTensor,
+        aten.reshape.default.decompose(inp, size),
+    )
 
 
 @VarLenTensor.implements(aten.squeeze.default)

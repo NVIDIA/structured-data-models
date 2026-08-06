@@ -3,11 +3,15 @@ from typing import Literal, cast
 import torch
 
 from sdm.processing.base import Processor
+from sdm.processing.ensemble import (
+    EnsembleProcessor,
+    EnsembleProcessorAdapter,
+)
 from sdm.stype import Stype
-from sdm.tensor import TableTensor
+from sdm.tensor import EnsembleTable, TableTensor
 
 
-class TaskDispatch(Processor):
+class TaskDispatch(EnsembleProcessor):
     """Route model output by the transformed target's semantic type.
 
     When used in :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
@@ -18,12 +22,14 @@ class TaskDispatch(Processor):
     ``TaskDispatch`` as a direct step in ``Recipe.output``.
 
     Args:
-        classification: Output processor for categorical targets. If omitted,
-            :class:`~sdm.processing.Identity` is used. A sequence is
-            normalized to :class:`~sdm.processing.Sequential`.
-        regression: Output processor for numerical targets. If omitted,
-            :class:`~sdm.processing.Identity` is used. A sequence is
-            normalized to :class:`~sdm.processing.Sequential`.
+        classification: Stateless output processor selected for a categorical
+            target. If omitted, output passes through unchanged. A sequence is
+            normalized to
+            :class:`~sdm.processing.Sequential`.
+        regression: Stateless output processor selected for a numerical target.
+            If omitted, output passes through unchanged. A sequence is
+            normalized to
+            :class:`~sdm.processing.Sequential`.
     """
 
     supported_stypes = frozenset(Stype)
@@ -49,6 +55,8 @@ class TaskDispatch(Processor):
                     f"{self.__class__.__name__!r} requires stateless routes, "
                     f"but the {task!r} route requires fit."
                 )
+            if not isinstance(processor, EnsembleProcessor):
+                processor = EnsembleProcessorAdapter(processor)
             self.processors[task] = processor
 
         if len(self.processors) == 0:
@@ -86,16 +94,19 @@ class TaskDispatch(Processor):
     def _reset(self) -> None:
         self._task = None
 
-    def _transform(self, table: TableTensor) -> TableTensor:
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
         if self._task is None:
             raise RuntimeError(
                 f"{self.__class__.__name__!r} has no resolved task; call "
                 "'recipe.target.fit()' before transforming model output."
             )
         if self._task not in self.processors:
-            return table
-        processor = cast(Processor, self.processors[self._task])
-        return processor.transform(table)
+            return ensemble_table
+        processor = cast(EnsembleProcessor, self.processors[self._task])
+        return processor.transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

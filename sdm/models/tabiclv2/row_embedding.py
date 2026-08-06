@@ -128,8 +128,9 @@ class RowEmbedding(torch.nn.Module):
             # y_emb has shape [F, ..., R_train, 1, D]:
             x[..., train_mask, :, :] += y_emb.to(x.dtype)
 
-        # Column-wise induced set attention (B * C as the batch axis):
-        x = x.transpose(-2, -3)  # [..., C, R, D]
+        # Column-wise induced set attention (B * C as the batch axis).
+        # Materialize once to avoid repeated copies in the column layers.
+        x = x.transpose(-2, -3).contiguous()  # [..., C, R, D]
         for i, col_layer in enumerate(self.col_layers):
             key = f"row_embedding.col_layer{i}"
             if cache is not None and cache.is_replaying:

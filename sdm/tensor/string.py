@@ -3,13 +3,13 @@ from __future__ import annotations
 import importlib.util
 import math
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
 import torch
 from torch import Tensor
-from typing_extensions import Self, override
+from typing_extensions import override
 
 from sdm._warnings import warn_once
 from sdm.tensor import VarLenTensor
@@ -243,7 +243,7 @@ class StringTensor(VarLenTensor):
     @override
     def from_list(
         cls,
-        values: str | None | Sequence[Any],
+        values: str | Sequence[Any] | None,
         *,
         dtype: torch.dtype | None = None,
         device: torch.device | str | None = None,
