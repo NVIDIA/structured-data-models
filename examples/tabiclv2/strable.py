@@ -88,8 +88,8 @@ for name, recipe in configs.items():
             recipe=recipe,
         )
         prediction = model.predict(
-            query.drop_columns(target_name)
-        ).numerical.squeeze()
+            query.drop_columns(target_name),
+        )[:, "q500"].numerical.squeeze()
         model.clear()
     rmse = (prediction - ground_truth).pow(2).mean().sqrt()
     mae = (prediction - ground_truth).abs().mean()
