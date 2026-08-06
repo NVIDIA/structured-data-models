@@ -1,6 +1,6 @@
 # Examples
 
-This folder contains runnable examples of ``structured-data-models``, grouped by model:
+This folder contains runnable examples of ``structured-data-models``, grouped by model architecture:
 
 * [**`tabiclv2/`**](tabiclv2/): `sdm.models.TabICLv2`
 * [**`kumorfm/`**](kumorfm/): `sdm.models.KumoRFM`
