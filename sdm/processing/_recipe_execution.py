@@ -9,7 +9,7 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.processing.output.reduce import ReduceEstimators
 from sdm.processing.recipe import Recipe
 from sdm.tensor import EnsembleTable
@@ -37,7 +37,7 @@ class _RecipeExecution:
 
     Internal helper for :class:`~sdm.models.base.ICLModel`. Construct via
     :meth:`~sdm.processing.recipe.Recipe.bind`, then :meth:`transform`,
-    :meth:`inverse_transform_target`, and :meth:`transform_output`.
+    :meth:`transform_output`.
 
     Attributes:
         recipe: Recipe with fitted ``features`` and ``target``.
@@ -173,33 +173,6 @@ class _RecipeExecution:
                 )
             )
         return tuple(queries)
-
-    def inverse_transform_target(
-        self,
-        outputs: Sequence[TableTensor],
-    ) -> tuple[TableTensor, ...]:
-        """Invert fitted target transforms on member outputs.
-
-        Args:
-            outputs: One model output per ensemble member.
-        """
-        num_members = len(self.contexts)
-        if len(outputs) != num_members:
-            raise ValueError(
-                f"Expected {num_members} member outputs (got {len(outputs)})"
-            )
-        table = cast(
-            EnsembleInvertibleMixin,
-            self.recipe.target,
-        ).inverse_transform_ensemble(
-            EnsembleTable.from_tables(
-                tables=outputs,
-                member_table_ids=tuple(range(num_members)),
-            )
-        )
-        return tuple(
-            table.table(member_id) for member_id in range(table.num_members)
-        )
 
     def transform_output(
         self,
