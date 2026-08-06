@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, cast
 
 import torch
@@ -10,27 +11,31 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
-class _ModuleReference(torch.nn.Module):
-    """Preserve a module reference across deep copies."""
+class _EmbedModelRef:
+    """Preserve an embedding model reference across deep copies."""
 
-    def __init__(self, module: torch.nn.Module) -> None:
-        super().__init__()
-        self.module = module
+    def __init__(self, fn: Callable[..., Any]) -> None:
+        self.fn = fn
 
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
-        return self.module(*args, **kwargs)
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self.fn(*args, **kwargs)
 
-    def __deepcopy__(self, _memo: dict[int, Any]) -> _ModuleReference:
-        return type(self)(self.module)
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _EmbedModelRef:
+        return type(self)(self.fn)
 
 
 class EmbedText(Processor):
     r"""Embed text columns with a user-provided embedding model.
 
+    All text columns are flattened into a single list of strings and
+    passed to ``embedding_model`` in one call. The model must return one
+    embedding per string as a :class:`torch.Tensor` with shape
+    ``[n, embedding_dim]``. Embeddings are concatenated in column order
+    into the numerical output.
+
     Args:
-        embedding_model: Pre-loaded model called on the flattened text values.
-            It must return a :class:`torch.Tensor` with shape
-            ``[n, embedding_dim]``.
+        embedding_model: Callable that maps a list of strings to a
+            :class:`torch.Tensor` with shape ``[n, embedding_dim]``.
         embedding_dim: Width of each returned embedding.
     """
 
@@ -39,11 +44,11 @@ class EmbedText(Processor):
 
     def __init__(
         self,
-        embedding_model: torch.nn.Module,
+        embedding_model: Callable[[list[str]], Tensor],
         embedding_dim: int,
     ) -> None:
         super().__init__()
-        self._embedding_model = _ModuleReference(embedding_model)
+        self._embedding_model = _EmbedModelRef(embedding_model)
         self._embedding_dim: int = embedding_dim
 
     def _transform(self, table: TableTensor) -> TableTensor:
@@ -64,18 +69,12 @@ class EmbedText(Processor):
             device=device,
         )
         if numerical.numel() != 0:
-            # FIXME: The embedding_model currently must take in a
-            # dataframe and not a Tensor.
             num_cols = len(col_names)
             all_cols: list[Tensor] = [
                 table.text[..., i].reshape(-1) for i in range(num_cols)
             ]
             flat_strings = cast(StringTensor, torch.cat(all_cols))
-            strings = (
-                flat_strings.to_cudf()
-                if flat_strings.is_cuda
-                else flat_strings.to_arrow()
-            )
+            strings = flat_strings.to_arrow().to_pylist()
             all_embeddings = self._embedding_model(strings).to(
                 device=device,
                 dtype=dtype,

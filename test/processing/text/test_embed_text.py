@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pyarrow as pa
 import torch
 from torch import Tensor
 
@@ -8,9 +7,8 @@ from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import EmbedText
 
 
-class _FakeEmbeddingModel(torch.nn.Module):
-    def forward(self, strings: pa.Array) -> Tensor:
-        return torch.ones(len(strings), 2)
+def _fake_embed(strings: list[str]) -> Tensor:
+    return torch.ones(len(strings), 2)
 
 
 def test_forward() -> None:
@@ -25,7 +23,7 @@ def test_forward() -> None:
     )
 
     output = EmbedText(
-        _FakeEmbeddingModel(),
+        _fake_embed,
         embedding_dim=2,
     )(table)
 
