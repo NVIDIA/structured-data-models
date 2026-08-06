@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Self
+from typing import Self, cast
 
 import torch
 
 from sdm import RelatedTables, TableTensor
-from sdm.processing.base import InvertibleMixin, Processor
+from sdm.processing.base import Processor
 from sdm.processing.common.sequential import Sequential
 from sdm.processing.common.task import TaskDispatch
-from sdm.processing.ensemble import EnsembleProcessor
+from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
 from sdm.stype import Stype
+from sdm.tensor import EnsembleTable
 
 
-class _TaskResolver(Processor, InvertibleMixin):
+class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
     """Resolve linked output dispatchers while fitting a recipe target.
 
     The wrapped target processor is a registered child module. Output
@@ -40,6 +41,15 @@ class _TaskResolver(Processor, InvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> Self:
         self.fit_transform(table, generator=generator)
+        return self
+
+    def fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> Self:
+        self.fit_transform_ensemble(ensemble_table, generator=generator)
         return self
 
     def fit_transform(
@@ -69,17 +79,56 @@ class _TaskResolver(Processor, InvertibleMixin):
                 for task_dispatcher in self._task_dispatchers:
                     task_dispatcher._reset()
 
-    def _transform(self, table: TableTensor) -> TableTensor:
-        return self.processor.transform(table)
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        self._fitted = False
+        for task_dispatcher in self._task_dispatchers:
+            task_dispatcher._reset()
 
-    def _inverse_transform(self, table: TableTensor) -> TableTensor:
-        fn = getattr(self.processor, "inverse_transform", None)
+        succeeded = False
+        try:
+            target = cast(
+                EnsembleProcessor,
+                self.processor,
+            ).fit_transform_ensemble(
+                ensemble_table,
+                generator=generator,
+            )
+            resolved = target.table(0)
+            for task_dispatcher in self._task_dispatchers:
+                task_dispatcher._resolve(resolved)
+            self._fitted = True
+            succeeded = True
+            return target
+        finally:
+            if not succeeded:
+                for task_dispatcher in self._task_dispatchers:
+                    task_dispatcher._reset()
+
+    def _transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        return cast(
+            EnsembleProcessor,
+            self.processor,
+        ).transform_ensemble(ensemble_table)
+
+    def _inverse_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+    ) -> EnsembleTable:
+        fn = getattr(self.processor, "inverse_transform_ensemble", None)
         if not callable(fn):
             raise AttributeError(
                 f"{self.processor.__class__.__name__!r} object has no "
-                "attribute 'inverse_transform'"
+                "attribute 'inverse_transform_ensemble'"
             )
-        return fn(table)
+        return fn(ensemble_table)
 
     def __repr__(self, *, indent: int = 0) -> str:
         return self.processor.__repr__(indent=indent)

@@ -10,6 +10,7 @@ from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
 from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
+from sdm.processing.output.reduce import ReduceEstimators
 from sdm.processing.recipe import Recipe
 from sdm.tensor import EnsembleTable
 
@@ -185,8 +186,8 @@ class _RecipeExecution:
         """Postprocess member outputs via inverse target (if regression) and
         ``recipe.output``.
 
-        Returns one table for a single member, otherwise stacks members on
-        dim 0.
+        Stacks members on dim 0 unless the output pipeline reduces the
+        ensemble dimension (e.g. :class:`~sdm.processing.ReduceEstimators`).
 
         Args:
             outputs: One raw model output per ensemble member.
@@ -211,7 +212,14 @@ class _RecipeExecution:
             recipe.output,
         ).transform_ensemble(table)
 
-        if table.num_members < input_members:
+        reduced = table.num_members < input_members or (
+            table.num_members == 1
+            and any(
+                isinstance(module, ReduceEstimators)
+                for module in recipe.output.modules()
+            )
+        )
+        if reduced:
             return table.table(0)
 
         members = [
