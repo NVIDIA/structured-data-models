@@ -36,6 +36,7 @@ class StringTensor(VarLenTensor):
 
     # NOTE Assume that `data` stores valid UTF-8 bytes and do not validate it.
     ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...] | None] = (torch.uint8,)
+    __hash__ = Tensor.__hash__
 
     @override
     @classmethod
@@ -325,6 +326,81 @@ class StringTensor(VarLenTensor):
     def item(self) -> str | None:  # type: ignore
         return cast(str | None, super().item())
 
+    def pairwise_equal(self, other: StringTensor) -> Tensor:
+        r"""Compare every string in two one-dimensional tensors."""
+        if self.dim() != 1 or other.dim() != 1:
+            raise ValueError("Expected one-dimensional string tensors")
+        if self.device != other.device:
+            raise RuntimeError(
+                "Expected both tensors to be on the same device "
+                f"(got '{self.device}' and '{other.device}')"
+            )
+
+        num_left = self.numel()
+        num_right = other.numel()
+        if num_left == 0 or num_right == 0:
+            return torch.zeros(
+                (num_left, num_right),
+                dtype=torch.bool,
+                device=self.device,
+            )
+
+        left_start = self._storage_offset
+        right_start = other._storage_offset
+        left_offset = self._offset.narrow(0, left_start, num_left + 1)
+        right_offset = other._offset.narrow(0, right_start, num_right + 1)
+        left_length = left_offset[1:] - left_offset[:-1]
+        right_length = right_offset[1:] - right_offset[:-1]
+
+        byte_index = torch.arange(
+            self._data.numel(),
+            dtype=left_offset.dtype,
+            device=self.device,
+        )
+        left_segment = torch.searchsorted(
+            left_offset[1:],
+            byte_index,
+            right=True,
+        )
+        left_valid = (
+            (byte_index >= left_offset[0])
+            & (byte_index < left_offset[-1])
+            & (left_segment < num_left)
+        )
+        left_segment = left_segment.clamp(max=num_left - 1)
+        byte_position = byte_index - left_offset[left_segment]
+
+        right_index = right_offset[:-1].unsqueeze(0) + byte_position.to(
+            right_offset.dtype
+        ).unsqueeze(1)
+        right_valid = byte_position.unsqueeze(1) < right_length.unsqueeze(0)
+        padded_right = torch.cat((other._data, other._data.new_zeros(1)))
+        right_index = right_index.clamp(
+            min=0,
+            max=other._data.numel(),
+        )
+        byte_equal = self._data.unsqueeze(1) == padded_right[right_index]
+        mismatch = left_valid.unsqueeze(1) & (~right_valid | ~byte_equal)
+
+        pair_index = left_segment.to(torch.int64).unsqueeze(
+            1
+        ) * num_right + torch.arange(num_right, device=self.device).unsqueeze(
+            0
+        )
+        mismatch_count = torch.zeros(
+            num_left * num_right,
+            dtype=torch.int64,
+            device=self.device,
+        ).scatter_add(
+            0,
+            pair_index.flatten(),
+            mismatch.to(torch.int64).flatten(),
+        )
+        mismatch_count = mismatch_count.view(num_left, num_right)
+        return (left_length.unsqueeze(1) == right_length.unsqueeze(0)) & (
+            mismatch_count == 0
+        )
+
     def __eq__(self, other: object) -> Tensor:  # type: ignore
         if isinstance(other, str):
             return _eq(self, other)
@@ -345,6 +421,10 @@ class StringTensor(VarLenTensor):
             out += f", device={self.device}"
         out += ")"
         return out
+
+
+def _pairwise_equal(left: StringTensor, right: StringTensor) -> Tensor:
+    return StringTensor.pairwise_equal(left, right)
 
 
 @StringTensor.implements(aten.eq.Tensor)

@@ -39,6 +39,40 @@ def test_from_list() -> None:
     assert tensor.item() is None
 
 
+@withCUDA
+def test_pairwise_equal(device: torch.device) -> None:
+    left = cast(
+        StringTensor,
+        StringTensor.from_list(
+            ["unused-long-prefix", "a", "", "aa", "a"],
+            device=device,
+        )[1:],
+    )
+    right = cast(
+        StringTensor,
+        StringTensor.from_list(
+            ["unused", "", "a", "b", "aa"],
+            device=device,
+        )[1:],
+    )
+
+    actual = left.pairwise_equal(right)
+    expected = torch.tensor(
+        [
+            [False, True, False, False],
+            [True, False, False, False],
+            [False, False, False, True],
+            [False, True, False, False],
+        ],
+        device=device,
+    )
+    torch.testing.assert_close(actual, expected)
+
+    empty = StringTensor.from_list([], device=device)
+    assert empty.pairwise_equal(right).shape == (0, 4)
+    assert right.pairwise_equal(empty).shape == (4, 0)
+
+
 def test_arrow() -> None:
     tensor = StringTensor.from_arrow(pa.array(["hi", "é", ""]))
     assert tensor.size() == (3,)
