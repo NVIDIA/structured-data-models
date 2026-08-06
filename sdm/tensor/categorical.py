@@ -607,20 +607,20 @@ def _is_pinned(inp: CategoricalTensor) -> bool:
     )
 
 
+@CategoricalTensor.implements(aten._pin_memory.default)
+def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
+    categories = tuple(category.pin_memory() for category in inp._categories)
+    return inp.__class__(inp._code.pin_memory(), categories)
+
+
 @CategoricalTensor.implements(aten.pin_memory.default)
 def _pin_memory_composite(
     inp: CategoricalTensor,
     device: torch.device | None = None,
 ) -> CategoricalTensor:
-    if inp.is_pinned():
+    if _is_pinned(inp):
         return inp
-    return cast(CategoricalTensor, aten._pin_memory.default(inp))
-
-
-@CategoricalTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: CategoricalTensor) -> CategoricalTensor:
-    categories = tuple(category.pin_memory() for category in inp._categories)
-    return inp.__class__(inp._code.pin_memory(), categories)
+    return _pin_memory(inp)
 
 
 @CategoricalTensor.implements(aten.equal.default)
