@@ -1,8 +1,6 @@
 import contextlib
-import copy
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
-from dataclasses import replace
+from collections.abc import Iterator
 from typing import Any, ClassVar, Literal, cast
 
 import torch
@@ -11,7 +9,7 @@ from torch import Tensor
 from sdm import RelatedTables, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin, Processor, Recipe
+from sdm.processing import InvertibleMixin, Recipe
 from sdm.processing._recipe_execution import _RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -56,7 +54,9 @@ class ICLModel(torch.nn.Module, ABC):
 
         # One cache per ensemble member.
         self._caches: list[Cache] | None = None
-        self._recipe_execution: _RecipeExecution | None = None
+        # One execution for "vectorized" (spanning all estimators), or one
+        # per estimator for "sequential".
+        self._recipe_executions: tuple[_RecipeExecution, ...] | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -125,133 +125,78 @@ class ICLModel(torch.nn.Module, ABC):
         recipe = self.default_recipe() if recipe is None else recipe
 
         if recipe_execution == "vectorized":
-            return self._forward_ensemble(
-                x_context=x_context,
-                y_context=y_context,
-                x_query=x_query,
-                related_context_tables=related_context_tables,
-                related_query_tables=related_query_tables,
-                recipe=recipe,
-                num_estimators=num_estimators,
-                generator=generator,
-                **kwargs,
-            )
+            with torch.amp.autocast(x_query.device.type, enabled=False):
+                execution = _RecipeExecution.fit_context(
+                    recipe=recipe,
+                    x_context=x_context,
+                    y_context=y_context,
+                    related_context_tables=related_context_tables,
+                    num_members=num_estimators,
+                    generator=generator,
+                )
+                query_inputs = execution.transform_query(
+                    x_query=x_query,
+                    related_query_tables=related_query_tables,
+                )
+
+            outs: list[TableTensor] = []
+            for context_input, query_input in zip(
+                execution.context_inputs,
+                query_inputs,
+                strict=True,
+            ):
+                self._validate_context(
+                    x=context_input.x,
+                    y=context_input.y,
+                    related_tables=context_input.related_tables,
+                )
+                self._validate_query(
+                    x_context=context_input.x.schema,
+                    x_query=query_input.x,
+                    related_context_tables=context_input.related_tables.schema
+                    if context_input.related_tables is not None
+                    else None,
+                    related_query_tables=query_input.related_tables,
+                )
+
+                out = self._forward(
+                    x_context=context_input.x,
+                    y_context=context_input.y,
+                    x_query=query_input.x,
+                    related_context_tables=context_input.related_tables,
+                    related_query_tables=query_input.related_tables,
+                    cache=None,
+                    generator=generator,
+                    **kwargs,
+                )
+                out = cast(TableTensor, out.to(query_input.x.dtype))
+                outs.append(out)
+
+            with torch.amp.autocast(x_query.device.type, enabled=False):
+                return execution.transform_output(outs)
         if recipe_execution != "sequential":
             raise AssertionError(
                 f"Unexpected recipe_execution {recipe_execution!r}"
             )
 
-        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
-
-        outs: list[TableTensor] = []
-        for recipe in recipes:
+        outs = []
+        last_execution: _RecipeExecution | None = None
+        for _ in range(num_estimators):
             with torch.amp.autocast(x_query.device.type, enabled=False):
-                x_context_i = recipe.features.fit_transform(
-                    x_context,
+                execution = _RecipeExecution.fit_context(
+                    recipe=recipe,
+                    x_context=x_context,
+                    y_context=y_context,
+                    related_context_tables=related_context_tables,
+                    num_members=1,
                     generator=generator,
                 )
-                y_context_i = recipe.target.fit_transform(
-                    y_context,
-                    generator=generator,
+                (query_input,) = execution.transform_query(
+                    x_query=x_query,
+                    related_query_tables=related_query_tables,
                 )
-                x_query_i = recipe.features.transform(x_query)
+            (context_input,) = execution.context_inputs
 
-                related_context_tables_i = related_query_tables_i = None
-                if related_context_tables is not None:
-                    related_processors = {
-                        table_name: copy.deepcopy(recipe.features)
-                        for table_name in related_context_tables.tables
-                    }
-                    related_context_tables_i = replace(
-                        related_context_tables,
-                        tables={
-                            k: related_processors[k].fit_transform(
-                                v, generator=generator
-                            )
-                            for k, v in related_context_tables.tables.items()
-                        },
-                    )
-                    assert related_query_tables is not None
-                    related_query_tables_i = replace(
-                        related_query_tables,
-                        tables={
-                            k: related_processors[k].transform(v)
-                            for k, v in related_query_tables.tables.items()
-                        },
-                    )
-
-            self._validate_context(
-                x=x_context_i,
-                y=y_context_i,
-                related_tables=related_context_tables_i,
-            )
-            self._validate_query(
-                x_context=x_context_i.schema,
-                x_query=x_query_i,
-                related_context_tables=related_context_tables_i.schema
-                if related_context_tables_i is not None
-                else None,
-                related_query_tables=related_query_tables_i,
-            )
-
-            out = self._forward(
-                x_context=x_context_i,
-                y_context=y_context_i,
-                x_query=x_query_i,
-                related_context_tables=related_context_tables_i,
-                related_query_tables=related_query_tables_i,
-                cache=None,
-                generator=generator,
-                **kwargs,
-            )
-            out = cast(TableTensor, out.to(x_query_i.dtype))
-            if y_context_i.numerical.size(-1) == 1:
-                if not isinstance(recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                with torch.amp.autocast(x_query.device.type, enabled=False):
-                    out = recipe.target.inverse_transform(out)
-            outs.append(out)
-
-        out = cast(
-            TableTensor,
-            torch.stack(cast(list[Tensor], outs), dim=0),
-        )
-        with torch.amp.autocast(x_query.device.type, enabled=False):
-            return recipe.output.transform(out)
-
-    def _forward_ensemble(
-        self,
-        *,
-        x_context: TableTensor,
-        y_context: TableTensor,
-        x_query: TableTensor,
-        related_context_tables: RelatedTables | None,
-        related_query_tables: RelatedTables | None,
-        recipe: Recipe,
-        num_estimators: int,
-        generator: torch.Generator | None,
-        **kwargs: Any,
-    ) -> TableTensor:
-        with torch.amp.autocast(x_query.device.type, enabled=False):
-            recipe_execution = _RecipeExecution.fit_context(
-                recipe=recipe,
-                x_context=x_context,
-                y_context=y_context,
-                related_context_tables=related_context_tables,
-                num_members=num_estimators,
-                generator=generator,
-            )
-            query_inputs = recipe_execution.transform_query(
-                x_query=x_query,
-                related_query_tables=related_query_tables,
-            )
-
-        outs: list[TableTensor] = []
-        for context_input, query_input in zip(
-            recipe_execution.context_inputs,
-            query_inputs,
-            strict=True,
-        ):
             self._validate_context(
                 x=context_input.x,
                 y=context_input.y,
@@ -277,10 +222,21 @@ class ICLModel(torch.nn.Module, ABC):
                 **kwargs,
             )
             out = cast(TableTensor, out.to(query_input.x.dtype))
+            if execution.is_regression:
+                if not isinstance(execution.recipe.target, InvertibleMixin):
+                    raise RuntimeError("Target recipe is not invertible")
+                with torch.amp.autocast(x_query.device.type, enabled=False):
+                    out = execution.recipe.target.inverse_transform(out)
             outs.append(out)
+            last_execution = execution
 
+        assert last_execution is not None
+        out = cast(
+            TableTensor,
+            torch.stack(cast(list[Tensor], outs), dim=0),
+        )
         with torch.amp.autocast(x_query.device.type, enabled=False):
-            return recipe_execution.transform_output(outs)
+            return last_execution.recipe.output.transform(out)
 
     @_maybe_inference_mode()
     def fit(
@@ -330,137 +286,73 @@ class ICLModel(torch.nn.Module, ABC):
 
         self.clear()
         if recipe_execution == "vectorized":
-            self._fit_ensemble(
-                x=x,
-                y=y,
-                related_tables=related_tables,
-                recipe=recipe,
-                num_estimators=num_estimators,
-                generator=generator,
-                **kwargs,
-            )
-            return
-        if recipe_execution != "sequential":
+            with torch.amp.autocast(x.device.type, enabled=False):
+                executions = (
+                    _RecipeExecution.fit_context(
+                        recipe=recipe,
+                        x_context=x,
+                        y_context=y,
+                        related_context_tables=related_tables,
+                        num_members=num_estimators,
+                        generator=generator,
+                    ),
+                )
+        elif recipe_execution == "sequential":
+            sequential_executions: list[_RecipeExecution] = []
+            for _ in range(num_estimators):
+                with torch.amp.autocast(x.device.type, enabled=False):
+                    sequential_executions.append(
+                        _RecipeExecution.fit_context(
+                            recipe=recipe,
+                            x_context=x,
+                            y_context=y,
+                            related_context_tables=related_tables,
+                            num_members=1,
+                            generator=generator,
+                        )
+                    )
+            executions = tuple(sequential_executions)
+        else:
             raise AssertionError(
                 f"Unexpected recipe_execution {recipe_execution!r}"
             )
 
-        recipes = [copy.deepcopy(recipe) for _ in range(num_estimators)]
-
         caches: list[Cache] = []
-        for recipe in recipes:
-            with torch.amp.autocast(x.device.type, enabled=False):
-                x_i = recipe.features.fit_transform(x, generator=generator)
-                y_i = recipe.target.fit_transform(y, generator=generator)
+        for execution in executions:
+            for member_id, context_input in enumerate(
+                execution.context_inputs
+            ):
+                self._validate_context(
+                    x=context_input.x,
+                    y=context_input.y,
+                    related_tables=context_input.related_tables,
+                )
 
-                related_tables_i = None
-                related_processors = None
-                if related_tables is not None:
-                    related_processors = {
-                        table_name: copy.deepcopy(recipe.features)
-                        for table_name in related_tables.tables
-                    }
-                    related_tables_i = replace(
-                        related_tables,
-                        tables={
-                            k: related_processors[k].fit_transform(
-                                v, generator=generator
-                            )
-                            for k, v in related_tables.tables.items()
-                        },
-                    )
+                cache = Cache(
+                    x_schema=context_input.x.schema,
+                    related_tables_schema=context_input.related_tables.schema
+                    if context_input.related_tables is not None
+                    else None,
+                    classes=execution.classes[member_id],
+                    kwargs=kwargs,
+                )
 
-            self._validate_context(
-                x=x_i,
-                y=y_i,
-                related_tables=related_tables_i,
-            )
-
-            cache = Cache(
-                recipe=recipe,
-                x_schema=x_i.schema,
-                related_processors=related_processors,
-                related_tables_schema=related_tables_i.schema
-                if related_tables_i is not None
-                else None,
-                classes=y_i.categorical.categories[0]
-                if y_i.categorical.size(-1) > 0
-                else None,
-                kwargs=kwargs,
-            )
-
-            self._forward(
-                x_context=x_i,
-                y_context=y_i,
-                x_query=None,
-                related_context_tables=related_tables_i,
-                related_query_tables=None,
-                cache=cache,
-                generator=generator,
-                **kwargs,
-            )
-            if num_estimators > 1:
-                cache = cache.cpu()
-            cache = cache.freeze()
-            caches.append(cache)
+                self._forward(
+                    x_context=context_input.x,
+                    y_context=context_input.y,
+                    x_query=None,
+                    related_context_tables=context_input.related_tables,
+                    related_query_tables=None,
+                    cache=cache,
+                    generator=generator,
+                    **kwargs,
+                )
+                if num_estimators > 1:
+                    cache = cache.cpu()
+                cache = cache.freeze()
+                caches.append(cache)
         self._caches = caches
-
-    def _fit_ensemble(
-        self,
-        *,
-        x: TableTensor,
-        y: TableTensor,
-        related_tables: RelatedTables | None,
-        recipe: Recipe,
-        num_estimators: int,
-        generator: torch.Generator | None,
-        **kwargs: Any,
-    ) -> None:
-        with torch.amp.autocast(x.device.type, enabled=False):
-            recipe_execution = _RecipeExecution.fit_context(
-                recipe=recipe,
-                x_context=x,
-                y_context=y,
-                related_context_tables=related_tables,
-                num_members=num_estimators,
-                generator=generator,
-            )
-
-        caches: list[Cache] = []
-        for member_id, context_input in enumerate(
-            recipe_execution.context_inputs
-        ):
-            self._validate_context(
-                x=context_input.x,
-                y=context_input.y,
-                related_tables=context_input.related_tables,
-            )
-
-            cache = Cache(
-                x_schema=context_input.x.schema,
-                related_tables_schema=context_input.related_tables.schema
-                if context_input.related_tables is not None
-                else None,
-                classes=recipe_execution.classes[member_id],
-                kwargs=kwargs,
-            )
-
-            self._forward(
-                x_context=context_input.x,
-                y_context=context_input.y,
-                x_query=None,
-                related_context_tables=context_input.related_tables,
-                related_query_tables=None,
-                cache=cache,
-                generator=generator,
-                **kwargs,
-            )
-            if num_estimators > 1:
-                cache = cache.cpu()
-            cache = cache.freeze()
-            caches.append(cache)
-        self._caches = caches
-        self._recipe_execution = recipe_execution
+        self._recipe_executions = executions
 
     @_maybe_inference_mode()
     def predict(
@@ -504,81 +396,56 @@ class ICLModel(torch.nn.Module, ABC):
                 ).tables,
             )
 
-        if self._recipe_execution is not None:
-            return self._predict_ensemble(x=x, related_tables=related_tables)
+        assert self._recipe_executions is not None
 
-        outs: list[TableTensor] = []
-        for cache in self._caches:
-            recipe = cast(Recipe, cache["recipe"])
+        query_inputs = []
+        with torch.amp.autocast(x.device.type, enabled=False):
+            for execution in self._recipe_executions:
+                query_inputs.extend(
+                    execution.transform_query(
+                        x_query=x,
+                        related_query_tables=related_tables,
+                    )
+                )
+
+        if len(self._recipe_executions) == 1:
+            (execution,) = self._recipe_executions
+            outs: list[TableTensor] = []
+            for cache, query_input in zip(
+                self._caches,
+                query_inputs,
+                strict=True,
+            ):
+                self._validate_query(
+                    x_context=cast(TableSchema, cache["x_schema"]),
+                    x_query=query_input.x,
+                    related_context_tables=cast(
+                        RelatedTablesSchema,
+                        cache["related_tables_schema"],
+                    ),
+                    related_query_tables=query_input.related_tables,
+                )
+
+                out = self._forward(
+                    x_context=None,
+                    y_context=None,
+                    x_query=query_input.x,
+                    related_context_tables=None,
+                    related_query_tables=query_input.related_tables,
+                    cache=cache.to(query_input.x.device),
+                    generator=None,
+                    **cast(dict[str, Any], cache["kwargs"]),
+                )
+                out = cast(TableTensor, out.to(query_input.x.dtype))
+                outs.append(out)
+
             with torch.amp.autocast(x.device.type, enabled=False):
-                x_i = recipe.features.transform(x)
+                return execution.transform_output(outs)
 
-                related_tables_i = None
-                if related_tables is not None:
-                    related_processors = cast(
-                        Mapping[str, Processor],
-                        cache["related_processors"],
-                    )
-                    related_tables_i = replace(
-                        related_tables,
-                        tables={
-                            k: related_processors[k].transform(v)
-                            for k, v in related_tables.tables.items()
-                        },
-                    )
-
-            self._validate_query(
-                x_context=cast(TableSchema, cache["x_schema"]),
-                x_query=x_i,
-                related_context_tables=cast(
-                    RelatedTablesSchema,
-                    cache["related_tables_schema"],
-                ),
-                related_query_tables=related_tables_i,
-            )
-
-            out = self._forward(
-                x_context=None,
-                y_context=None,
-                x_query=x_i,
-                related_context_tables=None,
-                related_query_tables=related_tables_i,
-                cache=cache.to(x_i.device),
-                generator=None,
-                **cast(dict[str, Any], cache["kwargs"]),
-            )
-            out = cast(TableTensor, out.to(x_i.dtype))
-            if cache["classes"] is None:
-                if not isinstance(recipe.target, InvertibleMixin):
-                    raise RuntimeError("Target recipe is not invertible")
-                with torch.amp.autocast(x.device.type, enabled=False):
-                    out = recipe.target.inverse_transform(out)
-            outs.append(out)
-
-        out = cast(
-            TableTensor,
-            torch.stack(cast(list[Tensor], outs), dim=0),
-        )
-        with torch.amp.autocast(x.device.type, enabled=False):
-            return recipe.output.transform(out)
-
-    def _predict_ensemble(
-        self,
-        *,
-        x: TableTensor,
-        related_tables: RelatedTables | None,
-    ) -> TableTensor:
-        assert self._caches is not None
-        assert self._recipe_execution is not None
-
-        with torch.amp.autocast(x.device.type, enabled=False):
-            query_inputs = self._recipe_execution.transform_query(
-                x_query=x,
-                related_query_tables=related_tables,
-            )
-
-        outs: list[TableTensor] = []
-        for cache, query_input in zip(
+        outs = []
+        last_execution: _RecipeExecution | None = None
+        for execution, cache, query_input in zip(
+            self._recipe_executions,
             self._caches,
             query_inputs,
             strict=True,
@@ -604,15 +471,26 @@ class ICLModel(torch.nn.Module, ABC):
                 **cast(dict[str, Any], cache["kwargs"]),
             )
             out = cast(TableTensor, out.to(query_input.x.dtype))
+            if execution.is_regression:
+                if not isinstance(execution.recipe.target, InvertibleMixin):
+                    raise RuntimeError("Target recipe is not invertible")
+                with torch.amp.autocast(x.device.type, enabled=False):
+                    out = execution.recipe.target.inverse_transform(out)
             outs.append(out)
+            last_execution = execution
 
+        assert last_execution is not None
+        out = cast(
+            TableTensor,
+            torch.stack(cast(list[Tensor], outs), dim=0),
+        )
         with torch.amp.autocast(x.device.type, enabled=False):
-            return self._recipe_execution.transform_output(outs)
+            return last_execution.recipe.output.transform(out)
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
         self._caches = None
-        self._recipe_execution = None
+        self._recipe_executions = None
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device

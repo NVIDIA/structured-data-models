@@ -7,6 +7,7 @@ import torch
 from sdm.processing.base import InvertibleMixin, Processor
 from sdm.processing.common.sequential import Sequential
 from sdm.processing.common.task import TaskDispatch
+from sdm.processing.ensemble import EnsembleProcessor
 from sdm.stype import Stype
 from sdm.tensor import TableTensor
 
@@ -109,6 +110,11 @@ class Recipe:
     ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
     ``target`` also selects its task-specific output route.
 
+    A pipeline given as a single :class:`~sdm.processing.base.Processor` that
+    is not already ensemble-aware is wrapped in a
+    :class:`~sdm.processing.common.Sequential` so it can still process
+    multiple estimators.
+
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
 
@@ -132,20 +138,9 @@ class Recipe:
         output: Processor | Iterable[Processor] | None = None,
     ) -> None:
 
-        if features is None:
-            features = Sequential()
-        elif not isinstance(features, Processor):
-            features = Sequential(*features)
-
-        if target is None:
-            target = Sequential()
-        elif not isinstance(target, Processor):
-            target = Sequential(*target)
-
-        if output is None:
-            output = Sequential()
-        elif not isinstance(output, Processor):
-            output = Sequential(*output)
+        features = self._as_ensemble_processor(features)
+        target = self._as_ensemble_processor(target)
+        output = self._as_ensemble_processor(output)
 
         # TODO: Support TaskDispatch in features after defining task-aware
         # feature fit ordering.
@@ -207,6 +202,18 @@ class Recipe:
         object.__setattr__(self, "features", features)
         object.__setattr__(self, "target", target)
         object.__setattr__(self, "output", output)
+
+    @staticmethod
+    def _as_ensemble_processor(
+        processor: Processor | Iterable[Processor] | None,
+    ) -> Processor:
+        if processor is None:
+            return Sequential()
+        if not isinstance(processor, Processor):
+            return Sequential(*processor)
+        if not isinstance(processor, EnsembleProcessor):
+            return Sequential(processor)
+        return processor
 
     def __repr__(self) -> str:
         return (
