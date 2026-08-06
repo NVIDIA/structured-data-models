@@ -909,16 +909,6 @@ def _is_pinned(inp: VarLenTensor) -> bool:
     return is_pinned and (inp._valid is None or inp._valid.is_pinned())
 
 
-@VarLenTensor.implements(aten.pin_memory.default)
-def _pin_memory_composite(
-    inp: VarLenTensor,
-    device: torch.device | None = None,
-) -> VarLenTensor:
-    if inp.is_pinned():
-        return inp
-    return cast(VarLenTensor, aten._pin_memory.default(inp))
-
-
 @VarLenTensor.implements(aten._pin_memory.default)
 def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
     return inp.__class__(
@@ -929,6 +919,16 @@ def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
         stride=inp.stride(),
         storage_offset=int(inp.storage_offset()),
     )
+
+
+@VarLenTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: VarLenTensor,
+    device: torch.device | None = None,
+) -> VarLenTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
 
 
 @VarLenTensor.implements(aten.isnan.default)

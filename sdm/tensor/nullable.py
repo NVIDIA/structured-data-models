@@ -635,6 +635,16 @@ def _pin_memory(inp: NullableIntTensor) -> NullableIntTensor:
     )
 
 
+@NullableIntTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: NullableIntTensor,
+    device: torch.device | None = None,
+) -> NullableIntTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @NullableIntTensor.implements(aten.isnan.default)
 def _isnan(inp: NullableIntTensor) -> Tensor:
     return ~inp._valid
