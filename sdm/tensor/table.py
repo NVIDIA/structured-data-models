@@ -1162,6 +1162,16 @@ def _pin_memory(inp: TableTensor) -> TableTensor:
     )
 
 
+@TableTensor.implements(aten.pin_memory.default)
+def _pin_memory_composite(
+    inp: TableTensor,
+    device: torch.device | None = None,
+) -> TableTensor:
+    if _is_pinned(inp):
+        return inp
+    return _pin_memory(inp)
+
+
 @TableTensor.implements(aten.equal.default)
 def _equal(inp: TableTensor, other: Tensor) -> bool:
     if inp.__class__ is not other.__class__:
@@ -1417,15 +1427,21 @@ def _slice(
     end: int | None = None,
     step: int = 1,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        if (
+            (start is None or start == 0 or start <= -inp.size(-1))
+            and (end is None or end >= inp.size(dim))
+            and step == 1
+        ):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't slice the column dimension of '{inp.__class__.__name__}'"
+        )
+
     blocks = {
         stype: aten.slice.Tensor(tensor, dim, start, end, step)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't slice the column dimension of {inp.__class__.__name__!r}"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
@@ -1441,15 +1457,17 @@ def _narrow(
     start: int,
     length: int,
 ) -> TableTensor:
+    if _is_column_dim(inp, dim):
+        if (start == 0 or start == -inp.size(-1)) and length == inp.size(-1):
+            return _alias(inp)
+        raise RuntimeError(
+            f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
+        )
+
     blocks = {
         stype: tensor.narrow(dim, start, length)
         for stype, tensor in inp.items()
     }
-
-    if dim % inp.dim() == inp.dim() - 1:
-        raise RuntimeError(
-            f"Can't narrow the column dimension of {inp.__class__.__name__!r}"
-        )
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
