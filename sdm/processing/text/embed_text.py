@@ -89,44 +89,26 @@ class EmbedText(Processor):
         )
         if numerical.numel() != 0:
             num_cols = len(col_names)
-            all_strings: list[Any] = []
-            for col in range(num_cols):
-                col_tensor = cast(
-                    StringTensor,
-                    table.text[..., col].reshape(-1),
-                )
-                all_strings.extend(col_tensor.to_arrow().to_pylist())
-
-            valid_mask = [s is not None for s in all_strings]
-            valid_strings = [s for s in all_strings if s is not None]
-            chunk_size = self._chunk_size or max(len(valid_strings), 1)
-
-            embed_dim = self._model_ref.embedding_dim
-            if valid_strings:
-                chunks: list[Tensor] = []
-                for start in range(0, len(valid_strings), chunk_size):
-                    chunks.append(
-                        self._model_ref.encode(
-                            valid_strings[start : start + chunk_size],
-                        ).to(
-                            device=device,
-                            dtype=dtype,
-                        )
-                    )
-                valid_embeddings = torch.cat(chunks)
-            else:
-                valid_embeddings = torch.empty(
-                    0, embed_dim, device=device, dtype=dtype,
-                )
-
-            all_embeddings = torch.zeros(
-                len(all_strings), embed_dim, device=device, dtype=dtype,
+            flat_strings = cast(
+                StringTensor,
+                table.text.movedim(-1, 0).reshape(-1),
             )
-            if valid_strings:
-                valid_indices = [
-                    i for i, m in enumerate(valid_mask) if m
-                ]
-                all_embeddings[valid_indices] = valid_embeddings
+            all_strings = [
+                s or "" for s in flat_strings.to_arrow().to_pylist()
+            ]
+            chunk_size = self._chunk_size or len(all_strings)
+
+            chunks: list[Tensor] = []
+            for start in range(0, len(all_strings), chunk_size):
+                chunks.append(
+                    self._model_ref.encode(
+                        all_strings[start : start + chunk_size],
+                    ).to(
+                        device=device,
+                        dtype=dtype,
+                    )
+                )
+            all_embeddings = torch.cat(chunks)
             # (num_cols * batch_numel, embedding_dim)
             numerical = (
                 all_embeddings.reshape(
