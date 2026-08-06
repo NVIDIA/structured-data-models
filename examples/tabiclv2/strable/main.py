@@ -12,6 +12,7 @@ parser.add_argument("--disable-text", action="store_true")
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+generator = torch.Generator(device=device).manual_seed(42)
 
 data_path = hf_hub_download(
     repo_id="inria-soda/STRABLE-benchmark",
@@ -47,7 +48,6 @@ table = sdm.TableTensor.from_arrow(
     device=device,
 )
 target_name = "BT Easiness"
-generator = torch.Generator(device=device).manual_seed(42)
 num_rows = len(table)
 perm = torch.randperm(num_rows, generator=generator, device=device)
 context_size = int(0.8 * num_rows)
