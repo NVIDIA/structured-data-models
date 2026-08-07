@@ -104,7 +104,6 @@ class RowEmbedding(torch.nn.Module):
         G, D = self.lin.in_features, self.lin.out_features
         K = self.readout_token.size(-2)
         train_mask: Any = slice(R_train) if train_mask is None else train_mask
-        recording = cache is not None and cache.is_recording
 
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
@@ -147,10 +146,11 @@ class RowEmbedding(torch.nn.Module):
             else:
                 x = self.lin(x, out=buffer[..., K:, :])  # [..., R, C, D]
 
+        projection_dtype = x.dtype
         stabilize_float16 = (
             y.numel() > 0
             and x.is_cuda
-            and x.dtype == torch.float16
+            and projection_dtype == torch.float16
             and self.lin.weight.dtype == torch.float32
         )
         if stabilize_float16:
@@ -189,28 +189,25 @@ class RowEmbedding(torch.nn.Module):
             result = col_layer(
                 query=x,  # [..., C, R, D]
                 key_value=key_value,  # [..., C, R_train, D]
-                return_key_value=recording,
+                return_key_value=cache is not None and cache.is_recording,
                 # The target-conditioned column blocks are FP16-sensitive.
-                _transformer_2_float32=stabilize_float16,
+                _force_output_block_float32=stabilize_float16,
                 batch_size_limit="auto",
                 out=None if torch.is_grad_enabled() else x,
             )  # [..., C, R, D]
             del key_value
 
-            if not recording:
+            if cache is not None and cache.is_recording:
+                x, key_value = result
+                if stabilize_float16:
+                    # Replay remains under ordinary FP16 autocast.
+                    key_value = KVCacheEntry(
+                        key=key_value.key.to(dtype=projection_dtype),
+                        value=key_value.value.to(dtype=projection_dtype),
+                    )
+                cache[key] = key_value
+            else:
                 x = result
-                del result
-                continue
-
-            assert cache is not None
-            x, key_value = result
-            if stabilize_float16:
-                # Replay remains under ordinary FP16 autocast.
-                key_value = KVCacheEntry(
-                    key=key_value.key.to(dtype=torch.float16),
-                    value=key_value.value.to(dtype=torch.float16),
-                )
-            cache[key] = key_value
             del result
 
         x = x.transpose(-2, -3)  # [..., R, C, D]
