@@ -27,14 +27,14 @@ jobs:
           python-version: '3.11'
           activate-environment: true
 
+      - name: Install package
+        run: |
+          uv pip install --torch-backend=cpu --group=doc .
+
       - name: Build documentation
         working-directory: ./docs
         run: |
-          uv run \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html \
-            --no-default-groups \
-            --group=doc \
-            sphinx-build -M html "source" "build" -W --keep-going
+          uv run --no-project sphinx-build -M html "source" "build" -W --keep-going
 
       - name: Upload documentation
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -46,11 +46,7 @@ jobs:
       - name: Run doctests
         working-directory: ./docs
         run: |
-          uv run \
-            --find-links=https://data.pyg.org/whl/torch-2.13.0+cpu.html \
-            --no-default-groups \
-            --group=doc \
-            sphinx-build -M doctest "source" "build" -W --keep-going
+          uv run --no-project sphinx-build -M doctest "source" "build" -W --keep-going
 
       - name: Push documentation to gh-pages
         if: github.event_name == 'push'
