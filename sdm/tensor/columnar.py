@@ -668,6 +668,7 @@ def _squeeze_dims(inp: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
             f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.squeeze.dims(_layout(inp), dims)
     return inp.__class__(
         columns=[column.squeeze(dims) for column in inp._columns],
         size=tuple(
@@ -676,6 +677,7 @@ def _squeeze_dims(inp: ColumnarTensor, dim: Sequence[int]) -> ColumnarTensor:
             if i not in dims or dim_size != 1
         ),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
