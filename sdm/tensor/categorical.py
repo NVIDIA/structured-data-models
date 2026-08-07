@@ -112,10 +112,21 @@ class CategoricalTensor(Tensor):
                     "contain null values"
                 )
 
+        return cls._new_wrapper(code, categories)
+
+    @classmethod
+    def _new_wrapper(
+        cls,
+        code: Tensor,
+        categories: Sequence[Tensor],
+        *,
+        size: Sequence[int | torch.SymInt] | None = None,
+        stride: Sequence[int | torch.SymInt] | None = None,
+    ) -> Self:
         out = Tensor._make_wrapper_subclass(
             cls,
-            size=code.size(),
-            strides=code.stride(),
+            size=code.size() if size is None else size,
+            strides=code.stride() if stride is None else stride,
             storage_offset=code.storage_offset(),
             dtype=code.dtype,
             device=code.device,
@@ -124,6 +135,8 @@ class CategoricalTensor(Tensor):
 
         out._code = code
         out._categories = tuple(categories)
+        for i, category in enumerate(out._categories):
+            setattr(out, f"_category_{i}", category)
 
         return out
 
@@ -342,6 +355,33 @@ class CategoricalTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(self) -> tuple[list[str], tuple[Any, ...]]:
+        attrs = [
+            "_code",
+            *(f"_category_{i}" for i in range(len(self._categories))),
+        ]
+        return attrs, (self.__class__, len(self._categories))
+
+    @staticmethod
+    def __tensor_unflatten__(
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[Any, ...],
+        outer_size: Sequence[int | torch.SymInt],
+        outer_stride: Sequence[int | torch.SymInt],
+    ) -> CategoricalTensor:
+        cls, num_categories = ctx
+        categories = tuple(
+            inner_tensors[f"_category_{i}"] for i in range(num_categories)
+        )
+        code = inner_tensors["_code"]
+        with torch.inference_mode(code.is_inference()):
+            return cls._new_wrapper(
+                code=code,
+                categories=categories,
+                size=outer_size,
+                stride=outer_stride,
+            )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._code, self._categories)
