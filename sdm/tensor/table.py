@@ -1261,12 +1261,14 @@ def _view(inp: TableTensor, size: Sequence[int]) -> TableTensor:
             f"{inp.size(-1)} {_columns} into shape {size}"
         )
 
+    layout = aten.view.default(_layout(inp), size)
     blocks = {
         stype: tensor.view((*size[:-1], tensor.size(-1)))
         for stype, tensor in inp.items()
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
