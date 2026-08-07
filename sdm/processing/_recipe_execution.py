@@ -9,9 +9,12 @@ import torch
 from torch import Tensor
 
 from sdm import RelatedTables, TableTensor
-from sdm.processing.ensemble import EnsembleInvertibleMixin, EnsembleProcessor
-from sdm.processing.output.reduce import ReduceEstimators
-from sdm.processing.recipe import Recipe
+from sdm.processing import (
+    EnsembleInvertibleMixin,
+    EnsembleProcessor,
+    Recipe,
+    ReduceEstimators,
+)
 from sdm.tensor import EnsembleTable
 
 

@@ -4,11 +4,9 @@ from typing import Self, cast
 import torch
 
 from sdm import Stype
-from sdm.processing.base import Processor
 from sdm.processing.ensemble import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
-    EnsembleProcessorAdapter,
 )
 from sdm.tensor import EnsembleTable, TableTensor
 
@@ -33,7 +31,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         Args:
             processor: The processor to append.
         """
-        processor = Processor.as_processor(processor)
+        processor = EnsembleProcessor.as_processor(processor)
         if isinstance(processor, Sequential):
             for child in processor.children():
                 self.add_module(str(len(self)), child)
@@ -66,12 +64,8 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> None:
         out = ensemble_table
-        n = len(self._modules)
-        for index, (name, child) in enumerate(self._modules.items()):
-            if not isinstance(child, EnsembleProcessor):
-                child = EnsembleProcessorAdapter(cast(Processor, child))
-                self._modules[name] = child
-            if index < n - 1:
+        for i, child in enumerate(self):
+            if i < len(self) - 1:
                 out = child.fit_transform_ensemble(out, generator=generator)
             else:
                 child.fit_ensemble(out, generator=generator)
@@ -83,10 +77,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         generator: torch.Generator | None = None,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in self._modules.items():
-            if not isinstance(child, EnsembleProcessor):
-                child = EnsembleProcessorAdapter(cast(Processor, child))
-                self._modules[name] = child
+        for child in self:
             out = child.fit_transform_ensemble(out, generator=generator)
         return out
 
@@ -95,10 +86,7 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in self._modules.items():
-            if not isinstance(child, EnsembleProcessor):
-                child = EnsembleProcessorAdapter(cast(Processor, child))
-                self._modules[name] = child
+        for child in self:
             out = child.transform_ensemble(out)
         return out
 
@@ -107,27 +95,23 @@ class Sequential(EnsembleProcessor, EnsembleInvertibleMixin):
         ensemble_table: EnsembleTable,
     ) -> EnsembleTable:
         out = ensemble_table
-        for name, child in reversed(self._modules.items()):
-            if not isinstance(child, EnsembleProcessor):
-                child = EnsembleProcessorAdapter(cast(Processor, child))
-                self._modules[name] = child
-            fn = getattr(child, "inverse_transform_ensemble", None)
-            if not callable(fn):
+        for child in reversed(list(self)):
+            if not isinstance(child, EnsembleInvertibleMixin):
                 raise AttributeError(
                     f"{child.__class__.__name__!r} object has no "
                     "attribute 'inverse_transform_ensemble'"
                 )
-            out = fn(out)
+            out = child.inverse_transform_ensemble(out)
         return out
 
-    def __iter__(self) -> Iterator[Processor]:
-        return cast(Iterator[Processor], self.children())
+    def __iter__(self) -> Iterator[EnsembleProcessor]:
+        return cast(Iterator[EnsembleProcessor], self.children())
 
     def __len__(self) -> int:
         return len(self._modules)
 
     def __iadd__(self, other: object) -> Self:
-        self.append(Processor.as_processor(other))
+        self.append(EnsembleProcessor.as_processor(other))
         return self
 
     def __repr__(self, *, indent: int = 0) -> str:

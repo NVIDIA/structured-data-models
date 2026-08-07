@@ -1,39 +1,21 @@
 from typing import Literal, cast
 
-import torch
+from torch.nn import ModuleDict
 
-from sdm.processing.base import Processor
-from sdm.processing.ensemble import (
-    EnsembleProcessor,
-    EnsembleProcessorAdapter,
-)
-from sdm.stype import Stype
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm import Stype
+from sdm.processing import EnsembleProcessor, Processor
+from sdm.tensor import EnsembleTable
 
 
 class TaskDispatch(EnsembleProcessor):
-    """Route model output by the transformed target's semantic type.
-
-    When used in :attr:`Recipe.output <sdm.processing.Recipe.output>`, fitting
-    :attr:`Recipe.target <sdm.processing.Recipe.target>` resolves the route
-    from the final transformed target. One numerical column selects regression
-    and one categorical column selects classification. Routes must be stateless
-    because output processing has no fitting data of its own. Configure
-    ``TaskDispatch`` as a direct step in ``Recipe.output``.
+    """Apply separate processors based on the semantic type of the target.
 
     Args:
-        classification: Stateless output processor selected for a categorical
-            target. If omitted, output passes through unchanged. A sequence is
-            normalized to
-            :class:`~sdm.processing.Sequential`.
-        regression: Stateless output processor selected for a numerical target.
-            If omitted, output passes through unchanged. A sequence is
-            normalized to
-            :class:`~sdm.processing.Sequential`.
+        classification: Processor selected for a categorical target.
+        regression: Processor selected for a numerical target.
     """
 
     supported_stypes = frozenset(Stype)
-    requires_fit = False
 
     def __init__(
         self,
@@ -42,57 +24,20 @@ class TaskDispatch(EnsembleProcessor):
         regression: object = None,
     ) -> None:
         super().__init__()
-        self.processors = torch.nn.ModuleDict()
+        self.requires_fit = False
+        self.processors: ModuleDict[EnsembleProcessor] = ModuleDict()
         for task, processor in (
             ("classification", classification),
             ("regression", regression),
         ):
             if processor is None:
                 continue
-            processor = Processor.as_processor(processor)
+            processor = EnsembleProcessor.as_processor(processor)
             if processor.requires_fit:
-                raise ValueError(
-                    f"{self.__class__.__name__!r} requires stateless routes, "
-                    f"but the {task!r} route requires fit."
-                )
-            if not isinstance(processor, EnsembleProcessor):
-                processor = EnsembleProcessorAdapter(processor)
+                self.requires_fit = True
             self.processors[task] = processor
 
-        if len(self.processors) == 0:
-            raise ValueError(
-                f"{self.__class__.__name__!r} requires at least one route."
-            )
-
         self._task: Literal["classification", "regression"] | None = None
-
-    def _resolve(self, target: TableTensor) -> None:
-        self._reset()
-        if target.size(-1) != 1:
-            raise ValueError(
-                "Expected the transformed target to contain exactly one "
-                f"column (got {target.size(-1)} columns)."
-            )
-
-        if target.numerical.size(-1) == 1:
-            task = "regression"
-        elif target.categorical.size(-1) == 1:
-            task = "classification"
-        else:
-            stype = next(
-                stype.value
-                for stype, columns in target.columns.items()
-                if len(columns) > 0
-            )
-            raise ValueError(
-                "Expected the transformed target to be numerical or "
-                f"categorical (got {stype!r})."
-            )
-
-        self._task = task
-
-    def _reset(self) -> None:
-        self._task = None
 
     def _transform_ensemble(
         self,
@@ -114,11 +59,6 @@ class TaskDispatch(EnsembleProcessor):
 
     def set_extra_state(self, state: str | None) -> None:
         r""":meta private:"""  # noqa: D415
-        if state is not None and state not in ("classification", "regression"):
-            raise ValueError(
-                f"Cannot restore invalid {state!r} task on "
-                f"{self.__class__.__name__!r}."
-            )
         self._task = cast(
             Literal["classification", "regression"] | None,
             state,
