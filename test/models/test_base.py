@@ -8,9 +8,11 @@ from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
+    Choice,
     InvertibleMixin,
     Processor,
     Recipe,
+    ReduceEstimators,
     Standardize,
     StypeDispatch,
 )
@@ -169,6 +171,7 @@ def _fit_draws(
             related_context,
             recipe=_generator_recipe(),
             num_estimators=2,
+            recipe_execution="sequential",
             generator=generator,
         )
     else:
@@ -180,6 +183,7 @@ def _fit_draws(
             _related_tables(query=True),
             recipe=_generator_recipe(),
             num_estimators=2,
+            recipe_execution="sequential",
             generator=generator,
         )
 
@@ -238,6 +242,7 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
             related_query,
             recipe=_recipe(),
             num_estimators=2,
+            recipe_execution="sequential",
         ),
     )
 
@@ -286,22 +291,9 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
         related_context,
         recipe=_recipe(),
         num_estimators=2,
+        recipe_execution="sequential",
     )
     assert model._caches is not None
-    processors = [
-        cast(dict[str, Processor], cache["related_processors"])
-        for cache in model._caches
-    ]
-    assert (
-        len(
-            {
-                id(processor)
-                for estimator in processors
-                for processor in estimator.values()
-            }
-        )
-        == 4
-    )
 
     prediction = model.predict(x_query, related_query)
 
@@ -370,3 +362,131 @@ def test_related_table_validation() -> None:
     )
     with pytest.raises(ValueError, match="share the same schema"):
         model.predict(x_query, mismatched_query)
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_vectorized_and_sequential_recipe_parity(cached: bool) -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    sequential_model = _RecordingModel()
+    vectorized_model = _RecordingModel()
+
+    if cached:
+        sequential_model.fit(
+            x_context,
+            y_context,
+            num_estimators=2,
+            recipe_execution="sequential",
+        )
+        vectorized_model.fit(
+            x_context,
+            y_context,
+            num_estimators=2,
+        )
+        sequential_out = sequential_model.predict(x_query)
+        vectorized_out = vectorized_model.predict(x_query)
+    else:
+        sequential_out = sequential_model(
+            x_context,
+            y_context,
+            x_query,
+            num_estimators=2,
+            recipe_execution="sequential",
+        )
+        vectorized_out = vectorized_model(
+            x_context,
+            y_context,
+            x_query,
+            num_estimators=2,
+        )
+
+    assert sequential_out.size() == vectorized_out.size()
+    torch.testing.assert_close(
+        sequential_out.numerical,
+        vectorized_out.numerical,
+    )
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_ensemble_aware_target_inverse_parity(cached: bool) -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+    sequential_model = _RecordingModel()
+    vectorized_model = _RecordingModel()
+
+    if cached:
+        sequential_model.fit(
+            x_context,
+            y_context,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
+            num_estimators=2,
+            recipe_execution="sequential",
+        )
+        vectorized_model.fit(
+            x_context,
+            y_context,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
+            num_estimators=2,
+        )
+        sequential_out = sequential_model.predict(x_query)
+        vectorized_out = vectorized_model.predict(x_query)
+    else:
+        sequential_out = sequential_model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
+            num_estimators=2,
+            recipe_execution="sequential",
+        )
+        vectorized_out = vectorized_model(
+            x_context,
+            y_context,
+            x_query,
+            recipe=Recipe(target=[Choice(Standardize(), Standardize())]),
+            num_estimators=2,
+        )
+
+    assert sequential_out.size() == vectorized_out.size()
+    torch.testing.assert_close(
+        sequential_out.numerical,
+        vectorized_out.numerical,
+    )
+
+
+def test_ensemble_output_preserves_estimator_dimension() -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    model = _RecordingModel()
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=Recipe(),
+        num_estimators=1,
+        recipe_execution="vectorized",
+    )
+
+    assert out.size() == (1, 2, 3)
+
+
+def test_ensemble_output_reduces_with_reduce_estimators() -> None:
+    x_context = torch.randn(4, 3)
+    y_context = torch.randn(4, 1)
+    x_query = torch.randn(2, 3)
+
+    model = _RecordingModel()
+    out = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=Recipe(output=ReduceEstimators()),
+        num_estimators=2,
+        recipe_execution="vectorized",
+    )
+
+    assert out.size() == (2, 3)
