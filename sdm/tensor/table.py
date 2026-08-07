@@ -1905,9 +1905,11 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> TableTensor:
         stype: torch.stack([tensor.blocks[stype] for tensor in tensors], dim)
         for stype in ref._columns
     }
+    layout = aten.stack.default([_layout(tensor) for tensor in tensors], dim)
 
     return ref.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], ref._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
