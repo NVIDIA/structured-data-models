@@ -676,6 +676,8 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> CategoricalTensor:
+    if inp.is_contiguous(memory_format=memory_format):
+        return inp
     code = inp._code.contiguous(memory_format=memory_format)
     return inp.__class__(code, inp._categories)
 
