@@ -18,6 +18,7 @@ permissions:
 jobs:
   pytest-gpu:
     runs-on: linux-amd64-gpu-rtxpro6000-latest-1
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
