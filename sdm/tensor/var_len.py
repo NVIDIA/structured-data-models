@@ -1260,10 +1260,10 @@ def _narrow(
 
 @VarLenTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: VarLenTensor, dim: int = 0) -> tuple[VarLenTensor, ...]:
-    return tuple(
+def _unbind(inp: VarLenTensor, dim: int = 0) -> list[VarLenTensor]:
+    return [
         _from_layout_view(inp, view) for view in _layout_view(inp).unbind(dim)
-    )
+    ]
 
 
 @VarLenTensor.implements(aten.split.Tensor)
@@ -1272,11 +1272,11 @@ def _split(
     inp: VarLenTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[VarLenTensor, ...]:
-    return tuple(
+) -> list[VarLenTensor]:
+    return [
         _from_layout_view(inp, view)
         for view in _layout_view(inp).split(split_size, dim)
-    )
+    ]
 
 
 @VarLenTensor.implements(aten.split.sizes)
@@ -1287,11 +1287,11 @@ def _split_with_sizes(
     inp: VarLenTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[VarLenTensor, ...]:
-    return tuple(
+) -> list[VarLenTensor]:
+    return [
         _from_layout_view(inp, view)
         for view in _layout_view(inp).split(tuple(split_sizes), dim)
-    )
+    ]
 
 
 @VarLenTensor.implements(aten.masked_select.default)
