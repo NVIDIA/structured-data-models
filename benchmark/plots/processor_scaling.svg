@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="925" viewBox="0 0 1020 925">
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,sans-serif;fill:#222}.title{font-size:18px;font-weight:bold}.panel{font-size:12px;font-weight:bold}.tick{font-size:10px}</style>
+<text x="12" y="25" class="title">Largest measured scaling effects</text>
+<text x="8" y="59" class="panel">TFIDF · rows · cpu</text>
+<line x1="48" y1="73" x2="48" y2="231" stroke="#888"/>
+<line x1="48" y1="231" x2="316" y2="231" stroke="#888"/>
+<text x="43" y="77" class="tick" text-anchor="end">2253.53 ms</text>
+<text x="43" y="231" class="tick" text-anchor="end">33.47</text>
+<text x="48" y="246" class="tick">1000</text>
+<text x="316" y="246" class="tick" text-anchor="end">50000</text>
+<polyline points="48.0,231.0 64.4,224.4 97.2,205.9 179.3,157.2 316.0,73.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="48.0" cy="231.0" r="3" fill="#2f6f9f"/>
+<circle cx="64.4" cy="224.4" r="3" fill="#2f6f9f"/>
+<circle cx="97.2" cy="205.9" r="3" fill="#2f6f9f"/>
+<circle cx="179.3" cy="157.2" r="3" fill="#2f6f9f"/>
+<circle cx="316.0" cy="73.0" r="3" fill="#2f6f9f"/>
+<text x="348" y="59" class="panel">TFIDF · text_columns · cpu</text>
+<line x1="388" y1="73" x2="388" y2="231" stroke="#888"/>
+<line x1="388" y1="231" x2="656" y2="231" stroke="#888"/>
+<text x="383" y="77" class="tick" text-anchor="end">2497.15 ms</text>
+<text x="383" y="231" class="tick" text-anchor="end">361.88</text>
+<text x="388" y="246" class="tick">1</text>
+<text x="656" y="246" class="tick" text-anchor="end">8</text>
+<polyline points="388.0,231.0 426.3,211.7 502.9,164.3 656.0,73.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="388.0" cy="231.0" r="3" fill="#2f6f9f"/>
+<circle cx="426.3" cy="211.7" r="3" fill="#2f6f9f"/>
+<circle cx="502.9" cy="164.3" r="3" fill="#2f6f9f"/>
+<circle cx="656.0" cy="73.0" r="3" fill="#2f6f9f"/>
+<text x="688" y="59" class="panel">TFIDF · text_length · cpu</text>
+<line x1="728" y1="73" x2="728" y2="231" stroke="#888"/>
+<line x1="728" y1="231" x2="996" y2="231" stroke="#888"/>
+<text x="723" y="77" class="tick" text-anchor="end">1453.87 ms</text>
+<text x="723" y="231" class="tick" text-anchor="end">102.88</text>
+<text x="728" y="246" class="tick">8</text>
+<text x="996" y="246" class="tick" text-anchor="end">128</text>
+<polyline points="728.0,231.0 745.9,221.5 781.6,204.6 853.1,163.3 996.0,73.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="728.0" cy="231.0" r="3" fill="#2f6f9f"/>
+<circle cx="745.9" cy="221.5" r="3" fill="#2f6f9f"/>
+<circle cx="781.6" cy="204.6" r="3" fill="#2f6f9f"/>
+<circle cx="853.1" cy="163.3" r="3" fill="#2f6f9f"/>
+<circle cx="996.0" cy="73.0" r="3" fill="#2f6f9f"/>
+<text x="8" y="279" class="panel">PowerTransform · rows · cpu</text>
+<line x1="48" y1="293" x2="48" y2="451" stroke="#888"/>
+<line x1="48" y1="451" x2="316" y2="451" stroke="#888"/>
+<text x="43" y="297" class="tick" text-anchor="end">704.12 ms</text>
+<text x="43" y="451" class="tick" text-anchor="end">30.65</text>
+<text x="48" y="466" class="tick">1000</text>
+<text x="316" y="466" class="tick" text-anchor="end">50000</text>
+<polyline points="48.0,451.0 64.4,443.2 97.2,424.2 179.3,375.9 316.0,293.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="48.0" cy="451.0" r="3" fill="#2f6f9f"/>
+<circle cx="64.4" cy="443.2" r="3" fill="#2f6f9f"/>
+<circle cx="97.2" cy="424.2" r="3" fill="#2f6f9f"/>
+<circle cx="179.3" cy="375.9" r="3" fill="#2f6f9f"/>
+<circle cx="316.0" cy="293.0" r="3" fill="#2f6f9f"/>
+<text x="348" y="279" class="panel">PowerTransform · columns · cpu</text>
+<line x1="388" y1="293" x2="388" y2="451" stroke="#888"/>
+<line x1="388" y1="451" x2="656" y2="451" stroke="#888"/>
+<text x="383" y="297" class="tick" text-anchor="end">550.34 ms</text>
+<text x="383" y="451" class="tick" text-anchor="end">29.82</text>
+<text x="388" y="466" class="tick">4</text>
+<text x="656" y="466" class="tick" text-anchor="end">128</text>
+<polyline points="388.0,451.0 413.9,436.2 448.5,415.9 517.7,374.5 656.0,293.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="388.0" cy="451.0" r="3" fill="#2f6f9f"/>
+<circle cx="413.9" cy="436.2" r="3" fill="#2f6f9f"/>
+<circle cx="448.5" cy="415.9" r="3" fill="#2f6f9f"/>
+<circle cx="517.7" cy="374.5" r="3" fill="#2f6f9f"/>
+<circle cx="656.0" cy="293.0" r="3" fill="#2f6f9f"/>
+<text x="688" y="279" class="panel">TFIDF · missing_ratio · cpu</text>
+<line x1="728" y1="293" x2="728" y2="451" stroke="#888"/>
+<line x1="728" y1="451" x2="996" y2="451" stroke="#888"/>
+<text x="723" y="297" class="tick" text-anchor="end">319.09 ms</text>
+<text x="723" y="451" class="tick" text-anchor="end">48.86</text>
+<text x="728" y="466" class="tick">0.0</text>
+<text x="996" y="466" class="tick" text-anchor="end">0.9</text>
+<polyline points="728.0,293.0 731.0,294.4 757.8,310.9 876.9,381.3 996.0,451.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="728.0" cy="293.0" r="3" fill="#2f6f9f"/>
+<circle cx="731.0" cy="294.4" r="3" fill="#2f6f9f"/>
+<circle cx="757.8" cy="310.9" r="3" fill="#2f6f9f"/>
+<circle cx="876.9" cy="381.3" r="3" fill="#2f6f9f"/>
+<circle cx="996.0" cy="451.0" r="3" fill="#2f6f9f"/>
+<text x="8" y="499" class="panel">ShuffleCategories · categorical_columns · cuda</text>
+<line x1="48" y1="513" x2="48" y2="671" stroke="#888"/>
+<line x1="48" y1="671" x2="316" y2="671" stroke="#888"/>
+<text x="43" y="517" class="tick" text-anchor="end">87.14 ms</text>
+<text x="43" y="671" class="tick" text-anchor="end">9.36</text>
+<text x="48" y="686" class="tick">1</text>
+<text x="316" y="686" class="tick" text-anchor="end">32</text>
+<polyline points="48.0,671.0 73.9,655.2 108.5,634.5 177.7,593.1 316.0,513.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="48.0" cy="671.0" r="3" fill="#2f6f9f"/>
+<circle cx="73.9" cy="655.2" r="3" fill="#2f6f9f"/>
+<circle cx="108.5" cy="634.5" r="3" fill="#2f6f9f"/>
+<circle cx="177.7" cy="593.1" r="3" fill="#2f6f9f"/>
+<circle cx="316.0" cy="513.0" r="3" fill="#2f6f9f"/>
+<text x="348" y="499" class="panel">ShuffleCategories · estimators · cuda</text>
+<line x1="388" y1="513" x2="388" y2="671" stroke="#888"/>
+<line x1="388" y1="671" x2="656" y2="671" stroke="#888"/>
+<text x="383" y="517" class="tick" text-anchor="end">54.15 ms</text>
+<text x="383" y="671" class="tick" text-anchor="end">4.26</text>
+<text x="388" y="686" class="tick">1</text>
+<text x="656" y="686" class="tick" text-anchor="end">16</text>
+<polyline points="388.0,671.0 405.9,662.4 441.6,640.6 513.1,597.3 656.0,513.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="388.0" cy="671.0" r="3" fill="#2f6f9f"/>
+<circle cx="405.9" cy="662.4" r="3" fill="#2f6f9f"/>
+<circle cx="441.6" cy="640.6" r="3" fill="#2f6f9f"/>
+<circle cx="513.1" cy="597.3" r="3" fill="#2f6f9f"/>
+<circle cx="656.0" cy="513.0" r="3" fill="#2f6f9f"/>
+<text x="688" y="499" class="panel">ShuffleCategories · cardinality · cuda</text>
+<line x1="728" y1="513" x2="728" y2="671" stroke="#888"/>
+<line x1="728" y1="671" x2="996" y2="671" stroke="#888"/>
+<text x="723" y="517" class="tick" text-anchor="end">56.36 ms</text>
+<text x="723" y="671" class="tick" text-anchor="end">25.65</text>
+<text x="728" y="686" class="tick">16</text>
+<text x="996" y="686" class="tick" text-anchor="end">16384</text>
+<polyline points="728.0,671.0 729.8,665.1 744.5,663.4 794.8,629.9 996.0,513.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="728.0" cy="671.0" r="3" fill="#2f6f9f"/>
+<circle cx="729.8" cy="665.1" r="3" fill="#2f6f9f"/>
+<circle cx="744.5" cy="663.4" r="3" fill="#2f6f9f"/>
+<circle cx="794.8" cy="629.9" r="3" fill="#2f6f9f"/>
+<circle cx="996.0" cy="513.0" r="3" fill="#2f6f9f"/>
+<text x="8" y="719" class="panel">ShuffleColumns · estimators · cuda</text>
+<line x1="48" y1="733" x2="48" y2="891" stroke="#888"/>
+<line x1="48" y1="891" x2="316" y2="891" stroke="#888"/>
+<text x="43" y="737" class="tick" text-anchor="end">12.79 ms</text>
+<text x="43" y="891" class="tick" text-anchor="end">0.93</text>
+<text x="48" y="906" class="tick">1</text>
+<text x="316" y="906" class="tick" text-anchor="end">16</text>
+<polyline points="48.0,891.0 65.9,880.4 101.6,859.6 173.1,818.6 316.0,733.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="48.0" cy="891.0" r="3" fill="#2f6f9f"/>
+<circle cx="65.9" cy="880.4" r="3" fill="#2f6f9f"/>
+<circle cx="101.6" cy="859.6" r="3" fill="#2f6f9f"/>
+<circle cx="173.1" cy="818.6" r="3" fill="#2f6f9f"/>
+<circle cx="316.0" cy="733.0" r="3" fill="#2f6f9f"/>
+<text x="348" y="719" class="panel">AlignCategories · categorical_columns · cuda</text>
+<line x1="388" y1="733" x2="388" y2="891" stroke="#888"/>
+<line x1="388" y1="891" x2="656" y2="891" stroke="#888"/>
+<text x="383" y="737" class="tick" text-anchor="end">10.94 ms</text>
+<text x="383" y="891" class="tick" text-anchor="end">0.54</text>
+<text x="388" y="906" class="tick">1</text>
+<text x="656" y="906" class="tick" text-anchor="end">32</text>
+<polyline points="388.0,891.0 413.9,875.8 448.5,855.5 517.7,813.8 656.0,733.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="388.0" cy="891.0" r="3" fill="#2f6f9f"/>
+<circle cx="413.9" cy="875.8" r="3" fill="#2f6f9f"/>
+<circle cx="448.5" cy="855.5" r="3" fill="#2f6f9f"/>
+<circle cx="517.7" cy="813.8" r="3" fill="#2f6f9f"/>
+<circle cx="656.0" cy="733.0" r="3" fill="#2f6f9f"/>
+<text x="688" y="719" class="panel">ImputeMode · categorical_columns · cuda</text>
+<line x1="728" y1="733" x2="728" y2="891" stroke="#888"/>
+<line x1="728" y1="891" x2="996" y2="891" stroke="#888"/>
+<text x="723" y="737" class="tick" text-anchor="end">7.98 ms</text>
+<text x="723" y="891" class="tick" text-anchor="end">0.59</text>
+<text x="728" y="906" class="tick">1</text>
+<text x="996" y="906" class="tick" text-anchor="end">32</text>
+<polyline points="728.0,891.0 753.9,875.1 788.5,854.5 857.7,813.8 996.0,733.0" fill="none" stroke="#2f6f9f" stroke-width="2"/>
+<circle cx="728.0" cy="891.0" r="3" fill="#2f6f9f"/>
+<circle cx="753.9" cy="875.1" r="3" fill="#2f6f9f"/>
+<circle cx="788.5" cy="854.5" r="3" fill="#2f6f9f"/>
+<circle cx="857.7" cy="813.8" r="3" fill="#2f6f9f"/>
+<circle cx="996.0" cy="733.0" r="3" fill="#2f6f9f"/>
+</svg>
