@@ -32,7 +32,6 @@ class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> None:
         super().__init__()
         self.processor = processor
-        self.requires_fit = processor.requires_fit
         self._task_dispatchers = task_dispatchers
 
     def _fit_ensemble(
@@ -76,6 +75,10 @@ class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
                 "'Recipe.target' must resolve to a single task type across "
                 "ensemble members"
             )
+
+        task = next(iter(tasks))
+        for task_dispatcher in self._task_dispatchers:
+            task_dispatcher._task = task
 
         return ensemble_table
 

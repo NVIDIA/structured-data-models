@@ -50,8 +50,7 @@ class TaskDispatch(EnsembleProcessor):
             )
         if self._task not in self.processors:
             return ensemble_table
-        processor = cast(EnsembleProcessor, self.processors[self._task])
-        return processor.transform_ensemble(ensemble_table)
+        return self.processors[self._task].transform_ensemble(ensemble_table)
 
     def get_extra_state(self) -> str | None:
         r""":meta private:"""  # noqa: D415

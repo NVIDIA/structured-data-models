@@ -137,15 +137,15 @@ class ICLModel(torch.nn.Module, ABC):
             with torch.amp.autocast(x_query.device.type, enabled=False):
                 execution = _RecipeExecution._bind(
                     recipe=recipe,
-                    x_context=x_context,
-                    y_context=y_context,
-                    related_context_tables=related_context_tables,
+                    x=x_context,
+                    y=y_context,
+                    related_tables=related_context_tables,
                     num_members=num_members,
                     generator=generator,
                 )
                 queries = execution.transform(
-                    x_query=x_query,
-                    related_query_tables=related_query_tables,
+                    x=x_query,
+                    related_tables=related_query_tables,
                 )
 
             member_outs: list[TableTensor] = []
@@ -253,9 +253,9 @@ class ICLModel(torch.nn.Module, ABC):
             with torch.amp.autocast(x.device.type, enabled=False):
                 execution = _RecipeExecution._bind(
                     recipe=recipe,
-                    x_context=x,
-                    y_context=y,
-                    related_context_tables=related_tables,
+                    x=x,
+                    y=y,
+                    related_tables=related_tables,
                     num_members=num_members,
                     generator=generator,
                 )
@@ -349,8 +349,8 @@ class ICLModel(torch.nn.Module, ABC):
         for execution in self._recipe_executions:
             with torch.amp.autocast(x.device.type, enabled=False):
                 queries = execution.transform(
-                    x_query=x,
-                    related_query_tables=related_tables,
+                    x=x,
+                    related_tables=related_tables,
                 )
 
             member_outs: list[TableTensor] = []
