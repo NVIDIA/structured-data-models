@@ -15,6 +15,9 @@ from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
 from sdm.tensor.io.arrow import _combine_arrow_chunks
 
 aten = torch.ops.aten
+_make_wrapper_subclass = torch.compiler.allow_in_graph(
+    Tensor._make_wrapper_subclass
+)
 
 
 def preserve_view_inference_mode(fn: Callable) -> Callable:
@@ -63,6 +66,7 @@ class VarLenTensor(Tensor):
     _data: Tensor
     _offset: Tensor
     _valid: Tensor | None
+    _storage_offset: int | torch.SymInt
 
     # Constructors ############################################################
 
@@ -75,7 +79,42 @@ class VarLenTensor(Tensor):
         stride: Sequence[int] | None = None,
         storage_offset: int = 0,
     ) -> None:
-        pass
+        self._set_wrapper_attrs(self, data, offset, valid, storage_offset)
+
+    @staticmethod
+    def _set_wrapper_attrs(
+        out: VarLenTensor,
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        storage_offset: int | torch.SymInt,
+    ) -> None:
+        out._data = data
+        out._offset = offset
+        out._valid = valid
+        out._storage_offset = storage_offset
+
+    @classmethod
+    def _new_wrapper(
+        cls,
+        data: Tensor,
+        offset: Tensor,
+        valid: Tensor | None,
+        size: Sequence[int | torch.SymInt],
+        stride: Sequence[int | torch.SymInt],
+        storage_offset: int | torch.SymInt,
+    ) -> Self:
+        out = _make_wrapper_subclass(
+            cls,
+            size=size,
+            strides=stride,
+            storage_offset=storage_offset,
+            dtype=data.dtype,
+            device=data.device,
+            requires_grad=False,  # Autograd lives on `_data` only.
+        )
+        cls._set_wrapper_attrs(out, data, offset, valid, storage_offset)
+        return out
 
     def __new__(
         cls,
@@ -107,10 +146,12 @@ class VarLenTensor(Tensor):
             dim = size.index(-1)
             size = (*size[:dim], numel // known, *size[dim + 1 :])
 
-        stride = _contiguous_stride(size) if stride is None else tuple(stride)
-        if any(dim_stride < 0 for dim_stride in stride):
+        resolved_stride = (
+            _contiguous_stride(size) if stride is None else tuple(stride)
+        )
+        if any(dim_stride < 0 for dim_stride in resolved_stride):
             raise ValueError(
-                f"Negative strides are not supported (got '{stride}')"
+                f"Negative strides are not supported (got '{resolved_stride}')"
             )
 
         if (
@@ -170,30 +211,34 @@ class VarLenTensor(Tensor):
                     f"on the same device (got '{data.device}' and "
                     f"'{valid.device}')"
                 )
-        if len(size) != len(stride):
+        if len(size) != len(resolved_stride):
             raise ValueError(
                 f"Expected 'size' and 'stride' in {cls.__name__!r} to have "
-                f"the same length (got {len(size)} and {len(stride)})"
+                f"the same length (got {len(size)} and "
+                f"{len(resolved_stride)})"
             )
         if storage_offset < 0:
             raise ValueError(
                 f"Expected 'storage_offset' in {cls.__name__!r} to be "
                 f"non-negative"
             )
-        if storage_offset + _span_len(size, stride) >= offset.numel():
+        if storage_offset + _span_len(size, resolved_stride) >= offset.numel():
             raise ValueError(
                 f"'offset' in {cls.__name__!r} is out of bounds (got "
                 f"{offset.numel()} entries, but expected at least "
-                f"{storage_offset + _span_len(size, stride) + 1} entries)"
+                f"{storage_offset + _span_len(size, resolved_stride) + 1} "
+                "entries)"
             )
         if (
             valid is not None
-            and storage_offset + _span_len(size, stride) > valid.numel()
+            and storage_offset + _span_len(size, resolved_stride)
+            > valid.numel()
         ):
             raise ValueError(
                 f"'valid' in {cls.__name__!r} is out of bounds (got "
                 f"{valid.numel()} entries, but expected at least "
-                f"{storage_offset + _span_len(size, stride)} entries)"
+                f"{storage_offset + _span_len(size, resolved_stride)} "
+                "entries)"
             )
         if data.numel() > torch.iinfo(offset.dtype).max:
             raise ValueError(
@@ -205,21 +250,15 @@ class VarLenTensor(Tensor):
         # NOTE We do not validate offset values here (e.g., monotonicity) due
         # to device synchronization.
 
-        out = Tensor._make_wrapper_subclass(
+        return _make_wrapper_subclass(
             cls,
             size=size,
-            strides=stride,
+            strides=resolved_stride,
             storage_offset=storage_offset,
             dtype=data.dtype,
             device=data.device,
             requires_grad=False,  # Autograd lives on `_data` only.
         )
-
-        out._data = data
-        out._offset = offset
-        out._valid = valid
-
-        return out
 
     @classmethod
     def from_tensor(
@@ -498,7 +537,7 @@ class VarLenTensor(Tensor):
             self._valid,
             size=self.size(),
             stride=self.stride(),
-            storage_offset=int(self.storage_offset()),
+            storage_offset=self._storage_offset,
         )
 
     @property
@@ -533,25 +572,30 @@ class VarLenTensor(Tensor):
         attrs = ["_data", "_offset"]
         if self._valid is not None:
             attrs.append("_valid")
-        ctx = (self.__class__, self.storage_offset())
+        ctx = (
+            self.__class__,
+            self._storage_offset,
+            self.is_inference(),
+        )
         return attrs, ctx
 
     @staticmethod
     def __tensor_unflatten__(
         inner_tensors: dict[str, Any],
         ctx: tuple[Any, ...],
-        outer_size: tuple[int, ...],
-        outer_stride: tuple[int, ...],
+        outer_size: tuple[int | torch.SymInt, ...],
+        outer_stride: tuple[int | torch.SymInt, ...],
     ) -> VarLenTensor:
-        cls, storage_offset = ctx
-        return cls(
-            data=inner_tensors["_data"],
-            offset=inner_tensors["_offset"],
-            valid=inner_tensors.get("_valid"),
-            size=outer_size,
-            stride=outer_stride,
-            storage_offset=storage_offset,
-        )
+        cls, storage_offset, is_inference = ctx
+        with torch.inference_mode(is_inference):
+            return cls._new_wrapper(
+                data=inner_tensors["_data"],
+                offset=inner_tensors["_offset"],
+                valid=inner_tensors.get("_valid"),
+                size=outer_size,
+                stride=outer_stride,
+                storage_offset=storage_offset,
+            )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
@@ -1033,20 +1077,29 @@ def _allclose(
 
 @VarLenTensor.implements(aten.view.default)
 @preserve_view_inference_mode
-def _view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
+def _view(
+    inp: VarLenTensor,
+    size: Sequence[int | torch.SymInt],
+) -> VarLenTensor:
     view = _layout_view(inp).view(tuple(size))
     return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten._unsafe_view.default)
 @preserve_view_inference_mode
-def _unsafe_view(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
+def _unsafe_view(
+    inp: VarLenTensor,
+    size: Sequence[int | torch.SymInt],
+) -> VarLenTensor:
     view = aten._unsafe_view.default(_layout_view(inp), size)
     return _from_layout_view(inp, view)
 
 
 @VarLenTensor.implements(aten.reshape.default)
-def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
+def _reshape(
+    inp: VarLenTensor,
+    size: Sequence[int | torch.SymInt],
+) -> VarLenTensor:
     return cast(
         VarLenTensor,
         aten.reshape.default.decompose(inp, size),
@@ -1097,7 +1150,7 @@ def _unsqueeze(inp: VarLenTensor, dim: int) -> VarLenTensor:
 @preserve_view_inference_mode
 def _expand(
     inp: VarLenTensor,
-    size: Sequence[int],
+    size: Sequence[int | torch.SymInt],
     *,
     implicit: bool = False,
 ) -> VarLenTensor:
@@ -1328,16 +1381,21 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> VarLenTensor:
 # Helpers #####################################################################
 
 
-def _contiguous_stride(size: Sequence[int]) -> tuple[int, ...]:
-    value = 1
-    stride = []
+def _contiguous_stride(
+    size: Sequence[int | torch.SymInt],
+) -> tuple[int | torch.SymInt, ...]:
+    value: int | torch.SymInt = 1
+    stride: list[int | torch.SymInt] = []
     for dim_size in reversed(size):
         stride.append(value)
         value *= dim_size
     return tuple(stride[::-1])
 
 
-def _span_len(size: Sequence[int], stride: Sequence[int]) -> int:
+def _span_len(
+    size: Sequence[int | torch.SymInt],
+    stride: Sequence[int | torch.SymInt],
+) -> int | torch.SymInt:
     if math.prod(size) == 0:
         return 0
     return 1 + sum(
@@ -1351,18 +1409,18 @@ def _layout_view(inp: VarLenTensor) -> Tensor:
         inp._offset,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=inp._storage_offset,
     )
 
 
 def _from_layout_view(inp: VarLenTensor, view: Tensor) -> VarLenTensor:
-    return inp.__class__(
+    return inp.__class__._new_wrapper(
         data=inp._data,
         offset=inp._offset,
         valid=inp._valid,
         size=view.size(),
         stride=view.stride(),
-        storage_offset=int(view.storage_offset()),
+        storage_offset=view.storage_offset(),
     )
 
 
