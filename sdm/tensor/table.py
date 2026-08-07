@@ -1006,6 +1006,7 @@ def _alias(inp: TableTensor) -> TableTensor:
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(aten.alias.default(_layout(inp))),
         **blocks,
     )
 
@@ -1149,6 +1150,22 @@ def _clone(
     memory_format: torch.memory_format | None = None,
 ) -> TableTensor:
     return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
+
+
+@TableTensor.implements(aten.detach.default)
+@preserve_view_inference_mode
+def _detach(inp: TableTensor) -> TableTensor:
+    blocks = {
+        stype: tensor.detach()
+        if tensor.requires_grad
+        else aten.alias.default(tensor)
+        for stype, tensor in inp.items()
+    }
+    return inp.__class__(
+        columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(_layout(inp)),
+        **blocks,
+    )
 
 
 @TableTensor.implements(aten.contiguous.default)
