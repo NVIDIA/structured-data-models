@@ -70,7 +70,7 @@ if args.text_processor != "none":
         text_processor = sp.TFIDF(ngram_range=(4, 6), max_features=256)
     else:
         text_processor = sp.Sequential(
-            sp.EmbedText("sentence-transformers/all-MiniLM-L6-v2"),
+            sp.SentenceTransform("sentence-transformers/all-MiniLM-L6-v2"),
             sp.PCA(num_components=64),
         )
     recipe.features = sp.StypeDispatch(text=text_processor) + recipe.features

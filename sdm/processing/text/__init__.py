@@ -1,9 +1,9 @@
 """Text processors."""
 
 from sdm.processing.text.tfidf import TFIDF
-from sdm.processing.text.embed_text import EmbedText
+from sdm.processing.text.sentence_transform import SentenceTransform
 
 __all__ = [
     "TFIDF",
-    "EmbedText",
+    "SentenceTransform",
 ]

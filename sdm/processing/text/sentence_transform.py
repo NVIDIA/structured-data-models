@@ -18,8 +18,8 @@ class _ModuleReference(torch.nn.Module):
         return type(self)(self.module)
 
 
-class EmbedText(Processor):
-    r"""Embed text columns with a Sentence Transformers model.
+class SentenceTransform(Processor):
+    r"""Transform text columns with a Sentence Transformers model.
 
     Args:
         model_name: Model name or local path passed to
@@ -66,10 +66,7 @@ class EmbedText(Processor):
         else:
             text = cast(
                 StringTensor,
-                table.text.permute(
-                    -1,
-                    *range(table.text.ndim - 1),
-                ).reshape(-1),
+                table.text.movedim(-1, 0).reshape(-1),
             )
             strings = [value or "" for value in text.tolist()]
             encode_kwargs = {}
