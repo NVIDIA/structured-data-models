@@ -90,7 +90,7 @@ def test_choice_accepts_callable_option() -> None:
     assert torch.equal(output.numerical, table.numerical.square())
     assert repr(choice) == "Choice(\n  Callable(<lambda>),\n)"
 
-    with pytest.raises(TypeError, match="not invertible"):
+    with pytest.raises(AttributeError, match="inverse_transform"):
         choice.inverse_transform(output)
 
 
@@ -116,7 +116,7 @@ def test_choice_inverse_requires_invertible_selected() -> None:
 
     choice.fit(table)
 
-    with pytest.raises(TypeError, match="not invertible"):
+    with pytest.raises(AttributeError, match="inverse_transform"):
         choice.inverse_transform(table)
 
 

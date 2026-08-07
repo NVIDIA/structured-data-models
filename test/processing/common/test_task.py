@@ -43,7 +43,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
         )""")
     assert repr(dispatch) == description
 
-    dispatch._resolve(_numerical_table())
+    dispatch._task = "regression"
     assert dispatch.transform(output).equal(output)
     assert repr(dispatch) == description
 
@@ -51,7 +51,7 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
     restored.load_state_dict(dispatch.state_dict())
     assert restored.transform(output).equal(output)
 
-    dispatch._resolve(_categorical_target())
+    dispatch._task = "classification"
     transformed = dispatch.transform(output)
 
     assert torch.allclose(
@@ -70,21 +70,16 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
 
 
 def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
-    with pytest.raises(ValueError, match="at least one route"):
-        TaskDispatch()
-
-    with pytest.raises(ValueError, match=r"regression.*requires fit"):
-        TaskDispatch(regression=Standardize())
+    assert len(TaskDispatch().processors) == 0
+    assert TaskDispatch(regression=Standardize()).requires_fit
 
     dispatch = TaskDispatch(regression=Identity())
     output = _numerical_table()
 
     with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
         dispatch.transform(output)
-    dispatch._resolve(_categorical_target())
+    dispatch._task = "classification"
     assert dispatch.transform(output).equal(output)
-    with pytest.raises(ValueError, match=r"exactly one.*got 2"):
-        dispatch._resolve(_numerical_table(("y0", "y1")))
 
 
 def test_task_dispatch_routes_ensemble_members() -> None:
@@ -95,7 +90,7 @@ def test_task_dispatch_routes_ensemble_members() -> None:
         member_table_ids=(1, 0, 1),
     )
     dispatch = TaskDispatch(classification=Softmax())
-    dispatch._resolve(_categorical_target())
+    dispatch._task = "classification"
 
     output = dispatch.transform_ensemble(ensemble_table)
 

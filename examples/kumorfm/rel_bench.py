@@ -120,8 +120,8 @@ for batch in tqdm.tqdm(query.split(args.batch_size)):
         pred, target = sdm.evaluation.to_binary_class(
             out, y_query, positive_class=1
         )
-    metric.update(pred, target)  # type: ignore
+    metric.update(pred, target)
 if task.task_type == relbench.base.TaskType.REGRESSION:
-    print(f"MAE: {metric.compute():.4f}")  # type: ignore
+    print(f"MAE: {metric.compute():.4f}")
 else:
-    print(f"AUROC: {metric.compute():.4f}")  # type: ignore
+    print(f"AUROC: {metric.compute():.4f}")

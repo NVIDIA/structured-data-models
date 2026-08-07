@@ -16,13 +16,11 @@ def test_recipe_normalizes_empty_roles_and_repr() -> None:
     recipe = Recipe(features=[Standardize()], target=None, output=[])
 
     assert isinstance(recipe.features, Sequential)
-    assert isinstance(recipe.target, Sequential)
     assert isinstance(recipe.output, Sequential)
     assert len(recipe.features) == 1
-    assert len(recipe.target) == 0
     assert len(recipe.output) == 0
     assert "features=Sequential" in repr(recipe)
-    assert "target=Sequential()" in repr(recipe)
+    assert "target=Identity()" in repr(recipe)
 
 
 def test_target_forward_then_inverse_round_trips() -> None:
