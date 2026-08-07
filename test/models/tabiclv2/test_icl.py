@@ -5,6 +5,7 @@ import torch
 from torch import Tensor
 
 from sdm.cache import Cache
+from sdm.models.tabiclv2 import icl as icl_module
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.testing import withCUDA
 
@@ -67,6 +68,51 @@ def test_icl_block_grouping() -> None:
             torch.tensor([11] + [10] * 9, device=device)
         ),
     )
+
+
+@withCUDA
+def test_icl_automatic_batch_size_limit(
+    device: torch.device,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    block = ICLBlock(
+        num_classes=2,
+        out_channels=2,
+        channels=8,
+        num_layers=2,
+        num_heads=2,
+        norm_bias=True,
+        device=device,
+    ).eval()
+    x = torch.randn(2, 5, 8, device=device)
+    y = torch.randint(2, (2, 3), device=device)
+    chunk_kwargs = {} if device.type == "cuda" else {"batch_size_limit": 1}
+
+    with torch.inference_mode():
+        monkeypatch.setattr(
+            icl_module,
+            "cuda_attention_memory_limit",
+            lambda _device: 1 << 60,
+        )
+        expected = block(x.clone(), y)
+
+        monkeypatch.setattr(
+            icl_module,
+            "cuda_attention_memory_limit",
+            lambda _device: 12 * 5 * 8 * 4,
+        )
+        actual = block(x.clone(), y, **chunk_kwargs)
+        cache = Cache()
+        block(x[:, :3].clone(), y, cache=cache, **chunk_kwargs)
+        replayed = block(
+            x[:, 3:].clone(),
+            y[:, :0],
+            cache=cache.freeze(),
+            **chunk_kwargs,
+        )
+
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(replayed, expected)
 
 
 @withCUDA
