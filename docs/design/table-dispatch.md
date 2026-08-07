@@ -1,12 +1,9 @@
 # Table dispatch in `Recipe`
 
-Status: Proposed
-
-## Decision
 
 Add `TableDispatch(task=..., related=...)` as a composable step in `Recipe.features`. Ordinary feature steps continue to apply to every table; users add `TableDispatch` only where task and related tables differ. An omitted route is an identity operation, and every related table gets its own fitted processor state.
 
-`TableDispatch` is shorter and more specific than `TableRoleDispatch`: the route names already communicate the role. `task` matches the established `task_table` and `task_links` vocabulary and remains correct for entity, event, and link-prediction tasks; `entity` would be too narrow. `related` matches `RelatedTables`. The API has no `all` route because an ordinary adjacent step already expresses “all tables”. Dispatch by table name is a separate concern and is not part of this proposal.
+`task` matches the established `task_table` and `task_links` vocabulary and remains correct for entity, event, and link-prediction tasks; `entity` would be too narrow. `related` matches `RelatedTables`. The API has no `all` route because an ordinary adjacent step already expresses “all tables”. Dispatch by table name is a separate concern and is not part of this proposal.
 
 ## User model
 
@@ -41,35 +38,53 @@ recipe = Recipe(
 
 Read this top to bottom: related tables execute the first route while the task table passes through; every table then executes the two shared steps. Each ensemble member follows the existing `Choice` semantics. Target and output processing are unchanged.
 
-The dispatchers answer different questions: `StypeDispatch` selects columns by semantic type, `TaskDispatch` selects output processing for classification or regression, and `TableDispatch` selects feature processing for the task table or related tables. `Choice` still represents ensemble alternatives. Users do not need a separate public “role” concept.
+The dispatchers answer different questions: `StypeDispatch` selects columns by semantic type, `TaskDispatch` selects output processing for classification or regression, and `TableDispatch` selects feature processing for the task table or related tables. 
 
 ## Semantics and implementation sketch
 
 `TableDispatch` may appear anywhere inside the feature tree, including `Sequential`, `Choice`, and `StypeDispatch`. Before fitting, `Recipe.bind` recursively specializes that tree into ordinary task and related processor trees:
 
-```text
-specialize(processor, table_kind):
-    if processor is TableDispatch:
-        route = processor[table_kind] or Identity()
-        return specialize(deepcopy(route), table_kind)
+  TableDispatch:
+      routes:
+          task    = EnsembleProcessor.as_processor(task)
+          related = EnsembleProcessor.as_processor(related)
 
-    result = deepcopy(processor)
-    for child_slot, child in processor.children():
-        result[child_slot] = specialize(child, table_kind)
-    return result
+      selected_route = unresolved
 
-bind(recipe, task_context, related_context):
-    task_features = specialize(recipe.features, "task")
-    related_template = specialize(recipe.features, "related")
+      fit/transform:
+          fail if selected_route is unresolved
+          pass through if that route was omitted
+          otherwise delegate to routes[selected_route]
 
-    task_features.fit_transform_ensemble(task_context)
-    for name, table in related_context.tables:
-        related_features[name] = deepcopy(related_template)
-        related_features[name].fit_transform_ensemble(table)
 
-    return Execution(task_features, related_features)
-```
+  _RecipeExecution._bind(recipe, x, y, related_tables, ...):
+      # Must happen first: resolves TaskDispatch as defined by PR #568.
+      y_out = recipe.target.fit_transform_ensemble(y)
 
-Query tables reuse their corresponding fitted processors. Specialization happens once per binding, so `TableDispatch` adds no branch to tensor execution and requires no change to `Processor`, ensemble, `Sequential`, `Choice`, or stype-dispatch semantics. Construction rejects an empty dispatcher and use outside `Recipe.features`. Because an unresolved scoped tree has no table context, it is executed through `Recipe.bind`; the specialized processors remain private execution state.
+      related_processors = {}
+      related_outputs = {}
 
-Do not add role-specific `Recipe` fields or `TableScope(all=..., task=..., related=...)`. Both split one ordered data flow across multiple locations, and a fixed `all` phase cannot express a related-only step that must run before a shared step without duplication or extra ordering rules.
+      for name, table in related_tables:
+          features = deepcopy(recipe.features)
+
+          for processor in features.modules():
+              if processor is TableDispatch:
+                  processor.selected_route = "related"
+
+          related_processors[name] = features
+          related_outputs[name] = features.fit_transform_ensemble(table)
+
+      for processor in recipe.features.modules():
+          if processor is TableDispatch:
+              processor.selected_route = "task"
+
+      x_out = recipe.features.fit_transform_ensemble(x)
+
+      return _RecipeExecution(
+          recipe=recipe,
+          task_context=x_out,
+          target_context=y_out,
+          related_context=related_outputs,
+          related_processors=related_processors,
+      )
+
