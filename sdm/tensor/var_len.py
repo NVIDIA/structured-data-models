@@ -222,23 +222,23 @@ class VarLenTensor(Tensor):
                 f"Expected 'storage_offset' in {cls.__name__!r} to be "
                 f"non-negative"
             )
-        if storage_offset + _span_len(size, resolved_stride) >= offset.numel():
+        span_len = _span_len(size, resolved_stride)
+        is_empty = math.prod(size) == 0
+        required_offset_entries = (
+            1 if is_empty else storage_offset + span_len + 1
+        )
+        if offset.numel() < required_offset_entries:
             raise ValueError(
                 f"'offset' in {cls.__name__!r} is out of bounds (got "
                 f"{offset.numel()} entries, but expected at least "
-                f"{storage_offset + _span_len(size, resolved_stride) + 1} "
-                "entries)"
+                f"{required_offset_entries} entries)"
             )
-        if (
-            valid is not None
-            and storage_offset + _span_len(size, resolved_stride)
-            > valid.numel()
-        ):
+        required_valid_entries = 0 if is_empty else storage_offset + span_len
+        if valid is not None and required_valid_entries > valid.numel():
             raise ValueError(
                 f"'valid' in {cls.__name__!r} is out of bounds (got "
                 f"{valid.numel()} entries, but expected at least "
-                f"{storage_offset + _span_len(size, resolved_stride)} "
-                "entries)"
+                f"{required_valid_entries} entries)"
             )
         if data.numel() > torch.iinfo(offset.dtype).max:
             raise ValueError(
@@ -1388,7 +1388,7 @@ def _contiguous_stride(
     stride: list[int | torch.SymInt] = []
     for dim_size in reversed(size):
         stride.append(value)
-        value *= dim_size
+        value *= torch.sym_max(dim_size, 1)
     return tuple(stride[::-1])
 
 

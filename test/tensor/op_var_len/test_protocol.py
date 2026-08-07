@@ -29,6 +29,17 @@ def test_public_metadata_tracks_logical_layout() -> None:
     assert tensor.requires_grad == tensor._data.requires_grad
 
 
+def test_empty_tensor_uses_pytorch_contiguous_strides() -> None:
+    tensor = VarLenTensor(
+        data=torch.empty(0),
+        offset=torch.zeros(1, dtype=torch.int64),
+        valid=None,
+        size=(2, 0, 4),
+    )
+
+    assert tensor.stride() == torch.empty(2, 0, 4).stride()
+
+
 @pytest.mark.parametrize("nullable", [False, True])
 @pytest.mark.parametrize("inference", [False, True])
 def test_tensor_flatten_round_trip(
