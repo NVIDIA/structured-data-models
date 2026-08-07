@@ -93,3 +93,20 @@ def test_views_preserve_string_type_aliases_and_inference_state(
         assert out.is_inference() == tensor.is_inference()
         assert out.tolist() == values
         assert _is_alias_of(out, tensor)
+
+
+def test_clone_and_to_copy_preserve_type_with_independent_storage() -> None:
+    tensor = _tensor()
+
+    for out in (
+        aten.clone.default(tensor),
+        aten._to_copy.default(tensor),
+    ):
+        assert isinstance(out, StringTensor)
+        assert out.tolist() == tensor.tolist()
+        assert not _is_alias_of(out, tensor)
+        assert not _is_alias_of(out._data, tensor._data)
+        assert not _is_alias_of(out._offset, tensor._offset)
+        assert out._valid is not None
+        assert tensor._valid is not None
+        assert not _is_alias_of(out._valid, tensor._valid)
