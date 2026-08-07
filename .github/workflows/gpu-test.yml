@@ -56,6 +56,8 @@ jobs:
           fi
 
       - name: Install package
+        env:
+          UV_EXCLUDE_NEWER: 0 days
         run: |
           RAPIDS_INDEX_URL="${NV_GHA_RUNNERS_PYPI_ANACONDA_CACHE_URL:-https://pypi.nvidia.com}"
           uv pip install \
@@ -64,8 +66,8 @@ jobs:
             --index-strategy=unsafe-best-match \
             --group=test \
             . \
-            'cudf-cu13>=26.6' \
-            'pylibcugraph-cu13>=26.6'
+            'cudf-cu13>=26.8' \
+            'pylibcugraph-cu13>=26.8'
           uv pip install \
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
             pyg-lib
@@ -82,6 +84,8 @@ jobs:
           import pylibcugraph
           import torch
 
+          pandas_version = version("pandas")
+          assert pandas_version.startswith("3.")
           assert torch.cuda.is_available(), "CUDA not available to torch"
           assert hasattr(pylibcugraph, "heterogeneous_uniform_neighbor_sample")
           assert hasattr(
@@ -91,6 +95,7 @@ jobs:
           print("torch", torch.__version__)
           print("cudf", cudf.__version__)
           print("cupy", cupy.__version__)
+          print("pandas", pandas_version)
           print("pylibcugraph", version("pylibcugraph-cu13"))
           print("pyg-lib", version("pyg-lib"))
           PY
