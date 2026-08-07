@@ -1049,7 +1049,7 @@ def _isfinite(inp: VarLenTensor) -> Tensor:
             dtype=torch.bool,
             device=inp.device,
         )
-    return valid
+    return valid.clone()
 
 
 @VarLenTensor.implements(aten.equal.default)
