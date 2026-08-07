@@ -18,9 +18,9 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import ModuleList, Parameter
+from torch.nn import Linear, ModuleList, Parameter
 
-from sdm.models.tabfm.attention import _MultiheadAttentionBlock
+from sdm.models.tabfm.attention import _MultiheadAttentionBlock, _RMSNorm
 
 
 class _InducedSelfAttentionBlock(torch.nn.Module):
@@ -127,3 +127,105 @@ class _SetTransformer(torch.nn.Module):
         for block in self.blocks:
             src = block(src=src, attn_mask=attn_mask)
         return src
+
+
+class _ColumnEmbedding(torch.nn.Module):
+    """Apply TabFM's distribution-aware embedding independently per column.
+
+    Args:
+        channels: Number of input and output channels per cell.
+        num_blocks: Number of induced-attention blocks.
+        num_heads: Number of attention heads.
+        feedforward_channels: Hidden width of each SwiGLU feed-forward layer.
+        num_inducing_points: Number of learned inducing vectors per block.
+        col_chunk_size: Maximum number of flattened columns processed at once.
+            ``None`` disables chunking.
+        ffn_chunk_size: Optional maximum number of flattened feed-forward
+            tokens processed at once.
+        device: Device on which to create parameters.
+        dtype: Dtype of parameters.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        num_blocks: int,
+        num_heads: int,
+        feedforward_channels: int,
+        num_inducing_points: int,
+        col_chunk_size: int | None = 16,
+        ffn_chunk_size: int | None = None,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        if col_chunk_size is not None and col_chunk_size <= 0:
+            raise ValueError("col_chunk_size must be positive or None")
+
+        factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
+        self.tf_col = _SetTransformer(
+            num_blocks=num_blocks,
+            channels=channels,
+            num_heads=num_heads,
+            feedforward_channels=feedforward_channels,
+            num_inducing_points=num_inducing_points,
+            ffn_chunk_size=ffn_chunk_size,
+            **factory_kwargs,
+        )
+        self.out_w = Linear(channels, channels, **factory_kwargs)
+        self.ln_w = _RMSNorm(channels, eps=1e-6, **factory_kwargs)
+        self.col_chunk_size = col_chunk_size
+
+    def _stage(self, src: Tensor, attn_mask: Tensor) -> Tensor:
+        return self.ln_w(self.out_w(self.tf_col(src, attn_mask=attn_mask)))
+
+    def forward(
+        self,
+        x: Tensor,  # [B, T, H, E]
+        context_size: Tensor,  # [B]
+    ) -> Tensor:  # [B, T, H, E]
+        """Embed each column using context rows as attention keys."""
+        batch_size, num_rows, num_columns, channels = x.shape
+        if (
+            context_size.shape != (batch_size,)
+            or context_size.is_floating_point()
+            or context_size.is_complex()
+            or context_size.dtype == torch.bool
+            or context_size.device != x.device
+        ):
+            raise ValueError(
+                "context_size must be integer [B] on the input device"
+            )
+
+        # [B, T, H, E] -> [B * H, T, E]
+        src = x.permute(0, 2, 1, 3).reshape(
+            batch_size * num_columns,
+            num_rows,
+            channels,
+        )
+        flat_context_size = context_size.repeat_interleave(num_columns)
+        row_index = torch.arange(num_rows, device=x.device)
+        attn_mask = row_index[None] < flat_context_size[:, None]  # [B * H, T]
+
+        if self.col_chunk_size is None or src.size(0) <= self.col_chunk_size:
+            output = self._stage(src, attn_mask)
+        else:
+            output = torch.cat(
+                [
+                    self._stage(src_chunk, mask_chunk)
+                    for src_chunk, mask_chunk in zip(
+                        src.split(self.col_chunk_size, dim=0),
+                        attn_mask.split(self.col_chunk_size, dim=0),
+                        strict=True,
+                    )
+                ],
+                dim=0,
+            )
+
+        # [B * H, T, E] -> [B, T, H, E]
+        return output.reshape(
+            batch_size,
+            num_columns,
+            num_rows,
+            channels,
+        ).permute(0, 2, 1, 3)
