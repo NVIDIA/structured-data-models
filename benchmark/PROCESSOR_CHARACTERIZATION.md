@@ -118,9 +118,13 @@ ceiling at the measured worst case.
 ## Impact heatmap
 
 `🔴` means a strong relative effect, `🟡` a moderate effect, and `⚪` a
-practically negligible effect under the absolute early-stop floor. Blank cells
-are irrelevant to that Processor. This table takes the maximum impact observed
-on CPU or GPU; it measures sensitivity, not optimization priority.
+practically negligible effect. A sweep is negligible when the difference
+between its fastest and slowest median is at most `max(15% of the fastest median, 0.20 ms CPU / 0.03 ms GPU)`. A non-negligible sweep is strong when the
+slowest median is at least 2× the fastest, or at least 1.25× the fastest with an
+absolute difference of at least 10 ms CPU / 1 ms GPU. All remaining effects are
+moderate. Blank cells are irrelevant to that Processor. This table takes the
+maximum impact observed on CPU or GPU; it measures sensitivity, not
+optimization priority.
 
 | Processor           | Rows | Columns | Value mix | Cardinality | Dtype | Estimators | Output width | Text size | Config count |
 | ------------------- | :--: | :-----: | :-------: | :---------: | :---: | :--------: | :----------: | :-------: | :----------: |
