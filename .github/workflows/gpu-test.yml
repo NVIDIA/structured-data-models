@@ -65,7 +65,6 @@ jobs:
             --group=test \
             . \
             'cudf-cu13>=26.6' \
-            'pandas<3' \
             'pylibcugraph-cu13>=26.6'
           uv pip install \
             --find-links=https://data.pyg.org/whl/torch-2.13.0+cu130.html \
