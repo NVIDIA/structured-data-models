@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Literal, cast
+from typing import cast
 
 import torch
 
@@ -81,34 +81,21 @@ class _RecipeExecution:
             if isinstance(module, TaskDispatch)
         )
         if task_dispatchers:
-            tasks: set[Literal["classification", "regression"]] = set()
-            for group in y_ensemble:
-                if group.size(-1) != 1:
-                    raise ValueError(
-                        "Expected the transformed target to contain exactly "
-                        f"one column (got {group.size(-1)} columns)"
-                    )
-                if group.numerical.size(-1) == 1:
-                    tasks.add("regression")
-                elif group.categorical.size(-1) == 1:
-                    tasks.add("classification")
-                else:
-                    stypes = ", ".join(
-                        f"{str(stype)!r}" for stype in group.active_stypes
-                    )
-                    raise ValueError(
-                        "Expected the transformed target to contain exactly "
-                        "one numerical or categorical column "
-                        f"(got {stypes})"
-                    )
-
-            if len(tasks) != 1:
+            if any(group.size(-1) != 1 for group in y_ensemble):
                 raise ValueError(
-                    "'Recipe.target' must resolve to a single task type "
-                    "across ensemble members"
+                    "Expected the transformed target to contain exactly one "
+                    "column"
                 )
 
-            task = next(iter(tasks))
+            if all(group.numerical.size(-1) == 1 for group in y_ensemble):
+                task = "regression"
+            elif all(group.categorical.size(-1) == 1 for group in y_ensemble):
+                task = "classification"
+            else:
+                raise ValueError(
+                    "'Recipe.target' must resolve to a single task type"
+                )
+
             for task_dispatcher in task_dispatchers:
                 task_dispatcher._task = task
 
