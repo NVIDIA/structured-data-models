@@ -10,8 +10,13 @@ from sdm import (
     Stype,
     TableTensor,
 )
-from sdm.processing import PCA, ClipQuantiles, Processor, Standardize
-from sdm.processing.base import InvertibleMixin
+from sdm.processing import (
+    PCA,
+    ClipQuantiles,
+    InvertibleMixin,
+    Processor,
+    Standardize,
+)
 
 ProcessorFactory = Callable[[], Processor]
 

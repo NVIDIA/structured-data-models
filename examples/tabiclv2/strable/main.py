@@ -60,10 +60,7 @@ model = sdm.models.TabICLv2(device=device)
 recipe = model.default_recipe()
 recipe.features = (
     StypeDispatch(
-        text=TFIDF(
-            ngram_range=(4, 6),
-            max_features=256,
-        )
+        text=TFIDF(ngram_range=(4, 6), max_features=256),
     )
     + recipe.features
 )

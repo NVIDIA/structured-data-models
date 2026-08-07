@@ -3,16 +3,16 @@ from typing import Literal
 import torch
 from torch import Tensor
 
-from sdm import Stype
-from sdm.processing.ensemble import EnsembleProcessor
-from sdm.relational.join import join_index
-from sdm.tensor import (
+from sdm import (
     CategoricalTensor,
     ColumnarTensor,
-    EnsembleTable,
     StringTensor,
+    Stype,
     TableTensor,
 )
+from sdm.processing import EnsembleProcessor
+from sdm.relational.join import join_index
+from sdm.tensor import EnsembleTable
 
 _UNSIGNED_DTYPES = frozenset({torch.uint16, torch.uint32, torch.uint64})
 
