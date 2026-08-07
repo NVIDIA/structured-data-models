@@ -20,21 +20,22 @@ import torch
 from torch import Tensor
 from torch.nn import Linear
 
-from sdm.tensor import TableTensor
 
+class _CellEmbedder(torch.nn.Module):
+    """Embed TabFM v1.0.0 feature cells.
 
-class CellEmbedder(torch.nn.Module):
-    """Embed grouped numerical and categorical cells for TabFM v1.0.0.
-
-    Feature groups use cyclic offsets ``2**index - 1``. Numerical and
-    categorical slots have separate learned Fourier projections.
+    This checkpoint-specific operator accepts an explicit categorical mask, so
+    features may appear in any order after preprocessing and column shuffling.
 
     Args:
-        channels: Number of output channels per cell.
+        embed_dim: Number of output channels per cell.
         feature_group_size: Number of cyclically shifted features per group.
         num_frequencies: Number of Fourier frequencies per group slot.
+        row_chunk_size: Maximum number of rows expanded at once. ``None``
+            disables chunking.
         device: Device on which to create parameters and buffers.
-        dtype: Dtype of parameters and buffers.
+        dtype: Compute dtype for the learned projections. Fourier-frequency
+            buffers remain in float32.
     """
 
     fourier_frequencies: Tensor
@@ -42,35 +43,29 @@ class CellEmbedder(torch.nn.Module):
 
     def __init__(
         self,
-        channels: int,
+        embed_dim: int,
         feature_group_size: int = 3,
         num_frequencies: int = 32,
+        row_chunk_size: int | None = 4096,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        if (
-            min(
-                channels,
-                feature_group_size,
-                num_frequencies,
-            )
-            <= 0
-        ):
+        if min(embed_dim, feature_group_size, num_frequencies) <= 0:
             raise ValueError("all dimensions must be positive")
+        if row_chunk_size is not None and row_chunk_size <= 0:
+            raise ValueError("row_chunk_size must be positive or None")
 
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
-        frequency_factory_kwargs: dict[str, Any] = {
-            "device": device,
-            "dtype": torch.float32,
-        }
         self.feature_group_size = feature_group_size
+        self.row_chunk_size = row_chunk_size
         self.register_buffer(
             "fourier_frequencies",
             torch.zeros(
                 feature_group_size,
                 num_frequencies,
-                **frequency_factory_kwargs,
+                device=device,
+                dtype=torch.float32,
             ),
         )
         self.register_buffer(
@@ -78,36 +73,42 @@ class CellEmbedder(torch.nn.Module):
             torch.zeros(
                 feature_group_size,
                 num_frequencies,
-                **frequency_factory_kwargs,
+                device=device,
+                dtype=torch.float32,
             ),
         )
         self.in_linear = Linear(
             2 * num_frequencies,
-            channels,
+            embed_dim,
             **factory_kwargs,
         )
         self.in_linear_cat = Linear(
             2 * num_frequencies,
-            channels,
+            embed_dim,
             **factory_kwargs,
         )
 
-    def _group(self, x: Tensor, d: Tensor | None = None) -> Tensor:
-        batch_size, num_rows, num_features = x.shape
-        feature_index = torch.arange(num_features, device=x.device)
+    def _group(
+        self,
+        features: Tensor,
+        active_features: Tensor | None,
+    ) -> Tensor:
+        """Apply cyclic feature offsets to ``[B, T, H]`` input."""
+        batch_size, num_rows, num_features = features.shape
+        feature_index = torch.arange(num_features, device=features.device)
         offsets = (
             2
             ** torch.arange(
                 self.feature_group_size,
-                device=x.device,
+                device=features.device,
             )
             - 1
         )
-        if d is None:
+        if active_features is None:
             index = (feature_index[:, None] + offsets[None, :]) % num_features
-            return x[..., index]
+            return features[..., index]
 
-        safe_features = d.long().clamp_min(1)
+        safe_features = active_features.long().clamp_min(1)
         index = (
             feature_index[None, :, None] + offsets[None, None, :]
         ) % safe_features[:, None, None]
@@ -117,68 +118,107 @@ class CellEmbedder(torch.nn.Module):
             num_features,
             self.feature_group_size,
         )
-        expanded = x.unsqueeze(-1).expand_as(index)
+        expanded = features.unsqueeze(-1).expand_as(index)
         return expanded.gather(dim=-2, index=index)
 
-    def _embed(
+    def _embed_rows(
         self,
-        x: Tensor,
-        cat_mask: Tensor | None,
-        d: Tensor | None,
+        features: Tensor,
+        categorical_mask: Tensor | None,
+        active_features: Tensor | None,
     ) -> Tensor:
-        grouped = self._group(x, d=d).unsqueeze(-1).float()
+        grouped = self._group(features, active_features).unsqueeze(-1).float()
+
         angles = grouped * self.fourier_frequencies
-        fourier = torch.cat([angles.sin(), angles.cos()], dim=-1).to(x.dtype)
-        numerical = self.in_linear(fourier)
-        if cat_mask is None:
+        fourier = torch.cat([angles.sin(), angles.cos()], dim=-1)
+        numerical = self.in_linear(fourier.to(features.dtype))
+        if categorical_mask is None:
             return numerical.sum(dim=-2)
 
-        angles = grouped * self.fourier_frequencies_cat
-        fourier = torch.cat([angles.sin(), angles.cos()], dim=-1).to(x.dtype)
-        categorical = self.in_linear_cat(fourier)
+        angles_cat = grouped * self.fourier_frequencies_cat
+        fourier_cat = torch.cat(
+            [angles_cat.sin(), angles_cat.cos()],
+            dim=-1,
+        )
+        categorical = self.in_linear_cat(fourier_cat.to(features.dtype))
         grouped_mask = self._group(
-            cat_mask[:, None].float(),
-            d=d,
-        ).bool()[..., None]
+            categorical_mask[:, None],
+            active_features,
+        )[..., None]
         return torch.where(grouped_mask, categorical, numerical).sum(dim=-2)
 
     def forward(
         self,
-        x: TableTensor,
-        d: Tensor | None = None,
+        features: Tensor,
+        categorical_mask: Tensor | None = None,
+        active_features: Tensor | None = None,
     ) -> Tensor:
-        """Embed numerical and categorical cells.
+        """Embed feature values.
 
         Args:
-            x: Input table with numerical and categorical blocks of shape
-                ``[B, T, C]``. The blocks are concatenated in that order.
-            d: Optional active feature counts with shape ``[B]``. Grouping
-                wraps by these counts and padded output columns are zeroed.
+            features: Dense feature values with shape ``[B, T, H]``. Values
+                must already use the projection's compute dtype.
+            categorical_mask: Optional boolean mask with shape ``[B, H]``.
+                Each grouped slot uses the projection for its source feature.
+            active_features: Optional integer tensor with shape ``[B]``. Each
+                member wraps grouping over its active prefix; padded output
+                columns are zero.
 
         Returns:
-            Cell embeddings with shape ``[B, T, H, E]``. ``E`` is
-            ``channels``.
+            Cell embeddings with shape ``[B, T, H, E]``.
         """
-        numerical = x.numerical
-        categorical = x.categorical.as_tensor()
-        features = torch.cat(
-            [numerical, categorical.to(dtype=numerical.dtype)],
-            dim=-1,
-        )
-        batch_size, _, num_features = features.shape
-        cat_mask = (
-            torch.arange(num_features, device=features.device)
-            >= numerical.size(-1)
-        ).expand(batch_size, -1)
-        if d is not None and (
-            d.shape != (batch_size,) or d.is_floating_point()
+        if (
+            features.dim() != 3
+            or not features.is_floating_point()
+            or features.is_complex()
         ):
-            raise ValueError("d must be an integer [B] tensor")
+            raise ValueError(
+                "features must be a floating-point [B, T, H] tensor"
+            )
+        batch_size, num_rows, num_features = features.shape
+        if categorical_mask is not None and (
+            categorical_mask.shape != (batch_size, num_features)
+            or categorical_mask.dtype != torch.bool
+            or categorical_mask.device != features.device
+        ):
+            raise ValueError(
+                "categorical_mask must be a boolean [B, H] tensor on the "
+                "feature device"
+            )
+        if active_features is not None and (
+            active_features.shape != (batch_size,)
+            or active_features.is_floating_point()
+            or active_features.is_complex()
+            or active_features.dtype == torch.bool
+            or active_features.device != features.device
+        ):
+            raise ValueError(
+                "active_features must be an integer [B] tensor on the "
+                "feature device"
+            )
+        if self.row_chunk_size is None or num_rows <= self.row_chunk_size:
+            output = self._embed_rows(
+                features,
+                categorical_mask,
+                active_features,
+            )
+        else:
+            # Rows are independent here, so chunking bounds the Fourier tensor.
+            output = torch.cat(
+                [
+                    self._embed_rows(
+                        features[:, start : start + self.row_chunk_size],
+                        categorical_mask,
+                        active_features,
+                    )
+                    for start in range(0, num_rows, self.row_chunk_size)
+                ],
+                dim=1,
+            )
 
-        cell = self._embed(x=features, cat_mask=cat_mask, d=d)
-        output = cell
-        if d is not None:
-            feature_index = torch.arange(num_features, device=features.device)
-            active = feature_index[None, :] < d[:, None]
-            output = output.masked_fill(~active[:, None, :, None], 0)
-        return output
+        if active_features is None:
+            return output
+
+        feature_index = torch.arange(num_features, device=features.device)
+        active = feature_index[None, :] < active_features[:, None]
+        return output.masked_fill(~active[:, None, :, None], 0)
