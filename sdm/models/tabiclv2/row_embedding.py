@@ -160,12 +160,14 @@ class RowEmbedding(torch.nn.Module):
                 plan_attention and cache is not None and cache.is_recording
             ):
                 col_batch_size_limit = attention_batch_size_limit(
-                    batch_size_limit,
-                    x,
-                    key_value,
-                    cuda_attention_memory_limit(x.device)
-                    if plan_attention
-                    else None,
+                    requested_limit=batch_size_limit,
+                    query=x,
+                    key_value=key_value,
+                    attention_memory_limit=(
+                        cuda_attention_memory_limit(x.device)
+                        if plan_attention
+                        else None
+                    ),
                 )
             result = col_layer(
                 query=x,  # [..., C, R, D]
@@ -194,10 +196,14 @@ class RowEmbedding(torch.nn.Module):
 
         # Row-wise attention (B * R as the batch axis).
         row_batch_size_limit = attention_batch_size_limit(
-            batch_size_limit,
-            x,
-            x,
-            cuda_attention_memory_limit(x.device) if plan_attention else None,
+            requested_limit=batch_size_limit,
+            query=x,
+            key_value=x,
+            attention_memory_limit=(
+                cuda_attention_memory_limit(x.device)
+                if plan_attention
+                else None
+            ),
             num_heads=self.num_heads,
         )
         for i, row_layer in enumerate(self.row_layers):

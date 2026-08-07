@@ -144,12 +144,14 @@ class ICLBlock(torch.nn.Module):
                 plan_attention and cache is not None and cache.is_recording
             ):
                 icl_batch_size_limit = attention_batch_size_limit(
-                    batch_size_limit,
-                    query,
-                    key_value,
-                    cuda_attention_memory_limit(x.device)
-                    if plan_attention
-                    else None,
+                    requested_limit=batch_size_limit,
+                    query=query,
+                    key_value=key_value,
+                    attention_memory_limit=(
+                        cuda_attention_memory_limit(x.device)
+                        if plan_attention
+                        else None
+                    ),
                     num_heads=self.num_heads,
                 )
             result = layer(
