@@ -81,6 +81,7 @@ class _RecipeExecution:
             if isinstance(module, TaskDispatch)
         )
         if task_dispatchers:
+            # Check total width because a target may contain multiple stypes.
             if any(group.size(-1) != 1 for group in y_ensemble):
                 raise ValueError(
                     "Expected the transformed target to contain exactly one "
