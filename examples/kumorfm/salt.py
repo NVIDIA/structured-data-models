@@ -1,3 +1,18 @@
+"""Benchmark KumoRFM on RelBench SALT autocomplete tasks.
+
+Without arguments, this runs all eight SALT tasks. Pass ``--task`` to run one
+task.
+
+Examples:
+    python examples/kumorfm/salt.py
+    python examples/kumorfm/salt.py --task sales-incoterms
+    python examples/kumorfm/salt.py --task sales-group --num_neighbors 32
+    python examples/kumorfm/salt.py --task item-plant --num_neighbors 32 32 8
+
+Each ``--num_neighbors`` value configures one hop: ``32`` is one hop, and
+``32 32 8`` is three hops.
+"""
+
 import argparse
 from collections.abc import Sequence
 from typing import cast
@@ -32,11 +47,12 @@ SALT_PRESETS = {
 }
 
 parser = argparse.ArgumentParser(
-    description="Benchmark KumoRFM on every RelBench SALT task"
+    description=__doc__,
+    formatter_class=argparse.RawDescriptionHelpFormatter,
 )
 parser.add_argument("--task", choices=SALT_PRESETS)
-parser.add_argument("--context_size", type=int, default=1_000)
-parser.add_argument("--num_neighbors", type=int)
+parser.add_argument("--context_size", type=int, default=10_000)
+parser.add_argument("--num_neighbors", type=int, nargs="+")
 parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--batch_size", type=int)
 parser.add_argument("--max_test_rows", type=int)
@@ -126,9 +142,7 @@ def run_task(task_name: str) -> None:
     context = torch.cat(task_tables[:2], dim=0)
     perm = torch.randperm(len(context))[: args.context_size]
     context = cast(TableTensor, context[perm])
-    num_neighbors = SALT_PRESETS[task_name][0]
-    if args.num_neighbors is not None:
-        num_neighbors = [args.num_neighbors] * 2 + num_neighbors[2:]
+    num_neighbors = args.num_neighbors or SALT_PRESETS[task_name][0]
     kwargs = {
         "task_link": {
             "task_column": task.entity_col,
