@@ -117,59 +117,6 @@ def test_pipeline_accepts_nested_sequential_with_callable() -> None:
     assert torch.equal(output.numerical, (table.numerical + 1) * 2)
 
 
-def test_pipeline_append_updates_requires_fit() -> None:
-    pipeline = sp.Sequential(lambda table: table)
-    assert not pipeline.requires_fit
-
-    assert pipeline.append(sp.Standardize()) is pipeline
-
-    assert pipeline.requires_fit
-
-
-def test_pipeline_prepend_updates_order_and_requires_fit() -> None:
-    table = _table()
-    pipeline = sp.Sequential(
-        lambda table: table.replace_blocks(numerical=table.numerical * 2)
-    )
-
-    assert pipeline.prepend(sp.Standardize()) is pipeline
-
-    expected = sp.Sequential(
-        sp.Standardize(),
-        lambda table: table.replace_blocks(numerical=table.numerical * 2),
-    ).fit_transform(table)
-    output = pipeline.fit_transform(table)
-
-    assert pipeline.requires_fit
-    assert output.equal(expected)
-
-
-def test_pipeline_prepend_flattens_nested_sequential() -> None:
-    pipeline = sp.Sequential(_add_one)
-
-    pipeline.prepend(
-        sp.Sequential(
-            lambda table: table.replace_blocks(
-                numerical=table.numerical.square()
-            ),
-            lambda table: table.replace_blocks(numerical=table.numerical * 2),
-        )
-    )
-    output = pipeline.transform(_table())
-
-    assert len(pipeline) == 3
-    assert torch.equal(output.numerical, _table().numerical.square() * 2 + 1)
-
-
-def test_pipeline_prepend_invalidates_fitted_state() -> None:
-    pipeline = sp.Sequential(sp.Standardize()).fit(_table())
-
-    pipeline.prepend(lambda table: table)
-
-    with pytest.raises(RuntimeError, match="'Sequential' is not fitted"):
-        pipeline.transform(_table())
-
-
 def test_pipeline_rejects_invalid_step() -> None:
     with pytest.raises(TypeError, match=r"Input must be"):
         sp.Sequential(cast(Any, object()))

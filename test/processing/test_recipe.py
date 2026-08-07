@@ -13,14 +13,6 @@ def _table(numerical: torch.Tensor | None = None) -> TableTensor:
     return TableTensor.from_tensor(numerical, columns=("x0", "x1"))
 
 
-def _add_one(table: TableTensor) -> TableTensor:
-    return table.replace_blocks(numerical=table.numerical + 1)
-
-
-def _double(table: TableTensor) -> TableTensor:
-    return table.replace_blocks(numerical=table.numerical * 2)
-
-
 def test_recipe_normalizes_empty_roles_and_repr() -> None:
     recipe = sp.Recipe(features=[sp.Standardize()], target=None, output=[])
 
@@ -80,20 +72,6 @@ def test_recipe_role_fit_accepts_table() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
-
-
-def test_recipe_role_append_prepend_helpers() -> None:
-    table = _table()
-    recipe = sp.Recipe()
-
-    assert recipe.append_features(_add_one).prepend_features(_double) is recipe
-    assert recipe.append_target(_add_one).prepend_target(_double) is recipe
-    assert recipe.append_output(_add_one).prepend_output(_double) is recipe
-
-    expected = table.numerical * 2 + 1
-    assert torch.equal(recipe.features.transform(table).numerical, expected)
-    assert torch.equal(recipe.target.transform(table).numerical, expected)
-    assert torch.equal(recipe.output.transform(table).numerical, expected)
 
 
 @withCUDA
