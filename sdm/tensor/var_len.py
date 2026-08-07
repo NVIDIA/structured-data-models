@@ -1001,20 +1001,36 @@ def _detach(inp: VarLenTensor) -> VarLenTensor:
 
 
 @VarLenTensor.implements(aten.is_pinned.default)
-def _is_pinned(inp: VarLenTensor) -> bool:
-    is_pinned = inp._data.is_pinned() and inp._offset.is_pinned()
-    return is_pinned and (inp._valid is None or inp._valid.is_pinned())
+def _is_pinned(
+    inp: VarLenTensor,
+    device: torch.device | None = None,
+) -> bool:
+    def is_pinned(tensor: Tensor) -> bool:
+        if device is None:
+            return tensor.is_pinned()
+        return tensor.is_pinned(device)
+
+    out = is_pinned(inp._data) and is_pinned(inp._offset)
+    return out and (inp._valid is None or is_pinned(inp._valid))
 
 
 @VarLenTensor.implements(aten._pin_memory.default)
-def _pin_memory(inp: VarLenTensor) -> VarLenTensor:
-    return inp.__class__(
-        data=inp._data.pin_memory(),
-        offset=inp._offset.pin_memory(),
-        valid=inp._valid.pin_memory() if inp._valid is not None else None,
+def _pin_memory(
+    inp: VarLenTensor,
+    device: torch.device | None = None,
+) -> VarLenTensor:
+    def pin_memory(tensor: Tensor) -> Tensor:
+        if device is None:
+            return tensor.pin_memory()
+        return tensor.pin_memory(device)
+
+    return inp.__class__._new_wrapper(
+        data=pin_memory(inp._data),
+        offset=pin_memory(inp._offset),
+        valid=pin_memory(inp._valid) if inp._valid is not None else None,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=inp._storage_offset,
     )
 
 
@@ -1023,9 +1039,9 @@ def _pin_memory_composite(
     inp: VarLenTensor,
     device: torch.device | None = None,
 ) -> VarLenTensor:
-    if _is_pinned(inp):
+    if _is_pinned(inp, device):
         return inp
-    return _pin_memory(inp)
+    return _pin_memory(inp, device)
 
 
 @VarLenTensor.implements(aten.isnan.default)
