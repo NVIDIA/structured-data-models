@@ -37,7 +37,7 @@ arrow_table = pq.read_table(data_path)
 arrow_table = arrow_table.drop_columns(readability_columns)
 table = sdm.TableTensor.from_arrow(
     table=arrow_table,
-    stypes=sdm.infer_stypes(arrow_table, allow_text=True),
+    stypes=sdm.infer_stypes(arrow_table, with_text=True),
     device=device,
 )
 

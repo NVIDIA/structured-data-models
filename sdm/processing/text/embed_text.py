@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 from typing import Any, cast
 
 import torch
@@ -11,51 +10,24 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
-class _SentenceTransformerRef:
-    """Hold a SentenceTransformer.
+class _ModuleReference(torch.nn.Module):
+    def __init__(self, module: torch.nn.Module) -> None:
+        super().__init__()
+        self.module = module
 
-    Shares it on deepcopy and reloads on unpickle.
-    """
-
-    def __init__(self, model_name: str) -> None:
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
-
-        self.model_name = model_name
-        self.model = SentenceTransformer(model_name)
-
-    def encode(self, strings: list[str]) -> Tensor:
-        return self.model.encode(
-            strings,
-            convert_to_tensor=True,
-        )
-
-    @property
-    def embedding_dim(self) -> int:
-        dim = self.model.get_embedding_dimension()
-        assert isinstance(dim, int)
-        return dim
-
-    def __deepcopy__(self, _memo: dict[int, Any]) -> _SentenceTransformerRef:
-        clone = copy.copy(self)
-        clone.model = self.model
-        return clone
-
-    def __getstate__(self) -> dict[str, Any]:
-        return {"model_name": self.model_name}
-
-    def __setstate__(self, state: dict[str, Any]) -> None:
-        self.__init__(state["model_name"])  # type: ignore[misc]
+    def __deepcopy__(self, memo: dict[int, Any]) -> _ModuleReference:
+        return type(self)(self.module)
 
 
 class EmbedText(Processor):
-    r"""Embed text columns with a sentence-transformer model.
+    r"""Embed text columns with a Sentence Transformers model.
 
     Args:
-        model_name: Name of a ``sentence-transformers`` model to load
-            from the HuggingFace Hub.
-        chunk_size: Maximum number of strings per model call. When set,
-            the flattened strings are split into chunks of this size to
-            avoid out-of-memory errors on large tables.
+        model_name: Model name or local path passed to
+            :class:`sentence_transformers.sentence_transformer.model.SentenceTransformer`.
+        batch_size: Batch size passed to
+            :meth:`~sentence_transformers.sentence_transformer.model.SentenceTransformer.encode`.
+            If ``None``, use the model default.
     """
 
     requires_fit = False
@@ -64,63 +36,67 @@ class EmbedText(Processor):
     def __init__(
         self,
         model_name: str,
-        chunk_size: int | None = None,
+        *,
+        batch_size: int | None = None,
     ) -> None:
         super().__init__()
-        self._model_ref = _SentenceTransformerRef(model_name)
-        self._chunk_size = chunk_size
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+
+        self.batch_size = batch_size
+        model: Any = SentenceTransformer(model_name)
+        self._model = _ModuleReference(model)
+        embedding_dim = model.get_embedding_dimension()
+        assert isinstance(embedding_dim, int)
+        self._embedding_dim = embedding_dim
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        device = table.device
-        dtype = torch.get_default_dtype()
-        col_names = table.columns[Stype.text]
+        columns = table.columns[Stype.text]
         batch_shape = table.text.shape[:-1]
-
-        out_col_names: list[str] = []
-        for col_name in col_names:
-            out_col_names.extend(
-                f"{col_name}_{i}" for i in range(self._model_ref.embedding_dim)
-            )
-
-        numerical = torch.empty(
-            (*batch_shape, len(out_col_names)),
-            dtype=dtype,
-            device=device,
+        output_columns = tuple(
+            f"{column}_{index}"
+            for column in columns
+            for index in range(self._embedding_dim)
         )
-        if numerical.numel() != 0:
-            num_cols = len(col_names)
-            flat_strings = cast(
+
+        if table.text.numel() == 0:
+            numerical = torch.empty(
+                (*batch_shape, len(output_columns)),
+                dtype=torch.get_default_dtype(),
+                device=table.device,
+            )
+        else:
+            text = cast(
                 StringTensor,
                 table.text.movedim(-1, 0).reshape(-1),
             )
-            all_strings = [
-                s or "" for s in flat_strings.to_arrow().to_pylist()
-            ]
-            chunk_size = self._chunk_size or len(all_strings)
+            strings = [value or "" for value in text.tolist()]
+            encode_kwargs = {}
+            if self.batch_size is not None:
+                encode_kwargs["batch_size"] = self.batch_size
+            model = cast(Any, self._model.module)
+            embeddings = cast(
+                Tensor,
+                model.encode(
+                    strings,
+                    show_progress_bar=False,
+                    convert_to_tensor=True,
+                    device=str(table.device),
+                    **encode_kwargs,
+                ),
+            ).to(dtype=torch.get_default_dtype(), device=table.device)
 
-            chunks: list[Tensor] = []
-            for start in range(0, len(all_strings), chunk_size):
-                chunks.append(
-                    self._model_ref.encode(
-                        all_strings[start : start + chunk_size],
-                    ).to(
-                        device=device,
-                        dtype=dtype,
-                    )
-                )
-            all_embeddings = torch.cat(chunks)
-            # (num_cols * batch_numel, embedding_dim)
+            # [num_columns, *batch_shape, embedding_dim]
             numerical = (
-                all_embeddings.reshape(
-                    num_cols,
+                embeddings.reshape(
+                    len(columns),
                     *batch_shape,
-                    self._model_ref.embedding_dim,
+                    self._embedding_dim,
                 )
                 .movedim(0, -2)
-                .reshape(*batch_shape, len(out_col_names))
+                .reshape(*batch_shape, len(output_columns))
             )
 
         return TableTensor(
-            columns={Stype.numerical: tuple(out_col_names)},
+            columns={Stype.numerical: output_columns},
             numerical=numerical,
         )
