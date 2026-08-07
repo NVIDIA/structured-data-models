@@ -1535,7 +1535,7 @@ def _materialize(
         inp._offset,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=inp._storage_offset,
     )
     start = function(start)
     assert start.storage_offset() == 0
@@ -1545,7 +1545,7 @@ def _materialize(
         inp._offset,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()) + 1,
+        storage_offset=inp._storage_offset + 1,
     )
     end = function(end)
     assert end.storage_offset() == 0
@@ -1572,13 +1572,13 @@ def _materialize(
             inp._valid,
             size=inp.size(),
             stride=inp.stride(),
-            storage_offset=int(inp.storage_offset()),
+            storage_offset=inp._storage_offset,
         )
         valid = function(valid).contiguous().view(-1)
 
     offset, index = _compact(start, end)
 
-    return inp.__class__(
+    return inp.__class__._new_wrapper(
         data=inp._data[index].to(
             device=device,
             dtype=dtype,
