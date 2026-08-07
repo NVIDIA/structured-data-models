@@ -834,10 +834,12 @@ def _select(inp: ColumnarTensor, dim: int, index: int) -> Tensor:
     if dim == inp.dim() - 1:
         return aten.alias.default(inp._columns[index])
 
+    layout = aten.select.int(_layout(inp), dim, index)
     return inp.__class__(
         columns=[column.select(dim, index) for column in inp._columns],
         size=(*inp.size()[:dim], *inp.size()[dim + 1 : -1]),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -851,12 +853,14 @@ def _slice(
     step: int = 1,
 ) -> ColumnarTensor:
     dim = _normalize_dim(inp, dim)
+    layout = aten.slice.Tensor(_layout(inp), dim, start, end, step)
 
     if dim == inp.dim() - 1:
         return inp.__class__(
             columns=inp._columns[slice(start, end, step)],
             size=inp.size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     return inp.__class__(
@@ -870,6 +874,7 @@ def _slice(
             *inp.size()[dim + 1 : -1],
         ),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -881,7 +886,27 @@ def _narrow(
     start: int,
     length: int,
 ) -> ColumnarTensor:
-    return _slice(inp, dim=dim, start=start, end=start + length)
+    dim = _normalize_dim(inp, dim)
+    layout = aten.narrow.default(_layout(inp), dim, start, length)
+
+    if dim == inp.dim() - 1:
+        start = start + inp.size(dim) if start < 0 else start
+        return inp.__class__(
+            columns=inp._columns[start : start + length],
+            size=inp.size()[:-1],
+            device=inp.device,
+            **_layout_kwargs(layout),
+        )
+
+    return inp.__class__(
+        columns=[
+            aten.narrow.default(column, dim, start, length)
+            for column in inp._columns
+        ],
+        size=layout.size()[:-1],
+        device=inp.device,
+        **_layout_kwargs(layout),
+    )
 
 
 @ColumnarTensor.implements(aten.unbind.int)
