@@ -9,6 +9,7 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.overrides import enable_reentrant_dispatch
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm.tensor.io import ARROW_TORCH_DTYPES, arrow_as_tensor, to_arrow
@@ -631,9 +632,14 @@ class VarLenTensor(Tensor):
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = {} if kwargs is None else kwargs
+        if not all(issubclass(cls, candidate) for candidate in types):
+            return NotImplemented
+
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
             with enable_reentrant_dispatch():  # Record autograd in `_data`.
-                return handler(*args, **(kwargs or {}))
+                out = handler(*args, **kwargs)
+            return return_and_correct_aliasing(func, args, kwargs, out)
 
         raise NotImplementedError(
             f"'{func}' is not supported for {cls.__name__!r}"
@@ -724,7 +730,7 @@ class VarLenTensor(Tensor):
 @VarLenTensor.implements(aten.alias.default)
 @preserve_view_inference_mode
 def _alias(inp: VarLenTensor) -> VarLenTensor:
-    return inp.__class__(
+    return inp.__class__._new_wrapper(
         data=aten.alias.default(inp._data),
         offset=aten.alias.default(inp._offset),
         valid=aten.alias.default(inp._valid)
@@ -732,7 +738,7 @@ def _alias(inp: VarLenTensor) -> VarLenTensor:
         else None,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=inp._storage_offset,
     )
 
 
