@@ -990,13 +990,13 @@ def _contiguous(
 @VarLenTensor.implements(aten.detach.default)
 @preserve_view_inference_mode
 def _detach(inp: VarLenTensor) -> VarLenTensor:
-    return inp.__class__(
+    return inp.__class__._new_wrapper(
         data=inp._data.detach(),
         offset=inp._offset,
         valid=inp._valid,
         size=inp.size(),
         stride=inp.stride(),
-        storage_offset=int(inp.storage_offset()),
+        storage_offset=inp._storage_offset,
     )
 
 

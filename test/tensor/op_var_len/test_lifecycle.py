@@ -139,3 +139,19 @@ def test_contiguous_obeys_copy_elision() -> None:
     assert out.is_contiguous()
     assert out.tolist() == view.tolist()
     assert not _is_alias(out, view)
+
+
+def test_detach_preserves_type_and_aliases_storage() -> None:
+    data = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    tensor = VarLenTensor(
+        data=data,
+        offset=torch.tensor([0, 1, 3]),
+        valid=None,
+        size=(2,),
+    )
+    out = aten.detach.default(tensor)
+
+    assert isinstance(out, VarLenTensor)
+    assert not out.requires_grad
+    assert out._data.data_ptr() == tensor._data.data_ptr()
+    assert _is_alias(out, tensor)
