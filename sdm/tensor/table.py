@@ -1460,8 +1460,10 @@ def _select(inp: TableTensor, dim: int, index: int) -> TableTensor:
         stype: tensor.select(dim, index) for stype, tensor in inp.items()
     }
 
+    layout = aten.select.int(_layout(inp), dim, index)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1486,6 +1488,7 @@ def _slice(
             f"Can't slice the column dimension of '{inp.__class__.__name__}'"
         )
 
+    layout = aten.slice.Tensor(_layout(inp), dim, start, end, step)
     blocks = {
         stype: aten.slice.Tensor(tensor, dim, start, end, step)
         for stype, tensor in inp.items()
@@ -1493,6 +1496,7 @@ def _slice(
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
@@ -1512,6 +1516,7 @@ def _narrow(
             f"Can't narrow the column dimension of '{inp.__class__.__name__}'"
         )
 
+    layout = aten.narrow.default(_layout(inp), dim, start, length)
     blocks = {
         stype: tensor.narrow(dim, start, length)
         for stype, tensor in inp.items()
@@ -1519,6 +1524,7 @@ def _narrow(
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
