@@ -10,35 +10,22 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
-class _ModelReference:
-    """Share a Sentence Transformers model across processor copies."""
-
+class _ModuleReference:
     def __init__(self, model_name: str) -> None:
-        try:
-            from sentence_transformers import (  # noqa: PLC0415
-                SentenceTransformer,
-            )
-        except ImportError as error:
-            raise ImportError(
-                "EmbedText requires the 'text' extra; install it with "
-                "'pip install structured-data-models[text]'."
-            ) from error
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
 
         self.model: Any = SentenceTransformer(model_name)
 
-    def __deepcopy__(self, _memo: dict[int, Any]) -> _ModelReference:
+    def __deepcopy__(self, memo: dict[int, Any]) -> _ModuleReference:
         return self
 
 
 class EmbedText(Processor):
     r"""Embed text columns with a Sentence Transformers model.
 
-    Each cell is encoded independently. Embeddings are concatenated in text
-    column order, and null cells are encoded as empty strings.
-
     Args:
         model_name: Model name or local path passed to
-            ``sentence_transformers.SentenceTransformer``.
+            :class:`sentence_transformers.SentenceTransformer`.
         batch_size: Number of text cells encoded in each model batch.
     """
 
@@ -49,7 +36,7 @@ class EmbedText(Processor):
         super().__init__()
         self.model_name = model_name
         self.batch_size = batch_size
-        self._model = _ModelReference(model_name)
+        self._model = _ModuleReference(model_name)
         embedding_dim = self._model.model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
