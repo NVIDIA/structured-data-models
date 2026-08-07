@@ -164,10 +164,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.recipe.Recipe"><code class="docutils literal notranslate"><span class="pre">Recipe</span></code></a><ul>
-<li><a class="reference internal" href="#sdm.processing.recipe.Recipe.bind"><code class="docutils literal notranslate"><span class="pre">Recipe.bind()</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#sdm.processing.recipe.Recipe"><code class="docutils literal notranslate"><span class="pre">Recipe</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -233,43 +230,20 @@ processors that do not explicitly document non-finite support. When
 <code class="docutils literal notranslate"><span class="pre">target</span></code> also selects its task-specific output route.</p>
 <p>Copy a task-aware recipe as a whole so its target remains connected to the
 output dispatchers.</p>
-<p>Bind a recipe to context data with <a class="reference internal" href="#sdm.processing.recipe.Recipe.bind" title="sdm.processing.recipe.Recipe.bind"><code class="xref py py-meth docutils literal notranslate"><span class="pre">bind()</span></code></a> to obtain a reusable
+<p>Bind a recipe to context data with <code class="xref py py-meth docutils literal notranslate"><span class="pre">bind()</span></code> to obtain a reusable
 execution for query, inverse-target, and output transforms.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to model inputs before the model.</p></li>
-<li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to labels. Invertible numerical target steps map
+<li><p><strong>features</strong> (<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><em>EnsembleProcessor</em></a>) – Steps applied to model inputs before the model.</p></li>
+<li><p><strong>target</strong> (<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><em>EnsembleProcessor</em></a>) – Steps applied to labels. Invertible numerical target steps map
 regression output back to the original space.</p></li>
-<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><em>Processor</em></a>) – Steps applied to stacked member outputs after member-local
+<li><p><strong>output</strong> (<a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><em>EnsembleProcessor</em></a>) – Steps applied to stacked member outputs after member-local
 mappings. Estimator reduction, when desired, is an explicit step
 in this pipeline.</p></li>
 </ul>
 </dd>
 </dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="sdm.processing.recipe.Recipe.bind">
-<span class="sig-name descname"><span class="pre">bind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><span class="pre">TableTensor</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">related_context_tables</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.task.RelatedTables"><span class="pre">RelatedTables</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_members</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_RecipeExecution</span></span></span><a class="headerlink" href="#sdm.processing.recipe.Recipe.bind" title="Link to this definition">#</a></dt>
-<dd><p>Bind this recipe to context data and return an execution.</p>
-<p>Fits <code class="docutils literal notranslate"><span class="pre">features</span></code> and <code class="docutils literal notranslate"><span class="pre">target</span></code> on the context and returns state for
-query, inverse-target, and output transforms. The caller’s recipe is
-left unchanged.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x_context</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Feature table for in-context examples.</p></li>
-<li><p><strong>y_context</strong> (<a class="reference internal" href="sdm.tensor.TableTensor.html#sdm.tensor.TableTensor" title="sdm.tensor.table.TableTensor"><em>TableTensor</em></a>) – Target table for in-context examples.</p></li>
-<li><p><strong>related_context_tables</strong> (<a class="reference internal" href="sdm.relational.RelatedTables.html#sdm.relational.RelatedTables" title="sdm.relational.task.RelatedTables"><em>RelatedTables</em></a><em> | </em><em>None</em>) – Related context tables, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
-<li><p><strong>num_members</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of ensemble members.</p></li>
-<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><em>Generator</em></a><em> | </em><em>None</em>) – Pseudorandom number generator for sampling.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><em>_RecipeExecution</em></p>
-</dd>
-</dl>
-</dd></dl>
-
 </dd></dl>
 
 </section>
@@ -298,7 +272,7 @@ left unchanged.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=a0b96b9e"></script>
+      <script src="../../_static/documentation_options.js?v=3051021c"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>

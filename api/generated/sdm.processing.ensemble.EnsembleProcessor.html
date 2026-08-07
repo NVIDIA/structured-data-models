@@ -165,6 +165,7 @@ data-aria-dark="Switch to auto color mode">
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
 <li><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor"><code class="docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a><ul>
+<li><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor.as_processor"><code class="docutils literal notranslate"><span class="pre">EnsembleProcessor.as_processor()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor.fit_ensemble"><code class="docutils literal notranslate"><span class="pre">EnsembleProcessor.fit_ensemble()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor.transform_ensemble"><code class="docutils literal notranslate"><span class="pre">EnsembleProcessor.transform_ensemble()</span></code></a></li>
 <li><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor.fit_transform_ensemble"><code class="docutils literal notranslate"><span class="pre">EnsembleProcessor.fit_transform_ensemble()</span></code></a></li>
@@ -224,6 +225,22 @@ are no-ops for supported stypes with empty blocks.</p>
 with one member.</p>
 <dl class="field-list simple">
 </dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="sdm.processing.ensemble.EnsembleProcessor.as_processor">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">as_processor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">processor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><span class="pre">EnsembleProcessor</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.as_processor" title="Link to this definition">#</a></dt>
+<dd><p>Normalize a processor-like object to a <a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>processor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – A processor-like object. An <a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a>
+is returned as-is, and any ordinary processor-like object is
+adapted to ensemble processing.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><em>EnsembleProcessor</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="sdm.processing.ensemble.EnsembleProcessor.fit_ensemble">
 <span class="sig-name descname"><span class="pre">fit_ensemble</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ensemble_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.ensemble.EnsembleTable"><span class="pre">EnsembleTable</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">generator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.13)"><span class="pre">Generator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Self" title="(in Python v3.14)"><span class="pre">Self</span></a></span></span><a class="headerlink" href="#sdm.processing.ensemble.EnsembleProcessor.fit_ensemble" title="Link to this definition">#</a></dt>
@@ -306,7 +323,7 @@ with one member.</p>
   </main>
 </div>
 
-      <script src="../../_static/documentation_options.js?v=a0b96b9e"></script>
+      <script src="../../_static/documentation_options.js?v=3051021c"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
