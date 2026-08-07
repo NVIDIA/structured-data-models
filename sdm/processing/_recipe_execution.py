@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import cast
+from typing import Literal, cast
 
 import torch
 
@@ -12,6 +12,7 @@ from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
     Recipe,
+    TaskDispatch,
 )
 from sdm.tensor import EnsembleTable
 
@@ -72,6 +73,44 @@ class _RecipeExecution:
             EnsembleTable(y, num_members=num_members),
             generator=generator,
         )
+
+        task_dispatchers = tuple(
+            module
+            for processor in (recipe.features, recipe.output)
+            for module in processor.modules()
+            if isinstance(module, TaskDispatch)
+        )
+        if task_dispatchers:
+            tasks: set[Literal["classification", "regression"]] = set()
+            for group in y_ensemble:
+                if group.size(-1) != 1:
+                    raise ValueError(
+                        "Expected the transformed target to contain exactly "
+                        f"one column (got {group.size(-1)} columns)"
+                    )
+                if group.numerical.size(-1) == 1:
+                    tasks.add("regression")
+                elif group.categorical.size(-1) == 1:
+                    tasks.add("classification")
+                else:
+                    stypes = ", ".join(
+                        f"{str(stype)!r}" for stype in group.active_stypes
+                    )
+                    raise ValueError(
+                        "Expected the transformed target to contain exactly "
+                        "one numerical or categorical column "
+                        f"(got {stypes})"
+                    )
+
+            if len(tasks) != 1:
+                raise ValueError(
+                    "'Recipe.target' must resolve to a single task type "
+                    "across ensemble members"
+                )
+
+            task = next(iter(tasks))
+            for task_dispatcher in task_dispatchers:
+                task_dispatcher._task = task
 
         related_processors: Mapping[str, EnsembleProcessor] = {}
         related_ensembles: Mapping[str, EnsembleTable] = {}

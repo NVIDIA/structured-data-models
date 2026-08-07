@@ -1,8 +1,16 @@
+import pytest
 import torch
 
 from sdm import CategoricalTensor, StringTensor, Stype, TableTensor
 from sdm.models import TabICLv2
-from sdm.processing import InvertibleMixin, Recipe, Sequential, Standardize
+from sdm.processing import (
+    Identity,
+    InvertibleMixin,
+    Recipe,
+    Sequential,
+    Standardize,
+    TaskDispatch,
+)
 from sdm.testing import withCUDA
 
 
@@ -68,6 +76,11 @@ def test_recipe_role_fit_accepts_table() -> None:
         torch.zeros(2),
         atol=1e-6,
     )
+
+
+def test_recipe_rejects_task_dispatch_in_target() -> None:
+    with pytest.raises(ValueError, match=r"not supported.*Recipe.target"):
+        Recipe(target=TaskDispatch(regression=Identity()))
 
 
 @withCUDA

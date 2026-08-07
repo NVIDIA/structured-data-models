@@ -2,105 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
 
-import torch
-
-from sdm import Stype
 from sdm.processing import (
-    EnsembleInvertibleMixin,
     EnsembleProcessor,
     Identity,
     Processor,
     TaskDispatch,
 )
-from sdm.tensor import EnsembleTable
-
-
-class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
-    """Resolve linked task dispatchers while fitting a recipe target."""
-
-    supported_stypes = frozenset(Stype)
-
-    def __init__(
-        self,
-        processor: EnsembleProcessor,
-        task_dispatchers: tuple[TaskDispatch, ...],
-    ) -> None:
-        super().__init__()
-        self.processor = processor
-        self._task_dispatchers = task_dispatchers
-
-    def _fit_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> None:
-        self._fit_transform_ensemble(ensemble_table, generator=generator)
-
-    def _fit_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-        *,
-        generator: torch.Generator | None = None,
-    ) -> EnsembleTable:
-
-        ensemble_table = self.processor.fit_transform_ensemble(
-            ensemble_table, generator=generator
-        )
-
-        tasks: set[Literal["classification", "regression"]] = set()
-        for group in ensemble_table:
-            if group.size(-1) != 1:
-                raise ValueError(
-                    "Expected the transformed target to contain exactly one "
-                    f"column (got {group.size(-1)} columns)"
-                )
-            if group.numerical.size(-1) == 1:
-                tasks.add("regression")
-            elif group.categorical.size(-1) == 1:
-                tasks.add("classification")
-            else:
-                stypes = ", ".join(
-                    f"{str(stype)!r}" for stype in group.active_stypes
-                )
-                raise ValueError(
-                    "Expected the transformed target to contain exactly one "
-                    f"numerical or categorical column (got {stypes})"
-                )
-
-        if len(tasks) != 1:
-            raise ValueError(
-                "'Recipe.target' must resolve to a single task type across "
-                "ensemble members"
-            )
-
-        task = next(iter(tasks))
-        for task_dispatcher in self._task_dispatchers:
-            task_dispatcher._task = task
-
-        return ensemble_table
-
-    def _transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        return self.processor.transform_ensemble(ensemble_table)
-
-    def _inverse_transform_ensemble(
-        self,
-        ensemble_table: EnsembleTable,
-    ) -> EnsembleTable:
-        if not isinstance(self.processor, EnsembleInvertibleMixin):
-            raise AttributeError(
-                f"{self.processor.__class__.__name__!r} object has no "
-                "attribute 'inverse_transform_ensemble'"
-            )
-        return self.processor.inverse_transform_ensemble(ensemble_table)
-
-    def __repr__(self, *, indent: int = 0) -> str:
-        return self.processor.__repr__(indent=indent)
 
 
 @dataclass(init=False, repr=False)
@@ -126,12 +34,9 @@ class Recipe:
     ``recipe.features.transform(table)`` or
     ``recipe.target.inverse_transform(prediction)``. Recipes do not infer each
     step's non-finite input contract; order steps so values are imputed before
-    processors that do not explicitly document non-finite support. When
-    ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
-    ``target`` also selects its task-specific output route.
-
-    Copy a task-aware recipe as a whole so its target remains connected to the
-    output dispatchers.
+    processors that do not explicitly document non-finite support. A
+    :class:`~sdm.processing.TaskDispatch` in ``features`` or ``output`` is
+    selected from the transformed target during model execution.
 
     Bind a recipe to context data with :meth:`bind` to obtain a reusable
     execution for query, inverse-target, and output transforms.
@@ -172,14 +77,6 @@ class Recipe:
             )
         if self.output.requires_fit:
             raise ValueError("'Recipe.output' should not require fitting")
-
-        task_dispatchers = tuple(
-            m for m in self.features.modules() if isinstance(m, TaskDispatch)
-        ) + tuple(
-            m for m in self.output.modules() if isinstance(m, TaskDispatch)
-        )
-        if len(task_dispatchers) > 0:
-            self.target = _TaskResolver(self.target, task_dispatchers)
 
     def __repr__(self) -> str:
         return (

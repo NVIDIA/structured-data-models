@@ -9,12 +9,16 @@ from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
     Choice,
+    Identity,
     InvertibleMixin,
     Processor,
     Recipe,
     ReduceEstimators,
+    Sequential,
+    Softmax,
     Standardize,
     StypeDispatch,
+    TaskDispatch,
 )
 
 
@@ -306,6 +310,51 @@ def test_related_table_preprocessing_forward_and_cache() -> None:
     torch.testing.assert_close(
         model.calls[-1].related_query_tables.tables["users"].numerical,
         torch.tensor([[3.0]]),
+    )
+
+
+def test_task_dispatch_resolves_during_recipe_execution() -> None:
+    model = _RecordingModel()
+    recipe = Recipe(
+        features=Sequential(
+            Identity(),
+            TaskDispatch(
+                regression=Sequential(StypeDispatch(numerical=Standardize()))
+            ),
+        ),
+        output=Sequential(
+            Identity(),
+            TaskDispatch(regression=Softmax()),
+        ),
+    )
+
+    output = model(
+        _table([0.0, 2.0], [1, 2], value_column="feature"),
+        TableTensor.from_tensor(torch.tensor([[0.0], [1.0]])),
+        _table([3.0], [3], value_column="feature"),
+        _related_tables(query=False),
+        _related_tables(query=True),
+        recipe=recipe,
+    )
+
+    call = model.calls[0]
+    assert call.x_query is not None
+    assert call.related_query_tables is not None
+    torch.testing.assert_close(
+        call.x_query.numerical,
+        torch.tensor([[2.0]]),
+    )
+    torch.testing.assert_close(
+        call.related_query_tables.tables["users"].numerical,
+        torch.tensor([[3.0]]),
+    )
+    torch.testing.assert_close(
+        call.related_query_tables.tables["orders"].numerical,
+        torch.tensor([[2.0]]),
+    )
+    torch.testing.assert_close(
+        output.numerical,
+        torch.ones_like(output.numerical),
     )
 
 

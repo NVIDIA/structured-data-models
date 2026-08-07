@@ -76,7 +76,7 @@ def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
     dispatch = TaskDispatch(regression=Identity())
     output = _numerical_table()
 
-    with pytest.raises(RuntimeError, match=r"recipe\.target\.fit"):
+    with pytest.raises(RuntimeError, match="model execution"):
         dispatch.transform(output)
     dispatch._task = "classification"
     assert dispatch.transform(output).equal(output)
