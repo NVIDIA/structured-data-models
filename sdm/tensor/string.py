@@ -546,6 +546,19 @@ def _sort(
     *,
     stable: bool | None = None,
 ) -> tuple[StringTensor, Tensor]:
+    if inp.dim() == 0:
+        if dim not in (-1, 0):
+            raise IndexError(
+                "Dimension out of range (expected to be in range of "
+                "[-1, 0], but got "
+                f"{dim})"
+            )
+        return cast(StringTensor, inp.clone()), torch.zeros(
+            (),
+            dtype=torch.int64,
+            device=inp.device,
+        )
+
     if dim < -inp.dim() or dim >= inp.dim():
         raise IndexError(
             f"Dimension out of range (expected to be in range of "
