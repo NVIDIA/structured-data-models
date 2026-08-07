@@ -1,5 +1,6 @@
 from typing import Literal, cast
 
+import torch
 from torch.nn import ModuleDict
 
 from sdm import Stype
@@ -38,6 +39,41 @@ class TaskDispatch(EnsembleProcessor):
             self.processors[task] = processor
 
         self._task: Literal["classification", "regression"] | None = None
+
+    def _fit_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> None:
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; call "
+                "'recipe.target.fit()' before transforming model output."
+            )
+        if self._task in self.processors:
+            self.processors[self._task].fit_ensemble(
+                ensemble_table,
+                generator=generator,
+            )
+
+    def _fit_transform_ensemble(
+        self,
+        ensemble_table: EnsembleTable,
+        *,
+        generator: torch.Generator | None = None,
+    ) -> EnsembleTable:
+        if self._task is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__!r} has no resolved task; call "
+                "'recipe.target.fit()' before transforming model output."
+            )
+        if self._task not in self.processors:
+            return ensemble_table
+        return self.processors[self._task].fit_transform_ensemble(
+            ensemble_table,
+            generator=generator,
+        )
 
     def _transform_ensemble(
         self,
