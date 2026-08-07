@@ -1,3 +1,6 @@
+import time
+from statistics import median
+
 import pytest
 import torch
 
@@ -118,6 +121,7 @@ def test_forward(
     assert all(cache.size() > 0 for cache in caches)
     assert model.predict(x_query).allclose(out)
     assert all(cache.size() > 0 for cache in caches)
+    assert not model._caches_pinned
     model.clear()
 
 
@@ -167,6 +171,195 @@ def test_num_estimators(batch_shape: tuple[int, ...]) -> None:
     assert out.size() == (*batch_shape, R_query, 999)
     assert model._caches is caches
     assert all(cache.size() > 0 and cache.is_cpu for cache in caches)
+    assert not model._caches_pinned
+    model.clear()
+
+
+@onlyCUDA
+def test_tabiclv2_cache_prefetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    device = torch.device("cuda:0")
+    model = TabICLv2(pretrained=False, device=device)
+    R_context, R_query, C = 5, 3, 6
+    x_context = torch.randn(R_context, C, device=device)
+    x_query = torch.randn(R_query, C, device=device)
+    y_context = torch.randn(R_context, 1, device=device)
+
+    torch.manual_seed(1)
+    expected = model(
+        x_context,
+        y_context,
+        x_query,
+        num_estimators=3,
+    )
+
+    torch.manual_seed(1)
+    model.fit(x_context, y_context, num_estimators=3)
+    assert model._caches_pinned
+    assert model._caches is not None
+    assert all(cache.is_cpu for cache in model._caches)
+
+    original_to = Cache.to
+    original_record_stream = Cache.record_stream
+    original_forward = model.reg_model.forward
+    transfer_calls: list[tuple[bool, torch.cuda.Stream]] = []
+    record_calls: list[torch.cuda.Stream] = []
+    order: list[str] = []
+    cache_indices = {id(cache): i for i, cache in enumerate(model._caches)}
+    forward_index = 0
+
+    def track_transfer(
+        cache: Cache,
+        target: torch.device | str | None,
+        *,
+        non_blocking: bool = False,
+    ) -> Cache:
+        if (cache_index := cache_indices.get(id(cache))) is not None:
+            order.append(f"transfer{cache_index}")
+        transfer_calls.append(
+            (non_blocking, torch.cuda.current_stream(device))
+        )
+        return original_to(
+            cache,
+            target,
+            non_blocking=non_blocking,
+        )
+
+    def track_record_stream(
+        cache: Cache,
+        stream: torch.cuda.Stream,
+    ) -> None:
+        record_calls.append(stream)
+        original_record_stream(cache, stream)
+
+    def track_forward(
+        x: torch.Tensor,
+        y: torch.Tensor,
+        *,
+        cache: Cache | None = None,
+        num_classes: int | None = None,
+    ) -> torch.Tensor:
+        nonlocal forward_index
+        order.append(f"forward{forward_index}")
+        forward_index += 1
+        return original_forward(
+            x,
+            y,
+            cache=cache,
+            num_classes=num_classes,
+        )
+
+    monkeypatch.setattr(Cache, "to", track_transfer)
+    monkeypatch.setattr(Cache, "record_stream", track_record_stream)
+    monkeypatch.setattr(model.reg_model, "forward", track_forward)
+
+    compute_stream = torch.cuda.current_stream(device)
+    prefetched = model.predict(x_query)
+    transfer_stream = model._cache_transfer_stream
+    assert transfer_stream is not None
+    assert transfer_stream != compute_stream
+    assert transfer_calls == [(True, transfer_stream)] * 3
+    assert record_calls == [compute_stream] * 3
+    assert order == [
+        "transfer0",
+        "transfer1",
+        "forward0",
+        "transfer2",
+        "forward1",
+        "forward2",
+    ]
+    release_event = model._cache_release_event
+    assert release_event is not None
+
+    model.clear()
+    assert release_event.query()
+    assert model._cache_release_event is None
+    assert not model._caches_pinned
+    assert prefetched.allclose(expected)
+
+
+@onlyCUDA
+def test_tabiclv2_cache_prefetch_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    device = torch.device("cuda:0")
+    model = TabICLv2(pretrained=False, device=device)
+    x_context = torch.randn(5, 6, device=device)
+    x_query = torch.randn(3, 6, device=device)
+    y_context = torch.randn(5, 1, device=device)
+    model.fit(x_context, y_context, num_estimators=2)
+
+    def fail_forward(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("injected replay failure")
+
+    monkeypatch.setattr(model.reg_model, "forward", fail_forward)
+    with pytest.raises(RuntimeError, match="injected replay failure"):
+        model.predict(x_query)
+
+    assert model._cache_release_event is None
+    assert model._cache_transfer_stream is not None
+    assert model._cache_transfer_stream.query()
+    assert torch.cuda.current_stream(device).query()
+
+
+@onlyCUDA
+def test_tabiclv2_cache_prefetch_benchmark(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    device = torch.device("cuda:0")
+    model = TabICLv2(pretrained=False, device=device)
+    x_context = torch.randn(128, 16, device=device)
+    x_query = torch.randn(64, 16, device=device)
+    y_context = torch.randn(128, 1, device=device)
+    model.fit(x_context, y_context, num_estimators=3)
+
+    assert model._caches is not None
+    cache_bytes = sum(cache.size() for cache in model._caches)
+    assert cache_bytes > 0
+    assert model._caches_pinned
+
+    def measure(prefetch: bool) -> tuple[torch.Tensor, float, int]:
+        monkeypatch.setattr(
+            model,
+            "_should_prefetch_caches",
+            lambda _: prefetch,
+        )
+        torch.cuda.synchronize(device)
+        baseline_bytes = torch.cuda.memory_allocated(device)
+        torch.cuda.reset_peak_memory_stats(device)
+        start = time.perf_counter()
+        out = model.predict(x_query)
+        torch.cuda.synchronize(device)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        peak_bytes = torch.cuda.max_memory_allocated(device) - baseline_bytes
+        return out, elapsed_ms, peak_bytes
+
+    measure(prefetch=False)
+    measure(prefetch=True)
+    times: dict[bool, list[float]] = {False: [], True: []}
+    peaks: dict[bool, list[int]] = {False: [], True: []}
+    outputs: dict[bool, torch.Tensor] = {}
+    for i in range(5):
+        for prefetch in (False, True) if i % 2 == 0 else (True, False):
+            out, elapsed_ms, peak_bytes = measure(prefetch)
+            outputs[prefetch] = out
+            times[prefetch].append(elapsed_ms)
+            peaks[prefetch].append(peak_bytes)
+
+    sync_ms = median(times[False])
+    async_ms = median(times[True])
+    sync_peak = max(peaks[False])
+    async_peak = max(peaks[True])
+    assert outputs[False].allclose(outputs[True])
+    assert sync_ms > 0
+    assert async_ms > 0
+    assert sync_peak > 0
+    assert async_peak > 0
+    print(  # noqa: T201
+        f"cache={cache_bytes / 2**20:.2f} MiB, "
+        f"sync={sync_ms:.2f} ms, async={async_ms:.2f} ms, "
+        f"speedup={sync_ms / async_ms:.2f}x, "
+        f"peak_gpu={sync_peak / 2**20:.2f}/{async_peak / 2**20:.2f} MiB"
+    )
     model.clear()
 
 
