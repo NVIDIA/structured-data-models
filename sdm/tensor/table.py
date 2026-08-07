@@ -1531,22 +1531,26 @@ def _narrow(
 
 @TableTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: TableTensor, dim: int = 0) -> tuple[TableTensor, ...]:
+def _unbind(inp: TableTensor, dim: int = 0) -> list[TableTensor]:
     if _is_column_dim(inp, dim):
+        if inp.size(dim) == 0:
+            return []
         return _split(inp, split_size=1, dim=dim)
 
     tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
         stype: tensor.unbind(dim) for stype, tensor in inp.items()
     }
+    layouts = aten.unbind.int(_layout(inp), dim)
 
     stypes = tuple(tensors_dict.keys())
-    return tuple(
+    return [
         inp.__class__(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+            **_layout_kwargs(layout),
             **dict(zip(stypes, blocks)),
         )
-        for blocks in zip(*tensors_dict.values())
-    )
+        for blocks, layout in zip(zip(*tensors_dict.values()), layouts)
+    ]
 
 
 @TableTensor.implements(aten.split.Tensor)
@@ -1555,34 +1559,55 @@ def _split(
     inp: TableTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[TableTensor, ...]:
+) -> list[TableTensor]:
     if _is_column_dim(inp, dim):
         if split_size != 1:
             raise RuntimeError(
                 f"Can only split the column dimension of "
                 f"{inp.__class__.__name__!r} with split size 1"
             )
-        return tuple(
-            inp.__class__(
-                columns={stype: (name,)},
-                **{stype: tensor.narrow(-1, i, 1)},
-            )
+        layouts = aten.split.Tensor(_layout(inp), split_size, dim)
+        columns = tuple(
+            (stype, tensor, i, name)
             for stype, tensor in inp.items()
             for i, name in enumerate(inp._columns[stype])
         )
+        if len(columns) == 0:
+            return [
+                inp.__class__(
+                    size=inp.size()[:-1],
+                    columns=cast(
+                        dict[StypeLike, tuple[str, ...]],
+                        inp._columns,
+                    ),
+                    device=inp.device,
+                    **_layout_kwargs(layout),
+                )
+                for layout in layouts
+            ]
+        return [
+            inp.__class__(
+                columns={stype: (name,)},
+                **_layout_kwargs(layout),
+                **{stype: tensor.narrow(-1, i, 1)},
+            )
+            for (stype, tensor, i, name), layout in zip(columns, layouts)
+        ]
 
     tensors_dict: dict[Stype, tuple[Tensor, ...]] = {
         stype: tensor.split(split_size, dim) for stype, tensor in inp.items()
     }
+    layouts = aten.split.Tensor(_layout(inp), split_size, dim)
 
     stypes = tuple(tensors_dict.keys())
-    return tuple(
+    return [
         inp.__class__(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+            **_layout_kwargs(layout),
             **dict(zip(stypes, blocks)),
         )
-        for blocks in zip(*tensors_dict.values())
-    )
+        for blocks, layout in zip(zip(*tensors_dict.values()), layouts)
+    ]
 
 
 @TableTensor.implements(aten.split.sizes)
@@ -1593,7 +1618,7 @@ def _split_with_sizes(
     inp: TableTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[TableTensor, ...]:
+) -> list[TableTensor]:
     if _is_column_dim(inp, dim):
         raise RuntimeError(
             f"Can't split the column dimension of {inp.__class__.__name__!r}"
@@ -1603,15 +1628,17 @@ def _split_with_sizes(
     blocks_dict: dict[Stype, tuple[Tensor, ...]] = {
         stype: tensor.split(split_sizes, dim) for stype, tensor in inp.items()
     }
+    layouts = aten.split_with_sizes.default(_layout(inp), split_sizes, dim)
 
     stypes = tuple(blocks_dict.keys())
-    return tuple(
+    return [
         inp.__class__(
             columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+            **_layout_kwargs(layout),
             **dict(zip(stypes, blocks)),
         )
-        for blocks in zip(*blocks_dict.values())
-    )
+        for blocks, layout in zip(zip(*blocks_dict.values()), layouts)
+    ]
 
 
 @TableTensor.implements(aten.index_select.default)
