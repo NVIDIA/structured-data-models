@@ -56,11 +56,20 @@ jobs:
           fi
 
       - name: Install package
-        env:
-          UV_EXCLUDE_NEWER: 0 days
         run: |
           RAPIDS_INDEX_URL="${NV_GHA_RUNNERS_PYPI_ANACONDA_CACHE_URL:-https://pypi.nvidia.com}"
           uv pip install \
+            --exclude-newer-package=cudf-cu13=false \
+            --exclude-newer-package=libcudf-cu13=false \
+            --exclude-newer-package=libcugraph-cu13=false \
+            --exclude-newer-package=libcuvs-cu13=false \
+            --exclude-newer-package=libkvikio-cu13=false \
+            --exclude-newer-package=libraft-cu13=false \
+            --exclude-newer-package=librmm-cu13=false \
+            --exclude-newer-package=pylibcudf-cu13=false \
+            --exclude-newer-package=pylibcugraph-cu13=false \
+            --exclude-newer-package=pylibraft-cu13=false \
+            --exclude-newer-package=rmm-cu13=false \
             --torch-backend=cu130 \
             --extra-index-url="${RAPIDS_INDEX_URL}" \
             --index-strategy=unsafe-best-match \
