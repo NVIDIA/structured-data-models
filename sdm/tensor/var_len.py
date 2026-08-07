@@ -1101,6 +1101,23 @@ def _unsafe_view(
     return _from_layout_view(inp, view)
 
 
+@VarLenTensor.implements(aten.as_strided.default)
+@preserve_view_inference_mode
+def _as_strided(
+    inp: VarLenTensor,
+    size: Sequence[int | torch.SymInt],
+    stride: Sequence[int | torch.SymInt],
+    storage_offset: int | torch.SymInt | None = None,
+) -> VarLenTensor:
+    view = aten.as_strided.default(
+        _layout_view(inp),
+        size,
+        stride,
+        storage_offset,
+    )
+    return _from_layout_view(inp, view)
+
+
 @VarLenTensor.implements(aten.reshape.default)
 def _reshape(
     inp: VarLenTensor,
