@@ -914,7 +914,7 @@ class TableTensor(Tensor):
         self,
         memory_format: torch.memory_format = torch.contiguous_format,
     ) -> bool:
-        return all(
+        return Tensor.is_contiguous(self, memory_format=memory_format) and all(
             tensor.is_contiguous(memory_format=memory_format)
             for _, tensor in self.items()
         )
@@ -1179,12 +1179,14 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> TableTensor:
+    layout = _layout(inp).contiguous(memory_format=memory_format)
     blocks = {
         stype: tensor.contiguous(memory_format=memory_format)
         for stype, tensor in inp.items()
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
