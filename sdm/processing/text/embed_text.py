@@ -21,6 +21,9 @@ class _ModuleReference(torch.nn.Module):
 class EmbedText(Processor):
     r"""Embed text columns with a Sentence Transformers model.
 
+    Each text column is replaced by one numerical column per embedding
+    dimension. Missing text values are encoded as empty strings.
+
     Args:
         model_name: Model name or local path passed to
             :class:`sentence_transformers.sentence_transformer.model.SentenceTransformer`.

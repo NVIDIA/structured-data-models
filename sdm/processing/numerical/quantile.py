@@ -87,6 +87,9 @@ class QuantileTransform(Processor, InvertibleMixin):
         n_quantiles: Maximum number of quantiles to compute.
         subsample: Maximum number of rows to use for quantile computation.
         output_distribution: Distribution to map the empirical quantiles to.
+            ``"uniform"`` maps values into ``[0, 1]``. ``"normal"`` maps them
+            through the inverse normal cumulative distribution and clips its
+            tails to finite values.
     """
 
     supported_stypes = frozenset({Stype.numerical})

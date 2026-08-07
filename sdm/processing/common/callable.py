@@ -5,7 +5,12 @@ from sdm.processing import Processor
 
 
 class Callable(Processor):
-    """Adapt a stateless callable to the :class:`Processor` interface."""
+    """Adapt a stateless callable to the :class:`Processor` interface.
+
+    Args:
+        function: Callable that receives and returns a
+            :class:`~sdm.tensor.TableTensor`.
+    """
 
     supported_stypes = frozenset(Stype)
     requires_fit = False

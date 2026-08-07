@@ -128,7 +128,11 @@ def _yeojohnson_log_likelihood(
 
 
 class PowerTransform(Processor, InvertibleMixin):
-    """Apply a feature-wise Yeo-Johnson power transform.
+    """Apply the Yeo-Johnson (2000) power transform feature-wise.
+
+    See the `original paper <https://doi.org/10.1093/biomet/87.4.954>`_.
+    Inverse transformation clips otherwise infinite reconstructions to the
+    fitted per-feature maxima.
 
     Args:
         standardize: If ``True``, zero-mean and unit-variance the transformed

@@ -9,8 +9,12 @@ from sdm.processing import Processor
 class PCA(Processor):
     r"""Project numerical columns onto their principal components.
 
+    Fitting caps the number of output components at the number of requested
+    components, fitted rows, and input numerical columns. Output columns are
+    named ``pca_0``, ``pca_1``, and so on.
+
     Args:
-        num_components: Number of principal components to keep.
+        num_components: Maximum number of principal components to keep.
     """
 
     supported_stypes = frozenset({Stype.numerical})

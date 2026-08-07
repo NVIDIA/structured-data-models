@@ -9,7 +9,8 @@ class SelectColumns(Processor):
     r"""Select a subset of columns for each semantic type.
 
     Args:
-        max_columns: The maximum number of columns to keep.
+        max_columns: Maximum number of columns to keep independently in each
+            semantic block.
         mode: The column selection mode.
             ``"first"`` keeps the first columns according to their order within
             each semantic block.

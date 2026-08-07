@@ -15,8 +15,14 @@ US_PER_DAY = 24 * US_PER_HOUR
 class AddCalendarFields(Processor):
     r"""Add numerical calendar fields derived from datetime columns.
 
+    The original datetime columns are retained. One numerical column is
+    appended for each requested field and datetime column, in input order.
+    Minute and hour are zero-based, weekday uses Monday as zero, and day and
+    month are also zero-based. Missing datetime values produce ``NaN``.
+
     Args:
-        fields: The calendar fields to add.
+        fields: Calendar fields to append. Supported values are ``"minute"``,
+            ``"hour"``, ``"weekday"``, ``"day_of_month"``, and ``"month"``.
     """
 
     supported_stypes = frozenset({Stype.datetime})
