@@ -40,11 +40,6 @@ dependencies = [
     "typing_extensions",
 ]
 
-[project.optional-dependencies]
-text = [
-    "sentence-transformers>=5.4",
-]
-
 [project.urls]
 Download = "https://github.com/NVIDIA/structured-data-models/releases"
 Homepage = "https://github.com/NVIDIA/structured-data-models"
