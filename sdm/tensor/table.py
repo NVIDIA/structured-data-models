@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import functools
 import math
 from collections import defaultdict
@@ -908,6 +909,27 @@ class TableTensor(Tensor):
             self.storage_offset(),
         )
         return (self.__class__, args)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> TableTensor:
+        if id(self) in memo:
+            return memo[id(self)]
+
+        with torch.inference_mode(self.is_inference()):
+            out = self.__class__(
+                columns=cast(
+                    Mapping[StypeLike, Sequence[str]],
+                    self._columns,
+                ),
+                numerical=copy.deepcopy(self._numerical, memo),
+                categorical=copy.deepcopy(self._categorical, memo),
+                datetime=copy.deepcopy(self._datetime, memo),
+                text=copy.deepcopy(self._text, memo),
+                id=copy.deepcopy(self._id, memo),
+                _stride=self.stride(),
+                _storage_offset=self.storage_offset(),
+            )
+        memo[id(self)] = out
+        return out
 
     @classmethod
     def __torch_dispatch__(  # type: ignore
