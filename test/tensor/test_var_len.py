@@ -402,6 +402,9 @@ def test_isnan_isfinite() -> None:
     assert out.dtype == torch.bool
     assert out.equal(torch.tensor([True, False, True]))
 
+    out[0] = False
+    assert tensor.tolist() == [[1, 2], None, [3]]
+
 
 def test_masked_select() -> None:
     tensor = VarLenTensor(
