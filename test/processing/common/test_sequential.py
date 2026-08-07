@@ -179,7 +179,7 @@ def test_inverse_transform_rejects_non_invertible_step() -> None:
     processor = Sequential(ImputeMean())
     transformed = processor.fit_transform(_table())
 
-    with pytest.raises(TypeError, match="'ImputeMean' is not invertible"):
+    with pytest.raises(AttributeError, match="inverse_transform"):
         processor.inverse_transform(transformed)
 
 

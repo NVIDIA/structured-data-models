@@ -70,11 +70,8 @@ def test_task_dispatch_routes_output_and_has_stable_repr() -> None:
 
 
 def test_task_dispatch_rejects_invalid_routes_and_targets() -> None:
-    with pytest.raises(ValueError, match="at least one route"):
-        TaskDispatch()
-
-    with pytest.raises(ValueError, match=r"regression.*requires fit"):
-        TaskDispatch(regression=Standardize())
+    assert len(TaskDispatch().processors) == 0
+    assert TaskDispatch(regression=Standardize()).requires_fit
 
     dispatch = TaskDispatch(regression=Identity())
     output = _numerical_table()

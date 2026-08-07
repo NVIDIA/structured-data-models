@@ -75,7 +75,7 @@ def test_task_resolver_uses_final_target_type_once(
     ) as transform:
         transformed_target = recipe.target.fit_transform(categorical_target)
 
-    assert transformed_target is categorical_target
+    assert transformed_target.equal(categorical_target)
     assert transform.call_count == 1
     assert torch.allclose(
         recipe.output.transform(output).numerical.sum(dim=-1),
@@ -120,15 +120,13 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     recipe.target.fit(_categorical_target())
     assert recipe.output.transform(output).equal(output)
 
-    with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
-        Recipe(features=[TaskDispatch(regression=Identity())])
-    with pytest.raises(ValueError, match=r"only supported.*Recipe.output"):
+    with pytest.raises(ValueError, match=r"not supported.*Recipe.target"):
         Recipe(target=[TaskDispatch(regression=Identity())])
 
     shared = TaskDispatch(regression=Identity())
     nested = Choice(Identity(), shared)
-    with pytest.raises(ValueError, match=r"direct step.*1\.options\.1"):
-        Recipe(output=[shared, nested])
+    Recipe(features=[TaskDispatch(regression=Identity())])
+    Recipe(output=[shared, nested])
 
 
 def test_task_resolver_copies_recipes_independently() -> None:

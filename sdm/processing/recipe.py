@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import torch
 
@@ -15,9 +15,6 @@ from sdm.processing import (
     TaskDispatch,
 )
 from sdm.tensor import EnsembleTable
-
-if TYPE_CHECKING:
-    pass
 
 
 class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
@@ -170,6 +167,8 @@ class Recipe:
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
             )
+        if self.output.requires_fit:
+            raise ValueError("'Recipe.output' should not require fitting")
 
         task_dispatchers = tuple(
             m for m in self.features.modules() if isinstance(m, TaskDispatch)
