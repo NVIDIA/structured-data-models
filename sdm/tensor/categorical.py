@@ -870,12 +870,12 @@ def _narrow(
 
 @CategoricalTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: CategoricalTensor, dim: int = 0) -> tuple[Tensor, ...]:
+def _unbind(inp: CategoricalTensor, dim: int = 0) -> list[Tensor]:
     code_list = inp._code.unbind(dim)
     dim %= inp.dim()
     if dim == inp.dim() - 1:
-        return code_list
-    return tuple(inp.__class__(code, inp.categories) for code in code_list)
+        return list(code_list)
+    return [inp.__class__(code, inp.categories) for code in code_list]
 
 
 @CategoricalTensor.implements(aten.split.Tensor)
@@ -884,15 +884,15 @@ def _split(
     inp: CategoricalTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[CategoricalTensor, ...]:
+) -> list[CategoricalTensor]:
     code_list = inp._code.split(split_size, dim)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return tuple(inp.__class__(code, inp.categories) for code in code_list)
-    return tuple(
+        return [inp.__class__(code, inp.categories) for code in code_list]
+    return [
         inp.__class__(code, inp.categories[i : i + split_size])
         for code, i in zip(code_list, range(0, inp.size(dim), split_size))
-    )
+    ]
 
 
 @CategoricalTensor.implements(aten.split.sizes)
@@ -903,17 +903,17 @@ def _split_with_sizes(
     inp: CategoricalTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[CategoricalTensor, ...]:
+) -> list[CategoricalTensor]:
     code_list = inp._code.split(tuple(split_sizes), dim)
     dim %= inp.dim()
     if dim != inp.dim() - 1:
-        return tuple(inp.__class__(code, inp.categories) for code in code_list)
+        return [inp.__class__(code, inp.categories) for code in code_list]
 
     offset = (0, *accumulate(split_sizes))
-    return tuple(
+    return [
         inp.__class__(code, inp.categories[start:end])
         for code, start, end in zip(code_list, offset[:-1], offset[1:])
-    )
+    ]
 
 
 @CategoricalTensor.implements(aten.index_select.default)
