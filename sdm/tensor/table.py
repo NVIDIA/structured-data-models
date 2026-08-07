@@ -1816,6 +1816,7 @@ def _index(
             )
         current_dim += num_indexed_dims
 
+    layout = aten.index.Tensor(_layout(inp), indices)
     blocks = {
         stype: aten.index.Tensor(tensor, indices)
         for stype, tensor in inp.items()
@@ -1823,6 +1824,7 @@ def _index(
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
