@@ -1216,12 +1216,14 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
 
     tensors = cast(Sequence[ColumnarTensor], tensors)
     dim = _normalize_dim(tensors[0], dim)
+    layout = aten.cat.default([_layout(tensor) for tensor in tensors], dim)
 
     if dim == tensors[0].dim() - 1:
         return tensors[0].__class__(
             columns=tuple(chain.from_iterable(t._columns for t in tensors)),
             size=tensors[0].size()[:-1],
             device=tensors[0].device,
+            **_layout_kwargs(layout),
         )
 
     return tensors[0].__class__(
@@ -1235,6 +1237,7 @@ def _cat(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             *tensors[0].size()[dim + 1 : -1],
         ),
         device=tensors[0].device,
+        **_layout_kwargs(layout),
     )
 
 
