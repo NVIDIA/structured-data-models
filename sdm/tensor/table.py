@@ -1783,12 +1783,14 @@ def _index_select(
             f"Can't index the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.index_select.default(_layout(inp), dim, index)
     blocks = {
         stype: tensor.index_select(dim, index) for stype, tensor in inp.items()
     }
 
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
