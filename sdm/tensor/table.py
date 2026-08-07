@@ -1040,6 +1040,10 @@ def _to_dtype_layout(
     ):
         return inp
 
+    outer_layout = aten._to_copy.default(
+        _layout(inp),
+        memory_format=memory_format,
+    )
     blocks = {
         stype: aten.to.dtype_layout(
             tensor,
@@ -1061,6 +1065,7 @@ def _to_dtype_layout(
     }
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(outer_layout),
         **blocks,
     )
 
