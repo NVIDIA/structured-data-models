@@ -1322,8 +1322,10 @@ def _squeeze_dims(inp: TableTensor, dim: Sequence[int]) -> TableTensor:
             f"Can't squeeze the column dimension of {inp.__class__.__name__!r}"
         )
 
+    layout = aten.squeeze.dims(_layout(inp), dims)
     return inp.__class__(
         columns=cast(dict[StypeLike, tuple[str, ...]], inp._columns),
+        **_layout_kwargs(layout),
         **blocks,
     )
 
