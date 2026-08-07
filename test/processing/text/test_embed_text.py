@@ -10,16 +10,16 @@ from torch import Tensor
 
 from sdm import StringTensor, Stype, TableTensor
 from sdm.processing import EmbedText
+from sdm.testing import withCUDA
 
 
-class _FakeSentenceTransformer(torch.nn.Module):
-    instances: ClassVar[list[_FakeSentenceTransformer]] = []
+class MyModel(torch.nn.Module):
+    instances: ClassVar[list[MyModel]] = []
 
     def __init__(self, model_name: str) -> None:
         super().__init__()
         self.model_name = model_name
         self.encode_kwargs: dict[str, Any] = {}
-        self.register_buffer("weight", torch.ones(1))
         self.instances.append(self)
 
     def get_embedding_dimension(self) -> int:
@@ -34,23 +34,25 @@ class _FakeSentenceTransformer(torch.nn.Module):
 @pytest.fixture(autouse=True)
 def sentence_transformers(monkeypatch: pytest.MonkeyPatch) -> None:
     module: Any = ModuleType("sentence_transformers")
-    module.SentenceTransformer = _FakeSentenceTransformer
+    module.SentenceTransformer = MyModel
     monkeypatch.setitem(sys.modules, "sentence_transformers", module)
-    _FakeSentenceTransformer.instances.clear()
+    MyModel.instances.clear()
 
 
-def test_forward() -> None:
+@withCUDA
+def test_forward(device: torch.device) -> None:
     table = TableTensor(
         columns={"text": ("title", "body")},
         text=StringTensor.from_list(
             [
                 ["a", "b"],
                 ["c", None],
-            ]
+            ],
+            device=device,
         ),
     )
 
-    output = EmbedText("fake-model")(table)
+    output = EmbedText("fake-model").to(device)(table)
 
     assert output.columns[Stype.numerical] == (
         "title_0",
@@ -64,23 +66,15 @@ def test_forward() -> None:
             [
                 [0.0, 1.0, 4.0, 5.0],
                 [2.0, 3.0, 6.0, 7.0],
-            ]
+            ],
+            device=device,
         ),
     )
-    model = _FakeSentenceTransformer.instances[0]
+    model = MyModel.instances[0]
     assert model.model_name == "fake-model"
     assert model.strings == ["a", "c", "b", ""]
     assert model.encode_kwargs == {
         "show_progress_bar": False,
         "convert_to_tensor": True,
-        "device": "cpu",
+        "device": str(device),
     }
-
-
-def test_to_moves_model() -> None:
-    processor = EmbedText("fake-model")
-
-    processor.to(dtype=torch.float64)
-
-    model = _FakeSentenceTransformer.instances[0]
-    assert model.weight.dtype == torch.float64

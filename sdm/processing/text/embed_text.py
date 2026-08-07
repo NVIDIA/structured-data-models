@@ -11,14 +11,12 @@ from sdm.tensor import StringTensor, TableTensor
 
 
 class _ModuleReference(torch.nn.Module):
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, module: torch.nn.Module) -> None:
         super().__init__()
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
-
-        self.model: Any = SentenceTransformer(model_name)
+        self.module = module
 
     def __deepcopy__(self, memo: dict[int, Any]) -> _ModuleReference:
-        return self
+        return type(self)(self.module)
 
 
 class EmbedText(Processor):
@@ -41,10 +39,12 @@ class EmbedText(Processor):
         batch_size: int | None = None,
     ) -> None:
         super().__init__()
-        self.model_name = model_name
+        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+
         self.batch_size = batch_size
-        self._model = _ModuleReference(model_name)
-        embedding_dim = self._model.model.get_embedding_dimension()
+        model: Any = SentenceTransformer(model_name)
+        self._model = _ModuleReference(model)
+        embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
         self._embedding_dim = embedding_dim
 
@@ -72,9 +72,10 @@ class EmbedText(Processor):
             encode_kwargs = {}
             if self.batch_size is not None:
                 encode_kwargs["batch_size"] = self.batch_size
+            model = cast(Any, self._model.module)
             embeddings = cast(
                 Tensor,
-                self._model.model.encode(
+                model.encode(
                     strings,
                     show_progress_bar=False,
                     convert_to_tensor=True,
