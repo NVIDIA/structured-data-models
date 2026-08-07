@@ -9,6 +9,7 @@ from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import InvertibleMixin, Processor
+from sdm.testing import onlyCUDA
 
 
 @dataclass
@@ -54,6 +55,43 @@ class _RecordingModel(ICLModel):
     @classmethod
     def default_recipe(cls) -> sp.Recipe:
         return sp.Recipe()
+
+
+class _CachedModel(_RecordingModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.order: list[str] = []
+        self.replay_calls = 0
+        self.fail_replay: int | None = None
+
+    def _forward(
+        self,
+        x_context: TableTensor | None,
+        y_context: TableTensor | None,
+        x_query: TableTensor | None,
+        related_context_tables: RelatedTables | None,
+        related_query_tables: RelatedTables | None,
+        cache: Cache | None,
+        generator: torch.Generator | None,
+        **kwargs: Any,
+    ) -> TableTensor:
+        if x_context is not None:
+            offset = x_context.numerical.mean(dim=-2, keepdim=True)
+            if cache is not None:
+                cache["offset"] = offset
+            table = x_context if x_query is None else x_query
+        else:
+            assert x_query is not None
+            assert cache is not None
+            self.replay_calls += 1
+            self.order.append("forward")
+            if self.replay_calls == self.fail_replay:
+                raise RuntimeError("injected replay failure")
+            offset = cast(torch.Tensor, cache["offset"])
+            table = x_query
+
+        table = table.select_stypes(Stype.numerical)
+        return table.replace_blocks(numerical=table.numerical + offset)
 
 
 class _UnsupportedRecordingModel(_RecordingModel):
@@ -406,3 +444,116 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
     )
 
     assert out.size() == (2, 3)
+
+
+@onlyCUDA
+def test_predict_prefetches_ensemble_caches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    device = torch.device("cuda")
+    x_context = torch.randn(4, 3, device=device)
+    y_context = torch.randn(4, 1, device=device)
+    x_query = torch.randn(2, 3, device=device)
+    model = _CachedModel()
+
+    expected = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=sp.Recipe(),
+        num_estimators=3,
+    )
+    model.fit(
+        x_context,
+        y_context,
+        recipe=sp.Recipe(),
+        num_estimators=3,
+    )
+
+    original_to = Cache.to
+    transfer_calls: list[tuple[bool, torch.cuda.Stream]] = []
+
+    def track_transfer(
+        cache: Cache,
+        target: torch.device | str | None,
+        *,
+        non_blocking: bool = False,
+    ) -> Cache:
+        model.order.append("transfer")
+        transfer_calls.append(
+            (non_blocking, torch.cuda.current_stream(device))
+        )
+        return original_to(cache, target, non_blocking=non_blocking)
+
+    monkeypatch.setattr(Cache, "to", track_transfer)
+    compute_stream = torch.cuda.Stream(device=device)
+    with torch.cuda.stream(compute_stream):
+        actual = model.predict(x_query)
+        repeated = model.predict(x_query)
+    compute_stream.synchronize()
+
+    assert transfer_calls
+    transfer_stream = transfer_calls[0][1]
+    assert all(
+        non_blocking and stream == transfer_stream
+        for non_blocking, stream in transfer_calls
+    )
+    assert transfer_stream != compute_stream
+    assert (
+        model.order
+        == [
+            "transfer",
+            "transfer",
+            "forward",
+            "transfer",
+            "forward",
+            "forward",
+        ]
+        * 2
+    )
+    assert actual.allclose(expected)
+    assert repeated.allclose(expected)
+    model.clear()
+
+
+@onlyCUDA
+def test_predict_prefetch_recovers_from_failure() -> None:
+    device = torch.device("cuda")
+    x_context = torch.randn(4, 3, device=device)
+    y_context = torch.randn(4, 1, device=device)
+    x_query = torch.randn(2, 3, device=device)
+    model = _CachedModel()
+
+    expected = model(
+        x_context,
+        y_context,
+        x_query,
+        recipe=sp.Recipe(),
+        num_estimators=3,
+    )
+    model.fit(
+        x_context,
+        y_context,
+        recipe=sp.Recipe(),
+        num_estimators=3,
+    )
+    model.fail_replay = 2
+    with pytest.raises(RuntimeError, match="injected replay failure"):
+        model.predict(x_query)
+
+    model.fail_replay = None
+    actual = model.predict(x_query)
+    torch.cuda.synchronize(device)
+    assert actual.allclose(expected)
+
+    model.clear()
+    model.fit(
+        x_context,
+        y_context,
+        recipe=sp.Recipe(),
+        num_estimators=3,
+    )
+    refitted = model.predict(x_query)
+    torch.cuda.synchronize(device)
+    assert refitted.allclose(expected)
+    model.clear()
