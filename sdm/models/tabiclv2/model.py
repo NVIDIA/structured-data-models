@@ -5,6 +5,7 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
+import sdm.processing as sp
 from sdm import RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
@@ -12,7 +13,6 @@ from sdm.models._huggingface import download_checkpoint
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.recipe import default_recipe
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import Recipe
 
 
 class TabICLv2(ICLModel):
@@ -140,7 +140,7 @@ class TabICLv2(ICLModel):
         self.eval()
 
     @classmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(cls) -> sp.Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 

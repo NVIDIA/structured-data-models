@@ -6,10 +6,10 @@ from typing import Any, ClassVar, Literal, cast
 import torch
 from torch import Tensor
 
+import sdm.processing as sp
 from sdm import RelatedTables, Stype, TableTensor
 from sdm._warnings import warn_once
 from sdm.cache import Cache
-from sdm.processing import InvertibleMixin, Recipe
 from sdm.processing._recipe_execution import _RecipeExecution
 from sdm.relational.task import RelatedTablesSchema
 from sdm.tensor.table import TableSchema
@@ -67,7 +67,7 @@ class ICLModel(torch.nn.Module, ABC):
         related_context_tables: RelatedTables | None = None,
         related_query_tables: RelatedTables | None = None,
         *,
-        recipe: Recipe | None = None,
+        recipe: sp.Recipe | None = None,
         num_estimators: int = 1,
         recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
@@ -180,7 +180,7 @@ class ICLModel(torch.nn.Module, ABC):
             # Regression: invert target before stacking estimator outputs.
             is_regression = execution.contexts[0].y.categorical.size(-1) == 0
             if is_regression:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
+                if not isinstance(execution.recipe.target, sp.InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
                 with torch.amp.autocast(x_query.device.type, enabled=False):
                     member_outs = list(
@@ -199,7 +199,7 @@ class ICLModel(torch.nn.Module, ABC):
         y: Tensor | TableTensor,  # [..., R, 1]
         related_tables: RelatedTables | None = None,
         *,
-        recipe: Recipe | None = None,
+        recipe: sp.Recipe | None = None,
         num_estimators: int = 1,
         recipe_execution: Literal["sequential", "vectorized"] = "vectorized",
         generator: torch.Generator | None = None,
@@ -384,7 +384,7 @@ class ICLModel(torch.nn.Module, ABC):
             # classes is None for regression (see fit()).
             is_regression = self._caches[cache_index - 1]["classes"] is None
             if is_regression:
-                if not isinstance(execution.recipe.target, InvertibleMixin):
+                if not isinstance(execution.recipe.target, sp.InvertibleMixin):
                     raise RuntimeError("Target recipe is not invertible")
                 with torch.amp.autocast(x.device.type, enabled=False):
                     member_outs = list(
@@ -425,7 +425,7 @@ class ICLModel(torch.nn.Module, ABC):
 
     @classmethod
     @abstractmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(cls) -> sp.Recipe:
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################

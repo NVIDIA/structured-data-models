@@ -5,6 +5,7 @@ from typing import Any, ClassVar, cast
 import torch
 from torch import Tensor
 
+import sdm.processing as sp
 from sdm import NaT, RelatedTables, Relationship, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
@@ -14,7 +15,6 @@ from sdm.models.kumorfm.recipe import default_recipe
 from sdm.models.kumorfm.task import TaskGraph
 from sdm.models.tabiclv2.icl import ICLBlock
 from sdm.models.tabiclv2.row_embedding import RowEmbedding
-from sdm.processing import Recipe, Standardize
 
 
 class KumoRFM(ICLModel):
@@ -234,7 +234,7 @@ class KumoRFM(ICLModel):
         )
 
     @classmethod
-    def default_recipe(cls) -> Recipe:
+    def default_recipe(cls) -> sp.Recipe:
         r""":meta private:"""  # noqa: D415
         return default_recipe()
 
@@ -372,7 +372,7 @@ class _KumoRFM(torch.nn.Module):
         xs_context: dict[str, Tensor] = {}
         xs_query: dict[str, Tensor] = {}
         for name in table_names:
-            standardizer = Standardize()  # Relative time standardization.
+            standardizer = sp.Standardize()  # Relative time standardization.
             x_context_i = context_task_row_i = None
             if context is not None:
                 assert x_context is not None
@@ -412,7 +412,7 @@ class _KumoRFM(torch.nn.Module):
                     seed_datetime=x_query.datetime,
                     task_row=query_task_row_i,
                     standardizer=cast(
-                        Standardize, cache[f"table_{name}.standardizer"]
+                        sp.Standardize, cache[f"table_{name}.standardizer"]
                     )
                     if cache is not None and cache.is_replaying
                     else standardizer,
@@ -561,7 +561,7 @@ class _KumoRFM(torch.nn.Module):
         datetime: Tensor,
         seed_datetime: Tensor,
         task_row: Tensor,
-        standardizer: Standardize,
+        standardizer: sp.Standardize,
     ) -> Tensor | None:
 
         if datetime.size(-1) == 0 or seed_datetime.size(-1) == 0:
