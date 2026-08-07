@@ -984,7 +984,7 @@ def _contiguous(
     *,
     memory_format: torch.memory_format = torch.contiguous_format,
 ) -> VarLenTensor:
-    return _to_dtype_layout(inp, copy=True, memory_format=memory_format)
+    return _to_dtype_layout(inp, memory_format=memory_format)
 
 
 @VarLenTensor.implements(aten.detach.default)

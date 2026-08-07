@@ -116,3 +116,26 @@ def test_clone_copies_all_inner_tensors() -> None:
     assert out._valid is not None
     assert tensor._valid is not None
     assert out._valid.data_ptr() != tensor._valid.data_ptr()
+
+
+def test_contiguous_obeys_copy_elision() -> None:
+    tensor = _nullable_tensor()
+    assert (
+        aten.contiguous.default(
+            tensor,
+            memory_format=torch.contiguous_format,
+        )
+        is tensor
+    )
+
+    view = VarLenTensor.from_list([[1.0], None, [2.0], [3.0]])
+    view = view.view(2, 2).t()
+    out = aten.contiguous.default(
+        view,
+        memory_format=torch.contiguous_format,
+    )
+
+    assert isinstance(out, VarLenTensor)
+    assert out.is_contiguous()
+    assert out.tolist() == view.tolist()
+    assert not _is_alias(out, view)
