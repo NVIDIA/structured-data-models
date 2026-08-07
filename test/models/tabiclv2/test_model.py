@@ -19,7 +19,7 @@ def test_row_embedding_automatic_batch_size_limit(
     model = RowEmbedding(
         num_classes=2,
         channels=8,
-        num_layers=1,
+        num_layers=2,
         num_heads=2,
         group_size=2,
         num_inducing_points=4,

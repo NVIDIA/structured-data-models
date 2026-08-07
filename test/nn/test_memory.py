@@ -6,6 +6,7 @@ from sdm.nn.memory import (
     cuda_attention_memory_limit,
     cuda_memory_availability,
 )
+from sdm.testing import withCUDA
 
 
 @pytest.mark.parametrize(
@@ -113,3 +114,40 @@ def test_attention_batch_size_limit(
         )
         == 1
     )
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float16, torch.bfloat16, torch.float64],
+)
+def test_attention_math_backend_batch_size_limit(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    num_heads = 2
+    query = torch.empty(2, 1_000, 16, device=device, dtype=dtype)
+    key_value = torch.empty(2, 1_000, 16, device=device, dtype=dtype)
+    score_bytes = (
+        num_heads
+        * query.size(-2)
+        * key_value.size(-2)
+        * max(query.element_size(), 4)
+    )
+    uses_math_backend = device.type == "cuda" and (
+        dtype == torch.float64
+        or (
+            dtype == torch.bfloat16
+            and torch.cuda.get_device_capability(device)[0] < 8
+        )
+    )
+
+    limit = attention_batch_size_limit(
+        None,
+        query,
+        key_value,
+        attention_memory_limit=score_bytes,
+        num_heads=num_heads,
+    )
+
+    assert limit == (1 if uses_math_backend else None)

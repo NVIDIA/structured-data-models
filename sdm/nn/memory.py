@@ -55,34 +55,60 @@ def attention_batch_size_limit(
     query: Tensor,
     key_value: Tensor | KVCacheEntry,
     attention_memory_limit: int | None,
+    *,
+    num_heads: int | None = None,
 ) -> int | None:
-    """Return the smallest explicit or memory-derived attention batch limit."""
+    """Return the smallest explicit or memory-derived attention batch limit.
+
+    ``num_heads`` enables the quadratic score estimate for known math-SDPA
+    fallback cases.
+    """
     if attention_memory_limit is None:
         return requested_limit
 
     # Attention inputs use [..., tokens, channels].
     input_batch_shapes = [query.size()[:-2]]
-    sequence_length = query.size(-2)
-    # Use the longer query/KV token count for the memory estimate.
+    query_length = query.size(-2)
+    key_value_length = query_length
+    # Read the query and key/value token lengths.
     if isinstance(key_value, Tensor):
         input_batch_shapes.append(key_value.size()[:-2])
-        sequence_length = max(sequence_length, key_value.size(-2))
+        key_value_length = key_value.size(-2)
     else:
         # Cached K/V is already split into [..., tokens, heads, head_channels].
         input_batch_shapes.extend(
             [key_value.key.size()[:-3], key_value.value.size()[:-3]]
         )
-        sequence_length = max(sequence_length, key_value.key.size(-3))
+        key_value_length = key_value.key.size(-3)
 
     # Match attention's broadcasting, then count its independent sequences.
     total_batch_size = prod(torch.broadcast_shapes(*input_batch_shapes))
     # Estimate one sequence's temporary bytes with the empirical work factor.
     estimated_bytes_per_batch = (
         _ATTENTION_WORK_FACTOR
-        * sequence_length
+        * max(query_length, key_value_length)
         * query.size(-1)
         * max(query.element_size(), 4)
     )
+    if (
+        num_heads is not None
+        and query.device.type == "cuda"
+        and (
+            query.dtype == torch.float64
+            or (
+                query.dtype == torch.bfloat16
+                and torch.cuda.get_device_capability(query.device)[0] < 8
+            )
+        )
+    ):
+        # Math SDPA materializes attention scores as [H, Q, KV].
+        estimated_bytes_per_batch = max(
+            estimated_bytes_per_batch,
+            num_heads
+            * query_length
+            * key_value_length
+            * max(query.element_size(), 4),
+        )
     # Fit as many sequences as the byte budget allows; one is indivisible.
     automatic_batch_size_limit = max(
         1,

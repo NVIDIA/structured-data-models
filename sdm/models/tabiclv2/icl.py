@@ -34,6 +34,7 @@ class ICLBlock(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.num_classes = num_classes
+        self.num_heads = num_heads
         self.temperature = temperature
 
         self.y_emb: torch.nn.Module | None = None
@@ -123,14 +124,12 @@ class ICLBlock(torch.nn.Module):
 
             x[..., :R_train, :] += y_emb.to(x.dtype)
 
-        attention_memory_limit = None
-        if (
+        plan_attention = (
             x.device.type == "cuda"
             and not self.training
             and not torch.is_grad_enabled()
             and not torch.compiler.is_compiling()
-        ):
-            attention_memory_limit = cuda_attention_memory_limit(x.device)
+        )
 
         icl_batch_size_limit = batch_size_limit
         for i, layer in enumerate(self.layers):
@@ -141,12 +140,17 @@ class ICLBlock(torch.nn.Module):
                 if cache is not None and cache.is_replaying
                 else x[..., :R_train, :]
             )
-            if i == 0:
+            if i == 0 or (
+                plan_attention and cache is not None and cache.is_recording
+            ):
                 icl_batch_size_limit = attention_batch_size_limit(
                     batch_size_limit,
                     query,
                     key_value,
-                    attention_memory_limit,
+                    cuda_attention_memory_limit(x.device)
+                    if plan_attention
+                    else None,
+                    num_heads=self.num_heads,
                 )
             result = layer(
                 query=query,

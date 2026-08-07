@@ -33,6 +33,7 @@ class RowEmbedding(torch.nn.Module):
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
 
         self.lin = Linear(group_size, channels, **factory_kwargs)
+        self.num_heads = num_heads
 
         self.num_classes = num_classes
         self.y_emb: torch.nn.Module | None = None
@@ -106,10 +107,6 @@ class RowEmbedding(torch.nn.Module):
             and not torch.is_grad_enabled()
             and not torch.compiler.is_compiling()
         )
-        attention_memory_limit: int | None = None
-        if plan_attention:
-            attention_memory_limit = cuda_attention_memory_limit(x.device)
-
         # Feature grouping: gather G columns into each token.
         shift = 2 ** torch.arange(G, device=x.device)
         index = torch.arange(C, device=x.device)
@@ -159,12 +156,16 @@ class RowEmbedding(torch.nn.Module):
                     )[:max_keys]
                     key_value = key_value[..., index, :]
 
-            if i == 0:
+            if i == 0 or (
+                plan_attention and cache is not None and cache.is_recording
+            ):
                 col_batch_size_limit = attention_batch_size_limit(
                     batch_size_limit,
                     x,
                     key_value,
-                    attention_memory_limit,
+                    cuda_attention_memory_limit(x.device)
+                    if plan_attention
+                    else None,
                 )
             result = col_layer(
                 query=x,  # [..., C, R, D]
@@ -196,7 +197,8 @@ class RowEmbedding(torch.nn.Module):
             batch_size_limit,
             x,
             x,
-            attention_memory_limit,
+            cuda_attention_memory_limit(x.device) if plan_attention else None,
+            num_heads=self.num_heads,
         )
         for i, row_layer in enumerate(self.row_layers):
             query = x[..., :K, :] if i == len(self.row_layers) - 1 else x

@@ -42,37 +42,84 @@ def _automatic_aggregation_work_byte_limit(
         num_edges=0,
         value_bytes=value_bytes,
     )
-    if (
-        _aggregation_required_bytes(
-            num_nodes=graph.num_nodes,
-            num_edges=graph.num_edges,
-            value_bytes=value_bytes,
-        )
-        <= available_memory
-    ):
+    required_bytes = _aggregation_required_bytes(
+        num_nodes=graph.num_nodes,
+        num_edges=graph.num_edges,
+        value_bytes=value_bytes,
+    )
+    if required_bytes <= available_memory or available_memory <= node_bytes:
         return None
-    return max(available_memory - node_bytes, 0)
+    return available_memory - node_bytes
 
 
 def _aggregation_slices(
     *,
     colptr: Tensor,
+    num_edges: int,
     work_byte_limit: int,
     value_bytes: int,
 ) -> list[tuple[int, int, int, int]]:
-    workptr = value_bytes * (
-        _AGGREGATION_EDGE_WORK_FACTOR * colptr
-        + _AGGREGATION_NODE_WORK_FACTOR * torch.arange(colptr.numel())
+    num_nodes = colptr.numel() - 1
+    if num_nodes == 0:
+        return []
+
+    total_work = value_bytes * (
+        _AGGREGATION_EDGE_WORK_FACTOR * num_edges
+        + _AGGREGATION_NODE_WORK_FACTOR * num_nodes
     )
-    slices: list[tuple[int, int, int, int]] = []
-    start = 0
-    while start < colptr.numel() - 1:
-        target = workptr[start] + work_byte_limit
-        end = int(torch.searchsorted(workptr, target, right=True)) - 1
-        end = max(start + 1, end)
-        slices.append((start, end, int(colptr[start]), int(colptr[end])))
-        start = end
-    return slices
+    num_targets = (total_work - 1) // work_byte_limit
+    if num_targets >= num_nodes:
+        boundaries = torch.arange(
+            num_nodes + 1,
+            dtype=torch.int64,
+            device=colptr.device,
+        )
+    else:
+        workptr = value_bytes * (
+            _AGGREGATION_EDGE_WORK_FACTOR * colptr.to(torch.int64)
+            + _AGGREGATION_NODE_WORK_FACTOR
+            * torch.arange(
+                colptr.numel(),
+                dtype=torch.int64,
+                device=colptr.device,
+            )
+        )
+        targets = work_byte_limit * torch.arange(
+            1,
+            num_targets + 1,
+            dtype=torch.int64,
+            device=colptr.device,
+        )
+        lower = torch.searchsorted(workptr, targets, right=True) - 1
+        upper = torch.searchsorted(workptr, targets)
+        # Isolate any destination whose own work exceeds the limit.
+        boundaries = torch.cat(
+            [
+                torch.tensor(
+                    [0, num_nodes],
+                    dtype=torch.int64,
+                    device=colptr.device,
+                ),
+                lower,
+                upper,
+            ]
+        ).clamp_(0, num_nodes)
+        boundaries = boundaries.unique(sorted=True)
+
+    edge_boundaries = colptr[boundaries]
+    plan = torch.stack(
+        [
+            boundaries[:-1],
+            boundaries[1:],
+            edge_boundaries[:-1],
+            edge_boundaries[1:],
+        ],
+        dim=-1,
+    )
+    return [
+        (start, end, edge_start, edge_end)
+        for start, end, edge_start, edge_end in plan.cpu().tolist()
+    ]
 
 
 class InvariantGNN(torch.nn.Module):
@@ -164,7 +211,8 @@ class InvariantGNN(torch.nn.Module):
             work_byte_limit = _automatic_aggregation_work_byte_limit(x, graph)
             if work_byte_limit is not None:
                 aggregation_slices = _aggregation_slices(
-                    colptr=graph.colptr.cpu(),
+                    colptr=graph.colptr,
+                    num_edges=graph.num_edges,
                     work_byte_limit=work_byte_limit,
                     value_bytes=x.size(-1) * max(x.element_size(), 4),
                 )
