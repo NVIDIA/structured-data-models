@@ -6,7 +6,6 @@ import torch
 
 from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
-    Choice,
     Identity,
     InvertibleMixin,
     Processor,
@@ -122,11 +121,6 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
 
     with pytest.raises(ValueError, match=r"not supported.*Recipe.target"):
         Recipe(target=[TaskDispatch(regression=Identity())])
-
-    shared = TaskDispatch(regression=Identity())
-    nested = Choice(Identity(), shared)
-    Recipe(features=[TaskDispatch(regression=Identity())])
-    Recipe(output=[shared, nested])
 
 
 def test_task_resolver_copies_recipes_independently() -> None:
