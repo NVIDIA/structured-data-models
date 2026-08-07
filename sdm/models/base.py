@@ -57,9 +57,6 @@ class ICLModel(torch.nn.Module, ABC):
         # One execution for "vectorized" (spanning all estimators), or one
         # per estimator for "sequential".
         self._recipe_executions: tuple[_RecipeExecution, ...] | None = None
-        self._caches_pinned = False
-        self._cache_release_event: torch.cuda.Event | None = None
-        self._cache_transfer_stream: torch.cuda.Stream | None = None
 
     @_maybe_inference_mode()
     def forward(
@@ -304,7 +301,6 @@ class ICLModel(torch.nn.Module, ABC):
 
         self._caches = caches
         self._recipe_executions = tuple(executions)
-        self._caches_pinned = pin_caches
 
     @_maybe_inference_mode()
     def predict(
@@ -317,8 +313,6 @@ class ICLModel(torch.nn.Module, ABC):
         .. note::
 
             This method requires a prior call to :meth:`fit`.
-            CUDA ensembles automatically prefetch one cache ahead and may
-            temporarily keep two member caches on the GPU.
 
         Args:
             x: The feature tensor of query examples with shape
@@ -352,126 +346,54 @@ class ICLModel(torch.nn.Module, ABC):
 
         assert self._recipe_executions is not None
 
-        self._drain_cache_release_event()
-        prefetch = self._should_prefetch_caches(x)
-        if prefetch and not self._caches_pinned:
-            self._caches[:] = [cache.pin_memory() for cache in self._caches]
-            self._caches_pinned = True
-
-        transfer_stream = self._cache_transfer_stream
-        compute_stream: torch.cuda.Stream | None = None
-        staged_cache: Cache | None = None
-        ready_event: torch.cuda.Event | None = None
-        release_event: torch.cuda.Event | None = None
         outs: list[TableTensor] = []
         execution: _RecipeExecution | None = None
         cache_index = 0
-        asynchronous = prefetch and x.device.type == "cuda"
-
-        def stage(cache: Cache) -> tuple[Cache, torch.cuda.Event]:
-            assert transfer_stream is not None
-            with torch.cuda.stream(transfer_stream):
-                staged = cache.to(x.device, non_blocking=True)
-                ready = transfer_stream.record_event()
-            return staged, ready
-
-        try:
-            if asynchronous:
-                if (
-                    transfer_stream is None
-                    or transfer_stream.device != x.device
-                ):
-                    if transfer_stream is not None:
-                        transfer_stream.synchronize()
-                    transfer_stream = torch.cuda.Stream(device=x.device)
-                    self._cache_transfer_stream = transfer_stream
-                compute_stream = torch.cuda.current_stream(device=x.device)
-                staged_cache, ready_event = stage(self._caches[0])
-
-            for execution in self._recipe_executions:
-                with torch.amp.autocast(x.device.type, enabled=False):
-                    queries = execution.transform(
-                        x=x,
-                        related_tables=related_tables,
-                    )
-
-                member_outs: list[TableTensor] = []
-                for query in queries:
-                    cache = self._caches[cache_index]
-                    cache_index += 1
-
-                    self._validate_query(
-                        x_context=cast(TableSchema, cache["x_schema"]),
-                        x_query=query.x,
-                        related_context_tables=cast(
-                            RelatedTablesSchema,
-                            cache["related_tables_schema"],
-                        ),
-                        related_query_tables=query.related_tables,
-                    )
-
-                    if asynchronous:
-                        assert compute_stream is not None
-                        assert staged_cache is not None
-                        assert ready_event is not None
-                        device_cache = staged_cache
-                        staged_cache = None
-                        compute_stream.wait_event(ready_event)
-                        device_cache.record_stream(compute_stream)
-
-                        if cache_index < len(self._caches):
-                            if release_event is not None:
-                                release_event.synchronize()
-                            staged_cache, ready_event = stage(
-                                self._caches[cache_index]
-                            )
-                    else:
-                        device_cache = cache.to(query.x.device)
-
-                    out = self._forward(
-                        x_context=None,
-                        y_context=None,
-                        x_query=query.x,
-                        related_context_tables=None,
-                        related_query_tables=query.related_tables,
-                        cache=device_cache,
-                        generator=None,
-                        **cast(dict[str, Any], cache["kwargs"]),
-                    )
-                    del device_cache
-                    if asynchronous:
-                        assert compute_stream is not None
-                        release_event = compute_stream.record_event()
-                        self._cache_release_event = release_event
-
-                    out = cast(TableTensor, out.to(query.x.dtype))
-                    member_outs.append(out)
-
-                # classes is None for regression (see fit()).
-                is_regression = (
-                    self._caches[cache_index - 1]["classes"] is None
+        for execution in self._recipe_executions:
+            with torch.amp.autocast(x.device.type, enabled=False):
+                queries = execution.transform(
+                    x=x,
+                    related_tables=related_tables,
                 )
-                if is_regression:
-                    if not isinstance(
-                        execution.recipe.target,
-                        InvertibleMixin,
-                    ):
-                        raise RuntimeError("Target recipe is not invertible")
-                    with torch.amp.autocast(x.device.type, enabled=False):
-                        member_outs = list(
-                            execution.inverse_transform_target(member_outs)
-                        )
-                outs.extend(member_outs)
-        except BaseException:
-            if asynchronous:
-                if transfer_stream is not None:
-                    with contextlib.suppress(Exception):
-                        transfer_stream.synchronize()
-                if compute_stream is not None:
-                    with contextlib.suppress(Exception):
-                        compute_stream.synchronize()
-                self._cache_release_event = None
-            raise
+
+            member_outs: list[TableTensor] = []
+            for query in queries:
+                cache = self._caches[cache_index]
+                cache_index += 1
+
+                self._validate_query(
+                    x_context=cast(TableSchema, cache["x_schema"]),
+                    x_query=query.x,
+                    related_context_tables=cast(
+                        RelatedTablesSchema,
+                        cache["related_tables_schema"],
+                    ),
+                    related_query_tables=query.related_tables,
+                )
+
+                out = self._forward(
+                    x_context=None,
+                    y_context=None,
+                    x_query=query.x,
+                    related_context_tables=None,
+                    related_query_tables=query.related_tables,
+                    cache=cache.to(query.x.device, non_blocking=True),
+                    generator=None,
+                    **cast(dict[str, Any], cache["kwargs"]),
+                )
+                out = cast(TableTensor, out.to(query.x.dtype))
+                member_outs.append(out)
+
+            # classes is None for regression (see fit()).
+            is_regression = self._caches[cache_index - 1]["classes"] is None
+            if is_regression:
+                if not isinstance(execution.recipe.target, InvertibleMixin):
+                    raise RuntimeError("Target recipe is not invertible")
+                with torch.amp.autocast(x.device.type, enabled=False):
+                    member_outs = list(
+                        execution.inverse_transform_target(member_outs)
+                    )
+            outs.extend(member_outs)
 
         assert execution is not None
         assert cache_index == len(self._caches)
@@ -480,10 +402,8 @@ class ICLModel(torch.nn.Module, ABC):
 
     def clear(self) -> None:
         r"""Clear cached context state created by :meth:`fit`."""
-        self._drain_cache_release_event()
         self._caches = None
         self._recipe_executions = None
-        self._caches_pinned = False
 
     def __repr__(self) -> str:
         device = next(self.parameters()).device
@@ -512,16 +432,6 @@ class ICLModel(torch.nn.Module, ABC):
         r"""Return the default processing recipe for this model."""
 
     # Helpers #################################################################
-
-    def _drain_cache_release_event(self) -> None:
-        if self._cache_release_event is None:
-            return
-        self._cache_release_event.synchronize()
-        self._cache_release_event = None
-
-    def _should_prefetch_caches(self, x: TableTensor) -> bool:
-        assert self._caches is not None
-        return x.device.type == "cuda" and len(self._caches) > 1
 
     def _validate_context(
         self,

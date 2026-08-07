@@ -1,3 +1,5 @@
+from typing import cast
+
 import torch
 
 from sdm import StringTensor
@@ -11,9 +13,8 @@ def test_cache() -> None:
     cache["entry"] = KVCacheEntry(key=torch.randn(5), value=torch.randn(5))
     assert len(cache) == 2
     cache = cache.cpu()
-    assert isinstance(cache["entry"], KVCacheEntry)
-    assert cache["entry"].key.is_cpu
-    assert cache["entry"].value.is_cpu
+    assert cast(KVCacheEntry, cache["entry"]).key.is_cpu
+    assert cast(KVCacheEntry, cache["entry"]).value.is_cpu
 
 
 def test_cache_size() -> None:
@@ -59,11 +60,8 @@ def test_cache_pinned_transfer() -> None:
     assert isinstance(pinned_child["tensor"], torch.Tensor)
     assert pinned_child["tensor"].is_pinned()
 
-    transfer_stream = torch.cuda.Stream()
-    with torch.cuda.stream(transfer_stream):
-        staged = pinned.to("cuda", non_blocking=True)
+    staged = pinned.to("cuda", non_blocking=True)
 
-    transfer_stream.synchronize()
     assert isinstance(staged["entry"], KVCacheEntry)
     assert isinstance(staged["strings"], StringTensor)
     torch.testing.assert_close(staged["entry"].key.cpu(), entry.key)

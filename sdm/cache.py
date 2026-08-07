@@ -42,11 +42,6 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
             value=self.value.pin_memory(),
         )
 
-    def record_stream(self, stream: torch.cuda.Stream) -> None:
-        r"""Record that cached CUDA tensors are used by ``stream``."""
-        self.key.record_stream(stream)
-        self.value.record_stream(stream)
-
     @property
     def device(self) -> torch.device:
         r""":meta private:"""  # noqa: D415
@@ -210,30 +205,6 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         )
         pinned._mode = self._mode
         return pinned
-
-    def record_stream(self, stream: torch.cuda.Stream) -> None:
-        r"""Record that nested CUDA tensor data is used by ``stream``."""
-
-        def _record_stream(value: object) -> None:
-            if isinstance(value, KVCacheEntry | Cache):
-                value.record_stream(stream)
-            elif isinstance(value, Tensor):
-                tensor_flatten = getattr(value, "__tensor_flatten__", None)
-                if tensor_flatten is None:
-                    value.record_stream(stream)
-                else:
-                    names, _ = tensor_flatten()
-                    for name in names:
-                        _record_stream(getattr(value, name))
-            elif isinstance(value, list | tuple):
-                for item in value:
-                    _record_stream(item)
-            elif isinstance(value, dict):
-                for item in value.values():
-                    _record_stream(item)
-
-        for value in self.values():
-            _record_stream(value)
 
     @property
     def device(self) -> torch.device:
