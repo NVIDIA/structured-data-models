@@ -18,7 +18,7 @@ class _ModuleReference(torch.nn.Module):
         return type(self)(self.module)
 
 
-class SentenceTransform(Processor):
+class SentenceTransformer(Processor):
     r"""Transform text columns with a Sentence Transformers model.
 
     Args:
@@ -39,10 +39,12 @@ class SentenceTransform(Processor):
         batch_size: int | None = None,
     ) -> None:
         super().__init__()
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+        from sentence_transformers import (  # noqa: PLC0415
+            SentenceTransformer as _SentenceTransformer,
+        )
 
         self.batch_size = batch_size
-        model: Any = SentenceTransformer(model_name)
+        model: Any = _SentenceTransformer(model_name)
         self._model = _ModuleReference(model)
         embedding_dim = model.get_embedding_dimension()
         assert isinstance(embedding_dim, int)
