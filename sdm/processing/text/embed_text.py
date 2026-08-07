@@ -24,9 +24,9 @@ class EmbedText(Processor):
 
     Args:
         model_name: Model name or local path passed to
-            :class:`sentence_transformers.SentenceTransformer`.
-        batch_size: Batch size passed to `SentenceTransformer.encode
-            <https://sbert.net/docs/package_reference/sentence_transformer/model.html#sentence_transformers.sentence_transformer.model.SentenceTransformer.encode>`_.
+            :class:`sentence_transformers.sentence_transformer.model.SentenceTransformer`.
+        batch_size: Batch size passed to
+            :meth:`~sentence_transformers.sentence_transformer.model.SentenceTransformer.encode`.
             If ``None``, use the model default.
     """
 
