@@ -706,6 +706,8 @@ class TableTensor(Tensor):
             datetime=self.datetime if datetime is None else datetime,
             text=self.text if text is None else text,
             id=self.id if id is None else id,
+            _stride=self.stride(),
+            _storage_offset=self.storage_offset(),
         )
 
     def select_stypes(
