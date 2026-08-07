@@ -18,7 +18,9 @@ from typing import Any
 
 import torch
 from torch import Tensor
-from torch.nn import Linear
+from torch.nn import Embedding, Linear
+
+from sdm.models.tabfm.mlp import _MLP
 
 
 class _CellEmbedder(torch.nn.Module):
@@ -36,6 +38,9 @@ class _CellEmbedder(torch.nn.Module):
         device: Device on which to create parameters and buffers.
         dtype: Compute dtype for the learned projections. Fourier-frequency
             buffers remain in float32.
+        is_classifier: Whether to configure classification or regression
+            targets. ``None`` keeps the feature-only embedder.
+        max_classes: Maximum number of classification classes.
     """
 
     fourier_frequencies: Tensor
@@ -49,6 +54,9 @@ class _CellEmbedder(torch.nn.Module):
         row_chunk_size: int | None = 4096,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
+        *,
+        is_classifier: bool | None = None,
+        max_classes: int = 10,
     ) -> None:
         super().__init__()
         factory_kwargs: dict[str, Any] = {"device": device, "dtype": dtype}
@@ -82,6 +90,23 @@ class _CellEmbedder(torch.nn.Module):
             embed_dim,
             **factory_kwargs,
         )
+        self.is_classifier = is_classifier
+        self.y_embedder_lookup: Embedding | _MLP | None
+        if is_classifier is None:
+            self.y_embedder_lookup = None
+        elif is_classifier:
+            self.y_embedder_lookup = Embedding(
+                num_embeddings=max_classes,
+                embedding_dim=embed_dim,
+                **factory_kwargs,
+            )
+        else:
+            self.y_embedder_lookup = _MLP(
+                in_channels=1,
+                hidden_channels=(6,),
+                out_channels=embed_dim,
+                **factory_kwargs,
+            )
 
     def _group(
         self,
@@ -147,6 +172,9 @@ class _CellEmbedder(torch.nn.Module):
         features: Tensor,
         categorical_mask: Tensor | None = None,
         active_features: Tensor | None = None,
+        *,
+        targets: Tensor | None = None,
+        context_size: Tensor | None = None,
     ) -> Tensor:
         """Embed feature values.
 
@@ -158,11 +186,25 @@ class _CellEmbedder(torch.nn.Module):
             active_features: Optional integer tensor with shape ``[B]``. Each
                 member wraps grouping over its active prefix; padded output
                 columns are zero.
+            targets: Optional target values with shape ``[B, T]``.
+            context_size: Number of context rows per member with shape ``[B]``.
 
         Returns:
             Cell embeddings with shape ``[B, T, H, E]``.
         """
-        batch_size, num_rows, num_features = features.shape
+        _, num_rows, num_features = features.shape
+        if (
+            targets is None
+            and context_size is None
+            and self.y_embedder_lookup is not None
+        ):
+            raise ValueError(
+                "task-specific embedders require targets and context_size"
+            )
+        if (targets is None) != (context_size is None):
+            raise ValueError(
+                "targets and context_size must be provided together"
+            )
         if self.row_chunk_size is None or num_rows <= self.row_chunk_size:
             output = self._embed_rows(
                 features,
@@ -181,6 +223,31 @@ class _CellEmbedder(torch.nn.Module):
                     for start in range(0, num_rows, self.row_chunk_size)
                 ],
                 dim=1,
+            )
+
+        target_embedder = self.y_embedder_lookup
+        if targets is not None and context_size is not None:
+            if target_embedder is None:
+                raise ValueError("targets require a task-specific embedder")
+            if self.is_classifier:
+                assert isinstance(target_embedder, Embedding)
+                clean_targets = targets.long().clamp(
+                    0,
+                    target_embedder.num_embeddings - 1,
+                )
+                target_embedding = target_embedder(clean_targets)
+            else:
+                assert isinstance(target_embedder, _MLP)
+                target_embedding = target_embedder(
+                    targets[..., None].to(output.dtype)
+                )
+
+            row_index = torch.arange(num_rows, device=features.device)
+            context = row_index[None, :] < context_size[:, None]
+            output = torch.where(
+                context[..., None, None],
+                output + target_embedding[:, :, None, :],
+                output,
             )
 
         if active_features is None:
