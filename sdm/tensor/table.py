@@ -843,6 +843,57 @@ class TableTensor(Tensor):
 
     # PyTorch/Python builtins #################################################
 
+    def __tensor_flatten__(
+        self,
+    ) -> tuple[
+        list[str],
+        tuple[
+            tuple[tuple[Stype, tuple[str, ...]], ...],
+            int | torch.SymInt,
+            bool,
+        ],
+    ]:
+        attrs = [
+            "_numerical",
+            "_categorical",
+            "_datetime",
+            "_text",
+            "_id",
+        ]
+        return attrs, (
+            tuple(self._columns.items()),
+            self.storage_offset(),
+            self.is_inference(),
+        )
+
+    @classmethod
+    def __tensor_unflatten__(
+        cls,
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[
+            tuple[tuple[Stype, tuple[str, ...]], ...],
+            int | torch.SymInt,
+            bool,
+        ],
+        outer_size: Sequence[int | torch.SymInt],
+        outer_stride: Sequence[int | torch.SymInt],
+    ) -> Self:
+        column_items, storage_offset, is_inference = ctx
+        with torch.inference_mode(is_inference):
+            return cls(
+                columns=dict(column_items),
+                numerical=inner_tensors["_numerical"],
+                categorical=cast(
+                    CategoricalTensor,
+                    inner_tensors["_categorical"],
+                ),
+                datetime=inner_tensors["_datetime"],
+                text=cast(StringTensor, inner_tensors["_text"]),
+                id=cast(ColumnarTensor, inner_tensors["_id"]),
+                _stride=outer_stride,
+                _storage_offset=storage_offset,
+            )
+
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (
             tuple(self.size()[:-1]),
