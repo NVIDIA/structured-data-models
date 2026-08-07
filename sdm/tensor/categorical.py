@@ -10,6 +10,7 @@ import pyarrow as pa
 import torch
 from torch import Tensor
 from torch.utils import _pytree as pytree
+from torch.utils._python_dispatch import return_and_correct_aliasing
 from typing_extensions import override
 
 from sdm.tensor import StringTensor, VarLenTensor
@@ -418,20 +419,39 @@ class CategoricalTensor(Tensor):
     @classmethod
     def __torch_dispatch__(  # type: ignore
         cls,
-        func: Callable[..., Any],
+        func: Any,
         types: tuple[type[Any], ...],
         args: tuple[Any, ...] = (),
         kwargs: dict[str, Any] | None = None,
     ) -> Any:
+        kwargs = {} if kwargs is None else kwargs
         if (handler := cls.HANDLED_FUNCTIONS.get(func)) is not None:
-            return handler(*args, **(kwargs or {}))
+            out = handler(*args, **kwargs)
+            if pytree.tree_any(
+                lambda value: isinstance(value, CategoricalTensor),
+                out,
+            ):
+                return return_and_correct_aliasing(func, args, kwargs, out)
+            return out
+
+        for i, argument in enumerate(func._schema.arguments):
+            if argument.alias_info is None or not argument.alias_info.is_write:
+                continue
+            value = args[i] if i < len(args) else kwargs.get(argument.name)
+            if pytree.tree_any(
+                lambda item: isinstance(item, CategoricalTensor),
+                value,
+            ):
+                raise NotImplementedError(
+                    f"'{func}' cannot mutate a {cls.__name__!r} argument"
+                )
 
         # Operate on vanilla tensors for all non-handled functions:
         args = pytree.tree_map_only(CategoricalTensor, lambda x: x._code, args)
         kwargs = pytree.tree_map_only(
             CategoricalTensor, lambda x: x._code, kwargs
         )
-        return func(*args, **(kwargs or {}))
+        return func(*args, **kwargs)
 
     @override
     def is_shared(self) -> bool:
