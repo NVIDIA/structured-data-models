@@ -1054,12 +1054,6 @@ def _reshape(inp: VarLenTensor, size: Sequence[int]) -> VarLenTensor:
     )
 
 
-@VarLenTensor.implements(aten.movedim.int)
-def _movedim(inp: VarLenTensor, source: int, destination: int) -> VarLenTensor:
-    view = _layout_view(inp).movedim(source, destination)
-    return _from_layout_view(inp, view)
-  
- 
 @VarLenTensor.implements(aten.flatten.using_ints)
 def _flatten(
     inp: VarLenTensor,
