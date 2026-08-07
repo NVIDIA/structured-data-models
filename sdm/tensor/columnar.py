@@ -1263,6 +1263,7 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             f"{tensors[0].__class__.__name__!r}"
         )
 
+    layout = aten.stack.default([_layout(tensor) for tensor in tensors], dim)
     return tensors[0].__class__(
         columns=[
             torch.stack([tensor._columns[i] for tensor in tensors], dim=dim)
@@ -1274,6 +1275,7 @@ def _stack(tensors: Sequence[Tensor], dim: int = 0) -> ColumnarTensor:
             *tensors[0].size()[dim:-1],
         ),
         device=tensors[0].device,
+        **_layout_kwargs(layout),
     )
 
 
