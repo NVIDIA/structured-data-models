@@ -192,6 +192,99 @@ def test_align_categories_filters_rare_values_without_query_leakage(
 
 
 @withCUDA
+def test_align_categories_orders_appearance_before_filtering(
+    device: torch.device,
+) -> None:
+    context = _table(
+        [[-1], [2], [1], [2], [0], [3], [1], [0]],
+        columns=("kind",),
+        categories=(("alpha", "beta", "gamma", "rare", "unused"),),
+        device=device,
+    )
+    query = _table(
+        [[3], [0], [2], [1], [4], [-1]],
+        columns=("kind",),
+        categories=(("gamma", "other", "alpha", "beta", "rare"),),
+        device=device,
+    )
+
+    processor = AlignCategories(sort_by="appearance", min_frequency=2)
+    context_output = processor.fit_transform(context)
+    query_output = processor.transform(query)
+
+    assert context_output.categorical.categories[0].tolist() == [
+        "gamma",
+        "beta",
+        "alpha",
+    ]
+    assert context_output.categorical.code.squeeze(-1).tolist() == [
+        -1,
+        0,
+        1,
+        0,
+        2,
+        -1,
+        1,
+        2,
+    ]
+    assert query_output.categorical.code.squeeze(-1).tolist() == [
+        1,
+        0,
+        2,
+        -1,
+        -1,
+        -1,
+    ]
+
+
+@withCUDA
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.uint16, torch.uint32, torch.uint64],
+)
+def test_align_categories_orders_appearance_per_ensemble_member(
+    device: torch.device,
+    dtype: torch.dtype,
+) -> None:
+    categories = (torch.tensor([10, 20, 30], dtype=dtype, device=device),)
+
+    def table(codes: list[int]) -> TableTensor:
+        return TableTensor(
+            columns={"categorical": ("value",)},
+            categorical=CategoricalTensor(
+                code=torch.tensor(
+                    codes,
+                    dtype=torch.int32,
+                    device=device,
+                ).unsqueeze(-1),
+                categories=categories,
+            ),
+        )
+
+    first = table([2, 0, -1, 1])
+    second = table([1, -1, 0, 2])
+    context = EnsembleTable.from_tables(
+        tables=(first, second),
+        member_table_ids=(0, 1),
+    )
+    processor = AlignCategories(sort_by="appearance")
+
+    context_output = processor.fit_transform_ensemble(context)
+
+    assert context.num_groups == 1
+    assert [
+        (
+            context_output.table(i).categorical.categories[0].tolist(),
+            context_output.table(i).categorical.code.squeeze(-1).tolist(),
+        )
+        for i in range(2)
+    ] == [
+        ([30, 10, 20], [0, 1, -1, 2]),
+        ([20, 10, 30], [0, -1, 1, 2]),
+    ]
+
+
+@withCUDA
 def test_align_categories_orders_values(
     device: torch.device,
 ) -> None:
