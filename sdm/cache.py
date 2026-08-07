@@ -23,12 +23,29 @@ class KVCacheEntry(_KVCacheEntry, DeviceMixin):
         value: Cached value projection tensor.
     """
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(
+        self,
+        device: torch.device | str | None,
+        *,
+        non_blocking: bool = False,
+    ) -> Self:
         r""":meta private:"""  # noqa: D415
         return self.__class__(
-            key=self.key.to(device),
-            value=self.value.to(device),
+            key=self.key.to(device, non_blocking=non_blocking),
+            value=self.value.to(device, non_blocking=non_blocking),
         )
+
+    def pin_memory(self) -> Self:
+        r"""Copy cached tensors into pinned CPU memory."""
+        return self.__class__(
+            key=self.key.pin_memory(),
+            value=self.value.pin_memory(),
+        )
+
+    def record_stream(self, stream: torch.cuda.Stream) -> None:
+        r"""Record that cached CUDA tensors are used by ``stream``."""
+        self.key.record_stream(stream)
+        self.value.record_stream(stream)
 
     @property
     def device(self) -> torch.device:
@@ -140,16 +157,21 @@ class Cache(MutableMapping[str, object], DeviceMixin):
     def __repr__(self) -> str:
         return repr(self._items)
 
-    def to(self, device: torch.device | str | None) -> Self:
+    def to(
+        self,
+        device: torch.device | str | None,
+        *,
+        non_blocking: bool = False,
+    ) -> Self:
         r""":meta private:"""  # noqa: D415
 
         def _to(value: object, device: torch.device | str | None) -> object:
             if isinstance(value, Tensor):
-                return value.to(device)
+                return value.to(device, non_blocking=non_blocking)
             if isinstance(value, KVCacheEntry):
-                return value.to(device)
+                return value.to(device, non_blocking=non_blocking)
             if isinstance(value, Cache):
-                return value.to(device)
+                return value.to(device, non_blocking=non_blocking)
             if isinstance(value, list):
                 return [_to(item, device=device) for item in value]
             if isinstance(value, tuple):
@@ -164,6 +186,54 @@ class Cache(MutableMapping[str, object], DeviceMixin):
         out = self.__class__({k: _to(v, device) for k, v in self.items()})
         out._mode = self._mode
         return out
+
+    def pin_memory(self) -> Self:
+        r"""Copy nested tensor data into pinned CPU memory."""
+
+        def _pin_memory(value: object) -> object:
+            if isinstance(value, Tensor):
+                return value.pin_memory()
+            if isinstance(value, KVCacheEntry):
+                return value.pin_memory()
+            if isinstance(value, Cache):
+                return value.pin_memory()
+            if isinstance(value, list):
+                return [_pin_memory(item) for item in value]
+            if isinstance(value, tuple):
+                return tuple(_pin_memory(item) for item in value)
+            if isinstance(value, dict):
+                return {key: _pin_memory(item) for key, item in value.items()}
+            return value
+
+        pinned = self.__class__(
+            {key: _pin_memory(value) for key, value in self.items()}
+        )
+        pinned._mode = self._mode
+        return pinned
+
+    def record_stream(self, stream: torch.cuda.Stream) -> None:
+        r"""Record that nested CUDA tensor data is used by ``stream``."""
+
+        def _record_stream(value: object) -> None:
+            if isinstance(value, KVCacheEntry | Cache):
+                value.record_stream(stream)
+            elif isinstance(value, Tensor):
+                tensor_flatten = getattr(value, "__tensor_flatten__", None)
+                if tensor_flatten is None:
+                    value.record_stream(stream)
+                else:
+                    names, _ = tensor_flatten()
+                    for name in names:
+                        _record_stream(getattr(value, name))
+            elif isinstance(value, list | tuple):
+                for item in value:
+                    _record_stream(item)
+            elif isinstance(value, dict):
+                for item in value.values():
+                    _record_stream(item)
+
+        for value in self.values():
+            _record_stream(value)
 
     @property
     def device(self) -> torch.device:
