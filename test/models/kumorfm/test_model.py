@@ -1,3 +1,6 @@
+import copy
+from datetime import UTC, datetime
+
 import pandas as pd
 import pytest
 import torch
@@ -16,7 +19,16 @@ from sdm.models.kumorfm import model as kumorfm_model
 from sdm.models.kumorfm.graph import HomogeneousGraph
 from sdm.models.kumorfm.invariant_gnn import InvariantGNN
 from sdm.models.kumorfm.model import _KumoRFM, _remap_v2_1_checkpoint
+from sdm.processing import EnsembleProcessor, TableDispatch
 from sdm.testing import withCUDA
+
+
+def _features_for_route(route: str) -> EnsembleProcessor:
+    features = copy.deepcopy(KumoRFM.default_recipe().features)
+    for module in features.modules():
+        if isinstance(module, TableDispatch):
+            module._route = route
+    return features
 
 
 def test_load_from_pretrained(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -389,7 +401,33 @@ def test_default_recipe_preserves_ids() -> None:
         id=ColumnarTensor((torch.tensor([10, 11]),)),
     )
 
-    transformed = KumoRFM.default_recipe().features.fit_transform(table)
+    transformed = _features_for_route("task").fit_transform(table)
 
     assert transformed.columns[Stype.id] == ("entity_id",)
     assert transformed.id.equal(table.id)
+
+
+def test_default_recipe_adds_calendar_fields_only_for_related() -> None:
+    timestamp = int(
+        datetime(2024, 2, 29, 23, 59, tzinfo=UTC).timestamp() * 1_000_000
+    )
+    table = TableTensor(
+        columns={
+            Stype.datetime: ("event_time",),
+            Stype.id: ("entity_id",),
+        },
+        datetime=torch.tensor([[timestamp]], dtype=torch.int64),
+        id=ColumnarTensor((torch.tensor([10]),)),
+    )
+
+    related = _features_for_route("related").fit_transform(table)
+    task = _features_for_route("task").fit_transform(table)
+
+    assert related.columns[Stype.datetime] == ("event_time",)
+    assert any(
+        name.startswith("event_time__")
+        for name in related.columns[Stype.numerical]
+    )
+    assert task.columns[Stype.datetime] == ("event_time",)
+    assert task.columns[Stype.numerical] == ()
+    assert task.datetime.equal(table.datetime)
