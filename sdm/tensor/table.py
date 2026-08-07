@@ -903,6 +903,9 @@ class TableTensor(Tensor):
             self._datetime,
             self._text,
             self._id,
+            None,
+            tuple(self.stride()),
+            self.storage_offset(),
         )
         return (self.__class__, args)
 
