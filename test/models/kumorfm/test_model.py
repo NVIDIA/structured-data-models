@@ -1,6 +1,8 @@
 import copy
 from datetime import UTC, datetime
 
+from typing import Literal
+
 import pandas as pd
 import pytest
 import torch
@@ -23,7 +25,9 @@ from sdm.processing import EnsembleProcessor, TableDispatch
 from sdm.testing import withCUDA
 
 
-def _features_for_route(route: str) -> EnsembleProcessor:
+def _features_for_route(
+    route: Literal["task", "related"],
+) -> EnsembleProcessor:
     features = copy.deepcopy(KumoRFM.default_recipe().features)
     for module in features.modules():
         if isinstance(module, TableDispatch):
