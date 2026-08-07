@@ -138,6 +138,8 @@ class ColumnarTensor(Tensor):
         )
 
         out._columns = columns
+        for i, column in enumerate(columns):
+            setattr(out, f"_column_{i}", column)
 
         return out
 
@@ -268,6 +270,37 @@ class ColumnarTensor(Tensor):
         return decorator
 
     # PyTorch/Python builtins #################################################
+
+    def __tensor_flatten__(
+        self,
+    ) -> tuple[list[str], tuple[torch.device, int | torch.SymInt, bool]]:
+        attrs = [f"_column_{i}" for i in range(len(self._columns))]
+        return attrs, (
+            self.device,
+            self.storage_offset(),
+            self.is_inference(),
+        )
+
+    @classmethod
+    def __tensor_unflatten__(
+        cls,
+        inner_tensors: dict[str, Tensor],
+        ctx: tuple[torch.device, int | torch.SymInt, bool],
+        outer_size: Sequence[int | torch.SymInt],
+        outer_stride: Sequence[int | torch.SymInt],
+    ) -> Self:
+        device, storage_offset, is_inference = ctx
+        columns = tuple(
+            inner_tensors[f"_column_{i}"] for i in range(len(inner_tensors))
+        )
+        with torch.inference_mode(is_inference):
+            return cls(
+                columns=columns,
+                size=cast(Sequence[int], outer_size[:-1]),
+                device=device,
+                _stride=outer_stride,
+                _storage_offset=storage_offset,
+            )
 
     def __reduce_ex__(self, proto: SupportsIndex) -> Any:
         args = (self._columns, tuple(self.size())[:-1], self.device)
