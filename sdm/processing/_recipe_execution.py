@@ -7,11 +7,10 @@ from typing import cast
 
 import torch
 
-from sdm import RelatedTables, TableTensor
+from sdm import Recipe, RelatedTables, TableTensor
 from sdm.processing import (
     EnsembleInvertibleMixin,
     EnsembleProcessor,
-    Recipe,
 )
 from sdm.tensor import EnsembleTable
 

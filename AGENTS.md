@@ -81,6 +81,13 @@ In particular, you the agent MUST obey these rules while interacting on GitHub:
 - Keep code direct and use the narrowest practical scope. Introduce abstractions only when they encapsulate behavior or invariants, define a public interface, or serve established reuse.
 - In `__init__.py`, order imports and `__all__` in dependency order: base classes/mixins first, then concrete; never alphabetically.
 
+# Import Style
+
+- Prefer imports closest to the public root: use `from sdm import TableTensor` over deeper public paths such as `from sdm.tensor import TableTensor`.
+- For examples, prefer top-level package usage via `import sdm`; add `import sdm.processing as sp` when composing multiple processors.
+- In package code and tests, only use `import sdm.processing as sp` when a file uses multiple concrete processor implementations.
+- Keep processor base classes and mixins direct when they are used for subclassing or type checks, e.g. `from sdm.processing import Processor, InvertibleMixin`.
+
 # CUDA / GPU Performance
 
 - Avoid host-device synchronization in model and processor hot paths. Do not use `.item()`, `.cpu()`, `.numpy()`, `print(cuda_tensor)`, or `torch.cuda.synchronize()` except at explicit API boundaries, tests, debugging, or profiler code.
