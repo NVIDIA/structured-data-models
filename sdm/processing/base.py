@@ -42,7 +42,7 @@ class Processor(torch.nn.Module, abc.ABC):
                 # TODO: Include all invalid columns in the error message
                 raise ValueError(
                     f"{self.__class__.__name__!r} does not support "
-                    f"{stype.value!r} columns."
+                    f"{stype!r} columns."
                 )
 
     @staticmethod

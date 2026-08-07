@@ -71,22 +71,22 @@ class DropConstantColumns(EnsembleProcessor):
         # [N, C] or [..., N, C] -> [C] or [..., C].
         if self.method == "variance":
             return data.std(dim=-2) > self.tolerance
-        if self.method == "unique":
-            # Preserve the schema when too few rows can exceed the threshold.
-            if data.size(-2) <= self.threshold:
-                return data.new_ones(
-                    (*data.shape[:-2], data.size(-1)),
-                    dtype=torch.bool,
-                )
-            if self.threshold == 1:
-                # Any mismatch with the first row proves a second unique value.
-                return (data != data[..., :1, :]).any(dim=-2)
 
-            # A sorted column with k unique values has k - 1 transitions.
-            values = data.sort(dim=-2).values
-            changed = values[..., 1:, :] != values[..., :-1, :]
-            return changed.sum(dim=-2) >= self.threshold
-        raise AssertionError(f"Unexpected method {self.method!r}")
+        assert self.method == "unique"
+        # Preserve the schema when too few rows can exceed the threshold.
+        if data.size(-2) <= self.threshold:
+            return data.new_ones(
+                (*data.shape[:-2], data.size(-1)),
+                dtype=torch.bool,
+            )
+        if self.threshold == 1:
+            # Any mismatch with the first row proves a second unique value.
+            return (data != data[..., :1, :]).any(dim=-2)
+
+        # A sorted column with k unique values has k - 1 transitions.
+        values = data.sort(dim=-2).values
+        changed = values[..., 1:, :] != values[..., :-1, :]
+        return changed.sum(dim=-2) >= self.threshold
 
     @staticmethod
     def _select_columns(

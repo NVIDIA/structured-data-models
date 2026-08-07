@@ -188,8 +188,8 @@ class RelationalData(DeviceMixin):
                     if stype != Stype.id:
                         raise ValueError(
                             f"Expected column {column!r} in table {table!r} "
-                            f"to have semantic type {Stype.id.value!r} "
-                            f"(got {stype.value!r})"
+                            f"to have semantic type {Stype.id!r} "
+                            f"(got {stype!r})"
                         )
 
     def to(self, device: torch.device | str | None) -> Self:
@@ -361,7 +361,7 @@ class RelationalData(DeviceMixin):
                 label = f"{{{table_name}}}"
             else:
                 columns = [
-                    f"{column}: {stype.value}"
+                    f"{column}: {stype}"
                     for stype, columns in table._columns.items()
                     for column in columns
                 ]
@@ -413,7 +413,7 @@ class RelationalData(DeviceMixin):
                 table.size(-2),
                 table.size(-1),
                 ", ".join(
-                    stype.value
+                    str(stype)
                     for stype, tensor in table.items()
                     if tensor.size(-1) > 0
                 ),

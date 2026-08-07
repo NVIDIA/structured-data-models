@@ -179,7 +179,7 @@ class TableTensor(Tensor):
 
             if stype == Stype.datetime and block.dtype != torch.int64:
                 raise ValueError(
-                    f"Expected {stype.value!r} block to have dtype "
+                    f"Expected {stype!r} block to have dtype "
                     f"'{torch.int64}' (got '{block.dtype}')"
                 )
 
@@ -188,17 +188,17 @@ class TableTensor(Tensor):
 
             if block.dim() < 2:
                 raise ValueError(
-                    f"Expected {stype.value!r} block to be at least 2D "
+                    f"Expected {stype!r} block to be at least 2D "
                     f"(got {block.dim()}D)"
                 )
             if size != block.size()[:-1]:
                 raise ValueError(
-                    f"Expected {stype.value!r} block size of "
+                    f"Expected {stype!r} block size of "
                     f"{_block_size_repr(size)} (got {tuple(block.size())})"
                 )
             if device != block.device:
                 raise ValueError(
-                    f"Expected {stype.value!r} block to be on device "
+                    f"Expected {stype!r} block to be on device "
                     f"'{device}' (got '{block.device}')"
                 )
 
@@ -248,7 +248,7 @@ class TableTensor(Tensor):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
                 raise ValueError(
-                    f"Expected {stype.value!r} block to hold "
+                    f"Expected {stype!r} block to hold "
                     f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 
@@ -926,7 +926,7 @@ class TableTensor(Tensor):
 
         stype_repr = [
             (
-                f"{' ' * (indent + 4)}{stype.value} ({tensor.size(-1):,}): "
+                f"{' ' * (indent + 4)}{stype} ({tensor.size(-1):,}): "
                 f"{_columns_repr(self._columns[stype])},"
             )
             for stype, tensor in self.items()
@@ -949,7 +949,7 @@ class TableTensor(Tensor):
 
         max_columns = 10
         rows = [
-            [column, stype.value]
+            [column, str(stype)]
             for stype, columns in self._columns.items()
             for column in columns
         ]

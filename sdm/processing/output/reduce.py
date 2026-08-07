@@ -118,7 +118,7 @@ class ReduceEstimators(EnsembleProcessor):
         else:
             raise ValueError("method must be 'mean'")
         return table.__class__(
-            columns={Stype.numerical.value: table.columns[Stype.numerical]},
+            columns={Stype.numerical: table.columns[Stype.numerical]},
             numerical=numerical,
         )
 
