@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import CategoricalTensor, Recipe, StringTensor, TableTensor
+from sdm import CategoricalTensor, StringTensor, TableTensor
 from sdm.processing import (
     InvertibleMixin,
     Processor,
@@ -41,8 +41,8 @@ def _output(device: torch.device | None = None) -> TableTensor:
     )
 
 
-def _recipe(*, target: Processor | None = None) -> Recipe:
-    return Recipe(
+def _recipe(*, target: Processor | None = None) -> sp.Recipe:
+    return sp.Recipe(
         target=target,
         output=[
             sp.TaskDispatch(
@@ -79,7 +79,7 @@ def test_task_resolver_uses_final_target_type_once(
     recipe.target.fit(_numerical_target(device))
     assert recipe.output.transform(output).equal(output)
 
-    converted = Recipe(
+    converted = sp.Recipe(
         target=[sp.ToNumerical()],
         output=[sp.TaskDispatch(regression=sp.Identity())],
     )
@@ -88,7 +88,7 @@ def test_task_resolver_uses_final_target_type_once(
     assert transformed_target.numerical.size(-1) == 1
     assert converted.output.transform(output).equal(output)
 
-    scaled = Recipe(
+    scaled = sp.Recipe(
         target=[sp.Standardize()],
         output=[sp.TaskDispatch(regression=sp.Identity())],
     )
@@ -105,7 +105,7 @@ def test_task_resolver_uses_final_target_type_once(
 
 def test_task_resolver_clears_failures_and_validates_placement() -> None:
     output = _output()
-    recipe = Recipe(output=[sp.TaskDispatch(regression=sp.Identity())])
+    recipe = sp.Recipe(output=[sp.TaskDispatch(regression=sp.Identity())])
     assert "_TaskResolver" not in repr(recipe)
 
     recipe.target.fit(_numerical_target())
@@ -115,7 +115,7 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     assert recipe.output.transform(output).equal(output)
 
     with pytest.raises(ValueError, match=r"not supported.*Recipe.target"):
-        Recipe(target=[sp.TaskDispatch(regression=sp.Identity())])
+        sp.Recipe(target=[sp.TaskDispatch(regression=sp.Identity())])
 
 
 def test_task_resolver_copies_recipes_independently() -> None:

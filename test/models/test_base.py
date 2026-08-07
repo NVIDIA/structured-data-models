@@ -5,7 +5,7 @@ import pytest
 import torch
 
 import sdm.processing as sp
-from sdm import ColumnarTensor, Recipe, RelatedTables, Stype, TableTensor
+from sdm import ColumnarTensor, RelatedTables, Stype, TableTensor
 from sdm.cache import Cache
 from sdm.models import ICLModel
 from sdm.processing import (
@@ -55,8 +55,8 @@ class _RecordingModel(ICLModel):
         return table.select_stypes(Stype.numerical)
 
     @classmethod
-    def default_recipe(cls) -> Recipe:
-        return Recipe()
+    def default_recipe(cls) -> sp.Recipe:
+        return sp.Recipe()
 
 
 class _UnsupportedRecordingModel(_RecordingModel):
@@ -135,14 +135,14 @@ def _related_tables(*, query: bool) -> RelatedTables:
     )
 
 
-def _recipe() -> Recipe:
-    return Recipe(
+def _recipe() -> sp.Recipe:
+    return sp.Recipe(
         features=sp.StypeDispatch(numerical=sp.Standardize()),
     )
 
 
-def _generator_recipe() -> Recipe:
-    return Recipe(
+def _generator_recipe() -> sp.Recipe:
+    return sp.Recipe(
         features=_GeneratorRecordingProcessor(),
         target=_GeneratorRecordingProcessor(),
     )
@@ -416,7 +416,7 @@ def test_ensemble_aware_target_inverse_parity(cached: bool) -> None:
         sequential_model.fit(
             x_context,
             y_context,
-            recipe=Recipe(
+            recipe=sp.Recipe(
                 target=[sp.Choice(sp.Standardize(), sp.Standardize())]
             ),
             num_estimators=2,
@@ -425,7 +425,7 @@ def test_ensemble_aware_target_inverse_parity(cached: bool) -> None:
         vectorized_model.fit(
             x_context,
             y_context,
-            recipe=Recipe(
+            recipe=sp.Recipe(
                 target=[sp.Choice(sp.Standardize(), sp.Standardize())]
             ),
             num_estimators=2,
@@ -437,7 +437,7 @@ def test_ensemble_aware_target_inverse_parity(cached: bool) -> None:
             x_context,
             y_context,
             x_query,
-            recipe=Recipe(
+            recipe=sp.Recipe(
                 target=[sp.Choice(sp.Standardize(), sp.Standardize())]
             ),
             num_estimators=2,
@@ -447,7 +447,7 @@ def test_ensemble_aware_target_inverse_parity(cached: bool) -> None:
             x_context,
             y_context,
             x_query,
-            recipe=Recipe(
+            recipe=sp.Recipe(
                 target=[sp.Choice(sp.Standardize(), sp.Standardize())]
             ),
             num_estimators=2,
@@ -470,7 +470,7 @@ def test_ensemble_output_preserves_estimator_dimension() -> None:
         x_context,
         y_context,
         x_query,
-        recipe=Recipe(),
+        recipe=sp.Recipe(),
         num_estimators=1,
         recipe_execution="vectorized",
     )
@@ -488,7 +488,7 @@ def test_ensemble_output_reduces_with_reduce_estimators() -> None:
         x_context,
         y_context,
         x_query,
-        recipe=Recipe(output=sp.ReduceEstimators()),
+        recipe=sp.Recipe(output=sp.ReduceEstimators()),
         num_estimators=2,
         recipe_execution="vectorized",
     )
