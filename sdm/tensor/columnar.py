@@ -911,28 +911,34 @@ def _narrow(
 
 @ColumnarTensor.implements(aten.unbind.int)
 @preserve_view_inference_mode
-def _unbind(inp: ColumnarTensor, dim: int = 0) -> tuple[Tensor, ...]:
+def _unbind(inp: ColumnarTensor, dim: int = 0) -> list[Tensor]:
     dim = _normalize_dim(inp, dim)
 
     if dim == inp.dim() - 1:
-        return tuple(aten.alias.default(column) for column in inp._columns)
+        return [aten.alias.default(column) for column in inp._columns]
 
+    layouts = aten.unbind.int(_layout(inp), dim)
     columns_list = [column.unbind(dim) for column in inp._columns]
     if len(columns_list) == 0:
         size = (*inp.size()[:dim], *inp.size()[dim + 1 : -1])
-        return tuple(
+        return [
             inp.__class__(
                 columns=(),
                 size=size,
                 device=inp.device,
+                **_layout_kwargs(layout),
             )
-            for _ in range(inp.size(dim))
-        )
+            for layout in layouts
+        ]
 
-    return tuple(
-        inp.__class__(columns=columns, device=inp.device)
-        for columns in zip(*columns_list)
-    )
+    return [
+        inp.__class__(
+            columns=columns,
+            device=inp.device,
+            **_layout_kwargs(layout),
+        )
+        for columns, layout in zip(zip(*columns_list), layouts)
+    ]
 
 
 @ColumnarTensor.implements(aten.split.Tensor)
@@ -941,11 +947,10 @@ def _split(
     inp: ColumnarTensor,
     split_size: int,
     dim: int = 0,
-) -> tuple[ColumnarTensor, ...]:
-    split_sizes = tuple(
-        min(split_size, inp.size(dim) - start)
-        for start in range(0, inp.size(dim), split_size)
-    )
+) -> list[ColumnarTensor]:
+    dim = _normalize_dim(inp, dim)
+    layouts = aten.split.Tensor(_layout(inp), split_size, dim)
+    split_sizes = tuple(layout.size(dim) for layout in layouts)
     return _split_with_sizes(inp, split_sizes, dim=dim)
 
 
@@ -957,9 +962,10 @@ def _split_with_sizes(
     inp: ColumnarTensor,
     split_sizes: Sequence[int],
     dim: int = 0,
-) -> tuple[ColumnarTensor, ...]:
+) -> list[ColumnarTensor]:
     dim = _normalize_dim(inp, dim)
     split_sizes = tuple(split_sizes)
+    layouts = aten.split_with_sizes.default(_layout(inp), split_sizes, dim)
 
     if dim == inp.dim() - 1:
         if sum(split_sizes) != inp.size(dim):
@@ -971,19 +977,20 @@ def _split_with_sizes(
 
         start = 0
         outs = []
-        for split_size in split_sizes:
+        for split_size, layout in zip(split_sizes, layouts):
             out = inp.__class__(
                 columns=inp._columns[start : start + split_size],
                 size=inp.size()[:-1],
                 device=inp.device,
+                **_layout_kwargs(layout),
             )
             start += split_size
             outs.append(out)
-        return tuple(outs)
+        return outs
 
     columns_list = [col.split(split_sizes, dim=dim) for col in inp._columns]
     if len(columns_list) == 0:
-        return tuple(
+        return [
             inp.__class__(
                 columns=(),
                 size=(
@@ -992,14 +999,19 @@ def _split_with_sizes(
                     *inp.size()[dim + 1 : -1],
                 ),
                 device=inp.device,
+                **_layout_kwargs(layout),
             )
-            for split_size in split_sizes
-        )
+            for split_size, layout in zip(split_sizes, layouts)
+        ]
 
-    return tuple(
-        inp.__class__(columns=columns, device=inp.device)
-        for columns in zip(*columns_list)
-    )
+    return [
+        inp.__class__(
+            columns=columns,
+            device=inp.device,
+            **_layout_kwargs(layout),
+        )
+        for columns, layout in zip(zip(*columns_list), layouts)
+    ]
 
 
 @ColumnarTensor.implements(aten.index_select.default)
