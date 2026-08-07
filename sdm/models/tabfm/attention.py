@@ -20,9 +20,33 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Linear, Parameter, RMSNorm
+from torch.nn import Linear, Parameter
 
 from sdm.nn import SDPA, RotaryEmbedding
+
+
+class _RMSNorm(torch.nn.Module):
+    """TabFM RMSNorm with a fully float32 normalization path."""
+
+    def __init__(
+        self,
+        channels: int,
+        eps: float = 1e-6,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+        self.eps = eps
+        self.weight = Parameter(
+            torch.ones(channels, device=device, dtype=dtype)
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        dtype = x.dtype
+        x = x.float()
+        variance = x.square().mean(dim=-1, keepdim=True)
+        x = x * (variance + self.eps).rsqrt()
+        return (x * self.weight.float()).to(dtype)
 
 
 class MultiheadAttention(torch.nn.Module):
@@ -60,12 +84,12 @@ class MultiheadAttention(torch.nn.Module):
         self.k_proj = Linear(channels, channels, **factory_kwargs)
         self.v_proj = Linear(channels, channels, **factory_kwargs)
         self.out_proj = Linear(channels, channels, **factory_kwargs)
-        self.query_ln = RMSNorm(
+        self.query_ln = _RMSNorm(
             self.head_channels,
             eps=1e-6,
             **factory_kwargs,
         )
-        self.key_ln = RMSNorm(
+        self.key_ln = _RMSNorm(
             self.head_channels,
             eps=1e-6,
             **factory_kwargs,
@@ -97,50 +121,26 @@ class MultiheadAttention(torch.nn.Module):
                 key/value sequence length.
             value: Value tensor with shape ``[..., KV, D]``.
             attn_mask: Boolean attention mask with shape ``[..., Q, KV]``.
+                TabFM's ``[..., 1, Q, KV]`` singleton-head layout is also
+                accepted.
             rope: Optional shared interleaved rotary embedding applied to
                 projected queries and keys.
 
         Returns:
             Tensor with shape ``[..., Q, D]``.
         """
-        if query.dim() < 2 or key.dim() < 2 or value.dim() < 2:
-            raise ValueError("query, key, and value must have at least 2 dims")
-        if query.shape[:-2] != key.shape[:-2]:
-            raise ValueError("query and key must have equal batch dimensions")
-        if query.shape[:-2] != value.shape[:-2]:
-            raise ValueError(
-                "query and value must have equal batch dimensions"
-            )
-        if key.size(-2) != value.size(-2):
-            raise ValueError("key and value sequence lengths must match")
-        channels = self.q_proj.in_features
+        input_rank = max(query.dim(), key.dim(), value.dim())
         if (
-            query.size(-1) != channels
-            or key.size(-1) != channels
-            or value.size(-1) != channels
+            attn_mask is not None
+            and attn_mask.dim() == input_rank + 1
+            and attn_mask.size(-3) == 1
         ):
-            raise ValueError("query, key, and value channels must match")
+            attn_mask = attn_mask.squeeze(-3)
 
-        *batch_shape, query_length, _ = query.shape
-        key_length = key.size(-2)
-        query = self.q_proj(query).view(
-            *batch_shape,
-            query_length,
-            self.num_heads,
-            self.head_channels,
-        )
-        key = self.k_proj(key).view(
-            *batch_shape,
-            key_length,
-            self.num_heads,
-            self.head_channels,
-        )
-        value = self.v_proj(value).view(
-            *batch_shape,
-            key_length,
-            self.num_heads,
-            self.head_channels,
-        )
+        head_shape = (self.num_heads, self.head_channels)
+        query = self.q_proj(query).unflatten(-1, head_shape)
+        key = self.k_proj(key).unflatten(-1, head_shape)
+        value = self.v_proj(value).unflatten(-1, head_shape)
 
         if rope is not None:
             query = rope(query)
@@ -155,17 +155,10 @@ class MultiheadAttention(torch.nn.Module):
         )
         query = query * scale.to(query.dtype)
 
-        if (
-            attn_mask is not None
-            and attn_mask.dim() >= 3
-            and attn_mask.size(-3) == 1
-        ):
-            attn_mask = attn_mask.squeeze(-3)
         output = self.sdpa(
             query=query,
             key=key,
             value=value,
             attn_mask=attn_mask,
         )
-        output = output.reshape(*batch_shape, query_length, channels)
-        return self.out_proj(output)
+        return self.out_proj(output.flatten(-2))
