@@ -4,15 +4,11 @@ from unittest.mock import patch
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import CategoricalTensor, Recipe, StringTensor, TableTensor
 from sdm.processing import (
-    Identity,
     InvertibleMixin,
     Processor,
-    Softmax,
-    Standardize,
-    TaskDispatch,
-    ToNumerical,
 )
 from sdm.testing import withCUDA
 
@@ -49,9 +45,9 @@ def _recipe(*, target: Processor | None = None) -> Recipe:
     return Recipe(
         target=target,
         output=[
-            TaskDispatch(
-                classification=Softmax(),
-                regression=Identity(),
+            sp.TaskDispatch(
+                classification=sp.Softmax(),
+                regression=sp.Identity(),
             )
         ],
     )
@@ -61,7 +57,7 @@ def _recipe(*, target: Processor | None = None) -> Recipe:
 def test_task_resolver_uses_final_target_type_once(
     device: torch.device,
 ) -> None:
-    target_processor = Identity()
+    target_processor = sp.Identity()
     recipe = _recipe(target=target_processor)
     categorical_target = _categorical_target(device)
     output = _output(device)
@@ -84,8 +80,8 @@ def test_task_resolver_uses_final_target_type_once(
     assert recipe.output.transform(output).equal(output)
 
     converted = Recipe(
-        target=[ToNumerical()],
-        output=[TaskDispatch(regression=Identity())],
+        target=[sp.ToNumerical()],
+        output=[sp.TaskDispatch(regression=sp.Identity())],
     )
     transformed_target = converted.target.fit_transform(categorical_target)
 
@@ -93,8 +89,8 @@ def test_task_resolver_uses_final_target_type_once(
     assert converted.output.transform(output).equal(output)
 
     scaled = Recipe(
-        target=[Standardize()],
-        output=[TaskDispatch(regression=Identity())],
+        target=[sp.Standardize()],
+        output=[sp.TaskDispatch(regression=sp.Identity())],
     )
     numerical_target = _numerical_target(device)
     transformed_target = scaled.target.fit_transform(numerical_target)
@@ -109,7 +105,7 @@ def test_task_resolver_uses_final_target_type_once(
 
 def test_task_resolver_clears_failures_and_validates_placement() -> None:
     output = _output()
-    recipe = Recipe(output=[TaskDispatch(regression=Identity())])
+    recipe = Recipe(output=[sp.TaskDispatch(regression=sp.Identity())])
     assert "_TaskResolver" not in repr(recipe)
 
     recipe.target.fit(_numerical_target())
@@ -119,13 +115,13 @@ def test_task_resolver_clears_failures_and_validates_placement() -> None:
     assert recipe.output.transform(output).equal(output)
 
     with pytest.raises(ValueError, match=r"not supported.*Recipe.target"):
-        Recipe(target=[TaskDispatch(regression=Identity())])
+        Recipe(target=[sp.TaskDispatch(regression=sp.Identity())])
 
 
 def test_task_resolver_copies_recipes_independently() -> None:
     template = _recipe()
     assert not any(
-        isinstance(module, TaskDispatch)
+        isinstance(module, sp.TaskDispatch)
         for module in template.target.modules()
     )
     classification = copy.deepcopy(template)

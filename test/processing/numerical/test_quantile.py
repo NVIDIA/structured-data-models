@@ -1,20 +1,20 @@
 import pytest
 import torch
 
+import sdm.processing as sp
 from sdm import TableTensor
-from sdm.processing import EnsembleProcessorAdapter, QuantileTransform
 from sdm.tensor import EnsembleTable
 from sdm.testing import onlyCUDA, withCUDA
 
 
 def test_quantile_transform_rejects_nonpositive_n_quantiles() -> None:
     with pytest.raises(ValueError, match="n_quantiles"):
-        QuantileTransform(n_quantiles=0)
+        sp.QuantileTransform(n_quantiles=0)
 
 
 def test_quantile_transform_rejects_nonpositive_subsample() -> None:
     with pytest.raises(ValueError, match="subsample"):
-        QuantileTransform(subsample=0)
+        sp.QuantileTransform(subsample=0)
 
 
 @withCUDA
@@ -32,7 +32,7 @@ def test_quantile_transform_uniform_fit_transform_and_inverse_round_trip(
         device=device,
     )
 
-    processor = QuantileTransform(n_quantiles=4, subsample=None).fit(
+    processor = sp.QuantileTransform(n_quantiles=4, subsample=None).fit(
         TableTensor.from_tensor(inp)
     )
     expected = torch.tensor(
@@ -65,7 +65,7 @@ def test_quantile_transform_wide_inverse_round_trip(
         -3, 3, steps=64 * 40, dtype=torch.float64, device=device
     ).view(64, 40)
 
-    processor = QuantileTransform(n_quantiles=64, subsample=None).fit(
+    processor = sp.QuantileTransform(n_quantiles=64, subsample=None).fit(
         TableTensor.from_tensor(inp)
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
@@ -82,7 +82,7 @@ def test_quantile_transform_repeated_values_map_to_midpoint(
 ) -> None:
     inp = torch.tensor([[0.0], [1.0], [1.0], [2.0]], device=device)
 
-    processor = QuantileTransform(n_quantiles=4, subsample=None).fit(
+    processor = sp.QuantileTransform(n_quantiles=4, subsample=None).fit(
         TableTensor.from_tensor(inp)
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
@@ -109,7 +109,7 @@ def test_quantile_transform_constant_columns_round_trip(
         device=device,
     )
 
-    processor = QuantileTransform(n_quantiles=3, subsample=None).fit(
+    processor = sp.QuantileTransform(n_quantiles=3, subsample=None).fit(
         TableTensor.from_tensor(inp)
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
@@ -137,7 +137,7 @@ def test_quantile_transform_single_quantile_maps_to_zero(
         device=device,
     )
 
-    processor = QuantileTransform(n_quantiles=1, subsample=None).fit(
+    processor = sp.QuantileTransform(n_quantiles=1, subsample=None).fit(
         TableTensor.from_tensor(inp)
     )
     transformed = processor.transform(TableTensor.from_tensor(inp)).numerical
@@ -161,7 +161,7 @@ def test_quantile_transform_normal_distribution_is_finite_at_bounds(
         device=device,
     )
 
-    processor = QuantileTransform(
+    processor = sp.QuantileTransform(
         n_quantiles=5,
         subsample=None,
         output_distribution="normal",
@@ -184,7 +184,7 @@ def test_quantile_transform_rejects_mismatched_generator_device() -> None:
     table = TableTensor.from_tensor(torch.rand(8, 2, device="cuda"))
 
     with pytest.raises(RuntimeError, match="device type for generator"):
-        QuantileTransform(subsample=4).fit(
+        sp.QuantileTransform(subsample=4).fit(
             table,
             generator=torch.Generator(),
         )
@@ -195,11 +195,11 @@ def test_quantile_transform_subsample_is_reproducible_with_generator() -> None:
     inp = torch.arange(200.0).view(100, 2)
 
     table = TableTensor.from_tensor(inp)
-    first = QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
+    first = sp.QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
-    second = QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
+    second = sp.QuantileTransform(n_quantiles=6, subsample=32).fit_transform(
         table,
         generator=torch.Generator().manual_seed(0),
     )
@@ -226,8 +226,8 @@ def test_quantile_transform_adapter_matches_grouped_tables(
     member_table_ids = (1, 0, 1)
     context = EnsembleTable.from_tables(contexts, member_table_ids)
     query = EnsembleTable.from_tables(queries, member_table_ids)
-    processor = EnsembleProcessorAdapter(
-        QuantileTransform(n_quantiles=8, subsample=subsample)
+    processor = sp.EnsembleProcessorAdapter(
+        sp.QuantileTransform(n_quantiles=8, subsample=subsample)
     )
 
     context_output = processor.fit_transform_ensemble(
@@ -241,7 +241,7 @@ def test_quantile_transform_adapter_matches_grouped_tables(
     expected_queries = []
     expected_restored = []
     for context_table, query_table in zip(contexts, queries, strict=True):
-        reference = QuantileTransform(
+        reference = sp.QuantileTransform(
             n_quantiles=8,
             subsample=subsample,
         )
