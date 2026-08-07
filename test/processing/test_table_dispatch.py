@@ -166,3 +166,7 @@ def test_recipe_rejects_table_dispatch_outside_features() -> None:
         sp.Recipe(target=sp.TableDispatch(related=sp.Identity()))
     with pytest.raises(ValueError, match=r"Recipe\.features"):
         sp.Recipe(output=sp.TableDispatch(related=sp.Identity()))
+    with pytest.raises(ValueError, match=r"Recipe\.features"):
+        sp.Recipe(target=sp.Sequential(sp.TableDispatch(related=sp.Identity())))
+    with pytest.raises(ValueError, match=r"Recipe\.features"):
+        sp.Recipe(output=sp.Sequential(sp.TableDispatch(related=sp.Identity())))
