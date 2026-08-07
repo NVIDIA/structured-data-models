@@ -1,13 +1,17 @@
 """Benchmark KumoRFM on RelBench entity tasks.
 
-Without arguments, this runs every binary-classification and regression task
-in the public ``rel-*`` datasets except MIMIC-IV. Pass ``--dataset`` to run
-one dataset or both ``--dataset`` and ``--task`` to run one task.
+Without arguments, this runs every supported entity task in the public
+``rel-*`` datasets except MIMIC-IV and SALT. Pass ``--dataset`` to run one
+dataset or both ``--dataset`` and ``--task`` to run one task.
 
 Examples:
     python examples/kumorfm/rel_bench.py
-    python examples/kumorfm/rel_bench.py --dataset rel-f1
     python examples/kumorfm/rel_bench.py --dataset rel-f1 --task driver-dnf
+    python examples/kumorfm/rel_bench.py --dataset rel-f1 --num_neighbors 32
+    python examples/kumorfm/rel_bench.py --dataset rel-f1 --num_neighbors 16 16
+
+Each ``--num_neighbors`` value configures one hop: ``32`` is one hop,
+``16 16`` is two hops, and ``16 16 8`` is three hops.
 """
 
 import argparse
@@ -29,7 +33,7 @@ parser.add_argument("--dataset", choices=relbench.datasets.get_dataset_names())
 parser.add_argument("--task")
 parser.add_argument("--context_size", type=int, default=10_000)
 parser.add_argument("--batch_size", type=int, default=1000)
-parser.add_argument("--num_neighbors", type=int, default=16)
+parser.add_argument("--num_neighbors", type=int, nargs="+", default=[16, 16])
 parser.add_argument("--num_estimators", type=int, default=1)
 parser.add_argument("--seed", type=int, default=0)
 args = parser.parse_args()
@@ -46,15 +50,18 @@ def run_task(dataset_name: str, task_name: str) -> None:
         return
     if task.task_type not in {
         relbench.base.TaskType.BINARY_CLASSIFICATION,
+        relbench.base.TaskType.MULTICLASS_CLASSIFICATION,
         relbench.base.TaskType.REGRESSION,
     }:
         print(f"{dataset_name}/{task_name}: skipped ({task.task_type.value})")
         return
 
     torch.manual_seed(args.seed)
-    classification = (
-        task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION
+    binary = task.task_type == relbench.base.TaskType.BINARY_CLASSIFICATION
+    multiclass = (
+        task.task_type == relbench.base.TaskType.MULTICLASS_CLASSIFICATION
     )
+    classification = binary or multiclass
 
     # Task-owned DB removes autocomplete leakage and adds any required row key.
     db = task.dataset.get_db(upto_test_timestamp=False)
@@ -120,7 +127,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
         for split in ["train", "val", "test"]
     ]
     task_df = pd.concat(dfs, ignore_index=True)
-    if classification:
+    if binary:
         # Normalize 0/1, Boolean, and f/t labels so AUROC scores True.
         labels = sorted(
             pd.concat(dfs[:2], ignore_index=True)[task.target_col]
@@ -150,7 +157,7 @@ def run_task(dataset_name: str, task_name: str) -> None:
                 str, db.table_dict[task.entity_table].pkey_col
             ),
         },
-        "num_neighbors": [args.num_neighbors] * 2,
+        "num_neighbors": args.num_neighbors,
         "task_time_column": task.time_col,
     }
     context, related_tables = sampler(context, **kwargs).to(device)
@@ -176,24 +183,39 @@ def run_task(dataset_name: str, task_name: str) -> None:
                     **kwargs,
                 ).to(device)
             )
-        if classification:
+        if binary:
             pred, target = sdm.evaluation.to_binary_class(
                 out,
                 y_query,
                 positive_class=True,
             )
+        elif multiclass:
+            pred = out.numerical
+            class_ids = torch.tensor(
+                [int(column) for column in out.columns[sdm.Stype.numerical]],
+                dtype=torch.long,
+                device=pred.device,
+            )
+            scores = pred.new_zeros(pred.size(0), int(task.num_classes))
+            pred = scores.index_copy(-1, class_ids, pred)
         else:
             pred = out["q500"].numerical.squeeze(-1)
             target = y_query.numerical.squeeze(-1)
         predictions.append(pred.cpu())
-        targets.append(target.cpu())
+        if not multiclass:
+            targets.append(target.cpu())
 
-    name = "AUROC" if classification else "MAE"
     pred = torch.cat(predictions)
+    if multiclass:
+        for name, score in task.evaluate(pred.numpy()).items():
+            print(f"{dataset_name}/{task_name} {name}: {score:.4f}")
+        return
+
+    name = "AUROC" if binary else "MAE"
     target = torch.cat(targets)
     score = (
         torchmetrics.classification.BinaryAUROC()(pred, target)
-        if classification
+        if binary
         else torchmetrics.regression.MeanAbsoluteError()(pred, target)
     )
     print(f"{dataset_name}/{task_name} {name}: {score:.4f}")
