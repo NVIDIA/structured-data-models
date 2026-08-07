@@ -12,6 +12,7 @@ from sdm.processing import (
     EnsembleProcessor,
     Identity,
     Processor,
+    TableDispatch,
     TaskDispatch,
 )
 from sdm.tensor import EnsembleTable
@@ -129,6 +130,8 @@ class Recipe:
     processors that do not explicitly document non-finite support. When
     ``output`` contains :class:`~sdm.processing.TaskDispatch`, fitting
     ``target`` also selects its task-specific output route.
+    ``TableDispatch`` is resolved only during model execution because a raw
+    feature table does not identify whether it is the task or a related table.
 
     Copy a task-aware recipe as a whole so its target remains connected to the
     output dispatchers.
@@ -169,6 +172,12 @@ class Recipe:
         if any(isinstance(m, TaskDispatch) for m in self.target.modules()):
             raise ValueError(
                 "'TaskDispatch' is not supported in 'Recipe.target'"
+            )
+        if any(
+            isinstance(m, TableDispatch) for m in self.target.modules()
+        ) or any(isinstance(m, TableDispatch) for m in self.output.modules()):
+            raise ValueError(
+                "'TableDispatch' is only supported in 'Recipe.features'"
             )
         if self.output.requires_fit:
             raise ValueError("'Recipe.output' should not require fitting")
