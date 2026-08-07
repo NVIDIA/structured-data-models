@@ -28,7 +28,7 @@ def test_unbind_overload() -> None:
     inp = cast(TableTensor, make_table().transpose(0, 1))
     expected = aten.unbind.int(inp.numerical, 0)
 
-    out = aten.unbind.int(inp, 0)
+    out = cast(list[TableTensor], aten.unbind.int(inp, 0))
 
     assert isinstance(out, list)
     assert isinstance(inp.unbind(0), tuple)
@@ -46,10 +46,13 @@ def test_split_overloads() -> None:
     inp = cast(TableTensor, make_table().transpose(0, 1))
     reference = inp.numerical
     outputs = (
-        aten.split.Tensor(inp, 2, 0),
-        aten.split.sizes(inp, (1, 2), 0),
-        aten.split.default(inp, (1, 2), 0),
-        aten.split_with_sizes.default(inp, (1, 2), 0),
+        cast(list[TableTensor], aten.split.Tensor(inp, 2, 0)),
+        cast(list[TableTensor], aten.split.sizes(inp, (1, 2), 0)),
+        cast(list[TableTensor], aten.split.default(inp, (1, 2), 0)),
+        cast(
+            list[TableTensor],
+            aten.split_with_sizes.default(inp, (1, 2), 0),
+        ),
     )
     expected = (
         aten.split.Tensor(reference, 2, 0),
