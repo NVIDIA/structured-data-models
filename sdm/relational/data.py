@@ -188,8 +188,8 @@ class RelationalData(DeviceMixin):
                     if stype != Stype.id:
                         raise ValueError(
                             f"Expected column {column!r} in table {table!r} "
-                            f"to have semantic type {Stype.id!r} "
-                            f"(got {stype!r})"
+                            f"to have semantic type {str(Stype.id)!r} "
+                            f"(got {str(stype)!r})"
                         )
 
     def to(self, device: torch.device | str | None) -> Self:

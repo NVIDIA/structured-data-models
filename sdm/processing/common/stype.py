@@ -110,7 +110,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         if len(remainder_stypes) == 0:
             return
 
-        names = ", ".join(f"{stype!r}" for stype in remainder_stypes)
+        names = ", ".join(f"{str(stype)!r}" for stype in remainder_stypes)
         raise ValueError(
             f"Found non-empty input columns for semantic types {names}, but "
             f"{self.__class__.__name__!r} has no route for them. Configure "

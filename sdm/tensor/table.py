@@ -179,7 +179,7 @@ class TableTensor(Tensor):
 
             if stype == Stype.datetime and block.dtype != torch.int64:
                 raise ValueError(
-                    f"Expected {stype!r} block to have dtype "
+                    f"Expected {str(stype)!r} block to have dtype "
                     f"'{torch.int64}' (got '{block.dtype}')"
                 )
 
@@ -188,17 +188,17 @@ class TableTensor(Tensor):
 
             if block.dim() < 2:
                 raise ValueError(
-                    f"Expected {stype!r} block to be at least 2D "
+                    f"Expected {str(stype)!r} block to be at least 2D "
                     f"(got {block.dim()}D)"
                 )
             if size != block.size()[:-1]:
                 raise ValueError(
-                    f"Expected {stype!r} block size of "
+                    f"Expected {str(stype)!r} block size of "
                     f"{_block_size_repr(size)} (got {tuple(block.size())})"
                 )
             if device != block.device:
                 raise ValueError(
-                    f"Expected {stype!r} block to be on device "
+                    f"Expected {str(stype)!r} block to be on device "
                     f"'{device}' (got '{block.device}')"
                 )
 
@@ -248,7 +248,7 @@ class TableTensor(Tensor):
             if block.size(-1) != len(columns[stype]):
                 _columns = "column" if len(columns[stype]) == 1 else "columns"
                 raise ValueError(
-                    f"Expected {stype!r} block to hold "
+                    f"Expected {str(stype)!r} block to hold "
                     f"{len(columns[stype])} {_columns} (got {block.size(-1)})"
                 )
 

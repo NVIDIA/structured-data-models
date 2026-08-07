@@ -18,11 +18,11 @@ Capabilities
 
    * - **Supported Input Feature Semantic Types**
      - {% for stype in cls.supported_feature_stypes | sort(attribute="value") -%}
-         ``{{ stype.value }}``{{ ", " if not loop.last }}
+         ``{{ stype }}``{{ ", " if not loop.last }}
        {%- endfor %}
    * - **Supported Target Semantic Types**
      - {% for stype in cls.supported_target_stypes | sort(attribute="value") -%}
-         ``{{ stype.value }}``{{ ", " if not loop.last }}
+         ``{{ stype }}``{{ ", " if not loop.last }}
        {%- endfor %}
    * - **Related Table Support**
      - {{ "✅" if cls.supports_related_tables else "❌" }}
