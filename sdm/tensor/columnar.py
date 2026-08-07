@@ -1125,11 +1125,13 @@ def _index_select(
     index: Tensor,
 ) -> ColumnarTensor:
     dim = _normalize_dim(inp, dim)
+    layout = aten.index_select.default(_layout(inp), dim, index)
     if dim == inp.dim() - 1:
         return inp.__class__(
             columns=[inp._columns[i] for i in index.tolist()],
             size=inp.size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     return inp.__class__(
@@ -1140,6 +1142,7 @@ def _index_select(
             *inp.size()[dim + 1 : -1],
         ),
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
@@ -1148,6 +1151,7 @@ def _index(
     inp: ColumnarTensor,
     indices: Sequence[Tensor | None],
 ) -> ColumnarTensor:
+    layout = aten.index.Tensor(_layout(inp), indices)
     current_dim = 0
     has_other_index = False
     column_index: Tensor | None = None
@@ -1182,6 +1186,7 @@ def _index(
             columns=[inp._columns[i] for i in column_index.tolist()],
             size=inp.size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     if len(inp._columns) == 0:
@@ -1190,6 +1195,7 @@ def _index(
             columns=(),
             size=aten.index.Tensor(dummy, indices).size()[:-1],
             device=inp.device,
+            **_layout_kwargs(layout),
         )
 
     return inp.__class__(
@@ -1197,6 +1203,7 @@ def _index(
             aten.index.Tensor(column, indices) for column in inp._columns
         ],
         device=inp.device,
+        **_layout_kwargs(layout),
     )
 
 
