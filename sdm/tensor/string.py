@@ -348,8 +348,15 @@ class StringTensor(VarLenTensor):
 
 
 @StringTensor.implements(aten.eq.Tensor)
-@StringTensor.implements(aten.eq.str)
-def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
+@StringTensor.implements(aten.eq.Scalar)
+def _eq(
+    inp: Tensor,
+    other: Tensor | str | int | float | complex | bool,
+) -> Tensor:
+    if not isinstance(inp, StringTensor):
+        assert isinstance(other, StringTensor)
+        return _eq(other, inp)
+
     if isinstance(other, Tensor) and inp.device != other.device:
         raise RuntimeError(
             f"Expected both tensors to be on the same device "
@@ -357,8 +364,13 @@ def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
         )
 
     if not isinstance(other, StringTensor | str):
+        size = (
+            torch.broadcast_shapes(inp.size(), other.size())
+            if isinstance(other, Tensor)
+            else inp.size()
+        )
         return torch.zeros(
-            torch.broadcast_shapes(inp.size(), other.size()),
+            size,
             dtype=torch.bool,
             device=inp.device,
         )
@@ -410,9 +422,36 @@ def _eq(inp: StringTensor, other: Tensor | str) -> Tensor:
     return mask.view(size)
 
 
+@StringTensor.implements(aten.eq.Tensor_out)
+def _eq_tensor_out(
+    inp: Tensor,
+    other: Tensor,
+    *,
+    out: Tensor,
+) -> Tensor:
+    return aten.eq.Scalar_out(_eq(inp, other), True, out=out)
+
+
+@StringTensor.implements(aten.eq.Scalar_out)
+def _eq_scalar_out(
+    inp: StringTensor,
+    other: int | float | complex | bool,
+    *,
+    out: Tensor,
+) -> Tensor:
+    return aten.eq.Scalar_out(_eq(inp, other), True, out=out)
+
+
 @StringTensor.implements(aten.ne.Tensor)
-@StringTensor.implements(aten.ne.str)
-def _ne(inp: StringTensor, other: Tensor | str) -> Tensor:
+@StringTensor.implements(aten.ne.Scalar)
+def _ne(
+    inp: Tensor,
+    other: Tensor | str | int | float | complex | bool,
+) -> Tensor:
+    if not isinstance(inp, StringTensor):
+        assert isinstance(other, StringTensor)
+        return _ne(other, inp)
+
     if isinstance(other, Tensor) and inp.device != other.device:
         raise RuntimeError(
             f"Expected both tensors to be on the same device "
@@ -420,8 +459,13 @@ def _ne(inp: StringTensor, other: Tensor | str) -> Tensor:
         )
 
     if not isinstance(other, StringTensor | str):
+        size = (
+            torch.broadcast_shapes(inp.size(), other.size())
+            if isinstance(other, Tensor)
+            else inp.size()
+        )
         return torch.ones(
-            torch.broadcast_shapes(inp.size(), other.size()),
+            size,
             dtype=torch.bool,
             device=inp.device,
         )
@@ -471,6 +515,26 @@ def _ne(inp: StringTensor, other: Tensor | str) -> Tensor:
             mask = torch.from_dlpack(out.to_cupy()).view(size)
 
     return mask.view(size)
+
+
+@StringTensor.implements(aten.ne.Tensor_out)
+def _ne_tensor_out(
+    inp: Tensor,
+    other: Tensor,
+    *,
+    out: Tensor,
+) -> Tensor:
+    return aten.eq.Scalar_out(_ne(inp, other), True, out=out)
+
+
+@StringTensor.implements(aten.ne.Scalar_out)
+def _ne_scalar_out(
+    inp: StringTensor,
+    other: int | float | complex | bool,
+    *,
+    out: Tensor,
+) -> Tensor:
+    return aten.eq.Scalar_out(_ne(inp, other), True, out=out)
 
 
 @StringTensor.implements(aten.sort.default)
