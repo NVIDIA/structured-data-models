@@ -3,9 +3,9 @@ from typing import Literal, cast
 import torch
 from torch import Tensor
 
-from sdm import CategoricalTensor, Stype
-from sdm.processing.ensemble import EnsembleProcessor
-from sdm.tensor import EnsembleTable, TableTensor
+from sdm import CategoricalTensor, Stype, TableTensor
+from sdm.processing import EnsembleProcessor
+from sdm.tensor import EnsembleTable
 
 
 class _CategoryPermutations(torch.nn.Module):

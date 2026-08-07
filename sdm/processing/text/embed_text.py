@@ -5,9 +5,8 @@ from typing import Any, cast
 import torch
 from torch import Tensor
 
-from sdm.processing.base import Processor
-from sdm.stype import Stype
-from sdm.tensor import StringTensor, TableTensor
+from sdm import StringTensor, Stype, TableTensor
+from sdm.processing import Processor
 
 
 class _ModuleReference(torch.nn.Module):

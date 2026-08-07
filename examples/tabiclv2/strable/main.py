@@ -5,7 +5,6 @@ import torch
 from huggingface_hub import hf_hub_download
 
 import sdm
-from sdm.processing import TFIDF, StypeDispatch
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--disable-text", action="store_true")
@@ -59,8 +58,8 @@ ground_truth = query[:, target_name].numerical.squeeze(-1)
 model = sdm.models.TabICLv2(device=device)
 recipe = model.default_recipe()
 recipe.features = (
-    StypeDispatch(
-        text=TFIDF(
+    sdm.processing.StypeDispatch(
+        text=sdm.processing.TFIDF(
             ngram_range=(4, 6),
             max_features=256,
         )

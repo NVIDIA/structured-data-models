@@ -9,9 +9,9 @@ import torch
 from torch import Tensor
 from torch.utils.dlpack import from_dlpack
 
-from sdm.processing.ensemble import EnsembleProcessor
-from sdm.stype import Stype
-from sdm.tensor import EnsembleTable, StringTensor, TableTensor
+from sdm import StringTensor, Stype, TableTensor
+from sdm.processing import EnsembleProcessor
+from sdm.tensor import EnsembleTable
 from sdm.tensor.io import arrow_as_tensor
 
 
