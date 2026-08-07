@@ -10,97 +10,94 @@ from sdm.stype import Stype
 from sdm.tensor import StringTensor, TableTensor
 
 
-class _ModuleReference(torch.nn.Module):
-    """Preserve a module reference across deep copies."""
+class _ModelReference:
+    """Share a Sentence Transformers model across processor copies."""
 
-    def __init__(self, module: torch.nn.Module) -> None:
-        super().__init__()
-        self.module = module
+    def __init__(self, model_name: str) -> None:
+        try:
+            from sentence_transformers import (  # noqa: PLC0415
+                SentenceTransformer,
+            )
+        except ImportError as error:
+            raise ImportError(
+                "EmbedText requires the 'text' extra; install it with "
+                "'pip install structured-data-models[text]'."
+            ) from error
 
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
-        return self.module(*args, **kwargs)
+        self.model: Any = SentenceTransformer(model_name)
 
-    def __deepcopy__(self, _memo: dict[int, Any]) -> _ModuleReference:
-        return type(self)(self.module)
+    def __deepcopy__(self, _memo: dict[int, Any]) -> _ModelReference:
+        return self
 
 
 class EmbedText(Processor):
-    r"""Embed text columns with a user-provided embedding model.
+    r"""Embed text columns with a Sentence Transformers model.
+
+    Each cell is encoded independently. Embeddings are concatenated in text
+    column order, and null cells are encoded as empty strings.
 
     Args:
-        embedding_model: Pre-loaded model called on the flattened text values.
-        embedding_dim: Width of each returned embedding.
-        chunk_size: Maximum number of strings per model call. When set,
-            the flattened strings are split into chunks of this size to
-            avoid out-of-memory errors on large tables.
+        model_name: Model name or local path passed to
+            ``sentence_transformers.SentenceTransformer``.
+        batch_size: Number of text cells encoded in each model batch.
     """
 
     requires_fit = False
     supported_stypes = frozenset({Stype.text})
 
-    def __init__(
-        self,
-        embedding_model: torch.nn.Module,
-        embedding_dim: int,
-        chunk_size: int | None = None,
-    ) -> None:
+    def __init__(self, model_name: str, *, batch_size: int = 32) -> None:
         super().__init__()
-        self._embedding_model = _ModuleReference(embedding_model)
-        self._embedding_dim: int = embedding_dim
-        self._chunk_size = chunk_size
+        self.model_name = model_name
+        self.batch_size = batch_size
+        self._model = _ModelReference(model_name)
+        embedding_dim = self._model.model.get_embedding_dimension()
+        assert isinstance(embedding_dim, int)
+        self._embedding_dim = embedding_dim
 
     def _transform(self, table: TableTensor) -> TableTensor:
-        device = table.device
-        dtype = torch.get_default_dtype()
-        col_names = table.columns[Stype.text]
+        columns = table.columns[Stype.text]
         batch_shape = table.text.shape[:-1]
-
-        out_col_names: list[str] = []
-        for col_name in col_names:
-            out_col_names.extend(
-                f"{col_name}_{i}" for i in range(self._embedding_dim)
-            )
-
-        numerical = torch.empty(
-            (*batch_shape, len(out_col_names)),
-            dtype=dtype,
-            device=device,
+        output_columns = tuple(
+            f"{column}_{index}"
+            for column in columns
+            for index in range(self._embedding_dim)
         )
-        if numerical.numel() != 0:
-            # FIXME: The embedding_model currently must take in a
-            # dataframe and not a Tensor.
-            num_cols = len(col_names)
-            flat_strings = table.text.movedim(-1, 0).reshape(-1)
-            chunk_size = self._chunk_size or len(flat_strings)
 
-            chunks: list[Tensor] = []
-            for start in range(0, len(flat_strings), chunk_size):
-                chunk = cast(
-                    StringTensor,
-                    flat_strings[start : start + chunk_size],
-                )
-                strings = (
-                    chunk.to_cudf() if chunk.is_cuda else chunk.to_arrow()
-                )
-                chunks.append(
-                    self._embedding_model(strings).to(
-                        device=device,
-                        dtype=dtype,
-                    )
-                )
-            all_embeddings = torch.cat(chunks)
-            # (num_cols * batch_numel, embedding_dim)
+        if table.text.numel() == 0:
+            numerical = torch.empty(
+                (*batch_shape, len(output_columns)),
+                dtype=torch.get_default_dtype(),
+                device=table.device,
+            )
+        else:
+            text = cast(
+                StringTensor,
+                table.text.movedim(-1, 0).reshape(-1),
+            )
+            strings = [value or "" for value in text.tolist()]
+            embeddings = cast(
+                Tensor,
+                self._model.model.encode(
+                    strings,
+                    batch_size=self.batch_size,
+                    show_progress_bar=False,
+                    convert_to_tensor=True,
+                    device=str(table.device),
+                ),
+            ).to(dtype=torch.get_default_dtype(), device=table.device)
+
+            # [num_columns, *batch_shape, embedding_dim]
             numerical = (
-                all_embeddings.reshape(
-                    num_cols,
+                embeddings.reshape(
+                    len(columns),
                     *batch_shape,
                     self._embedding_dim,
                 )
                 .movedim(0, -2)
-                .reshape(*batch_shape, len(out_col_names))
+                .reshape(*batch_shape, len(output_columns))
             )
 
         return TableTensor(
-            columns={Stype.numerical: tuple(out_col_names)},
+            columns={Stype.numerical: output_columns},
             numerical=numerical,
         )
