@@ -450,7 +450,7 @@ class ICLModel(torch.nn.Module, ABC):
             )
         invalid = x.active_stypes - self.supported_feature_stypes - {Stype.id}
         if len(invalid) > 0:
-            stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
+            stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
             warn_once(
                 key="model-unsupported-feature-stypes",
                 message=(
@@ -461,7 +461,7 @@ class ICLModel(torch.nn.Module, ABC):
             )
         invalid = y.active_stypes - self.supported_target_stypes
         if len(invalid) > 0:
-            stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
+            stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
             raise ValueError(
                 f"{self.__class__.__name__!r} received unsupported target "
                 f"stypes {stypes}"
@@ -477,7 +477,7 @@ class ICLModel(torch.nn.Module, ABC):
                 invalid = table.active_stypes - self.supported_feature_stypes
                 invalid = invalid - {Stype.id}
                 if len(invalid) > 0:
-                    stypes = ", ".join(f"{stype.value!r}" for stype in invalid)
+                    stypes = ", ".join(f"{str(stype)!r}" for stype in invalid)
                     warn_once(
                         key="model-unsupported-feature-stypes",
                         message=(

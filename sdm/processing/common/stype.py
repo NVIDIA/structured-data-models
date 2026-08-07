@@ -76,7 +76,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
             processor = Processor.as_processor(processor)
             if not isinstance(processor, EnsembleProcessor):
                 processor = EnsembleProcessorAdapter(processor)
-            self.processors[stype.value] = processor
+            self.processors[str(stype)] = processor
 
         self.remainder = remainder
         self.requires_fit = any(
@@ -104,13 +104,13 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
         remainder_stypes = [
             stype
             for stype in Stype
-            if stype.value not in self.processors
+            if str(stype) not in self.processors
             and any(len(group.columns[stype]) > 0 for group in ensemble_table)
         ]
         if len(remainder_stypes) == 0:
             return
 
-        names = ", ".join(f"{stype.value!r}" for stype in remainder_stypes)
+        names = ", ".join(f"{str(stype)!r}" for stype in remainder_stypes)
         raise ValueError(
             f"Found non-empty input columns for semantic types {names}, but "
             f"{self.__class__.__name__!r} has no route for them. Configure "
@@ -215,7 +215,7 @@ class StypeDispatch(EnsembleProcessor, EnsembleInvertibleMixin):
     ) -> EnsembleTable:
         return ensemble_table.select_stypes(
             tuple(
-                stype for stype in Stype if stype.value not in self.processors
+                stype for stype in Stype if str(stype) not in self.processors
             )
         )
 

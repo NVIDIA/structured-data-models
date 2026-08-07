@@ -44,8 +44,8 @@ def _validate_time_columns(
         if stype != Stype.datetime:
             raise ValueError(
                 f"Expected '{column_name}' in table '{table_name}' to "
-                f"have semantic type '{Stype.datetime.value}' "
-                f"(got '{stype.value}')"
+                f"have semantic type {str(Stype.datetime)!r} "
+                f"(got {str(stype)!r})"
             )
 
 
@@ -281,7 +281,7 @@ class RelationalSampler:
                 if stype != Stype.id:
                     raise ValueError(
                         f"Expected column '{column}' to have semantic type "
-                        f"'{Stype.id.value}' (got '{stype.value}')"
+                        f"{str(Stype.id)!r} (got {str(stype)!r})"
                     )
 
         if task_time_column is not None:
@@ -289,7 +289,7 @@ class RelationalSampler:
             if stype != Stype.datetime:
                 raise ValueError(
                     f"Expected task time column to have semantic type "
-                    f"'{Stype.datetime.value}' (got '{stype.value}')"
+                    f"{str(Stype.datetime)!r} (got {str(stype)!r})"
                 )
         return task_link
 

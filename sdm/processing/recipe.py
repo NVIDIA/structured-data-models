@@ -55,16 +55,19 @@ class _TaskResolver(EnsembleProcessor, EnsembleInvertibleMixin):
             if group.size(-1) != 1:
                 raise ValueError(
                     "Expected the transformed target to contain exactly one "
-                    f"column (got {group.size(-1)} columns)."
+                    f"column (got {group.size(-1)} columns)"
                 )
             if group.numerical.size(-1) == 1:
                 tasks.add("regression")
             elif group.categorical.size(-1) == 1:
                 tasks.add("classification")
             else:
+                stypes = ", ".join(
+                    f"{str(stype)!r}" for stype in group.active_stypes
+                )
                 raise ValueError(
-                    "Expected the transformed target to be numerical or "
-                    f"categorical (got {', '.join(group.active_stypes)})."
+                    "Expected the transformed target to contain exactly one "
+                    f"numerical or categorical column (got {stypes})"
                 )
 
         if len(tasks) != 1:

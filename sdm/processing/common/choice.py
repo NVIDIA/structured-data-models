@@ -76,21 +76,21 @@ class Choice(EnsembleProcessor, EnsembleInvertibleMixin):
                 member_id % len(self.options)
                 for member_id in range(ensemble_table.num_members)
             )
-        if self.selection == "random":
-            device = (
-                next(iter(ensemble_table)).device
-                if generator is None
-                else generator.device
-            )
-            return tuple(
-                torch.randint(
-                    len(self.options),
-                    (ensemble_table.num_members,),
-                    generator=generator,
-                    device=device,
-                ).tolist()
-            )
-        raise AssertionError(f"Unexpected selection {self.selection!r}")
+
+        assert self.selection == "random"
+        device = (
+            next(iter(ensemble_table)).device
+            if generator is None
+            else generator.device
+        )
+        return tuple(
+            torch.randint(
+                len(self.options),
+                (ensemble_table.num_members,),
+                generator=generator,
+                device=device,
+            ).tolist()
+        )
 
     def _tables_by_option(
         self,
