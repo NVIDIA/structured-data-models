@@ -2,7 +2,7 @@
 <html lang="en" data-accent-color="green" data-content_root="../../">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>ClipSigma - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="ImputeMean" href="sdm.processing.numerical.ImputeMean.html" /><link rel="prev" title="ClipQuantiles" href="sdm.processing.numerical.ClipQuantiles.html" /><script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>TFIDF - Structured Data Models</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="EmbedText" href="sdm.processing.text.EmbedText.html" /><link rel="prev" title="ImputeMode" href="sdm.processing.categorical.ImputeMode.html" /><script>
     function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
     setColorMode(localStorage._theme||"auto");
   </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
@@ -20,7 +20,7 @@
 }
 </style>
     
-  <meta property="og:type" content="website"/><meta property="og:title" content="ClipSigma"/>
+  <meta property="og:type" content="website"/><meta property="og:title" content="TFIDF"/>
     <meta name="twitter:card" content="summary"/>
   </head>
 <body><div class="sy-head">
@@ -115,7 +115,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.common.SelectColumns.html">SelectColumns</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.Clip.html">Clip</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipQuantiles.html">ClipQuantiles</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">ClipSigma</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ClipSigma.html">ClipSigma</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.ImputeMean.html">ImputeMean</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.PowerTransform.html">PowerTransform</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.numerical.QuantileTransform.html">QuantileTransform</a></li>
@@ -125,7 +125,7 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
-<li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.TFIDF.html">TFIDF</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">TFIDF</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.text.EmbedText.html">EmbedText</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
@@ -164,7 +164,7 @@ data-aria-dark="Switch to auto color mode">
       <i class="i-lucide close"></i>
     </button>
     <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
-<li><a class="reference internal" href="#sdm.processing.numerical.ClipSigma"><code class="docutils literal notranslate"><span class="pre">ClipSigma</span></code></a></li>
+<li><a class="reference internal" href="#sdm.processing.text.TFIDF"><code class="docutils literal notranslate"><span class="pre">TFIDF</span></code></a></li>
 </ul>
 </div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
   </aside>
@@ -186,7 +186,7 @@ data-aria-dark="Switch to auto color mode">
         <span>/</span>
         <meta itemprop="position" content="2" />
       </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-        <strong itemprop="name">ClipSigma</strong>
+        <strong itemprop="name">TFIDF</strong>
         <meta itemprop="position" content="3" />
       </li></ol>
     <div class="xl:hidden ml-1">
@@ -199,20 +199,30 @@ data-aria-dark="Switch to auto color mode">
 </div><div class="flex flex-col break-words justify-between">
       <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
   <article class="yue" role="main">
-          <section id="clipsigma">
-<h1>ClipSigma<a class="headerlink" href="#clipsigma" title="Link to this heading">#</a></h1>
+          <section id="tfidf">
+<h1>TFIDF<a class="headerlink" href="#tfidf" title="Link to this heading">#</a></h1>
 <dl class="py class">
-<dt class="sig sig-object py" id="sdm.processing.numerical.ClipSigma">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.numerical.</span></span><span class="sig-name descname"><span class="pre">ClipSigma</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.numerical.ClipSigma" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <a class="reference internal" href="sdm.processing.base.Processor.html#sdm.processing.base.Processor" title="sdm.processing.base.Processor"><code class="xref py py-class docutils literal notranslate"><span class="pre">Processor</span></code></a></p>
-<p>Two-stage z-score outlier clipping with soft logarithmic bounds.</p>
-<p>The first pass masks values outside the initial z-score bounds, then the
-second pass refits bounds on the remaining values. The transform applies
-logarithmic soft clipping instead of hard truncation.</p>
+<dt class="sig sig-object py" id="sdm.processing.text.TFIDF">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">sdm.processing.text.</span></span><span class="sig-name descname"><span class="pre">TFIDF</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">ngram_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_features</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lowercase</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#sdm.processing.text.TFIDF" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <a class="reference internal" href="sdm.processing.ensemble.EnsembleProcessor.html#sdm.processing.ensemble.EnsembleProcessor" title="sdm.processing.ensemble.EnsembleProcessor"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleProcessor</span></code></a></p>
+<p>Encode text columns as character n-gram TF-IDF vectors.</p>
+<p>Tokenization follows scikit-learn’s <code class="docutils literal notranslate"><span class="pre">char_wb</span></code> analyzer: whitespace-
+delimited words are space-padded before windowing, so a word shorter than
+<code class="docutils literal notranslate"><span class="pre">n</span></code> still yields one n-gram. Fit learns a vocabulary and smoothed idf
+weights per text column. Transform replaces text with concatenated
+numerical features (one per retained n-gram), applies those idf weights,
+L2-normalizes each row, and ignores n-grams unseen at fit time.
+When fitted on an <a class="reference internal" href="sdm.tensor.EnsembleTable.html#sdm.tensor.EnsembleTable" title="sdm.tensor.EnsembleTable"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleTable</span></code></a>, distinct member
+tables learn independent vocabularies and can produce different numerical
+schemas; members assigned the same table share fitted state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Positive z-score multiplier setting how many standard
-deviations from the mean mark the soft clipping bounds.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ngram_range</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>]</em>) – Inclusive <code class="docutils literal notranslate"><span class="pre">(min_n,</span> <span class="pre">max_n)</span></code> character-window sizes.</p></li>
+<li><p><strong>max_features</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – If set, keep only this many most frequent n-grams per
+column. <code class="docutils literal notranslate"><span class="pre">None</span></code> keeps the full vocabulary.</p></li>
+<li><p><strong>lowercase</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code>, lowercase text before tokenizing.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -225,16 +235,16 @@ deviations from the mean mark the soft clipping bounds.</p>
   </svg>
   <span>Back to top</span>
 </button><div class="navigation flex print:hidden"><div class="navigation-prev">
-    <a href="sdm.processing.numerical.ClipQuantiles.html">
+    <a href="sdm.processing.categorical.ImputeMode.html">
       <i class="i-lucide chevron-left"></i>
       <div class="page-info">
-        <span>Previous</span><div class="title">ClipQuantiles</div></div>
+        <span>Previous</span><div class="title">ImputeMode</div></div>
     </a>
   </div><div class="navigation-next">
-    <a href="sdm.processing.numerical.ImputeMean.html">
+    <a href="sdm.processing.text.EmbedText.html">
       <div class="page-info">
         <span>Next</span>
-        <div class="title">ImputeMean</div>
+        <div class="title">EmbedText</div>
       </div>
       <i class="i-lucide chevron-right"></i>
     </a>

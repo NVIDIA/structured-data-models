@@ -48,6 +48,17 @@ Categorical Processors
    ~sdm.processing.categorical.{{ name }}
 {% endfor %}
 
+Text Processors
+---------------
+
+.. autosummary::
+   :toctree: generated
+   :nosignatures:
+
+{% for name in api_names("sdm.processing.text") %}
+   ~sdm.processing.text.{{ name }}
+{% endfor %}
+
 Datetime Processors
 -------------------
 

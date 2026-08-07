@@ -1,0 +1,8 @@
+﻿TFIDF
+=====
+
+.. currentmodule:: sdm.processing.text
+
+.. autoclass:: TFIDF
+   :members:
+   :show-inheritance:

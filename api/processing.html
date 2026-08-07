@@ -125,6 +125,8 @@ data-aria-dark="Switch to auto color mode">
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.AlignCategories.html">AlignCategories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.ShuffleCategories.html">ShuffleCategories</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.categorical.ImputeMode.html">ImputeMode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.text.TFIDF.html">TFIDF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.text.EmbedText.html">EmbedText</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.datetime.AddCalendarFields.html">AddCalendarFields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.output.ReduceEstimators.html">ReduceEstimators</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/sdm.processing.output.Softmax.html">Softmax</a></li>
@@ -166,6 +168,7 @@ data-aria-dark="Switch to auto color mode">
 <li><a class="reference internal" href="#common-processors">Common Processors</a></li>
 <li><a class="reference internal" href="#numerical-processors">Numerical Processors</a></li>
 <li><a class="reference internal" href="#categorical-processors">Categorical Processors</a></li>
+<li><a class="reference internal" href="#text-processors">Text Processors</a></li>
 <li><a class="reference internal" href="#datetime-processors">Datetime Processors</a></li>
 <li><a class="reference internal" href="#post-processors">Post-Processors</a></li>
 </ul>
@@ -317,6 +320,21 @@ data-aria-dark="Switch to auto color mode">
 </table>
 </div>
 </section>
+<section id="text-processors">
+<h2>Text Processors<a class="headerlink" href="#text-processors" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/sdm.processing.text.TFIDF.html#sdm.processing.text.TFIDF" title="sdm.processing.text.TFIDF"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TFIDF</span></code></a></p></td>
+<td><p>Encode text columns as character n-gram TF-IDF vectors.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/sdm.processing.text.EmbedText.html#sdm.processing.text.EmbedText" title="sdm.processing.text.EmbedText"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EmbedText</span></code></a></p></td>
+<td><p>Embed text columns with a Sentence Transformers model.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="datetime-processors">
 <h2>Datetime Processors<a class="headerlink" href="#datetime-processors" title="Link to this heading">#</a></h2>
 <div class="table-wrapper autosummary longtable docutils container">
@@ -370,7 +388,7 @@ data-aria-dark="Switch to auto color mode">
   </main>
 </div>
 
-      <script src="../_static/documentation_options.js?v=fd6466a8"></script>
+      <script src="../_static/documentation_options.js?v=a0b96b9e"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
