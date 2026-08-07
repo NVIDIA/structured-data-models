@@ -78,7 +78,6 @@ fallback_version = "0.1.0.dev0"
 [tool.uv]
 package = true
 exclude-newer = "7 days"
-find-links = ["https://data.pyg.org/whl/torch-2.13.0+cpu.html"]
 
 [tool.uv.exclude-newer-package]
 cudf-cu13 = false
