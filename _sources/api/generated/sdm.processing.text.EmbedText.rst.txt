@@ -1,8 +1,0 @@
-﻿EmbedText
-=========
-
-.. currentmodule:: sdm.processing.text
-
-.. autoclass:: EmbedText
-   :members:
-   :show-inheritance:

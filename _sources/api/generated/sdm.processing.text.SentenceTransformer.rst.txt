@@ -1,0 +1,8 @@
+﻿SentenceTransformer
+===================
+
+.. currentmodule:: sdm.processing.text
+
+.. autoclass:: SentenceTransformer
+   :members:
+   :show-inheritance:
