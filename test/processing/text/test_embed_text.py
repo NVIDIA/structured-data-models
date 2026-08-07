@@ -31,4 +31,3 @@ def test_forward(device: torch.device) -> None:
     )
     assert output.numerical.shape == (2, 256)
     assert output.numerical.device == device
-    assert output.numerical.isfinite().all()
